@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import fields
 import gzip
 import inspect
 import json
@@ -10,11 +11,22 @@ from pathlib import Path
 from typing import Any, Iterator
 
 import pytest
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 
+from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
+from gbdraw.api.requests import (
+    CircularDiagramRequest,
+    InMemoryRecordSource,
+    LinearDiagramRequest,
+    RecordInput,
+)
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     CanonicalRequestCodecError,
-    EncodedCanonicalRequest,
+    CanonicalRequestEncodingError,
+    _SHARED_OPTION_WRONG_MODE_DEFAULTS,
+    _option_wire_key,
     decode_canonical_request,
     describe_canonical_request,
     encode_canonical_request,
@@ -84,6 +96,45 @@ def violations(value: object, shape: dict[str, Any], path: str = "renderRequest"
     return problems
 
 
+def _resolved(shape: dict[str, Any]) -> dict[str, Any]:
+    return _resolved(TYPES[shape["name"]]) if shape["kind"] == "ref" else shape
+
+
+def _children(shape: dict[str, Any]) -> list[dict[str, Any]]:
+    kind = shape["kind"]
+    if kind == "union":
+        return shape["options"]
+    if kind == "tuple":
+        return shape["items"]
+    if kind == "array":
+        return [shape["items"]]
+    return [shape["values"]] if kind == "record" else []
+
+
+def _described_objects() -> list[tuple[str, dict[str, Any]]]:
+    """Each object of the description with a name: its typedef, then the path inside it."""
+
+    found: list[tuple[str, dict[str, Any]]] = []
+
+    def walk(shape: dict[str, Any], label: str) -> None:
+        if shape["kind"] == "object":
+            tag = shape["fields"].get("kind", {}).get("values")
+            label = f"{label}[{tag[0]}]" if tag and "." in label else label
+            found.append((label, shape))
+            for key, item in shape["fields"].items():
+                walk(item, f"{label}.{key}")
+        for item in _children(shape):
+            walk(item, label)
+
+    for name, shape in TYPES.items():
+        walk(shape, name)
+    return found
+
+
+OBJECTS = _described_objects()
+LABELS = {id(shape): label for label, shape in OBJECTS}
+
+
 def _objects(
     value: object, shape: dict[str, Any], path: tuple[str | int, ...] = ()
 ) -> Iterator[tuple[tuple[str | int, ...], dict[str, Any]]]:
@@ -111,30 +162,65 @@ def _objects(
             yield from _objects(item, shape["fields"][key], (*path, key))
 
 
-def _mutated(payload: dict[str, Any], path: tuple[str | int, ...], key: str, *, add: bool) -> dict[str, Any]:
+def _literal_values(shape: dict[str, Any]) -> list[object]:
+    """The values a field names one by one; none when any string is allowed beside them."""
+
+    options = [_resolved(item) for item in (_children(shape) if shape["kind"] == "union" else [shape])]
+    if any(item["kind"] == "string" for item in options):
+        return []
+    return [value for item in options if item["kind"] == "literal" for value in item["values"]]
+
+
+def _with(payload: dict[str, Any], path: tuple[str | int, ...], key: str, *value: object) -> dict[str, Any]:
+    """``payload`` with ``key`` of the object at ``path`` set to ``value``, or removed."""
+
     result = deepcopy(payload)
     holder: Any = result
     for step in path:
         holder = holder[step]
-    if add:
-        holder[key] = None
+    if value:
+        holder[key] = value[0]
     else:
         del holder[key]
     return result
 
 
-def _checked_encoder(seen: list[EncodedCanonicalRequest]):
-    def encode(*args: Any, **kwargs: Any) -> EncodedCanonicalRequest:
-        encoded = encode_canonical_request(*args, **kwargs)
-        assert violations(encoded.payload, ROOT) == []
-        seen.append(encoded)
-        return encoded
-
-    return encode
+def _decodes(payload: dict[str, Any], resource_paths: dict[str, Path], output: Path) -> bool:
+    try:
+        decode_canonical_request(payload, resource_paths=resource_paths, output_directory=output)
+    except CanonicalRequestCodecError:
+        return False
+    return True
 
 
-# Every test of the codec that takes only a temporary directory builds its own
-# typed request; they are the representative requests of both modes.
+Encoded = tuple[dict[str, Any], dict[str, Path]]
+
+
+@pytest.fixture(scope="module")
+def encoded_requests(tmp_path_factory: pytest.TempPathFactory) -> dict[str, list[Encoded]]:
+    """What each test of the codec that takes only a temporary directory encodes.
+
+    Those tests build the representative typed requests of both modes; the
+    payload is copied as encoded, before the test changes it.
+    """
+
+    result: dict[str, list[Encoded]] = {}
+    with pytest.MonkeyPatch.context() as patch:
+        for name in _CODEC_TESTS:
+            folder = tmp_path_factory.mktemp("codec")
+            seen: list[Encoded] = result.setdefault(name, [])
+
+            def encode(*args: Any, _seen: list[Encoded] = seen, _folder: Path = folder, **kwargs: Any):
+                encoded = encode_canonical_request(*args, **kwargs)
+                resources = codec_tests._materialize_resources(encoded, _folder / f"shape-{len(_seen)}")
+                _seen.append((deepcopy(encoded.payload), resources))
+                return encoded
+
+            patch.setattr(codec_tests, "encode_canonical_request", encode)
+            getattr(codec_tests, name)(folder)
+    return result
+
+
 _CODEC_TESTS = sorted(
     name
     for name, function in vars(codec_tests).items()
@@ -142,64 +228,193 @@ _CODEC_TESTS = sorted(
     and inspect.isfunction(function)
     and list(inspect.signature(function).parameters) == ["tmp_path"]
 )
-# Requests with records, layout, comparisons, annotations, track slots, depth
-# tracks, resources and a batch: the decoder is checked object by object.
-_DECODED_CODEC_TESTS = (
-    "test_schema6_round_trips_circular_batch_grouping_and_outputs",
-    "test_schema8_round_trips_typed_similarity_alignment_and_translations",
-    "test_circular_request_payload_round_trip_uses_stable_resources",
-    "test_linear_comparison_kinds_and_payload_round_trip",
-    "test_file_backed_options_and_typed_config_round_trip",
-    "test_canonical_depth_tracks_round_trip_mixed_sources",
-    "test_annotation_targets_and_styles_round_trip",
-)
 
 
 @pytest.mark.parametrize("name", _CODEC_TESTS)
 def test_every_encoded_request_matches_the_description(
-    name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    name: str, encoded_requests: dict[str, list[Encoded]]
 ) -> None:
-    seen: list[EncodedCanonicalRequest] = []
-    monkeypatch.setattr(codec_tests, "encode_canonical_request", _checked_encoder(seen))
-
-    getattr(codec_tests, name)(tmp_path)
-
-
-def test_the_decoded_codec_tests_exist() -> None:
-    assert set(_DECODED_CODEC_TESTS) <= set(_CODEC_TESTS)
+    if not encoded_requests[name]:
+        pytest.skip("This test of the codec encodes no request.")
+    assert [violations(payload, ROOT) for payload, _resources in encoded_requests[name]] == [
+        [] for _item in encoded_requests[name]
+    ]
 
 
-@pytest.mark.parametrize("name", _DECODED_CODEC_TESTS)
-def test_the_decoder_refuses_what_the_description_refuses(
-    name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def _record() -> SeqRecord:
+    return SeqRecord(Seq("ATGC" * 10), id="record", annotations={"molecule_type": "DNA"})
+
+
+_REQUEST_TYPES: dict[str, tuple[Any, Any]] = {
+    "circular": (CircularDiagramRequest, CircularDiagramOptions),
+    "linear": (LinearDiagramRequest, LinearDiagramOptions),
+}
+
+
+def _request(mode: str, **options: object) -> Any:
+    request_type, options_type = _REQUEST_TYPES[mode]
+    return request_type(
+        records=(RecordInput(source=InMemoryRecordSource(_record())),),
+        options=options_type(**options),
+    )
+
+
+def _smallest_request(mode: str, tmp_path: Path) -> Encoded:
+    encoded = encode_canonical_request(_request(mode))
+    return encoded.payload, codec_tests._materialize_resources(encoded, tmp_path / "resources")
+
+
+# Where one change cannot show that the decoder and the description agree, and why.
+_COERCED = "accepted", "the typed constructor reads null as a value (str, bool, a default); no writer writes null"
+_TOGETHER = "refused", "a decision's status, rationale and anchor are checked together; none encoded is skipped"
+_KNOWN_DIFFERENCES = {
+    "CanonicalAnnotationSet.id = null": _COERCED,
+    "CanonicalRegionAnnotation.id = null": _COERCED,
+    "CanonicalRegionAnnotation.label = null": _COERCED,
+    "CanonicalCoordinateSpan.wrapsOrigin = null": _COERCED,
+    "CanonicalFeatureSelector.value = null": _COERCED,
+    "CanonicalHatchStyle.cross = null": _COERCED,
+    "CanonicalGeneratedProteinComparison.mode = null": _COERCED,
+    "CanonicalCircularDiagramOptions.conservationReference = null": _COERCED,
+    "CanonicalLinearDiagramOptions.pairwiseMatchStyle = null": _COERCED,
+    "CanonicalAlignmentRecordDecision.anchor = null": _TOGETHER,
+    "CanonicalAlignmentRecordDecision.status = 'skipped'": _TOGETHER,
+    "CanonicalAlignmentRecordDecision.rationale = 'skipped_by_user'": _TOGETHER,
+    "CanonicalAlignmentRecordDecision.rationale = 'skipped_no_candidate'": _TOGETHER,
+    "CanonicalAlignmentRecordDecision.rationale = 'skipped_unmappable'": _TOGETHER,
+    "CanonicalCollinearityResultComparison.valueKind = 'blocks'": (
+        "refused", "the resource of the encoded comparison holds a result, not blocks"
+    ),
+    "CanonicalLinearTrackOptions.linearTrackSlots = null": (
+        "refused", "the encoded request has an axis index, which requires the slots"
+    ),
+}
+
+
+def test_the_decoder_agrees_with_the_description_on_every_object(
+    encoded_requests: dict[str, list[Encoded]], tmp_path: Path
 ) -> None:
-    seen: list[EncodedCanonicalRequest] = []
-    monkeypatch.setattr(codec_tests, "encode_canonical_request", _checked_encoder(seen))
-    getattr(codec_tests, name)(tmp_path)
-    assert seen
+    """Remove each field, set it to null and to each named value, add an unknown one.
 
-    accepted: list[str] = []
-    for number, encoded in enumerate(seen):
-        resource_paths = codec_tests._materialize_resources(encoded, tmp_path / f"shape-{number}")
-        mutations = [
-            (path, key, add)
-            for path, shape in _objects(encoded.payload, ROOT)
-            for key, add in [
-                *((key, False) for key in shape["fields"] if key not in shape["optional"]),
-                ("fieldTheDescriptionDoesNotName", True),
+    A cross-field rule can refuse one request and accept another, so a change
+    the description allows must decode in some request, and one it refuses in none.
+    """
+
+    accepted: dict[tuple[str, bool], set[bool]] = {}
+    reached: set[str] = set()
+    decodable = [
+        item
+        for found in encoded_requests.values()
+        for item in found
+        if not violations(item[0], ROOT) and _decodes(*item, tmp_path)
+    ]
+    for mode in ("circular", "linear"):
+        decodable.append(_smallest_request(mode, tmp_path / mode))
+    for payload, resources in decodable:
+        for path, shape in _objects(payload, ROOT):
+            label = LABELS[id(shape)]
+            reached.add(label)
+            holder: Any = payload
+            for step in path:
+                holder = holder[step]
+            changes: list[tuple[str, bool, tuple[object, ...]]] = [
+                (f"{label}: an unknown field", False, ("fieldTheDescriptionDoesNotName", None)),
             ]
-        ]
-        for path, key, add in mutations:
+            for key, field in shape["fields"].items():
+                if key in holder:
+                    changes.append((f"{label}.{key} removed", key in shape["optional"], (key,)))
+                changes.append((f"{label}.{key} = null", violations(None, field) == [], (key, None)))
+                changes += [
+                    (f"{label}.{key} = {value!r}", True, (key, value))
+                    for value in _literal_values(field)
+                    if value is not None
+                ]
+            for change, allowed, arguments in changes:
+                unchanged = len(arguments) == 2 and holder.get(arguments[0], 0) == arguments[1]
+                accepted.setdefault((change, allowed), set()).add(
+                    unchanged or _decodes(_with(payload, path, *arguments), resources, tmp_path)
+                )
+    differences = {
+        change: "refused" if allowed else "accepted"
+        for (change, allowed), found in accepted.items()
+        if (True in found) != allowed
+    }
+    assert differences == {key: value for key, (value, _reason) in _KNOWN_DIFFERENCES.items()}
+    assert {label for label, _shape in OBJECTS} - reached == set()
+
+
+# The decoder reads these keys and no writer writes them: the depth inputs of
+# older writers (the writer stores every depth input as depthTracks), and a
+# comparison table path, which the encoder refuses (a file is a resource).
+_DEPTH_INPUTS_OF_OLDER_WRITERS = {
+    "depthFile", "depthFiles", "depthTable", "depthTables", "depthTrackColors", "depthTrackFiles",
+    "depthTrackLabels", "depthTrackLargeTickIntervals", "depthTrackSmallTickIntervals",
+    "depthTrackTables", "depthTrackTickFontSizes",
+}
+_DECODER_ONLY_OPTIONS = {
+    "circular": ("conservation_table_file", _DEPTH_INPUTS_OF_OLDER_WRITERS),
+    "linear": ("comparison_table_file", _DEPTH_INPUTS_OF_OLDER_WRITERS | {"depthTrackHeights"}),
+}
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_the_description_names_every_option_key_a_writer_can_write(
+    mode: str, tmp_path: Path
+) -> None:
+    table_path, older_depth_inputs = _DECODER_ONLY_OPTIONS[mode]
+    described = TYPES[f"Canonical{mode.capitalize()}DiagramOptions"]["fields"]
+    payload, resources = _smallest_request(mode, tmp_path)
+
+    # A shared option of the other mode is a key only at its default.
+    defaults = {
+        _option_wire_key(name): value
+        for name, value in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items()
+    }
+
+    def decoder_names(key: str) -> bool:
+        for value in (None, defaults.get(key)):
             try:
                 decode_canonical_request(
-                    _mutated(encoded.payload, path, key, add=add),
-                    resource_paths=resource_paths,
+                    _with(payload, ("diagramOptions",), key, value),
+                    resource_paths=resources,
                     output_directory=tmp_path / "output",
                 )
-            except CanonicalRequestCodecError:
-                continue
-            accepted.append(f"{'added' if add else 'removed'} {'.'.join(map(str, (*path, key)))}")
-    assert accepted == []
+            except CanonicalRequestCodecError as error:
+                if "Unknown field" in str(error):
+                    continue
+            return True
+        return False
+
+    candidates = {_option_wire_key(item.name) for item in fields(_REQUEST_TYPES[mode][1])}
+    decoder_keys = {key for key in candidates | set(defaults) | set(described) if decoder_names(key)}
+    assert set(described) <= decoder_keys
+    assert decoder_keys - set(described) == older_depth_inputs | {_option_wire_key(table_path)}
+    with pytest.raises(CanonicalRequestEncodingError, match="comparison table"):
+        encode_canonical_request(_request(mode, **{table_path: "table.tsv"}))
+
+
+def test_every_described_field_is_held_by_a_request_or_named_by_the_decoder(
+    encoded_requests: dict[str, list[Encoded]],
+) -> None:
+    """Removing a field from the description must make some test fail.
+
+    A request that holds the field would then hold an unknown field; an option
+    key that no request holds is compared with the decoder's keys above.
+    """
+
+    held: set[str] = set()
+    requests = [payload for found in encoded_requests.values() for payload, _resources in found]
+    requests += [request for path in _session_files() for request in _stored_requests(_load(path))]
+    for payload in requests:
+        if violations(payload, ROOT):
+            continue
+        for path, shape in _objects(payload, ROOT):
+            holder: Any = payload
+            for step in path:
+                holder = holder[step]
+            held.update(f"{LABELS[id(shape)]}.{key}" for key in holder)
+    described = {f"{label}.{key}" for label, shape in OBJECTS for key in shape["fields"]}
+    assert {name for name in described - held if "DiagramOptions." not in name} == set()
 
 
 def _stored_requests(value: object) -> Iterator[dict[str, Any]]:

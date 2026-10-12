@@ -193,7 +193,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 export { CANONICAL_REQUEST_SCHEMA };
 // The canonical render request of the current schema (the writer format only;
 // readers take unvalidated data, R14) is generated from the Python codec.
-/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 /**
  * What the request writer returns and the session stores beside the request:
  * the encoded resources by id and the Web-only file metadata.
@@ -249,6 +249,7 @@ const canonicalAlignmentAnchor = (value, path) => {
   };
 };
 
+/** @returns {CanonicalSimilarityAlignmentPlan | null} */
 const canonicalSimilarityAlignment = (value, recordKeys, path) => {
   if (value === null) return null;
   const plan = requireExactCanonicalKeys(value, [

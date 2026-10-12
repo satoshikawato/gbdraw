@@ -78,6 +78,16 @@ def nullable(shape: Shape) -> Shape:
     return union(shape, NULL)
 
 
+def non_null(shape: Shape) -> Shape:
+    """``shape`` without its null alternative."""
+
+    return union(*(
+        item
+        for item in (shape["options"] if shape["kind"] == "union" else (shape,))
+        if item != NULL
+    ))
+
+
 def obj(fields: Mapping[str, Shape], *, optional: SequenceABC[str] = ()) -> Shape:
     unknown = set(optional) - set(fields)
     if unknown:

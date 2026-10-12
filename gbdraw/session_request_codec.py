@@ -121,6 +121,7 @@ from .api.requests import (
     _with_legacy_similarity_alignment,
 )
 from .layout.similarity_alignment import (
+    SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
     AlignmentAnchorIdentity,
     AlignmentDecisionStatus,
     AlignmentRecordDecision,
@@ -4828,7 +4829,7 @@ def describe_canonical_request() -> dict[str, Any]:
 
     from .contract_shapes import (
         INTEGER, NULL, STRING, UNKNOWN, Shape,
-        array, literal, nullable, obj, record, ref, shape_of_hint, tuple_of, union,
+        array, literal, non_null, nullable, obj, record, ref, shape_of_hint, tuple_of, union,
     )
 
     types_: dict[str, Shape] = {}
@@ -4931,7 +4932,8 @@ def describe_canonical_request() -> dict[str, Any]:
     empty = named("EmptyLayout", obj({}))
     data(AlignmentAnchorIdentity)
     data(AlignmentRecordDecision)
-    data(SimilarityAlignmentPlan)
+    # SimilarityAlignmentPlan.__post_init__ refuses every other schema.
+    data(SimilarityAlignmentPlan, replace={"schema": literal(SIMILARITY_ALIGNMENT_PLAN_SCHEMA)})
     data(LinearRecordTranslation)
     layouts = {
         "circular": union(empty, data(CircularMultiRecordOptions, "CircularLayout")),
@@ -4958,17 +4960,14 @@ def describe_canonical_request() -> dict[str, Any]:
     data(FeatureOverride)  # FeatureOverride.to_mapping
     # FeaturePlacementOverride.from_mapping: a lane has a side and a level, main neither.
     target_hints = _class_type_hints(FeaturePlacementTarget)
-    lane = {
-        name: union(*(item for item in of(target_hints[name])["options"] if item != NULL))
-        for name in ("side", "level")
-    }
+    lane = {name: non_null(of(target_hints[name])) for name in ("side", "level")}
     placement_hints = _class_type_hints(FeaturePlacementOverride)
     wire[FeaturePlacementOverride] = named("FeaturePlacement", obj({
         "recordKey": of(placement_hints["record_key"]),
         "biologicalFeatureId": of(placement_hints["biological_feature_id"]),
         "placement": union(obj({"kind": literal("main")}), obj({"kind": literal("lane"), **lane})),
     }))
-    modes: dict[str, tuple[type, type, type]] = {
+    modes: dict[Literal["circular", "linear"], tuple[type, type, type]] = {
         "circular": (CircularDiagramOptions, CircularRequestTrackOptions, CircularOutputOptions),
         "linear": (LinearDiagramOptions, LinearRequestTrackOptions, LinearOutputOptions),
     }
@@ -4976,11 +4975,26 @@ def describe_canonical_request() -> dict[str, Any]:
         _TABLE_FIELDS | _FILE_FIELDS | _TABLE_SEQUENCE_FIELDS | _FILE_SEQUENCE_FIELDS
         | _OPTIONAL_FILE_SEQUENCE_FIELDS
     )
-    # The decoder also reads the depth inputs of older writers; the writer
-    # stores every depth input as depthTracks.
+    # The decoder also reads the depth inputs of older writers (the writer
+    # stores every depth input as depthTracks) and a comparison table path,
+    # which encode_canonical_request refuses to write.
     unwritten = (
         _COMPARISON_FIELDS | _PLACEMENT_INPUT_FIELDS | _RING_SEARCH_FIELDS | _DEPTH_COMPATIBILITY_FIELDS
+        | {"conservation_table_file", "comparison_table_file"}
     )
+
+    def option(name: str, hint: object, mode: Literal["circular", "linear"]) -> Shape:
+        """The hint's shape, without null where the option's decoder refuses null."""
+
+        shape = (resource if name in option_files else of)(hint)
+        try:
+            _decode_option_value(
+                name, None, mode=mode, schema=CANONICAL_REQUEST_SCHEMA, resource_paths={}
+            )
+        except CanonicalRequestDecodingError:
+            return non_null(shape)
+        return shape
+
     diagram_options: dict[str, Shape] = {}
     for mode, (options_class, track_class, output_class) in modes.items():
         title = mode.capitalize()
@@ -5000,9 +5014,7 @@ def describe_canonical_request() -> dict[str, Any]:
         required = sorted(members)
         for item in fields(options_class):
             if item.name not in unwritten:
-                members[_option_wire_key(item.name)] = (
-                    resource if item.name in option_files else of
-                )(hints[item.name])
+                members[_option_wire_key(item.name)] = option(item.name, hints[item.name], mode)
         # A shared option of the other mode is accepted at its default only.
         for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
             members.setdefault(_option_wire_key(name), literal(default))
@@ -5045,9 +5057,7 @@ def describe_canonical_request() -> dict[str, Any]:
     # _encode_canonical_request and decode_canonical_request.
     # A CircularDiagramRequest resolves its grouping; a CircularBatchRequest is "batch".
     grouping = union(
-        *(item for item in of(_class_type_hints(CircularDiagramRequest)["grouping"])["options"]
-          if item != NULL),
-        literal("batch"),
+        non_null(of(_class_type_hints(CircularDiagramRequest)["grouping"])), literal("batch")
     )
     requests = []
     for mode in modes:
