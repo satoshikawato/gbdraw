@@ -5,8 +5,9 @@ import { evaluateWebOwnerGraphAt, revisionExists } from '../../tools/report-web-
 
 // Untouched-base characterization and historical replay of the owner-graph
 // detectors (implementation plan Phase B1). Both read revisions from Git, so
-// they run where the history is present (a full checkout or the trusted-base
-// policy job) and skip in a shallow checkout.
+// they run where the history is present and skip in a shallow checkout. In CI
+// that is the `web-change-budget` job, which sets OWNER_GRAPH_REPLAY_HISTORY
+// to `required` so that a checkout without the history fails there.
 const BASE = '8f450194';
 
 // First-parent merges that introduced a coupling the audit attributes to the
@@ -24,6 +25,10 @@ const REPLAY = [
 ];
 
 const historyAvailable = revisionExists(BASE) && REPLAY.every(({ merge }) => revisionExists(`${merge}^1`));
+
+test('the history this replay reads is present where it is required', { skip: process.env.OWNER_GRAPH_REPLAY_HISTORY !== 'required' }, () => {
+  assert.ok(historyAvailable, 'revision history not available in this checkout');
+});
 
 test(`untouched-base characterization at ${BASE}`, { skip: historyAvailable ? false : 'revision history not available in this checkout' }, () => {
   const { results, summary } = evaluateWebOwnerGraphAt(BASE);

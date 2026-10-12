@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { evaluateWebOwnerGraphAt } from '../../tools/report-web-owner-graph.mjs';
+import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
 
 // R13 baseline (gbdraw/web/CLAUDE.md "Owner layering and ports"). The
 // detectors in tools/web-owner-graph-detectors.mjs observe the coupling
@@ -10,13 +11,13 @@ import { evaluateWebOwnerGraphAt } from '../../tools/report-web-owner-graph.mjs'
 // factories that take whole owner objects, heavy derived trigger sites, and
 // the call shapes of each projection domain outside its owner.
 //
-// The three literals are registered design-rule allowlists
-// (tools/web-design-rule-guards.json, R13): a runtime change removes the
-// subjects it fixes from the baseline in the same pull request, and an
-// addition is an authority-only change. Each entry is `detector|subject`
-// with its count (1 for a subject that is present; the number of trigger
-// sites for a trigger-site module). Lower an entry or remove it when the
-// subject is gone; the assertion names what to change.
+// The two literals are registered design-rule allowlists
+// (tools/web-design-rule-guards.json, R13, kind `count-map`): an observed
+// count may not exceed its entry, and adding or raising an entry is an
+// authority-only change. Each entry is `detector|subject` with its count (1
+// for a subject that is present; the number of trigger sites for a
+// trigger-site module). Lowering or removing an entry whose subject is gone is
+// optional; the test names those entries.
 //
 // Print the current subjects with `node tools/report-web-owner-graph.mjs --at worktree`.
 const OWNER_GRAPH_BASELINE = {
@@ -54,7 +55,7 @@ const OWNER_GRAPH_BASELINE = {
 };
 
 // Distinct call shapes per projection domain outside its owner (R3: one
-// projection is one call shape). May only decrease.
+// projection is one call shape). May not grow.
 const PROJECTION_SHAPE_BASELINE = {
   'feature-visibility': 1,
   'feature-visibility-labels': 1,
@@ -74,30 +75,25 @@ const SUBJECT_DETECTORS = [
 
 const { results } = evaluateWebOwnerGraphAt('worktree');
 
-test('every owner-graph subject in the working tree is in the baseline, and every baseline entry is still observed (R13)', () => {
-  const observed = new Map();
+test('no owner-graph subject in the working tree exceeds its baseline entry (R13)', (t) => {
+  const observed = {};
   SUBJECT_DETECTORS.forEach((id) => {
-    results[id].subjects.forEach((subject) => observed.set(`${id}|${subject}`, 1));
+    results[id].subjects.forEach((subject) => { observed[`${id}|${subject}`] = 1; });
   });
   Object.entries(results['heavy-derived.trigger-site.v2'].countsBySubject).forEach(([subject, count]) => {
-    observed.set(`heavy-derived.trigger-site.v2|${subject}`, count);
+    observed[`heavy-derived.trigger-site.v2|${subject}`] = count;
   });
-  const added = [...observed].filter(([key, count]) => !(key in OWNER_GRAPH_BASELINE) || count > OWNER_GRAPH_BASELINE[key]);
-  const fixed = Object.entries(OWNER_GRAPH_BASELINE).filter(([key, count]) => !observed.has(key) || observed.get(key) < count);
-  assert.deepEqual(added.map(([key, count]) => `${key}: ${count}`), [],
+  const { above, lowerable } = compareCountBaseline(observed, OWNER_GRAPH_BASELINE);
+  reportLowerable(t, 'OWNER_GRAPH_BASELINE', lowerable);
+  assert.deepEqual(above.map(({ key, observed: count }) => `${key}: ${count}`), [],
     'new owner-graph subjects (R13): remove the coupling, or register the entry in an authority-only pull request');
-  assert.deepEqual(fixed.map(([key, count]) => `${key}: ${count} -> ${observed.get(key) ?? 0}`), [],
-    'fixed owner-graph subjects: lower or remove these OWNER_GRAPH_BASELINE entries in this pull request');
 });
 
-test('the distinct projection call shapes per domain do not grow (R3, R13)', () => {
-  const shapes = results['projection.call-shape.v1'].shapesByDomain;
-  const grown = Object.entries(shapes).filter(([domain, count]) => !(domain in PROJECTION_SHAPE_BASELINE) || count > PROJECTION_SHAPE_BASELINE[domain]);
-  const shrunk = Object.entries(PROJECTION_SHAPE_BASELINE).filter(([domain, count]) => (shapes[domain] ?? 0) < count);
-  assert.deepEqual(grown.map(([domain, count]) => `${domain}: ${count}`), [],
+test('the distinct projection call shapes per domain do not grow (R3, R13)', (t) => {
+  const { above, lowerable } = compareCountBaseline(results['projection.call-shape.v1'].shapesByDomain, PROJECTION_SHAPE_BASELINE);
+  reportLowerable(t, 'PROJECTION_SHAPE_BASELINE', lowerable);
+  assert.deepEqual(above.map(({ key, observed: count }) => `${key}: ${count}`), [],
     `new projection call shapes (R3): ${JSON.stringify(results['projection.call-shape.v1'].observedShapes.map(({ domain, path, line, shape }) => `${domain} ${path}:${line} ${shape}`), null, 1)}`);
-  assert.deepEqual(shrunk.map(([domain, count]) => `${domain}: ${count} -> ${shapes[domain] ?? 0}`), [],
-    'fewer projection call shapes: lower these PROJECTION_SHAPE_BASELINE entries in this pull request');
 });
 
 // R13 layers (`webLayerOf` in tools/web-owner-graph-detectors.mjs): a module

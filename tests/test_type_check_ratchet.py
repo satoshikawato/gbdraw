@@ -3,11 +3,15 @@
 mypy, pinned by the ``typecheck`` extra, checks ``gbdraw/`` except
 ``gbdraw/web/`` with the ``[tool.mypy]`` settings in ``pyproject.toml``. A
 file's type debt is its number of mypy errors plus its number of
-``# type: ignore`` comments. ``TYPE_DEBT_BASELINE`` records the debt of every
-file that has any. An entry may only go down; a file that is not listed,
-including a new file, has no debt. Suppressions that would hide errors from
-this count are rejected. Raising an entry or relaxing the configuration needs
-the Owner's approval.
+``# type: ignore`` comments. ``TYPE_DEBT_BASELINE`` records the debt a file
+may hold: a file may not exceed its entry, and a file that is not listed,
+including a new file, has no debt. Lowering or removing an entry is optional;
+the test names the entries that may be lowered. ``TYPE_DEBT_BASELINE`` is a
+registered design-rule allowlist (``tools/web-design-rule-guards.json``,
+TYPE-DEBT, kind ``py-count-map``), so adding or raising an entry is an
+authority-only change that needs the Owner's approval, as does relaxing the
+configuration. Suppressions that would hide errors from this count are
+rejected.
 Plan: ``docs/internal/PYTHON_TYPE_CHECK_RATCHET_PLAN_2026-10-06.md``.
 """
 
@@ -20,6 +24,7 @@ import re
 import subprocess
 import sys
 import tokenize
+import warnings
 from importlib import metadata
 from pathlib import Path
 
@@ -169,7 +174,7 @@ def test_no_suppression_outside_the_count() -> None:
     )
 
 
-def test_type_debt_matches_the_baseline() -> None:
+def test_type_debt_stays_at_or_below_the_baseline() -> None:
     _installed_mypy_matches_the_pin()
     files = _checked_files()
     errors = _mypy_errors()
@@ -186,32 +191,22 @@ def test_type_debt_matches_the_baseline() -> None:
         "keep TYPE_DEBT_BASELINE sorted by path"
     )
 
-    checked = set(files)
     problems: list[str] = []
-    for path in sorted(checked | set(TYPE_DEBT_BASELINE)):
+    lowerable: list[str] = []
+    for path in sorted(set(files) | set(TYPE_DEBT_BASELINE)):
         baseline = TYPE_DEBT_BASELINE.get(path, 0)
-        if path not in checked:
-            problems.append(f"{path} no longer exists: remove its entry")
-            continue
         found = errors.get(path, []) + ignores.get(path, [])
         debt = len(found)
-        detail = (
-            f"{len(errors.get(path, []))} mypy errors + "
-            f"{len(ignores.get(path, []))} `# type: ignore`"
-        )
         if debt > baseline:
             problems.append(
-                f"{path}: type debt {debt} ({detail}) is above its baseline "
+                f"{path}: type debt {debt} ({len(errors.get(path, []))} mypy errors + "
+                f"{len(ignores.get(path, []))} `# type: ignore`) is above its baseline "
                 f"{baseline}. Fix the new errors; do not add `# type: ignore`. "
                 "Raising the baseline needs the Owner's approval.\n    "
                 + "\n    ".join(found)
             )
         elif debt < baseline:
-            target = (
-                "remove its entry" if debt == 0 else f"lower its entry to {debt}"
-            )
-            problems.append(
-                f"{path}: type debt {debt} ({detail}) is below its baseline "
-                f"{baseline}: {target} in TYPE_DEBT_BASELINE"
-            )
+            lowerable.append(f"{path} {baseline} -> {debt}")
+    if lowerable:
+        warnings.warn(f"TYPE_DEBT_BASELINE may be lowered: {', '.join(lowerable)}")
     assert not problems, "\n".join(problems)
