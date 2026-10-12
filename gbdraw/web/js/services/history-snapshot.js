@@ -2,7 +2,6 @@
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
-/** @import { HistoryArtifactHandle } from './history.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
@@ -15,6 +14,7 @@ import {
 } from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
+/** @import { HistoryArtifactHandle } from './history.js' */
 
 export { cloneJsonData };
 
@@ -1536,7 +1536,7 @@ export const createHistorySnapshotService = ({
   /**
    * The handle History stored and passes back: History's own type names the fields History reads; these are
    * the fields `captureGeneratedArtifactHandle` wrote beside them, as a restore reads them.
-   * @typedef {HistoryArtifactHandle & {
+   * @typedef {Pick<HistoryArtifactHandle, 'retainedBytes' | 'fileIds' | 'identity'> & {
    *   kind?: unknown,
    *   ownerSet?: GeneratedArtifactOwnerSet | null,
    *   mutableIntent?: Partial<GeneratedArtifactIntent>,

@@ -14,9 +14,6 @@
 /** @import { LegendRowContext } from '../services/specific-color-rules.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearComparisonEdge, LinearComparisonIssue, LinearComparisonPair, LinearComparisonPlan, LinearComparisonResolvedEdge, LinearComparisonSource } from '../services/linear-comparisons.js' */
-/** @import { RulePreparationOptions } from './rule-matching.js' */
-/** @import { AnnotationRecordCatalog } from './annotations/record-catalog.js' */
-/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { LinearComparisonUiIssue } from './comparison-ui.js' */
 /** @import { LinearSourceGroup, LinearSourceRemovalPlan } from '../services/linear-sources.js' */
 /** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
@@ -273,6 +270,9 @@ import {
   uploadedDepthFileCount
 } from '../services/depth-track-state.js';
 /** @import { HistoryManagerOptions } from '../services/history.js' */
+/** @import { RulePreparationOptions } from './rule-matching.js' */
+/** @import { AnnotationRecordCatalog } from './annotations/record-catalog.js' */
+/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { MountedResultContext } from './preview-runtime.js' */
 /** @import { UnresolvedNotice } from '../services/feature-visibility.js' */
 /** @import { FeatureListRow } from './pairwise-match-popup.js' */

@@ -210,6 +210,8 @@ import {
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
 /** @import { CircularConservationLike } from '../services/conservation-series.js' */
+/** @import { LegendEntry } from '../state.js' */
+/** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 
 const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
@@ -2541,7 +2543,7 @@ export const createRunAnalysis = ({
       || Object.keys(drawing.featurePlacementOverrides || {}).length > 0
       || Object.keys(drawing.featureStrokeOverrides).length > 0
       || Object.keys(drawing.legendColorOverrides).length > 0 || Object.keys(drawing.legendStrokeOverrides).length > 0
-      || drawing.legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption)
+      || drawing.legendEntries.value.some((/** @type {LegendEntry} */ entry) => entry.originalCaption && /** @type {string} */ (entry.originalCaption) !== entry.caption)
       || drawing.dormantLegendEntries.value.length > 0;
     // The committed records whose source this Generate replaces or drops. The
     // metadata of a Session without a feature catalog has no record keys.
@@ -4114,7 +4116,7 @@ export const createRunAnalysis = ({
          */
         const buildCacheFilename = (spec, queryEntry, subjectEntry) => {
           const edge = comparisonResolution.edges.find(
-            (candidate) => candidate.edgeKey === spec.edgeKey
+            (/** @type {LinearComparisonResolvedEdge} */ candidate) => candidate.edgeKey === spec.edgeKey
           );
           const fallback = losatPairDefaultName(
             drawing,
@@ -4175,8 +4177,8 @@ export const createRunAnalysis = ({
           const losatRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
             ? new Set(linearSeqs.map((_, index) => index))
             : new Set(comparisonResolution.edges
-                .filter((edge) => edge.source === 'losat')
-                .flatMap((edge) => [edge.queryIndex, edge.subjectIndex]));
+                .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'losat')
+                .flatMap((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.queryIndex, edge.subjectIndex]));
           for (let i = 0; i < linearSeqs.length; i++) {
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
@@ -4207,8 +4209,8 @@ export const createRunAnalysis = ({
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
             ? linearSeqs.map((_, index) => index)
             : Array.from(new Set(comparisonResolution.edges
-                .filter((edge) => edge.source === 'losat')
-                .flatMap((edge) => [edge.queryIndex, edge.subjectIndex])))
+                .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'losat')
+                .flatMap((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.queryIndex, edge.subjectIndex])))
                 .sort((left, right) => left - right);
           const proteinEntries = [];
           for (const index of proteinRecordIndexes) {
@@ -4405,7 +4407,7 @@ export const createRunAnalysis = ({
               if (hasCachedText) losatTiming.cacheHits += 1;
               else losatTiming.cacheMisses += 1;
               const resolvedEdge = comparisonResolution.edges.find(
-                (edge) => edge.edgeKey === spec.edgeKey
+                (/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === spec.edgeKey
               );
               const isResolvedDisplayPair = canonicalGridPair
                 ? canonicalGridPair(spec.queryIndex, spec.subjectIndex)
@@ -4850,7 +4852,7 @@ export const createRunAnalysis = ({
                 });
               });
               let nextLegacyEvidence = candidateOwnerSet.legacyProteinDerivedEvidence;
-              if (!nextLegacyEnvelope.entries.some((candidate) => candidate.state === 'pending')) {
+              if (!nextLegacyEnvelope.entries.some((/** @type {LegacyProteinCandidateEnvelope['entries'][number]} */ candidate) => candidate.state === 'pending')) {
                 nextLegacyEvidence = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
               }
               let nextOrthogroups = candidateOwnerSet.orthogroups;
