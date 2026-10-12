@@ -50,7 +50,7 @@ test('the settings pane keeps no second copy of a section title beside its icon'
   for (const { title, icon } of SETTINGS_SECTIONS) {
     const escaped = title.replace(/&/g, '&amp;');
     for (const text of new Set([title, escaped])) {
-      if (new RegExp(`<i class="ph ${icon}[^>]*></i>\\s*(?:<span[^>]*>)?${text.replace(/[/&]/g, '\\$&')}\\b`).test(pane)) {
+      if (new RegExp(`<i class="ph ${icon}[^>]*></i>\\s*(?:<span[^>]*>)?${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(pane)) {
         copies.push(`${icon} ${text}`);
       }
     }
