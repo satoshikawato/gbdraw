@@ -118,20 +118,23 @@ const DRAWN_ELEMENT_SECTIONS = Object.freeze([
 
 export const DRAWN_ELEMENT_SELECTOR = DRAWN_ELEMENT_SECTIONS.map(({ selector }) => selector).join(', ');
 
-// A record definition is named after its record (`<record id>_definition`),
-// so the id of a record called `tick_1` or `skew_a` reads like a track's.
-const RECORD_DEFINITION_SELECTOR = '[data-gbdraw-role^="record-definition"]';
+// The groups of a record are named after it, so those of a record called
+// `tick_1` or `skew_a` have ids that read like a track's: its definition
+// (`<record id>_definition…`; a Result drawn by 0.13.0 has the id alone, no
+// role) and, in such a Result, the group of its features (`<record id>…`).
+const RECORD_DEFINITION_SELECTOR = '[data-gbdraw-role^="record-definition"], [id*="_definition"]';
+const FEATURE_SELECTOR = '[data-gbdraw-feature-id]';
 
 /**
  * The section that holds the settings of the drawn element an event in the
- * Result reached: the element itself, or the group it is drawn in. A record
- * definition has none, whatever its id.
+ * Result reached: the element itself, or the group it is drawn in. A group of
+ * a record has none, whatever its id.
  * @param {EventTarget | null} target
  * @returns {SettingsSectionKey | null}
  */
 export const drawnElementSection = (target) => {
   const element = target instanceof Element ? target.closest(DRAWN_ELEMENT_SELECTOR) : null;
-  if (!element || element.matches(RECORD_DEFINITION_SELECTOR)) return null;
+  if (!element || element.matches(RECORD_DEFINITION_SELECTOR) || element.querySelector(FEATURE_SELECTOR)) return null;
   return DRAWN_ELEMENT_SECTIONS.find(({ selector }) => element.matches(selector))?.section ?? null;
 };
 

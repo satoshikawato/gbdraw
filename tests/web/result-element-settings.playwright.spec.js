@@ -5,6 +5,7 @@
 // Labels. It works while Layout edit is off and no Review alignment is open,
 // writes no setting, History step, or Result, and leaves no trace in an export.
 const { test, expect } = require('@playwright/test');
+const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 
@@ -30,9 +31,11 @@ const hint = (page) => page.locator('.preview-layout-hint');
 const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
 const frames = (page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
-const loadSession = async (page, name) => {
+const sessionPath = (name) => join(process.cwd(), 'gbdraw/web/gallery/sessions', name);
+// `file` is a Gallery Session by name, or a Session file as `setInputFiles` takes it.
+const loadSession = async (page, file) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
+  await page.locator('input[accept^=".json,"]').setInputFiles(typeof file === 'string' ? sessionPath(file) : file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
   await frames(page);
@@ -237,6 +240,16 @@ test('Circular with custom track slots: a tick label opens Axis & Scale and a di
   await expectClosed(page, 'circular-axis', 'the click that cleared the selection');
   await clickInk(page, TICKS);
   await expectOpened(page, 'circular-axis', 'Axis & Scale', 'the click after the selection cleared');
+  // And for the popup of a Legend row.
+  await closeSections(page);
+  const rowPopup = page.locator('.preview-item-popup[role="dialog"]');
+  await clickInk(page, 'g[data-legend-key] text');
+  await expect(rowPopup).toBeVisible();
+  await clickInk(page, GC_SKEW);
+  await expect(rowPopup).toHaveCount(0);
+  await expectClosed(page, 'dinucleotide', 'the click that closed the popup of a Legend row');
+  await clickInk(page, GC_SKEW);
+  await expectOpened(page, 'dinucleotide', 'Dinucleotide content/skew', 'the click after the popup of a Legend row closed');
 
   // No setting, History step, or Result changed, and an export carries no marker.
   await page.waitForTimeout(150);
@@ -316,12 +329,22 @@ test('Circular, the default layout with a plot title: the title opens Titles & R
   expect(svg).not.toContain('data-gbdraw-preview-item');
 });
 
-test('Linear: the scale opens Axis & Scale and the plot title Titles; Layout edit and Review alignment open nothing', async ({ page }) => {
+test('Linear: the scale opens Axis & Scale and the plot title Titles; a record definition and Layout edit open nothing', async ({ page }) => {
   test.setTimeout(420_000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
-  await loadSession(page, LINEAR_SESSION);
+  // The stored Result, with the definition of its first record named as that of a record called
+  // `tick_chr1` is (`<record id>_definition…`): the id reads like a tick group's.
+  const stored = readFileSync(sessionPath(LINEAR_SESSION), 'utf8');
+  expect(stored.split('BGC0000708_definition_record_1')).toHaveLength(2);
+  await loadSession(page, { name: LINEAR_SESSION, mimeType: 'application/json',
+    buffer: Buffer.from(stored.replace('BGC0000708_definition_record_1', 'tick_chr1_definition_record_1')) });
   const before = await appState(page);
+
+  // It stays the button of its popup, and only the scale and the title are marked for their settings.
+  await expect(page.locator('.gbdraw-preview-surface [id="tick_chr1_definition_record_1"]')).toHaveAttribute('data-gbdraw-preview-item', '');
+  expect((await page.locator(`.gbdraw-preview-surface ${MARKER}`).evaluateAll((elements) => elements.map((element) => element.id))).sort())
+    .toEqual(['length_bar', 'plot_title']);
 
   for (const [selector, key, title] of [['#length_bar', 'linear-axis', 'Axis & Scale'], ['#plot_title', 'titles', 'Titles & Record Labels']]) {
     await closeSections(page);
@@ -330,6 +353,13 @@ test('Linear: the scale opens Axis & Scale and the plot title Titles; Layout edi
     expect(await hintLines(page), 'two lines').toBe(2);
     await clickInk(page, `${selector} text`);
     await expectOpened(page, key, title);
+    // A held press pans the figure: the Layout edit sentence stays, alone, and says why the item did not move.
+    const held = await inkPoint(page, `${selector} text`);
+    await page.mouse.move(held.x, held.y);
+    await page.mouse.down();
+    await page.mouse.move(held.x + 12, held.y + 8, { steps: 4 });
+    await expect(hint(page), `${selector}, held`).toHaveText(MOVE_HINT, { useInnerText: true });
+    await page.mouse.up();
   }
   await hover(page, '#legend text');
   await expect(hint(page)).toHaveText(MOVE_HINT, { useInnerText: true });
@@ -362,23 +392,9 @@ test('Linear: the scale opens Axis & Scale and the plot title Titles; Layout edi
   await expect.poll(() => undoCount(page)).toBe(steps + 1);
   expect(await titleAt()).not.toBe(transform);
   await expectClosed(page, 'titles', 'after a drag of the title');
-  await layoutEdit(page).click();
-  await expect(layoutEdit(page)).toHaveAttribute('aria-pressed', 'false');
-
-  // Review alignment open: a click on the figure opens nothing.
-  await page.locator('[data-gbdraw-feature-id="f94b7f30b_record_2"]').click({ force: true });
-  await page.locator('.feature-popup [data-similarity-alignment-popup-review]').click();
-  const review = page.getByRole('dialog', { name: 'Review alignment' });
-  await expect(review.locator('[data-alignment-record-key]')).toHaveCount(4, { timeout: 180000 });
-  await closeSections(page);
-  await clickInk(page, '#length_bar text');
-  await expectClosed(page, 'linear-axis', 'Review alignment open, the scale');
-  await clickInk(page, '#plot_title text');
-  await expectClosed(page, 'titles', 'Review alignment open, the title');
-  await expect(review).toBeVisible();
 });
 
-test('Linear with several records: the GC content and GC skew track of a record open Dinucleotide content/skew', async ({ page }) => {
+test('Linear with several records: a GC content or GC skew track opens Dinucleotide content/skew; Review alignment offers and opens nothing', async ({ page }) => {
   test.setTimeout(420_000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
@@ -399,6 +415,28 @@ test('Linear with several records: the GC content and GC skew track of a record 
     await clickInk(page, `[id="${id}"] *`);
     await expectOpened(page, 'dinucleotide', 'Dinucleotide content/skew', id);
   }
+
+  // Review alignment open, from the drawer and with no popup held: a track shows the canvas's
+  // cursor and no hint, and a click on a drawn element opens nothing.
+  await page.locator('[data-gbdraw-feature-id="f94b7f30b_record_2"]').click({ force: true });
+  await page.locator('.feature-popup').getByRole('button', { name: 'Show in editor' }).click();
+  await page.locator('[data-similarity-alignment-drawer-review]').click();
+  const review = page.getByRole('dialog', { name: 'Review alignment' });
+  await expect(review.locator('[data-alignment-record-key]')).toHaveCount(4, { timeout: 180000 });
+  await expect(page.locator('.feature-popup')).toHaveCount(0);
+  await closeSections(page);
+  const SKEW_TRACK = '[id="gc_skew_record_4"] *';
+  expect(await hover(page, SKEW_TRACK)).toEqual({ cursor: 'grab', outline: 'none' });
+  await expect(hint(page)).toBeHidden();
+  // What the review leaves as it is: the Layout edit sentence of the title, the pointer of a Legend row.
+  expect(await hover(page, '#plot_title text')).toEqual({ cursor: 'help', outline: 'dashed' });
+  await expect(hint(page)).toHaveText(MOVE_HINT, { useInnerText: true });
+  expect((await hover(page, 'g[data-legend-key] text')).cursor).toBe('pointer');
+  for (const [selector, key] of [[SKEW_TRACK, 'dinucleotide'], ['#length_bar text', 'linear-axis'], ['#plot_title text', 'titles']]) {
+    await clickInk(page, selector);
+    await expectClosed(page, key, `Review alignment open, ${selector}`);
+  }
+  await expect(review).toBeVisible();
 });
 
 test('phone width: a tick label brings Axis & Scale below the header', async ({ page }) => {

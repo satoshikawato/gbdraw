@@ -395,8 +395,10 @@
         .preview-item-popup {
             width: min(400px, calc(100vw - 24px));
         }
-        /* While the canvas is panned, an item shows the canvas's own cursor. */
-        .preview-layout-off:not(.preview-panning) .gbdraw-preview-surface [data-gbdraw-preview-item] {
+        /* While the canvas is panned, an item shows the canvas's own cursor; so does a drawn
+           element with a settings section (`settings`) while Review alignment is open. */
+        .preview-layout-off:not(.preview-panning) .gbdraw-preview-surface [data-gbdraw-preview-item=""],
+        .preview-layout-off:not(.preview-panning, .preview-reviewing) .gbdraw-preview-surface [data-gbdraw-preview-item="settings"] {
             cursor: pointer;
         }
         .pairwise-match-feature-list {
@@ -1085,17 +1087,17 @@
             outline: 1px dashed #94a3b8;
             outline-offset: 4px;
         }
-        /* The hint names what the hovered item does, one line each: a drawn element with a
-           settings section (`settings`), a Layout edit target, or both (the plot title, the
-           Linear scale). It is hidden while the canvas is panned. */
+        /* The hint names what the hovered item does, one line each: a Layout edit target
+           (also while a press on it pans the canvas), a drawn element with a settings
+           section (`settings`; not while the canvas is panned or Review alignment is open),
+           or both (the plot title, the Linear scale). */
         .preview-layout-hint,
         .preview-layout-hint span {
             display: none;
             pointer-events: none;
         }
-        .preview-layout-off:not(.preview-panning):has(:is(.gbdraw-preview-layout-target, [data-gbdraw-preview-item="settings"]):hover) .preview-layout-hint,
-        .preview-layout-off:has([data-gbdraw-preview-item="settings"]:hover) .preview-settings-hint,
-        .preview-layout-off:has(.gbdraw-preview-layout-target:hover) .preview-move-hint {
+        .preview-layout-off:has(.gbdraw-preview-layout-target:hover) :is(.preview-layout-hint, .preview-move-hint),
+        .preview-layout-off:not(.preview-panning, .preview-reviewing):has([data-gbdraw-preview-item="settings"]:hover) :is(.preview-layout-hint, .preview-settings-hint) {
             display: block;
         }
         .drag-hint {
@@ -5889,7 +5891,7 @@
 
                 <div class="preview-workspace">
                 <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30"
-                     :class="{ 'preview-layout-off': !layoutRepositionMode, 'preview-panning': isPanning }">
+                     :class="{ 'preview-layout-off': !layoutRepositionMode, 'preview-panning': isPanning, 'preview-reviewing': similarityAlignmentDialogOpen }">
 
                     <div v-if="featureSelectionStatus"
                          class="feature-selection-status"
