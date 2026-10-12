@@ -22,7 +22,7 @@ const {
   getLinearSourceDefaultSubtitle,
   setLinearSourceDefaultSubtitle,
   inferredDefinitionForRecord,
-  linearFileCardNames,
+  linearFileCardRecord,
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
 } = await import('../../gbdraw/web/js/services/linear-sources.js');
@@ -262,10 +262,9 @@ test('an explicit override equal to the file default survives a save and reload'
 test('a one-record File shows its record names on the card and no empty File names block', () => {
   const record = createLinearSeq({ uid: 'only', gb: { name: 'one.gb' }, inferred_definition: 'Inferred' });
   const [source] = groupLinearSourceRecords([record]);
-  const names = linearFileCardNames(source);
-  assert.equal(names.fileNames, false);
-  assert.equal(names.cardRecord, source.records[0], 'the record entry itself, found by identity');
-  assert.equal(names.cardRecord.sequence, record);
+  const cardRecord = linearFileCardRecord(source);
+  assert.equal(cardRecord, source.records[0], 'the record entry itself, found by identity');
+  assert.equal(cardRecord.sequence, record);
 });
 
 test('a one-record File that holds a File-level value keeps the File names block alone', () => {
@@ -273,11 +272,11 @@ test('a one-record File that holds a File-level value keeps the File names block
     const record = createLinearSeq({ uid: 'only', gb: { name: 'one.gb' }, definition: 'Own', ...stored });
     const [source] = groupLinearSourceRecords([record]);
     // One names block: the record's names stay in Record options.
-    assert.deepEqual(linearFileCardNames(source), { fileNames: true, cardRecord: null }, JSON.stringify(stored));
+    assert.equal(linearFileCardRecord(source), null, JSON.stringify(stored));
     // Clearing the stored value puts the record's names on the card instead.
     setLinearSourceDefaultDefinition(source, '');
     setLinearSourceDefaultSubtitle(source, '');
-    assert.deepEqual(linearFileCardNames(source), { fileNames: false, cardRecord: source.records[0] });
+    assert.equal(linearFileCardRecord(source), source.records[0]);
   }
 });
 
@@ -285,16 +284,15 @@ test('a File with two or more records keeps the File names block and per-record 
   const file = { name: 'two.gb' };
   const records = [createLinearSeq({ uid: 'a', gb: file }), createLinearSeq({ uid: 'b', gb: file })];
   const [source] = groupLinearSourceRecords(records);
-  assert.deepEqual(linearFileCardNames(source), { fileNames: true, cardRecord: null });
+  assert.equal(linearFileCardRecord(source), null);
   setLinearSourceDefaultDefinition(source, 'Shared');
-  assert.deepEqual(linearFileCardNames(source), { fileNames: true, cardRecord: null });
+  assert.equal(linearFileCardRecord(source), null);
 });
 
 test('a File card without an inspected or uploaded file follows the rows it has', () => {
   // No file and no discovery state is read: one row is the one-record card.
   const [empty] = groupLinearSourceRecords([createLinearSeq({ uid: 'empty' })]);
-  assert.equal(linearFileCardNames(empty).fileNames, false);
-  assert.equal(linearFileCardNames(empty).cardRecord, empty.records[0]);
+  assert.equal(linearFileCardRecord(empty), empty.records[0]);
 });
 
 test('the File card template takes its name fields from the one decision and one component', async () => {
@@ -302,11 +300,11 @@ test('the File card template takes its name fields from the one decision and one
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const lines = html.split('\n');
   const block = lines.find((line) => line.includes(':data-linear-source-defaults="source.uid"'));
-  assert.match(block, /linearFileCardNames\(source\)\.fileNames/);
+  assert.match(block, /'linear-file-names-unused': linearFileCardRecord\(source\) \}/);
   const uses = lines.filter((line) => line.includes('<linear-record-names'));
   assert.equal(uses.length, 2, 'on the File card and in Record options');
-  assert.match(uses[0], /v-if="linearFileCardNames\(source\)\.cardRecord"/);
-  assert.match(uses[1], /v-if="!linearFileCardNames\(source\)\.cardRecord"/);
+  assert.match(uses[0], /v-if="linearFileCardRecord\(source\)"/);
+  assert.match(uses[1], /v-if="!linearFileCardRecord\(source\)"/);
   // The record's fields exist once: in the component both places render.
   for (const label of ['`Definition for sequence ${idx + 1}`', '`Subtitle / title for sequence ${idx + 1}`']) {
     assert.equal(lines.filter((line) => line.includes(label)).length, 1, label);

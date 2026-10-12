@@ -2148,7 +2148,7 @@
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                             </div>
-                            <div class="mt-2 p-2 bg-white/70 rounded border border-slate-200 space-y-1.5" :class="{ 'linear-file-names-unused': !linearFileCardNames(source).fileNames }" :data-linear-source-defaults="source.uid">
+                            <div class="mt-2 p-2 bg-white/70 rounded border border-slate-200 space-y-1.5" :class="{ 'linear-file-names-unused': linearFileCardRecord(source) }" :data-linear-source-defaults="source.uid">
                                 <div class="text-[10px] font-bold text-slate-500">Names for all records in this file</div>
                                 <div>
                                     <label class="text-[9px] font-semibold text-slate-500 block mb-0.5">Organism / strain</label>
@@ -2176,7 +2176,7 @@
                                     >
                                 </div>
                             </div>
-                            <linear-record-names v-if="linearFileCardNames(source).cardRecord" class="mt-2 rounded border border-slate-200 bg-white/70 p-2" :seq="linearFileCardNames(source).cardRecord.sequence" :idx="linearFileCardNames(source).cardRecord.index" :source="source" :disabled="!semanticMutationAvailable" @reset-definition="resetLinearRecordDefinition" @reset-subtitle="resetLinearRecordSubtitle"></linear-record-names>
+                            <linear-record-names v-if="linearFileCardRecord(source)" class="mt-2 rounded border border-slate-200 bg-white/70 p-2" :seq="linearFileCardRecord(source).sequence" :idx="linearFileCardRecord(source).index" :source="source" :disabled="!semanticMutationAvailable" @reset-definition="resetLinearRecordDefinition" @reset-subtitle="resetLinearRecordSubtitle"></linear-record-names>
                             <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-source-depth="source.uid">
                                 <summary
                                     role="button"
@@ -2332,7 +2332,7 @@
                                     </div>
                                 </div>
                             </details>
-                            <linear-record-names v-if="!linearFileCardNames(source).cardRecord" :seq="seq" :idx="idx" :source="source" :disabled="!semanticMutationAvailable" @reset-definition="resetLinearRecordDefinition" @reset-subtitle="resetLinearRecordSubtitle"></linear-record-names>
+                            <linear-record-names v-if="!linearFileCardRecord(source)" :seq="seq" :idx="idx" :source="source" :disabled="!semanticMutationAvailable" @reset-definition="resetLinearRecordDefinition" @reset-subtitle="resetLinearRecordSubtitle"></linear-record-names>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
                                     <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">Region (optional)</span> <span class="apply-note ml-auto">Applies on Generate</span>

@@ -473,7 +473,7 @@ export const MarkupPreview = {
 
 // A Linear record's own name fields. The File card of a one-record File and
 // the Record options of every other record render this one component on the
-// record's state; `linearFileCardNames` decides which place shows it.
+// record's state; `linearFileCardRecord` decides which place shows it.
 export const LinearRecordNames = {
   template: '#linear-record-names-template',
   components: { MarkupPreview },
