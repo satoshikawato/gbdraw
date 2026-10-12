@@ -42,7 +42,7 @@ from gbdraw.api import (
     upgrade_session_document,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.session_drawings import replace_session_drawings, write_session_drawings
+from gbdraw.session_drawings import _result_set, _view, replace_session_drawings, write_session_drawings
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.web_support.request_render import render_canonical_web_request
 
@@ -467,3 +467,30 @@ def test_an_upgraded_v33_label_override_with_empty_text_renders_as_before(tmp_pa
     upgraded = upgrade_session_document(source).document
 
     assert _render_svgs(upgraded, tmp_path / "upgraded") == _render_svgs(source, tmp_path / "source")
+
+
+def test_a_result_set_keeps_the_key_order_of_its_source() -> None:
+    """OV-598: the keys follow the Session they were read from, not a set's iteration order.
+
+    A set of strings iterates in an order that depends on ``PYTHONHASHSEED``;
+    one order and its reverse cannot both match it.
+    """
+
+    fields = ["renderRequest", "results", "runMetadata", "cliInvocation"]
+    editor = ["featureCatalog", "alignmentResetReceipt", "originalSvgStroke"]
+    ui = ["selectedResultIndex", "generatedLegendPosition", "appliedPaletteName", "appliedPaletteColors"]
+    for reverse in (False, True):
+        order = [names[::-1] if reverse else names for names in (fields, editor, ui)]
+        source = {
+            **{key: {} for key in order[0]},
+            "editorState": {**{key: None for key in order[1]}, "legend": {}},
+            "ui": {key: 0 for key in order[2]},
+        }
+        result_set = _result_set(source)
+        assert [key for key in result_set if key in fields] == order[0]
+        assert [key for key in result_set["editorState"] if key in editor] == order[1]
+        assert list(result_set["ui"]) == order[2]
+        view = _view({}, source)
+        assert [key for key in view if key in fields] == order[0]
+        assert [key for key in view["editorState"] if key in editor] == order[1]
+        assert list(view["ui"]) == order[2]
