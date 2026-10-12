@@ -312,8 +312,14 @@ const legendGroupKey = (rule) => JSON.stringify([rule.cap, fillIdentity(rule.col
  * @property {readonly string[]} types The feature types of its rules, in rule order (`*`: every type).
  */
 
+// A group takes a feature of a type one of its rules is for; a rule for every
+// type (`*`) is for each type. The popup lists the groups that take the clicked
+// feature, and a pick joins every group it lists (PD-OI-061 revision 4).
+/** @param {ColorRuleLegendGroup} group @param {string} type */
+export const colorRuleGroupTakes = (group, type) => group.types.includes(type) || group.types.includes('*');
+
 // The color-rule Legend groups of a rule table, each once, in rule order; with
-// `type`, those with a rule of that feature type. The feature popup's list and
+// `type`, those that take a feature of that type. The feature popup's list and
 // the target of a Legend rename read this one derivation.
 /**
  * @param {readonly SpecificRuleInput[]} rules
@@ -332,7 +338,7 @@ export const colorRuleLegendGroups = (rules, type) => {
     if (!group.types.includes(normalized.feat)) group.types.push(normalized.feat);
     groups.set(key, group);
   }
-  return [...groups.values()].filter((group) => type === undefined || group.types.includes(type));
+  return [...groups.values()].filter((group) => type === undefined || colorRuleGroupTakes(group, type));
 };
 
 /**

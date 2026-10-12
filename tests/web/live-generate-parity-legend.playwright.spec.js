@@ -116,6 +116,8 @@ test('a Legend rename onto the name of a color rule without a drawn row asks and
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: '#c83366', cap: 'Zeta' });
   await renameRow(page, 'GC content', 'Zeta');
   await expect(page.getByRole('heading', { name: 'Legend Name Conflict' })).toBeVisible();
+  await expect(page.locator('#legend-rename-description p'), 'OV-586: the dialog says what the name is')
+    .toHaveText('"Zeta" is the name of a color rule with another color.');
   await expect(page.getByRole('button', { name: /^Merge into "/ }), 'Merge is not offered').toHaveCount(0);
   await page.getByRole('button', { name: 'Keep both: name it "Zeta (1)"' }).click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.legendRenameDialog.show);
@@ -672,6 +674,8 @@ test('a Legend rename of a rule row onto another rule row of one feature type as
   const shown = await semanticSnapshot(page);
   await renameRow(page, 'beta', 'alpha');
   await conflictAsked(page);
+  await expect(page.locator('#legend-rename-description p'), 'a Legend item keeps its sentence')
+    .toHaveText('"alpha" already exists with another color.');
   await expect(suffixButton(page), 'Keep both is offered').toHaveCount(1);
   await page.getByRole('button', { name: 'Merge into "alpha"' }).click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.legendRenameDialog.show);
@@ -762,6 +766,80 @@ test('a pick of a color rule that draws no row asks the scope and draws the feat
   expect(await colorIdNames(page), 'no name carries a color ID').toEqual([]);
   await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
   await expectLiveEqualsGenerate(page, { label: 'FL2 joined the Connector rule from the popup list' });
+  expect(await colorIdNames(page), 'Generate adds no color ID').toEqual([]);
+});
+
+// The reported step (OV-580): the clicked feature's row is a color rule's
+// row, and the answer to the scope question is "All N". The whole row joins
+// the picked group: its rule takes the group's name and color.
+test('a pick with All N from a color rule\'s row moves the whole row into the picked group', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: 'protein$', color: '#2a9d8f', cap: 'beta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup', color: '#e63946', cap: 'alpha' });
+  const before = { rows: await legendState(page), rules: await ruleTable(page) };
+  const shown = await semanticSnapshot(page);
+  expect([await featureFill(page, { locus_tag: 'FL1' }), await featureFill(page, { locus_tag: 'FL2' })],
+    'the rule draws both features of the row').toEqual([['#2a9d8f'], ['#2a9d8f']]);
+  const list = await openPopup(page, { locus_tag: 'FL2' });
+  await list.selectOption({ label: 'alpha' });
+  await expect(page.getByRole('heading', { name: 'Legend Name Scope' })).toBeVisible();
+  await page.getByRole('button', { name: 'All 2 "beta" features' }).click();
+  await page.waitForFunction(() => window.__GBDRAW_APP__.clickedFeature?.appliedLegendName === 'alpha', null, { timeout: 30_000 });
+  await settleLive(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the scope answer is followed by no conflict dialog').toBe(false);
+  expect([await featureFill(page, { locus_tag: 'FL1' }), await featureFill(page, { locus_tag: 'FL2' })],
+    'both features of the row take the group\'s color').toEqual([['#e63946'], ['#e63946']]);
+  const joined = await legendState(page);
+  expect(joined.listed.filter((caption) => caption === 'alpha'), 'one alpha row').toHaveLength(1);
+  expect(joined.listed, 'the row that joined is gone').not.toContain('beta');
+  expect((await legendFills(page)).alpha, 'the row keeps its color').toBe('#e63946');
+  expect(await ruleTable(page), 'the row\'s rule takes the group\'s name and color')
+    .toEqual([['protein$', 'alpha', '#e63946'], ['^dup', 'alpha', '#e63946']]);
+  expect(await colorIdNames(page), 'no name carries a color ID').toEqual([]);
+  await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+  await history(page, 'undo');
+  expect({ rows: await legendState(page), rules: await ruleTable(page) }, 'one Undo returns the rows and the rules').toEqual(before);
+  expect(diffSemanticSnapshots(shown, await semanticSnapshot(page)), 'one Undo shows the Result before the pick').toEqual([]);
+  await history(page, 'redo');
+  expect(await legendState(page), 'Redo joins again').toEqual(joined);
+  await expectLiveEqualsGenerate(page, { label: 'the beta rule row joined alpha from the popup list with All N' });
+  expect(await colorIdNames(page), 'Generate adds no color ID').toEqual([]);
+});
+
+// D-07: a color rule for every feature type (`*`) is a rule for each type, so
+// the list offers its group for any feature, and every group the list offers
+// can be joined: also one whose row draws only features of another type.
+test('the popup list offers a rule for every feature type, and a pick joins a group with rules of several types', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  for (const rule of [
+    RULE_ROWS[2],
+    { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: RULE_ROWS[2].color, cap: 'rep' },
+    { feat: '*', qual: 'locus_tag', val: '^NOMATCH2$', color: '#123456', cap: 'Everything' }
+  ]) await addColorRule(page, rule);
+  const pick = async (locusTag, name) => {
+    const list = await openPopup(page, { locus_tag: locusTag });
+    expect(await list.locator('option').allTextContents().then((names) => names.map((text) => text.trim())),
+      `${locusTag}: the list offers the every-type group and the group with a CDS rule`)
+      .toEqual(['Choose from color rules…', 'Everything', 'rep']);
+    await list.selectOption({ label: name });
+    await expect(page.getByRole('heading', { name: 'Legend Name Scope' })).toBeVisible();
+    await page.getByRole('button', { name: /This feature only/ }).click();
+    await page.waitForFunction((caption) => window.__GBDRAW_APP__.clickedFeature?.appliedLegendName === caption, name, { timeout: 30_000 });
+    await settleLive(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), `${name}: a pick is followed by no conflict dialog`).toBe(false);
+  };
+  await pick('FL1', 'rep');
+  expect(await featureFill(page, { locus_tag: 'FL1' }), 'the CDS takes the color of the group its row shares with a repeat').toEqual(['#7b2cbf']);
+  await pick('FL2', 'Everything');
+  expect(await featureFill(page, { locus_tag: 'FL2' }), 'the CDS takes the color of the every-type rule').toEqual(['#123456']);
+  const rows = await legendState(page);
+  expect(rows.listed.filter((caption) => ['rep', 'Everything'].includes(caption)).sort(), 'one row per group').toEqual(['Everything', 'rep']);
+  expect(await legendFills(page), 'each row in its group\'s color').toMatchObject({ rep: '#7b2cbf', Everything: '#123456' });
+  expect(await colorIdNames(page), 'no name carries a color ID').toEqual([]);
+  await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+  await expectLiveEqualsGenerate(page, { label: 'FL1 joined a group of two feature types, FL2 the group of an every-type rule' });
   expect(await colorIdNames(page), 'Generate adds no color ID').toEqual([]);
 });
 

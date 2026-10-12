@@ -7194,7 +7194,10 @@
                                 Rename "<span class="font-semibold text-slate-800">{{ legendRenameDialog.oldCaption }}</span>" to "<span class="font-semibold text-slate-800">{{ legendRenameDialog.newCaption }}</span>"?
                             </p>
                             <div v-else id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                <p v-if="!legendRenameDialog.mergeAvailable">
+                                <p v-if="legendRenameDialog.targetRuleOnly">
+                                    "{{ legendRenameDialog.newCaption }}" is the name of a color rule with another color.
+                                </p>
+                                <p v-else-if="!legendRenameDialog.mergeAvailable">
                                     "{{ legendRenameDialog.newCaption }}" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item' : 'already exists' }} and draws a different feature type, so the two cannot be merged.
                                 </p>
                                 <p v-else>

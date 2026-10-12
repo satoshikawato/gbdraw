@@ -1148,7 +1148,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const ruleOwned = ruleRows();
   await ruleOwned.renameActions.renameLegendEntry(0, 'Special');
   assert.equal(ruleOwned.legendRenameDialog.show, true, 'a rename onto a color rule\'s row asks');
-  assert.deepEqual([ruleOwned.legendRenameDialog.mode, ruleOwned.legendRenameDialog.mergeAvailable], ['target', true]);
+  assert.deepEqual([ruleOwned.legendRenameDialog.mode, ruleOwned.legendRenameDialog.mergeAvailable, ruleOwned.legendRenameDialog.targetRuleOnly],
+    ['target', true, false]);
   assert.equal(ruleOwned.committed.length, 0);
   await ruleOwned.renameActions.handleLegendRenameChoice('merge');
   assert.deepEqual(committedFor(ruleOwned, 't1'), [['t1', 'Special', '#ff0000']]);
@@ -1163,6 +1164,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.equal(asked.legendRenameDialog.show, true, 'a rename onto the name of a rule without a row asks');
     assert.deepEqual([asked.legendRenameDialog.mode, asked.legendRenameDialog.mergeAvailable, asked.legendRenameDialog.targetCaption,
       asked.legendRenameDialog.targetColor, asked.legendRenameDialog.suffixCaption], ['target', true, 'Connector', '#5a5a5a', 'Connector (1)']);
+    assert.equal(asked.legendRenameDialog.targetRuleOnly, true, 'OV-586: the dialog says the name is a color rule\'s, not a Legend item\'s');
     assert.equal(asked.committed.length, 0);
     await asked.renameActions.handleLegendRenameChoice('merge');
     assert.deepEqual(committedFor(asked, 't1'), [['t1', 'Connector', '#5a5a5a']]);
@@ -1211,6 +1213,33 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.deepEqual([pickedOtherType.legendRenameDialog.show, pickedOtherType.legendRenameDialog.mode,
     pickedOtherType.legendRenameDialog.mergeAvailable], [true, 'target', false]);
   assert.equal(pickedOtherType.committed.length, 0);
+  // D-07: a rule for every feature type (`*`) is a rule for each type, so the
+  // popup lists its group for any feature. A pick joins every group the list
+  // offers: a group of `*` rules only, a group with rules of several types,
+  // and a group whose row draws only features of another type.
+  const everyRule = { feat: '*', qual: 'note', val: '^NOMATCH5$', color: '#123456', cap: 'Everything' };
+  const mixedRules = [{ ...cdsRule, cap: 'Mixed' }, { ...cdsRule, cap: 'Mixed', feat: 'tRNA', val: '^NOMATCH6$' }];
+  assert.deepEqual(colorRuleLegendGroups([everyRule, cdsRule, ...mixedRules], 'tRNA').map(({ name, types }) => [name, types]),
+    [['Everything', ['*']], ['Mixed', ['CDS', 'tRNA']]], 'the list offers the group of a rule for every type');
+  const c1 = { id: 'c1', svg_id: 'c1', type: 'CDS', product: 'p', qualifiers: { product: ['p'] }, start: 100, end: 190, legendCaption: 'Mixed' };
+  for (const [rules, name, color, options] of [
+    [[everyRule], 'Everything', '#123456', {}],
+    [mixedRules, 'Mixed', '#00aa00', {}],
+    [mixedRules, 'Mixed', '#00aa00', {
+      entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'Mixed', color: '#00aa00', featureIds: ['c1'] }],
+      order: ['tRNA', 'Mixed'], features: [t1, c1]
+    }]
+  ]) {
+    const picked = ruleRows({ rules, ...options });
+    await picked.renameActions.joinLegendGroup(colorRuleLegendGroups(rules, 'tRNA')[0]);
+    assert.notEqual(picked.legendRenameDialog.show, true, `a pick of ${name} asks nothing`);
+    assert.deepEqual(committedFor(picked, 't1'), [['t1', name, color]]);
+    // A typed rename keeps the Merge rule of rows of one same feature type.
+    const typed = ruleRows({ rules, ...options });
+    await typed.renameActions.renameLegendEntry(0, name);
+    assert.deepEqual([typed.legendRenameDialog.show, typed.legendRenameDialog.mergeAvailable], [true, false],
+      `a typed rename onto ${name} offers no Merge`);
+  }
   const pickedDeleted = ruleRows({
     entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }],
     deleted: [{ caption: 'Special', originalCaption: 'Special', color: '#ff0000', featureIds: ['t2'] }]

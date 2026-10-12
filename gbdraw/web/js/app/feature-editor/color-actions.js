@@ -16,7 +16,7 @@ import {
   setsFeatureStroke
 } from '../../services/legend-svg.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
-import { colorRuleLegendGroups, ruleLegendCaptions } from '../../services/specific-color-rules.js';
+import { colorRuleGroupTakes, colorRuleLegendGroups, ruleLegendCaptions } from '../../services/specific-color-rules.js';
 import { isAutoFeatureUnderlay } from '../../services/feature-dom.js';
 import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
@@ -102,6 +102,7 @@ import {
  * @property {string} caption
  * @property {string} color
  * @property {ReadonlySet<string | undefined>} types The feature types it draws.
+ * @property {boolean} ruleOnly A color rule's name that no Legend row shows.
  */
 
 /**
@@ -686,6 +687,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = 0;
     legendRenameDialog.mergeAvailable = true;
     legendRenameDialog.deletedTargetKey = '';
+    legendRenameDialog.targetRuleOnly = false;
     legendRenameDialog.suffixCaption = '';
     legendRenameDialog.pendingRequest = null;
   });
@@ -991,6 +993,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.currentColor = request.currentColor || '';
     legendRenameDialog.siblingCount = Math.max(0, siblingCount);
     legendRenameDialog.deletedTargetKey = '';
+    legendRenameDialog.targetRuleOnly = false;
     legendRenameDialog.pendingRequest = request;
   };
 
@@ -1012,6 +1015,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = request.siblingCount || 0;
     legendRenameDialog.mergeAvailable = mergeAvailable;
     legendRenameDialog.deletedTargetKey = deletedTargetKey;
+    legendRenameDialog.targetRuleOnly = target.ruleOnly;
     legendRenameDialog.suffixCaption = suffixCaption;
     legendRenameDialog.pendingRequest = request;
   };
@@ -1091,8 +1095,9 @@ export const createFeatureColorActions = ({
       caption: group ? group.name : targetRow.caption,
       color: group ? group.color : String((deletedTarget
         ? displayedLegendRowColors(state, drawing, readDrawnTracks()).deleted(deletedTarget) : listedRowColor(drawing, listedTarget)) || ''),
-      types: featureTypes(getFeaturesForLegendCaption(targetRow.caption))
-    } : targetGroup && { caption: targetGroup.name, color: targetGroup.color, types: new Set(targetGroup.types) };
+      types: featureTypes(getFeaturesForLegendCaption(targetRow.caption)),
+      ruleOnly: false
+    } : targetGroup && { caption: targetGroup.name, color: targetGroup.color, types: new Set(targetGroup.types), ruleOnly: true };
     const featureOrRuleRename = features.length > 0 || getLegendRowRules(request.sourceKey).length > 0;
     // OV-62 (PD-OI-061 amended): two rows merge only when each draws features of
     // one type and the type is the same. A row without features (GC content,
@@ -1100,10 +1105,13 @@ export const createFeatureColorActions = ({
     // offer Keep both and Cancel only. The types are those of the features
     // that take each row's caption, as the live editor knows them: a generated
     // row such as `other proteins` has none live, so it is not merged into. A
-    // color-rule group that draws no row has the types of its rules.
+    // color-rule group that draws no row has the types of its rules. A picked
+    // group takes each type one of its rules is for, whatever its row draws:
+    // the popup lists it for that type, and every listed group can be joined.
     const sourceTypes = featureTypes(features);
-    const mergeAllowed = target !== null && sourceTypes.size === 1 && target.types.size === 1
-      && [...sourceTypes][0] === [...target.types][0];
+    const sourceType = [...sourceTypes][0];
+    const mergeAllowed = target !== null && sourceTypes.size === 1
+      && (group ? colorRuleGroupTakes(group, String(sourceType)) : target.types.size === 1 && target.types.has(sourceType));
     const sameColor = target !== null && colorsMatch(target.color, currentColor);
     const resolution = request.targetResolution || (group && mergeAllowed && !deletedTarget ? 'merge' : null);
 
