@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -8,13 +8,12 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-losat-cache-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
-await writeFile(
-  join(tempRoot, 'losat-cache.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'losat-cache.js'), 'utf8'),
-  'utf8'
-);
+// losat-cache.js reads the generated schema constants.
+for (const module of ['services/losat-cache.js', 'contracts/schema.generated.js']) {
+  await cp(join(repoRoot, 'gbdraw', 'web', 'js', module), join(tempRoot, module));
+}
 
-const cache = await import(pathToFileURL(join(tempRoot, 'losat-cache.js')));
+const cache = await import(pathToFileURL(join(tempRoot, 'services', 'losat-cache.js')));
 const numericContract = JSON.parse(await readFile(
   join(repoRoot, 'tests', 'fixtures', 'losat-outfmt6-numeric-contract.json'),
   'utf8'
@@ -371,8 +370,8 @@ const reverseEntry = {
 assert.ok(getProteinEntry(reverseEntry, manifest, reverseEntry), 'matching reverse direction hits');
 
 // Count actual validation entry points, without a production telemetry API.
-const probePath = join(tempRoot, 'counted-cache.js');
-let probeSource = await readFile(join(tempRoot, 'losat-cache.js'), 'utf8');
+const probePath = join(tempRoot, 'services', 'counted-cache.js');
+let probeSource = await readFile(join(tempRoot, 'services', 'losat-cache.js'), 'utf8');
 for (const [signature, counter] of [
   ['export const validateProteinIdentityManifest = (manifest) => {', 'manifest'],
   ['export const rawProteinTextMatchesBindings = (text, queryIds, subjectIds) => {', 'tsv']

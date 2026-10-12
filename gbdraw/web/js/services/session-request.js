@@ -89,6 +89,11 @@ import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptional
 import { SESSION_TABLE_LABELS, diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
+  CANONICAL_REQUEST_SCHEMA,
+  FEATURE_OVERRIDE_SCHEMA,
+  SUPPORTED_CANONICAL_REQUEST_SCHEMAS
+} from '../contracts/schema.generated.js';
+import {
   arrowHeadLengthRatioForState,
   defaultFeatureRendering,
   normalizeArrowHeadLengthRatio,
@@ -182,7 +187,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 // generated artifacts still come from `state`.
 /** @typedef {Record<string, any>} RequestDrawing */
 
-export const CANONICAL_REQUEST_SCHEMA = 9;
+export { CANONICAL_REQUEST_SCHEMA };
 /**
  * The canonical render request of the current schema (the writer format only;
  * readers take unvalidated data, R14). Python owns the option field set (R7),
@@ -207,10 +212,7 @@ export const CANONICAL_REQUEST_SCHEMA = 9;
  * @property {Record<string, any>} resources
  * @property {Record<string, any>} webFiles
  */
-const FEATURE_OVERRIDE_SCHEMA = 9;
-const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
-  1, 2, 5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA
-]);
+const SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET = new Set(SUPPORTED_CANONICAL_REQUEST_SCHEMAS);
 
 const requireExactCanonicalKeys = (value, keys, path) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -4102,7 +4104,7 @@ export const projectCanonicalSessionRequest = ({
   deferResourceContent = false,
   adoptCanonicalPayloads = false
 }) => {
-  if (!renderRequest || !SUPPORTED_CANONICAL_REQUEST_SCHEMAS.has(renderRequest.schema)) {
+  if (!renderRequest || !SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET.has(renderRequest.schema)) {
     throw new Error('Unsupported canonical renderRequest schema.');
   }
   if (!['circular', 'linear'].includes(renderRequest.mode)) {

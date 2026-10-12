@@ -531,26 +531,11 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
 
 
 def test_current_session_version_matches_web_config() -> None:
-    source = Path("gbdraw/web/js/services/config.js").read_text(encoding="utf-8")
-    match = re.search(r"const\s+SESSION_VERSION\s*=\s*(\d+);", source)
-    assert match is not None
-    supported_match = re.search(
-        r"SUPPORTED_SESSION_VERSIONS\s*=\s*new Set\(\[([\s\S]*?)\]\)",
-        source,
-    )
-    assert supported_match is not None
-    web_supported_versions = {
-        int(value) for value in re.findall(r"\b\d+\b", supported_match.group(1))
-    }
-    if "SESSION_VERSION" in supported_match.group(1):
-        web_supported_versions.add(int(match.group(1)))
-
+    # The Web reads both values from `contracts/schema.generated.js`.
     assert CURRENT_SESSION_VERSION == 46
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
         {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
     )
-    assert int(match.group(1)) == CURRENT_SESSION_VERSION
-    assert web_supported_versions == SUPPORTED_SESSION_VERSIONS
 
     authority_source = Path(
         "gbdraw/web/js/services/session-authority.js"

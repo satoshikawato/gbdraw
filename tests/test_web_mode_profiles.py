@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from gbdraw.legend.table import configure_pairwise_identity_legend_from_comparisons
 
 
@@ -12,6 +14,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 
 
+# The `browser` marker puts this test in the jobs a Web-only pull request runs.
+@pytest.mark.browser
 def test_generated_web_mode_profiles_match_python_source() -> None:
     result = subprocess.run(
         [

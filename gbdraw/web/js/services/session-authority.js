@@ -11,13 +11,16 @@ import { RENDERED_ID_FEATURE_EDIT_FIELDS, migrateSessionFeaturePlacements } from
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { LOSAT_EXECUTION_FIELDS, MODE_SCOPED_ROWS, SLICE_MODES, validateModeSliceFields } from './mode-scoped-migration.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import {
+  FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
+  MODE_SCOPED_SESSION_VERSION,
+  TYPED_DRAFT_SESSION_VERSION
+} from '../contracts/schema.generated.js';
 
-// Session 44 introduced the current active-config and record-display draft
-// shapes; Session 46 keeps the draft of each diagram mode in `modes`
-// (PD-OI-086) and keys per-feature edits by source identity (design Q4).
-export const TYPED_DRAFT_SESSION_VERSION = 44;
-export const MODE_SCOPED_SESSION_VERSION = 46;
-const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({ 44: 4, 46: 5 });
+// `TYPED_DRAFT_SESSION_VERSION` (44) introduced the current active-config and
+// record-display draft shapes; `MODE_SCOPED_SESSION_VERSION` (46) keeps the
+// draft of each diagram mode in `modes` (PD-OI-086) and keys per-feature
+// edits by source identity (design Q4).
 
 export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   format: 'document',
