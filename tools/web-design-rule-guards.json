@@ -138,13 +138,17 @@
       "id": "R11",
       "heading": "R11: History transaction boundaries",
       "guards": [
+        "tests/web/feature-label-visual-unit.test.mjs",
+        "tests/web/gui-audit-regressions.playwright.spec.js",
         "tests/web/history-config-restore.test.mjs",
         "tests/web/history-generated-authority.playwright.spec.js",
         "tests/web/history-inputs.playwright.spec.js",
         "tests/web/history-inputs.test.mjs",
+        "tests/web/history.test.mjs",
         "tests/web/multi-result-edit-matrix.playwright.spec.js",
         "tests/web/non-edit-state-preservation.playwright.spec.js",
-        "tests/web/session-operation-consistency.test.mjs"
+        "tests/web/session-operation-consistency.test.mjs",
+        "tests/web/specific-color-actions.test.mjs"
       ],
       "allowlists": []
     },
