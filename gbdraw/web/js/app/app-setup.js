@@ -81,6 +81,7 @@ import { cloneJsonData } from '../services/json-clone.js';
 import {
   groupLinearSourceRecords,
   linearRecordNames,
+  linearFileCardRecord,
   isPristineLinearSource,
   linearSourceHasPrimaryInput,
   linearSourceDepthStatus,
@@ -1233,7 +1234,11 @@ export const createAppSetup = () => {
       .map((entry) => [String(entry.edgeKey), entry])
   ));
 
-  const pendingLinearRecordExpansions = new Set();
+  // The Linear rows whose next record discovery may expand them, each with
+  // whether the row's own names were entered for the file being read. They
+  // were not when the file replaced another: those names belong to that file.
+  /** @type {Map<string, boolean>} */
+  const pendingLinearRecordExpansions = new Map();
   // The Linear Files and the Circular input just uploaded: their first record
   // discovery infers record definitions (Linear GenBank) and opens the record
   // list of a file with many records (D-04). A Session load, a rollback, and a
@@ -1250,11 +1255,12 @@ export const createAppSetup = () => {
   };
   /** @param {DrawingState} drawing */
   const expandDiscoveredLinearRecords = (drawing, { uid, records, inferDefinitions = false }) => {
-    const expanding = pendingLinearRecordExpansions.delete(uid);
+    const namesOfThisFile = pendingLinearRecordExpansions.get(uid);
+    pendingLinearRecordExpansions.delete(uid);
     const index = linearSeqs.findIndex((seq) => seq.uid === uid);
     if (index < 0) return;
     const source = linearSeqs[index];
-    if (!expanding || records.length < 2 || source.region_record_id) {
+    if (namesOfThisFile === undefined || records.length < 2 || source.region_record_id) {
       if (inferDefinitions) {
         source.inferred_definition = inferredDefinitionForRecord(records, source.region_record_id);
       }
@@ -1263,6 +1269,9 @@ export const createAppSetup = () => {
     const row = linearRecordRowFor(uid, index + 1);
     // Expanded records keep only File-level values. A crop or record display
     // value of the replaced File does not apply to the new records (IN-04).
+    // A name entered on the card of this file before it had several records
+    // becomes the File's name where the File has none (OV-486).
+    const typed = namesOfThisFile ? source : null;
     const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => createLinearSeq({
       uid: recordIndex === 0 ? uid : undefined,
       gb: source.gb,
@@ -1270,8 +1279,8 @@ export const createAppSetup = () => {
       fasta: source.fasta,
       depth: source.depth,
       losat_gencode: source.losat_gencode,
-      file_definition: source.file_definition,
-      file_subtitle: source.file_subtitle,
+      file_definition: source.file_definition || typed?.definition || '',
+      file_subtitle: source.file_subtitle || typed?.record_subtitle || '',
       inferred_definition: inferDefinitions ? record.inferredDefinition || '' : '',
       region_record_id: record.value
     }));
@@ -1307,8 +1316,12 @@ export const createAppSetup = () => {
   };
   const materializeAutomaticLinearRecords = async () => {
     if (mode.value !== 'linear') return;
+    // A row that already waits for its discovery keeps what its writer said
+    // about its names (a replacing file does not own the row's record name).
     linearSeqs.forEach((seq) => {
-      if (!seq.region_record_id) pendingLinearRecordExpansions.add(seq.uid);
+      if (!seq.region_record_id && !pendingLinearRecordExpansions.has(seq.uid)) {
+        pendingLinearRecordExpansions.set(seq.uid, true);
+      }
     });
     await linearRecordSelector.refresh();
   };
@@ -5703,7 +5716,7 @@ export const createAppSetup = () => {
       linearSeqs.splice(0, linearSeqs.length, ...next);
     }));
     const activeUids = new Set(next.map((seq) => seq.uid));
-    pendingLinearRecordExpansions.forEach((uid) => {
+    pendingLinearRecordExpansions.forEach((_, uid) => {
       if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
     });
     pendingLinearUploads.forEach((uid) => {
@@ -5875,7 +5888,7 @@ export const createAppSetup = () => {
         : members.has(entry.uid) ? [] : [entry]
     )), { alignmentMutation: 'source replaced.', retiredRecordKeys: [...members] });
     if (keepSource) {
-      pendingLinearRecordExpansions.add(replacement.uid);
+      pendingLinearRecordExpansions.set(replacement.uid, !seq[field]);
       pendingLinearUploads.add(replacement.uid);
     }
   };
@@ -6389,6 +6402,7 @@ export const createAppSetup = () => {
     linearSourceMoveBlockedReason,
     canMoveLinearSource,
     moveLinearSource,
+    linearFileCardRecord,
     getLinearSourceDefaultDefinition,
     setLinearSourceDefaultDefinition,
     getLinearSourceDefaultSubtitle,

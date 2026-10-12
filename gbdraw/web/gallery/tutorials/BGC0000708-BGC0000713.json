@@ -88,7 +88,7 @@
     },
     {
       "title": "Add the first cluster",
-      "body": "Under File 1, upload BGC0000708.gbk as the GenBank / DDBJ File. In Names for all records in this file, enter the organism and the subtitle; they name every record of the file in the figure. Type the <i> tags literally: the SVG uses them to italicize the taxon name.",
+      "body": "Under File 1, upload BGC0000708.gbk as the GenBank / DDBJ File. The file holds one record, so its name fields are on the File card: enter the organism in Organism / strain and the subtitle in Subtitle / title. Type the <i> tags literally: the SVG uses them to italicize the taxon name.",
       "table": {
         "columns": [
           "Field",
@@ -100,7 +100,7 @@
             "BGC0000708.gbk"
           ],
           [
-            "Organism / strain",
+            "Organism / strain (optional)",
             "<i>Streptomyces lividus</i> CBS 844.73"
           ],
           [
@@ -112,12 +112,12 @@
       "replay": [
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Default definition for file 1\"]",
+          "selector": "input[aria-label=\"Definition for sequence 1\"]",
           "value": "<i>Streptomyces lividus</i> CBS 844.73"
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Default subtitle for file 1\"]",
+          "selector": "input[aria-label=\"Subtitle / title for sequence 1\"]",
           "value": "Lividomycin biosynthetic gene cluster"
         }
       ],
@@ -126,8 +126,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-02-01-file1-defaults.webp",
-            "alt": "File 1 card with BGC0000708.gbk loaded and names for all records filled with the literal <i>Streptomyces lividus</i> CBS 844.73 and Lividomycin biosynthetic gene cluster.",
-            "caption": "BGC0000708.gbk in File 1, with the names for all its records typed in."
+            "alt": "File 1 card with BGC0000708.gbk loaded and its Organism / strain and Subtitle / title filled with the literal <i>Streptomyces lividus</i> CBS 844.73 and Lividomycin biosynthetic gene cluster.",
+            "caption": "BGC0000708.gbk in File 1, with its organism and subtitle typed in."
           },
           "capture": {
             "source": "webapp",
@@ -136,11 +136,11 @@
               "width": 1280,
               "height": 1000
             },
-            "replayThrough": 1,
+            "replayThrough": 2,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 420; const card = document.querySelector('section[aria-label=\"Linear input file 1\"]'); const header = card?.firstElementChild; const uploader = card?.querySelector(':scope > .space-y-2'); const defaults = card?.querySelector('[data-linear-source-defaults]'); if (!card || !header || !uploader || !defaults) throw new Error('BGC File 1 card was not found.'); header.setAttribute('data-capture', 'bgc-file1-header'); uploader.setAttribute('data-capture', 'bgc-file1-upload'); defaults.setAttribute('data-capture', 'bgc-file1-defaults'); card.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 420; const card = document.querySelector('section[aria-label=\"Linear input file 1\"]'); const header = card?.firstElementChild; const uploader = card?.querySelector(':scope > .space-y-2'); const names = card?.querySelector(':scope > [data-linear-record-names]'); if (!card || !header || !uploader || !names) throw new Error('BGC File 1 card was not found.'); header.setAttribute('data-capture', 'bgc-file1-header'); uploader.setAttribute('data-capture', 'bgc-file1-upload'); names.setAttribute('data-capture', 'bgc-file1-names'); card.scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "wait",
@@ -150,7 +150,7 @@
             "clipSelectors": [
               "[data-capture='bgc-file1-header']",
               "[data-capture='bgc-file1-upload']",
-              "[data-capture='bgc-file1-defaults']"
+              "[data-capture='bgc-file1-names']"
             ],
             "cropPadding": {
               "top": 10,
@@ -166,15 +166,16 @@
             "visibleText": [
               "File 1",
               "BGC0000708.gbk",
-              "Names for all records in this file"
+              "Organism / strain (optional)",
+              "Subtitle / title (optional)"
             ],
             "visibleControls": [
               {
-                "selector": "input[aria-label='Default definition for file 1']",
+                "selector": "input[aria-label='Definition for sequence 1']",
                 "value": "<i>Streptomyces lividus</i> CBS 844.73"
               },
               {
-                "selector": "input[aria-label='Default subtitle for file 1']",
+                "selector": "input[aria-label='Subtitle / title for sequence 1']",
                 "value": "Lividomycin biosynthetic gene cluster"
               }
             ]
@@ -184,7 +185,7 @@
     },
     {
       "title": "Add the other four clusters, one at a time",
-      "body": "Click Add sequence, upload the next file into the new File slot, and fill in the names for all its records before you add the next one. Keep this order: the comparison links adjacent rows.",
+      "body": "Click Add sequence, upload the next file into the new File slot, and fill in its Organism / strain and Subtitle / title before you add the next one. Keep this order: the comparison links adjacent rows.",
       "table": {
         "columns": [
           "File",
@@ -222,42 +223,42 @@
       "replay": [
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Default definition for file 2\"]",
+          "selector": "input[aria-label=\"Definition for sequence 2\"]",
           "value": "<i>Streptomyces fradiae</i> ATCC 10745"
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Default subtitle for file 2\"]",
+          "selector": "input[aria-label=\"Subtitle / title for sequence 2\"]",
           "value": "Neomycin biosynthetic gene cluster"
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Default definition for file 3\"]",
+          "selector": "input[aria-label=\"Definition for sequence 3\"]",
           "value": "<i>Streptomyces fradiae</i> MCIMB 8233"
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Default subtitle for file 3\"]",
+          "selector": "input[aria-label=\"Subtitle / title for sequence 3\"]",
           "value": "Neomycin biosynthetic gene cluster"
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Default definition for file 4\"]",
+          "selector": "input[aria-label=\"Definition for sequence 4\"]",
           "value": "<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455"
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Default subtitle for file 4\"]",
+          "selector": "input[aria-label=\"Subtitle / title for sequence 4\"]",
           "value": "Paromomycin biosynthetic gene cluster"
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Default definition for file 5\"]",
+          "selector": "input[aria-label=\"Definition for sequence 5\"]",
           "value": "<i>Streptomyces ribosidificus</i> ATCC 21294"
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"Default subtitle for file 5\"]",
+          "selector": "input[aria-label=\"Subtitle / title for sequence 5\"]",
           "value": "Ribostamycin biosynthetic gene"
         }
       ],
@@ -266,7 +267,7 @@
           "dataDependent": true,
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-01-file5-defaults.webp",
-            "alt": "File 5 card with BGC0000713.gbk loaded, the names for all its records filled, and the Add sequence button below it.",
+            "alt": "File 5 card with BGC0000713.gbk loaded, its Organism / strain and Subtitle / title filled, and the Add sequence button below it.",
             "caption": "The last file, BGC0000713.gbk, in File 5. Add sequence adds the next slot."
           },
           "capture": {
@@ -280,7 +281,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 420; const card = document.querySelector('section[aria-label=\"Linear input file 5\"]'); const header = card?.firstElementChild; const uploader = card?.querySelector(':scope > .space-y-2'); const defaults = card?.querySelector('[data-linear-source-defaults]'); if (!card || !header || !uploader || !defaults) throw new Error('BGC File 5 card was not found.'); header.setAttribute('data-capture', 'bgc-file5-header'); uploader.setAttribute('data-capture', 'bgc-file5-upload'); defaults.setAttribute('data-capture', 'bgc-file5-defaults'); const add = document.querySelector('button[aria-label=\"Add sequence\"]'); if (!add) throw new Error('Add sequence was not found.'); add.setAttribute('data-capture', 'bgc-add-sequence'); card.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 420; const card = document.querySelector('section[aria-label=\"Linear input file 5\"]'); const header = card?.firstElementChild; const uploader = card?.querySelector(':scope > .space-y-2'); const names = card?.querySelector(':scope > [data-linear-record-names]'); if (!card || !header || !uploader || !names) throw new Error('BGC File 5 card was not found.'); header.setAttribute('data-capture', 'bgc-file5-header'); uploader.setAttribute('data-capture', 'bgc-file5-upload'); names.setAttribute('data-capture', 'bgc-file5-names'); const add = document.querySelector('button[aria-label=\"Add sequence\"]'); if (!add) throw new Error('Add sequence was not found.'); add.setAttribute('data-capture', 'bgc-add-sequence'); card.scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "wait",
@@ -290,7 +291,7 @@
             "clipSelectors": [
               "[data-capture='bgc-file5-header']",
               "[data-capture='bgc-file5-upload']",
-              "[data-capture='bgc-file5-defaults']",
+              "[data-capture='bgc-file5-names']",
               "[data-capture='bgc-add-sequence']"
             ],
             "cropPadding": {
@@ -307,16 +308,17 @@
             "visibleText": [
               "File 5",
               "BGC0000713.gbk",
-              "Names for all records in this file",
+              "Organism / strain (optional)",
+              "Subtitle / title (optional)",
               "Add sequence"
             ],
             "visibleControls": [
               {
-                "selector": "input[aria-label='Default definition for file 5']",
+                "selector": "input[aria-label='Definition for sequence 5']",
                 "value": "<i>Streptomyces ribosidificus</i> ATCC 21294"
               },
               {
-                "selector": "input[aria-label='Default subtitle for file 5']",
+                "selector": "input[aria-label='Subtitle / title for sequence 5']",
                 "value": "Ribostamycin biosynthetic gene"
               }
             ]
@@ -1975,7 +1977,7 @@
               ],
               [
                 "Files 1 to 5",
-                "BGC0000708, BGC0000709, BGC0000711, BGC0000712, BGC0000713 (.gbk), Names for all records as in steps 2 and 3"
+                "BGC0000708, BGC0000709, BGC0000711, BGC0000712, BGC0000713 (.gbk), Organism / strain and Subtitle / title as in steps 2 and 3"
               ],
               [
                 "File 5 › Reverse complement",

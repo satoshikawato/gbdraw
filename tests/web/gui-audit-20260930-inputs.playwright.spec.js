@@ -215,16 +215,44 @@ test('replacing a cropped Linear file with a multi-record file expands it and cl
   const rows = () => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({
     start: sequence.region_start ?? null,
     end: sequence.region_end ?? null,
-    definition: sequence.definition || ''
+    definition: sequence.definition || '',
+    file: sequence.file_definition || ''
   })));
   // D-32: replacing one record with one record keeps its crop and Definition.
   await uploadLinear(page, 0, 'second.gb', SECOND_RECORD_TEXT);
-  expect(await rows()).toEqual([{ start: 100, end: 3000, definition: 'Genome A custom' }]);
+  expect(await rows()).toEqual([{ start: 100, end: 3000, definition: 'Genome A custom', file: '' }]);
   await uploadLinear(page, 0, 'two.gb', BATCH_TEXT);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 30_000 }).toBe(2);
-  expect(await rows())
-    .toEqual([{ start: null, end: null, definition: '' }, { start: null, end: null, definition: '' }]);
+  // The replaced file's record name does not become the new File's name.
+  const cleared = { start: null, end: null, definition: '', file: '' };
+  expect(await rows()).toEqual([cleared, cleared]);
   await generateAndWaitForResult(page);
+});
+
+// Record Layout (like Generate) reads the records of every File. Asked for
+// before the records of a replacing file are read, it must not turn the
+// replaced file's record name into the new File's name.
+test('a replaced Linear file keeps no record name when Record Layout starts before its records are read', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openLinear(page);
+  await uploadLinear(page, 0, 'first.gb', FIRST_RECORD_TEXT);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.linearSeqs[0].definition = 'Genome A custom';
+    app.setLinearRecordLayoutEnabled(false);
+  });
+  // The replacement and the request run in one task, so the request is made
+  // before the record discovery of the new file returns.
+  await evaluateWithRetainedPromise(page, async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'two.gb', { type: 'text/plain' }));
+    await app.setLinearRecordLayoutEnabled(true);
+  }, BATCH_TEXT);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 30_000 }).toBe(2);
+  const cleared = { definition: '', file: '' };
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => (
+    { definition: sequence.definition || '', file: sequence.file_definition || '' }
+  )))).toEqual([cleared, cleared]);
 });
 
 // The shared record-discovery vector (G-D) supplies the loader's per-record
@@ -378,9 +406,8 @@ test('Reset Settings clears Linear per-record display text and the alignment pla
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.sessionSaveAvailable, null, { timeout: 300_000 });
   await settle(page);
-  // The Gallery Session names its clusters in File defaults; give one record
-  // its own display text so Reset has per-record text to clear.
-  await page.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
+  // The Gallery Session names each cluster in its record's own fields, which
+  // the card of a one-record File shows; type other text into the first one.
   await page.getByLabel('Definition for sequence 1', { exact: true }).fill('<i>Streptomyces lividus</i>');
   await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).fill('Lividomycin cluster');
   await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).press('Tab');
@@ -389,6 +416,8 @@ test('Reset Settings clears Linear per-record display text and the alignment pla
     const { state } = await import('/gbdraw/web/js/state.js');
     return state.linearSeqs.map((sequence) => sequence.record_subtitle || '');
   });
+  const definitionsBefore = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.definition || ''));
+  expect(definitionsBefore[0]).toBe('<i>Streptomyces lividus</i>');
   const planBefore = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     return Boolean(state.similarityAlignmentPlan?.value);
@@ -414,11 +443,15 @@ test('Reset Settings clears Linear per-record display text and the alignment pla
   const restored = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     return {
+      definitions: state.linearSeqs.map((sequence) => sequence.definition || ''),
       subtitles: state.linearSeqs.map((sequence) => sequence.record_subtitle || ''),
       alignmentPlan: Boolean(state.similarityAlignmentPlan?.value)
     };
   });
+  expect(restored.definitions).toEqual(definitionsBefore);
   expect(restored.subtitles).toEqual(before);
+  // The card of the one-record File shows the restored name again.
+  await expect(page.getByLabel('Definition for sequence 1', { exact: true })).toHaveValue('<i>Streptomyces lividus</i>');
   expect(restored.alignmentPlan).toBe(planBefore);
 });
 

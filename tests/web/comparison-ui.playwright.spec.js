@@ -163,12 +163,14 @@ test('Phase 1 keeps secondary controls quiet until they are useful', { tag: '@pr
   await expect(page.locator('[data-linear-source-depth]').first()).not.toHaveAttribute('open', '');
   await expect(page.locator('[data-linear-source-depth]').first().locator(':scope > summary'))
     .toHaveText('No depth track attached');
-  await expect(page.getByPlaceholder('e.g., Escherichia coli O157:H7 Sakai').first())
-    .toBeVisible();
+  // A fresh File card has one row, so the record's own name fields are on it.
+  const definition = page.getByLabel('Definition for sequence 1', { exact: true });
+  await expect(definition).toBeVisible();
+  await expect(definition).toHaveAttribute('placeholder', 'e.g., Escherichia coli O157:H7 Sakai');
 
   const typography = await page.evaluate(() => {
     const secondary = document.querySelector('details[data-linear-record-options] > summary');
-    const helper = document.querySelector('[data-linear-source-defaults] label');
+    const helper = document.querySelector('[data-linear-source-card] > [data-linear-record-names] span');
     const add = document.querySelector('[data-linear-file-add]');
     const fileActions = document.querySelector('.app-file-actions');
     return {

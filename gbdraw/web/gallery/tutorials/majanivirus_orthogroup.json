@@ -120,8 +120,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-02-01-upload-row-label-context.webp",
-            "alt": "MjeNMV.gb record card with Record options open and its Organism / strain value visible.",
-            "caption": "Upload MjeNMV.gb, open Record options, enter its Organism / strain value, and repeat the remaining rows from the table."
+            "alt": "MjeNMV.gb File card with its Organism / strain value typed in above the closed Record options.",
+            "caption": "Upload MjeNMV.gb, enter its Organism / strain value on the File card, and repeat the remaining rows from the table."
           },
           "capture": {
             "source": "webapp",
@@ -130,7 +130,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['MjeNMV.gb', 'MelaMJNV.gb', 'PemoMJNVA.gb', 'PeseMJNV.gb', 'PemoMJNVB.gb', 'LvMJNV.gb', 'TrcuMJNV.gb', 'MeenMJNV.gb', 'MejoMJNV.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Majanivirus GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = 'Marsupenaeus japonicus endogenous nimavirus'; const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Majanivirus Linear input row 1 was not found.'); options.open = true; const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === 'Organism / strain (optional)' && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error('Majanivirus Organism / strain input was not found.'); input.dataset.capture = 'majanivirus-organism-input'; const fileCard = row.closest('[data-linear-source-card]'); if (!fileCard) throw new Error('Linear file card was not found.'); fileCard.dataset.capture = 'majanivirus-record-row'; fileCard.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['MjeNMV.gb', 'MelaMJNV.gb', 'PemoMJNVA.gb', 'PeseMJNV.gb', 'PemoMJNVB.gb', 'LvMJNV.gb', 'TrcuMJNV.gb', 'MeenMJNV.gb', 'MejoMJNV.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Majanivirus GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = 'Marsupenaeus japonicus endogenous nimavirus'; const input = document.querySelector('[data-linear-record-names=\"record-1\"] input[aria-label=\"Definition for sequence 1\"]'); if (!input) throw new Error('Majanivirus Organism / strain input was not found.'); input.dataset.capture = 'majanivirus-organism-input'; const fileCard = input.closest('[data-linear-source-card]'); if (!fileCard) throw new Error('Linear file card was not found.'); fileCard.dataset.capture = 'majanivirus-record-row'; fileCard.scrollIntoView({ block: 'center' });"
               },
               {"type": "evaluate", "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"}
             ],

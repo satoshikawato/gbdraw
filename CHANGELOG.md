@@ -158,6 +158,18 @@ write-up of a release.
   Auto window and step values show the value for the current genome once its
   records are read. Text with `<i>` markup shows an italic preview. Removing a
   Linear File asks **Empty this slot** or **Remove file**.
+- Web app (Linear): a name typed on an empty File card is kept when its file is
+  chosen. For a file with several records it becomes the File-level name
+  (OV-486).
+- Web app (Linear): a File with one record shows that record's **Organism /
+  strain** and **Subtitle / title** on the File card instead of **Names for all
+  records in this file**. A File with two or more records, or a one-record File
+  that holds a File-level name, is unchanged. A name typed on the card of a
+  one-record File is now the record's own: **Reset Settings** clears it and
+  **Undo** restores it, and another one-record file chosen for the card keeps
+  it.
+- Web app (Linear): in **Record options**, the **Using file default** badge and
+  the label of its field each stay on one line (OV-485).
 - Web app: before the records are inspected, Region Annotations rows name their
   record instead of calling it unavailable (OV-373), and Linear record selects
   say **Not inspected** instead of **Loading records...** (OV-379). After
