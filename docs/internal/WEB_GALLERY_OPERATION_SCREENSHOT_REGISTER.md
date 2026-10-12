@@ -5,6 +5,23 @@ Last updated: 2026-10-12
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
 
+## Edit-surface redesign: feature popup, search bar, Legend tab (2026-10-12)
+
+Operations that show the redesigned feature popup, the Feature search bar, or the Editor drawer's Legend tab.
+Recaptured at the tool default scale; an image is kept only when it visibly differs from the committed one.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `vibrio-harveyi-group-collinear` | `manual-06-01-search-dnaa.webp`, `manual-07-01-search-rctb.webp` | Recapture; recipe corrected | Search bar with **Regular expression** and the status `1 of 2 matches`; the replay waits on that status; the open feature popup is closed first | Accepted; no popup fragment |
+| `vibrio-harveyi-group-collinear` | `manual-06-02-rotate-start.webp` | Recapture; text corrected | **Edit** tab: header gene, product, record and location; **Similarity group** above **Layout**; **Apply when I Generate** and **Apply now** | Accepted |
+| `BGC0000708-BGC0000713` | `manual-07-01-align-og6.webp` | Recapture; recipe corrected | neoU popup with gene and product in the header, **Similarity group**, **Align…**, **Review alignment options…**; the recipe sets the popup's own width to 500 px (the size state it wrote before is not on `window.__GBDRAW_APP__`, so the popup stayed 720 px wide and left the window), crops from the whole popup header, and stops when the popup does not fit the window | Accepted at 1926x858: close button, tabs, and **Align…** inside the crop |
+| `BGC0000708-BGC0000713` | `manual-12-01-feature-popup.webp` | Recapture; recipe corrected | **Qualifiers** tab as a name and value list (no row borders): the recipe marks each name and the value beside it and scrolls the name to the top | Accepted |
+| `BGC0000708-BGC0000713` | `manual-11-01-orthogroup-popup.webp` | Keep | Similarity-group popup unchanged apart from sub-percent noise | Committed bytes kept |
+| `HmmtDNA_ATskew` | `manual-10-01-feature-popup.webp` | Recapture; recipe corrected | RNR2 **Details** popup left of the highlighted l-rRNA; the recipe pans the feature to a fixed place in the preview before the click, where it left the place to the scroll that the click does on a feature outside the visible preview (three different outcomes seen, one capture run timed out) | Accepted at 3153x903; two runs byte-identical |
+| `HmmtDNA_ATskew` | `post-02-01-legend-editor.webp` | Recapture; recipe added | Exact Session; **Editor** drawer open on **Legend**; list scrolled to the AT skew rows; crop from the drawer header to the last row | Accepted; the AT skew swatches show the GC skew colors (Product bug, see the handoff) |
+
+The capture tool's `resetSettings` action confirms the in-app **Reset all settings?** dialog; the tool no longer expects a browser dialog.
+
 ## BGC progressive tutorial (Gallery revision 2026-10-11)
 
 The BGC Gallery Session is rebuilt from the five MIBiG files in

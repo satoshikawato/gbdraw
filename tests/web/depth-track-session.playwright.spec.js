@@ -12,7 +12,8 @@ const {
   getDiagramWorkerActivity,
   openApp,
   reveal,
-  waitForAppShell
+  waitForAppShell,
+  expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -720,11 +721,8 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
     expect(savedPath).toBeTruthy();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppShell(page, { waitForPalette: false });
-    const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
     await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
-    const dialog = await dialogPromise;
-    expect(dialog.message()).toBe('Session loaded successfully!');
-    await dialog.accept();
+    await expectSessionLoadedWithoutWarnings(page);
     await expect.poll(() => page.evaluate(() => (
       window.__GBDRAW_APP__.mode === 'linear' && window.__GBDRAW_APP__.linearSeqs.length
     ))).toBe(2);
@@ -1695,8 +1693,9 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(repairedCanonicalSession))
   });
-  await expect.poll(() => dialogs.length).toBe(1);
-  expect(dialogs[0]).toBe('Session loaded successfully!');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: repaired-canonical.gbdraw-session.json', { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
+  expect(dialogs).toEqual([]);
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
     comparisonHeight: window.__GBDRAW_APP__.adv.comparison_height,
@@ -1909,11 +1908,8 @@ ORIGIN
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
 
   expect(await layoutPreferenceTree()).toEqual(expectedPreferences);
   await expectActiveProjection('circular', false, expectedPreferences.circular.single);
@@ -1976,11 +1972,8 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     return JSON.parse(gunzipSync(readFileSync(filePath)).toString('utf8'));
   };
   const loadSession = async (filePath) => {
-    const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
     await page.locator('input[accept^=".json,"]').first().setInputFiles(filePath);
-    const dialog = await dialogPromise;
-    expect(dialog.message()).toBe('Session loaded successfully!');
-    await dialog.accept();
+    await expectSessionLoadedWithoutWarnings(page);
     await page.waitForFunction(() => {
       const app = window.__GBDRAW_APP__;
       return (
@@ -2527,6 +2520,7 @@ ORIGIN
   });
   await expect(page.getByRole('alert', { name: 'Session not loaded' })).not.toContainText('Injected session commit failure');
   expect(dialogs).toEqual([]);
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
     title: window.__GBDRAW_APP__.sessionTitle,
@@ -2851,11 +2845,8 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return app.mode === 'linear' &&
@@ -3005,11 +2996,8 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return app.mode === 'circular' &&

@@ -2,6 +2,7 @@
 /** @import { DrawingState, LegendEntry } from '../../state.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from '../../services/legend-svg.js' */
 /** @import { SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
+/** @import { DrawnTrack } from '../../services/track-legend-rows.js' */
 import { displayedLegendRowColors, draftLegendRowColors, draftLegendRows, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { matchedRuleKeys, ruleKey, ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
@@ -77,6 +78,13 @@ import {
  *   choice in flight ends (D-12, OIC-028).
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
+ * @property {ReadDrawnTracksPort} readDrawnTracks
+ */
+
+/**
+ * The tracks of the request that drew the displayed Result (`drawnTracks`), which give a track's
+ * Legend row its color (OV-484).
+ * @typedef {() => readonly DrawnTrack[]} ReadDrawnTracksPort
  */
 
 /** @param {FeatureColorActionsOptions} options */
@@ -90,7 +98,8 @@ export const createFeatureColorActions = ({
   closeAfterDialogChoice = (close) => { close(); },
   // R13, D-15: the palette owner's user default colors.
   readUserDefaultColor,
-  setDefaultColor
+  setDefaultColor,
+  readDrawnTracks
 }) => {
   const {
     extractedFeatures,
@@ -287,7 +296,7 @@ export const createFeatureColorActions = ({
       legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
       dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalLegendOrder.value || []
     });
-    const draft = draftLegendRowColors({ ...context, paletteColors: appliedFeatureColors(state) });
+    const draft = draftLegendRowColors({ ...context, paletteColors: appliedFeatureColors(state), drawnTracks: readDrawnTracks() });
     return Object.entries(drawing.legendStrokeOverrides).find(([caption]) => {
       const row = rows.styledRow(caption);
       if (!row) return false;
@@ -314,7 +323,7 @@ export const createFeatureColorActions = ({
   // palette colors; never the color the row recorded at the last Generate.
   // Without a row, nothing is derived (review L4).
   /** @param {DrawingState} drawing @param {LegendEntry | null} entry */
-  const listedRowColor = (drawing, entry) => (entry ? displayedLegendRowColors(state, drawing).listed(entry) : undefined);
+  const listedRowColor = (drawing, entry) => (entry ? displayedLegendRowColors(state, drawing, readDrawnTracks()).listed(entry) : undefined);
   // R15-3 (OV-285): the deleted row a rename's caption names. The caption only
   // detects the conflict; the row is its Python key (an editor row's own
   // caption), which the composition root's Restore acts on.
@@ -599,6 +608,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = 0;
     legendRenameDialog.mergeAvailable = true;
     legendRenameDialog.deletedTargetKey = '';
+    legendRenameDialog.suffixCaption = '';
     legendRenameDialog.pendingRequest = null;
   });
 
@@ -899,8 +909,9 @@ export const createFeatureColorActions = ({
    * @param {string} targetColor The color the target row shows.
    * @param {boolean | null} mergeAvailable
    * @param {PythonLegendKey | ''} deletedTargetKey The key of a deleted target row, else ''.
+   * @param {string} suffixCaption The name "Keep both" gives the renamed row.
    */
-  const openLegendRenameTargetDialog = (request, targetEntry, targetColor, mergeAvailable, deletedTargetKey) => {
+  const openLegendRenameTargetDialog = (request, targetEntry, targetColor, mergeAvailable, deletedTargetKey, suffixCaption) => {
     legendRenameDialog.show = true;
     legendRenameDialog.mode = 'target';
     legendRenameDialog.oldCaption = request.oldCaption;
@@ -911,6 +922,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = request.siblingCount || 0;
     legendRenameDialog.mergeAvailable = mergeAvailable;
     legendRenameDialog.deletedTargetKey = deletedTargetKey;
+    legendRenameDialog.suffixCaption = suffixCaption;
     legendRenameDialog.pendingRequest = request;
   };
 
@@ -959,7 +971,7 @@ export const createFeatureColorActions = ({
     }
 
     // D-06 (PD-OI-061): a rename onto another entry of a different color asks
-    // Merge, Suffix, or Cancel, with or without features. A target owned by a
+    // Merge, Keep both (suffix), or Cancel, with or without features. A target owned by a
     // specific-color rule keeps the PD-OI-042 caption disambiguation instead.
     // R15-3 (OV-285): a rename onto a deleted row's caption always asks, as onto
     // a listed row; its Merge is a Restore of that row, then the merge.
@@ -969,7 +981,7 @@ export const createFeatureColorActions = ({
     const isDistinctTargetEntry = targetEntry && !captionsMatch(targetEntry.caption, oldCaption);
     // OV-282: the color the target row shows, the palette's for a row the palette colors.
     const targetColor = String((deletedTarget
-      ? displayedLegendRowColors(state, drawing).deleted(deletedTarget) : listedRowColor(drawing, listedTarget)) || '');
+      ? displayedLegendRowColors(state, drawing, readDrawnTracks()).deleted(deletedTarget) : listedRowColor(drawing, listedTarget)) || '');
     const ruleOwnedTarget = isDistinctTargetEntry && getLegendRowRules(legendEntryKey(targetEntry)).length > 0;
     const featureOrRuleRename = features.length > 0 || getLegendRowRules(request.sourceKey).length > 0;
     // OV-62 (PD-OI-061 amended): two rows merge only when each draws features of
@@ -1006,7 +1018,8 @@ export const createFeatureColorActions = ({
           targetEntry,
           targetColor,
           mergeAllowed,
-          deletedTarget ? legendEntryKey(deletedTarget) : ''
+          deletedTarget ? legendEntryKey(deletedTarget) : '',
+          getUniqueLegendCaption(drawing, newCaption, { ignoreCaptions: [oldCaption] })
         );
         return;
       }

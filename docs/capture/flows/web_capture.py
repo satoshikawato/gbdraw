@@ -397,7 +397,11 @@ def fit_complete_linear_preview(
     page: Page,
     target_zoom: str = "40%",
 ) -> None:
-    """Use the public preview controls to center a whole Linear diagram in view."""
+    """Use the public preview controls to center a whole Linear diagram in view.
+
+    `target_zoom` is the documented zoom; a diagram wider than the preview at
+    that zoom is shown with the preview's own Fit instead.
+    """
 
     reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
     zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
@@ -442,14 +446,23 @@ def fit_complete_linear_preview(
             """
         )
 
+    def too_wide(geometry: dict[str, float] | None) -> bool:
+        if geometry is None:
+            raise AssertionError("Could not resolve the rendered Linear preview")
+        return geometry["wrapperWidth"] > geometry["canvasWidth"] + 4
+
     geometry = preview_geometry()
-    if geometry is None:
-        raise AssertionError("Could not resolve the rendered Linear preview")
-    if geometry["wrapperWidth"] > geometry["canvasWidth"] + 4:
-        raise AssertionError(
-            "The documented Linear preview zoom does not fit the complete diagram: "
-            f"{geometry!r}"
-        )
+    if too_wide(geometry):
+        # Wider than the preview at the documented zoom: the app's Fit takes the
+        # largest zoom that shows the whole diagram, measured from the page.
+        page.get_by_role("button", name="Fit to preview", exact=True).click()
+        page.wait_for_timeout(250)
+        geometry = preview_geometry()
+        if too_wide(geometry):
+            raise AssertionError(
+                "The documented Linear preview zoom does not fit the complete diagram: "
+                f"{geometry!r}"
+            )
 
     delta_x = geometry["canvasCenterX"] - geometry["wrapperCenterX"]
     if abs(delta_x) > 2:

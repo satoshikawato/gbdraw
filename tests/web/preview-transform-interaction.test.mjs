@@ -109,7 +109,14 @@ await writeFile(
 );
 await writeFile(
   join(tempDir, 'services', 'legend-svg.js'),
-  'export const COMPARISON_LEGEND_SELECTOR = "[data-gbdraw-role=comparison-legend]";\n',
+  'export const COMPARISON_LEGEND_SELECTOR = "[data-gbdraw-role=comparison-legend]";\n' +
+    'export const legendEntryKey = (entry) => String(entry?.caption || "");\n',
+  'utf8'
+);
+// No Legend row or record definition in these fixtures opens a popup.
+await writeFile(
+  join(tempDir, 'app', 'preview-item-popup.js'),
+  'export const PREVIEW_ITEM_SELECTOR = "g[data-legend-key]";\nexport const previewItemTarget = () => null;\n',
   'utf8'
 );
 

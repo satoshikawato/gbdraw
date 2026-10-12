@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync, gzipSync } = require('node:zlib');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, expectSessionLoadedWithoutWarnings, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -49,11 +49,8 @@ const galleryV30Session = (edit = () => {}) => {
 };
 
 const loadBaselineSession = async (page) => {
-  const dialogPromise = page.waitForEvent('dialog');
   await page.locator(sessionInputSelector).setInputFiles(baselineSession);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => (
     window.__GBDRAW_APP__?.sessionTitle === 'HmmtDNA_basic_circular'
   ));
@@ -114,6 +111,7 @@ test('session loading is painted before import work and prevents duplicate adopt
     dialogs.push(dialog.message());
     await dialog.accept();
   });
+  const notice = page.locator('[data-app-notice]');
 
   const sessionInput = page.locator(sessionInputSelector);
   const loadButton = page.getByRole('button', { name: 'Load Session', exact: true });
@@ -152,6 +150,7 @@ test('session loading is painted before import work and prevents duplicate adopt
       .filter(({ name }) => name === 'firstCommittedPreview').length
   ))).toBe(0);
   expect(dialogs).toEqual([]);
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
 
   await page.evaluate(() => window.__GBDRAW_SESSION_IMPORT_GATE__.release());
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
@@ -159,7 +158,9 @@ test('session loading is painted before import work and prevents duplicate adopt
   await expect(loadButton).toBeEnabled();
   await expect(loadButton).toHaveAttribute('aria-busy', 'false');
   await expect(sessionInput).toHaveValue('');
-  expect(dialogs).toEqual(['Session loaded successfully!']);
+  expect(dialogs).toEqual([]);
+  await expect(notice).toContainText(`Session loaded: ${replacementSession.name}`, { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   const after = await importSnapshot(page);
   expect(after.title).toBe('lambda_basic_linear');
   expect(after.mode).toBe('linear');
@@ -177,10 +178,9 @@ test('session loading is painted before import work and prevents duplicate adopt
       .filter(({ name }) => name === 'sessionSelection').length === 2
     && window.__GBDRAW_APP__?.sessionImportPending === false
   ));
-  expect(dialogs).toEqual([
-    'Session loaded successfully!',
-    'Session loaded successfully!'
-  ]);
+  expect(dialogs).toEqual([]);
+  await expect(notice).toContainText(`Session loaded: ${replacementSession.name}`, { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   await expect(sessionInput).toHaveValue('');
 });
 
@@ -201,12 +201,14 @@ test('a Session 39 table row with extra cells loads with a notice that names it'
   await page.locator(sessionInputSelector).setInputFiles(join(
     repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
   ));
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await page.waitForFunction(() => (
     window.__GBDRAW_SESSION_LOADING_EVENTS__.some(({ name }) => name === 'interactiveReady')
     && window.__GBDRAW_APP__?.sessionImportPending === false
   ), null, { timeout: 120_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
-  expect(dialogs).toEqual(['Session loaded successfully! Some table rows of this older Session were read '
+  expect(dialogs).toEqual([]);
+  await expect(page.locator('[data-app-notice] li')).toHaveText(['Some table rows of this older Session were read '
     + 'as the current version writes them. Label whitelist: line 1 had extra cells, joined into the last column '
     + 'with one space.']);
   expect(await page.evaluate(() => ({
@@ -256,6 +258,7 @@ test('failed session loading clears pending state and preserves the prior sessio
   await expect(loadButton).toBeEnabled();
   await expect(sessionInput).toHaveValue('');
   expect(dialogs).toEqual([]);
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
     'This file is not a gbdraw Session: it is not valid JSON.'
   );
@@ -272,6 +275,7 @@ test('failed session loading clears pending state and preserves the prior sessio
     && window.__GBDRAW_APP__?.sessionImportPending === false
   ));
   expect(dialogs).toEqual([]);
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
     'This file is not a gbdraw Session: it is not valid JSON.'
   );
@@ -317,8 +321,8 @@ test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name 
   };
   await loadAndSettle(galleryV30Session());
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
-  expect(dialogs).toHaveLength(1);
-  expect(dialogs[0]).toMatch(/^Session loaded successfully!/);
+  expect(dialogs).toEqual([]);
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   const loaded = await importSnapshot(page);
   expect(loaded).toMatchObject({ title: 'out', mode: 'linear', selectedResultName: 'out' });
   expect(loaded.previewHtml).toContain('<svg');
@@ -326,7 +330,8 @@ test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name 
   await loadAndSettle(galleryV30Session((adv) => {
     adv.circular_track_slots_enabled = true;
   }));
-  expect(dialogs).toHaveLength(1);
+  expect(dialogs).toEqual([]);
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
     'The track settings are invalid. Track row 1. Field: spacing. Custom Track Slots no longer read this field.'
   );
@@ -363,9 +368,10 @@ test('Load Session asks before it replaces work changed since the last Save or L
   });
   await expect(confirm).toHaveCount(0);
   await expect.poll(() => pickers).toBe(2);
-  await page.evaluate(async () => {
+  await page.evaluate(() => {
     window.__GBDRAW_APP__.form.prefix = 'typed-not-committed';
-    await window.__GBDRAW_APP__.openSessionFilePicker();
+    // The picker call waits for the choice, so it is not awaited here.
+    void window.__GBDRAW_APP__.openSessionFilePicker();
   });
   await expect(confirm).toBeVisible();
   await page.keyboard.press('Escape');
@@ -395,11 +401,8 @@ test('Load Session asks before it replaces work changed since the last Save or L
   const chooserPromise = page.waitForEvent('filechooser');
   await confirm.getByRole('button', { name: 'Load Session', exact: true }).click();
   const chooser = await chooserPromise;
-  const loaded = page.waitForEvent('dialog');
   await chooser.setFiles(baselineSession);
-  const alert = await loaded;
-  expect(alert.message()).toBe('Session loaded successfully!');
-  await alert.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
   await expect.poll(undoCount).toBe(0);
   await expect(prefix).not.toHaveValue('unsaved-work');
@@ -457,11 +460,8 @@ const exampleFit = (page) => page.evaluate(() => {
 const expectExampleFitted = (page) => expect.poll(() => exampleFit(page))
   .toEqual({ inside: true, zoomChanged: true });
 const acceptLoadedSession = async (page, title) => {
-  const loaded = page.waitForEvent('dialog');
   return async () => {
-    const alert = await loaded;
-    expect(alert.message()).toBe('Session loaded successfully!');
-    await alert.accept();
+    await expectSessionLoadedWithoutWarnings(page);
     await page.waitForFunction((expected) => (
       window.__GBDRAW_APP__?.sessionImportPending === false
       && window.__GBDRAW_APP__.sessionTitle === expected
@@ -621,11 +621,10 @@ test('the example chooser cancels with focus back on Load an example and keeps t
 // "Applying an edit".
 test('the first feature popup after a Session load says it is preparing and keeps Save and Load available', async ({ page }) => {
   await openApp(page);
-  const dialogPromise = page.waitForEvent('dialog');
   await page.locator(sessionInputSelector).setInputFiles(join(
     repoRoot, 'gbdraw', 'web', 'gallery', 'sessions', 'BGC0000708-BGC0000713.gbdraw-session.json'
   ));
-  await (await dialogPromise).accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false
     && (window.__GBDRAW_APP__?.results || []).length > 0);
   // The livE CDS of record 1; no ribbon lies under its centre.
@@ -639,4 +638,28 @@ test('the first feature popup after a Session load says it is preparing and keep
   await expect(page.locator('.feature-popup')).toBeVisible({ timeout: 180_000 });
   await expect(preparing).toHaveCount(0);
   expect(await page.evaluate(() => Boolean(window.__GBDRAW_APP__.clickedPairwiseMatch))).toBe(false);
+});
+
+// The Load notice describes the loaded Session: Generate keeps it; a mode
+// switch and Reset Settings, which replace what it describes, clear it. A
+// live region that is always rendered announces it.
+test('the Load notice stays across Generate and clears on a mode switch and Reset Settings', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+  await loadBaselineSession(page);
+  const notice = page.locator('[data-app-notice]');
+  await expect(page.locator('[data-app-notice-announcer]')).toHaveText(/^Session loaded/);
+  await generateAndWaitForResult(page);
+  await expect(notice).toContainText('Session loaded');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('linear'))).toEqual({ status: 'ok' });
+  await expect(notice).toHaveCount(0);
+  await expect(page.locator('[data-app-notice-announcer]')).toHaveCount(1);
+
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'))).toEqual({ status: 'ok' });
+  await loadBaselineSession(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.requestResetSettings(); });
+  const reset = page.getByRole('dialog', { name: 'Reset all settings?', exact: true });
+  await expect(reset).toContainText('Linear comparisons, which turn off; their uploaded tables stay');
+  await reset.getByRole('button', { name: 'Reset all settings', exact: true }).click();
+  await expect(notice).toHaveCount(0);
 });

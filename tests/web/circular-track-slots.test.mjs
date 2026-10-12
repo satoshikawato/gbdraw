@@ -171,6 +171,30 @@ test('the track preview uses the short/long boundary the Circular drawing keeps'
   assert.equal(featureWidthNote({ 'labels.length_threshold.circular': 50_000 }), '≈ 18.5 px (estimate)');
 });
 
+// OV-487: Python draws a content or skew slot without a dinucleotide with the
+// drawing's, so the closed disclosure names that one, not GC.
+test('the slot options summary names the dinucleotide the slot is drawn with', () => {
+  const state = createState();
+  state.adv.nt = 'AT';
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  const summary = (renderer, params) => editor.circularTrackSlotOptionsSummary({ id: 'slot', renderer, params });
+  assert.equal(summary('dinucleotide_skew', {}), 'AT · legend label, gaps, colors');
+  assert.equal(summary('dinucleotide_content', { nt: ' ' }), 'AT · legend label, gaps');
+  assert.equal(summary('dinucleotide_content', { nt: 'gc' }), 'GC · legend label, gaps');
+  assert.equal(summary('features', {}), 'Gaps');
+});
+
+// The default tracks draw the drawing's dinucleotide, so the preset summary
+// names it too.
+test('the preset summary names the default tracks by the dinucleotide of the drawing', () => {
+  const state = createState();
+  state.form.suppress_skew = false;
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  assert.match(editor.circularTrackPresetSummary().detail, /GC content, GC skew inside$/);
+  state.adv.nt = ' at ';
+  assert.match(editor.circularTrackPresetSummary().detail, /AT content, AT skew inside$/);
+});
+
 test('Circular placement actions preserve the Axis boundary and radial sides', () => {
   const state = createState({
     slots: [
@@ -433,13 +457,13 @@ test('un-hiding GC while the custom stack is off restores the row the hide disab
   assert.deepEqual(gcRows(state), [{ id: 'gc_content', enabled: true, marked: false }]);
 });
 
-test('a GC row the user disabled stays disabled across Hide and un-hide', () => {
+test('a GC row the user disabled stays disabled across Hide and un-hide', async () => {
   const state = createState({
     slots: [featureSlot(), spacerSlot(), { ...gcSlot(), enabled: false }, { ...gcSlot(), id: 'gc_content_2' }]
   });
-  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state), askChoice: async () => 'hide' });
 
-  editor.setCircularGcSuppressed(true);
+  await editor.setCircularGcSuppressed(true);
   assert.deepEqual(gcRows(state), [
     { id: 'gc_content', enabled: false, marked: false },
     { id: 'gc_content_2', enabled: false, marked: true }

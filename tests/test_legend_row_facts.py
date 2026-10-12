@@ -33,7 +33,12 @@ from gbdraw.api import (
 )
 from gbdraw.api.request_render import render_request
 from gbdraw.legend.row_facts import collect_legend_row_facts
+from gbdraw.diagrams.circular.assemble import _sync_legend_table_for_circular_slots
+from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
 from gbdraw.legend.table import _generated_legend_fills
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, _decode_track_slots
+from gbdraw.tracks.circular import parse_circular_track_slots
+from gbdraw.tracks.linear import parse_linear_track_slots
 
 _COLOR_COLUMNS = ["feature_type", "qualifier_key", "value", "color", "caption"]
 _VISIBILITY_COLUMNS = ["record_id", "feature_type", "qualifier", "value", "action"]
@@ -294,3 +299,41 @@ def test_generated_legend_rows_take_no_input_the_web_pin_lacks():
         "feature_specific_colors", "features_present", "default_colors", "used_color_rules",
         "default_used_features", "gc_config", "skew_config", "depth_config", "show_gc", "show_skew", "show_depth",
     ]
+
+
+TRACK_SLOT_ROWS = json.loads(
+    (Path(__file__).parent / "fixtures" / "legend_track_slot_rows.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", TRACK_SLOT_ROWS, ids=[case["name"] for case in TRACK_SLOT_ROWS])
+def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
+    """The Web app reads each of these rows' slot and fill from the request's slot entries (OV-484)."""
+    palette = case["palette"]
+
+    def track(high, low):
+        return SimpleNamespace(
+            dinucleotide=case["dinucleotide"], high_fill_color=high, low_fill_color=low, stroke_color="none", stroke_width=0
+        )
+
+    gc_config = track(palette["gc_content"], palette["gc_content"])
+    skew_config = track(palette["skew_high"], palette["skew_low"])
+    # The request's entries (spec strings or slot objects), read as a render reads them.
+    entries = list(_decode_track_slots(case["slots"], mode=case["mode"], schema=CANONICAL_REQUEST_SCHEMA, path="slots"))
+    table = {key: {"fill": fill} for key, fill in case.get("legend", [])}
+    if case["mode"] == "circular":
+        table = _sync_legend_table_for_circular_slots(
+            table, circular_track_slots=parse_circular_track_slots(entries), gc_config=gc_config, skew_config=skew_config,
+            depth_config=None, depth_df=None, cfg=SimpleNamespace(),
+        )
+    else:
+        defaults = _generated_legend_fills(
+            {}, [], pd.DataFrame(columns=["feature_type", "color"]), used_color_rules=None, default_used_features=set(),
+            gc_config=gc_config, skew_config=skew_config, depth_config=None,
+            show_gc=True, show_skew=True, show_depth=False,
+        )
+        table.update({key: {"fill": fill} for key, fill in defaults.items()})
+        table = _sync_legend_table_for_linear_slots(
+            table, linear_track_slots=parse_linear_track_slots(entries), skew_config=skew_config, depth_tracks=None,
+        )
+    assert [[key, row["fill"]] for key, row in table.items()] == [[key, fill] for key, _, _, fill in case["rows"]]

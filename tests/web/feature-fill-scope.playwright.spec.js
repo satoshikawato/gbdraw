@@ -174,7 +174,7 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
     () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())
   ).toBe(0);
 
-  const captionScopeButton = scopeDialog.locator('button.bg-green-600');
+  const captionScopeButton = scopeDialog.getByRole('button').filter({ hasText: /^\s*Legend item "/ });
   await expect(captionScopeButton).toBeVisible();
   await captionScopeButton.click();
   // The choice prepares the rules it adds; on a Session just loaded that
@@ -317,7 +317,7 @@ test('Feature stroke width steppers defer scope selection and stroke changes kee
     () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())
   ).toBe(0);
 
-  const captionScopeButton = scopeDialog.locator('button.bg-green-600');
+  const captionScopeButton = scopeDialog.getByRole('button').filter({ hasText: /^\s*Legend item "/ });
   await expect(captionScopeButton).toBeVisible();
   await captionScopeButton.click();
   await expect(scopeDialog).toBeHidden();
@@ -415,7 +415,7 @@ test('a popup scope dialog opens ready and keeps focus while its choice applies'
       return app.selectedFeatureIds.size;
     });
     expect(selected).toBeGreaterThan(0);
-    await scope.getByRole('button').filter({ hasText: 'Apply to all "tRNA"' }).last().click();
+    await scope.getByRole('button').filter({ hasText: 'Legend item "tRNA"' }).last().click();
     await expect(scope.getByRole('status')).toHaveText('Applying an edit…');
     const whileBusy = await focusIn();
     // W1: no control is enabled, so Tab and Shift+Tab keep focus on the panel.

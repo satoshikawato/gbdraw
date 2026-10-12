@@ -1002,9 +1002,8 @@ test('legacy standalone config import migrates retired values without a writer e
   assert.equal(state.activeDrawing().form.linear_track_layout, 'below');
   assert.equal(state.activeDrawing().adv.label_placement, 'above_feature');
   assert.equal(state.activeDrawing().adv.multi_record_size_mode, 'auto');
-  assert.deepEqual(alerts, [
-    'Legacy configuration loaded. Save as a session to use the current format.'
-  ]);
+  // The legacy notice belongs to the app; the service shows no native alert.
+  assert.deepEqual(alerts, []);
 });
 
 const frozenV39Session = () => JSON.parse(gunzipSync(readFileSync(new URL(

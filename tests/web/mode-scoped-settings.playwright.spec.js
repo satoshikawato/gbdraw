@@ -284,7 +284,8 @@ const LINEAR_LEGEND_EDITS = [
     name: 'a moved row (F5)',
     edit: (page) => page.evaluate(() => {
       const app = window.__GBDRAW_APP__;
-      app.moveLegendEntryUp(app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region'));
+      const index = app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region');
+      app.moveLegendEntry(index, index - 1);
     }),
     rows: ['repeat_region', 'CDS']
   },
@@ -385,7 +386,8 @@ test('OV-142 N1/N5: a Circular rename and move leave the Linear Legend, and roun
   await renameRow(page, 'CDS', 'Coding');
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.moveLegendEntryUp(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
+    const index = app.legendEntries.findIndex((entry) => entry.caption === 'GC content');
+    app.moveLegendEntry(index, index - 1);
   });
   await settleLive(page);
   const circularAfter = await legendState(page);

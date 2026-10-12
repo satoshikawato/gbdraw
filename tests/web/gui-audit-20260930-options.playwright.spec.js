@@ -6,7 +6,7 @@ const { execFile } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { promisify } = require('node:util');
-const { generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { answerChoicePrompt, generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const {
   BATCH_FIXTURE,
   HMMT,
@@ -276,7 +276,10 @@ test('un-hiding GC while the custom stack is inactive restores the GC content ro
   const useStack = await openCustomStackPanel(page);
   const hideGc = await reveal(page.getByRole('checkbox', { name: 'Hide GC Content', exact: true }));
   await useStack.check();
-  await hideGc.check();
+  // The stack draws a GC content row, so the hide asks first and the box stays clear until the answer.
+  await hideGc.click();
+  await answerChoicePrompt(page, 'Hide GC content?', 'hide');
+  await expect(hideGc).toBeChecked();
   await useStack.uncheck();
   await hideGc.uncheck();
   await useStack.check();

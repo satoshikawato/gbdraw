@@ -525,8 +525,8 @@ const choose = async (page, choice) => {
   await evaluateWithRetainedPromise(page, async (picked) => { await window.__GBDRAW_APP__.handleLegendRenameChoice(picked); }, choice);
   await settleLive(page);
 };
-const mergeButton = (page) => page.getByRole('button', { name: /Merge into existing/ });
-const suffixButton = (page) => page.getByRole('button', { name: /add a suffix/ });
+const mergeButton = (page) => page.getByRole('button', { name: /^Merge into "/ });
+const suffixButton = (page) => page.getByRole('button', { name: /^Keep both: name it "/ });
 
 test('a Legend rename of GC content onto CDS offers no Merge, and Suffix equals Generate', async ({ page }) => {
   test.setTimeout(120_000);
@@ -557,7 +557,7 @@ const legendState = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return { listed: app.legendEntries.map((entry) => entry.caption), deleted: app.deletedLegendEntries.map((entry) => entry.caption) };
 });
-const restoreMergeButton = (page) => page.getByRole('button', { name: /Restore the deleted row and merge/ });
+const restoreMergeButton = (page) => page.getByRole('button', { name: /^Restore ".*" and merge into it/ });
 const conflictAsked = async (page) => {
   expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
   await expect(page.getByRole('heading', { name: 'Legend Name Conflict' })).toBeVisible();

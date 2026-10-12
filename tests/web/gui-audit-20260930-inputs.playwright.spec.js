@@ -249,6 +249,7 @@ test('each record of a multi-record Linear file keeps its own organism', async (
   await page.evaluate(() => { window.__GBDRAW_APP__.linearSeqs[1].definition = 'Record override'; });
   await settle(page);
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await settle(page);
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearRecordLayoutEnabled(false));
   await settle(page);
@@ -394,6 +395,7 @@ test('Reset Settings clears Linear per-record display text and the alignment pla
   });
   expect(before.some(Boolean)).toBe(true);
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await settle(page);
   const after = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');

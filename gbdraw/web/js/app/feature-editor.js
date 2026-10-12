@@ -3,7 +3,8 @@
 /** @import { PreparedFileLegend, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort } from './feature-editor/svg-actions.js' */
-/** @import { ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
+/** @import { ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
+/** @import { AskChoice, ShowNotice } from './app-messages.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
 import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
@@ -33,6 +34,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   Closes a choice dialog once the History step of its choice ends (D-12).
  * @property {() => ({ mode?: string, diagramOptions?: Record<string, any> } | null)} getCommittedRequest
  *   The committed canonical request (Python owns the option fields, R7).
+ * @property {ReadDrawnTracksPort} readDrawnTracks
  * @property {() => Record<string, any> | null} [getCommittedSession] The committed canonical Session.
  * @property {((resourceId: string, kind: string) => any) | null} [readResourceRecordCount]
  *   Counts the records of a committed resource.
@@ -58,6 +60,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
+ * @property {AskChoice} askChoice The root's choice dialog.
+ * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there.
  */
 
 /** @param {FeatureEditorOptions} options */
@@ -70,6 +74,7 @@ export const createFeatureEditor = ({
   runUndoableCheckpoint,
   closeAfterDialogChoice,
   getCommittedRequest,
+  readDrawnTracks,
   getCommittedSession = () => null,
   readResourceRecordCount = null,
   readFeatureOverrideTable = null,
@@ -86,7 +91,9 @@ export const createFeatureEditor = ({
   projectFeatureEdits,
   evaluateLabelRules,
   readUserDefaultColor,
-  setDefaultColor
+  setDefaultColor,
+  askChoice,
+  showNotice
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
   // R13: the label owner's reactions, registered once it exists; the owners
@@ -94,7 +101,7 @@ export const createFeatureEditor = ({
   const editorPorts = /** @type {FeatureEditorPorts} */ ({});
   const ruleActions = createFeatureRuleActions({
     state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
-    ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable
+    ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice
   });
   const featureSvgActions = createFeatureSvgActions({
     state,
@@ -115,7 +122,8 @@ export const createFeatureEditor = ({
     getFeatureFillElements: featureSvgActions.getFeatureFillElements,
     closeAfterDialogChoice,
     readUserDefaultColor,
-    setDefaultColor
+    setDefaultColor,
+    readDrawnTracks
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature
@@ -126,10 +134,11 @@ export const createFeatureEditor = ({
     ports: editorPorts,
     selectResult,
     rulePreparation,
-    getCommittedRequest
+    getCommittedRequest,
+    showNotice
   });
   const labelActions = createFeatureLabelActions({
-    state, commitActiveResultEdit, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest,
+    state, commitActiveResultEdit, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest, showNotice,
     setFeatureVisibility: visibilityActions.setFeatureVisibility,
     prepareDrawnFeatureMatches: visibilityActions.prepareDrawnFeatureMatches,
     evaluateLabelRules
@@ -142,10 +151,10 @@ export const createFeatureEditor = ({
   // the root's projection (`projectFeatureEdits`) projects it.
   const featureEditTableActions = createFeatureEditTableActions({
     state, ref, computed, getCommittedSession, readResourceRecordCount, readFeatureOverrideTable,
-    projectFeatureEdits
+    projectFeatureEdits, showNotice
   });
   /** @param {Record<string, any>} feat
-   *  @param {{ clientX: number, clientY: number } | null} [eventLike] */
+   *  @param {import('../utils/popup-bounds.js').PopupOrigin | null} [eventLike] */
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
     return featureSvgActions.openFeatureEditorForFeature(feat, eventLike);
   };
@@ -232,6 +241,10 @@ export const createFeatureEditor = ({
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
     preparePairwiseInteractionAffordances:
       featureSvgActions.preparePairwiseInteractionAffordances,
+    preparePreviewItemAffordances: featureSvgActions.preparePreviewItemAffordances,
+    // The legend-entry popup's feature count: the features a Legend row colors.
+    /** @param {string} caption */
+    countLegendCaptionFeatures: (caption) => ruleActions.findFeaturesWithSameLegendItem({ svg_id: null }, caption).length,
     previewAlignmentCandidate: featureSvgActions.previewAlignmentCandidate,
     clearAlignmentCandidatePreview: featureSvgActions.clearAlignmentCandidatePreview,
     showAlignmentOverlay: featureSvgActions.showAlignmentOverlay,

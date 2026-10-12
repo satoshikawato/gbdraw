@@ -167,7 +167,7 @@ test('Live palette and its History keep the scale draft out of the committed req
     // D-15: CDS #123456 is a user default color, so the switch asks first; the
     // select keeps the palette until a choice, and the choice is one step.
     const paletteDialog=page.getByRole('dialog',{name:'Change palette'});
-    await expect(paletteDialog).toContainText('You changed 1 default color');
+    await expect(paletteDialog).toContainText('Keep your 1 changed color from the "default" palette (CDS)?');
     await expect(paletteSelect).toHaveValue(previous);
     await paletteDialog.getByRole('button',{name:"Use the palette's colors"}).click();
     await expect(paletteDialog).toHaveCount(0);

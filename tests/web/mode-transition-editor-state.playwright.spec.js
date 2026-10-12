@@ -73,8 +73,7 @@ test('label visibility intent survives mode inactivity and regeneration', async 
     await generate(page);
     const target = await popup(page);
     await expect(page.locator(`.origin-top text[data-label-feature-id="${target.featureId}"]`)).toBeVisible();
-    await page.locator('.feature-popup select').filter({ has: page.locator('option[value="on"]')
-      .filter({ hasText: 'On (always show)' }) }).selectOption('off');
+    await page.locator('.feature-popup').getByLabel('Label visibility', { exact: true }).selectOption('off');
     await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
     await closeEditor(page);
     const edited = await snapshot(page);

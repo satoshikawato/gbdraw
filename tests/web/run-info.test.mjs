@@ -1150,6 +1150,19 @@ test('slot legend labels with a comma or an inline comment marker stay lossless 
 // GE-03 (Linear): with the scale font set and no ruler-label font, the CLI makes
 // the ruler labels follow the scale font while the Web keeps the configured
 // ruler-label defaults, so the recipe is unavailable with a reason.
+// OV-490: Python reads a Linear slot that names no dinucleotide with the request's.
+test('a Linear slot without a dinucleotide takes the request\'s in the source recipe (OV-490)', async () => {
+  const session = structuredClone(linearGallerySession);
+  session.renderRequest.diagramOptions.dinucleotide = 'AT';
+  const slot = (id, renderer, side) => ({ kind: 'linearTrackSlot', id, renderer, enabled: true, side, height: null, spacing: null, z: 0, params: {} });
+  session.renderRequest.diagramOptions.tracks.linearTrackSlots = [slot('features', 'features', 'overlay'), slot('skew', 'dinucleotide_skew', 'below')];
+  session.renderRequest.diagramOptions.tracks.linearTrackAxisIndex = 0;
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const tokens = recipe.args.filter((_, index) => recipe.args[index - 1] === '--linear_track_slot');
+  assert.match(tokens.find((token) => token.startsWith('skew:')) || '', /[@,]nt=AT(,|$)/, tokens.join(' | '));
+});
+
 test('a Linear scale font without a ruler-label font is not a lossless recipe (GE-03)', async () => {
   const session = structuredClone(linearGallerySession);
   Object.assign(session.renderRequest.diagramOptions.configOverrides, {

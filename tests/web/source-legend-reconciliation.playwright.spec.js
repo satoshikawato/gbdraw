@@ -632,8 +632,8 @@ for (const mode of ['linear', 'circular']) {
 
       await rename();
       await expect(dialog).toBeVisible();
-      await expect(dialog.getByRole('button', { name: /^Merge into existing/ })).toHaveCount(0);
-      await expect(dialog.getByRole('button', { name: 'Keep current color and add a suffix' })).toHaveCount(1);
+      await expect(dialog.getByRole('button', { name: /^Merge into "/ })).toHaveCount(0);
+      await expect(dialog.getByRole('button', { name: /^Keep both: name it "/ })).toHaveCount(1);
       await expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveCount(1);
       await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleLegendRenameChoice('merge'));
       await expect(dialog).toHaveCount(0);
@@ -641,7 +641,7 @@ for (const mode of ['linear', 'circular']) {
       expect(await legendRowsByCaption(page), 'a forced Merge changes nothing').toEqual(before);
 
       await rename();
-      await dialog.getByRole('button', { name: 'Keep current color and add a suffix' }).click();
+      await dialog.getByRole('button', { name: /^Keep both: name it "/ }).click();
       await expect.poll(() => page.evaluate(legendIndex, 'GC skew (+) (1)')).toBeGreaterThanOrEqual(0);
       await settleLive(page);
       const renamed = await legendRowsByCaption(page);

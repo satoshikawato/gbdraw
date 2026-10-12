@@ -945,8 +945,9 @@ def capture_bgc_losatp(
                 suggested_name=suggested,
             )
 
+        # The popup stays inside the window and can lie over the export buttons.
+        popup.get_by_role("button", name="Close match popup", exact=True).click()
         if scenario_id == "T-GUI-04":
-            popup.get_by_role("button", name="Close match popup", exact=True).click()
             _verify_direction_reset(page)
 
         svg_button = page.get_by_role("button", name="SVG", exact=True)

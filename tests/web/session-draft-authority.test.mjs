@@ -1000,9 +1000,9 @@ assert.deepEqual(
   )?.width,
   { value: 23, unit: 'px' }
 );
-assert.deepEqual(alerts, [
-  'Legacy configuration loaded. Save as a session to use the current format.'
-]);
+// The legacy notice belongs to the app (`Configuration loaded from an older
+// gbdraw...`); the service shows no native alert.
+assert.deepEqual(alerts, []);
 
 state.mode.value = 'circular';
 state.activeDrawing().form.multi_record_canvas = false;

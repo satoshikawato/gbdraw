@@ -9,22 +9,16 @@ const JSON_TASK_BUDGET_MS = 16;
 export const SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
 /**
+ * A compressed Session above the threshold asks before its download;
+ * the caller asks with the app's choice dialog.
  * @param {Blob} blob The compressed Session.
- * @param {(message: string) => boolean} [confirmFn]
- * @returns {boolean} Whether the download may continue.
+ * @returns {number | null} Its size in MB when the download asks first, else null.
  */
-export const confirmLargeSessionBlob = (
-  blob,
-  confirmFn = globalThis.confirm
-) => {
+export const largeSessionDownloadMegabytes = (blob) => {
   if (!(blob instanceof Blob)) {
     throw new TypeError('Session download confirmation requires a Blob.');
   }
-  if (blob.size <= SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES) return true;
-  if (typeof confirmFn !== 'function') return true;
-  return Boolean(confirmFn(
-    `Compressed session size is ${(blob.size / (1024 * 1024)).toFixed(1)} MB. Continue?`
-  ));
+  return blob.size > SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES ? blob.size / (1024 * 1024) : null;
 };
 
 const readUtf8Stream = async (stream, maxBytes) => {

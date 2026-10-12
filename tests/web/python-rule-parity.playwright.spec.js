@@ -67,7 +67,7 @@ test('Python label TSV syntax is validated before replacing live overrides', asy
     await window.__GBDRAW_APP__.loadLabelOverrideTable({ target: input });
   }, { pattern, label });
   await importLabel('(?i)NADH', 'MATCHED');
-  expect(messages.at(-1)).toMatch(/Applied to 7 label/);
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Applied to 7 label(s).');
   await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCHED$/ }).count()).toBe(0);
   await page.evaluate(() => window.__GBDRAW_APP__.redoHistory());

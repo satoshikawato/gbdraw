@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
 /** @import { ChangeTrackLayout } from './track-slot-edits.js' */
+/** @import { AskChoice } from './app-messages.js' */
 import {
   CONSERVATION_SLOT_MANAGER,
   isManagedConservationSlot,
@@ -579,6 +580,8 @@ const circularGeometryShortcutsForState = (drawing) => ({
  * @typedef {object} CircularTrackSlotEditorOptions
  * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
  * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
+ * @property {AskChoice} [askChoice] The root's choice dialog: hiding a GC track the custom stack draws asks first.
+ * @property {(label: string, fn: () => unknown) => unknown} [runUndoable] History's undoable step, which the chosen hide runs in.
  */
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
@@ -587,7 +590,9 @@ const circularGeometryShortcutsForState = (drawing) => ({
 /**
  * @param {CircularTrackSlotEditorOptions} options
  */
-export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
+export const createCircularTrackSlotEditor = ({
+  state, changeTrackLayout = (apply) => apply(), askChoice = async () => 'cancel', runUndoable = (_label, fn) => fn()
+}) => {
   const editorKeys = new WeakMap();
   // A slot's Gaps disclosure stays open while its row is rebuilt (Generate and
   // Session load replace the slot objects, so the row is keyed anew).
@@ -601,11 +606,16 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     if (details.open) openSlotOptions.add(String(slot?.id));
     else openSlotOptions.delete(String(slot?.id));
   };
+  // The dinucleotide of the Circular drawing: what the default tracks draw, and
+  // a content or skew slot that sets none (OV-487). The slot summary, the
+  // preset summary, and the placeholders of a slot's fields name it from here.
+  /** @returns {string} */
+  const circularDrawingDinucleotide = () => normalizeNt(state.drawings.circular.adv.nt);
   // What the closed disclosure holds; a GC or AT track names its dinucleotide.
   /** @param {{ renderer?: unknown, params?: { nt?: unknown } } | null | undefined} slot */
   const circularTrackSlotOptionsSummary = (slot) => {
     if (slot?.renderer !== 'dinucleotide_content' && slot?.renderer !== 'dinucleotide_skew') return 'Gaps';
-    const nt = String(slot?.params?.nt || '').trim().toUpperCase() || 'GC';
+    const nt = normalizeNt(slot?.params?.nt, circularDrawingDinucleotide());
     return `${nt} · legend label, gaps${slot.renderer === 'dinucleotide_skew' ? ', colors' : ''}`;
   };
   let nextEditorKey = 1;
@@ -1288,7 +1298,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     } else if (renderer === 'features') {
       slot.params.lane_direction = laneDirectionForSide(slot.side);
     } else if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
-      slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(drawing.adv.nt));
+      slot.params.nt = normalizeNt(slot.params.nt, circularDrawingDinucleotide());
     } else if (renderer === 'annotations') {
       slot.side = slot.side === 'overlay' ? 'overlay' : 'outside';
       slot.params.set_id = String(slot.params.set_id || drawing.annotationSets?.[0]?.id || '');
@@ -1310,21 +1320,26 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     ));
   };
 
-  /** @param {DrawingState} drawing */
-  const confirmCircularSuppressOverride = (drawing, renderer) => {
-    if (!drawing.adv.circular_track_slots_enabled) return true;
-    const activeSlots = activeCircularTrackSlotsForRenderer(drawing, renderer);
-    if (activeSlots.length === 0) return true;
-
-    const trackLabel = SUPPRESS_TRACK_LABEL_BY_RENDERER[renderer] || 'selected';
-    const plural = activeSlots.length === 1 ? '' : 's';
-    const message = [
-      `Custom Track Slots currently include ${activeSlots.length} enabled ${trackLabel} track${plural}.`,
-      `Hiding ${trackLabel} will disable ${activeSlots.length === 1 ? 'that custom track slot' : 'those custom track slots'} and override the custom track settings.`,
-      '',
-      'Continue?'
-    ].join('\n');
-    return globalThis.confirm ? globalThis.confirm(message) : true;
+  /**
+   * Hiding a GC track turns off the enabled custom stack rows that draw it, so
+   * it asks first; null when no row would change.
+   * @param {DrawingState} drawing
+   * @param {string} renderer
+   * @returns {Promise<string> | null}
+   */
+  const askCircularSuppressOverride = (drawing, renderer) => {
+    if (!drawing.adv.circular_track_slots_enabled) return null;
+    const count = activeCircularTrackSlotsForRenderer(drawing, renderer).length;
+    if (count === 0) return null;
+    const trackLabel = SUPPRESS_TRACK_LABEL_BY_RENDERER[renderer] || 'this track';
+    return askChoice({
+      title: `Hide ${trackLabel}?`,
+      description: count === 1
+        ? `Your custom track stack has 1 ${trackLabel} track. Hiding ${trackLabel} turns that track off.`
+        : `Your custom track stack has ${count} ${trackLabel} tracks. Hiding ${trackLabel} turns those tracks off.`,
+      actions: [{ id: 'hide', label: `Hide ${trackLabel}`, tone: 'primary' }],
+      cancelLabel: `Keep ${trackLabel}`
+    });
   };
 
   /** @typedef {{ target?: { checked: boolean } | null } | null} CircularSuppressToggleEvent The checkbox change event of a Suppress control. */
@@ -1347,13 +1362,21 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
       return;
     }
 
-    if (nextChecked && !confirmCircularSuppressOverride(drawing, renderer)) {
+    const apply = () => {
+      drawing.form[formKey] = nextChecked;
+      normalizeSlotsInPlace();
+    };
+    const asked = nextChecked ? askCircularSuppressOverride(drawing, renderer) : null;
+    if (asked) {
+      // The checkbox shows the kept value until the choice; the chosen hide is one History step.
       if (event?.target) event.target.checked = previousChecked;
-      return;
+      return asked.then((choice) => (
+        choice === 'hide' && !state.sessionOperationAvailability?.() && Boolean(drawing.form[formKey]) === previousChecked
+          ? runUndoable(SUPPRESS_CONTROL_LABEL_BY_RENDERER[renderer] || 'Hide track', apply)
+          : false
+      ));
     }
-    drawing.form[formKey] = nextChecked;
-    normalizeSlotsInPlace();
-
+    apply();
     if (event?.target) event.target.checked = nextChecked;
   };
 
@@ -1391,13 +1414,13 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularGcSuppressed = (checked, event = null) => {
     const drawing = state.drawings.circular;
-    setCircularSuppressControl(drawing, 'gc_content', checked, event);
+    return setCircularSuppressControl(drawing, 'gc_content', checked, event);
   };
 
   /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularSkewSuppressed = (checked, event = null) => {
     const drawing = state.drawings.circular;
-    setCircularSuppressControl(drawing, 'gc_skew', checked, event);
+    return setCircularSuppressControl(drawing, 'gc_skew', checked, event);
   };
 
   const setCircularTrackSlotEnabled = (slot, enabled) => {
@@ -1498,10 +1521,9 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     return '';
   };
   const circularTrackSlotLegendLabelPlaceholder = (slot) => {
-    const drawing = state.drawings.circular;
     const renderer = String(slot?.renderer || '').trim();
     if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
-      const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, normalizeNt(drawing.adv.nt));
+      const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, circularDrawingDinucleotide());
       return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
     }
     if (renderer === 'depth') return 'Depth';
@@ -1683,6 +1705,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
     const lengthParam = getPreviewLengthParam(state, drawing);
     const lane = laneDirectionForPreset(preset);
+    const nt = circularDrawingDinucleotide();
     const slotLike = (id, renderer) => ({ id, renderer });
     /** @type {string[]} */
     const inside = [];
@@ -1696,10 +1719,10 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
       place('depth', getPresetRadiusRatio(slotLike('depth', 'depth'), 'depth', preset, lengthParam, drawing));
     }
     if (!Boolean(drawing.form.suppress_gc)) {
-      place('GC content', getPresetRadiusRatio(slotLike('gc_content', 'dinucleotide_content'), 'dinucleotide_content', preset, lengthParam, drawing));
+      place(`${nt} content`, getPresetRadiusRatio(slotLike('gc_content', 'dinucleotide_content'), 'dinucleotide_content', preset, lengthParam, drawing));
     }
     if (!Boolean(drawing.form.suppress_skew)) {
-      place('GC skew', getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, drawing));
+      place(`${nt} skew`, getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, drawing));
     }
     return {
       label: formatPresetName(preset),
@@ -1728,6 +1751,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     circularTrackSlotOptionsOpen,
     setCircularTrackSlotOptionsOpen,
     circularTrackSlotOptionsSummary,
+    circularDrawingDinucleotide,
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,

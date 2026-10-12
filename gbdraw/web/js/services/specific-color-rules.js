@@ -111,20 +111,19 @@ const drawsRow = (row, rule) => row.color === fillIdentity(rule.color)
  */
 
 // Python's own Legend rows (gbdraw/legend/table.py::_generated_legend_fills),
-// read from a key: a track's row ("<NT> content" and "<NT> skew", each also
-// as "(+)" and "(-)", and "Depth"), with the palette key of its fill ('' for
-// Depth, which no palette key colors), else the row of the feature type it
+// read from a key: a default track's row ("<NT> content" and "<NT> skew", each
+// also as "(+)" and "(-)", and "Depth"), else the row of the feature type it
 // names, the type's own row or its "other" row, which the type's palette key
-// colors. tests/fixtures/legend_generated_rows.json holds Python's keys.
-const TRACK_ROW = /^[ACGTU]{2} (content|skew)(?: \(([+-])\))?$/;
+// colors. A track row has no palette key here: the track rows of the request
+// that drew the Result give its fill (track-legend-rows.js, OV-484).
+// tests/fixtures/legend_generated_rows.json holds Python's keys.
+const TRACK_ROW = /^[ACGTU]{2} (content|skew)(?: \([+-]\))?$/;
 /**
  * @param {string} key
  * @returns {{ track: boolean, paletteKey: string }}
  */
 export const generatedLegendRow = (key) => {
-  if (key === 'Depth') return { track: true, paletteKey: '' };
-  const track = TRACK_ROW.exec(key);
-  if (track) return { track: true, paletteKey: track[1] === 'content' ? 'gc_content' : `skew_${track[2] === '-' ? 'low' : 'high'}` };
+  if (key === 'Depth' || TRACK_ROW.test(key)) return { track: true, paletteKey: '' };
   if (!key.toLowerCase().startsWith('other ')) return { track: false, paletteKey: key };
   const type = key.slice(6).trim();
   if (type.toLowerCase() === 'proteins') return { track: false, paletteKey: 'CDS' };
@@ -229,6 +228,8 @@ export const ruleCommitLegendRows = (context) => {
   return { rendererRows: rendererRowsOf(compared, context), takenKeys: taken };
 };
 
+// Python's `_unique_legend_key` (gbdraw/legend/table.py).
+/** @param {ReadonlySet<string>} reserved @param {string} preferred @returns {string} */
 const uniqueLegendKey = (reserved, preferred) => {
   if (!reserved.has(preferred)) return preferred;
   let suffix = 2;

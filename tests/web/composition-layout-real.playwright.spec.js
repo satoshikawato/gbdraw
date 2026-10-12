@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -476,11 +476,8 @@ const reloadSession = async (page, file, mode, legendSide) => {
     'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
   );
   await expect(sessionInput).toHaveCount(1);
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 180000 });
   await sessionInput.setInputFiles(file);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await page.waitForFunction(
     () => window.__GBDRAW_SESSION_IMPORT_COMPLETE__ !== null,
     null,

@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { ShowNotice } from '../app-messages.js' */
 import { buildFeatureOverrideTable } from '../run-info.js';
 import {
   FEATURE_OVERRIDE_EDIT_FIELDS,
@@ -58,6 +59,7 @@ export const replaceFeatureEdits = (featureOverrides, rows, records) => {
  * @property {((payload: Record<string, any>) => Promise<{ result?: any }>) | null} [readFeatureOverrideTable]
  *   The diagram helper that reads a Feature Edits TSV (R7).
  * @property {() => any} projectFeatureEdits The root's projection of loaded feature edits onto the displayed Result (R3).
+ * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
  */
 
 /** @param {FeatureEditTableOptions} options */
@@ -68,7 +70,8 @@ export const createFeatureEditTableActions = ({
   getCommittedSession,
   readResourceRecordCount,
   readFeatureOverrideTable,
-  projectFeatureEdits
+  projectFeatureEdits,
+  showNotice = () => {}
 }) => {
 
   const downloadFeatureEditTable = async () => {
@@ -77,21 +80,22 @@ export const createFeatureEditTableActions = ({
     const records = committed?.renderRequest?.records || [];
     const rows = committed && records.length ? requestFeatureOverrides(drawing.featureOverrides, records) : [];
     if (!committed || rows.length === 0) {
-      window.alert('No feature edits to export.');
+      showNotice({ text: 'There are no feature edits to export.' });
       return false;
     }
     const { text, reason } = await buildFeatureOverrideTable({
       renderRequest: committed.renderRequest, resources: committed.resources, rows, readResourceRecordCount
     });
     if (!text) {
-      window.alert(`Cannot export feature edits: ${reason}`);
+      showNotice({ text: `Cannot export feature edits: ${reason}`, tone: 'warning' });
       return false;
     }
     downloadTextFile('gbdraw_feature_override_table.tsv', text, 'text/tab-separated-values');
     const elsewhere = Object.values(drawing.featureOverrides).filter(hasEdit).length - rows.length;
     if (elsewhere > 0) {
-      window.alert(`Exported ${rows.length} feature edit(s). ${elsewhere} feature edit(s) of records `
-        + 'outside the current diagram were not exported.');
+      showNotice({ text: `Exported ${rows.length} feature edit(s).`, items: [
+        `${elsewhere} feature edit(s) of records outside the current diagram were not exported.`
+      ] });
     }
     return true;
   };
@@ -115,7 +119,7 @@ export const createFeatureEditTableActions = ({
     const records = committed?.renderRequest?.records || [];
     try {
       if (!committed || !records.length) {
-        window.alert('No diagram is currently displayed. Generate a diagram, then load the feature edits TSV.');
+        showNotice({ text: 'No diagram is shown. Generate a diagram, then load the Feature Edits TSV.', tone: 'warning' });
         return false;
       }
       // app-setup wires the helper; a missing one throws here and is reported as a Feature edits TSV error.
@@ -131,11 +135,12 @@ export const createFeatureEditTableActions = ({
       await projectFeatureEdits();
       if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;
-      let message = `Loaded ${rows.length + unmatchedRows.length} row(s). Applied ${rows.length} feature edit(s).`;
-      if (unmatchedRows.length > 0) {
-        message += ` ${unmatchedRows.length} row(s) name no record or feature of the current diagram and were not applied.`;
-      }
-      window.alert(message);
+      showNotice({
+        text: `Loaded ${rows.length + unmatchedRows.length} row(s). Applied ${rows.length} feature edit(s).`,
+        items: unmatchedRows.length > 0
+          ? [`${unmatchedRows.length} row(s) name no record or feature of the current diagram and were not applied.`]
+          : []
+      });
       return true;
     } catch (error) {
       const model = normalizeUserFacingError(error, { operation: OPERATION, stage: 'helper' });

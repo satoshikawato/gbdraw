@@ -23,6 +23,70 @@ write-up of a release.
   compatibility, and installation availability. Publication dates are recorded
   in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
 
+- Web app feature popup: the header shows the gene name, the product on up to
+  two lines, and the record and location with thousands separators. **Edit**
+  groups **Appearance** (fill, stroke, the label text with its visibility and
+  one **Apply Label**, feature visibility, legend name) before **Similarity
+  group** and **Layout**; the always-shown hints, the label key, and the source
+  label line are gone, and a missing label is explained in one line.
+  **Details** and **Qualifiers** list each field beside its value with one copy
+  button per tab. The record rotation buttons are now **Apply when I Generate**
+  and **Apply now**, and a record that cannot rotate shows its reason under a
+  disabled toggle.
+- Web app popups: feature and match popups open inside the window beside the
+  clicked item instead of clipped at the bottom right (OV-371), and a popup no
+  longer covers the header buttons when opened or dragged (OV-384). A popup
+  opened with **Edit** in the Editor's Features list opens beside the Editor
+  when the window has room there (OV-503).
+- Web app on a phone: the docked Editor uses most of the space between the
+  canvas and the Generate bar (about 400 px instead of 200 px at 390x844).
+- Web app: a click on a Legend row or a record definition in the preview opens
+  a popup while Layout edit is off. The Legend item popup shows the feature
+  count and the rule behind the color, and edits the color and legend name or
+  removes the row. The record popup lists the accession, length, reverse
+  complement, display start, and region, in Linear also the organism line and the
+  alignment, and edits the definition text and Reverse complement, which apply
+  on Generate.
+- Web app: the Editor's Features list uses one compact row per feature that
+  expands to its label text field; the label and feature-edit TSV actions move
+  into one **Import / export** menu. The Legend tab reorders rows by a drag
+  grip, also with the Up and Down arrow keys, and its help moves into a help tip.
+- Interactive SVG: the similarity-group section of a match popup shows the
+  group name and gene count, the members, and the identifiers under
+  **Technical details**, as in the web app.
+- Web app: confirmations use the app's own dialog with named buttons instead of
+  the browser's OK/Cancel box: **Reset Settings** lists what it resets, and a
+  risky color rule pattern, a repeated or large Session download, a large
+  reproducibility or raw LOSAT TSV download, and hiding a GC track of a custom
+  stack each name their action. Reset Settings also says that it turns the
+  Linear comparisons off. Load Session, Save Session, and table imports and exports report
+  in a dismissible notice above the Result instead of a browser alert; Session
+  warnings show as a list.
+- Web app: the feature-edit choice dialogs (color and stroke scope, label
+  visibility, label text scope, Legend name, palette colors, Feature placement
+  reset) show one primary choice, group the shared scopes, and name each option
+  by its outcome; a Legend name conflict shows the name **Keep both** gives.
+- Web app: feature search fits one row, shows **Qualifier key** only for
+  qualifier search, labels the regex toggle **Regular expression** (also in a
+  downloaded Interactive SVG, whose invalid-pattern message now names it), and
+  shows a match count only after a search. **Reset Layout** is unavailable until
+  something moved, and **Canvas padding** fields show their unit (px).
+- Web app fixes: the Editor's Legend tab showed the default skew colors on the
+  rows of a skew track with its own colors, and a live palette change repainted
+  those rows in the preview legend; both now keep the track's colors (OV-484).
+  The Legend rows of a second skew track with the same label now follow a live
+  palette change, and a palette change no longer applies a track slot color
+  that still waits for Generate (OV-488).
+  A Session whose request names a Circular track slot's renderer by the alias
+  `content`, `gc_content`, `conservation` or `circular_comparison` (a Python
+  API request) now loads it as that track: a spec string was read as a skew
+  track (OV-489), and a slot object, also with `skew` or `gc_skew`, stopped
+  the Load (OV-491). A Linear content or skew slot without a dinucleotide (a
+  CLI or Python API Session) now loads, and shows in the Source recipe, with
+  the Session's dinucleotide, not GC (OV-490). In a drawing with a dinucleotide
+  other than GC, the empty dinucleotide field of a Custom Track Slots row and
+  the Circular preset summary said GC; both now name the drawing's dinucleotide
+  (OV-497).
 - Raised the short/long size boundary of the Auto sizes: Linear diagrams now
   use 100 kb and Circular diagrams 75 kb; both used 50 kb. A record of 50 kb
   has too few features for the long styles, which are sized for whole genomes.
@@ -59,15 +123,17 @@ write-up of a release.
     the Auto values beside the size fields and the Circular track preview
     follow that boundary, as Generate does.
   - The aminoglycoside BGC Gallery figure is unchanged. Its tutorial now
-    types Head Length Ratio 0.64 in the last step, and its intermediate
-    previews show the short Auto sizes.
+    types Head Length Ratio 0.64 in step 10, **Finish the figure**, and its
+    intermediate previews show the short Auto sizes.
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters
   and the appearance first, then **Search limits** and **Performance** (formerly
   **Runtime and reproducibility**). **Selected pairs** shows each pair as one row
   with its source, file, problem and **Save Raw LOSAT TSV**; the separate **Raw
   LOSAT results** list in **Advanced comparison and layout** is gone. Pair-plan
   problems appear once, in a **Fix before Generate** list with an action each.
-  The Collinear **Evidence scope** setting is now **Search between**.
+  The Collinear **Evidence scope** setting is now **Search between**. An open pair
+  **File name** field takes its own row under **Save Raw LOSAT TSV** instead of
+  the narrow column beside it.
 - Web errors appear once, at their cause: a failed Generate no longer repeats the
   "last successful result" notice, a Linear comparison error offers **Show in
   Comparison**, an invalid colour-rule pattern shows its cause under the field,

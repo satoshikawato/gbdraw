@@ -315,6 +315,14 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
     'Query',
     'Subject',
   ]);
+  // The similarity group reads as in the app popup: name and count, the
+  // members, then the identifiers under Technical details.
+  await expect(page.locator('.gfi-group-name')).toHaveText('Familyog1');
+  await expect(page.locator('[data-gfi-group-count]')).toHaveText('2 genes in 2 records');
+  const technical = page.locator('[data-gfi-group-technical]');
+  await expect(technical).not.toHaveAttribute('open', '');
+  await technical.locator('summary').click();
+  await expect(technical).toContainText('Similarity group ID');
   await expect(page.locator('.gfi-content')).toContainText('99.1');
   await expect(page.locator('.gfi-content')).toContainText('Protein A');
   await expect(page.locator('.gfi-content')).toContainText('Protein B');

@@ -3950,6 +3950,31 @@ assert.deepEqual(
 assert.equal(structuredV33Projection.config.adv.linear_track_slots[1].height, '44px');
 assert.equal(structuredV33Projection.config.adv.linear_track_slots[1].spacing, '6px');
 
+// OV-490: a Linear content or skew slot that names no dinucleotide takes the
+// request's, as Python reads it (`slot_dinucleotide`), not GC.
+const requestDinucleotideProjection = projectCanonicalSessionRequest({
+  ...structuredSparseDepthCanonical,
+  renderRequest: {
+    ...structuredSparseDepthCanonical.renderRequest,
+    diagramOptions: {
+      ...structuredSparseDepthCanonical.renderRequest.diagramOptions,
+      dinucleotide: 'AT',
+      tracks: {
+        ...structuredSparseDepthCanonical.renderRequest.diagramOptions.tracks,
+        linearTrackSlots: [
+          ...structuredSparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots,
+          { kind: 'linearTrackSlot', id: 'skew', renderer: 'dinucleotide_skew', enabled: true, side: 'below', height: null, spacing: null, z: 0, params: {} },
+          { kind: 'linearTrackSlot', id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, side: 'below', height: null, spacing: null, z: 0, params: { nt: 'GC' } }
+        ]
+      }
+    }
+  }
+});
+assert.deepEqual(
+  requestDinucleotideProjection.config.adv.linear_track_slots.slice(-2).map((slot) => [slot.id, slot.params.nt]),
+  [['skew', 'AT'], ['gc_skew', 'GC']]
+);
+
 const legacySparseDepthProjection = projectCanonicalSessionRequest({
   ...structuredSparseDepthCanonical,
   linearTrackSlotSchemaVersion: 1

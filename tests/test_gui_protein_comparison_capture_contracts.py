@@ -586,7 +586,8 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         'output_prefix="hepatoplasmataceae_collinear"',
     ):
         assert fragment in source + wrapper
-    assert 'aria-label="Pairwise match details content"' in index
+    # The match popup frame also shows legend and record items; a match keeps this name.
+    assert ": 'Pairwise match details content'\"" in index
     assert 'role="region"' in index
     assert source.count('name="Set all adjacent comparisons", exact=True') == 1
     assert "Load Session" not in source

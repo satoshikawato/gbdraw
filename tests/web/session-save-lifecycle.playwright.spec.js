@@ -20,8 +20,7 @@ const sessionFile = {
 const installSaveProbe = (page) => page.addInitScript(() => {
   window.__GBDRAW_SAVE_PROBE__ = {
     events: [],
-    promptCalls: 0,
-    confirmCalls: 0
+    promptCalls: 0
   };
   window.__GBDRAW_TEST_HOOKS__ = {
     onSessionLifecycleEvent(event) {
@@ -34,7 +33,6 @@ const resetSaveProbe = (page) => page.evaluate(() => {
   const probe = window.__GBDRAW_SAVE_PROBE__;
   probe.events.length = 0;
   probe.promptCalls = 0;
-  probe.confirmCalls = 0;
 });
 
 const saveProbe = (page) => page.evaluate(() => ({
@@ -148,10 +146,6 @@ test('Save Session is single-flight, paints pending state, and releases every se
       probe.promptCalls += 1;
       return 'single-flight-save';
     };
-    window.confirm = () => {
-      probe.confirmCalls += 1;
-      return true;
-    };
     const first = window.__GBDRAW_APP__.saveSessionWithTitle();
     const second = window.__GBDRAW_APP__.saveSessionWithTitle();
     window.__GBDRAW_SAVE_PROMISES__ = [first, second];
@@ -186,7 +180,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
 
   const successProbe = await saveProbe(page);
   expect(successProbe.promptCalls).toBe(1);
-  expect(successProbe.confirmCalls).toBe(0);
+  await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
   expect(eventNames(successProbe).filter((name) => name === 'session-save-joined')).toHaveLength(1);
   expect(eventNames(successProbe).filter(
     (name) => name === 'session-save-projection-start'
@@ -272,18 +266,22 @@ test('Save Session is single-flight, paints pending state, and releases every se
   await expect(saveButton).toBeEnabled();
 
   await resetSaveProbe(page);
-  const repeatCanceled = await evaluateWithRetainedPromise(page, async () => {
-    const probe = window.__GBDRAW_SAVE_PROBE__;
+  // The second Save of the same file asks once; both calls share that question.
+  await page.evaluate(() => {
     window.__GBDRAW_APP__.sessionTitle = 'single-flight-save';
-    window.confirm = () => {
-      probe.confirmCalls += 1;
-      return false;
-    };
-    const first = window.__GBDRAW_APP__.saveSessionWithTitle();
-    const second = window.__GBDRAW_APP__.saveSessionWithTitle();
-    const results = await Promise.all([first, second]);
+    window.__GBDRAW_SAVE_PROMISES__ = [
+      window.__GBDRAW_APP__.saveSessionWithTitle(),
+      window.__GBDRAW_APP__.saveSessionWithTitle()
+    ];
+  });
+  const again = page.getByRole('dialog', { name: 'Download the Session again?' });
+  await expect(again).toHaveCount(1);
+  await again.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(again).toHaveCount(0);
+  const repeatCanceled = await evaluateWithRetainedPromise(page, async () => {
+    const results = await Promise.all(window.__GBDRAW_SAVE_PROMISES__);
     return {
-      samePromise: first === second,
+      samePromise: window.__GBDRAW_SAVE_PROMISES__[0] === window.__GBDRAW_SAVE_PROMISES__[1],
       sameResult: results[0] === results[1],
       statuses: results.map((result) => result?.status),
       pending: window.__GBDRAW_APP__.sessionSavePending
@@ -296,7 +294,6 @@ test('Save Session is single-flight, paints pending state, and releases every se
     pending: false
   });
   const canceledProbe = await saveProbe(page);
-  expect(canceledProbe.confirmCalls).toBe(1);
   expect(eventNames(canceledProbe).filter(
     (name) => name === 'session-save-download-canceled'
   )).toHaveLength(1);
@@ -308,4 +305,31 @@ test('Save Session is single-flight, paints pending state, and releases every se
     'session-save-pending-cleared'
   ]);
   await expect(saveButton).toBeEnabled();
+
+  // A Session file over 50 MB asks before its download: Cancel
+  // downloads nothing, Download saves. Every Blob reports 60 MB here.
+  await page.evaluate(() => {
+    const { get } = Object.getOwnPropertyDescriptor(Blob.prototype, 'size');
+    Object.defineProperty(Blob.prototype, 'size', {
+      configurable: true,
+      get() { return Math.max(get.call(this), 60 * 1024 * 1024); }
+    });
+  });
+  const large = page.getByRole('dialog', { name: 'Download a large Session?' });
+  for (const choice of ['Cancel', 'Download']) {
+    await resetSaveProbe(page);
+    await page.evaluate(() => { window.__GBDRAW_SAVE_PROMISES__ = [window.__GBDRAW_APP__.saveSessionWithTitle()]; });
+    await page.getByRole('dialog', { name: 'Download the Session again?' })
+      .getByRole('button', { name: 'Download again', exact: true }).click();
+    await expect(large).toContainText('The Session file is 60.0 MB.');
+    const downloaded = choice === 'Download' ? page.waitForEvent('download') : null;
+    await large.getByRole('button', { name: choice, exact: true }).click();
+    await expect(large).toHaveCount(0);
+    const status = await evaluateWithRetainedPromise(page, async () => (await window.__GBDRAW_SAVE_PROMISES__[0])?.status);
+    expect(status).toBe(choice === 'Download' ? 'saved' : 'canceled');
+    if (downloaded) await downloaded;
+    const probe = await saveProbe(page);
+    const canceled = probe.events.filter(({ name }) => name === 'session-save-download-canceled');
+    expect(canceled.map(({ reason }) => reason)).toEqual(choice === 'Download' ? [] : ['large-download']);
+  }
 });

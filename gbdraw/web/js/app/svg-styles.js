@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
+/** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 import {
   appliedFeatureColors,
   estimateColorFactor,
@@ -9,7 +10,7 @@ import {
 } from '../utils/color-utils.js';
 import { PAIRWISE_LEGEND_SELECTOR } from '../services/legend-svg.js';
 import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
-import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
+import { skewTrackColor } from '../services/track-legend-rows.js';
 
 export { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 
@@ -45,6 +46,8 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
  * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3), which prepares the
  *   rule matches, paints the tracks through this owner, and shows the fills.
+ * @property {() => readonly DrawnTrack[]} readDrawnTracks
+ *   The tracks of the request that drew the displayed Result (`drawnTracks`).
  */
 
 /** @param {SvgStylesOptions} options */
@@ -56,7 +59,8 @@ export const createSvgStyles = ({
   commitActiveResultEdit = null,
   // R13: the composition root's projection of the palette and the rules (R3),
   // which prepares the rule matches and paints the tracks through this owner.
-  projectPaletteAndRules
+  projectPaletteAndRules,
+  readDrawnTracks
 }) => {
   const {
     svgContent,
@@ -83,15 +87,17 @@ export const createSvgStyles = ({
     return updated;
   };
 
-  // The palette styles the tracks of the displayed Result with the settings of
-  // the drawing of that Result's mode: its skew slot colors (OV-108). Feature
-  // and Legend row fills are editor operations (`projectPaletteAndRules`).
+  // The palette styles the tracks of the displayed Result. A content track
+  // takes the palette's gc_content: no slot gives it a color. A skew track takes
+  // the colors of the slot that drew it, as its Legend rows do (`skewTrackColor`,
+  // OV-484): the slots of the request that drew the Result, of its own mode
+  // (OV-108), never the draft's, which apply on Generate (R1, OV-488); a skew
+  // track that request names no slot for keeps its drawn colors. Feature and
+  // Legend row fills are editor operations (`projectPaletteAndRules`).
   const applyPaletteToSvg = ({
     recolorPairwise = false,
     recolorCollinear = false
   } = {}) => {
-    const resultMode = (state.generatedMode?.value ?? mode.value) === 'linear' ? 'linear' : 'circular';
-    const drawing = state.drawings[resultMode];
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     if (!svgContent.value) return;
@@ -123,41 +129,20 @@ export const createSvgStyles = ({
       ['dinucleotide_skew']
     );
     if (skewGroups.length > 0) {
-      skewGroups.forEach((skewGroup) => {
-        const slotId = String(skewGroup.getAttribute('data-gbdraw-slot-id') || '').trim();
-        const customSlotsEnabled = resultMode === 'circular'
-          ? drawing.adv.circular_track_slots_enabled
-          : drawing.adv.linear_track_slots_enabled;
-        const slots = resultMode === 'circular'
-          ? drawing.adv.circular_track_slots
-          : drawing.adv.linear_track_slots;
-        const slot = customSlotsEnabled && Array.isArray(slots)
-          ? slots.find((candidate) => (
-              candidate?.enabled !== false &&
-              candidate?.renderer === 'dinucleotide_skew' &&
-              String(candidate?.id || '').trim() === slotId
-            ))
-          : null;
-        const positiveColor = resolveTrackSlotSkewColorValue(/** @type {any} */ ({
-          slot,
-          key: 'positive_color',
-          currentColors: colors
-        }));
-        const negativeColor = resolveTrackSlotSkewColorValue(/** @type {any} */ ({
-          slot,
-          key: 'negative_color',
-          currentColors: colors
-        }));
-        const skewPaths = skewGroup.querySelectorAll('path');
+      const tracks = readDrawnTracks();
+      skewGroups.forEach((/** @type {Element} */ skewGroup) => {
+        const slotId = String(skewGroup.getAttribute('data-gbdraw-slot-id') || '').trim() || null;
+        // The drawn paths of a skew track: the positive side, then the negative.
+        const sideColors = [
+          skewTrackColor(tracks, slotId, 'positive', colors),
+          skewTrackColor(tracks, slotId, 'negative', colors)
+        ];
         let pathIndex = 0;
-        skewPaths.forEach((path) => {
+        skewGroup.querySelectorAll('path').forEach((path) => {
           const fill = path.getAttribute('fill');
           if (fill && fill !== 'white' && fill !== 'none') {
-            if (pathIndex === 0) {
-              if (setColorAttributeIfChanged(path, 'fill', positiveColor)) updatedCount++;
-            } else if (pathIndex === 1) {
-              if (setColorAttributeIfChanged(path, 'fill', negativeColor)) updatedCount++;
-            }
+            const color = sideColors[pathIndex];
+            if (color && setColorAttributeIfChanged(path, 'fill', color)) updatedCount++;
             pathIndex++;
           }
         });

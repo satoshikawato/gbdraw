@@ -14,8 +14,13 @@ import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/featu
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
-/** @param {((state: Record<string, any>) => Record<string, any>) | null} [createHistory] The History manager the rule owner commits through; a recorder of its steps by default. */
-const setup = (evaluate = evaluatePythonRules, createHistory = null) => {
+/**
+ * @param {typeof evaluatePythonRules} [evaluate]
+ * @param {{ createHistory?: ((state: Record<string, any>) => Record<string, any>) | null } & Record<string, any>} [options]
+ *   `createHistory`: the History manager the rule owner commits through (a recorder of its steps by default);
+ *   the other options go to the rule owner (`askChoice`).
+ */
+const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...options } = {}) => {
   const state = {
     manualSpecificRules: [], extractedFeatures: { value: [
       { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
@@ -63,7 +68,7 @@ const setup = (evaluate = evaluatePythonRules, createHistory = null) => {
       state.legendEntries.value=intents;
       state.results.value=[{name:'figure',content:'after'}];
     } };
-  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch});
+  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch, ...options});
   return {state,actions,history,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders, setRerendering};
 };
 // Review 3 (OV-262 in the Features drawer): with the type's default color
@@ -448,15 +453,17 @@ test('a rule captioned with a track row draws its own row, and the commit leaves
   assert.deepEqual([...ruleCommitLegendRows({ ...context, rules: [live, next] }).takenKeys], []);
 });
 
-// The Python rows the Web app reads from their keys, with the palette key of
-// their fill, are those Python generates (tests/test_legend_row_facts.py).
+// The Python rows the Web app reads from their keys are those Python
+// generates (tests/test_legend_row_facts.py): a present type's row with the
+// palette key of its fill, or a track's row, whose fill the track rows of the
+// request give (tests/web/track-legend-row-colors.test.mjs).
 test('the generated Legend rows read from their keys are Python\'s', () => {
   const { cases } = JSON.parse(readFileSync(new URL('../fixtures/legend_generated_rows.json', import.meta.url), 'utf8'));
   for (const { name, features_present: types, rows } of cases) {
     for (const [key, paletteKey] of rows) {
       const row = generatedLegendRow(key);
-      assert.equal(row.paletteKey, paletteKey, `${name}: ${key}`);
-      assert.ok(row.track || types.includes(row.paletteKey), `${name}: ${key} is a track row or a present type's row`);
+      assert.equal(row.track, !types.includes(paletteKey), `${name}: ${key} is a track row or a present type's row`);
+      assert.equal(row.paletteKey, row.track ? '' : paletteKey, `${name}: ${key}`);
     }
   }
   assert.deepEqual(generatedLegendRow('Group'), { track: false, paletteKey: 'Group' }, 'any other key names a type\'s row');
@@ -647,8 +654,9 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
 // Add, or an edit made while an Add is pending, waits for it and applies to
 // the table that holds its rule; an Add waits for a pending edit the same way.
 // Each write is its own History step (R11).
-const queuedRuleWrites = (createHistory = null) => {
-  const s=setup(undefined, createHistory);
+/** @param {Parameters<typeof setup>[1]} [options] */
+const queuedRuleWrites = (options) => {
+  const s=setup(undefined, options);
   s.state.errorLog={value:null};
   s.state.manualSpecificRules.push(
     {feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:''},
@@ -690,6 +698,58 @@ for (const second of ['a', 'b']) {
     assert.equal(s.state.newSpecRule.val,'','the pattern of the last Add is cleared');
   }));
 }
+// An Add whose pattern may match slowly asks first. Its write takes its turn
+// at the answer, so it also applies to the table an earlier Add wrote.
+test('an Add that asks about a slow pattern applies after a pending Add, to the table with its rule', () => withDocument(async () => {
+  let answer;
+  const {s,held,table}=queuedRuleWrites({askChoice:()=>new Promise(resolve=>{answer=resolve;})});
+  const [first,release]=await held(s.actions.addSpecificRule());
+  s.state.newSpecRule.val='(a+)+';
+  const asked=s.actions.addSpecificRule();
+  assert.deepEqual(table(),['b #445566 ','zz #778899 '],'nothing is written before the answer');
+  answer('add');
+  release();
+  assert.deepEqual(await Promise.all([first,asked]),[true,true]);
+  assert.deepEqual(table(),['b #445566 ','zz #778899 ',added,'(a+)+ #112233 Shared']);
+  assert.deepEqual(s.transactions,['Add specific color rule','Add specific color rule']);
+}));
+// The question is asked before the Add's History step (the real manager): the
+// step is recorded once, at the answer, under the Add's name, and "Edit
+// pattern" records none. An edit made while the question is asked is a step
+// of its own, before the Add's.
+test('an Add that asks about a slow pattern is one History step recorded at the answer; Edit pattern records none', () => withDocument(async () => {
+  let answer;
+  const s=setup(undefined,{askChoice:()=>new Promise(resolve=>{answer=resolve;}),createHistory:state=>createHistoryManager({
+    buildIntent:()=>structuredClone({rules:state.manualSpecificRules}),
+    applyIntent:({rules})=>{state.manualSpecificRules.splice(0,Infinity,...structuredClone(rules));},
+    buildCheckpoint:()=>({}),applyCheckpoint:()=>{}})});
+  s.state.errorLog={value:null};
+  s.state.manualSpecificRules.push({feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:''});
+  Object.assign(s.state.newSpecRule,{val:'(a+)+',cap:''});
+  const table=()=>s.state.manualSpecificRules.map(rule=>`${rule.val} ${rule.color}`);
+  await s.history.initializeIntentBaseline();
+  const ask=async()=>{
+    const asked=s.actions.addSpecificRule();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(s.history.mutationPending(),false,'no step is open while the question is asked');
+    return [asked];
+  };
+  let [asked]=await ask();
+  answer('cancel');
+  await asked;
+  assert.deepEqual([table(),s.history.getUndoCount()],[['b #445566'],0]);
+
+  [asked]=await ask();
+  assert.equal(await s.actions.setSpecificRuleField(0,'color','#000000'),true);
+  assert.deepEqual([s.history.getUndoCount(),s.history.undoLabel()],[1,'Edit specific color rule']);
+  answer('add');
+  assert.equal(await asked,true);
+  assert.deepEqual([table(),s.history.getUndoCount(),s.history.undoLabel()],[['b #000000','(a+)+ #112233'],2,'Add specific color rule']);
+  await s.history.undo();
+  assert.deepEqual([table(),s.history.undoLabel()],[['b #000000'],'Edit specific color rule']);
+  await s.history.redo();
+  assert.deepEqual(table(),['b #000000','(a+)+ #112233']);
+}));
 for (const [kind, edit] of Object.entries(ruleEdits)) {
   test(`a ${kind} edit made while an Add is pending applies after it, to the table with its rule (OV-443)`, () => withDocument(async () => {
     const {s,held,table}=queuedRuleWrites();
@@ -766,9 +826,9 @@ test('a popup recolor of a rule made while an Add is pending applies after it (O
 // rule-actions.js): one step, under the name the step had when the action
 // started, here the color input's.
 test('a popup recolor of a rule and its rule write are one History step under the step\'s name', () => withDocument(async () => {
-  const {s,held,table}=queuedRuleWrites(state=>createHistoryManager({
+  const {s,held,table}=queuedRuleWrites({createHistory:state=>createHistoryManager({
     buildIntent:()=>JSON.parse(JSON.stringify(state.manualSpecificRules)),
-    applyIntent:()=>{},buildCheckpoint:()=>({}),applyCheckpoint:()=>{}}));
+    applyIntent:()=>{},buildCheckpoint:()=>({}),applyCheckpoint:()=>{}})});
   await s.history.initializeIntentBaseline();
   const popup=popupFor(s);
   Object.assign(s.state.featureStyleScopeDialog,{show:true,feat:s.state.extractedFeatures.value[1],color:'#000000',

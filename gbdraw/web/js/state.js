@@ -412,9 +412,14 @@ const labelReflowLastError = ref(null);
 // SVG Feature Click state
 const svgContainer = ref(null);
 const clickedFeature = ref(null); // {id, svg_id, label, location, color, feat}
-const clickedFeaturePos = reactive({ x: 0, y: 0 });
+// A popup's position. A popup opened at a clicked point keeps that `anchor`
+// until it is placed with its rendered size (OV-371); `maxHeight` (0: none)
+// keeps a popup placed above the point from growing over it.
+/** @import { PopupAnchor } from './utils/popup-bounds.js' */
+/** @typedef {{ x: number, y: number, maxHeight: number, anchor: PopupAnchor | null }} PopupPosition */
+const clickedFeaturePos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
 const clickedPairwiseMatch = ref(null); // {title, subtitle, sections}
-const clickedPairwiseMatchPos = reactive({ x: 0, y: 0 });
+const clickedPairwiseMatchPos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
 const pairwiseMatchPopupRef = ref(null);
 const pairwiseMatchPopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
 const pairwiseMatchPopupSize = reactive({ width: 0, height: 0 });
@@ -504,6 +509,7 @@ const legendRenameDialog = reactive({
   // R15-3 (OV-285): the Python key of the deleted row the new caption names;
   // '' when the target is listed. Its Merge restores that row first.
   deletedTargetKey: /** @type {PythonLegendKey | ''} */ (''),
+  suffixCaption: '', // the name "Keep both" gives the renamed row
   pendingRequest: null
 });
 
@@ -762,18 +768,36 @@ const filteredFeatures = computed(() => {
   return features;
 });
 
-// The height of a Features list row (`h-[83px]` in index.html): three lines,
-// the last with the Visibility checkbox (R-5).
-const FEATURE_ROW_HEIGHT_PX = 83;
+// The height of a compact Features list row (`h-[36px]` in index.html), and
+// the extra height of the one row expanded to edit (`h-[44px]`).
+const FEATURE_ROW_HEIGHT_PX = 36;
+const FEATURE_ROW_EXPANDED_EXTRA_PX = 44;
 const FEATURE_LIST_OVERSCAN = 8;
 const featureListScrollTop = ref(0);
 const featureListViewportHeight = ref(520);
+const featureListExpandedId = ref(null);
 const isFeatureDrawerMounted = computed(
   () => Boolean(svgContent.value && showRightDrawer.value && rightDrawerTab.value === 'features')
 );
+const featureListExpandedIndex = computed(() => (
+  featureListExpandedId.value === null
+    ? -1
+    : filteredFeatures.value.findIndex((feature) => feature.id === featureListExpandedId.value)
+));
+/** @param {number} index */
+const featureListRowTop = (index) => (
+  index * FEATURE_ROW_HEIGHT_PX
+  + (featureListExpandedIndex.value >= 0 && index > featureListExpandedIndex.value ? FEATURE_ROW_EXPANDED_EXTRA_PX : 0)
+);
 const featureListStartIndex = computed(() => {
   if (!isFeatureDrawerMounted.value) return 0;
-  return Math.max(0, Math.floor(featureListScrollTop.value / FEATURE_ROW_HEIGHT_PX) - FEATURE_LIST_OVERSCAN);
+  const top = featureListScrollTop.value;
+  const expanded = featureListExpandedIndex.value;
+  let index = Math.floor(top / FEATURE_ROW_HEIGHT_PX);
+  if (expanded >= 0 && index > expanded) {
+    index = Math.max(expanded, Math.floor((top - FEATURE_ROW_EXPANDED_EXTRA_PX) / FEATURE_ROW_HEIGHT_PX));
+  }
+  return Math.max(0, index - FEATURE_LIST_OVERSCAN);
 });
 const featureListEndIndex = computed(() => {
   if (!isFeatureDrawerMounted.value) return 0;
@@ -784,9 +808,9 @@ const visibleFeatureRows = computed(() => {
   if (!isFeatureDrawerMounted.value) return [];
   return filteredFeatures.value.slice(featureListStartIndex.value, featureListEndIndex.value);
 });
-const featureListTopSpacerPx = computed(() => featureListStartIndex.value * FEATURE_ROW_HEIGHT_PX);
+const featureListTopSpacerPx = computed(() => featureListRowTop(featureListStartIndex.value));
 const featureListBottomSpacerPx = computed(
-  () => Math.max(0, (filteredFeatures.value.length - featureListEndIndex.value) * FEATURE_ROW_HEIGHT_PX)
+  () => Math.max(0, featureListRowTop(filteredFeatures.value.length) - featureListRowTop(featureListEndIndex.value))
 );
 const featureEditorStatusText = computed(() => {
   const count = Number(featureEditorStatus.summaryCount || extractedFeatures.value.length || 0);
@@ -1111,6 +1135,7 @@ export const state = {
   previewFeatureSearchRenderedCount,
   featureListScrollTop,
   featureListViewportHeight,
+  featureListExpandedId,
   isFeatureDrawerMounted,
   visibleFeatureRows,
   featureRecordPickerVisible,
