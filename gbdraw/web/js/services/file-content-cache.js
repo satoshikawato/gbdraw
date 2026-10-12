@@ -86,7 +86,7 @@ export const readFileText = async (file) => {
   throw new TypeError('A File-like object with arrayBuffer() or text() is required.');
 };
 
-/** @param {FileLike | null | undefined} file */
+/** @param {unknown} file */
 export const getSessionResourceSource = (file) => sessionResourceSource(file);
 
 /** @param {FileLike | null | undefined} file */

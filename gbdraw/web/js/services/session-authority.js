@@ -110,6 +110,10 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
   ...RENDERED_ID_FEATURE_EDIT_FIELDS
 ]);
 
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
 const isPlainObject = (value) => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
 );
@@ -125,7 +129,10 @@ const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze([
   'featureCatalog'
 ]);
 
+// Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
+/** @type {ReadonlySet<unknown>} */
 const LINEAR_COMPARISON_PLAN_MODES = new Set(['none', 'adjacent', 'selected']);
+/** @type {ReadonlySet<unknown>} */
 const LINEAR_COMPARISON_SOURCES = new Set(['losat', 'upload']);
 const LINEAR_COMPARISON_EDGE_FIELDS = new Set([
   'id',
@@ -138,12 +145,19 @@ const LINEAR_COMPARISON_EDGE_FIELDS = new Set([
   'losatFilename'
 ]);
 
+/**
+ * @param {unknown} value
+ * @param {string} field
+ * @param {string} message
+ * @returns {void}
+ */
 const assertNoOwnField = (value, field, message) => {
   if (isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, field)) {
     throw new Error(message);
   }
 };
 
+/** @returns {Set<string>} The edge IDs. */
 const validateLinearComparisonPlan = (plan) => {
   if (!isPlainObject(plan)) {
     throw new Error('Current Web comparison draft requires config.linearComparisonPlan.');
@@ -214,7 +228,7 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
     'Current sessions cannot contain config.linearRecordLayout.comparisons.'
   );
 
-  (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((sequence) => {
+  (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((/** @type {unknown} */ sequence) => {
     assertNoOwnField(
       sequence,
       'blast',
@@ -227,7 +241,7 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
     );
   });
   (Array.isArray(webFiles.linearRecordMetadata) ? webFiles.linearRecordMetadata : [])
-    .forEach((metadata) => {
+    .forEach((/** @type {unknown} */ metadata) => {
       assertNoOwnField(
         metadata,
         'losatFilename',
@@ -282,7 +296,8 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
     }
     boundIds.add(id);
   });
-  config.linearComparisonPlan.edges.forEach((edge) => {
+  // `validateLinearComparisonPlan` above proved every edge is a plain object.
+  config.linearComparisonPlan.edges.forEach((/** @type {Record<string, unknown>} */ edge) => {
     if (edge.fileActive && !boundIds.has(edge.id)) {
       throw new Error(
         `Active comparison file is missing its Web file binding: ${edge.id}.`
@@ -291,7 +306,13 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
   });
 };
 
+/**
+ * @param {unknown} source
+ * @param {readonly string[]} fields
+ * @returns {Record<string, unknown>}
+ */
 const copyFields = (source, fields) => {
+  /** @type {Record<string, unknown>} */
   const projected = {};
   if (!source || typeof source !== 'object' || Array.isArray(source)) return projected;
   fields.forEach((field) => {
@@ -302,6 +323,10 @@ const copyFields = (source, fields) => {
   return projected;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
 const hasInput = value => Array.isArray(value) ? value.some(hasInput) : value != null;
 
 // The same complete inventory is used before Save and at document admission.
@@ -313,7 +338,7 @@ const hasInput = value => Array.isArray(value) ? value.some(hasInput) : value !=
 export const hasBiologicalSessionInputs = (files = {}) => (
   ['c_gb', 'c_gff', 'c_fasta', 'c_conservation_fastas', 'c_conservation_sequence_sources']
     .some(key => hasInput(files[key]))
-  || (files.linearSeqs || []).some(row => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
+  || (files.linearSeqs || []).some((/** @type {Record<string, unknown>} */ row) => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
 );
 
 /**
@@ -330,7 +355,11 @@ const validateSettingsOnlyDocument = data => {
     || ['c_gb', 'c_gff', 'c_fasta'].some(key => !Object.hasOwn(bindings, key))) {
     throw new Error('Settings-only Session requires resources and an explicit Web input inventory.');
   }
-  if (hasBiologicalSessionInputs(bindings)
+  // Every Linear row is an object, as Python's reader requires
+  // (`_validate_settings_only_session`); `validateWebFileBindings` lets a
+  // null row through (OV-566).
+  if (bindings.linearSeqs.some((/** @type {unknown} */ row) => !isPlainObject(row))
+    || hasBiologicalSessionInputs(bindings)
     || Object.keys(data.webFiles).some(key => key !== 'bindings')) {
     throw new Error('Settings-only Session cannot contain biological sources.');
   }

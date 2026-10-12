@@ -24,16 +24,18 @@ import { genbankHeaderIds } from './genbank-header.js';
  */
 
 /**
- * A source as callers supply it for registration; the registry normalizes it
- * into a `SequenceSource`.
+ * A source as callers supply it for registration: a row this module built, or
+ * a sequence source of a feature catalog (a Session's is checked only for its
+ * `sequence`). The registry reads every field as unvalidated and normalizes
+ * it into a `SequenceSource`, or registers nothing.
  * @typedef {object} SequenceSourceInput
- * @property {string} key
- * @property {string} [recordId]
- * @property {string[]} [aliases]
- * @property {string} sequence
- * @property {string} [origin]
- * @property {number | string | null} [recordIndex]
- * @property {number | string | null} [sourceIndex]
+ * @property {unknown} [key]
+ * @property {unknown} [recordId]
+ * @property {unknown} [aliases]
+ * @property {unknown} [sequence]
+ * @property {unknown} [origin]
+ * @property {unknown} [recordIndex]
+ * @property {unknown} [sourceIndex]
  */
 
 /**

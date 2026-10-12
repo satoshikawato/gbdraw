@@ -560,6 +560,8 @@ export const createFeatureSvgActions = ({
     // A catalog feature opens as the displayed Result draws it; one that the
     // Result lists but does not draw (a hidden feature, R-5) opens without an
     // element, so its popup can show it again.
+    // The catalog lookup below can miss; `if (!target) return null` follows it.
+    /** @type {typeof feat | undefined} */
     let target = feat;
     let renderedSvgId = renderedFeatureSvgId(feat);
     const catalogFeatures = resultCatalogFeatures(state);

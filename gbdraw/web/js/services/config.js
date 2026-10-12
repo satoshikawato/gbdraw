@@ -298,12 +298,16 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
 /** @import { CanonicalLinearLayout, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
-/** @import { LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
+/** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
-/** @import { DrawingState } from '../state.js' */
+/** @import { LinearComparisonEdge, LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
+/** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { LinearRecordRow } from './linear-record-layout.js' */
+/** @import { TrackSlotRow } from './track-slot-validation.js' */
+/** @import { DiagnosticContext, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { DownloadChoicePort } from './text-download.js' */
 
 /**
@@ -417,11 +421,17 @@ const sessionSaveRequiresGenerate = (context = {}) => diagnosticError(
   })
 );
 // A Save wrapper keeps a recognized cause; otherwise it reports the bounded fallback.
+/**
+ * @template F
+ * @param {Error | string | Record<string, unknown> | null | undefined} error
+ * @param {F} fallback
+ */
 const recognizedCauseOr = (error, fallback) => {
   const model = normalizeUserFacingError(error);
   return model && !['UNKNOWN', 'VALIDATION_UNCLASSIFIED'].includes(model.code)
     ? diagnosticError(model.code, model.context, { stage: model.stage }) : fallback;
 };
+/** @param {unknown} value */
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
@@ -429,7 +439,9 @@ const cloneColors = (colors) => ({ ...(colors || {}) });
 const hasColorEntries = (colors) =>
   Boolean(colors) && typeof colors === 'object' && !Array.isArray(colors) && Object.keys(colors).length > 0;
 
+/** @param {unknown} colors */
 const normalizeColorMap = (colors) => {
+  /** @type {Record<string, string>} */
   const normalized = {};
   if (!colors || typeof colors !== 'object' || Array.isArray(colors)) return normalized;
   Object.entries(colors).forEach(([key, value]) => {
@@ -438,15 +450,19 @@ const normalizeColorMap = (colors) => {
   return normalized;
 };
 
+/** @param {unknown} paletteName */
 const paletteColorsFromDefinitions = (paletteName) => {
   const name = String(paletteName || '').trim();
   if (!name) return null;
+  /** @type {Record<string, Record<string, string>>} */
   const definitions = state.paletteDefinitions?.value || {};
   const colors = definitions[name];
   return hasColorEntries(colors) ? normalizePaletteColors(cloneColors(colors)) : null;
 };
 
+/** @param {unknown} source */
 const cloneStringMap = (source) => {
+  /** @type {Record<string, string>} */
   const cloned = {};
   if (!source || typeof source !== 'object' || Array.isArray(source)) return cloned;
   Object.entries(source).forEach(([key, value]) => {
@@ -457,6 +473,7 @@ const cloneStringMap = (source) => {
   return cloned;
 };
 
+/** @param {unknown} rules */
 const normalizeFeatureVisibilityRulesForSession = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
 );
@@ -494,11 +511,16 @@ const sanitizeExtractedFeatureForSession = (feature) => {
   return rest;
 };
 
+/** @param {unknown} features */
 const sanitizeExtractedFeaturesForSession = (features) => {
   if (!Array.isArray(features)) return [];
   return features.map((feature) => sanitizeExtractedFeatureForSession(feature));
 };
 
+/**
+ * @param {Record<string, string>} target
+ * @param {unknown} source
+ */
 const replaceStringMap = (target, source) => {
   Object.keys(target).forEach((key) => delete target[key]);
   Object.entries(cloneStringMap(source)).forEach(([key, value]) => {
@@ -506,7 +528,9 @@ const replaceStringMap = (target, source) => {
   });
 };
 
+/** @param {unknown} rules */
 const cloneQualifierPriorityRules = (rules) => {
+  /** @type {{ feat: string, order: string }[]} */
   const cloned = [];
   if (!Array.isArray(rules)) return cloned;
 
@@ -527,7 +551,10 @@ const cloneQualifierPriorityRules = (rules) => {
   return cloned;
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {unknown} rules
+ */
 const replaceQualifierPriorityRules = (drawing, rules) => {
   drawing.manualPriorityRules.splice(
     0,
@@ -575,6 +602,7 @@ const safeDeepMerge = (target, source) => {
   });
 };
 
+/** @param {unknown} value */
 const parseMultiRecordPositionToken = (value) => {
   const raw = String(value ?? '').trim();
   const separatorIndex = raw.lastIndexOf('@');
@@ -586,8 +614,10 @@ const parseMultiRecordPositionToken = (value) => {
   return { selector, row };
 };
 
+/** @param {{ args?: unknown } | null | undefined} cliInvocation */
 const multiRecordPositionsFromCliInvocation = (cliInvocation) => {
   const args = Array.isArray(cliInvocation?.args) ? cliInvocation.args : [];
+  /** @type {{ selector: string, row: number }[]} */
   const positions = [];
   const seenSelectors = new Set();
 
@@ -628,6 +658,7 @@ const isCliInvocationSessionExportable = (invocation) => {
   return bindings.every((binding) => String(binding?.slot || '').startsWith('files.'));
 };
 
+/** @param {unknown} name */
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '')
     .replace(/[^\w.-]+/g, '_')
@@ -635,6 +666,7 @@ const makeSafeFilename = (name) => {
   return cleaned || 'gbdraw_session';
 };
 
+/** @param {unknown} title */
 const buildSessionFilename = (title) => {
   const base = String(title || '').trim();
   if (!base) return 'gbdraw_session.json.gz';
@@ -642,11 +674,16 @@ const buildSessionFilename = (title) => {
   return `${safe}.gbdraw-session.json.gz`;
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ */
 const normalizeLegendPosition = (value, fallback = 'left') => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized || fallback;
 };
 
+/** @param {unknown} value */
 const normalizeLabelRendering = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['auto', 'embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
@@ -660,6 +697,7 @@ const withCurrentLinearLabelVisibility = (configData) => {
   };
 };
 
+/** @param {unknown} value */
 const normalizePositiveNumberOrNull = (value) => {
   if (
     value === null ||
@@ -699,7 +737,7 @@ const migrateImportedCircularTrackSlots = (configData = {}) => {
     adv: {
       ...adv,
       circular_track_slots_schema_version: CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
-      circular_track_slots: adv.circular_track_slots.map((slot, index) => (
+      circular_track_slots: adv.circular_track_slots.map((/** @type {string | TrackSlotRow} */ slot, /** @type {number} */ index) => (
         typeof slot === 'string'
           ? parseCircularTrackSlotSpec(
               migrateLegacyCircularTrackSlotSpec(slot),
@@ -794,39 +832,54 @@ const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion =
   };
 };
 
+/** @param {unknown} value */
 const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
+/**
+ * @template F
+ * @param {unknown} value
+ * @param {F} fallback
+ */
 const normalizePositiveInteger = (value, fallback) => {
   const numeric = Number(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : fallback;
 };
 
+/** @param {unknown} value */
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
 };
 
+/** @param {unknown} value */
 const normalizeCollinearColorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'identity') return 'average_identity';
   return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
 };
 
+/** @param {unknown} value */
 const normalizeCircularConservationSource = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'upload' ? 'upload' : 'losat';
 };
 
+/** @param {unknown} value */
 const normalizeCircularConservationLosatProgram = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'tblastx' ? 'tblastx' : 'blastn';
 };
 
+/** @param {unknown} value */
 const normalizeCircularConservationReference = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['auto', 'query', 'subject'].includes(normalized) ? normalized : 'auto';
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ */
 const normalizeHexColor = (value, fallback = '#4e79a7') => {
   const resolved = resolveColorToHex(String(value || fallback).trim());
   const color = String(resolved || fallback).trim();
@@ -847,8 +900,10 @@ const normalizeHexColor = (value, fallback = '#4e79a7') => {
  */
 const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
   if (!Array.isArray(entries)) return [];
+  /** @type {Record<string, unknown>[]} */
   const normalized = [];
   const captions = new Set();
+  /** @type {{ list: string, caption: string }[]} */
   const dropped = [];
   entries.forEach((entry) => {
     if (!isPlainObject(entry)) return;
@@ -868,7 +923,7 @@ const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
       caption,
       color,
       featureIds: Array.isArray(entry.featureIds)
-        ? entry.featureIds.map((id) => String(id || '').trim()).filter(Boolean)
+        ? entry.featureIds.map((/** @type {unknown} */ id) => String(id || '').trim()).filter(Boolean)
         : []
     });
   });
@@ -877,6 +932,7 @@ const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
   return normalized;
 };
 
+/** @param {unknown} value */
 const normalizeStrokeWidth = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
@@ -894,6 +950,7 @@ const cloneJsonObject = (value) => {
 };
 
 const normalizeLegendColorOverrides = (source) => {
+  /** @type {Record<string, string>} */
   const normalized = {};
   if (!isPlainObject(source)) return normalized;
   Object.entries(source).forEach(([key, value]) => {
@@ -933,6 +990,7 @@ const normalizeStrokeOverride = (source, { requireOverride = false } = {}) => {
 };
 
 const normalizeStrokeOverrideMap = (source, { requireOverride = false } = {}) => {
+  /** @type {Record<string, NonNullable<ReturnType<typeof normalizeStrokeOverride>>>} */
   const normalized = {};
   if (!isPlainObject(source)) return normalized;
   Object.entries(source).forEach(([key, value]) => {
@@ -945,6 +1003,7 @@ const normalizeStrokeOverrideMap = (source, { requireOverride = false } = {}) =>
   return normalized;
 };
 
+/** @param {unknown} source */
 const normalizeStringArray = (source) => {
   if (!Array.isArray(source)) return [];
   return source
@@ -952,6 +1011,7 @@ const normalizeStringArray = (source) => {
     .filter(Boolean);
 };
 
+/** @param {unknown} series */
 const normalizeCircularConservationSeries = (series) => {
   if (!Array.isArray(series)) return [];
   return series
@@ -977,6 +1037,11 @@ const DEPTH_TRACK_FALLBACK_COLORS = [
   '#7F7F7F'
 ];
 
+/**
+ * @param {number} index
+ * @param {{ depth_color?: unknown, depth_height?: unknown, depth_large_tick_interval?: unknown,
+ *   depth_small_tick_interval?: unknown, depth_tick_font_size?: unknown }} [legacyAdv]
+ */
 const normalizeDepthTrackConfig = (entry, index, legacyAdv = {}) => {
   const source = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
   const hasHeight = Object.prototype.hasOwnProperty.call(source, 'height');
@@ -1000,6 +1065,10 @@ const normalizeDepthTrackConfig = (entry, index, legacyAdv = {}) => {
   };
 };
 
+/**
+ * @param {unknown} tracks
+ * @param {Parameters<typeof normalizeDepthTrackConfig>[2]} [legacyAdv]
+ */
 const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
   const rawTracks = Array.isArray(tracks) ? tracks : [];
   const normalized = rawTracks.map((entry, index) => normalizeDepthTrackConfig(entry, index, legacyAdv));
@@ -1038,10 +1107,16 @@ let adoptedProteinIdentityManifest = null;
 // exact manifest that already validated its protein references and raw text.
 const adoptedLosatCacheValues = new WeakMap();
 
+/**
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
 const rawReactiveValue = (value) => (
   globalThis.window?.Vue?.toRaw?.(value) ?? value
 );
 
+/** @param {{ renderRequest?: unknown, resources?: unknown, webFiles?: unknown } | null | undefined} canonical */
 const cloneCanonicalSession = (canonical) => {
   if (
     !canonical
@@ -1057,6 +1132,7 @@ const cloneCanonicalSession = (canonical) => {
   };
 };
 
+/** @param {{ arrow_head_length_ratio?: unknown, arrow_shaft_width_ratio?: unknown } | null} [adv] */
 const normalizedArrowGeometryState = (adv = {}) => ({
   arrow_head_length_ratio: arrowHeadLengthRatioForState(
     adv?.arrow_head_length_ratio
@@ -1066,12 +1142,14 @@ const normalizedArrowGeometryState = (adv = {}) => ({
   )
 });
 
+/** @param {unknown} value */
 const persistedArrowGeometryValue = (value) => {
   if (typeof value !== 'string' || value.trim() === '') return value;
   const numeric = Number(value.trim());
   return Number.isFinite(numeric) ? numeric : value;
 };
 
+/** @param {{ arrow_head_length_ratio?: unknown, arrow_shaft_width_ratio?: unknown } | null} [adv] */
 const normalizedPersistedArrowGeometryState = (adv = {}) =>
   normalizedArrowGeometryState({
     arrow_head_length_ratio: persistedArrowGeometryValue(
@@ -1082,6 +1160,10 @@ const normalizedPersistedArrowGeometryState = (adv = {}) =>
     )
   });
 
+/**
+ * @param {LinearComparisonPlan} target
+ * @param {unknown} source
+ */
 const replaceLinearComparisonPlan = (target, source) => {
   const normalized = normalizeLinearComparisonPlan(source);
   target.mode = normalized.mode;
@@ -1090,6 +1172,7 @@ const replaceLinearComparisonPlan = (target, source) => {
   target.edges.splice(0, target.edges.length, ...normalized.edges);
 };
 
+/** @param {unknown} plan */
 const serializeLinearComparisonPlan = (plan) => {
   const normalized = normalizeLinearComparisonPlan(plan);
   return {
@@ -1265,6 +1348,10 @@ const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined
   };
 };
 
+/**
+ * @param {Record<string, unknown>} target
+ * @param {Record<string, unknown> | null | undefined} source
+ */
 const replacePlainObject = (target, source) => {
   Object.keys(target).forEach((key) => delete target[key]);
   Object.entries(source || {}).forEach(([key, value]) => {
@@ -1275,6 +1362,7 @@ const replacePlainObject = (target, source) => {
 /** @type {((request: Record<string, any>) => any) | null} */
 let unmanagedConfigOverrideValidator = null;
 
+/** @param {typeof unmanagedConfigOverrideValidator} validator */
 export const setUnmanagedConfigOverrideValidator = (validator) => {
   unmanagedConfigOverrideValidator = typeof validator === 'function'
     ? validator
@@ -1533,6 +1621,7 @@ const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
   };
 };
 
+/** @param {'losatCache' | 'losatDerivedCache'} field */
 const sessionArtifactEntries = (data, field) => {
   const container = data[field];
   if (container === undefined || container === null) return [];
@@ -1561,6 +1650,7 @@ const rejectInvalidLosatCacheKeys = (entries, { requireKey = false } = {}) => {
   }
 };
 
+/** @param {number} sourceSessionVersion */
 function* sessionLosatArtifactSteps(data, sourceSessionVersion) {
   if (sourceSessionVersion < CURRENT_ARTIFACT_SESSION_MIN_VERSION) return;
   const rawEntries = sessionArtifactEntries(data, 'losatCache');
@@ -1601,10 +1691,12 @@ function* sessionLosatArtifactSteps(data, sourceSessionVersion) {
   if (invalidDerivedEntry) throw SESSION_FIELDS_ERROR();
 };
 
+/** @param {number} sourceSessionVersion */
 export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
   for (const _step of sessionLosatArtifactSteps(data, sourceSessionVersion)) { /* exhaust validation */ }
 };
 
+/** @param {number} sourceSessionVersion */
 const validateSessionLosatArtifactsForImport = async (data, sourceSessionVersion) => {
   let deadline = performance.now() + 16;
   for (const _step of sessionLosatArtifactSteps(data, sourceSessionVersion)) {
@@ -1615,10 +1707,19 @@ const validateSessionLosatArtifactsForImport = async (data, sourceSessionVersion
   }
 };
 
+/**
+ * The envelopes of retired LOSAT artifacts a Session keeps, as they were read.
+ * @typedef {{ entries?: readonly unknown[] }} LegacyArtifactEnvelope
+ */
+/**
+ * @param {{ legacyRawCandidates?: LegacyArtifactEnvelope | null,
+ *   legacyDerivedEvidence?: LegacyArtifactEnvelope | null }} options
+ */
 export const buildSessionLegacyArtifacts = ({
   legacyRawCandidates,
   legacyDerivedEvidence
 }) => {
+  /** @type {{ proteinRawCandidates?: LegacyArtifactEnvelope, proteinDerivedEvidence?: LegacyArtifactEnvelope }} */
   const legacyArtifacts = {};
   if (legacyRawCandidates?.entries?.length) {
     legacyArtifacts.proteinRawCandidates = legacyRawCandidates;
@@ -1834,6 +1935,7 @@ export const restoreCurrentWriterActiveConfig = ({
   }
   validateCurrentWriterActiveConfig({ mode, storedConfig, scopedDrafts: true });
   const restored = cloneJsonData(projectedConfig);
+  /** @type {string[]} */
   const restoredDomains = [];
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS.forEach((domain) => {
     if (!Object.prototype.hasOwnProperty.call(storedConfig, domain)) return;
@@ -2531,9 +2633,10 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   const rawMultiRecordPositions = Array.isArray(drawing.adv.multi_record_positions)
     ? drawing.adv.multi_record_positions
     : [];
+  /** @type {{ selector: string, row: number }[]} */
   const dedupedMultiRecordPositions = [];
   const seenMultiRecordSelectors = new Set();
-  rawMultiRecordPositions.forEach((entry) => {
+  rawMultiRecordPositions.forEach((/** @type {{ selector?: unknown, row?: unknown } | null} */ entry) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
     const selector = String(entry.selector ?? '').trim();
     if (!selector || seenMultiRecordSelectors.has(selector)) return;
@@ -2653,6 +2756,7 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   drawing.adv.gc_content_tick_interval = normalizePositiveNumberOrNull(drawing.adv.gc_content_tick_interval);
   drawing.adv.gc_content_small_tick_interval = normalizePositiveNumberOrNull(drawing.adv.gc_content_small_tick_interval);
   drawing.adv.gc_content_tick_font_size = normalizePositiveNumberOrNull(drawing.adv.gc_content_tick_font_size);
+  /** @param {unknown} value */
   const normalizeNonNegativeNumberOrNull = (value) => {
     if (
       value === null ||
@@ -2675,6 +2779,11 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   ) {
     drawing.adv.depth_max = null;
   }
+  /**
+   * @template F
+   * @param {unknown} value
+   * @param {F} fallback
+   */
   const normalizeFiniteNumberOrFallback = (value, fallback) => {
     if (value === null || value === undefined || value === '') return fallback;
     const numeric = Number(value);
@@ -2920,6 +3029,12 @@ const restorePaletteStateFromSession = (drawing, ui = {}) => {
 };
 
 const serializedFileDescriptors = new WeakMap();
+/**
+ * @template D
+ * @param {File} file
+ * @param {D} descriptor
+ * @returns {D}
+ */
 const cacheSerializedFileDescriptor = (file, descriptor) => {
   setResourcePayloadOwner(descriptor, file);
   serializedFileDescriptors.set(file, descriptor);
@@ -3003,13 +3118,14 @@ const deserializeFile = (entry) => {
 /** @type {{ clearActiveRuntime?: () => void } | null} */
 let activePreviewRuntime = null;
 
+/** @param {{ clearActiveRuntime?: () => void } | null | undefined} runtime */
 export const setPreviewRuntime = (runtime) => {
   activePreviewRuntime = runtime || null;
 };
 
 export const serializeResults = () => {
   if (activePreviewRuntime) {
-    return normalizeLogicalResults(state.results.value.map((res, idx) => ({
+    return normalizeLogicalResults(state.results.value.map((/** @type {SvgResultEntry} */ res, /** @type {number} */ idx) => ({
       name: res.name || `Result ${idx + 1}`,
       content: res.content
     })));
@@ -3022,7 +3138,7 @@ export const serializeResults = () => {
     return serializeCleanSvg(svg);
   })();
 
-  return normalizeLogicalResults(state.results.value.map((res, idx) => ({
+  return normalizeLogicalResults(state.results.value.map((/** @type {SvgResultEntry} */ res, /** @type {number} */ idx) => ({
     name: res.name || `Result ${idx + 1}`,
     content: idx === state.selectedResultIndex.value && currentSvg ? currentSvg : res.content
   })));
@@ -3072,7 +3188,7 @@ const restoredLosatCacheInfoIdentity = (drawing, entry) => {
   const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
   if (identity.edgeKey && identity.edgeKey !== edgeKey) return {};
   const resolved = drawing.linearComparisonResolution.value.edges.find(
-    (edge) => edge.edgeKey === edgeKey
+    (/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === edgeKey
   );
   return {
     ...identity,
@@ -3093,10 +3209,16 @@ const serializeLosatCache = () => {
   const manifest = state.proteinIdentityManifest.value;
   const rawManifest = rawReactiveValue(manifest);
   const info = Array.isArray(state.losatCacheInfo.value) ? state.losatCacheInfo.value : [];
+  /** @type {Record<string, unknown>[]} */
   const entries = [];
   const seen = new Set();
   const prevalidatedProteinEntries = new WeakSet();
 
+  /**
+   * @param {string} key
+   * @param {Record<string, unknown>} cached
+   * @param {{ filename?: unknown, display?: unknown }} [infoEntry]
+   */
   const buildEntry = (key, cached, infoEntry = {}) => {
     const rawCached = rawReactiveValue(cached);
     let serialized = rawCached;
@@ -3125,7 +3247,7 @@ const serializeLosatCache = () => {
 
   // One entry per raw key: rows that share a key (two rings of one sequence)
   // keep the first row's filename, as the CLI raw cache does.
-  info.forEach((entry, idx) => {
+  info.forEach((/** @type {{ key?: string, filename?: string, display?: boolean } | null} */ entry, /** @type {number} */ idx) => {
     if (!entry || !entry.key || seen.has(entry.key)) return;
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
@@ -3137,7 +3259,7 @@ const serializeLosatCache = () => {
     seen.add(entry.key);
   });
 
-  cacheMap.forEach((value, key) => {
+  cacheMap.forEach((/** @type {Record<string, unknown>} */ value, /** @type {string} */ key) => {
     if (seen.has(key)) return;
     if (!isCurrentRawLosatCacheEntry(value)) return;
     entries.push(buildEntry(key, value));
@@ -3174,7 +3296,12 @@ const serializeLosatCache = () => {
   }
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {unknown} entries
+ * @param {unknown} [legacyEnvelope]
+ * @param {{ adoptCurrent?: boolean, validatedManifest?: unknown }} [options]
+ */
 const applyLosatCache = (
   drawing,
   entries,
@@ -3182,7 +3309,9 @@ const applyLosatCache = (
   { adoptCurrent = false, validatedManifest = null } = {}
 ) => {
   const map = new Map();
+  /** @type {Record<string, unknown>[]} */
   const info = [];
+  /** @type {Record<string, unknown>[]} */
   const legacyEntries = [];
 
   if (Array.isArray(entries)) {
@@ -3237,6 +3366,7 @@ const applyLosatCache = (
   };
 };
 
+/** @param {Map<string, unknown> | null | undefined} map */
 const pruneLosatDerivedCache = (map) => {
   if (!map || typeof map.delete !== 'function') return;
   while (map.size > LOSAT_DERIVED_CACHE_LIMIT) {
@@ -3260,12 +3390,18 @@ const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
     .map((entry) => cloneJsonData(entry))
 });
 
+/**
+ * @param {unknown} entries
+ * @param {unknown} [legacyEvidence]
+ * @param {{ adoptCurrent?: boolean }} [options]
+ */
 const applyLosatDerivedCache = (
   entries,
   legacyEvidence = null,
   { adoptCurrent = false } = {}
 ) => {
   const map = new Map();
+  /** @type {unknown[]} */
   const legacyEntries = [];
 
   if (Array.isArray(entries)) {
@@ -3402,6 +3538,14 @@ export const assertActiveModeInputs = (mode = state.mode.value, sourceState = st
 
 // `sequences`: the drawn record files, in request order. `cards`: every
 // Linear card, OFF cards included; an error names its card number among them.
+/**
+ * @template {{ uid?: unknown, region_start?: unknown, region_end?: unknown }} S
+ * @param {S[]} sequences
+ * @param {{ mode?: unknown, status?: unknown, issues?: { code: string, context?: DiagnosticContext }[],
+ *   records?: { sourceIndex?: unknown }[] } | null | undefined} catalog
+ * @param {{ cards?: { uid: string }[] }} [options]
+ * @returns {S[]}
+ */
 export const materializeLinearRecordFiles = (
   sequences,
   catalog,
@@ -3570,6 +3714,10 @@ export const serializeActiveRenderFiles = async (
   };
 };
 
+/**
+ * @param {unknown} comparisons
+ * @param {{ adoptCanonicalPayloads?: boolean }} [options]
+ */
 const deserializeCanonicalComparisons = (
   comparisons,
   { adoptCanonicalPayloads = false } = {}
@@ -3694,6 +3842,9 @@ export const getCommittedLinearDefinitionVisibility = () => (
 
 // The record count of a committed source, as the Source recipe reads it before
 // it names records by #index (Export Feature Edits TSV).
+/**
+ * @param {string} resourceId
+ */
 export const readCommittedResourceRecordCount = (resourceId, kind) => (
   readCanonicalResourceRecordCount(committedCanonicalSession?.resources, resourceId, kind)
 );
@@ -3843,7 +3994,7 @@ const applyFiles = (filesData, {
       targetDrawing.linearRecordRows.splice(
         0,
         targetDrawing.linearRecordRows.length,
-        ...targetState.linearSeqs.map((seq, index) => {
+        ...targetState.linearSeqs.map((/** @type {LinearSeq} */ seq, /** @type {number} */ index) => {
           const saved = rowByUid.get(seq.uid);
           const row = Number.isInteger(Number(saved?.row)) && Number(saved.row) > 0
             ? Number(saved.row) : index + 1;
@@ -3895,7 +4046,7 @@ const applyFiles = (filesData, {
 const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode) => {
   const circularDepthFiles = representativeDepthFiles(state.files.c_depth);
   const circularDepthCount = circularDepthFiles.some(Boolean) ? circularDepthFiles.length : 0;
-  const linearRows = state.linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
+  const linearRows = state.linearSeqs.map((/** @type {LinearSeq} */ seq) => depthFileSlotsFromValue(seq.depth));
   const linearDepthCount = mode === 'linear'
     ? depthTrackSessionWidth({
         rows: linearRows,
@@ -3906,7 +4057,7 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode) => {
   // Rows are padded to the series count only when one holds a Depth file, as
   // Circular counts its series, so rows without a file load as saved (OV-337).
   if (mode === 'linear' && linearDepthCount > 0 && linearRows.some((row) => row.some(Boolean))) {
-    state.linearSeqs.forEach((seq) => {
+    state.linearSeqs.forEach((/** @type {LinearSeq} */ seq) => {
       seq.depth = padDepthFileSlots(seq.depth, linearDepthCount);
     });
   }
@@ -4008,15 +4159,15 @@ const cloneLiveFileState = (drawing) => ({
   },
   circularRecordList: cloneJsonData(state.circularRecordList.value),
   circularRecordDiscovery: { ...state.circularRecordDiscovery },
-  linearSeqs: state.linearSeqs.map((seq) => ({
+  linearSeqs: state.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({
     ...seq,
     depth: Array.isArray(seq.depth) ? [...seq.depth] : seq.depth
   })),
-  linearRecordRows: drawing.linearRecordRows.map((entry) => ({ ...entry })),
+  linearRecordRows: drawing.linearRecordRows.map((/** @type {LinearRecordRow} */ entry) => ({ ...entry })),
   linearComparisonPlan: {
     mode: drawing.linearComparisonPlan.mode,
     defaultSource: drawing.linearComparisonPlan.defaultSource,
-    edges: drawing.linearComparisonPlan.edges.map((edge) => ({ ...edge }))
+    edges: drawing.linearComparisonPlan.edges.map((/** @type {LinearComparisonEdge} */ edge) => ({ ...edge }))
   }
 });
 
@@ -4093,6 +4244,7 @@ const captureSessionImportTransientState = () => ({
   plotTitleAutoTransform: cloneJsonData(state.plotTitleAutoTransform.value)
 });
 
+/** @param {ReturnType<typeof captureSessionImportTransientState>} snapshot */
 const restoreSessionImportTransientState = (snapshot) => {
   state.suppressCircularMultiRecordDefaults.value =
     snapshot.suppressCircularMultiRecordDefaults;
@@ -4256,6 +4408,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   }
 };
 
+/** @param {Record<string, unknown>} target */
 const clearObject = (target) => {
   Object.keys(target).forEach((key) => {
     delete target[key];
@@ -4836,8 +4989,16 @@ const buildOtherModeResult = (other, renderRequest) => {
  */
 
 /**
+ * How a Save ended: the download was handed off, or the person or a newer
+ * operation canceled it.
+ * @typedef {{ status: 'saved', blob: Blob, filename: string }
+ *   | { status: 'canceled', compressedSize?: number }} SessionSaveResult
+ */
+
+/**
  * @param {string | null | undefined} titleOverride
  * @param {ExportSessionDocumentOptions} options
+ * @returns {Promise<SessionSaveResult>}
  */
 const exportSessionDocument = async (
   titleOverride = null,
@@ -5040,6 +5201,7 @@ const exportSessionDocument = async (
 };
 
 /**
+ * @param {{ target: { files: ArrayLike<File>, value?: string } }} e
  * @param {Record<string, any>} [options] The options of `importSession` with
  * `isCurrent` and `signal`; `transformLegacyResultSvg` is the composition
  * root's `LegacyResultSvgTransform` port.
@@ -5912,6 +6074,24 @@ export const disposeSessionOperations = () => {
 // `options.readOtherModeArtifact` returns the other mode's artifact slot that
 // the root keeps (E1), `options.beforeExport` learns whether Save projects
 // the draft request, and `options.onSaved` runs once the download is handed off.
+/**
+ * What the composition root passes to `exportSession`.
+ * @typedef {object} SessionSaveOptions
+ * @property {(operation: 'save' | 'load') => SessionBusy | null} [availability]
+ * @property {DownloadChoicePort} [askChoice]
+ * @property {{ value?: Parameters<typeof bindRecordDisplayDrafts>[1] }} [recordDisplayRows]
+ * @property {() => Readonly<ArtifactSlot> | null} [readOtherModeArtifact]
+ * @property {() => string | null} [resolveTitle] Null when the person canceled the title prompt.
+ * @property {(request: { draftRequest: boolean }) => Promise<Pick<ExportSessionDocumentOptions,
+ *   'linearRecordCatalog' | 'omittedAnnotationRecordKeys'>>} [beforeExport]
+ * @property {(result: Extract<SessionSaveResult, { status: 'saved' }>) => void} [onSaved]
+ * @property {(error: UserFacingError | null) => void} [onError]
+ */
+
+/**
+ * @param {string | null} [titleOverride]
+ * @param {SessionSaveOptions} [options]
+ */
 export const exportSession = (titleOverride = null, options = {}) => {
   if (sessionSaveInFlight) {
     recordSessionLifecycleEvent('session-save-joined');
@@ -6015,6 +6195,7 @@ export const exportSession = (titleOverride = null, options = {}) => {
   return operation.promise;
 };
 
+/** @param {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} event */
 export const importSession = async (event, options = {}) => {
   const input = event?.target;
   const file = input?.files?.[0];

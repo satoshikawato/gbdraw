@@ -3,7 +3,9 @@
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
 
 /**
- * A Vue ref as the export capture unwraps it.
+ * A Vue ref, or the `{ value }` cell that stands in for one (a Gallery
+ * Session's request state), as the export capture and the request writer
+ * unwrap it.
  * @template T
  * @typedef {{ value: T }} ExportRef
  */

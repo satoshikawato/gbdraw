@@ -27,18 +27,16 @@ import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.
 
 const NO_IMPLICIT_ANY_BASELINE = {
   'app/annotations.js': 33,
-  'app/app-setup.js': 336,
+  'app/app-setup.js': 334,
   'app/feature-editor/feature-edit-table.js': 10,
   'app/feature-search/preview-actions.js': 6,
   'app/run-analysis.js': 304,
   'app/run-info.js': 222,
   'app/similarity-alignment.js': 4,
-  'services/config.js': 343,
-  'services/feature-catalog.js': 80,
-  'services/losat-cache.js': 59,
-  'services/runtime-capabilities.js': 10,
-  'services/session-authority.js': 19,
-  'services/session-request.js': 484
+  'services/config.js': 206,
+  'services/losat-cache.js': 2,
+  'services/session-authority.js': 7,
+  'services/session-request.js': 191
 };
 
 const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');

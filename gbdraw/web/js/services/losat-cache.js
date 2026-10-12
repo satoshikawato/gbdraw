@@ -8,6 +8,8 @@ import {
   PROTEIN_LOSAT_CACHE_SCHEMA
 } from '../contracts/schema.generated.js';
 
+// Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
+/** @type {ReadonlySet<unknown>} */
 const LEGACY_CANDIDATE_STATES = new Set(['pending', 'promoted', 'rejected']);
 const LOSAT_OUTFMT6_COLUMN_COUNT = 12;
 const LOSAT_OUTFMT6_INTEGER_COLUMN_INDEXES = new Set([3, 4, 5, 6, 7, 8, 9]);
@@ -25,6 +27,7 @@ const MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = [
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw
 // key. The shipped WASM has no build manifest, so its version is not recorded
 // (null), as for a CLI runtime whose version probe fails.
+/** @param {unknown} program */
 export const webLosatRuntimeRecord = (program) => ({
   kind: 'losat',
   source: 'wasm',
@@ -35,6 +38,7 @@ export const webLosatRuntimeRecord = (program) => ({
 // Default raw LOSAT TSV name of a Linear edge; the CLI port is
 // gbdraw.comparisons.linear_losat.losat_edge_filename
 // (tests/fixtures/losat_edge_filename_cases.json).
+/** @param {unknown} label */
 const losatFilenameLabel = (label) => String(label ?? '')
   .replace(/[\s/]+/gu, '.')
   .replace(/\.+/g, '.')
@@ -42,33 +46,65 @@ const losatFilenameLabel = (label) => String(label ?? '')
   .replace(/[^\p{L}\p{N}_.-]+/gu, '_')
   .replace(/^_+|_+$/g, '');
 
+/**
+ * @param {unknown} leftLabel
+ * @param {unknown} rightLabel
+ * @param {string} suffix
+ */
 export const losatEdgeFilename = (leftLabel, rightLabel, suffix) => (
   `${losatFilenameLabel(leftLabel) || 'seq_1'}.${losatFilenameLabel(rightLabel) || 'seq_2'}.${suffix}.tsv`
 );
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 export const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
 
+/**
+ * @template T
+ * @param {T} value A JSON-serializable value.
+ * @returns {T}
+ */
 const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 
+/**
+ * @param {unknown} args
+ * @returns {string[]}
+ */
 export const normalizeLosatArgs = (args) => (
   Array.isArray(args) ? args.map((arg) => String(arg)) : []
 );
 
+/**
+ * @param {unknown} left
+ * @param {unknown} right
+ * @returns {boolean}
+ */
 export const sameLosatArgs = (left, right) => {
   const a = normalizeLosatArgs(left);
   const b = normalizeLosatArgs(right);
   return a.length === b.length && a.every((value, index) => value === b[index]);
 };
 
+/**
+ * @param {unknown} entry
+ * @returns {entry is Record<string, unknown>}
+ */
 const hasRawShape = (entry) => (
   isPlainObject(entry) &&
   entry.kind === 'raw-losat' &&
   typeof entry.text === 'string' &&
-  (entry.searchContext === undefined || /^[0-9a-f]{64}$/.test(entry.searchContext))
+  // `RegExp.test` coerces a non-string `searchContext` to text; the cast only satisfies the signature.
+  (entry.searchContext === undefined || /^[0-9a-f]{64}$/.test(/** @type {string} */ (entry.searchContext)))
 );
 
+/**
+ * @param {unknown} entry
+ * @returns {boolean}
+ */
 export const isProteinRawLosatCacheEntry = (entry) => (
   hasRawShape(entry) &&
   entry.schema === PROTEIN_LOSAT_CACHE_SCHEMA &&
@@ -89,18 +125,30 @@ export const isProteinRawLosatCacheEntry = (entry) => (
   Boolean(entry.subjectRecordInstanceKey)
 );
 
+/**
+ * @param {unknown} entry
+ * @returns {boolean}
+ */
 export const isLegacyProteinRawLosatCacheEntry = (entry) => (
   hasRawShape(entry) &&
   entry.schema === NUCLEOTIDE_LOSAT_CACHE_SCHEMA &&
   String(entry.program || '').toLowerCase() === 'blastp'
 );
 
+/**
+ * @param {unknown} entry
+ * @returns {boolean}
+ */
 export const isNucleotideRawLosatCacheEntry = (entry) => {
   if (!hasRawShape(entry) || entry.schema !== NUCLEOTIDE_LOSAT_CACHE_SCHEMA) return false;
   if (entry.identityKind && entry.identityKind !== 'nucleotide') return false;
   return String(entry.program || '').toLowerCase() !== 'blastp';
 };
 
+/**
+ * @param {unknown} entry
+ * @returns {'protein-current' | 'nucleotide-current' | 'protein-legacy' | 'invalid'}
+ */
 export const classifyRawLosatCacheEntry = (entry) => {
   if (isProteinRawLosatCacheEntry(entry)) return 'protein-current';
   if (isNucleotideRawLosatCacheEntry(entry)) return 'nucleotide-current';
@@ -108,11 +156,20 @@ export const classifyRawLosatCacheEntry = (entry) => {
   return 'invalid';
 };
 
+/**
+ * @param {unknown} entry
+ * @returns {boolean}
+ */
 export const isCurrentRawLosatCacheEntry = (entry) => {
   const classification = classifyRawLosatCacheEntry(entry);
   return classification === 'protein-current' || classification === 'nucleotide-current';
 };
 
+/**
+ * @param {unknown} entry
+ * @param {{ allowLegacy?: boolean }} [options]
+ * @returns {boolean}
+ */
 export const isLosatDerivedCacheEntry = (entry, { allowLegacy = true } = {}) => (
   isPlainObject(entry) &&
   (
@@ -132,6 +189,10 @@ export const isLosatDerivedCacheEntry = (entry, { allowLegacy = true } = {}) => 
   isPlainObject(entry.payload)
 );
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 const stableObjectText = (value) => {
   if (Array.isArray(value)) return `[${value.map(stableObjectText).join(',')}]`;
   if (isPlainObject(value)) {
@@ -142,6 +203,11 @@ const stableObjectText = (value) => {
   return JSON.stringify(value);
 };
 
+/**
+ * @param {Record<string, unknown>} target
+ * @param {unknown} incoming
+ * @param {string} owner
+ */
 const mergeManifestMap = (target, incoming, owner) => {
   Object.entries(incoming || {}).forEach(([key, value]) => {
     if (!Object.prototype.hasOwnProperty.call(target, key)) {
@@ -154,6 +220,11 @@ const mergeManifestMap = (target, incoming, owner) => {
   });
 };
 
+/**
+ * @param {unknown} value
+ * @param {WeakSet<object>} [visited]
+ * @returns {boolean}
+ */
 const containsManifestPresentationIdentity = (value, visited = new WeakSet()) => {
   if (Array.isArray(value)) {
     return value.some((item) => containsManifestPresentationIdentity(item, visited));
@@ -171,6 +242,26 @@ const containsManifestPresentationIdentity = (value, visited = new WeakSet()) =>
   });
 };
 
+/**
+ * @typedef {object} ProteinIdentityInstance
+ * @property {number} schema
+ * @property {unknown} recordAnalysisId Coerces to an own key of `ProteinIdentityManifest.recordAnalyses`; its type is not checked.
+ * @property {string} runtimeBindingHash
+ * @property {string} displayBindingHash
+ * @property {Record<string, string>} runtimeIds feature analysis ID -> runtime handle
+ * @property {Record<string, { displayAlias: string, exportOrdinal?: number | null }>} featureMetadata
+ */
+
+/**
+ * The protein identity manifest once `validateProteinIdentityManifest` accepts it.
+ * @typedef {object} ProteinIdentityManifest
+ * @property {number} schema
+ * @property {Record<string, { schema: number, proteins: { featureAnalysisId: string }[] }>} proteinSets
+ * @property {Record<string, { schema: number, proteinSetHash: string }>} recordAnalyses
+ * @property {Record<string, ProteinIdentityInstance>} recordInstances
+ */
+
+/** @returns {ProteinIdentityManifest} */
 export const emptyProteinIdentityManifest = () => ({
   schema: PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   proteinSets: {},
@@ -178,6 +269,10 @@ export const emptyProteinIdentityManifest = () => ({
   recordInstances: {}
 });
 
+/**
+ * @param {unknown} manifest
+ * @returns {manifest is ProteinIdentityManifest}
+ */
 export const validateProteinIdentityManifest = (manifest) => {
   if (!isPlainObject(manifest) || manifest.schema !== PROTEIN_IDENTITY_MANIFEST_SCHEMA) {
     return false;
@@ -217,7 +312,8 @@ export const validateProteinIdentityManifest = (manifest) => {
   const allRuntimeHandles = new Set();
   for (const [instanceKey, instance] of Object.entries(manifest.recordInstances)) {
     if (!instanceKey || !isPlainObject(instance) || instance.schema !== 2) return false;
-    if (!Object.prototype.hasOwnProperty.call(manifest.recordAnalyses, instance.recordAnalysisId)) {
+    // `hasOwnProperty.call` and the lookup below coerce a non-string `recordAnalysisId` to a key.
+    if (!Object.prototype.hasOwnProperty.call(manifest.recordAnalyses, /** @type {string} */ (instance.recordAnalysisId))) {
       return false;
     }
     if (
@@ -228,7 +324,10 @@ export const validateProteinIdentityManifest = (manifest) => {
       !isPlainObject(instance.runtimeIds) ||
       !isPlainObject(instance.featureMetadata)
     ) return false;
-    const analysis = manifest.recordAnalyses[instance.recordAnalysisId];
+    // The loop over `recordAnalyses` above proved each one is a plain object with a string `proteinSetHash`.
+    const analysis = /** @type {{ proteinSetHash: string }} */ (
+      manifest.recordAnalyses[/** @type {string} */ (instance.recordAnalysisId)]
+    );
     const expectedFeatureIds = proteinSetFeatureIds.get(analysis.proteinSetHash);
     if (
       Object.keys(instance.runtimeIds).length !== expectedFeatureIds.size ||
@@ -262,7 +361,8 @@ export const validateProteinIdentityManifest = (manifest) => {
       for (let index = 0; index < ordered.length; index += 1) {
         const featureId = ordered[index];
         const expectedOrdinal = ordered.length > 1 ? index + 1 : null;
-        const rawOrdinal = instance.featureMetadata[featureId].exportOrdinal;
+        // Every `featureId` here is a key of `runtimeIds`, whose metadata the loop above proved is a plain object.
+        const rawOrdinal = /** @type {{ exportOrdinal?: unknown }} */ (instance.featureMetadata[featureId]).exportOrdinal;
         const actualOrdinal = rawOrdinal === undefined || rawOrdinal === null
           ? null
           : rawOrdinal;
@@ -273,8 +373,13 @@ export const validateProteinIdentityManifest = (manifest) => {
   return true;
 };
 
+/** @type {WeakMap<object, { manifest: ProteinIdentityManifest, runtimeIdsByInstance: Map<string, Set<string>>, runtimeHandles: Set<string> | null }>} */
 const validatedProteinIdentityIndexes = new WeakMap();
 
+/**
+ * @param {unknown} manifest
+ * @returns {object | null}
+ */
 export const buildValidatedProteinIdentityIndex = (manifest) => {
   if (!validateProteinIdentityManifest(manifest)) return null;
   const runtimeIdsByInstance = new Map();
@@ -291,10 +396,16 @@ export const buildValidatedProteinIdentityIndex = (manifest) => {
   return index;
 };
 
+/** @param {object | null | undefined} index */
 export const releaseValidatedProteinIdentityIndex = (index) => (
-  validatedProteinIdentityIndexes.delete(index)
+  // `WeakMap.delete` returns false for a non-object key, so a missing index is harmless.
+  validatedProteinIdentityIndexes.delete(/** @type {object} */ (index))
 );
 
+/**
+ * @param {unknown} manifest
+ * @param {object | null | undefined} index
+ */
 const indexedProteinIdentity = (manifest, index) => {
   const validated = index && validatedProteinIdentityIndexes.get(index);
   return validated?.manifest === manifest ? validated : null;
@@ -363,17 +474,12 @@ export const validateProteinRawEntryReferences = (
   );
 };
 
-export const proteinRuntimeIdSets = (manifest, queryInstanceKey, subjectInstanceKey) => {
-  if (!validateProteinIdentityManifest(manifest)) return null;
-  const query = manifest.recordInstances[queryInstanceKey];
-  const subject = manifest.recordInstances[subjectInstanceKey];
-  if (!query || !subject) return null;
-  return {
-    query: new Set(Object.values(query.runtimeIds)),
-    subject: new Set(Object.values(subject.runtimeIds))
-  };
-};
-
+/**
+ * @param {unknown} text
+ * @param {unknown} queryIds
+ * @param {unknown} subjectIds
+ * @returns {boolean}
+ */
 export const rawProteinTextMatchesBindings = (text, queryIds, subjectIds) => {
   if (typeof text !== 'string' || !(queryIds instanceof Set) || !(subjectIds instanceof Set)) {
     return false;
@@ -544,20 +650,27 @@ export const validateDerivedProteinReferences = (
   if (!runtimeHandles) {
     runtimeHandles = new Set();
     Object.values(manifest.recordInstances).forEach((instance) => {
-      Object.values(instance.runtimeIds || {}).forEach((handle) => runtimeHandles.add(handle));
+      Object.values(instance.runtimeIds || {}).forEach((handle) => /** @type {Set<string>} */ (runtimeHandles).add(handle)); // set just above, when it was missing
     });
     if (indexedIdentity) indexedIdentity.runtimeHandles = runtimeHandles;
   }
+  /** @param {string} value */
   const hasForbiddenLegacyReference = (value) => (
     LEGACY_PROTEIN_REFERENCE_RE.test(value) ||
     LONG_TRANSPORT_ID_RE.test(value) ||
     FEATURE_ANALYSIS_ID_RE.test(value)
   );
+  /** @param {string} value */
   const compoundEdgeReferences = (value) => {
     const match = COMPOUND_SUPPORTING_EDGE_RE.exec(value) || COMPOUND_PATH_EDGE_RE.exec(value);
     return match ? [match[1], match[2]] : null;
   };
   let sawReference = false;
+  /**
+   * @param {unknown} value
+   * @param {string} [ownerKey]
+   * @returns {boolean}
+   */
   const visit = (value, ownerKey = '') => {
     if (
       DERIVED_COMPOUND_EDGE_REFERENCE_KEYS.has(ownerKey) &&
@@ -697,6 +810,7 @@ export const createLegacyProteinCandidateEnvelope = (entries) => ({
     }))
 });
 
+/** @param {unknown} value */
 export const normalizeLegacyProteinCandidateEnvelope = (value) => {
   if (!isPlainObject(value) || value.schema !== LEGACY_PROTEIN_CANDIDATE_SCHEMA) {
     return createLegacyProteinCandidateEnvelope([]);
@@ -750,6 +864,7 @@ export const transitionLegacyProteinCandidate = (
   return { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries };
 };
 
+/** @param {unknown} envelope */
 export const serializableLegacyProteinCandidateEnvelope = (envelope) => {
   const normalized = normalizeLegacyProteinCandidateEnvelope(envelope);
   return {
@@ -758,6 +873,10 @@ export const serializableLegacyProteinCandidateEnvelope = (envelope) => {
   };
 };
 
+/**
+ * @param {unknown} envelope
+ * @param {{ states?: string[] }} [options]
+ */
 export const candidateOriginalEntries = (envelope, { states = ['pending'] } = {}) => {
   const acceptedStates = new Set(states);
   return normalizeLegacyProteinCandidateEnvelope(envelope).entries

@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-/** @import { CommittedRecordRequest } from '../services/feature-identity.js' */
+/** @import { CommittedRecord, CommittedRecordRequest } from '../services/feature-identity.js' */
 /** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
 // Source-bound editable rotation intent. The request service owns serialization.
 import {
@@ -22,7 +22,7 @@ import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
-/** @import { AnchorIntent } from '../services/record-display-model.js' */
+/** @import { AnchorIntent, RecordDisplayDraft, RecordDisplayRow } from '../services/record-display-model.js' */
 
 // Session Load reads no record bytes (776a2f93), so a loaded Result can have a
 // current source whose records are not read yet. That popup target failure is
@@ -44,52 +44,12 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  */
 
 /**
- * The identity of a record row or draft: its source input and record selector.
- * @typedef {object} RecordDisplayDraftIdentity
- * @property {string} sourceUid `circular`, or a Linear File card's UID
- * @property {string} selector
- */
-
-/**
- * A draft of the display of one record (a drawing holds those of its own mode).
- * @typedef {RecordDisplayDraftIdentity & {
- *   recordId?: unknown, topologyOverride: boolean | null, startCoordinate: number | null,
- *   reverseComplementOverride: boolean | null, anchorIntent: unknown
- * }} RecordDisplayDraft
- */
-
-/**
- * A record row of one source input, as `buildRecordDisplayRows` builds it with the input's crop and orientation.
- * @typedef {RecordDisplayDraftIdentity & {
- *   key: string, scope: string, source: unknown, paired?: unknown, recordId?: unknown,
- *   recordLength?: number | null, detectedTopology?: unknown, cropped?: unknown, reverse?: unknown
- * }} RecordDisplayRow
- */
-
-/**
  * A row of the committed request: the draft row with what the request carries for the record.
  * @typedef {RecordDisplayRow & {
  *   committedDisplay: { isCircular: boolean | null, startCoordinate: number | null },
  *   committedReverseComplement: boolean, committedCropped: boolean,
  *   canonicalRecordKey: string, canonicalSource: Record<string, unknown>, recordKey: string
  * }} CommittedDisplayRow
- */
-
-/**
- * A selector of a record in the committed request: by index or by record ID.
- * @typedef {{ kind?: string, index: number, value?: string }} CommittedRecordSelector
- */
-
-/**
- * A record of the committed request, as the record display reads it.
- * @typedef {object} CommittedRequestRecord
- * @property {string} recordKey
- * @property {string} [cardinality]
- * @property {CommittedRecordSelector | null} [selector]
- * @property {{ selector?: CommittedRecordSelector | null, reverseComplement?: boolean } | null} [region]
- * @property {{ reverseComplement?: boolean } | null} [presentation]
- * @property {{ isCircular: boolean | null, startCoordinate: number | null }} [display]
- * @property {{ resourceId?: string, gffResourceId?: string, fastaResourceId?: string }} source
  */
 
 /**
@@ -268,7 +228,7 @@ export const createRecordDisplayControls = ({
     const request = getCommittedRequest();
     return orientations.map((orientation) => {
       const records = request?.mode === 'linear'
-        ? request.records.filter((/** @type {CommittedRequestRecord} */ record) => record.recordKey === orientation.recordKey) : [];
+        ? request.records.filter((/** @type {CommittedRecord} */ record) => record.recordKey === orientation.recordKey) : [];
       const inputs = sources.value.filter(source => source.scope === 'linear'
         && source.sourceUid === orientation.recordKey);
       if (records.length !== 1 || inputs.length !== 1) {
@@ -331,7 +291,7 @@ export const createRecordDisplayControls = ({
     committedRows = allRows.value.filter((row) => row.scope === request.mode
       && boundSources.some((source) => source.scope === row.scope && source.sourceUid === row.sourceUid
         && source.source === row.source && source.paired === row.paired)).flatMap((row) => {
-      const selected = request.records.find((/** @type {CommittedRequestRecord} */ record, /** @type {number} */ index) => {
+      const selected = request.records.find((/** @type {CommittedRecord} */ record, /** @type {number} */ index) => {
         const selector = record.region?.selector || record.selector;
         const matchesSelector = !selector || (selector.kind === 'recordIndex'
           ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value);

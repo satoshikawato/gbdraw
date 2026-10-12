@@ -37,6 +37,25 @@ import { resolveDisambiguatedRecordSelection } from './record-options.js';
  *   recordId?: unknown, recordLength?: number | null, detectedTopology?: unknown
  * }} RecordDisplayRowView
  */
+/**
+ * The identity of a record row or draft: its source input and record selector.
+ * @typedef {object} RecordDisplayDraftIdentity
+ * @property {string} sourceUid `circular`, or a Linear File card's UID
+ * @property {string} selector
+ */
+/**
+ * A draft of the display of one record (a drawing holds those of its own mode).
+ * @typedef {RecordDisplayDraftIdentity & {
+ *   recordId?: unknown, topologyOverride: boolean | null, startCoordinate: number | null,
+ *   reverseComplementOverride: boolean | null, anchorIntent: unknown
+ * }} RecordDisplayDraft
+ */
+/**
+ * A record row of one source input, as `buildRecordDisplayRows` builds it with the input's crop and orientation.
+ * @typedef {RecordDisplayDraftIdentity & RecordDisplayRowView & {
+ *   key: string, scope: string, source: unknown, paired?: unknown
+ * }} RecordDisplayRow
+ */
 
 // A record display row or draft names its source input and record. A drawing
 // holds the drafts of its own mode's inputs (PD-OI-086): `circular`, or a

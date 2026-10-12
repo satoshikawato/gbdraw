@@ -534,9 +534,10 @@ export const matchesSessionResourceDescriptor = (file, descriptor) => {
   return true;
 };
 
-/** @param {FileLike | null | undefined} file */
+/** @param {unknown} file A file slot's value; only a clean Session resource view has a source. */
 export const sessionResourceSource = (file) => {
-  // A missing file is no key: `get` returns undefined for it.
+  // The lookup is by identity. A value that is no key (a missing file, a
+  // descriptor, a `File`) has no backing: `get` returns undefined for it.
   const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing || backing.dirty) return null;
   if (Array.isArray(backing.descriptors)) {
