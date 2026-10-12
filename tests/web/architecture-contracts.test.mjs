@@ -5764,8 +5764,8 @@ test('pull request SHA mismatches are blocking metadata errors', () => {
 // tests of the numbered rules in gbdraw/web/CLAUDE.md. A runtime diff may contract them and
 // may not expand them; an expansion is an authority-only change.
 const DESIGN_RULE_GUARD_TEST_PATH = 'tests/web/design-rule-guard-fixture.test.mjs';
-const designRuleGuardRegistrySource = (rules) => `${JSON.stringify({
-  schemaVersion: 1,
+const designRuleGuardRegistrySource = (rules, schemaVersion = 1) => `${JSON.stringify({
+  schemaVersion,
   rulesPath: WEB_DESIGN_RULES_PATH,
   rules
 }, null, 2)}\n`;
@@ -5800,12 +5800,15 @@ const designRuleGuardTestSource = ({
   ''
 ].join('\n');
 
-const withDesignRuleGuardRepository = (runCase, { registry = DESIGN_RULE_REGISTRY } = {}) => (
-  withChangeBudgetRepository(({ commit, execute, write }) => {
+const withDesignRuleGuardRepository = (runCase, {
+  registry = DESIGN_RULE_REGISTRY,
+  sources = { [DESIGN_RULE_GUARD_TEST_PATH]: designRuleGuardTestSource() }
+} = {}) => (
+  withChangeBudgetRepository(({ commit, execute, root, write }) => {
     write(DESIGN_RULE_GUARD_REGISTRY_PATH, registry);
-    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource());
+    Object.entries(sources).forEach(([path, content]) => write(path, content));
     commit('register design-rule guards');
-    return runCase({ execute, write });
+    return runCase({ execute, root, write });
   })
 );
 const runtimeChange = (write) => {
@@ -5840,6 +5843,10 @@ test('design-rule allowlists cannot expand alongside runtime files', () => {
     ['WRITERS', { writers: "{\n  'app/app-setup.js': { removeCircularDepthTrack: 'transition' },\n  'services/reset.js': { resetSettings: 'restore' }\n}" }],
     ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 4, 'app/b.js': 0 }" }],
     ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 3, 'app/b.js': 0, 'app/c.js': 1 }" }],
+    // A new key is new even when Object.prototype has a member of that name.
+    ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 3, 'app/b.js': 0, constructor: 1 }" }],
+    ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 3, 'app/b.js': 0, '__proto__': 1 }" }],
+    ['WRITERS', { writers: "{\n  'app/app-setup.js': { removeCircularDepthTrack: 'reconcile' },\n  'services/reset.js': { resetSettings: 'restore' },\n  constructor: {}\n}" }],
     ['BASELINE', { baseline: 47 }]
   ];
   expansions.forEach(([symbol, overrides]) => {
@@ -5911,6 +5918,475 @@ test('the design-rule guard registry is read from the trusted base and fails clo
   }, { registry: '{ not json\n' });
 });
 
+// A literal is read only when `;` closes it: `[...].concat(MORE)` is not the
+// list between the brackets, on the same line or on the next one.
+test('a design-rule allowlist literal that continues as an expression is unreadable', () => {
+  const continued = [
+    ['RECONCILE', (source) => source.replace("'changeCircularDepthSources']);", "'changeCircularDepthSources'].concat(MORE));")],
+    ['RECONCILE', (source) => source.replace("'changeCircularDepthSources']);", "'changeCircularDepthSources']).add(MORE);")],
+    ['THROW_BASELINE', (source) => source.replace("'app/b.js': 0 };", "'app/b.js': 0 }.merged;")],
+    ['RECONCILE', (source) => source.replace("'changeCircularDepthSources']);", "'changeCircularDepthSources'])\n  .union(MORE);")],
+    ['RECONCILE', (source) => source.replace("'changeCircularDepthSources']);", "'changeCircularDepthSources']\n  .concat(MORE));")],
+    ['THROW_BASELINE', (source) => source.replace("'app/b.js': 0 };", "'app/b.js': 0 }\n  // merged below\n  .merged;")],
+    ['THROW_BASELINE', (source) => source.replace("'app/b.js': 0 };", "'app/b.js': 0 }")]
+  ];
+  continued.forEach(([symbol, rewrite]) => {
+    withDesignRuleGuardRepository(({ execute, write }) => {
+      runtimeChange(write);
+      const source = rewrite(designRuleGuardTestSource());
+      assert.notEqual(source, designRuleGuardTestSource());
+      write(DESIGN_RULE_GUARD_TEST_PATH, source);
+      const result = execute();
+      assert.equal(result.status, 1, `${symbol}\n${result.output}`);
+      assert.match(result.output, new RegExp(`design-rule\\.co-change: .*#${symbol} \\(unreadable\\)`));
+    });
+  });
+});
+
+// Registry schema 2: a guard records its root cause, its CI job and when it
+// can retire; a rule outside gbdraw/web/CLAUDE.md names its own rulesPath; and
+// an allowlist may be a frozen JS literal, a path -> names map, the entries of
+// a JSON file, or a module-level Python literal.
+const DESIGN_RULE_PYTHON_GUARD_PATH = 'tests/test_design_rule_guard_fixture.py';
+const DESIGN_RULE_JSON_GUARD_PATH = 'tests/web/contracts/design-rule-guard-fixture.json';
+const designRuleGuard = (path, overrides = {}) => ({
+  path, rootCause: 'P3', job: 'web-contracts-pr', retireWhen: 'never', ...overrides
+});
+const designRuleRules2 = () => [{
+  id: 'R10',
+  heading: 'R10: A watcher does not repair state',
+  guards: [
+    designRuleGuard(DESIGN_RULE_GUARD_TEST_PATH),
+    designRuleGuard(DESIGN_RULE_JSON_GUARD_PATH, {
+      rootCause: 'new', job: 'promotion', retireWhen: 'when live edits and Generate share one projection'
+    })
+  ],
+  allowlists: [
+    { path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'RULE_WRITERS', kind: 'set-map' },
+    { path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'FROZEN', kind: 'set' },
+    { path: DESIGN_RULE_JSON_GUARD_PATH, symbol: 'entries', kind: 'json-entries' }
+  ]
+}, {
+  id: 'TYPE-DEBT',
+  heading: 'Type checking',
+  rulesPath: 'CLAUDE.md',
+  guards: [designRuleGuard(DESIGN_RULE_PYTHON_GUARD_PATH, { rootCause: 'P10', job: 'core-pr' })],
+  allowlists: [
+    { path: DESIGN_RULE_PYTHON_GUARD_PATH, symbol: 'TYPE_DEBT_BASELINE', kind: 'py-count-map' },
+    { path: DESIGN_RULE_PYTHON_GUARD_PATH, symbol: 'UNPROVEN_BASELINE', kind: 'py-count-map' },
+    { path: DESIGN_RULE_PYTHON_GUARD_PATH, symbol: 'ALLOWED_FILES', kind: 'py-set' },
+    { path: DESIGN_RULE_PYTHON_GUARD_PATH, symbol: 'CAP', kind: 'py-count' }
+  ]
+}];
+const DESIGN_RULE_SUBJECTS_2 = Object.freeze({
+  RULE_WRITERS: `R10 ${DESIGN_RULE_GUARD_TEST_PATH}#RULE_WRITERS`,
+  FROZEN: `R10 ${DESIGN_RULE_GUARD_TEST_PATH}#FROZEN`,
+  entries: `R10 ${DESIGN_RULE_JSON_GUARD_PATH}#entries`,
+  TYPE_DEBT_BASELINE: `TYPE-DEBT ${DESIGN_RULE_PYTHON_GUARD_PATH}#TYPE_DEBT_BASELINE`,
+  UNPROVEN_BASELINE: `TYPE-DEBT ${DESIGN_RULE_PYTHON_GUARD_PATH}#UNPROVEN_BASELINE`,
+  ALLOWED_FILES: `TYPE-DEBT ${DESIGN_RULE_PYTHON_GUARD_PATH}#ALLOWED_FILES`,
+  CAP: `TYPE-DEBT ${DESIGN_RULE_PYTHON_GUARD_PATH}#CAP`
+});
+const designRuleGuardSources2 = ({
+  ruleWriters = "Object.freeze({\n  // The edit transition and the popup's rule scopes.\n  'js/app/visibility-actions.js': ['editRules'],\n  'js/services/config.js': ['resetBaseline', 'applyDrawingData']\n})",
+  frozen = "Object.freeze(new Set(['normalizeSlots', 'changeSources']))",
+  entries = [
+    { id: 'label-placement-awaits-reflow', kind: 'leader', condition: { autoReflow: false } },
+    { id: 'legend-order-awaits-generate', kind: 'legend', condition: { autoReflow: true } }
+  ],
+  typeDebt = '{"gbdraw/api/options.py": 2, "gbdraw/render/export.py": 1}',
+  unproven = '{\n    "gbdraw/analysis/collinearity.py": (10, _COMPARISON),  # (sites, what they check)\n    "gbdraw/api/options.py": (3, _TYPED_API),\n}',
+  allowedFiles = 'frozenset({\n    "gbdraw/web/js/a.js",\n    "gbdraw/web/js/b.js",\n})',
+  cap = '12'
+} = {}) => ({
+  [DESIGN_RULE_GUARD_TEST_PATH]: [
+    "import test from 'node:test';",
+    '',
+    `export const RULE_WRITERS = ${ruleWriters};`,
+    `const FROZEN = ${frozen};`,
+    '',
+    "test('writers', () => { void RULE_WRITERS; void FROZEN; });",
+    ''
+  ].join('\n'),
+  [DESIGN_RULE_JSON_GUARD_PATH]: typeof entries === 'string'
+    ? entries
+    : `${JSON.stringify({ description: 'Differences a decision allows.', entries }, null, 2)}\n`,
+  [DESIGN_RULE_PYTHON_GUARD_PATH]: [
+    '"""Shrink-only baselines.',
+    '',
+    'CAP = 99 in this docstring is not the assignment.',
+    '"""',
+    'from __future__ import annotations',
+    '',
+    '_COMPARISON = "comparison checks"',
+    '_TYPED_API = "typed API checks"',
+    '# TYPE_DEBT_BASELINE = {} in a comment is not the assignment either.',
+    `TYPE_DEBT_BASELINE: dict[str, int] = ${typeDebt}`,
+    '',
+    '# Shrink-only: path -> (unproven sites, what they check).',
+    `UNPROVEN_BASELINE: dict[str, tuple[int, str]] = ${unproven}`,
+    `ALLOWED_FILES = ${allowedFiles}`,
+    `CAP = ${cap}  # the cap`,
+    '',
+    '',
+    'def test_baselines() -> None:',
+    '    assert CAP and TYPE_DEBT_BASELINE is not None and UNPROVEN_BASELINE and ALLOWED_FILES',
+    '    for path in UNPROVEN_BASELINE:',
+    '        assert UNPROVEN_BASELINE.get(path, (0, ""))[0] <= len(UNPROVEN_BASELINE) * CAP',
+    '    counts = {path: count for path, (count, _note) in UNPROVEN_BASELINE.items()}',
+    '    assert counts == {path: UNPROVEN_BASELINE[path][0] for path in sorted(UNPROVEN_BASELINE)}, (',
+    '        f"lower UNPROVEN_BASELINE = {counts}"',
+    '    )',
+    '    assert check(UNPROVEN_BASELINE, strict=True) and check(baseline=UNPROVEN_BASELINE)',
+    '    assert "gbdraw/web/js/c.js" not in ALLOWED_FILES and ALLOWED_FILES != set()',
+    ''
+  ].join('\n')
+});
+const withDesignRuleGuardRepository2 = (runCase, { rules = designRuleRules2(), schemaVersion = 2 } = {}) => (
+  withDesignRuleGuardRepository(({ execute, root, write }) => runCase({
+    execute,
+    root,
+    write,
+    writeGuards: (overrides) => Object.entries(designRuleGuardSources2(overrides))
+      .forEach(([path, source]) => write(path, source))
+  }), { registry: designRuleGuardRegistrySource(rules, schemaVersion), sources: designRuleGuardSources2() })
+);
+const pythonProductionChange = (write) => {
+  write('gbdraw/api/options.py', 'LIMIT = 2\n');
+};
+const DESIGN_RULE_CONTRACTIONS_2 = Object.freeze({
+  ruleWriters: "Object.freeze({\n  'js/services/config.js': ['applyDrawingData']\n})",
+  frozen: "Object.freeze(new Set(['normalizeSlots']))",
+  entries: [{ id: 'label-placement-awaits-reflow', kind: 'leader', condition: { autoReflow: false } }],
+  typeDebt: '{"gbdraw/api/options.py": 1}',
+  unproven: '{"gbdraw/analysis/collinearity.py": (9, _COMPARISON), "gbdraw/api/options.py": (3, _TYPED_API)}',
+  allowedFiles: 'frozenset({"gbdraw/web/js/a.js"})',
+  cap: '11'
+});
+// [symbol, source overrides, direction when it is not a readable expansion]
+const DESIGN_RULE_EXPANSIONS_2 = Object.freeze([
+  ['RULE_WRITERS', { ruleWriters: "Object.freeze({\n  'js/app/visibility-actions.js': ['editRules'],\n  'js/services/config.js': ['resetBaseline', 'applyDrawingData'],\n  'js/services/reset.js': ['resetDraft']\n})" }],
+  ['RULE_WRITERS', { ruleWriters: "Object.freeze({\n  'js/app/visibility-actions.js': ['editRules', 'replaceRules'],\n  'js/services/config.js': ['resetBaseline', 'applyDrawingData']\n})" }],
+  ['RULE_WRITERS', { ruleWriters: "Object.freeze({ ...OTHER_WRITERS, 'js/services/config.js': ['resetBaseline'] })" }, 'unreadable'],
+  ['RULE_WRITERS', { ruleWriters: "Object.freeze({ 'js/services/config.js': 'resetBaseline' })" }, 'unreadable'],
+  ['FROZEN', { frozen: "Object.freeze(new Set(['normalizeSlots', 'changeSources', 'applyLayout']))" }],
+  ['FROZEN', { frozen: "Object.freeze(new Set(['normalizeSlots']).add(MORE))" }, 'unreadable'],
+  ['FROZEN', { frozen: "Object.freeze(['normalizeSlots', 'changeSources'])\n  .concat(MORE)" }, 'unreadable'],
+  ['entries', { entries: [
+    { id: 'label-placement-awaits-reflow', kind: 'leader', condition: { autoReflow: false } },
+    { id: 'legend-order-awaits-generate', kind: 'legend', condition: { autoReflow: true } },
+    { id: 'track-order-awaits-generate', kind: 'track', condition: {} }
+  ] }],
+  ['entries', { entries: [
+    { id: 'label-placement-awaits-reflow', kind: 'leader', condition: {} },
+    { id: 'legend-order-awaits-generate', kind: 'legend', condition: { autoReflow: true } }
+  ] }],
+  ['entries', { entries: [
+    { id: 'legend-order-awaits-generate', kind: 'legend', condition: { autoReflow: true } },
+    { id: 'legend-order-awaits-generate', kind: 'leader', condition: {} }
+  ] }, 'unreadable'],
+  ['entries', { entries: [{ kind: 'leader', condition: {} }] }, 'unreadable'],
+  ['entries', { entries: '{ "entries": [\n' }, 'unreadable'],
+  ['TYPE_DEBT_BASELINE', { typeDebt: '{"gbdraw/api/options.py": 3, "gbdraw/render/export.py": 1}' }],
+  ['TYPE_DEBT_BASELINE', { typeDebt: '{"gbdraw/api/options.py": 2, "gbdraw/render/export.py": 1, "gbdraw/cli.py": 1}' }],
+  ['TYPE_DEBT_BASELINE', { typeDebt: '{**_OTHER, "gbdraw/api/options.py": 2}' }, 'unreadable'],
+  ['TYPE_DEBT_BASELINE', { typeDebt: 'dict(_OTHER)' }, 'unreadable'],
+  ['TYPE_DEBT_BASELINE', { typeDebt: '{"gbdraw/api/options.py": 2, "gbdraw/render/export.py": 1} | _OTHER' }, 'unreadable'],
+  ['TYPE_DEBT_BASELINE', { typeDebt: '{"gbdraw/api/options.py": 2, "gbdraw/render/export.py": 1}\nTYPE_DEBT_BASELINE["gbdraw/cli.py"] = 4' }, 'unreadable'],
+  ['TYPE_DEBT_BASELINE', { typeDebt: '{"gbdraw/api/options.py": -1}' }, 'unreadable'],
+  ['UNPROVEN_BASELINE', { unproven: '{"gbdraw/analysis/collinearity.py": (11, _COMPARISON), "gbdraw/api/options.py": (3, _TYPED_API)}' }],
+  ['UNPROVEN_BASELINE', { unproven: '{"gbdraw/analysis/collinearity.py": (_COMPARISON, 10), "gbdraw/api/options.py": (3, _TYPED_API)}' }, 'unreadable'],
+  ['ALLOWED_FILES', { allowedFiles: '{"gbdraw/web/js/a.js", "gbdraw/web/js/b.js", "gbdraw/web/js/c.js"}' }],
+  ['ALLOWED_FILES', { allowedFiles: 'frozenset(_GENERATED | {"gbdraw/web/js/a.js"})' }, 'unreadable'],
+  ['ALLOWED_FILES', { allowedFiles: '("gbdraw/web/js/a.js", "gbdraw/web/js/b.js" "gbdraw/web/js/c.js")' }, 'unreadable'],
+  ['CAP', { cap: '13' }],
+  ['CAP', { cap: 'len(_ALL)' }, 'unreadable'],
+  ['CAP', { cap: '12 + _MORE' }, 'unreadable']
+]);
+const designRuleSubjectPattern = (symbol, direction = 'expansion') => (
+  `${DESIGN_RULE_SUBJECTS_2[symbol].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(${direction}\\)`
+);
+
+test('schema 2 design-rule allowlists of every kind may contract alongside runtime files', () => {
+  withDesignRuleGuardRepository2(({ execute, write, writeGuards }) => {
+    runtimeChange(write);
+    pythonProductionChange(write);
+    writeGuards(DESIGN_RULE_CONTRACTIONS_2);
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.doesNotMatch(result.output, /design-rule\.co-change|- expansion: /);
+    Object.values(DESIGN_RULE_SUBJECTS_2).forEach((subject) => {
+      assert.ok(result.output.includes(`- contraction: ${subject}\n`), `${subject}\n${result.output}`);
+    });
+    assert.match(result.output, /Registry: 2 rule\(s\) from the trusted base/);
+  });
+  // The same values written another way are neither a contraction nor an expansion.
+  withDesignRuleGuardRepository2(({ execute, write, writeGuards }) => {
+    runtimeChange(write);
+    pythonProductionChange(write);
+    writeGuards({
+      ruleWriters: "{ 'js/services/config.js': ['applyDrawingData', 'resetBaseline'], 'js/app/visibility-actions.js': ['editRules'], }",
+      frozen: "new Set(['changeSources', 'normalizeSlots'])",
+      typeDebt: "{\n    'gbdraw/render/export.py': 1,  # export\n    'gbdraw/api/options.py': 2,\n}",
+      unproven: '{"gbdraw/api/options.py": (3, "typed API checks"), "gbdraw/analysis/collinearity.py": (10, _COMPARISON)}',
+      allowedFiles: '["gbdraw/web/js/b.js", "gbdraw/web/js/a.js"]',
+      cap: '12'
+    });
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.doesNotMatch(result.output, /design-rule\.co-change|- expansion: |- contraction: /);
+  });
+});
+
+test('schema 2 design-rule allowlists cannot expand alongside runtime files', () => {
+  DESIGN_RULE_EXPANSIONS_2.forEach(([symbol, overrides, direction]) => {
+    withDesignRuleGuardRepository2(({ execute, write, writeGuards }) => {
+      runtimeChange(write);
+      writeGuards(overrides);
+      const result = execute();
+      const label = `${symbol} ${JSON.stringify(overrides)}\n${result.output}`;
+      assert.equal(result.status, 1, label);
+      assert.match(result.output, new RegExp(
+        'design-rule\\.co-change: a registered design-rule allowlist expanded alongside production runtime files '
+        + `\\(${designRuleSubjectPattern(symbol, direction)}\\)`
+      ), label);
+    });
+  });
+});
+
+test('a schema 2 design-rule allowlist expansion without runtime files is an authority change', () => {
+  DESIGN_RULE_EXPANSIONS_2.filter(([, , direction]) => !direction).forEach(([symbol, overrides]) => {
+    withDesignRuleGuardRepository2(({ execute, writeGuards }) => {
+      writeGuards(overrides);
+      const result = execute();
+      const label = `${symbol} ${JSON.stringify(overrides)}\n${result.output}`;
+      assert.equal(result.status, 0, label);
+      assert.match(result.output, /Gate: \*\*PASS\*\*/, label);
+      assert.match(result.output, /Review: \*\*REQUIRED\*\*/, label);
+      assert.match(result.output, new RegExp(
+        `Governance and authority: registered design-rule allowlists expanded \\(${designRuleSubjectPattern(symbol)}\\)`
+      ), label);
+    });
+  });
+});
+
+// Counts compare per key with <=: lowering a count or removing a key needs
+// nothing else, with or without a runtime file in the diff.
+test('a design-rule count contraction without runtime files passes and is not an authority change', () => {
+  withDesignRuleGuardRepository2(({ execute, writeGuards }) => {
+    const { typeDebt, unproven, cap } = DESIGN_RULE_CONTRACTIONS_2;
+    writeGuards({ typeDebt, unproven, cap });
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.doesNotMatch(result.output, /design-rule\.co-change|allowlists expanded|- expansion: /);
+    ['TYPE_DEBT_BASELINE', 'UNPROVEN_BASELINE', 'CAP'].forEach((symbol) => {
+      assert.ok(result.output.includes(`- contraction: ${DESIGN_RULE_SUBJECTS_2[symbol]}\n`), result.output);
+    });
+  });
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({ throwBaseline: "{ 'app/a.js': 2 }", baseline: 45 }));
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.doesNotMatch(result.output, /design-rule\.co-change|allowlists expanded|- expansion: /);
+    assert.match(result.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#THROW_BASELINE/);
+    assert.match(result.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#BASELINE/);
+  });
+});
+
+// A Python baseline guards the Python package: for a py-* allowlist a changed
+// gbdraw/**/*.py outside gbdraw/web/ is production too.
+test('a Python design-rule baseline cannot expand alongside Python package files', () => {
+  const pythonExpansion = { typeDebt: '{"gbdraw/api/options.py": 3, "gbdraw/render/export.py": 1}' };
+  const webExpansion = DESIGN_RULE_EXPANSIONS_2[0][1];
+  const blocked = /design-rule\.co-change: a registered design-rule allowlist expanded alongside production runtime files /;
+  withDesignRuleGuardRepository2(({ execute, write, writeGuards }) => {
+    pythonProductionChange(write);
+    writeGuards({ ...pythonExpansion, ...webExpansion });
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /Gate: \*\*FAIL\*\*/);
+    // Only the Python baseline blocks; the Web allowlist stays an authority change.
+    assert.match(result.output, new RegExp(`${blocked.source}\\(${designRuleSubjectPattern('TYPE_DEBT_BASELINE')}\\)`));
+    assert.match(result.output, new RegExp(`- expansion: ${designRuleSubjectPattern('RULE_WRITERS')}`));
+  });
+  // Not Python production: the Web tree, tests, tools, and a non-.py package file.
+  ['gbdraw/web/server.py', 'tests/test_other.py', 'tools/prepare.py', 'gbdraw/data/config.toml'].forEach((path) => {
+    withDesignRuleGuardRepository2(({ execute, write, writeGuards }) => {
+      write(path, 'LIMIT = 2\n');
+      writeGuards(pythonExpansion);
+      const result = execute();
+      assert.equal(result.status, 0, `${path}\n${result.output}`);
+      assert.doesNotMatch(result.output, blocked, path);
+      assert.match(result.output, new RegExp(
+        `registered design-rule allowlists expanded \\(${designRuleSubjectPattern('TYPE_DEBT_BASELINE')}\\)`
+      ), path);
+    });
+  });
+  // Python package files do not make a Web allowlist expansion blocking, in either schema.
+  withDesignRuleGuardRepository2(({ execute, write, writeGuards }) => {
+    pythonProductionChange(write);
+    writeGuards(webExpansion);
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.doesNotMatch(result.output, blocked);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+  });
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    pythonProductionChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({ baseline: 47 }));
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.doesNotMatch(result.output, blocked);
+  });
+  // Python has no `const`: a baseline is read only when one module-level
+  // assignment is the single place that binds or changes the name. A removed
+  // baseline contracted.
+  const pythonSource = designRuleGuardSources2()[DESIGN_RULE_PYTHON_GUARD_PATH];
+  const declaration = 'TYPE_DEBT_BASELINE: dict[str, int] = ';
+  const unreadable = `${blocked.source}\\(${designRuleSubjectPattern('TYPE_DEBT_BASELINE', 'unreadable')}\\)`;
+  const withStatement = (statement) => pythonSource.replace('\n\ndef test_baselines', `\n${statement}\n\n\ndef test_baselines`);
+  [
+    [pythonSource.replace(declaration, '_, TYPE_DEBT_BASELINE = 0, ')],
+    [pythonSource.replace(declaration, `if True:\n    ${declaration}`)],
+    // The module-level literal stays, and the name is bound or changed elsewhere.
+    [withStatement('if sys.version_info < (3, 11):\n    TYPE_DEBT_BASELINE["gbdraw/cli.py"] = 3')],
+    [withStatement('try:\n    import tomllib\nexcept ImportError:\n    TYPE_DEBT_BASELINE = {"gbdraw/cli.py": 3}')],
+    [withStatement('for _path in ("gbdraw/cli.py",):\n    TYPE_DEBT_BASELINE.setdefault(_path, 3)')],
+    [withStatement('if True: TYPE_DEBT_BASELINE.update({"gbdraw/cli.py": 3})')],
+    [withStatement('_X = 1; TYPE_DEBT_BASELINE = {"gbdraw/cli.py": 3}')],
+    [withStatement('_X, TYPE_DEBT_BASELINE = 1, {"gbdraw/cli.py": 3}')],
+    [withStatement('_A, TYPE_DEBT_BASELINE, _B = 1, {"gbdraw/cli.py": 3}, 2')],
+    [withStatement('_X = TYPE_DEBT_BASELINE = {"gbdraw/cli.py": 3}')],
+    [withStatement('_ALL |= TYPE_DEBT_BASELINE; TYPE_DEBT_BASELINE |= {"gbdraw/cli.py": 3}')],
+    [withStatement('from tests.other_baselines import TYPE_DEBT_BASELINE')],
+    [withStatement('import tests.other_baselines as TYPE_DEBT_BASELINE')],
+    [withStatement('def _grow():\n    global TYPE_DEBT_BASELINE\n    TYPE_DEBT_BASELINE = {"gbdraw/cli.py": 3}')],
+    [pythonSource.replace(/^TYPE_DEBT_BASELINE.*\n/m, '').replace('TYPE_DEBT_BASELINE is not None and ', ''), 0, '- contraction: TYPE-DEBT [^\\n]*#TYPE_DEBT_BASELINE\\n']
+  ].forEach(([source, status = 1, expected = unreadable]) => {
+    withDesignRuleGuardRepository2(({ execute, write }) => {
+      assert.notEqual(source, pythonSource);
+      pythonProductionChange(write);
+      write(DESIGN_RULE_PYTHON_GUARD_PATH, source);
+      const result = execute();
+      assert.equal(result.status, status, `${source}\n${result.output}`);
+      assert.match(result.output, new RegExp(expected), source);
+    });
+  });
+});
+
+test('the design-rule guard registry parser validates each schema 2 field and keeps schema 1 strict', () => {
+  const malformed = (mutate, expected, schemaVersion = 2) => {
+    const rules = designRuleRules2();
+    mutate(rules);
+    withDesignRuleGuardRepository2(({ execute }) => {
+      const result = execute();
+      const label = `${expected}\n${result.output}`;
+      assert.equal(result.status, 1, label);
+      assert.ok(result.output.includes(
+        `trusted design-rule guard registry: tools/web-design-rule-guards.json: ${expected}`
+      ), label);
+    }, { rules, schemaVersion });
+  };
+  malformed(() => {}, 'schemaVersion must be 1 or 2', 3);
+  malformed((rules) => { rules[0].guards[0] = DESIGN_RULE_GUARD_TEST_PATH; }, 'rules[0].guards[0]: expected an object');
+  malformed((rules) => { delete rules[0].guards[0].path; }, 'rules[0].guards[0].path: expected a path');
+  malformed((rules) => { rules[0].guards[0].rootCause = 'P11'; }, 'rules[0].guards[0].rootCause: expected P1..P10 or new');
+  malformed((rules) => { delete rules[0].guards[1].rootCause; }, 'rules[0].guards[1].rootCause: expected P1..P10 or new');
+  malformed((rules) => { rules[0].guards[0].job = 'Web contracts'; }, 'rules[0].guards[0].job: expected a CI job id');
+  malformed((rules) => { delete rules[1].guards[0].job; }, 'rules[1].guards[0].job: expected a CI job id');
+  malformed((rules) => { rules[0].guards[0].retireWhen = ' '; }, 'rules[0].guards[0].retireWhen: expected text');
+  malformed((rules) => { delete rules[0].guards[0].retireWhen; }, 'rules[0].guards[0].retireWhen: expected text');
+  malformed((rules) => { rules[0].guards = DESIGN_RULE_GUARD_TEST_PATH; }, 'rules[0].guards: expected an array');
+  malformed((rules) => { delete rules[1].rulesPath; }, 'rules[1].id: expected R<n>, or an upper-case id with its own rulesPath');
+  malformed((rules) => { rules[1].id = 'type-debt'; }, 'rules[1].id: expected R<n>, or an upper-case id with its own rulesPath');
+  malformed((rules) => { rules[1].rulesPath = ''; }, 'rules[1].rulesPath: expected a path');
+  malformed((rules) => { rules[1].id = 'R10'; }, 'rules[1].id: duplicate R10');
+  malformed((rules) => { rules[1].allowlists[0].kind = 'py-map'; }, 'rules[1].allowlists[0].kind: expected one of count, count-map, set, writer-map, set-map, json-entries, py-count, py-count-map, py-set');
+  // Schema 1 reads as before: bare path guards, R<n> ids, and its four kinds.
+  malformed((rules) => { rules.pop(); }, 'rules[0].guards: expected an array of paths', 1);
+  malformed((rules) => {
+    rules[0].guards = [DESIGN_RULE_GUARD_TEST_PATH];
+    rules[0].allowlists = [];
+    rules[1].guards = [DESIGN_RULE_PYTHON_GUARD_PATH];
+    rules[1].allowlists = [];
+  }, 'rules[1].id: expected R<n>', 1);
+  malformed((rules) => {
+    rules.pop();
+    rules[0].guards = [DESIGN_RULE_GUARD_TEST_PATH];
+  }, 'rules[0].allowlists[0].kind: expected one of count, count-map, set, writer-map', 1);
+});
+
+// Every rule a registry names exists in its rules file and every guard exists.
+const assertDesignRuleRegistryResolves = (registry, root) => {
+  assert.ok([1, 2].includes(registry.schemaVersion), 'schemaVersion');
+  registry.rules.forEach((rule) => {
+    // The numbered Web rules are `###` headings; a rule with its own rulesPath may sit at any level.
+    const level = rule.rulesPath ? /^#{1,6} / : /^### /;
+    const headings = readFileSync(join(root, rule.rulesPath || registry.rulesPath), 'utf8').split(/\r?\n/)
+      .filter((line) => level.test(line)).map((line) => line.replace(/^#+ /, ''));
+    assert.ok(headings.includes(rule.heading), `${rule.id}: ${rule.heading}`);
+    rule.guards.forEach((guard) => {
+      const path = typeof guard === 'string' ? guard : guard.path;
+      assert.ok(existsSync(join(root, path)), `${rule.id}: ${path}`);
+    });
+  });
+};
+// The Gate reads the registry from the trusted base and fails closed: a
+// malformed registry fails every later pull request, and a literal the Gate
+// cannot read fails every later pull request that changes its file together
+// with production code. So a candidate registry goes through the Gate itself
+// before it merges. The registry and every registered literal's file are the
+// base, and each file then gains one blank line, which makes the Gate read
+// every literal with its registered kind on both sides.
+const assertGateReadsDesignRuleRegistry = (registrySource, root) => {
+  const paths = [...new Set(
+    JSON.parse(registrySource).rules.flatMap((rule) => rule.allowlists.map(({ path }) => path))
+  )];
+  const sources = Object.fromEntries(paths.map((path) => [path, readFileSync(join(root, path), 'utf8')]));
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    paths.forEach((path) => write(path, `${sources[path]}\n`));
+    const { output } = execute();
+    assert.doesNotMatch(output, /trusted design-rule guard registry:/);
+    assert.match(output, /Registry: \d+ rule\(s\) from the trusted base/);
+    // A literal that is missing or unreadable shows as an expansion; a readable one is unchanged.
+    assert.deepEqual(output.split('\n').filter((line) => /^- (?:expansion|contraction): /.test(line)), []);
+  }, { registry: registrySource, sources });
+};
+
+test('the head-registry check resolves schema 2 guards, a rule\'s own rulesPath, and Python and JSON literals', () => {
+  withDesignRuleGuardRepository2(({ root, write, writeGuards }) => {
+    write(WEB_DESIGN_RULES_PATH, '## Design rules\n\n### R10: A watcher does not repair state\n');
+    write('CLAUDE.md', '# CLAUDE.md\n\n## Coding Conventions\n\n#### Type checking\n');
+    const registry = JSON.parse(designRuleGuardRegistrySource(designRuleRules2(), 2));
+    assertDesignRuleRegistryResolves(registry, root);
+    assertGateReadsDesignRuleRegistry(JSON.stringify(registry), root);
+    const broken = (mutate, expected, check = assertDesignRuleRegistryResolves) => {
+      const candidate = structuredClone(registry);
+      mutate(candidate);
+      assert.throws(() => check(check === assertDesignRuleRegistryResolves ? candidate : JSON.stringify(candidate), root), expected);
+    };
+    broken((candidate) => { candidate.schemaVersion = 3; }, /schemaVersion/);
+    broken((candidate) => { candidate.rules[1].heading = 'Type debt'; }, /TYPE-DEBT: Type debt/);
+    broken((candidate) => { delete candidate.rules[1].rulesPath; }, /TYPE-DEBT: Type checking/);
+    broken((candidate) => { candidate.rules[1].guards[0].path = 'tests/test_missing.py'; }, /tests\/test_missing\.py/);
+    // A registered literal the Gate does not find, or finds and cannot read.
+    const unreadable = (symbol, status) => new RegExp(`#${symbol} \\(unreadable in the trusted base \\(${status}\\)\\)`);
+    const gate = assertGateReadsDesignRuleRegistry;
+    broken((candidate) => { candidate.schemaVersion = 3; }, /trusted design-rule guard registry:/, gate);
+    broken((candidate) => { candidate.rules[1].allowlists[0].symbol = 'DEBT_BASELINE'; }, unreadable('DEBT_BASELINE', 'missing'), gate);
+    broken((candidate) => { candidate.rules[0].allowlists[0].symbol = 'WRITERS'; }, unreadable('WRITERS', 'missing'), gate);
+    broken((candidate) => { candidate.rules[0].allowlists[2].symbol = 'allowed'; }, unreadable('allowed', 'missing'), gate);
+    // A literal that is read but is not of its registered kind.
+    broken((candidate) => { candidate.rules[1].allowlists[3].kind = 'py-set'; }, /#CAP \(unreadable\)/, gate);
+    broken((candidate) => { candidate.rules[1].allowlists[0].path = 'tests/test_missing.py'; }, /ENOENT/, gate);
+    writeGuards({ typeDebt: 'dict(_OTHER)', frozen: "Object.freeze(['normalizeSlots'])\n  .concat(MORE)" });
+    assert.throws(() => gate(JSON.stringify(registry), root), unreadable('TYPE_DEBT_BASELINE', 'unreadable'));
+    assert.throws(() => gate(JSON.stringify(registry), root), unreadable('FROZEN', 'unreadable'));
+  });
+});
+
 test('the Web design rules and the guard registry are pre-registered guard and authority paths', () => {
   const checker = readFileSync(CHANGE_BUDGET_CHECKER, 'utf8');
   assert.match(checker, /const webDesignRulesPath = 'gbdraw\/web\/CLAUDE\.md';/);
@@ -5922,19 +6398,12 @@ test('the Web design rules and the guard registry are pre-registered guard and a
     assert.match(block, /designRuleGuardRegistryPath/);
   }
   if (existsSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH))) {
-    // Once the registry is activated, every rule it names exists in the Web
-    // rules, every guard exists, and every allowlist literal is readable.
-    const registry = JSON.parse(readFileSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH), 'utf8'));
-    const rules = readFileSync(join(REPOSITORY_ROOT, WEB_DESIGN_RULES_PATH), 'utf8');
-    assert.equal(registry.schemaVersion, 1);
-    registry.rules.forEach((rule) => {
-      assert.match(rules, new RegExp(`^### ${rule.heading.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, 'm'), rule.id);
-      rule.guards.forEach((guard) => assert.ok(existsSync(join(REPOSITORY_ROOT, guard)), `${rule.id}: ${guard}`));
-      rule.allowlists.forEach(({ path, symbol }) => {
-        const source = readFileSync(join(REPOSITORY_ROOT, path), 'utf8');
-        assert.match(source, new RegExp(`^[ \\t]*(?:export\\s+)?const\\s+${symbol}\\s*=`, 'm'), `${rule.id}: ${path}#${symbol}`);
-      });
-    });
+    // Once the registry is activated, every rule it names exists in its rules
+    // file, every guard exists, and the Gate parses the registry and reads
+    // every allowlist literal with its registered kind.
+    const source = readFileSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH), 'utf8');
+    assertDesignRuleRegistryResolves(JSON.parse(source), REPOSITORY_ROOT);
+    assertGateReadsDesignRuleRegistry(source, REPOSITORY_ROOT);
   }
 });
 

@@ -58,7 +58,7 @@ export const WEB_OWNER_GRAPH_DEFAULTS = Object.freeze({
       'config.js', 'web-ux-profile.js', 'mode-profiles.generated.js', 'mode-profiles.js',
       'mode-scoped-settings.generated.js'
     ]),
-    leafDirectories: Object.freeze(['utils/']),
+    leafDirectories: Object.freeze(['utils/', 'contracts/']),
     stateBoundServices: Object.freeze(['services/config.js', 'services/reset.js']),
     entryModules: Object.freeze(['app.js', 'components.js'])
   }),
@@ -845,8 +845,8 @@ const detectHeavyDerivedTriggerSitesV2 = (sources, registryInput) => {
 
 // --- import direction (R13 layers) --------------------------------------------
 
-// Layer of a module under gbdraw/web/js, lowest first: 0 leaves (`utils/` and
-// the constants modules), 1 state-free `services/`, 2 `state.js`, 3 the
+// Layer of a module under gbdraw/web/js, lowest first: 0 leaves (`utils/`,
+// `contracts/` and the constants modules), 1 state-free `services/`, 2 `state.js`, 3 the
 // state-bound services, 4 owner modules (`app/`), 5 composition roots, 6
 // `app.js` and `components.js`. Anything else (`workers/`, a non-module file)
 // is unranked: `null`.
