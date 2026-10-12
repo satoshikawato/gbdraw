@@ -2424,23 +2424,28 @@
                             >
                                 <summary
                                     class="min-w-0 text-[10px] font-semibold text-slate-500"
-                                    :aria-label="`File ${sourceIndex + 1}: ${linearCardFileNames(source) || 'no file'}`"
-                                    :aria-describedby="linearSourceGencodeRequired(source) ? `linear-file-gencode-${source.uid}` : null"
+                                    :aria-label="`File ${sourceIndex + 1}: ${linearCardFileLine(source)}`"
+                                    :aria-describedby="[
+                                        linearSourceInspectionFailed(source) && `linear-file-failed-${source.uid}`,
+                                        linearSourceGencodeRequired(source) && `linear-file-gencode-${source.uid}`
+                                    ].filter(Boolean).join(' ') || null"
                                 >
                                     <span class="shrink-0">File {{ sourceIndex + 1 }}</span>
                                     <span class="linear-file-fold-line">
                                         <span class="linear-file-fold-names">
+                                            <!-- The ready look only when every slot the card shows holds a file. -->
                                             <span
-                                                v-if="linearCardFileNames(source)"
+                                                v-if="linearCardHoldsInput(source)"
                                                 class="linear-file-chip"
                                                 :class="{ failed: linearSourceInspectionFailed(source) }"
-                                                :title="linearCardFileNames(source)"
+                                                :title="linearCardFileLine(source)"
                                             >
                                                 <i :class="linearSourceInspectionFailed(source) ? 'ph ph-warning-circle' : 'ph ph-check-circle'" aria-hidden="true"></i>
-                                                <span class="truncate">{{ linearCardFileNames(source) }}</span>
+                                                <span class="truncate">{{ linearCardFileLine(source) }}</span>
                                             </span>
-                                            <span v-else class="truncate font-normal">No file</span>
+                                            <span v-else class="truncate font-normal" :title="linearCardFileLine(source)">{{ linearCardFileLine(source) }}</span>
                                         </span>
+                                        <span v-if="linearSourceInspectionFailed(source)" :id="`linear-file-failed-${source.uid}`" class="sr-only">This file could not be read.</span>
                                         <span v-if="linearSourceGencodeRequired(source)" :id="`linear-file-gencode-${source.uid}`" class="shrink-0 font-normal text-red-700">Gencode required</span>
                                     </span>
                                     <!-- A press on or between the move buttons never folds the card. -->

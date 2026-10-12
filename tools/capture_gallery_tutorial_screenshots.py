@@ -697,14 +697,6 @@ def replay_tutorial_steps(page, sample: dict[str, Any], through: int) -> None:
         raise RuntimeError(f"Tutorial path for {sample.get('id')} is not local.")
     steps = as_array(read_json(tutorial_path).get("manualSteps"))[:through]
     apply_capture_action(page, {"type": "resetSettings"})
-    # A loaded Session folds the Linear File cards; a reader who uploaded the files sees them open.
-    apply_capture_action(
-        page,
-        {
-            "type": "evaluate",
-            "script": "() => document.querySelectorAll('[data-linear-source-fold]').forEach((fold) => { fold.open = true; })",
-        },
-    )
     for step in steps:
         for action in as_array(step.get("replay") if isinstance(step, dict) else None):
             apply_capture_action(page, action)
@@ -1285,6 +1277,12 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
         session_path = resolve_gallery_reference(session_ref)
         if session_path is not None and session_path.exists():
             load_web_app_session(page, session_path)
+            # A loaded Session folds its Linear File cards. A tutorial reader uploaded
+            # the files, so every capture shows the cards open.
+            page.evaluate(
+                "() => document.querySelectorAll('[data-linear-source-fold]')"
+                ".forEach((fold) => { fold.open = true; })"
+            )
         replay_through = capture.get("replayThrough")
         if isinstance(replay_through, int):
             replay_tutorial_steps(page, sample, replay_through)

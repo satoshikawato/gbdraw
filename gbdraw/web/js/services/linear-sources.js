@@ -106,27 +106,35 @@ export const restoreFoldedLinearSources = (folded, uids) => {
   uids.forEach((uid) => folded.add(uid));
 };
 
-/**
- * The one rule of which cards a loaded Session shows folded: those that hold
- * a file. A card without a file stays open.
- * @param {FoldedLinearSources} folded
- * @param {readonly FoldableLinearSource[]} sources
- */
-export const foldLoadedLinearSources = (folded, sources) => restoreFoldedLinearSources(
-  folded, sources.filter(linearSourceHasPrimaryInput).map(({ uid }) => uid)
-);
+/** @typedef {'gb' | 'gff' | 'fasta'} LinearFileField */
 
 /**
- * Forgets the cards that left the list.
+ * The file slots a File card shows for an input type, in the order of its
+ * uploaders.
+ * @param {string} inputType
+ * @returns {readonly LinearFileField[]}
+ */
+export const linearCardFileFields = (inputType) => (inputType === 'gff' ? ['gff', 'fasta'] : ['gb']);
+
+/**
+ * A card holds its input when every slot it shows has a file. The folded line
+ * and the load rule read this one answer.
+ * @param {LinearSourceView} source
+ * @param {string} inputType
+ */
+export const linearCardInputComplete = (source, inputType) => linearCardFileFields(inputType)
+  .every((field) => Boolean(source.sequence?.[field]));
+
+/**
+ * The one rule of which cards a loaded Session shows folded: those that hold
+ * their input. A card without a file, or with a slot still empty, stays open.
  * @param {FoldedLinearSources} folded
  * @param {readonly FoldableLinearSource[]} sources
+ * @param {string} inputType
  */
-export const dropMissingFoldedLinearSources = (folded, sources) => {
-  const present = new Set(sources.map(({ uid }) => uid));
-  folded.forEach((uid) => {
-    if (!present.has(uid)) folded.delete(uid);
-  });
-};
+export const foldLoadedLinearSources = (folded, sources, inputType) => restoreFoldedLinearSources(
+  folded, sources.filter((source) => linearCardInputComplete(source, inputType)).map(({ uid }) => uid)
+);
 
 /**
  * @typedef {{ allowed: false, reason: string, sourceIndex?: number }

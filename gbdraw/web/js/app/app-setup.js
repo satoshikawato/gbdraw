@@ -87,8 +87,9 @@ import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import {
-  dropMissingFoldedLinearSources,
   groupLinearSourceRecords,
+  linearCardFileFields,
+  linearCardInputComplete,
   linearRecordNames,
   linearFileCardRecord,
   isPristineLinearSource,
@@ -794,20 +795,32 @@ export const createAppSetup = () => {
     linearSourceGroups.value.find((source) => source.uid === linearSourceRemovalDialog.sourceUid) || null
   ));
   const linearSourceRemovalCanDelete = computed(() => linearSourceGroups.value.length > 1);
-  /** @param {readonly ({ name?: string } | null)[]} files @returns {string[]} */
-  const chosenFileNames = (files) => files.filter(Boolean).map((file) => String(file?.name || 'Unnamed file'));
+  /** @param {{ name?: string }} file */
+  const chosenFileName = (file) => String(file.name || 'Unnamed file');
   /**
-   * The file names of a Linear File, as its dialogs name it: every file a removal takes.
+   * The file names of a Linear File, as its dialogs name it: every file the
+   * row holds, which a removal takes, also one of the other input type.
    * @param {LinearSourceGroup} source
    */
   const linearSourceFileName = (source) => {
-    const names = chosenFileNames([source.sequence.gb, source.sequence.gff, source.sequence.fasta]);
+    const names = [source.sequence.gb, source.sequence.gff, source.sequence.fasta].filter(Boolean).map(chosenFileName);
     return names.length ? names.join(' + ') : `File ${linearSourceGroups.value.indexOf(source) + 1}`;
   };
-  /** The names of the files a File card shows for the chosen input type, as its folded line names them. @param {LinearSourceGroup} source */
-  const linearCardFileNames = (source) => chosenFileNames(
-    lInputType.value === 'gff' ? [source.sequence.gff, source.sequence.fasta] : [source.sequence.gb]
-  ).join(' + ');
+  const LINEAR_FILE_SLOT_NAMES = { gb: 'GenBank', gff: 'GFF3', fasta: 'FASTA' };
+  /**
+   * What a File card's header line says of the slots the card shows: each
+   * file's name, "no FASTA" for a slot still empty, "No file" for none.
+   * @param {LinearSourceGroup} source
+   */
+  const linearCardFileLine = (source) => {
+    const fields = linearCardFileFields(lInputType.value);
+    if (!fields.some((field) => source.sequence[field])) return 'No file';
+    return fields.map((field) => (
+      source.sequence[field] ? chosenFileName(source.sequence[field]) : `no ${LINEAR_FILE_SLOT_NAMES[field]}`
+    )).join(' + ');
+  };
+  /** @param {LinearSourceGroup} source */
+  const linearCardHoldsInput = (source) => linearCardInputComplete(source, lInputType.value);
   // A File card folds to its header line. The disclosure reports every change
   // of its own state: the user's press, and a path that opened the card to
   // show a setting inside it.
@@ -5958,7 +5971,6 @@ export const createAppSetup = () => {
     pendingLinearUploads.forEach((uid) => {
       if (!activeUids.has(uid)) pendingLinearUploads.delete(uid);
     });
-    dropMissingFoldedLinearSources(linearFoldedSources, linearSourceGroups.value);
     const nextRows = reconcileLinearRecordLayout(linearSeqs, layoutEntries);
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...nextRows);
     // A card that stays but now reads another file (`retiredRecordKeys`) is ON.
@@ -6602,7 +6614,8 @@ export const createAppSetup = () => {
     clearLinearSourceDepthFile,
     linearSeqs,
     linearSourceGroups,
-    linearCardFileNames,
+    linearCardFileLine,
+    linearCardHoldsInput,
     isLinearSourceFolded,
     syncLinearSourceFold,
     linearSourceInspectionFailed,

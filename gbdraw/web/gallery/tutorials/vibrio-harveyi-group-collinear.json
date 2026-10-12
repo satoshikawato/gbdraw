@@ -96,7 +96,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const input = document.querySelector(\"input[aria-label='Default definition for file 1']\"); const card = input?.closest('[data-linear-source-card]'); if (!card) throw new Error('File card not found.'); card.querySelector(':scope > [data-linear-source-fold]').open = true; card.setAttribute('data-capture-vibrio-file', 'true'); card.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const input = document.querySelector(\"input[aria-label='Default definition for file 1']\"); const card = input?.closest('[data-linear-source-card]'); if (!card) throw new Error('File card not found.'); card.setAttribute('data-capture-vibrio-file', 'true'); card.scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "wait",
@@ -182,7 +182,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const input = document.querySelector(\"input[aria-label='Default definition for file 2']\"); const card = input?.closest('[data-linear-source-card]'); if (!card) throw new Error('File card not found.'); card.querySelector(':scope > [data-linear-source-fold]').open = true; card.setAttribute('data-capture-vibrio-file', 'true'); const add = document.querySelector(\"button[aria-label='Add sequence']\"); if (!add) throw new Error('Add sequence button not found.'); add.setAttribute('data-capture-vibrio-add', 'true'); card.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const input = document.querySelector(\"input[aria-label='Default definition for file 2']\"); const card = input?.closest('[data-linear-source-card]'); if (!card) throw new Error('File card not found.'); card.setAttribute('data-capture-vibrio-file', 'true'); const add = document.querySelector(\"button[aria-label='Add sequence']\"); if (!add) throw new Error('Add sequence button not found.'); add.setAttribute('data-capture-vibrio-add', 'true'); card.scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "wait",

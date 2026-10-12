@@ -5718,7 +5718,8 @@ const importSessionDocument = async (e, options = {}) => {
     });
     // The loaded File cards are new to the user: view state, reset with the document.
     foldLoadedLinearSources(
-      state.linearFoldedSources, groupLinearSourceRecords(/** @type {LinearSeq[]} */ (state.linearSeqs))
+      state.linearFoldedSources, groupLinearSourceRecords(/** @type {LinearSeq[]} */ (state.linearSeqs)),
+      state.lInputType.value
     );
     // The comparisons are the Linear drawing's.
     restoreImportedComparisonIntent(

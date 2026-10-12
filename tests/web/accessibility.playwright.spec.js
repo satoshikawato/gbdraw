@@ -226,12 +226,12 @@ test('linear File card header lines keep their names folded and open', async ({ 
   const folds = page.locator('[data-linear-source-fold]');
   const names = () => folds.locator(':scope > summary')
     .evaluateAll((headers) => headers.map((header) => header.getAttribute('aria-label')));
-  await expect.poll(names).toEqual(['File 1: HmmtDNA.gbk', 'File 2: no file']);
+  await expect.poll(names).toEqual(['File 1: HmmtDNA.gbk', 'File 2: No file']);
   await reveal(folds.first().locator(':scope > summary'));
   await folds.first().locator(':scope > summary').click();
   await expect(folds.first()).toHaveJSProperty('open', false);
   await expect(folds.last()).toHaveJSProperty('open', true);
-  expect(await names()).toEqual(['File 1: HmmtDNA.gbk', 'File 2: no file']);
+  expect(await names()).toEqual(['File 1: HmmtDNA.gbk', 'File 2: No file']);
   const audit = await auditButtons(page);
   expect(audit.problems, 'buttons without a stable author-provided name').toEqual([]);
   await expect(page.getByRole('button', { name: 'Move File 1 down', exact: true })).toBeVisible();

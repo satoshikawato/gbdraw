@@ -15,6 +15,7 @@ test.use({ actionTimeout: 20_000 });
 
 const FIVE_FILES = 'BGC0000708-BGC0000713.gbdraw-session.json';
 const ONE_FILE = 'lambda_basic_linear.gbdraw-session.json';
+const TWO_RECORD_FILES = 'vibrio-harveyi-group-collinear.gbdraw-session.json.gz';
 const genbank = readFileSync(join(__dirname, '../test_inputs/BGC0000708.gbk'));
 
 const cards = (page) => page.locator('[data-linear-source-card]');
@@ -42,18 +43,24 @@ const openLinear = async (page) => {
 const chooseGenBank = (card, name, content = genbank) => card.locator('input[type="file"]').first()
   .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(content) });
 
-// Each card in list order: its File uid, whether it is folded (the disclosure
-// and the owner state agree), and its height.
+// Each card in list order: its File uid, whether it is folded, and its height.
+// `folded` is the disclosure's state where the owner state agrees with it, and
+// a text no expectation matches while the toggle event has not arrived yet.
 const foldState = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   return Array.from(document.querySelectorAll('[data-linear-source-card]'), (card) => {
-    const details = card.querySelector(':scope > details');
-    const folded = !details.open;
-    if (state.linearFoldedSources.has(card.dataset.linearSourceCard) !== folded) throw new Error('owner state and disclosure differ');
-    return { uid: card.dataset.linearSourceCard, folded, height: Math.round(card.getBoundingClientRect().height) };
+    const closed = !card.querySelector(':scope > details').open;
+    const owned = state.linearFoldedSources.has(card.dataset.linearSourceCard);
+    return {
+      uid: card.dataset.linearSourceCard,
+      folded: owned === closed ? closed : `disclosure ${closed ? 'closed' : 'open'}, owner state ${owned ? 'folded' : 'open'}`,
+      height: Math.round(card.getBoundingClientRect().height)
+    };
   });
 });
 const folded = async (page) => (await foldState(page)).map((card) => card.folded);
+// The layout a width change asks for is in place once the pane or the window has that width.
+const paneWidth = (page) => page.locator('.settings-pane').evaluate((pane) => Math.round(pane.getBoundingClientRect().width));
 // The toggle event that reports a disclosure's state arrives after the click.
 const expectFolded = (page, expected) => expect.poll(() => folded(page)).toEqual(expected);
 const listHeight = (page) => page.locator('[data-linear-record-list]').evaluate((list) => Math.round(list.getBoundingClientRect().height));
@@ -153,7 +160,8 @@ test('a loaded Session shows its File cards folded to one line each, and the hea
     return { x: box.right + 2, y: box.top + box.height / 2 };
   });
   await page.mouse.click(gap.x, gap.y);
-  await page.waitForTimeout(300);
+  // A click that folded would have closed the disclosure before it returned.
+  await expect(first.locator(':scope > details')).toHaveJSProperty('open', true);
   await expectFolded(page, [false, true, true, true, true]);
 
   // Every card opened by hand: the list is as tall as it was before cards folded.
@@ -173,7 +181,7 @@ test('Add sequence, an upload, Undo, Redo, a mode switch, and Reset Settings lea
   await expect(cards(page)).toHaveCount(6);
   await expectFolded(page, [true, true, false, true, true, false]);
   const added = cards(page).nth(5);
-  await expect(header(added)).toHaveAttribute('aria-label', 'File 6: no file');
+  await expect(header(added)).toHaveAttribute('aria-label', 'File 6: No file');
   await chooseGenBank(added, 'added-file.gbk');
   await expect(header(added)).toHaveAttribute('aria-label', 'File 6: added-file.gbk');
   await expect(added.locator('.upload-zone.ready')).toBeVisible({ timeout: 120_000 });
@@ -181,7 +189,7 @@ test('Add sequence, an upload, Undo, Redo, a mode switch, and Reset Settings lea
 
   // Undo and Redo of the upload and the added card change no card that stays.
   await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
-  await expect(header(cards(page).nth(5))).toHaveAttribute('aria-label', 'File 6: no file');
+  await expect(header(cards(page).nth(5))).toHaveAttribute('aria-label', 'File 6: No file');
   await expectFolded(page, [true, true, false, true, true, false]);
   await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
   await expect(cards(page)).toHaveCount(5);
@@ -189,6 +197,14 @@ test('Add sequence, an upload, Undo, Redo, a mode switch, and Reset Settings lea
   await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
   await expect(cards(page)).toHaveCount(6);
   await expectFolded(page, [true, true, false, true, true, false]);
+  // A card folded by hand comes back folded through Undo and Redo of the step that added it.
+  await header(cards(page).nth(5)).click();
+  await expectFolded(page, [true, true, false, true, true, true]);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await expect(cards(page)).toHaveCount(5);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await expect(cards(page)).toHaveCount(6);
+  await expectFolded(page, [true, true, false, true, true, true]);
   await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
   await expect(cards(page)).toHaveCount(5);
 
@@ -305,6 +321,68 @@ test('Show in settings of a record opens its folded card and focuses the name fi
   await expectFolded(page, [false, true, true, true, true]);
 });
 
+test('a File with several records keeps its record list as it was through a fold, and Show in settings opens into it', async ({ page }) => {
+  test.setTimeout(420_000);
+  await openWithSession(page, TWO_RECORD_FILES);
+  await expectFolded(page, [true, true]);
+  const card = cards(page).first();
+  const records = card.locator('[data-linear-source-records]');
+  await header(card).click();
+  await expectFolded(page, [false, true]);
+  await expect(records.locator(':scope > summary')).toContainText('Number of records: 2');
+  await expect(records).toHaveJSProperty('open', false);
+  // Opened by hand, the list is the same node and still open after the card was folded and opened.
+  await records.locator(':scope > summary').click();
+  await expect(records).toHaveJSProperty('open', true);
+  await records.evaluate((node) => { node.dataset.foldProbe = 'kept'; });
+  await header(card).click();
+  await expectFolded(page, [true, true]);
+  await expect(records).toBeHidden();
+  await header(card).click();
+  await expectFolded(page, [false, true]);
+  await expect(records).toHaveAttribute('data-fold-probe', 'kept');
+  await expect(records).toHaveJSProperty('open', true);
+  // Closed by hand, it stays closed through a fold, and Show in settings opens the card and the list.
+  await records.locator(':scope > summary').click();
+  await expect(records).toHaveJSProperty('open', false);
+  await header(card).click();
+  await expectFolded(page, [true, true]);
+  const definition = page.locator('.gbdraw-preview-surface [data-gbdraw-role^="record-definition"] text').first();
+  const box = await definition.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.getByRole('button', { name: 'Show in settings', exact: true }).click();
+  await expectFolded(page, [false, true]);
+  await expect(records).toHaveJSProperty('open', true);
+  await expect(records.locator('[data-linear-record-names] input:focus')).toHaveCount(1);
+});
+
+// Save Session refuses a GFF3 without its FASTA, so no saved Session holds such a card; the
+// load rule for one is pinned in tests/web/linear-sources.test.mjs.
+test('a loaded GFF3 + FASTA Session folds a card that holds both of its files', async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  page.on('dialog', (dialog) => dialog.accept());
+  await openLinear(page);
+  await page.getByRole('radio', { name: 'GFF3 + FASTA' }).check();
+  const card = cards(page).first();
+  await card.locator('input[type="file"]').nth(0).setInputFiles(join(__dirname, '../test_inputs/NC_013668.gff3'));
+  await expect(header(card)).toHaveAttribute('aria-label', 'File 1: NC_013668.gff3 + no FASTA');
+  await card.locator('input[type="file"]').nth(1).setInputFiles(join(__dirname, '../test_inputs/NC_013668.fasta'));
+  await expect(header(card)).toHaveAttribute('aria-label', 'File 1: NC_013668.gff3 + NC_013668.fasta');
+  await expectFolded(page, [false]);
+
+  const pending = page.waitForEvent('download');
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  const download = await pending;
+  const saved = testInfo.outputPath(download.suggestedFilename());
+  await download.saveAs(saved);
+  await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await sessionSettled(page);
+  await expect(cards(page)).toHaveCount(1);
+  await expectFolded(page, [true]);
+  await expect(chips(card)).toHaveText(['NC_013668.gff3 + NC_013668.fasta']);
+});
+
 test('removing a File moves the focus to the header line of a folded neighbour and leaves it folded', async ({ page }) => {
   test.setTimeout(420_000);
   await openWithSession(page);
@@ -332,6 +410,14 @@ test('removing a File moves the focus to the header line of a folded neighbour a
   await expect(cards(page)).toHaveCount(3);
   await expect(header(cards(page).nth(2))).toBeFocused();
   await expectFolded(page, [true, true, true]);
+  // Undo brings the removed File back as it was: folded.
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await expect(cards(page)).toHaveCount(4);
+  await expect(header(cards(page).nth(3))).toHaveAttribute('aria-label', 'File 4: BGC0000713.gbk');
+  await expectFolded(page, [true, true, true, true]);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await expect(cards(page)).toHaveCount(3);
+  await expectFolded(page, [true, true, true]);
 
   // Empty this slot: the card's place holds a new, open card, and its uploader takes the focus.
   await header(cards(page).first()).click();
@@ -351,7 +437,7 @@ test('the folded line names both files of a GFF3 + FASTA card, cuts a long name,
   await expectFolded(page, [false]);
   await header(card).click();
   await expectFolded(page, [true]);
-  await expect(header(card)).toHaveAttribute('aria-label', 'File 1: no file');
+  await expect(header(card)).toHaveAttribute('aria-label', 'File 1: No file');
   await expect(header(card).locator('.linear-file-fold-names')).toHaveText('No file');
   await expect(chips(card)).toHaveCount(0);
   await header(card).click();
@@ -371,25 +457,41 @@ test('the folded line names both files of a GFF3 + FASTA card, cuts a long name,
   await expectFolded(page, [true, true]);
   for (const width of [240, 320, 500]) {
     await page.evaluate((value) => { window.__GBDRAW_APP__.sidebarWidth = value; }, width);
-    await page.waitForTimeout(150);
+    await expect.poll(() => paneWidth(page)).toBe(width);
     expect(await noSidewaysScroll(page), `pane width ${width}`).toEqual({ area: true, page: true, wideCards: 0 });
     expect((await foldState(page)).map((entry) => entry.height <= 40), `one line at ${width}`).toEqual([true, true]);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(300);
+  await expect.poll(() => paneWidth(page)).toBeLessThanOrEqual(390);
   expect(await noSidewaysScroll(page), 'phone width').toEqual({ area: true, page: true, wideCards: 0 });
   await page.setViewportSize({ width: 1600, height: 1000 });
 
-  // GFF3 + FASTA: both names, and the failed look of a file whose inspection failed.
+  // GFF3 + FASTA. A card that holds only a file of the other input type reads as a card without a file.
   await page.evaluate(() => { window.__GBDRAW_APP__.sidebarWidth = 400; });
   await page.getByRole('radio', { name: 'GFF3 + FASTA' }).check();
   const pair = cards(page).first();
+  await expect(header(pair)).toHaveAttribute('aria-label', 'File 1: No file');
+  await expect(chips(pair)).toHaveCount(0);
+  // One file of the pair: the line names the missing one and does not look ready.
   await header(pair).click();
   await pair.locator('input[type="file"]').nth(0).setInputFiles({ name: 'genome.gff3', mimeType: 'text/plain', buffer: Buffer.from('not a gff\n') });
+  await expect(pair.locator('.upload-zone.ready')).toHaveCount(1);
+  await header(pair).click();
+  await expectFolded(page, [true, true]);
+  await expect(header(pair)).toHaveAttribute('aria-label', 'File 1: genome.gff3 + no FASTA');
+  await expect(header(pair).locator('.linear-file-fold-names')).toHaveText('genome.gff3 + no FASTA');
+  await expect(chips(pair)).toHaveCount(0);
+  await expect(header(pair).locator('.ph-check-circle')).toHaveCount(0);
+  // Both files, and the failed look of a file whose inspection failed.
+  await header(pair).click();
   await pair.locator('input[type="file"]').nth(1).setInputFiles({ name: 'genome.fasta', mimeType: 'text/plain', buffer: Buffer.from('not a fasta\n') });
   await expect(pair.locator('.upload-zone.failed')).toHaveCount(2, { timeout: 120_000 });
   await header(pair).click();
   await expect(chips(pair)).toHaveText(['genome.gff3 + genome.fasta']);
+  // The failed state is also a description of the header line, not only a colour and an icon.
+  expect(await header(pair).evaluate((summary) => summary.getAttribute('aria-describedby').split(' ')
+    .map((id) => document.getElementById(id)?.textContent))).toEqual(['This file could not be read.']);
+  await expect(header(cards(page).nth(1))).not.toHaveAttribute('aria-describedby', /.+/);
   await expect(chips(pair)).toHaveAttribute('title', 'genome.gff3 + genome.fasta');
   await expect(header(pair)).toHaveAttribute('aria-label', 'File 1: genome.gff3 + genome.fasta');
   for (const chip of await chips(pair).all()) {

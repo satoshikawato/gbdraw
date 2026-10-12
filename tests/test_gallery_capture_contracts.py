@@ -646,10 +646,6 @@ def test_replay_resets_then_performs_steps_through_the_named_one(
 
     assert performed == [
         {"type": "resetSettings"},
-        {
-            "type": "evaluate",
-            "script": "() => document.querySelectorAll('[data-linear-source-fold]').forEach((fold) => { fold.open = true; })",
-        },
         {"type": "fill", "value": "one"},
         {"type": "generate"},
     ]

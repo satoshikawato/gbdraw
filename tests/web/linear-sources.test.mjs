@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import {
-  dropMissingFoldedLinearSources,
   foldLoadedLinearSources,
+  linearCardFileFields,
+  linearCardInputComplete,
   groupLinearSourceRecords,
   isPristineLinearSource,
   linearRecordNames,
@@ -533,30 +534,38 @@ test('a press on a File card header folds and unfolds that card alone', () => {
   assert.deepEqual([...folded], ['b1']);
 });
 
-test('a loaded Session folds the File cards that hold a file and leaves the others open', () => {
+test('a loaded Session folds the File cards that hold their input and leaves the others open', () => {
   const folded = new Set(['stale', 'empty']);
-  foldLoadedLinearSources(folded, foldSources());
+  foldLoadedLinearSources(folded, foldSources(), 'gb');
   assert.deepEqual([...folded], ['a1', 'b1'], 'by the uid of each File, not of each record');
-  foldLoadedLinearSources(folded, groupLinearSourceRecords([sourceRecord('only', null)]));
+  foldLoadedLinearSources(folded, groupLinearSourceRecords([sourceRecord('only', null)]), 'gb');
   assert.deepEqual([...folded], [], 'a Session without files folds nothing');
+});
+
+test('a card holds its input when every slot its input type shows has a file', () => {
+  const card = (files) => groupLinearSourceRecords([{ uid: 'c', gb: null, gff: null, fasta: null, ...files }])[0];
+  const gff = foldFile('g.gff3');
+  const fasta = foldFile('g.fasta');
+  assert.deepEqual(linearCardFileFields('gb'), ['gb']);
+  assert.deepEqual(linearCardFileFields('gff'), ['gff', 'fasta']);
+  assert.equal(linearCardInputComplete(card({ gb: foldFile('a.gbk') }), 'gb'), true);
+  assert.equal(linearCardInputComplete(card({ gff, fasta }), 'gff'), true);
+  assert.equal(linearCardInputComplete(card({ gff }), 'gff'), false, 'GFF3 without FASTA');
+  assert.equal(linearCardInputComplete(card({ fasta }), 'gff'), false, 'FASTA without GFF3');
+  assert.equal(linearCardInputComplete(card({ gb: foldFile('a.gbk') }), 'gff'), false, 'only a file of the other input type');
+  assert.equal(linearCardInputComplete(card({ gff, fasta }), 'gb'), false);
+  // The load rule is that answer: an incomplete pair stays open like a card without a file.
+  const folded = new Set();
+  foldLoadedLinearSources(folded, [card({ gff, fasta }), { ...card({ gff }), uid: 'half' }, { ...card({ gb: foldFile('a.gbk') }), uid: 'other' }], 'gff');
+  assert.deepEqual([...folded], ['c']);
 });
 
 test('a rolled-back load returns the fold state it replaced', () => {
   const folded = new Set(['a1']);
   const before = [...folded];
-  foldLoadedLinearSources(folded, groupLinearSourceRecords([sourceRecord('x', foldFile('x.gbk'))]));
+  foldLoadedLinearSources(folded, groupLinearSourceRecords([sourceRecord('x', foldFile('x.gbk'))]), 'gb');
   restoreFoldedLinearSources(folded, before);
   assert.deepEqual([...folded], ['a1']);
-});
-
-test('a File card that left the list is forgotten, and the others keep their state', () => {
-  const folded = new Set(['a1', 'b1', 'gone']);
-  dropMissingFoldedLinearSources(folded, foldSources());
-  assert.deepEqual([...folded], ['a1', 'b1']);
-  // A record uid that is not its File's uid names no card.
-  folded.add('a2');
-  dropMissingFoldedLinearSources(folded, foldSources());
-  assert.deepEqual([...folded], ['a1', 'b1']);
 });
 
 test('the fold state follows a File through Move up and Move down', () => {
@@ -565,7 +574,6 @@ test('the fold state follows a File through Move up and Move down', () => {
   setLinearSourceFolded(folded, 'b1', true);
   const moved = groupLinearSourceRecords(moveLinearSourceGroup(sequences, 1, -1));
   assert.deepEqual(moved.map(({ uid }) => uid), ['b1', 'a1', 'empty']);
-  dropMissingFoldedLinearSources(folded, moved);
   assert.deepEqual(moved.map(({ uid }) => folded.has(uid)), [true, false, false]);
   assert.equal(moved[0].sequence.gb.name, 'b.gbk');
 });
