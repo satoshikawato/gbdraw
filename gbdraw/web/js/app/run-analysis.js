@@ -6,23 +6,6 @@
 /** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
 /** @import { AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
-/** @import { LabelDiagramOptions, LabelFeature } from './feature-editor/label-actions.js' */
-/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
-/** @import { FileLike } from '../services/session-resource-backing.js' */
-/** @import { LosatJob, LosatJobResult, LosatRunOptions } from '../services/losat.js' */
-/** @import { OrderedConservationSource } from '../services/conservation-series.js' */
-/** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
-/** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
-/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry } from '../services/losat-cache.js' */
-/** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
-/** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
-/** @import { UserFacingError } from '../utils/error-normalization.js' */
-/** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
-/** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
-/** @import { EditorPaintState } from './result-paint-record.js' */
-/** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
-/** @import { CircularConservationLike } from '../services/conservation-series.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { keepResultNames } from '../services/result-normalization.js';
@@ -210,6 +193,23 @@ import {
   createImportedComparisonIntentState,
   inheritCommittedComparisonIntent
 } from '../services/imported-comparison-intent.js';
+/** @import { LabelDiagramOptions, LabelFeature } from './feature-editor/label-actions.js' */
+/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
+/** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { LosatJob, LosatJobResult, LosatRunOptions } from '../services/losat.js' */
+/** @import { OrderedConservationSource } from '../services/conservation-series.js' */
+/** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
+/** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
+/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry } from '../services/losat-cache.js' */
+/** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
+/** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
+/** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
+/** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
+/** @import { EditorPaintState } from './result-paint-record.js' */
+/** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
+/** @import { CircularConservationLike } from '../services/conservation-series.js' */
 
 const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')

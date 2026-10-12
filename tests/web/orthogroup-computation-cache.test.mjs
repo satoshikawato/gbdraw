@@ -149,7 +149,6 @@ test('the Description field shows only the group\'s own edit and follows its fir
   const render = context.Vue.compile(markup);
   // What the composition root hands the template (app/app-setup.js).
   const bindings = {
-    orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides,
     orthogroupDescriptionFieldText: editor.orthogroupDescriptionFieldText,
     setOrthogroupDescriptionOverride: editor.setOrthogroupDescriptionOverride,
     get selectedOrthogroup() { return editor.selectedOrthogroup.value; }

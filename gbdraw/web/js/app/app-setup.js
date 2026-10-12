@@ -14,28 +14,14 @@
 /** @import { LegendRowContext } from '../services/specific-color-rules.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearComparisonEdge, LinearComparisonIssue, LinearComparisonPair, LinearComparisonPlan, LinearComparisonResolvedEdge, LinearComparisonSource } from '../services/linear-comparisons.js' */
-/** @import { HistoryManagerOptions } from '../services/history.js' */
 /** @import { RulePreparationOptions } from './rule-matching.js' */
-/** @import { MountedResultContext } from './preview-runtime.js' */
-/** @import { UnresolvedNotice } from '../services/feature-visibility.js' */
 /** @import { AnnotationRecordCatalog } from './annotations/record-catalog.js' */
-/** @import { FeatureListRow } from './pairwise-match-popup.js' */
-/** @import { OrthogroupGroup } from './orthogroups.js' */
-/** @import { SequenceRecordEntry } from '../services/record-discovery.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { DepthFileSlots, RawDepthTrackConfig, ReindexDepthSlotsOptions, SyncDepthSlotLabelsOptions } from '../services/depth-track-state.js' */
-/** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
-/** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
-/** @import { RawConservationSeriesEntry } from '../services/conservation-series.js' */
-/** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
-/** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { LinearComparisonUiIssue } from './comparison-ui.js' */
 /** @import { LinearSourceGroup, LinearSourceRemovalPlan } from '../services/linear-sources.js' */
 /** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
-/** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
-/** @import { LosatCacheInfoEntry, MultiRecordPosition } from './run-analysis.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 /** @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput The Session file input's change event, or an object with its `target`; the type `importSession` of services/config.js declares inline. */
 import { createRulePreparation } from './rule-matching.js';
@@ -286,6 +272,20 @@ import {
   syncDepthSlotLabels,
   uploadedDepthFileCount
 } from '../services/depth-track-state.js';
+/** @import { HistoryManagerOptions } from '../services/history.js' */
+/** @import { MountedResultContext } from './preview-runtime.js' */
+/** @import { UnresolvedNotice } from '../services/feature-visibility.js' */
+/** @import { FeatureListRow } from './pairwise-match-popup.js' */
+/** @import { OrthogroupGroup } from './orthogroups.js' */
+/** @import { SequenceRecordEntry } from '../services/record-discovery.js' */
+/** @import { DepthFileSlots, RawDepthTrackConfig, ReindexDepthSlotsOptions, SyncDepthSlotLabelsOptions } from '../services/depth-track-state.js' */
+/** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
+/** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
+/** @import { RawConservationSeriesEntry } from '../services/conservation-series.js' */
+/** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
+/** @import { SequenceRecord } from '../services/record-discovery.js' */
+/** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
+/** @import { LosatCacheInfoEntry, MultiRecordPosition } from './run-analysis.js' */
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, shallowRef, reactive, isRef } = window.Vue;
 const toRaw = window.Vue.toRaw || ((/** @type {unknown} */ value) => value);

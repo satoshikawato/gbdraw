@@ -115,4 +115,16 @@ state.previewFeatureSearchInput.value = 'zzmarkerzz';
 search.applySearch();
 assert.deepEqual(state.previewFeatureSearchMatches.value, []);
 
+// An empty source text and a source that is not text name no bulk override either (review U7).
+hidden.label = '';
+hidden.gene = 5;
+state.labelTextBulkOverrides = { '': 'zzemptyzz', 5: 'zzfivezz' };
+// The watchers of the rows and of the override tables drop the search index.
+watchers.forEach(({ callback }) => callback());
+for (const text of ['zzemptyzz', 'zzfivezz']) {
+  state.previewFeatureSearchInput.value = text;
+  search.applySearch();
+  assert.deepEqual(state.previewFeatureSearchMatches.value, [], `no feature matches ${text}`);
+}
+
 console.log('preview feature search sources tests passed');
