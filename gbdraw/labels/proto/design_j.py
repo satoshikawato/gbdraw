@@ -190,6 +190,9 @@ class _Par:
         #                                                  and nearer to its own ink than to any other label's (LP-D15)
         self.relax = ctx.opt("relax", 40.0)               # px of push (and of run + push saved) at which a label is seated as in face=0 (0: never)
         self.strt = int(ctx.opt("strt", 1))               # 1: a bent leader blocked by its neighbour's box is straightened by sliding that neighbour outward (LP-D16)
+        self.mid = int(ctx.opt("mid", 1))                # 1: a leader that reaches the left or right end of its box head-on ends at the middle of that end (LP-D18)
+        self.midfr = ctx.opt("midfr", 0.3)               # ... within this fraction of the half height of the middle (the metric allows 0.35)
+        self.midang = ctx.opt("midang", 11.0)            # ... "head-on" = within this many degrees of the horizontal (the metric: 10)
         self.ink = ctx.opt("ink", 3.4)                   # wanted distance of a leader end to the ink of its own text (px)
         self.inkmin, self.inkmax = ctx.opt("inkmin", 2.5), ctx.opt("inkmax", 4.5)   # ... the end is refused outside this range
         self.um = ctx.opt("um", 0.7)                     # an end is nearer to its own ink than to another label's ink by 1 px + this margin
@@ -484,6 +487,8 @@ class _Lab:
             outq, outy = (aq <= q0 + 0.05) | (aq >= q0 + w - 0.05), (ya <= y0 + 0.05) | (ya >= y1 - 0.05)
             ok &= ~((outq & (np.abs(fy) >= s10) & ((ya - yc) * fy > 0) & (np.abs(ya - yc) > 0.9))
                     | (outy & (np.abs(fq) >= s10) & ((aq - q0 - 0.5 * w) * fq > 0) & (np.abs(aq - q0 - 0.5 * w) > 0.9)))
+        if par.face and par.mid:                           # LP-D18: head-on onto the left or right end of the box: at the middle of it
+            ok &= ~(outq & (np.abs(fy) < math.sin(math.radians(par.midang))) & (np.abs(ya - yc) > par.midfr * 0.5 * h))
         if par.eg:
             lg = par.lgap
             ok &= ~((self.Sq > q0 - lg) & (self.Sq < q0 + w + lg) & (self.Sy > y0 - lg) & (self.Sy < y1 + lg))   # the stub inside the grown box
