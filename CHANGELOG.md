@@ -241,6 +241,19 @@ write-up of a release.
   - The aminoglycoside BGC Gallery figure is unchanged. Its tutorial now
     types Head Length Ratio 0.64 in step 10, **Finish the figure**, and its
     intermediate previews show the short Auto sizes.
+  - In the Web app, the Auto values beside the size fields and the Circular
+    track preview now read the records Generate draws. The Linear **Label Font
+    Size** value follows the records in the label scope (**Show Labels**), so
+    with **First Record Only** on a short first record it reads 24 px, not
+    5 px (OV-493). The Circular values follow the records that are drawn: a
+    Multi-Record Canvas as one diagram, separate diagrams one record each,
+    and neither a record turned off nor one that is not selected. They read
+    **Auto (by genome size)** when separate diagrams take different sizes, or
+    when the one record is cropped to a region (OV-494).
+- Web app sidebar: the Feature Visibility rule action **Exclude from matching**
+  is now **Leave out of protein search**, and the color rule field **Legend
+  caption** is now **Legend name**, the words the feature popup uses. Saved
+  Sessions and rule files are unchanged.
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters
   and the appearance first, then **Search limits** and **Performance** (formerly
   **Runtime and reproducibility**). **Selected pairs** shows each pair as one row

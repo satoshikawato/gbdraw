@@ -184,6 +184,7 @@ import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linea
 import { createLinearTypographyController } from './linear-typography.js';
 import {
   buildDisambiguatedRecordEntries,
+  circularDiagramRecordLengths,
   formatRecordLength,
   resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
@@ -2063,7 +2064,16 @@ export const createAppSetup = () => {
       })
     })(change);
   };
-  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout, askChoice, runUndoable: history.runUndoable });
+  // The records each diagram of the next Circular Generate draws, by length:
+  // the record set of the request, read once for the Auto notes and the track
+  // slot estimates.
+  const circularDiagramLengths = computed(() => (
+    circularDiagramRecordLengths(state.circularRecordList.value, state.drawings.circular)
+  ));
+  const readCircularDiagramLengths = () => circularDiagramLengths.value;
+  const circularTrackSlotEditor = createCircularTrackSlotEditor({
+    state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, circularDiagramLengths: readCircularDiagramLengths
+  });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
@@ -2085,12 +2095,14 @@ export const createAppSetup = () => {
     { immediate: true }
   );
   const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(
-    state, state.drawings.circular
+    state, state.drawings.circular, circularDiagramLengths.value
   ));
   const losatSettings = createLosatSettings({ state });
-  // Auto values follow the longest record the next Linear Generate draws, once
-  // every drawn record is read and none is cropped; until then they name their rule.
+  // Auto values follow the records the next Generate draws. The Linear ones are
+  // known once every drawn record is read and none is cropped; until then the
+  // values name their rule.
   const autoValueDisplay = createAutoValueDisplay(state, {
+    circularDiagramLengths: readCircularDiagramLengths,
     linearRecordLengths: () => {
       const lengths = state.drawings.linear.drawnLinearSeqs.value.map((seq) => {
         if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;

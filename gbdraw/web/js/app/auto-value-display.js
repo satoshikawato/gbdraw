@@ -1,6 +1,11 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-import { normalizeOptionalText, sizeClassForRecordLengths } from '../services/track-slot-display.js';
+import {
+  linearLabelSizeLengths,
+  normalizeOptionalText,
+  sharedSizeClass,
+  sizeClassForRecordLengths
+} from '../services/track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from '../services/current-option-values.js';
 
 const DEFAULTS = Object.freeze({
@@ -163,10 +168,9 @@ const normalizeLengthParam = (value) => {
 
 /**
  * What the record-length readers take from the Web state (`state.js`): the
- * shown mode and the Circular record list, both Vue refs.
+ * shown mode, a Vue ref.
  * @typedef {object} RecordLengthState
  * @property {{ value?: string }} [mode]
- * @property {{ value?: { record_length?: number, length?: number }[] }} [circularRecordList]
  */
 
 /**
@@ -174,53 +178,68 @@ const normalizeLengthParam = (value) => {
  * @typedef {{ height?: unknown }} AutoValueContext
  */
 
-/** @param {RecordLengthState} state */
-const circularRecordLengths = (state) => {
-  const recordsRef = state?.circularRecordList;
-  const records = Array.isArray(recordsRef?.value)
-    ? recordsRef.value
-    : (Array.isArray(recordsRef) ? recordsRef : []);
-  return records
-    .map((entry) => Number(entry?.record_length ?? entry?.length ?? 0))
-    .filter((value) => Number.isFinite(value) && value > 0);
-};
-
-/** @param {RecordLengthState} state @param {DrawingState} drawing */
-const activeCircularLengthParam = (state, drawing) => (
-  sizeClassForRecordLengths('circular', circularRecordLengths(state), drawing)
-);
-
-// Linear record lengths come from the app's record reader, registered by
-// `createAutoValueDisplay`; an empty list means they are not known yet.
-/** @type {WeakMap<RecordLengthState, () => number[]>} */
-const linearLengthSources = new WeakMap();
+/**
+ * The records the next Generate draws, by length. The notes do not choose
+ * records: the app registers these readers in `createAutoValueDisplay`, and
+ * each returns an empty list while a drawn length is not known.
+ * @typedef {object} DrawnLengthSources
+ * @property {() => number[][]} circularDiagramLengths the records of each Circular diagram
+ * @property {() => number[]} linearRecordLengths the records of the Linear diagram, in drawing order
+ */
+/** @type {WeakMap<RecordLengthState, DrawnLengthSources>} */
+const drawnLengthSources = new WeakMap();
 
 /** @param {RecordLengthState} state */
 const shownMode = (state) => (
   String(state?.mode?.value || state?.mode || 'circular') === 'circular' ? 'circular' : 'linear'
 );
 
+/** @param {RecordLengthState} state */
+const circularDiagramLengths = (state) => drawnLengthSources.get(state)?.circularDiagramLengths() || [];
+
+/** @param {RecordLengthState} state */
+const linearRecordLengths = (state) => drawnLengthSources.get(state)?.linearRecordLengths() || [];
+
 /**
- * The record lengths of the shown mode's next Generate, or [] while unknown.
+ * The record lengths of each diagram the shown mode's next Generate draws, or
+ * [] while unknown.
  * @param {RecordLengthState} state
  */
-const knownRecordLengths = (state) => (
-  shownMode(state) === 'circular' ? circularRecordLengths(state) : linearLengthSources.get(state)?.() || []
+const drawnDiagramLengths = (state) => {
+  if (shownMode(state) === 'circular') return circularDiagramLengths(state);
+  const lengths = linearRecordLengths(state);
+  return lengths.length ? [lengths] : [];
+};
+
+/** @param {RecordLengthState} state @param {DrawingState} drawing */
+const activeCircularLengthParam = (state, drawing) => (
+  sharedSizeClass('circular', circularDiagramLengths(state), drawing)
 );
 
 /**
- * The size class of the shown mode's next Generate, or null while unknown.
+ * The size class of the shown mode's next Generate, or null while it is
+ * unknown or separate diagrams take different ones.
  * @param {RecordLengthState} state
  * @param {DrawingState} drawing the drawing of the shown mode
  */
 const activeLengthParam = (state, drawing) => (
-  sizeClassForRecordLengths(shownMode(state), knownRecordLengths(state), drawing)
+  sharedSizeClass(shownMode(state), drawnDiagramLengths(state), drawing)
 );
 
-/** @param {RecordLengthState} state */
-const maxKnownRecordLength = (state) => {
-  const lengths = knownRecordLengths(state);
-  return lengths.length ? Math.max(...lengths) : null;
+/**
+ * The value a sliding window or a scale interval takes in the next Generate:
+ * each Circular record follows its own length, and a Linear diagram its
+ * longest record. Null while no length is known or the records differ.
+ * @template T
+ * @param {RecordLengthState} state
+ * @param {(length: number) => T} valueForLength
+ * @returns {T | null}
+ */
+const sharedLengthValue = (state, valueForLength) => {
+  const diagrams = drawnDiagramLengths(state);
+  const lengths = shownMode(state) === 'circular' ? diagrams.flat() : diagrams.map((records) => Math.max(...records));
+  const values = new Set(lengths.map(valueForLength));
+  return values.size === 1 ? [...values][0] : null;
 };
 
 /** @param {unknown} length */
@@ -420,8 +439,7 @@ const dinucleotideWindowText = (state, drawing, field) => {
   if (field === 'window' && manualWindow !== null) return withAuto(formatBp(manualWindow));
   if (field === 'step' && manualStep !== null) return withAuto(formatBp(manualStep));
 
-  const length = maxKnownRecordLength(state);
-  const preset = slidingWindowForLength(length);
+  const preset = sharedLengthValue(state, slidingWindowForLength);
   if (preset) return withAuto(formatBp(preset[field]));
   return 'Auto (by genome size)';
 };
@@ -440,8 +458,7 @@ const depthWindowText = (state, drawing, field) => {
     return withAuto(formatBp(Math.max(minValue, manualSource / divisor)));
   }
 
-  const length = maxKnownRecordLength(state);
-  const preset = slidingWindowForLength(length);
+  const preset = sharedLengthValue(state, slidingWindowForLength);
   if (preset) {
     const source = field === 'window' ? preset.window : preset.step;
     const minValue = field === 'window' ? 100 : 1;
@@ -475,15 +492,25 @@ const linearLabelPlacementText = (drawing) => {
 
 /** @param {RecordLengthState} state */
 const scaleIntervalText = (state) => {
-  const length = maxKnownRecordLength(state);
-  const mode = String(state?.mode?.value || state?.mode || 'circular');
-  if (mode === 'circular') {
-    const interval = autoCircularTickInterval(length);
-    return interval ? withAuto(formatBp(interval)) : 'by record length (auto)';
-  }
-  const interval = autoLinearTickInterval(length);
+  const interval = sharedLengthValue(
+    state,
+    shownMode(state) === 'circular' ? autoCircularTickInterval : autoLinearTickInterval
+  );
   return interval ? withAuto(formatBp(interval)) : 'by record length (auto)';
 };
+
+// Linear labels take the size class of the records in the label scope, which
+// can differ from the class of the diagram (OV-493).
+/** @param {RecordLengthState} state @param {DrawingState} drawing */
+const linearLabelFontSizeText = (state, drawing) => formatShortLong(
+  DEFAULTS.linear.labelFontSizePx,
+  formatPx,
+  sizeClassForRecordLengths(
+    'linear',
+    linearLabelSizeLengths(linearRecordLengths(state), drawing.form.show_labels_linear),
+    drawing
+  )
+);
 
 /**
  * @param {RecordLengthState} state
@@ -533,7 +560,7 @@ const autoTextByKey = (state, drawing, key, context = null) => {
     case 'labelFontSize':
       return String(state?.mode?.value || state?.mode || 'circular') === 'circular'
         ? lengthDependentPx(state, drawing, DEFAULTS.circular.labelFontSizePx)
-        : lengthDependentPx(state, drawing, DEFAULTS.linear.labelFontSizePx);
+        : linearLabelFontSizeText(state, drawing);
     case 'labelRendering': return 'per label';
     case 'linearLabelPlacement': return linearLabelPlacementText(drawing);
     case 'circularLabelSpacing': return withAuto(formatPx(DEFAULTS.labels.spacingPx));
@@ -563,11 +590,10 @@ const autoTextByKey = (state, drawing, key, context = null) => {
 
 /**
  * @param {RecordLengthState & { activeDrawing: () => DrawingState }} state the Web state of `state.js`
- * @param {{ linearRecordLengths?: () => number[] }} [options] the lengths of the
- *   records the next Linear Generate draws, or [] while any is unknown
+ * @param {Partial<DrawnLengthSources>} [sources] the records the next Generate draws
  */
-export const createAutoValueDisplay = (state, { linearRecordLengths = () => [] } = {}) => {
-  linearLengthSources.set(state, linearRecordLengths);
+export const createAutoValueDisplay = (state, sources = {}) => {
+  drawnLengthSources.set(state, { circularDiagramLengths: () => [], linearRecordLengths: () => [], ...sources });
   /**
    * @param {string} key
    * @param {AutoValueContext | null} [context]

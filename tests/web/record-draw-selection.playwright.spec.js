@@ -372,3 +372,85 @@ test('a Legend rename waits while its record is OFF, also across a source replac
   expect(captions).toContain('transfer RNA');
   expect(captions).not.toContain('tRNA');
 });
+
+// The Auto note of Label Font Size in the sidebar, and the label font sizes
+// each Result draws.
+const labelFontNote = (page) => page.locator(
+  '.auto-value-field:has(> input[aria-label="Label Font Size"]) > .auto-value-placeholder'
+);
+const drawnLabelFontSizes = (page) => page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => {
+  const svg = new DOMParser().parseFromString(String(result.content || ''), 'image/svg+xml');
+  return [...new Set([...svg.querySelectorAll('text[data-label-feature-id]')]
+    .map((label) => Number(label.getAttribute('font-size'))))];
+}));
+
+// OV-494: the Circular Auto notes and the track slot estimates take the size
+// class of the records the request draws (a 30,000 bp and a 90,000 bp record:
+// short and long by the 75 kb boundary), not of every record in the file.
+test('the Circular Auto notes and slot estimates show the sizes Generate draws for the ON records', async ({ page }) => {
+  test.setTimeout(420_000);
+  await openApp(page);
+  await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setDiagramMode('circular');
+    app.setCircularSourceFile('c_gb', new File([text], 'short-long.gb', { type: 'text/plain', lastModified: 1 }));
+    Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'out', legend: 'none' });
+  }, genbank([{ id: 'S30', repeats: 10_000 }, { id: 'L90', repeats: 30_000 }]));
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(2);
+  const featureWidthNote = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.adv.circular_track_slots.findIndex((slot) => slot.renderer === 'features');
+    return app.circularTrackSlotGeometryAutoText(app.adv.circular_track_slots[index], index, 'width');
+  });
+  const setLongRecordDrawn = async (drawn) => {
+    await page.locator('[data-record-list-open="circular"]').click();
+    await page.locator('[data-record-list-row="#2"]').setChecked(drawn);
+    await page.locator('[data-record-list-close]').click();
+  };
+
+  // One canvas of both records: every record takes the long sizes.
+  await expect(labelFontNote(page)).toHaveText('8 px (auto)');
+  expect(await featureWidthNote()).toBe('≈ 18.5 px (estimate)');
+
+  // The long record OFF: the canvas draws the short record alone.
+  await setLongRecordDrawn(false);
+  await expect(labelFontNote(page)).toHaveText('14 px (auto)');
+  expect(await featureWidthNote()).toBe('≈ 37 px (estimate)');
+  await generateAndWaitForResult(page);
+  expect(await drawnLabelFontSizes(page)).toEqual([[14]]);
+  expect(await featureWidthNote()).toBe('37 px (auto)');
+
+  // Separate diagrams of both records: each takes the sizes of its own length.
+  await setLongRecordDrawn(true);
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
+  await expect(labelFontNote(page)).toHaveText('Auto (by genome size)');
+  await generateAndWaitForResult(page);
+  expect(await drawnLabelFontSizes(page)).toEqual([[14], [8]]);
+
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+  await expect(labelFontNote(page)).toHaveText('8 px (auto)');
+  await generateAndWaitForResult(page);
+  expect(await drawnLabelFontSizes(page)).toEqual([[8]]);
+});
+
+// OV-493: Generate sizes the Linear labels by the records in the label scope
+// (a 30,000 bp first record and a 120,000 bp second one: short and long by the
+// 100 kb boundary); the note reads the same records.
+test('the Linear Label Font Size note shows the size Generate draws for the label scope', async ({ page }) => {
+  test.setTimeout(420_000);
+  await openLinear(page);
+  await uploadLinear(page, 'short.gb', genbank([{ id: 'S30', repeats: 10_000 }]));
+  await uploadLinear(page, 'long.gb', genbank([{ id: 'L120', repeats: 40_000 }]), { newFile: true });
+  await expect.poll(() => linearState(page)).toHaveLength(2);
+
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.show_labels_linear = 'first'; });
+  await expect(labelFontNote(page)).toHaveText('24 px (auto)');
+  await generateAndWaitForResult(page);
+  expect(await drawnLabelFontSizes(page)).toEqual([[24]]);
+
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.show_labels_linear = 'all'; });
+  await expect(labelFontNote(page)).toHaveText('5 px (auto)');
+  await generateAndWaitForResult(page);
+  expect(await drawnLabelFontSizes(page)).toEqual([[5]]);
+});
+

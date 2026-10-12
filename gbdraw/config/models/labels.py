@@ -16,6 +16,14 @@ from .common import ShortLongFloatConfig
 
 CircularLabelScope = Literal["none", "outer", "both"]
 LinearLabelScope = Literal["none", "all", "first", "orthogroup_top"]
+LinearLabelScopeRecords = Literal["none", "all", "first"]
+# The records whose labels each Linear label display scope selects.
+LINEAR_LABEL_SCOPE_RECORDS: Mapping[LinearLabelScope, LinearLabelScopeRecords] = {
+    "none": "none",
+    "all": "all",
+    "first": "first",
+    "orthogroup_top": "all",
+}
 
 
 @dataclass(frozen=True)
@@ -243,7 +251,9 @@ class LabelsConfig:
 __all__ = [
     "LabelsConfig",
     "CircularLabelScope",
+    "LINEAR_LABEL_SCOPE_RECORDS",
     "LinearLabelScope",
+    "LinearLabelScopeRecords",
     "LabelsFilteringConfig",
     "LabelsLengthThresholdConfig",
     "LabelsFontSizeConfig",

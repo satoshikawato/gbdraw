@@ -59,6 +59,7 @@ import {
 } from './depth-track-state.js';
 import {
   buildDisambiguatedRecordEntries,
+  isSingleCircularJourney,
   resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
@@ -1430,10 +1431,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
   const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
   // The offered records decide the journey, so one ON record of several
   // stays a batch of one or a grid of one.
-  const singleJourney = (
-    recordSet.presentedCount <= 1 &&
-    recordSet.singlePresentation
-  );
+  const singleJourney = isSingleCircularJourney(recordSet);
   /** @type {RequestDraftRecord[]} */
   const records = selectedRecords.map((record, index) => {
     const region = singleJourney

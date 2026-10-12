@@ -8,9 +8,10 @@ import math
 import re
 from numbers import Integral, Real
 from types import MappingProxyType
-from typing import Literal, Mapping, cast
+from typing import Literal, Mapping, cast, get_args
 
 from gbdraw.config.models.canvas import linear_axis_ruler_applies
+from gbdraw.config.models.labels import LinearLabelScope
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 
@@ -225,11 +226,19 @@ def _camel_threshold_name(name: str) -> str:
 def mode_profiles_payload() -> dict[str, object]:
     """Return the JSON-compatible profile representation used by the web app."""
 
+    # gbdraw.auto_sizes takes DiagramMode from this module.
+    from gbdraw.auto_sizes import linear_label_size_records
+
     length_threshold = load_config_toml("gbdraw.data", "config.toml")["labels"]["length_threshold"]
     return {
         "version": MODE_PROFILE_VERSION,
-        # The packaged short/long boundary of each mode (rule: gbdraw/auto_sizes.py).
+        # The packaged short/long boundary of each mode, and the records that set
+        # the Auto Linear label font for each label display scope (rules:
+        # gbdraw/auto_sizes.py).
         "autoSizes": {
+            "linearLabelSizeRecords": {
+                scope: linear_label_size_records(scope) for scope in get_args(LinearLabelScope)
+            },
             "sizeClassThresholdBp": {mode: int(length_threshold[mode]) for mode in MODE_PROFILES},
         },
         "comparisonDomains": {

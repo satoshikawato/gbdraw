@@ -159,16 +159,29 @@ const slotSides = (state) => Object.fromEntries(
 // that the drawing keeps from its Session.
 test('the track preview uses the short/long boundary the Circular drawing keeps', () => {
   const featureWidthNote = (unmanagedConfigOverrides) => {
-    const state = {
-      ...createState(),
-      circularRecordList: { value: [{ record_length: 60_000 }] },
-      unmanagedConfigOverrides
-    };
-    const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+    const state = { ...createState(), unmanagedConfigOverrides };
+    const editor = createCircularTrackSlotEditor({ state: withDrawings(state), circularDiagramLengths: () => [[60_000]] });
     return editor.circularTrackSlotGeometryAutoText(state.adv.circular_track_slots[0], 0, 'width');
   };
   assert.equal(featureWidthNote({}), '≈ 37 px (estimate)');
   assert.equal(featureWidthNote({ 'labels.length_threshold.circular': 50_000 }), '≈ 18.5 px (estimate)');
+});
+
+// OV-494: the estimate reads the records the next Generate draws, one list per
+// diagram, and follows the diagram at the shown Result's position.
+test('the track preview estimates the diagram Generate draws at the shown Result', () => {
+  const featureWidthNote = (diagramLengths, selectedResultIndex = 0) => {
+    const state = { ...createState(), unmanagedConfigOverrides: {}, selectedResultIndex: { value: selectedResultIndex } };
+    const editor = createCircularTrackSlotEditor({ state: withDrawings(state), circularDiagramLengths: () => diagramLengths });
+    return editor.circularTrackSlotGeometryAutoText(state.adv.circular_track_slots[0], 0, 'width');
+  };
+  // A 30,000 bp and a 300,000 bp record: the long record OFF, both on one canvas, and separate diagrams.
+  assert.equal(featureWidthNote([[30_000]]), '≈ 37 px (estimate)');
+  assert.equal(featureWidthNote([[30_000, 300_000]]), '≈ 18.5 px (estimate)');
+  assert.equal(featureWidthNote([[30_000], [300_000]]), '≈ 37 px (estimate)');
+  assert.equal(featureWidthNote([[30_000], [300_000]], 1), '≈ 18.5 px (estimate)');
+  assert.equal(featureWidthNote([[30_000]], 1), '≈ 37 px (estimate)', 'fewer diagrams than the shown Result');
+  assert.equal(featureWidthNote([]), '≈ 18.5 px (estimate)', 'long while no drawn length is known');
 });
 
 // OV-487: Python draws a content or skew slot without a dinucleotide with the

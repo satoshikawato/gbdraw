@@ -72,10 +72,10 @@ import {
 
 /**
  * What the slot helpers read of the Web state (`state.js`): the Depth and
- * Conservation inputs, the shown mode, and the Circular record list.
+ * Conservation inputs, the shown mode, and the shown Result.
  * @typedef {object} TrackSlotStateView
  * @property {{ value?: string }} [mode]
- * @property {{ value?: { record_length?: number, length?: number }[] }} [circularRecordList]
+ * @property {{ value?: number }} [selectedResultIndex]
  * @property {{
  *   c_depth?: DepthFileSlots | DepthFileSlots[],
  *   c_conservation_blasts?: FileLike | FileLike[] | null,
@@ -211,21 +211,17 @@ const previewFeatureRadiusRatio = (preset, lengthParam, drawing) => {
   return 1.0;
 };
 
-/** @param {TrackSlotStateView | null | undefined} state */
-const getPreviewRecordEntries = (state) => {
-  const recordsRef = state?.circularRecordList;
-  const records = Array.isArray(recordsRef?.value)
-    ? recordsRef.value
-    : (Array.isArray(recordsRef) ? recordsRef : []);
-  return records;
-};
-
-/** @param {TrackSlotStateView | null | undefined} state @param {DrawingState} drawing the Circular drawing */
-const getPreviewLengthParam = (state, drawing) => {
-  const lengths = getPreviewRecordEntries(state)
-    .map((entry) => Number(entry?.record_length ?? entry?.length ?? 0))
-    .filter((value) => Number.isFinite(value) && value > 0);
-  return sizeClassForRecordLengths('circular', lengths, drawing) || 'long';
+/**
+ * The size class of the estimates: that of the diagram the next Generate draws
+ * at the shown Result's position (a Multi-Record Canvas is one diagram, any
+ * other drawn record its own), and long while no drawn length is known.
+ * @param {DrawingState} drawing the Circular drawing
+ * @param {number[][]} diagramLengths the record lengths of each diagram the next Generate draws
+ * @param {number} resultIndex the shown Result
+ */
+const getPreviewLengthParam = (drawing, diagramLengths, resultIndex) => {
+  const shown = diagramLengths[resultIndex] || diagramLengths[0] || [];
+  return sizeClassForRecordLengths('circular', shown, drawing) || 'long';
 };
 
 /** @param {{ id?: unknown } | null | undefined} slot @param {string} renderer @param {DrawingState} drawing */
@@ -529,8 +525,12 @@ const positiveNumberOrNull = (value) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
-/** @param {TrackSlotStateView | null | undefined} state @param {DrawingState} drawing */
-export const estimateCircularConservationLayoutWarning = (state, drawing) => {
+/**
+ * @param {TrackSlotStateView | null | undefined} state
+ * @param {DrawingState} drawing
+ * @param {number[][]} diagramLengths the record lengths of each diagram the next Generate draws
+ */
+export const estimateCircularConservationLayoutWarning = (state, drawing, diagramLengths) => {
   const currentMode = String(state?.mode?.value ?? state?.mode ?? '').trim().toLowerCase();
   if (currentMode && currentMode !== 'circular') return '';
   if (drawing?.circularConservation?.enabled !== true) return '';
@@ -539,7 +539,7 @@ export const estimateCircularConservationLayoutWarning = (state, drawing) => {
   if (entries.length <= 0) return '';
 
   const preset = normalizeCircularTrackPreset(drawing?.form?.track_type);
-  const lengthParam = getPreviewLengthParam(state, drawing);
+  const lengthParam = getPreviewLengthParam(drawing, diagramLengths, Number(state?.selectedResultIndex?.value ?? 0) || 0);
   const axisRadius = PREVIEW_RADIUS_PX;
   const defaultSpacing = previewSpacingPx();
   const lane = laneDirectionForPreset(preset);
@@ -661,6 +661,8 @@ const circularGeometryShortcutsForState = (drawing) => ({
  * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
  * @property {AskChoice} [askChoice] The root's choice dialog: hiding a GC track the custom stack draws asks first.
  * @property {(label: string, fn: () => unknown) => unknown} [runUndoable] History's undoable step, which the chosen hide runs in.
+ * @property {() => number[][]} [circularDiagramLengths] The record lengths of each diagram the next Generate draws
+ *   (default: none known); the estimates take their size class from them.
  */
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
@@ -670,7 +672,8 @@ const circularGeometryShortcutsForState = (drawing) => ({
  * @param {CircularTrackSlotEditorOptions} options
  */
 export const createCircularTrackSlotEditor = ({
-  state, changeTrackLayout = (apply) => apply(), askChoice = async () => 'cancel', runUndoable = (_label, fn) => fn()
+  state, changeTrackLayout = (apply) => apply(), askChoice = async () => 'cancel', runUndoable = (_label, fn) => fn(),
+  circularDiagramLengths = () => []
 }) => {
   /** @type {WeakMap<CircularTrackSlot, string>} */
   const editorKeys = new WeakMap();
@@ -1786,7 +1789,7 @@ export const createCircularTrackSlotEditor = ({
   /** @param {DrawingState} drawing @param {CircularTrackSlot | null | undefined} slot @param {number} slotIndex */
   const estimateCircularSlotGeometry = (drawing, slot, slotIndex) => {
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
-    const lengthParam = getPreviewLengthParam(state, drawing);
+    const lengthParam = getPreviewLengthParam(drawing, circularDiagramLengths(), selectedResultIndexValue());
     const renderer = String(slot?.renderer || '').trim();
     const widthPx = previewWidthPxForRenderer(renderer, lengthParam);
     const spacingPx = previewSpacingPx();
@@ -1852,7 +1855,7 @@ export const createCircularTrackSlotEditor = ({
   const circularTrackPresetSummary = () => {
     const drawing = state.drawings.circular;
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
-    const lengthParam = getPreviewLengthParam(state, drawing);
+    const lengthParam = getPreviewLengthParam(drawing, circularDiagramLengths(), selectedResultIndexValue());
     const lane = laneDirectionForPreset(preset);
     const nt = circularDrawingDinucleotide();
     /** @param {string} id @param {string} renderer */

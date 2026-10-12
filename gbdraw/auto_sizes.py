@@ -15,6 +15,7 @@ from functools import reduce
 from typing import Literal
 
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.labels import LINEAR_LABEL_SCOPE_RECORDS, LinearLabelScope
 from gbdraw.mode_profiles import DiagramMode
 
 
@@ -125,6 +126,22 @@ def linear_tick_interval(length: int) -> int:
         if length < below:
             return interval
     return _LINEAR_TICK_ABOVE_TIERS
+
+
+def linear_label_size_records(label_scope: LinearLabelScope) -> Literal["all", "first"]:
+    """Return which records set the Auto Linear label font.
+
+    They are the records in the label display scope. A scope that selects no
+    record leaves the labels shown by per-feature overrides, which take the size
+    of all records.
+    """
+    selected = LINEAR_LABEL_SCOPE_RECORDS[label_scope]
+    return "all" if selected == "none" else selected
+
+
+def linear_label_size_lengths(record_lengths: Sequence[int], label_scope: LinearLabelScope) -> Sequence[int]:
+    """Return the lengths of the records that set the Auto Linear label font, in drawing order."""
+    return record_lengths[:1] if linear_label_size_records(label_scope) == "first" else record_lengths
 
 
 def linear_label_font_size(record_lengths: Sequence[int], cfg: GbdrawConfig) -> float:
@@ -325,6 +342,8 @@ __all__ = [
     "depth_sliding_window",
     "determine_length_parameter",
     "linear_label_font_size",
+    "linear_label_size_lengths",
+    "linear_label_size_records",
     "linear_tick_interval",
     "scalar_axis_tick_font_size",
     "sliding_window",

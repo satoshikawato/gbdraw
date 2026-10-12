@@ -9,7 +9,7 @@ from gbdraw.labels.filtering import has_forced_label_overrides
 from gbdraw.labels.policy import LabelRenderingPolicy
 
 from .canvas import LinearTrackLayoutMode
-from .labels import CircularLabelScope, LinearLabelScope
+from .labels import LINEAR_LABEL_SCOPE_RECORDS, CircularLabelScope, LinearLabelScope
 from .root import GbdrawConfig
 
 
@@ -90,8 +90,8 @@ class LinearRenderProfile(_RenderProfile):
 
     def labels_in_scope(self, record_index: int) -> bool:
         """Return whether the label display scope selects this record's labels."""
-        scope = self.label_scope
-        return scope in ("all", "orthogroup_top") or (scope == "first" and record_index == 0)
+        selected = LINEAR_LABEL_SCOPE_RECORDS[self.label_scope]
+        return selected == "all" or (selected == "first" and record_index == 0)
 
     def record_has_labels(self, record_index: int) -> bool:
         """Return whether this record can draw labels, in scope or by override."""

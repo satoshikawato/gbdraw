@@ -133,3 +133,44 @@ export const resolveCircularRequestRecordSet = ({
     selectionFailure: selectionFailure || (recordSelectors.length > 0 && drawnRecords.length === 0 ? 'NONE_DRAWN' : '')
   };
 };
+
+/**
+ * What the drawn-record reader takes from a Circular drawing.
+ * @typedef {object} CircularRecordDrawing
+ * @property {{ circular_record_selector: string, multi_record_canvas: boolean,
+ *   circular_region_start: unknown, circular_region_end: unknown }} form
+ * @property {{ circular_grouping_intent: string }} adv
+ * @property {readonly string[]} recordsOff
+ */
+
+/**
+ * Whether a record set is one record offered alone: the journey that draws the
+ * record's own presentation and can crop it to a region.
+ * @param {{ presentedCount: number, singlePresentation: boolean }} recordSet
+ */
+export const isSingleCircularJourney = (recordSet) => recordSet.presentedCount <= 1 && recordSet.singlePresentation;
+
+/**
+ * The record lengths of each diagram the next Generate of a Circular drawing
+ * draws, in drawing order: a Multi-Record Canvas is one diagram of every drawn
+ * record, and any other record is a diagram of its own. Empty while a drawn
+ * length is not known: no record is read or drawn, the selection fails, or
+ * the one record is cropped to a region.
+ * @param {readonly { selector?: string, record_id?: string, record_length?: number | null }[]} records
+ * @param {CircularRecordDrawing} drawing
+ * @returns {number[][]}
+ */
+export const circularDiagramRecordLengths = (records, drawing) => {
+  const recordSet = resolveCircularRequestRecordSet({
+    records: [...records],
+    selector: drawing.form.circular_record_selector,
+    multiRecordCanvas: drawing.form.multi_record_canvas,
+    groupingIntent: drawing.adv.circular_grouping_intent,
+    recordsOff: drawing.recordsOff
+  });
+  const cropped = isSingleCircularJourney(recordSet)
+    && Boolean(cleanText(drawing.form.circular_region_start) || cleanText(drawing.form.circular_region_end));
+  const lengths = recordSet.records.map((record) => Number(record.record_length));
+  if (cropped || recordSet.selectionFailure || lengths.length === 0 || !lengths.every((length) => length > 0)) return [];
+  return drawing.form.multi_record_canvas ? [lengths] : lengths.map((length) => [length]);
+};

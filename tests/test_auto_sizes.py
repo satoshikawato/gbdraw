@@ -18,17 +18,19 @@ from gbdraw.auto_sizes import (
     depth_sliding_window,
     determine_length_parameter,
     linear_label_font_size,
+    linear_label_size_lengths,
     linear_tick_interval,
     scalar_axis_tick_font_size,
     sliding_window,
 )
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig, LinearRenderProfile
+from gbdraw.config.models.labels import LinearLabelScope
 from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_for_preset
 from gbdraw.diagrams.linear.precalc import _resolve_linear_diagram_label_font_size
 from gbdraw.layout.circular_depth_axis import depth_axis_tick_font_size_px
 from gbdraw.layout.scalar_axis import linear_scalar_axis_tick_font_size_px
-from gbdraw.mode_profiles import DiagramMode
+from gbdraw.mode_profiles import DiagramMode, mode_profiles_payload
 from gbdraw.svg.circular_ticks import get_circular_tick_intervals
 
 
@@ -187,16 +189,34 @@ def test_linear_label_font_follows_the_longest_record_in_the_label_scope(
     assert linear_label_font_size(scope_lengths, cfg) == getattr(cfg.labels.font_size.linear, size)
 
 
-def test_linear_label_font_of_a_scope_limited_to_the_short_record_stays_short(cfg: GbdrawConfig) -> None:
+# The Web's Auto note reads which records set the label font from the generated
+# mode profiles; the renderer draws with the same answer for every scope.
+@pytest.mark.parametrize(
+    ("scope", "sized_lengths", "size"),
+    [
+        ("first", (20_000,), "short"),
+        ("all", (20_000, 200_000), "long"),
+        ("orthogroup_top", (20_000, 200_000), "long"),
+        # No record in scope: labels shown by per-feature overrides take the size of all records.
+        ("none", (20_000, 200_000), "long"),
+    ],
+)
+def test_linear_label_font_follows_the_records_of_the_label_scope(
+    cfg: GbdrawConfig, scope: LinearLabelScope, sized_lengths: tuple[int, ...], size: str
+) -> None:
     lengths = (20_000, 200_000)
-    profile = LinearRenderProfile(apply_config_overrides(cfg, {"labels.linear.scope": "first"}))
+    assert tuple(linear_label_size_lengths(lengths, scope)) == sized_lengths
+    published = cast(Any, mode_profiles_payload()["autoSizes"])["linearLabelSizeRecords"][scope]
+    assert published == ("first" if len(sized_lengths) == 1 else "all")
+
+    profile = LinearRenderProfile(apply_config_overrides(cfg, {"labels.linear.scope": scope}))
     canvas = LinearCanvasConfigurator(
         num_of_entries=len(lengths), longest_genome=max(lengths), profile=profile, legend="none"
     )
     assert canvas.length_param == "long"
     assert _resolve_linear_diagram_label_font_size(
         [_record(length) for length in lengths], canvas_config=canvas, profile=profile
-    ) == cfg.labels.font_size.linear.short
+    ) == getattr(cfg.labels.font_size.linear, size)
 
 
 def test_drawn_extent_size_class_follows_the_longest_record(cfg: GbdrawConfig) -> None:
