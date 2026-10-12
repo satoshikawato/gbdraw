@@ -14,17 +14,26 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import {
   CANONICAL_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+  CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS,
   FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
+  FLAT_DRAFT_TOP_LEVEL_FIELDS,
   MODE_SCOPED_SESSION_VERSION,
+  OTHER_MODE_RESULT_EDITOR_FIELDS,
+  OTHER_MODE_RESULT_FIELDS,
+  OTHER_MODE_RESULT_LEGEND_FIELDS,
+  OTHER_MODE_RESULT_RUN_METADATA_FIELDS,
+  OTHER_MODE_RESULT_UI_FIELDS,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
+/** @import { SessionInput } from '../contracts/session.generated.js' */
 
 // `TYPED_DRAFT_SESSION_VERSION` (44) introduced the current active-config and
 // record-display draft shapes; `MODE_SCOPED_SESSION_VERSION` (46) keeps the
 // draft of each diagram mode in `modes` (PD-OI-086) and keys per-feature
 // edits by source identity (design Q4).
 
-export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
+// One class per top-level key of a Session: the keys are `SessionInput`'s.
+export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze(/** @satisfies {Record<keyof SessionInput, string>} */ ({
   format: 'document',
   version: 'document',
   createdAt: 'document',
@@ -48,13 +57,13 @@ export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   cliInvocation: 'provenance',
   modes: 'editor-metadata',
   cliOptions: 'provenance'
-});
+}));
 
 // The homes that Session 46 moved into `modes` (and app-level `ui`): a
 // Session 46 that holds any of them is rejected (plan 4.1).
 /** @type {ReadonlyArray<[string, ReadonlySet<string>]>} */
 const RETIRED_MODE_SCOPED_FIELDS = Object.freeze([
-  ['', new Set(['config', 'features'])],
+  ['', new Set(FLAT_DRAFT_TOP_LEVEL_FIELDS)],
   ['editorState', new Set(['featureStrokes'])],
   ['editorState.legend', new Set(MODE_SCOPED_ROWS.filter((row) => row.domain === 'editorState.legend').map((row) => row.path))],
   ['ui', new Set(MODE_SCOPED_ROWS.filter((row) => row.domain === 'ui').map((row) => row.path))]
@@ -120,14 +129,6 @@ const isPlainObject = (value) => (
 
 const adoptedCurrentDocuments = new WeakSet();
 const adoptedCanonicalOwners = new WeakSet();
-
-const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze([
-  'extractedFeatures',
-  'biologicalFeatures',
-  'featureSelectorSafetyScope',
-  'featureRecordIds',
-  'featureCatalog'
-]);
 
 // Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
 /** @type {ReadonlySet<unknown>} */
@@ -483,22 +484,6 @@ const validateCommittedResultSet = (set, version) => {
   }
 };
 
-const OTHER_MODE_RESULT_FIELDS = new Set([
-  'renderRequest', 'results', 'editorState', 'ui', 'runMetadata', 'cliInvocation'
-]);
-// The per-set part of the shared `ui` and `editorState` objects.
-const OTHER_MODE_RESULT_UI_FIELDS = new Set([
-  'selectedResultIndex', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
-  'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors'
-]);
-const OTHER_MODE_RESULT_EDITOR_FIELDS = new Set([
-  'featureCatalog', 'alignmentResetReceipt', 'legend', 'originalSvgStroke'
-]);
-const OTHER_MODE_RESULT_LEGEND_FIELDS = new Set(['originalOrder', 'originalColors']);
-const OTHER_MODE_RESULT_RUN_METADATA_FIELDS = new Set([
-  'trackSlotGeometry', 'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings'
-]);
-
 // E1: Session 46 keeps the other diagram mode's Result set beside the
 // top-level set. It needs a committed top-level request of the other mode, at
 // least one Result, and resources in the top-level table.
@@ -508,7 +493,7 @@ const OTHER_MODE_RESULT_RUN_METADATA_FIELDS = new Set([
  */
 const validateOtherModeResult = (sessionData, version) => {
   const other = sessionData.otherModeResult;
-  if (!isPlainObject(other) || Object.keys(other).some((key) => !OTHER_MODE_RESULT_FIELDS.has(key))) {
+  if (!isPlainObject(other) || Object.keys(other).some((key) => !OTHER_MODE_RESULT_FIELDS.includes(key))) {
     throw new Error('Session otherModeResult must contain only a committed Result set.');
   }
   const mode = other.renderRequest?.mode;
@@ -528,13 +513,13 @@ const validateOtherModeResult = (sessionData, version) => {
   const ui = Object.hasOwn(other, 'ui') ? other.ui : {};
   const legend = Object.hasOwn(other.editorState, 'legend') ? other.editorState.legend : {};
   const runMetadata = Object.hasOwn(other, 'runMetadata') ? other.runMetadata : {};
-  if (!isPlainObject(ui) || Object.keys(ui).some((key) => !OTHER_MODE_RESULT_UI_FIELDS.has(key))
-    || Object.keys(other.editorState).some((key) => !OTHER_MODE_RESULT_EDITOR_FIELDS.has(key))
-    || !isPlainObject(legend) || Object.keys(legend).some((key) => !OTHER_MODE_RESULT_LEGEND_FIELDS.has(key))) {
+  if (!isPlainObject(ui) || Object.keys(ui).some((key) => !OTHER_MODE_RESULT_UI_FIELDS.includes(key))
+    || Object.keys(other.editorState).some((key) => !OTHER_MODE_RESULT_EDITOR_FIELDS.includes(key))
+    || !isPlainObject(legend) || Object.keys(legend).some((key) => !OTHER_MODE_RESULT_LEGEND_FIELDS.includes(key))) {
     throw new Error('Session otherModeResult editorState and ui hold only that Result set\'s fields.');
   }
   if (!isPlainObject(runMetadata)
-    || Object.keys(runMetadata).some((key) => !OTHER_MODE_RESULT_RUN_METADATA_FIELDS.has(key))) {
+    || Object.keys(runMetadata).some((key) => !OTHER_MODE_RESULT_RUN_METADATA_FIELDS.includes(key))) {
     throw new Error('Session otherModeResult.runMetadata holds only that Result set\'s metadata.');
   }
   validateAnnotationWarnings(runMetadata.annotationWarnings, other.results);

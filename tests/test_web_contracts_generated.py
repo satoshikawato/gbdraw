@@ -73,6 +73,66 @@ def test_generated_web_contracts_module_imports_nothing(render: str) -> None:
     assert re.search(r"\bimport\b|\bfrom\s+['\"]", source) is None
 
 
+def test_a_changed_session_field_set_makes_the_generated_module_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.session_io as session_io
+
+    generator = _generator()
+    assert (
+        "/** @type {readonly string[]} */\n"
+        "export const OTHER_MODE_RESULT_LEGEND_FIELDS = Object.freeze(['originalColors', 'originalOrder']);\n"
+    ) in generator.render_web_contracts_module()
+
+    monkeypatch.setattr(
+        session_io, "OTHER_MODE_RESULT_LEGEND_FIELDS", session_io.OTHER_MODE_RESULT_LEGEND_FIELDS | {"another"}
+    )
+
+    assert "Object.freeze(['another', 'originalColors', 'originalOrder'])" in generator.render_web_contracts_module()
+
+
+def test_the_session_typedefs_import_only_the_request_typedefs() -> None:
+    # A leaf of the Web layers may import a leaf (R13).
+    source = _generator().render_session_typedefs_module()
+
+    assert re.findall(r"\bimport\b.*|\bfrom\s+['\"].*", source) == [
+        "import { CanonicalRenderRequest } from './request.generated.js' */"
+    ]
+    assert source.endswith("export {};\n")
+    assert re.search(r"\bany\b", source.split("\n\n", 1)[1]) is None
+    assert (
+        "/** @typedef {SessionInput & { format: 'gbdraw-session', version: number }} SessionEnvelope */\n"
+    ) in source
+
+
+def test_a_changed_session_declaration_makes_the_session_typedefs_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.session_contract as contract
+
+    generator = _generator()
+    current = generator.render_session_typedefs_module()
+    assert " * @property {string[]} [originalOrder]\n" in current
+    assert "another" not in current
+
+    monkeypatch.setitem(contract.SessionOtherModeLegend.__annotations__, "another", "str")
+
+    assert " * @property {string} another\n" in generator.render_session_typedefs_module()
+
+
+def test_a_changed_registry_row_makes_the_session_typedefs_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.session_contract as contract
+
+    generator = _generator()
+    assert " * @property {unknown} [canvasPadding]\n" in generator.render_session_typedefs_module()
+
+    monkeypatch.setitem(contract.SLICE_CONTAINERS, "ui", contract.SLICE_CONTAINERS["ui"] | {"another"})
+
+    assert " * @property {unknown} [another]\n" in generator.render_session_typedefs_module()
+
+
 def test_a_changed_codec_table_makes_the_request_typedefs_stale(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -153,3 +213,21 @@ def test_named_shapes_render_as_typedefs() -> None:
         " */\n"
         "/** @typedef {string | { a?: number }} Either */\n"
     )
+
+
+def test_an_open_object_renders_with_an_index_signature() -> None:
+    from gbdraw.contract_shapes import INTEGER, STRING, obj
+
+    generator = _generator()
+
+    # `@property` cannot carry an index signature, so the typedef is a type literal.
+    assert generator._typedefs({"Open": obj({"id": STRING, "size": obj({"n": INTEGER}, open=True)}, optional=["size"], open=True)}) == (
+        "/**\n"
+        " * @typedef {{\n"
+        " *   id: string,\n"
+        " *   size?: { n: number, [key: string]: unknown },\n"
+        " *   [key: string]: unknown\n"
+        " * }} Open\n"
+        " */\n"
+    )
+    assert generator._jsdoc_type(obj({}, open=True)) == "{ [key: string]: unknown }"

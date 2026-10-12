@@ -8,7 +8,8 @@ renders it without importing the Python types it came from:
 - ``{"kind": "array", "items": shape}`` and ``{"kind": "tuple", "items": [shape, ...]}``
 - ``{"kind": "record", "values": shape}``: an object with any string keys
 - ``{"kind": "union", "options": [shape, ...]}``: a nullable value is a union with null
-- ``{"kind": "object", "fields": {name: shape}, "optional": [name, ...]}``: no other field
+- ``{"kind": "object", "fields": {name: shape}, "optional": [name, ...], "open": bool}``:
+  no other field, unless it is open
 - ``{"kind": "ref", "name": name}``: a shape named in the description's ``types``
 """
 
@@ -17,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from enum import Enum
 import types
-from typing import Any, Callable, Literal, Mapping, Union, get_args, get_origin
+from typing import Any, Callable, Literal, Mapping, Union, get_args, get_origin, get_type_hints
 
 Shape = dict[str, Any]
 
@@ -88,11 +89,13 @@ def non_null(shape: Shape) -> Shape:
     ))
 
 
-def obj(fields: Mapping[str, Shape], *, optional: SequenceABC[str] = ()) -> Shape:
+def obj(fields: Mapping[str, Shape], *, optional: SequenceABC[str] = (), open: bool = False) -> Shape:
+    """An object with these fields; an ``open`` one may hold other keys, of any value."""
+
     unknown = set(optional) - set(fields)
     if unknown:
         raise ValueError(f"Optional field(s) not in the object: {sorted(unknown)}")
-    return {"kind": "object", "fields": dict(fields), "optional": sorted(optional)}
+    return {"kind": "object", "fields": dict(fields), "optional": sorted(optional), "open": open}
 
 
 def shape_of_hint(
@@ -127,3 +130,19 @@ def shape_of_hint(
     if isinstance(hint, type) and issubclass(hint, Enum):
         return literal(*(member.value for member in hint))
     raise TypeError(f"No JSON shape is defined for the type {hint!r}.")
+
+
+def typed_dict_shape(
+    cls: type,
+    special: Callable[[object], Shape | None] = lambda _hint: None,
+    *,
+    open: bool = False,
+) -> Shape:
+    """The object a ``TypedDict`` class declares: its keys are the wire names."""
+
+    optional: frozenset[str] = getattr(cls, "__optional_keys__")
+    return obj(
+        {name: shape_of_hint(hint, special) for name, hint in get_type_hints(cls).items()},
+        optional=sorted(optional),
+        open=open,
+    )
