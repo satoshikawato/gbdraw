@@ -232,14 +232,19 @@
  * @property {number | null} outerGapPx
  */
 /**
+ * @typedef {object} CanonicalLinearScalarSpec
+ * @property {number} value
+ * @property {'px'} unit
+ */
+/**
  * @typedef {object} CanonicalLinearTrackSlot
  * @property {'linearTrackSlot'} kind
  * @property {string} id
  * @property {'features' | 'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'annotations' | 'spacer' | string} renderer
  * @property {boolean} enabled
  * @property {string | null} side
- * @property {CanonicalScalarSpec | null} height
- * @property {CanonicalScalarSpec | null} spacing
+ * @property {CanonicalLinearScalarSpec | null} height
+ * @property {CanonicalLinearScalarSpec | null} spacing
  * @property {number} z
  * @property {Record<string, unknown>} params
  */

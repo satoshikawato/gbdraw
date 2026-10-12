@@ -4954,9 +4954,13 @@ def describe_canonical_request() -> dict[str, Any]:
     data(AnnotationSet)
     data(AnnotationOptions, files=frozenset({"table_file"}))
     data(DepthTrackInput, "DepthTrack", files=frozenset({"source"}))
-    data(ScalarSpec)
+    scalar = data(ScalarSpec)
     data(CircularTrackSlot, kind="circularTrackSlot")
-    data(LinearTrackSlot, kind="linearTrackSlot")
+    # A Linear slot's height and spacing are pixels (gbdraw.tracks.linear._validate_px_scalar).
+    pixels = nullable(named("LinearScalarSpec", obj(
+        {**types_[scalar["name"]]["fields"], "unit": literal("px")}
+    )))
+    data(LinearTrackSlot, kind="linearTrackSlot", replace={"height": pixels, "spacing": pixels})
     data(FeatureOverride)  # FeatureOverride.to_mapping
     # FeaturePlacementOverride.from_mapping: a lane has a side and a level, main neither.
     target_hints = _class_type_hints(FeaturePlacementTarget)
