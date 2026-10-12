@@ -166,9 +166,7 @@ const saveAndReloadSession = async (page) => {
   const saved = await (await download).path();
   await page.reload();
   await waitForAppShell(page);
-  const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(saved);
-  await (await loaded).accept();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
 };
