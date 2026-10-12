@@ -25,6 +25,7 @@ import { featureIdentityKeyOf, featureOverrideValue } from '../../services/featu
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { COMPARISON_LEGEND_SELECTOR, legendEntryKey } from '../../services/legend-svg.js';
 import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.js';
+import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
   featureIdentity,
@@ -60,6 +61,11 @@ export {
   getFeatureIdentity,
   normalizeFeatureIdentity
 };
+
+// A press that moved farther than this before its release is a drag, not a click on a drawn element.
+const CLICK_SLOP_PX = 4;
+// Marks an item of the preview that a click acts on, for the pointer cursor.
+const PREVIEW_ITEM_ATTRIBUTE = 'data-gbdraw-preview-item';
 
 /**
  * A pointer position, as an event or a plain point carries it.
@@ -114,6 +120,12 @@ export {
  */
 
 /**
+ * The root's way to open the settings section of a drawn element (the pane
+ * opens it, brings it to the top, and focuses its heading).
+ * @typedef {(section: import('../../services/settings-sections.js').SettingsSectionKey) => unknown} RevealSettingsSection
+ */
+
+/**
  * @typedef {object} FeatureSvgActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(feature: Record<string, any>) => string} getFeatureColor The rule owner's color of a feature.
@@ -127,6 +139,7 @@ export {
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
  * @property {() => boolean} [previewPopupsHeld] While it holds (the Review alignment panel is open, the popups
  *   hidden), no gesture on the figure opens, retargets or closes a popup.
+ * @property {RevealSettingsSection} [revealSettingsSection]
  */
 
 /**
@@ -214,6 +227,7 @@ export {
  * @property {Element | null} activeMatchHoverElement
  * @property {string} activeMatchHoverKey
  * @property {Element | null} pendingMatchElement
+ * @property {{ clientX: number, clientY: number } | null} pressPoint Where the last press on the Result began.
  * @property {Set<Element>} activeHoverElements
  * @property {string} hoverHighlightKey The hover whose highlight is written ('' for none).
  * @property {string} pendingHoverHighlightKey The hover whose highlight waits for the dwell.
@@ -254,7 +268,8 @@ export const createFeatureSvgActions = ({
   prepareDrawnFeatureMatches = () => true,
   featureSelection = null,
   previewTransformInteraction = null,
-  previewPopupsHeld = () => false
+  previewPopupsHeld = () => false,
+  revealSettingsSection = () => {}
 }) => {
   const {
     orthogroups,
@@ -978,6 +993,7 @@ export const createFeatureSvgActions = ({
       activeMatchHoverElement: null,
       activeMatchHoverKey: '',
       pendingMatchElement: null,
+      pressPoint: null,
       activeHoverElements: new Set(),
       hoverHighlightKey: '',
       pendingHoverHighlightKey: '',
@@ -1874,12 +1890,28 @@ export const createFeatureSvgActions = ({
           e.preventDefault();
           return;
         }
+        revealDrawnElementSettings(e);
         if (isBackgroundPreviewClick(/** @type {Element} */ (e.target), svg)) { // a click on the Result targets an element
           featureSelection?.clearFeatureSelection?.({ clearStatus: true });
           if (previewPopupsHeld()) return;
           if (clickedFeature.value) clickedFeature.value = null;
           if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
         }
+      };
+
+      // A click on a drawn element whose settings have a section (the scale, a
+      // dinucleotide track, the plot title) opens that section. It opens
+      // nothing while Layout edit is on (a press drags there), while a review
+      // holds the popups, or when the press moved: a pan of the figure ends in
+      // a click on the element it began on. To the popups the click stays a
+      // click on the background.
+      /** @param {MouseEvent} e */
+      const revealDrawnElementSettings = (e) => {
+        if (state.layoutRepositionMode?.value || previewPopupsHeld()) return;
+        const press = handlerState.pressPoint;
+        if (press && Math.hypot(e.clientX - press.clientX, e.clientY - press.clientY) > CLICK_SLOP_PX) return;
+        const section = drawnElementSection(e.target, svg);
+        if (section) revealSettingsSection(section);
       };
 
       /** @param {KeyboardEvent} e */
@@ -1901,6 +1933,7 @@ export const createFeatureSvgActions = ({
 
       /** @param {PointerEvent} e */
       const handlePointerDown = (e) => {
+        handlerState.pressPoint = { clientX: e.clientX, clientY: e.clientY };
         if (e.button === 0 && e.isPrimary !== false) {
           const matchEl = getPairwiseMatchClickTarget(e, svg);
           if (matchEl) {
@@ -2058,19 +2091,22 @@ export const createFeatureSvgActions = ({
     return true;
   };
 
-  // Legend rows and record definitions are buttons that open their popup;
-  // an export strips these attributes (stripTransientPreviewState).
+  // Legend rows and record definitions are buttons that open their popup. A
+  // drawn element whose settings have a section is marked `settings` for the
+  // pointer and the hint only: the section index is the keyboard way to its
+  // section. An export strips these attributes (stripTransientPreviewState).
   /** @param {{ root?: Element | null }} [options] */
   const preparePreviewItemAffordances = ({ root = null } = {}) => {
     const svg = root || delegatedFeatureHandlers?.svg || null;
     if (!svg) return false;
     svg.querySelectorAll(PREVIEW_ITEM_SELECTOR).forEach((element) => {
       if (element.closest(COMPARISON_LEGEND_SELECTOR)) return;
-      element.setAttribute('data-gbdraw-preview-item', '');
+      element.setAttribute(PREVIEW_ITEM_ATTRIBUTE, '');
       element.setAttribute('role', 'button');
       element.setAttribute('tabindex', '0');
       element.setAttribute('aria-haspopup', 'dialog');
     });
+    svg.querySelectorAll(DRAWN_ELEMENT_SELECTOR).forEach((element) => element.setAttribute(PREVIEW_ITEM_ATTRIBUTE, 'settings'));
     return true;
   };
 

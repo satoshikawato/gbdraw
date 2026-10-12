@@ -119,6 +119,12 @@ await writeFile(
   'export const PREVIEW_ITEM_SELECTOR = "g[data-legend-key]";\nexport const previewItemTarget = () => null;\n',
   'utf8'
 );
+// No drawn element in these fixtures opens a settings section.
+await writeFile(
+  join(tempDir, 'services', 'settings-sections.js'),
+  'export const DRAWN_ELEMENT_SELECTOR = "g[data-gbdraw-slot-renderer]";\nexport const drawnElementSection = () => null;\n',
+  'utf8'
+);
 
 let nextTimerId = 1;
 const timers = new Map();

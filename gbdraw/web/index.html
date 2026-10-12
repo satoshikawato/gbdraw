@@ -1084,12 +1084,20 @@
             outline: 1px dashed #94a3b8;
             outline-offset: 4px;
         }
-        .preview-layout-hint {
+        /* The hint names what the hovered item does: a drawn element with a settings section
+           (`settings`), a Layout edit target, or both (the plot title, the Linear scale). */
+        .preview-layout-hint,
+        .preview-layout-hint span {
             display: none;
             pointer-events: none;
         }
-        .preview-layout-off:has(.gbdraw-preview-layout-target:hover) .preview-layout-hint {
+        .preview-layout-off:has(:is(.gbdraw-preview-layout-target, [data-gbdraw-preview-item="settings"]):hover) .preview-layout-hint {
             display: block;
+        }
+        .preview-layout-off:has([data-gbdraw-preview-item="settings"]:hover) .preview-settings-hint,
+        .preview-layout-off:has(.gbdraw-preview-layout-target:hover) .preview-move-hint,
+        .preview-layout-off:has([data-gbdraw-preview-item="settings"]:hover):has(.gbdraw-preview-layout-target:hover) .preview-hint-join {
+            display: inline;
         }
         .drag-hint {
             pointer-events: none;
@@ -2029,7 +2037,7 @@
              :data-settings-display="settingsPane.display" :data-settings-docked="settingsPane.docked"
              :style="{ '--settings-stacked-width': sidebarWidth + 'px' }">
 
-            <settings-section-index :mode="mode" controls="settings-sections" :view="settingsPane" :reveal="revealSetting"
+            <settings-section-index :mode="mode" controls="settings-sections" :view="settingsPane" :reveal="revealSettingsSection"
                                     @rail="showSettingsPaneRail" @stacked="showSettingsPaneStacked" @close="closeDockedSettings"></settings-section-index>
 
             <div id="settings-sections" class="settings-scroll flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
@@ -6011,10 +6019,11 @@
 
                     <!-- Zoom and Canvas controls -->
                     <!-- Preview-only target hint; the toolbar also explains keyboard/touch activation.
-                         CSS shows it while a layout target is hovered; a popup that a click on that target
-                         opened (a Legend row, a record definition) hides it. -->
+                         CSS shows it, and the sentence that applies, while a layout target or a drawn element
+                         with a settings section is hovered; a popup that a click on that target opened (a
+                         Legend row, a record definition) hides it. -->
                     <div v-if="svgContent && !layoutRepositionMode && !clickedPairwiseMatch && !clickedFeature" class="preview-layout-hint drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200" aria-hidden="true">
-                        <p class="text-sm text-slate-600">Turn on Layout edit to move this item</p>
+                        <p class="text-sm text-slate-600"><span class="preview-settings-hint">Click to open its settings</span><span class="preview-hint-join">. </span><span class="preview-move-hint">Turn on Layout edit to move this item</span></p>
                     </div>
 
                     <!-- Drag hint -->

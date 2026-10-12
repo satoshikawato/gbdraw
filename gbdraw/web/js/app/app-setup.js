@@ -1906,7 +1906,8 @@ export const createAppSetup = () => {
     shownLegendName: legendActions.shownLegendName,
     askChoice,
     showNotice,
-    revealSetting: settingsPaneActions.revealSetting
+    revealSetting: settingsPaneActions.revealSetting,
+    revealSettingsSection: settingsPaneActions.revealSettingsSection
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
@@ -6670,6 +6671,7 @@ export const createAppSetup = () => {
     startResizing,
     settingsPane: settingsPaneActions.settingsPane,
     revealSetting: settingsPaneActions.revealSetting,
+    revealSettingsSection: settingsPaneActions.revealSettingsSection,
     showSettingsPaneRail: settingsPaneActions.showSettingsPaneRail,
     showSettingsPaneStacked: settingsPaneActions.showSettingsPaneStacked,
     closeDockedSettings: settingsPaneActions.closeDockedSettings,

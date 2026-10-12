@@ -11,6 +11,7 @@ import {
   isRecordGroup
 } from '../record-groups.js';
 import { setClassToken } from '../../services/svg-serialization.js';
+import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
 
 /**
  * @typedef {object} DiagramDragActionsOptions
@@ -128,9 +129,9 @@ export const createDiagramDragActions = ({
   };
 
   /** @param {{ id?: string } | null | undefined} group */
-  const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';
+  const isLengthBarGroup = (group) => (group?.id || '') === LENGTH_BAR_ID;
   /** @param {{ id?: string } | null | undefined} group */
-  const isPlotTitleGroup = (group) => (group?.id || '') === 'plot_title';
+  const isPlotTitleGroup = (group) => (group?.id || '') === PLOT_TITLE_ID;
 
   /**
    * @param {Element | null | undefined} el
@@ -215,7 +216,7 @@ export const createDiagramDragActions = ({
    */
   const syncLengthBarElement = (svg, preserveOffset = false) => {
     // The Python-drawn scale bar is a `g` group.
-    const nextLengthBar = /** @type {SVGGraphicsElement | null} */ (svg?.getElementById('length_bar') || null);
+    const nextLengthBar = /** @type {SVGGraphicsElement | null} */ (svg?.getElementById(LENGTH_BAR_ID) || null);
     if (!nextLengthBar) {
       clearLengthBarState();
       return;
@@ -375,13 +376,13 @@ export const createDiagramDragActions = ({
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    const clickedLengthBar = e.target.closest('#length_bar');
+    const clickedLengthBar = e.target.closest(`#${LENGTH_BAR_ID}`);
     if (clickedLengthBar) {
       startLengthBarDrag(e, /** @type {SVGGraphicsElement} */ (clickedLengthBar)); // the `g#length_bar` group
       return;
     }
 
-    const clickedPlotTitle = e.target.closest('#plot_title');
+    const clickedPlotTitle = e.target.closest(`#${PLOT_TITLE_ID}`);
     if (clickedPlotTitle) {
       startPlotTitleDrag(e, /** @type {SVGGraphicsElement} */ (clickedPlotTitle)); // the `g#plot_title` group
       return;

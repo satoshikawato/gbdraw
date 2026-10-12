@@ -1117,6 +1117,14 @@ edit** on, a press on these items drags them instead. The comparison legend
 opens no popup. Both popups open beside the clicked item and stay below the
 app header, as the feature popup does.
 
+With **Layout edit** off, a click on the Circular coordinate ticks or the
+Linear scale opens **Axis & Scale** in the settings, a click on a dinucleotide
+content or skew track opens **Dinucleotide content/skew**, and a click on the
+plot title opens **Titles & Record Labels**, as the icon button of that section
+above the settings does. While the pointer is on one of them, the preview reads
+"Click to open its settings". The click changes no setting and adds no **Undo**
+step, and a press that pans the figure opens nothing.
+
 Ctrl-click selects features for bulk color, legend name, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the name of another
