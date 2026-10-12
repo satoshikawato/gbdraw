@@ -578,8 +578,8 @@ const parseDesignRuleGuardRegistry = (source) => {
 // Reads `const SYMBOL = <literal>` from a test source without executing it:
 // a number, an array or `new Set([...])` of strings, or an object literal of
 // numbers or of nested string maps, each optionally in `Object.freeze(...)`.
-// Returns null when the literal is absent, is not one of those shapes, or
-// continues as an expression (`[...].concat(MORE)`).
+// Returns null when the literal is absent, is not one of those shapes, or is
+// not closed by `;` (`[...].concat(MORE)`, also continued on the next line).
 const matchingBracketEnd = (text, openIndex) => {
   const pairs = { '[': ']', '{': '}', '(': ')' };
   const stack = [];
@@ -665,9 +665,10 @@ const readJavaScriptLiteral = (source, symbol) => {
   if (opener !== '[' && opener !== '{') return UNREADABLE_ALLOWLIST;
   const end = matchingBracketEnd(source, literalStart);
   if (end < 0) return UNREADABLE_ALLOWLIST;
-  // Only the wrappers' closing parentheses may follow the literal.
+  // Only the wrappers' closing parentheses and then `;` may follow the literal:
+  // a line end does not close it (`.concat(MORE)` may start the next line).
   const closers = '\\s*\\)'.repeat(wrappers.slice(1).filter(Boolean).length);
-  if (!new RegExp(`^${closers}[ \\t]*(?:;|\\r?\\n|$)`).test(masked.slice(end + 1))) return UNREADABLE_ALLOWLIST;
+  if (!new RegExp(`^${closers}\\s*;`).test(masked.slice(end + 1))) return UNREADABLE_ALLOWLIST;
   try {
     return { status: 'ok', value: JSON.parse(literalToJson(source.slice(literalStart, end + 1))) };
   } catch (_error) {
@@ -684,9 +685,32 @@ const maskPython = (source) => source.replace(
 // of a Python source without executing it: an integer, a string, a list, tuple,
 // set or `frozenset(...)` (an array here), a dict with string keys (an object),
 // or a bare name (null, as the note in `(10, _COMPARISON)`). Python has no
-// `const`, so the literal is unreadable when another module-level statement
-// starts with SYMBOL, when the name is used but not assigned that way, when
-// the value is any other expression, or when more follows it.
+// `const`, so the literal is unreadable when the name is used but not assigned
+// that way, when anything else in the file binds or changes the name (see
+// `pythonRebinding`), when the value is any other expression, or when more
+// follows it.
+// Code that binds or changes NAME, at any indentation: a line or a `;`
+// statement that starts with it, NAME as an assignment target (`X, NAME = `,
+// `X = NAME = `, `NAME[key] = `, `NAME |= `, `NAME := `), a method call that is
+// not a known read, and `import`, `as`, `for`, `del`, `def`, `class`, `global`
+// or `nonlocal` naming it. Reads (`for key in NAME`, `len(NAME)`, `NAME.get(`,
+// `f(NAME, strict=True)`) are not matched. Not seen: a change through an alias,
+// `globals()` or a callee, a parenthesized target list, and another module.
+const PYTHON_READ_METHODS = 'get|items|keys|values|copy|count|index|union|intersection|difference|'
+  + 'symmetric_difference|isdisjoint|issubset|issuperset';
+const pythonRebinding = (name) => {
+  const bare = `(?<![\\w.])${name}(?!\\w)`;
+  const assign = '(?:\\*\\*|\\/\\/|<<|>>|[-+*/%@|&^:])?=(?!=)';
+  return new RegExp([
+    `^[ \\t]*${bare}`,
+    `;[ \\t]*${bare}`,
+    `${bare}[ \\t]*(?:\\[[^\\]\\n]*\\][ \\t]*)?${assign}`,
+    `^[ \\t]*[\\w.,\\[\\] \\t*]*?${bare}[\\w.,\\[\\] \\t*]*${assign}`,
+    `${bare}\\.(?!(?:${PYTHON_READ_METHODS})\\b)\\w+[ \\t]*\\(`,
+    `\\bimport\\b[^\\n]*${bare}`,
+    `\\b(?:as|for|del|def|class|global|nonlocal)[ \\t]+${bare}`
+  ].join('|'), 'm');
+};
 const readPythonLiteral = (source, symbol) => {
   const masked = maskPython(source);
   const name = escapeAllowlistSymbol(symbol);
@@ -694,7 +718,9 @@ const readPythonLiteral = (source, symbol) => {
   if (!declaration) {
     return new RegExp(`(?<![\\w.])${name}(?!\\w)`).test(masked) ? UNREADABLE_ALLOWLIST : { status: 'missing', value: null };
   }
-  if (masked.match(new RegExp(`^${name}(?!\\w)`, 'gm')).length !== 1) return UNREADABLE_ALLOWLIST;
+  const elsewhere = masked.slice(0, declaration.index) + ' '.repeat(declaration[0].length)
+    + masked.slice(declaration.index + declaration[0].length);
+  if (pythonRebinding(name).test(elsewhere)) return UNREADABLE_ALLOWLIST;
   let index = declaration.index + declaration[0].length;
   let depth = 0;
   const fail = () => {

@@ -5918,13 +5918,17 @@ test('the design-rule guard registry is read from the trusted base and fails clo
   }, { registry: '{ not json\n' });
 });
 
-// A literal is read only when nothing follows it: `[...].concat(MORE)` is not
-// the list between the brackets.
+// A literal is read only when `;` closes it: `[...].concat(MORE)` is not the
+// list between the brackets, on the same line or on the next one.
 test('a design-rule allowlist literal that continues as an expression is unreadable', () => {
   const continued = [
     ['RECONCILE', (source) => source.replace("'changeCircularDepthSources']);", "'changeCircularDepthSources'].concat(MORE));")],
     ['RECONCILE', (source) => source.replace("'changeCircularDepthSources']);", "'changeCircularDepthSources']).add(MORE);")],
-    ['THROW_BASELINE', (source) => source.replace("'app/b.js': 0 };", "'app/b.js': 0 }.merged;")]
+    ['THROW_BASELINE', (source) => source.replace("'app/b.js': 0 };", "'app/b.js': 0 }.merged;")],
+    ['RECONCILE', (source) => source.replace("'changeCircularDepthSources']);", "'changeCircularDepthSources'])\n  .union(MORE);")],
+    ['RECONCILE', (source) => source.replace("'changeCircularDepthSources']);", "'changeCircularDepthSources']\n  .concat(MORE));")],
+    ['THROW_BASELINE', (source) => source.replace("'app/b.js': 0 };", "'app/b.js': 0 }\n  // merged below\n  .merged;")],
+    ['THROW_BASELINE', (source) => source.replace("'app/b.js': 0 };", "'app/b.js': 0 }")]
   ];
   continued.forEach(([symbol, rewrite]) => {
     withDesignRuleGuardRepository(({ execute, write }) => {
@@ -6026,8 +6030,15 @@ const designRuleGuardSources2 = ({
     '',
     '',
     'def test_baselines() -> None:',
-    '    CAP = 99',
     '    assert CAP and TYPE_DEBT_BASELINE is not None and UNPROVEN_BASELINE and ALLOWED_FILES',
+    '    for path in UNPROVEN_BASELINE:',
+    '        assert UNPROVEN_BASELINE.get(path, (0, ""))[0] <= len(UNPROVEN_BASELINE) * CAP',
+    '    counts = {path: count for path, (count, _note) in UNPROVEN_BASELINE.items()}',
+    '    assert counts == {path: UNPROVEN_BASELINE[path][0] for path in sorted(UNPROVEN_BASELINE)}, (',
+    '        f"lower UNPROVEN_BASELINE = {counts}"',
+    '    )',
+    '    assert check(UNPROVEN_BASELINE, strict=True) and check(baseline=UNPROVEN_BASELINE)',
+    '    assert "gbdraw/web/js/c.js" not in ALLOWED_FILES and ALLOWED_FILES != set()',
     ''
   ].join('\n')
 });
@@ -6060,6 +6071,7 @@ const DESIGN_RULE_EXPANSIONS_2 = Object.freeze([
   ['RULE_WRITERS', { ruleWriters: "Object.freeze({ 'js/services/config.js': 'resetBaseline' })" }, 'unreadable'],
   ['FROZEN', { frozen: "Object.freeze(new Set(['normalizeSlots', 'changeSources', 'applyLayout']))" }],
   ['FROZEN', { frozen: "Object.freeze(new Set(['normalizeSlots']).add(MORE))" }, 'unreadable'],
+  ['FROZEN', { frozen: "Object.freeze(['normalizeSlots', 'changeSources'])\n  .concat(MORE)" }, 'unreadable'],
   ['entries', { entries: [
     { id: 'label-placement-awaits-reflow', kind: 'leader', condition: { autoReflow: false } },
     { id: 'legend-order-awaits-generate', kind: 'legend', condition: { autoReflow: true } },
@@ -6228,21 +6240,37 @@ test('a Python design-rule baseline cannot expand alongside Python package files
     assert.equal(result.status, 0, result.output);
     assert.doesNotMatch(result.output, blocked);
   });
-  // Python has no `const`: a baseline that is still used but is no longer one
-  // plain module-level assignment is unreadable; one that is gone contracted.
+  // Python has no `const`: a baseline is read only when one module-level
+  // assignment is the single place that binds or changes the name. A removed
+  // baseline contracted.
   const pythonSource = designRuleGuardSources2()[DESIGN_RULE_PYTHON_GUARD_PATH];
   const declaration = 'TYPE_DEBT_BASELINE: dict[str, int] = ';
+  const unreadable = `${blocked.source}\\(${designRuleSubjectPattern('TYPE_DEBT_BASELINE', 'unreadable')}\\)`;
+  const withStatement = (statement) => pythonSource.replace('\n\ndef test_baselines', `\n${statement}\n\n\ndef test_baselines`);
   [
-    [pythonSource.replace(declaration, '_, TYPE_DEBT_BASELINE = 0, '), 1, `${blocked.source}\\(${designRuleSubjectPattern('TYPE_DEBT_BASELINE', 'unreadable')}\\)`],
-    [pythonSource.replace(declaration, `if True:\n    ${declaration}`), 1, `${blocked.source}\\(${designRuleSubjectPattern('TYPE_DEBT_BASELINE', 'unreadable')}\\)`],
+    [pythonSource.replace(declaration, '_, TYPE_DEBT_BASELINE = 0, ')],
+    [pythonSource.replace(declaration, `if True:\n    ${declaration}`)],
+    // The module-level literal stays, and the name is bound or changed elsewhere.
+    [withStatement('if sys.version_info < (3, 11):\n    TYPE_DEBT_BASELINE["gbdraw/cli.py"] = 3')],
+    [withStatement('try:\n    import tomllib\nexcept ImportError:\n    TYPE_DEBT_BASELINE = {"gbdraw/cli.py": 3}')],
+    [withStatement('for _path in ("gbdraw/cli.py",):\n    TYPE_DEBT_BASELINE.setdefault(_path, 3)')],
+    [withStatement('if True: TYPE_DEBT_BASELINE.update({"gbdraw/cli.py": 3})')],
+    [withStatement('_X = 1; TYPE_DEBT_BASELINE = {"gbdraw/cli.py": 3}')],
+    [withStatement('_X, TYPE_DEBT_BASELINE = 1, {"gbdraw/cli.py": 3}')],
+    [withStatement('_A, TYPE_DEBT_BASELINE, _B = 1, {"gbdraw/cli.py": 3}, 2')],
+    [withStatement('_X = TYPE_DEBT_BASELINE = {"gbdraw/cli.py": 3}')],
+    [withStatement('_ALL |= TYPE_DEBT_BASELINE; TYPE_DEBT_BASELINE |= {"gbdraw/cli.py": 3}')],
+    [withStatement('from tests.other_baselines import TYPE_DEBT_BASELINE')],
+    [withStatement('import tests.other_baselines as TYPE_DEBT_BASELINE')],
+    [withStatement('def _grow():\n    global TYPE_DEBT_BASELINE\n    TYPE_DEBT_BASELINE = {"gbdraw/cli.py": 3}')],
     [pythonSource.replace(/^TYPE_DEBT_BASELINE.*\n/m, '').replace('TYPE_DEBT_BASELINE is not None and ', ''), 0, '- contraction: TYPE-DEBT [^\\n]*#TYPE_DEBT_BASELINE\\n']
-  ].forEach(([source, status, expected]) => {
+  ].forEach(([source, status = 1, expected = unreadable]) => {
     withDesignRuleGuardRepository2(({ execute, write }) => {
       assert.notEqual(source, pythonSource);
       pythonProductionChange(write);
       write(DESIGN_RULE_PYTHON_GUARD_PATH, source);
       const result = execute();
-      assert.equal(result.status, status, `${expected}\n${result.output}`);
+      assert.equal(result.status, status, `${source}\n${result.output}`);
       assert.match(result.output, new RegExp(expected), source);
     });
   });
