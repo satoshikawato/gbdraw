@@ -1934,6 +1934,24 @@
         }
         .settings-dock-close:hover { background-color: #f1f5f9; color: var(--ui-text); }
         .settings-dock-close:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+        /* The popup beside the Result (js/app/settings-pane.js) holds the section of a clicked drawn element:
+           the section's own card, moved here, as wide as the docked panel. The card scrolls inside the popup
+           under its heading, which is the popup's heading and drag handle and does not fold the section. */
+        .settings-popup {
+            position: fixed; z-index: 45; display: flex; flex-direction: column; overflow: hidden;
+            width: min(320px, calc(100vw - 2rem));
+            border: 1px solid var(--ui-line-strong); border-radius: 12px; background-color: var(--ui-surface);
+            box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.35), 0 4px 10px rgba(15, 23, 42, 0.08);
+        }
+        .settings-popup > [data-settings-section] {
+            min-height: 0; margin: 0; padding-top: 0; overflow-y: auto; border: 0; border-radius: 0; box-shadow: none;
+        }
+        .settings-popup > [data-settings-section] > details > summary {
+            position: sticky; top: 0; z-index: 1; margin: 0 -0.75rem 10px; padding: 12px 2.75rem 12px 0.75rem;
+            border-bottom: 1px solid var(--ui-line); background-color: #f1f5f9; cursor: move;
+        }
+        .settings-popup > [data-settings-section] > details > summary::before { content: none; }
+        .settings-popup > .settings-dock-close { right: 9px; }
         /* A rail column too low for its entries scrolls and shows it: a 4 px scrollbar beside the entries.
            Where the width cannot be set (Firefox), a thin scrollbar takes up to 8 px: it uses the column's
            right padding first, so an entry keeps at least 46 px for its name. */
@@ -2046,7 +2064,7 @@
              :data-settings-display="settingsPane.display" :data-settings-docked="settingsPane.docked"
              :style="{ '--settings-stacked-width': sidebarWidth + 'px' }">
 
-            <settings-section-index :mode="mode" controls="settings-sections" :view="settingsPane" :reveal="revealSettingsSection" :revealed="settingsReveal"
+            <settings-section-index :mode="mode" controls="settings-sections" :view="settingsPane" :reveal="revealSettingsSection"
                                     @rail="showSettingsPaneRail" @stacked="showSettingsPaneStacked" @close="closeDockedSettings"></settings-section-index>
 
             <div id="settings-sections" class="settings-scroll flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
@@ -4499,6 +4517,7 @@
                     </details>
                 </div>
 
+                <teleport to="#settings-popup" defer :disabled="settingsPane.floating !== 'titles'">
                 <div v-settings-section="'titles'" data-setting="titles" class="card">
                     <details>
                         <summary aria-label="Titles and Record Labels"><settings-section-title section="titles"></settings-section-title> <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>
@@ -4598,6 +4617,7 @@
                         </div>
                     </details>
                 </div>
+                </teleport>
 
                 <div v-settings-section="'legend'" data-setting="legend" class="card">
                     <details>
@@ -5220,7 +5240,8 @@
                     </details>
                 </div>
 
-                <div v-if="mode === 'linear'" v-settings-section="'linear-axis'" data-setting="axis-scale" class="card">
+                <teleport v-if="mode === 'linear'" to="#settings-popup" defer :disabled="settingsPane.floating !== 'linear-axis'">
+                <div v-settings-section="'linear-axis'" data-setting="axis-scale" class="card">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><settings-section-title section="linear-axis"></settings-section-title> <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
                         <setting-note setting="axis-scale" class="mt-2"></setting-note>
@@ -5359,8 +5380,10 @@
                         </div>
                     </details>
                 </div>
+                </teleport>
 
-                <div v-if="mode === 'circular'" v-settings-section="'circular-axis'" data-setting="axis-scale" class="card">
+                <teleport v-if="mode === 'circular'" to="#settings-popup" defer :disabled="settingsPane.floating !== 'circular-axis'">
+                <div v-settings-section="'circular-axis'" data-setting="axis-scale" class="card">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><settings-section-title section="circular-axis"></settings-section-title> <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
                         <setting-note setting="axis-scale" class="mt-2"></setting-note>
@@ -5428,7 +5451,9 @@
                         </div>
                     </details>
                 </div>
+                </teleport>
 
+                <teleport to="#settings-popup" defer :disabled="settingsPane.floating !== 'dinucleotide'">
                 <div v-settings-section="'dinucleotide'" data-setting="dinucleotide" class="card">
                     <details>
                         <summary aria-label="Dinucleotide content/skew"><settings-section-title section="dinucleotide"></settings-section-title> <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
@@ -5550,6 +5575,7 @@
                         </div>
                     </details>
                 </div>
+                </teleport>
 
 
                 <div v-settings-section="'about'" class="card">
@@ -8181,7 +8207,7 @@
                             <span>Reset Layout</span>
                         </button>
                         <!-- Layout reposition mode toggle -->
-                        <button v-if="svgContent" @click="layoutRepositionMode = !layoutRepositionMode" data-history-ignore
+                        <button v-if="svgContent" @click="layoutRepositionMode = !layoutRepositionMode; closeSettingsPopup()" data-history-ignore
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
                                 :title="layoutRepositionMode ? 'Layout edit is on: drag a legend, title, or Linear scale to move it. Turn off to pan.' : 'Turn on to move a legend, title, or Linear scale. While off, dragging pans the view.'"
                                 :aria-pressed="layoutRepositionMode"
@@ -8237,6 +8263,15 @@
             </div>
         </div>
     </main>
+
+    <!-- The settings section of a clicked drawn element is moved here, beside the Result (js/app/settings-pane.js).
+         The host stays inside the app root: History listens for its inputs there. -->
+    <div id="settings-popup" v-show="settingsPane.floating" class="settings-popup" role="dialog" aria-label="Settings of the clicked element"
+         :style="settingsPopupStyle" @mousedown="startSettingsPopupDrag" @click.capture="keepSettingsPopupSectionOpen">
+        <button type="button" class="settings-dock-close" data-history-ignore aria-label="Close section" title="Close section" @click="closeSettingsPopup">
+            <i class="ph ph-x" aria-hidden="true"></i>
+        </button>
+    </div>
 
     <footer data-app-footer class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-sm text-slate-500 flex items-center justify-center gap-6 shrink-0 h-8">
         <span>

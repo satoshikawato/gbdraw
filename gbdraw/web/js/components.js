@@ -16,7 +16,7 @@ import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting
 /** @import { SettingApplicationId } from './services/setting-application.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
-/** @import { SettingsPaneView, SettingsReveal } from './app/settings-pane.js' */
+/** @import { SettingsPaneView } from './app/settings-pane.js' */
 
 const { ref, reactive, computed, inject, nextTick, watch, useId, onMounted, onBeforeUnmount } = window.Vue;
 
@@ -281,11 +281,24 @@ export const SettingNote = {
 // `v-settings-section="'<key>'"` on the element of a settings section: it
 // names the section (`data-settings-section`) and tells the stylesheet whether
 // the docked rail entry shows it (`data-settings-in-dock`). The pane says which
-// display shows, so the stacked display ignores the second attribute.
+// display shows, so the stacked display ignores the second attribute. A section
+// in the popup beside the Result (`data-settings-floating`) is open there; back
+// in the pane its disclosure is open or closed as it was, which the attribute
+// remembers.
 /** @param {HTMLElement} element @param {{ value: SettingsSectionKey }} binding */
 export const settingsSection = (element, { value }) => {
   element.dataset.settingsSection = value;
   element.dataset.settingsInDock = String(settingsEntryOf(value) === state.settingsPaneDocked.value);
+  const floating = state.settingsPopup.value?.section === value;
+  const details = /** @type {HTMLDetailsElement | null} */ (element.querySelector(':scope > details'));
+  if (!details || floating === ('settingsFloating' in element.dataset)) return;
+  if (floating) {
+    element.dataset.settingsFloating = String(details.open);
+    details.open = true;
+  } else {
+    details.open = element.dataset.settingsFloating === 'true';
+    delete element.dataset.settingsFloating;
+  }
 };
 
 // The section index of the settings: one button per section of the shown
@@ -295,10 +308,9 @@ export const settingsSection = (element, { value }) => {
 // - Stacked: a row of icons. An entry opens its section, brings it to the top
 //   of the visible settings at once, and moves the focus to its heading; the
 //   marked entry (`aria-current`) is the last section whose top has reached
-//   the top edge of the visible settings, and a section the pane opened (an
-//   activated entry, or a click on its drawn element in the Result) stays
-//   marked while it stays where that left it, so a short last section keeps
-//   its mark. The switch to the rail ends the row.
+//   the top edge of the visible settings, and an activated entry stays marked
+//   while its section stays where the activation left it, so a short last
+//   section keeps its mark. The switch to the rail ends the row.
 // - Rail: a column of icons over short names, the switch back first. An entry
 //   docks its section beside the rail, opened and focused in the same way; the
 //   marked entry is the docked one, and the close button leaves the rail alone.
@@ -324,12 +336,11 @@ export const SettingsSectionIndex = {
     mode: { type: String, required: true },
     controls: { type: String, required: true },
     view: { type: Object, required: true },
-    reveal: { type: Function, required: true },
-    revealed: { type: Object, required: true }
+    reveal: { type: Function, required: true }
   },
   emits: ['rail', 'stacked', 'close'],
   /**
-   * @param {{ mode: 'circular' | 'linear', controls: string, view: SettingsPaneView, reveal: RevealSection, revealed: SettingsReveal }} props
+   * @param {{ mode: 'circular' | 'linear', controls: string, view: SettingsPaneView, reveal: RevealSection }} props
    * @param {{ emit: (event: 'rail' | 'stacked' | 'close', section?: SettingsSectionKey) => void }} context
    */
   setup(props, { emit }) {
@@ -379,14 +390,13 @@ export const SettingsSectionIndex = {
     // Opens a section and brings it to the top. The focus goes to its heading
     // unless `focus` names a button of the index.
     /** @param {SettingsSectionKey} key @param {string} [focus] */
-    const bringToTop = (key, focus) =>
-      props.reveal(key, focus ? /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(focus)) : null);
-    // A section the pane opened holds the mark. A section without an entry in
-    // this form (About & Citation in the row) leaves the mark to the geometry.
-    watch(() => props.revealed.last, (/** @type {SettingsReveal['last']} */ revealed) => {
-      held = revealed && entries.value.some((entry) => entry.key === revealed.key) ? revealed : null;
-      if (held) current.value = held.key; else mark();
-    }, { flush: 'sync' });
+    const bringToTop = async (key, focus) => {
+      await props.reveal(key, focus ? /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(focus)) : null);
+      // A section without an entry in this form (About & Citation in the row) leaves the mark to the geometry.
+      const top = sectionOf(key)?.getBoundingClientRect().top;
+      held = top !== undefined && entries.value.some((entry) => entry.key === key) ? { key, top } : null;
+      if (held) current.value = key; else mark();
+    };
     /** @param {SettingsSectionKey} key */
     const activate = (key) => {
       hideTip();
@@ -485,9 +495,10 @@ export const SettingsSectionIndex = {
     }));
     // A mode change may remove the entry whose text is shown, and the marked
     // section; so may the phone width, which changes the display of a rail and
-    // the layout of the stacked settings. One source each: one getter that
-    // returns them all would also run when only the docked section changes.
-    watch([() => props.mode, () => props.view.display, () => props.view.switchable], () => {
+    // the layout of the stacked settings, and a section that leaves the pane
+    // for the popup or returns. One source each: one getter that returns them
+    // all would also run when only the docked section changes.
+    watch([() => props.mode, () => props.view.display, () => props.view.switchable, () => props.view.floating], () => {
       hideTip();
       held = null;
       nextTick(mark);

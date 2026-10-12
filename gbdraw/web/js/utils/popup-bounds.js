@@ -48,6 +48,26 @@ export const popupViewportBounds = () => ({
   right: Math.max(1, window.innerWidth || 1)
 });
 
+// The popup bounds inside a rectangle of the page (the Result's canvas).
+/** @param {PopupBounds} box @returns {PopupBounds} */
+export const popupBoundsWithin = (box) => {
+  const bounds = popupViewportBounds();
+  return {
+    top: Math.max(bounds.top, box.top), bottom: Math.min(bounds.bottom, box.bottom),
+    left: Math.max(bounds.left, box.left), right: Math.min(bounds.right, box.right)
+  };
+};
+
+// A press that moved farther than this before its release is a drag (a pan of
+// the figure), not a click that opens or closes a popup of the Result.
+const CLICK_SLOP_PX = 4;
+/**
+ * @typedef {{ clientX: number, clientY: number }} PressPoint Where a press began.
+ * @param {PressPoint | null} press @param {PressPoint} release
+ */
+export const isClickAtPress = (press, release) =>
+  !press || Math.hypot(release.clientX - press.clientX, release.clientY - press.clientY) <= CLICK_SLOP_PX;
+
 const clamp = (/** @type {number} */ value, /** @type {number} */ min, /** @type {number} */ max) => (
   Math.min(Math.max(value, min), Math.max(min, max))
 );
