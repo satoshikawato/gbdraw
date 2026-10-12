@@ -5,7 +5,7 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -184,6 +184,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   expect((await definitionLines(page)).filter((line) => line.kind === 'replicon')).toEqual([]);
   expect((await definitionLines(page)).filter((line) => line.kind === 'subtitle')).toMatchObject([{ text: 'p1' }]);
   // An explicit clear returns to the file default, including after another load.
+  await openLinearFileCards(page);
   await page.getByLabel('Default subtitle for file 1').fill('File default');
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -1545,6 +1546,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   expect(await page.evaluate(() => window.__GBDRAW_AUTOMATIC_RELOAD_RUN__.error)).toBe('');
   expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(1);
+  await openLinearFileCards(page);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(1);
 
@@ -3611,6 +3613,7 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
     .map((entry) => entry.row))).toEqual([1, 1, 2, 2, 3]);
   await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).click();
   await expect(controls).toHaveCount(5);
+  await openLinearFileCards(page);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
   await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(2);
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });

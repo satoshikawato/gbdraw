@@ -804,10 +804,10 @@ export const createAppSetup = () => {
     const names = chosenFileNames([source.sequence.gb, source.sequence.gff, source.sequence.fasta]);
     return names.length ? names.join(' + ') : `File ${linearSourceGroups.value.indexOf(source) + 1}`;
   };
-  /** The names of the files a File card shows for the chosen input type, in the order of its uploaders. @param {LinearSourceGroup} source */
-  const linearSourceFileNames = (source) => chosenFileNames(
+  /** The names of the files a File card shows for the chosen input type, as its folded line names them. @param {LinearSourceGroup} source */
+  const linearCardFileNames = (source) => chosenFileNames(
     lInputType.value === 'gff' ? [source.sequence.gff, source.sequence.fasta] : [source.sequence.gb]
-  );
+  ).join(' + ');
   // A File card folds to its header line. The disclosure reports every change
   // of its own state: the user's press, and a path that opened the card to
   // show a setting inside it.
@@ -6602,7 +6602,7 @@ export const createAppSetup = () => {
     clearLinearSourceDepthFile,
     linearSeqs,
     linearSourceGroups,
-    linearSourceFileNames,
+    linearCardFileNames,
     isLinearSourceFolded,
     syncLinearSourceFold,
     linearSourceInspectionFailed,

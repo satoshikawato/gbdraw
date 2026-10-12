@@ -362,13 +362,14 @@ for (const mode of ['circular', 'linear']) {
     }
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = true; });
     await openAllDetails(page);
-    const enabled = await page.evaluate(({ selectors, names }) => Array
+    const enabledControls = () => page.evaluate(({ selectors, names }) => Array
       .from(document.querySelectorAll('.settings-pane :is(input, select, textarea, button)'))
       .filter((control) => control.checkVisibility() && !control.closest('.help-tip')
         && !control.disabled && control.getAttribute('aria-disabled') !== 'true')
       .map((control) => ({ control, name: control.getAttribute('aria-label') || control.textContent.trim() }))
       .filter(({ control, name }) => !selectors.some((selector) => control.matches(selector)) && !names.includes(name))
       .map(({ control, name }) => name || control.outerHTML.slice(0, 80)), BUSY_ENABLED_CONTROLS);
+    const enabled = await enabledControls();
     // A disabled field, and the "(auto)" value drawn behind it, must also look disabled
     // (.form-input fades its opacity).
     await page.waitForFunction(() => document.getAnimations()
@@ -378,8 +379,19 @@ for (const mode of ['circular', 'linear']) {
         '.settings-pane .auto-value-field:has(> .form-input:disabled) > .auto-value-placeholder'].join(', ')))
       .filter((element) => element.checkVisibility() && Number(getComputedStyle(element).opacity) >= 1)
       .map((element) => element.getAttribute('aria-label') || element.textContent.trim() || element.outerHTML.slice(0, 80)));
+    // A Linear File card still folds (its header line changes only what the panel shows),
+    // and the move buttons on a folded header line are disabled too.
+    let enabledFolded = [];
+    if (mode === 'linear') {
+      const fold = page.locator('[data-linear-source-fold]').first();
+      await fold.locator(':scope > summary').click();
+      await expect(fold).toHaveJSProperty('open', false);
+      await expect(fold.locator(':scope > summary button')).toHaveCount(2);
+      enabledFolded = await enabledControls();
+    }
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = false; });
     expect(enabled).toEqual([]);
+    expect(enabledFolded, 'enabled controls with a File card folded').toEqual([]);
     expect(undimmed, 'disabled fields that look enabled').toEqual([]);
   });
 }

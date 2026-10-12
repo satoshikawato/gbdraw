@@ -7,7 +7,7 @@
 // changes only what the pane shows: no setting, History step, or Result.
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 
 // Section key and title of every entry, per mode, in card order. Basic and
 // About & Citation have no entry.
@@ -156,6 +156,8 @@ test('an entry opens its section, brings it to the top, focuses its heading, and
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
   await loadSession(page, 'BGC0000708-BGC0000713.gbdraw-session.json');
+  // The test measures scroll distances over Input Genomes with its cards open.
+  await openLinearFileCards(page);
   await expect(index(page)).toBeVisible();
   const snapshot = () => page.evaluate(() => {
     const app = window.__GBDRAW_APP__;

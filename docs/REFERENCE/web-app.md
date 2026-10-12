@@ -97,6 +97,16 @@ comparison endpoints, and source-derived state as one undoable change. The only
 File cannot be deleted. Removing an empty final File is immediate; removing a
 populated final File asks for confirmation. Cancel and Escape change nothing.
 
+The header line of a Linear File card (**File N** and the move buttons) folds
+the card to that one line and opens it again: click it, or focus it and press
+Enter or Space. A folded card shows its file name between **File N** and the
+move buttons (both names for GFF3 + FASTA, "No file" for an empty card), in red
+with a warning icon when the file could not be read, and **Gencode required**
+when a record needs a translation table. After **Load Session** or **Load
+example** the cards that hold a file are folded; a card you add stays open, and
+choosing a file does not fold it. Which cards are folded is not saved in a
+Session and is not an Undo step.
+
 Replacing a File with one that holds several records expands it into one row
 per record. The new rows keep only File-level values (the File, its Depth TSV,
 and the file defaults); the crop, reverse complement, **Definition**, and

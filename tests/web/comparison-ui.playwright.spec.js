@@ -170,7 +170,7 @@ test('Phase 1 keeps secondary controls quiet until they are useful', { tag: '@pr
 
   const typography = await page.evaluate(() => {
     const secondary = document.querySelector('details[data-linear-record-options] > summary');
-    const helper = document.querySelector('[data-linear-source-card] > [data-linear-record-names] span');
+    const helper = document.querySelector('[data-linear-source-card] > details > [data-linear-record-names] span');
     const add = document.querySelector('[data-linear-file-add]');
     const fileActions = document.querySelector('.app-file-actions');
     return {

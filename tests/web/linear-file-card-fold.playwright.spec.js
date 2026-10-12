@@ -389,7 +389,8 @@ test('the folded line names both files of a GFF3 + FASTA card, cuts a long name,
   await pair.locator('input[type="file"]').nth(1).setInputFiles({ name: 'genome.fasta', mimeType: 'text/plain', buffer: Buffer.from('not a fasta\n') });
   await expect(pair.locator('.upload-zone.failed')).toHaveCount(2, { timeout: 120_000 });
   await header(pair).click();
-  await expect(chips(pair)).toHaveText(['genome.gff3', 'genome.fasta']);
+  await expect(chips(pair)).toHaveText(['genome.gff3 + genome.fasta']);
+  await expect(chips(pair)).toHaveAttribute('title', 'genome.gff3 + genome.fasta');
   await expect(header(pair)).toHaveAttribute('aria-label', 'File 1: genome.gff3 + genome.fasta');
   for (const chip of await chips(pair).all()) {
     await expect(chip).toHaveClass(/failed/);
@@ -422,7 +423,10 @@ test('a folded card that TLOSATX cannot search says Gencode required, as its ope
   expect(await header(card).evaluate((summary) => document.getElementById(summary.getAttribute('aria-describedby'))?.textContent))
     .toBe('Gencode required');
   await expect(header(cards(page).nth(1))).not.toContainText('Gencode required');
-  expect((await foldState(page))[0].height, 'still one line').toBeLessThanOrEqual(40);
+  // The mark is whole: beside the name where the line has the room, else on a second line.
+  expect(await mark.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  expect(await chips(card).evaluate((chip) => chip.getBoundingClientRect().width), 'the name keeps its room').toBeGreaterThan(90);
+  expect((await foldState(page))[0].height).toBeLessThanOrEqual(56);
   // The open card says it on its record options, from the same predicate, and the header line no longer does.
   await header(card).click();
   await expect(mark).toBeHidden();

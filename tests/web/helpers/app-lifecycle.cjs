@@ -283,6 +283,13 @@ const openApp = async (
   return assertAppShellReady(page, { waitForPalette, checkErrors });
 };
 
+// A loaded Session shows the Linear File cards that hold a file folded to
+// their header line. A case that acts inside the cards after a load opens
+// them first; `reveal` opens the card around one locator.
+const openLinearFileCards = (page) => page.evaluate(() => {
+  document.querySelectorAll('[data-linear-source-fold]').forEach((card) => { card.open = true; });
+});
+
 // Enter toggles a summary wherever its help-tip button sits; a click at the
 // summary center can land on that button and leave the section closed.
 const reveal = async (locator) => {
@@ -618,6 +625,7 @@ module.exports = {
   generateAndWaitForResult,
   getDiagramWorkerActivity,
   observeNonEditOperation,
+  openLinearFileCards,
   openApp,
   reveal,
   snapshotUserOwnedState,

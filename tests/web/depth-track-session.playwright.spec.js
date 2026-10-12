@@ -11,6 +11,7 @@ const {
   generateAndWaitForResult,
   getDiagramWorkerActivity,
   openApp,
+  openLinearFileCards,
   reveal,
   waitForAppShell,
   expectSessionLoadedWithoutWarnings,
@@ -726,6 +727,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
     await expect.poll(() => page.evaluate(() => (
       window.__GBDRAW_APP__.mode === 'linear' && window.__GBDRAW_APP__.linearSeqs.length
     ))).toBe(2);
+    await openLinearFileCards(page);
   };
   const showDepthRows = async () => {
     const disclosure = page.locator('[data-linear-source-depth]').first();

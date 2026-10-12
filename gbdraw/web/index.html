@@ -1977,11 +1977,12 @@
                ready or failed look, the problems the card marks, the move buttons, the caret.
                An open card shows the same line without the names and the marks. */
             [data-linear-source-card]:has(> .linear-file-fold:not([open])) { padding-block: 6px; }
+            .linear-file-fold > summary { min-height: 1.25rem; }
             .linear-file-fold > summary::before { order: 1; }
             .linear-file-fold > summary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; border-radius: 4px; }
             .linear-file-fold-line { @apply flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1; flex: 1 1 0; }
             .linear-file-fold[open] > summary > .linear-file-fold-line > * { display: none; }
-            .linear-file-fold-names { @apply flex min-w-0 items-center gap-1; flex: 1 1 1.5rem; }
+            .linear-file-fold-names { @apply flex min-w-0 items-center; flex: 1 1 6rem; }
             .linear-file-chip { @apply inline-flex min-w-0 items-center gap-1 rounded-md border px-1.5 font-bold text-green-700; line-height: 18px; }
             /* One marker for settings that the next Generate applies. */
             .apply-note { @apply inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-px font-medium leading-4 text-slate-500; font-size: 11px; }
@@ -2423,23 +2424,22 @@
                             >
                                 <summary
                                     class="min-w-0 text-[10px] font-semibold text-slate-500"
-                                    :aria-label="`File ${sourceIndex + 1}: ${linearSourceFileNames(source).join(' + ') || 'no file'}`"
+                                    :aria-label="`File ${sourceIndex + 1}: ${linearCardFileNames(source) || 'no file'}`"
                                     :aria-describedby="linearSourceGencodeRequired(source) ? `linear-file-gencode-${source.uid}` : null"
                                 >
                                     <span class="shrink-0">File {{ sourceIndex + 1 }}</span>
                                     <span class="linear-file-fold-line">
                                         <span class="linear-file-fold-names">
                                             <span
-                                                v-for="(name, nameIndex) in linearSourceFileNames(source)"
-                                                :key="nameIndex"
+                                                v-if="linearCardFileNames(source)"
                                                 class="linear-file-chip"
                                                 :class="{ failed: linearSourceInspectionFailed(source) }"
-                                                :title="name"
+                                                :title="linearCardFileNames(source)"
                                             >
                                                 <i :class="linearSourceInspectionFailed(source) ? 'ph ph-warning-circle' : 'ph ph-check-circle'" aria-hidden="true"></i>
-                                                <span class="truncate">{{ name }}</span>
+                                                <span class="truncate">{{ linearCardFileNames(source) }}</span>
                                             </span>
-                                            <span v-if="!linearSourceFileNames(source).length" class="truncate font-normal">No file</span>
+                                            <span v-else class="truncate font-normal">No file</span>
                                         </span>
                                         <span v-if="linearSourceGencodeRequired(source)" :id="`linear-file-gencode-${source.uid}`" class="shrink-0 font-normal text-red-700">Gencode required</span>
                                     </span>
