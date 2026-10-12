@@ -1,40 +1,11 @@
 // @ts-check
 /** @import { SvgResultRoot } from './svg-result-ingestion.js' */
+import { DINUCLEOTIDE_SKEW_GROUPS, findTrackGroups } from './drawn-groups.js';
 
 const PAIRWISE_LEGEND_SELECTOR =
   '[data-gbdraw-role="comparison-legend"][data-gbdraw-orientation="h"], '
   + '[data-gbdraw-role="comparison-legend"][data-gbdraw-orientation="v"], '
   + '#pairwise_legend, #pairwise_legend_h, #pairwise_legend_v';
-
-/**
- * @param {ParentNode | null | undefined} svg
- * @param {unknown[]} baseIds Element ids; a group matches the id or `<id>_…`.
- * @param {unknown[]} [slotRenderers] Slot renderer names, tried before the base ids.
- * @returns {Element[]}
- */
-export const getGroupsByBaseIds = (svg, baseIds, slotRenderers = []) => {
-  if (!svg) return [];
-  /** @type {Set<Element>} */
-  const seen = new Set();
-  /** @type {Element[]} */
-  const groups = [];
-  /** @param {string} selector */
-  const addGroups = (selector) => {
-    svg.querySelectorAll(selector).forEach((group) => {
-      if (seen.has(group)) return;
-      seen.add(group);
-      groups.push(group);
-    });
-  };
-  (Array.isArray(slotRenderers) ? slotRenderers : []).forEach((renderer) => {
-    if (renderer) addGroups(`g[data-gbdraw-slot-renderer="${renderer}"]`);
-  });
-  if (groups.length > 0) return groups;
-  (Array.isArray(baseIds) ? baseIds : []).forEach((baseId) => {
-    if (baseId) addGroups(`g[id="${baseId}"], g[id^="${baseId}_"]`);
-  });
-  return groups;
-};
 
 /** @param {unknown} value */
 const parseTranslate = (value) => {
@@ -116,11 +87,7 @@ export const normalizeLegacyLegendEntryGroups = (svg) => {
  */
 export const ensureUniqueSkewClipPathIds = (svg) => {
   if (!svg) return false;
-  const skewGroups = getGroupsByBaseIds(
-    svg,
-    ['skew', 'gc_skew'],
-    ['dinucleotide_skew']
-  );
+  const skewGroups = findTrackGroups(svg, DINUCLEOTIDE_SKEW_GROUPS);
   if (skewGroups.length === 0) return false;
   let changed = false;
   const idCounts = new Map();

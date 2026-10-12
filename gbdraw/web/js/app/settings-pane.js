@@ -1,14 +1,15 @@
 // @ts-check
 // The settings pane: which display it shows (the stacked settings or the icon
 // rail), the entry docked beside the rail, the one way to bring a setting
-// into view, and the display the browser remembers. The transitions are in
+// into view, the one way to open a section by its key, and the display the
+// browser remembers. The transitions are in
 // services/settings-pane-state.js; templates and other owners call the
 // functions returned here and never assign the two refs.
 import { readSettingsPaneDisplay, writeSettingsPaneDisplay } from '../services/browser-preferences.js';
 import {
   closeDockedSettingsEntry, dockSettingsSection, reconcileSettingsPaneState, showSettingsRail, showSettingsStacked
 } from '../services/settings-pane-state.js';
-import { settingsScrollOwner, settingsView } from '../services/settings-sections.js';
+import { settingsEntryIn, settingsScrollOwner, settingsSectionElement, settingsView } from '../services/settings-sections.js';
 
 /** @import { DiagramMode, SettingsPaneDisplay, SettingsPaneRefs } from '../services/settings-pane-state.js' */
 /** @import { SettingsSectionKey } from '../services/settings-sections.js' */
@@ -22,6 +23,8 @@ const { computed, nextTick, onMounted, onUnmounted, ref, watch } = window.Vue;
  * @property {SettingsPaneDisplay} display
  * @property {SettingsSectionKey | null} docked The docked rail entry.
  * @property {boolean} switchable Whether the display can be switched here.
+ * @property {{ key: SettingsSectionKey, top: number } | null} revealed
+ *   The section last opened by its key, and where that left its top edge.
  */
 
 /**
@@ -33,14 +36,26 @@ const { computed, nextTick, onMounted, onUnmounted, ref, watch } = window.Vue;
  * @typedef {(target: HTMLElement, options?: { align?: 'start', focus?: HTMLElement }) => Promise<void>} RevealSetting
  */
 
+/**
+ * Opens the section of `key` in the shown mode (for a key of the other mode,
+ * the shown mode's section of the same title), brings its top to the top edge
+ * of the settings, and focuses its heading, or `focus` when one is given. The
+ * section index and a click on a drawn element of the Result both open a
+ * section this way. A key without a section in the shown mode opens nothing.
+ * @typedef {(key: SettingsSectionKey, focus?: HTMLElement | null) => Promise<void>} RevealSettingsSection
+ */
+
 /** @param {{ state: SettingsPaneRefs & { mode: { value: DiagramMode } } }} options */
 export const createSettingsPaneController = ({ state }) => {
   // The phone layout is read from the layout itself (the settings do not
   // scroll there), so its breakpoint stays in the stylesheet.
   /** @type {{ value: boolean }} */
   const phoneLayout = ref(false);
+  /** @type {{ value: SettingsPaneView['revealed'] }} */
+  const revealed = ref(null);
+  const settingsArea = () => document.querySelector('.settings-scroll');
   const readLayout = () => {
-    const area = document.querySelector('.settings-scroll');
+    const area = settingsArea();
     phoneLayout.value = Boolean(area && settingsScrollOwner(area) !== area);
   };
 
@@ -53,7 +68,8 @@ export const createSettingsPaneController = ({ state }) => {
     return {
       display: rail ? 'rail' : 'stacked',
       docked: rail ? state.settingsPaneDocked.value : null,
-      switchable: !phoneLayout.value
+      switchable: !phoneLayout.value,
+      revealed: revealed.value
     };
   });
 
@@ -89,6 +105,21 @@ export const createSettingsPaneController = ({ state }) => {
     focus.focus({ preventScroll: true });
   };
 
+  // The heading of a section is the summary of a card that is one disclosure,
+  // or the heading element that takes the focus (Input Genomes, Comparison).
+  /** @type {RevealSettingsSection} */
+  const revealSettingsSection = async (key, focus) => {
+    const area = settingsArea();
+    const entry = settingsEntryIn(state.mode.value, key);
+    const section = area && entry ? settingsSectionElement(area, entry) : null;
+    const heading = /** @type {HTMLElement | null | undefined} */ (
+      section?.querySelector(':scope > details:first-child > summary, :scope > [tabindex="-1"]'));
+    if (!entry || !section || !heading) return;
+    if (heading.parentElement instanceof HTMLDetailsElement) heading.parentElement.open = true;
+    await revealSetting(section, { align: 'start', focus: focus ?? heading });
+    revealed.value = { key: entry, top: section.getBoundingClientRect().top };
+  };
+
   // R10: a mode written by anything (the mode buttons, Undo, a loaded Session) reconciles the docked entry.
   watch(() => state.mode.value, (/** @type {DiagramMode} */ mode) => reconcileSettingsPaneState(state, mode), { flush: 'sync' });
   onMounted(() => {
@@ -97,5 +128,5 @@ export const createSettingsPaneController = ({ state }) => {
   });
   onUnmounted(() => window.removeEventListener('resize', readLayout));
 
-  return { settingsPane, showSettingsPaneRail, showSettingsPaneStacked, closeDockedSettings, revealSetting };
+  return { settingsPane, showSettingsPaneRail, showSettingsPaneStacked, closeDockedSettings, revealSetting, revealSettingsSection };
 };

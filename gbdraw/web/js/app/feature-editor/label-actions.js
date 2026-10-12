@@ -20,6 +20,7 @@ import { readFileText } from '../../services/file-content-cache.js';
 import { ownEntry } from '../../utils/own-entry.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
+import { LENGTH_BAR_ID, TICK_GROUPS, trackGroupSelector } from '../../services/drawn-groups.js';
 
 /**
  * A feature row of the displayed Result's catalog or of the extracted list.
@@ -52,10 +53,8 @@ export const EXCLUDED_GROUP_SELECTOR = [
   COMPARISON_LEGEND_SELECTOR,
   '#horizontal_legend',
   '#vertical_legend',
-  '#length_bar',
-  'g[data-gbdraw-slot-renderer="ticks"]',
-  'g[id="tick"]',
-  'g[id^="tick_"]'
+  `#${LENGTH_BAR_ID}`,
+  trackGroupSelector(TICK_GROUPS)
 ].join(', ');
 const EDITABLE_LABEL_SELECTOR = 'text[data-label-editable="true"]';
 const LABEL_BINDING_SCHEMA_ATTRIBUTE = 'data-gbdraw-label-binding-schema';

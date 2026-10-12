@@ -183,6 +183,7 @@
       "tests/web/joint-display-placement.playwright.spec.js",
       "tests/web/losat-display-pair-reuse.playwright.spec.js",
       "tests/web/record-display-discovery.playwright.spec.js",
+      "tests/web/result-element-settings.playwright.spec.js",
       "tests/web/specific-color-pattern-drafts.playwright.spec.js"
     ],
     [

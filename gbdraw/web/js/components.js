@@ -10,7 +10,7 @@ import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidan
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
-import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsView } from './services/settings-sections.js';
+import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { SettingApplicationId } from './services/setting-application.js' */
@@ -295,16 +295,17 @@ export const settingsSection = (element, { value }) => {
 // - Stacked: a row of icons. An entry opens its section, brings it to the top
 //   of the visible settings at once, and moves the focus to its heading; the
 //   marked entry (`aria-current`) is the last section whose top has reached
-//   the top edge of the visible settings, and an activated entry stays marked
-//   while its section stays where the activation left it, so a short last
-//   section keeps its mark. The switch to the rail ends the row.
+//   the top edge of the visible settings, and a section the pane opened (an
+//   activated entry, or a click on its drawn element in the Result) stays
+//   marked while it stays where that left it, so a short last section keeps
+//   its mark. The switch to the rail ends the row.
 // - Rail: a column of icons over short names, the switch back first. An entry
 //   docks its section beside the rail, opened and focused in the same way; the
 //   marked entry is the docked one, and the close button leaves the rail alone.
 //   A column too low for its entries scrolls: the docked entry and the focused
 //   one are brought into view.
-// An entry never closes a section and writes no setting. Both forms bring a
-// section into view through `reveal`, the pane's one way to show a setting.
+// An entry never closes a section and writes no setting. Both forms open a
+// section through `reveal`, the pane's one way to open a section by its key.
 // The text shown for a hovered or keyboard-focused button (the section title,
 // or the words of a switch or of the close button) is the index's own: each
 // button is named by its aria-label ("Go to <title>" for an entry; the
@@ -313,9 +314,9 @@ export const settingsSection = (element, { value }) => {
 // column scrolls, the text of a hovered entry goes and the text of the focused
 // entry follows it.
 /**
- * The pane's way to bring a section into view: its top at the top edge of the
- * settings, the focus on `focus`.
- * @typedef {(section: HTMLElement, options: { align: 'start', focus: HTMLElement }) => unknown} RevealSection
+ * The pane's way to open a section: open, its top at the top edge of the
+ * settings, the focus on its heading, or on `focus` when one is given.
+ * @typedef {(key: SettingsSectionKey, focus?: HTMLElement | null) => unknown} RevealSection
  */
 export const SettingsSectionIndex = {
   template: '#settings-section-index-template',
@@ -363,7 +364,7 @@ export const SettingsSectionIndex = {
 
     const area = () => /** @type {HTMLElement} */ (document.getElementById(props.controls));
     /** @param {SettingsSectionKey} key */
-    const sectionOf = (key) => /** @type {HTMLElement | null} */ (area().querySelector(`[data-settings-section="${key}"]`));
+    const sectionOf = (key) => settingsSectionElement(area(), key);
     /** @param {string} selector A button of the index. */
     const focusButton = (selector) => /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(selector))
       ?.focus({ preventScroll: true });
@@ -375,19 +376,16 @@ export const SettingsSectionIndex = {
       current.value = (reached.at(-1) ?? entries.value[0]).key;
     };
     // Opens a section and brings it to the top. The focus goes to its heading
-    // (the summary of a card that is one disclosure, or the heading element
-    // that takes the focus: Input Genomes, Comparison) unless `focus` names a
-    // button of the index.
+    // unless `focus` names a button of the index.
     /** @param {SettingsSectionKey} key @param {string} [focus] */
-    const bringToTop = async (key, focus) => {
-      const section = /** @type {HTMLElement} */ (sectionOf(key));
-      const heading = /** @type {HTMLElement} */ (section.querySelector(':scope > details:first-child > summary, :scope > [tabindex="-1"]'));
-      if (heading.parentElement instanceof HTMLDetailsElement) heading.parentElement.open = true;
-      await props.reveal(section, { align: 'start', focus: /** @type {HTMLElement} */ (focus ? root.value?.querySelector(focus) : heading) });
-      // A section without an entry in this form (About & Citation in the row) leaves the mark to the geometry.
-      held = entries.value.some((entry) => entry.key === key) ? { key, top: section.getBoundingClientRect().top } : null;
-      if (held) current.value = key; else mark();
-    };
+    const bringToTop = (key, focus) =>
+      props.reveal(key, focus ? /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(focus)) : null);
+    // A section the pane opened holds the mark. A section without an entry in
+    // this form (About & Citation in the row) leaves the mark to the geometry.
+    watch(() => props.view.revealed, (/** @type {SettingsPaneView['revealed']} */ revealed) => {
+      held = revealed && entries.value.some((entry) => entry.key === revealed.key) ? revealed : null;
+      if (held) current.value = held.key; else mark();
+    }, { flush: 'sync' });
     /** @param {SettingsSectionKey} key */
     const activate = (key) => {
       hideTip();
@@ -486,7 +484,8 @@ export const SettingsSectionIndex = {
     }));
     // A mode change may remove the entry whose text is shown, and the marked
     // section; so may a display that changes with the layout (the phone width).
-    watch(() => [props.mode, props.view.display], () => {
+    // Two sources: one getter that returns both would run on every change of the view.
+    watch([() => props.mode, () => props.view.display], () => {
       hideTip();
       held = null;
       nextTick(mark);
