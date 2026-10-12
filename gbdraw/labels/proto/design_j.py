@@ -18,7 +18,7 @@ along the stack, or the edge of its cone near the equator), so a label can alway
 is dropped and no leader has to turn sharply.
 Labels asked for inside the ring (`--labels both`, ctx.inner_items) are placed inside by the same rule; with
 `inside=1` an outside label moves inside when that shortens the total leader length (as in H).
-Options: clear 3, inside 1, cone 70, lgap 2.5, lpad 2.4, stub 1, edge 1, fl 12, cutmax 30, cutn 14, hide 0, tw 0.8, ray 1, plat 2 (see _Par).
+Options: clear 3, inside 1, cone 70, lgap 2.5, lpad 2.4, stub 1, edge 1, fl 12, cutmax 30, cutn 14, hide 0, tw 0.8, ray 1, plat 2, sym 1 (see _Par).
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ from ...core.text import calculate_bbox_dimensions
 from .common import Ctx, Item, emit, pack_ordered
 from .design_g import _seg_box_hit, _seg_cross_matrix
 
+EDGE_FR = (0.5, 0.2, 0.8)
 OFFS = np.array([0, 1, 2, 3, 4, 6, 8, 10, 13, 16, 20, 25, 30, 36, 44, 52, 62, 75, 90, 110, 135], dtype=float)
 LEAN = np.tan(np.radians([2, 5, 8, 11, 14, 17, 20, 24, 28, 33, 39, 46, 54, 62]))
 NEAR = [0.0, 1.0, 2.0, 4.0, 6.0, 9.0]
@@ -43,6 +44,32 @@ while PUSH[-1] < 4000.0:
 
 def _plen(pts) -> float:
     return sum(math.dist(p, q) for p, q in zip(pts, pts[1:]))
+
+
+def _sturn(pts, min_seg: float = 3.0) -> float:
+    """Signed total turn in degrees (positive: clockwise in image coordinates), pieces under 3 px dropped."""
+    pts = [p for k, p in enumerate(pts) if k == 0 or math.dist(p, pts[k - 1]) >= min_seg]
+    turn = 0.0
+    for a, b, c in zip(pts, pts[1:], pts[2:]):
+        u, v = (b[0] - a[0], b[1] - a[1]), (c[0] - b[0], c[1] - b[1])
+        nu, nv = math.hypot(*u), math.hypot(*v)
+        if nu >= min_seg and nv >= min_seg:
+            ang = math.degrees(math.acos(max(-1.0, min(1.0, (u[0] * v[0] + u[1] * v[1]) / (nu * nv)))))
+            turn += ang if u[0] * v[1] - u[1] * v[0] > 0 else -ang
+    return turn
+
+
+def _sturn_arr(anchor, stub, att) -> np.ndarray:
+    """Signed turn (degrees, positive clockwise in image coordinates) of the leaders anchor -> stub -> each row of att."""
+    u = (stub[0] - anchor[0], stub[1] - anchor[1])
+    vx, vy = att[:, 0] - stub[0], att[:, 1] - stub[1]
+    nv = np.hypot(vx, vy)
+    cosv = np.clip((u[0] * vx + u[1] * vy) / np.maximum(math.hypot(*u) * nv, 1e-9), -1.0, 1.0)
+    ang = np.degrees(np.arccos(cosv))
+    return np.where(nv < 3.0, 0.0, np.where(u[0] * vy - u[1] * vx > 0, ang, -ang))
+
+
+SYM_K = 0.5                                              # px per degree^2 of deviation from the wanted lean of a label of a symmetric fan
 
 
 def _turn(pts, min_seg: float = 3.0) -> float:
@@ -67,7 +94,9 @@ class _Par:
         self.lpad = min(ctx.opt("lpad", 2.4), self.lgap - 0.1)   # a leader passing another label's box (below lgap:
         #                                                  a label on its own exit ray never blocks a neighbour's ray)
         self.stub = ctx.opt("stub", 1.0)                 # elbow distance beyond the ring edge
-        self.edge = ctx.opt("edge", 1.0)                 # allowance for the feature outline stroke
+        self.edge = ctx.opt("fedge", 1.0)                # allowance for the feature outline stroke
+        self.eg = int(ctx.opt("edge", 1))                # 1: the leader may end anywhere on the perimeter of the label box (LP-D13)
+        self.back = ctx.opt("back", -1.0)                # px any point of the box may be nearer the ring than the leader end (edge=1); -1: half the text height
         self.fl = ctx.opt("fl", 12.0)                    # a label may sit towards the equator of its feature while a
         #                                                  spot within fl px of the ring exists there
         self.cutmax = math.radians(ctx.opt("cutmax", 30.0))   # the cut at a pole lies within this angle of the pole
@@ -75,8 +104,10 @@ class _Par:
         self.short = 2.5                                 # a run shorter than this has no direction
         self.tw = ctx.opt("tw", 0.8)                      # px of leader cost per degree of turn at the ring edge
         self.plat = ctx.opt("plat", 2.0)                 # px of leader cost a label may give up to make room for the labels after it
+        self.sym = int(ctx.opt("sym", 1))                # 1: a lopsided cluster of labels is shifted until its fan is symmetric
         self.ray = int(ctx.opt("ray", 1))                # 1: candidates exactly on the feature's own ray (straight leaders)
-        self.nostraight = 3.0                            # a run shorter than this does not turn (the metric drops it)
+        self.slide = int(ctx.opt("slide", 1))             # 1: a finished layout is slid toward the ring, leaders end where their line meets the box (LP-D14)
+        self.nostraight = 3.0                            # a run shorter than this does not turn (the metric drops pieces under 3 px)
         self.grid_out, self.grid_in = 80, 140
 
 
@@ -226,7 +257,7 @@ class _Lab:
         self.ray = (self.S, (self.S[0] + sx * hq * reach, self.S[1] + hy * reach))
         self._profile(geo, par)
 
-    def cands(self, yc, geo: _Geo, par: _Par):
+    def cands(self, yc, geo: _Geo, par: _Par, lean: float | None = None):
         """Candidates, shape (len(yc), n): near end q0, attach height ya, leader-to-text gap; and the nearest allowed q0."""
         yc = yc[:, None]
         y0, y1 = yc - 0.5 * self.h, yc + 0.5 * self.h
@@ -255,6 +286,41 @@ class _Lab:
             parts.append(np.where(run > 0, self.Sq + run * uq + gap, base))
             heights.append(np.where(run > 0, ya, near))
             gaps.append(np.where(run > 0, gap, par.lgap))
+        if par.eg:                                         # the leader ends on the top or the bottom edge, or at the point of the box nearest to the stub
+            lg = par.lgap
+            for uq, uy in [(self.nq, self.ny)] + self.edges:         # the feature's own ray, and the two edges of the cone
+                if abs(uy) < 1e-6:
+                    continue
+                for ye in (y0 - lg, y1 + lg):
+                    t = (ye - self.Sy) / uy
+                    eq = self.Sq + t * uq
+                    for f in EDGE_FR:
+                        parts.append(np.where(t > 0.5, eq - f * self.w, base))
+                        heights.append(np.where(t > 0.5, ye, near))
+                        gaps.append(np.where(t > 0.5, -f * self.w, par.lgap))
+            for q0 in [base + OFFS[None, :]] + [self.Sq - f * self.w + zero for f in EDGE_FR]:
+                aq = np.clip(self.Sq, q0 - lg, q0 + self.w + lg)
+                parts.append(q0 + zero)
+                heights.append(np.clip(self.Sy, y0 - lg, y1 + lg) + 0.0 * q0)
+                gaps.append(q0 - aq)
+        if lean is not None:                               # a symmetric fan: leaders that lean by `lean` degrees (image coordinates, clockwise > 0)
+            th = math.radians(self.sx * lean)
+            vq, vy = self.nq * math.cos(th) - self.ny * math.sin(th), self.nq * math.sin(th) + self.ny * math.cos(th)
+            if abs(vy) > 1e-6:
+                for fy in (0.0, 0.25, 0.5, 0.75, 1.0):
+                    ya = y0 + fy * self.h
+                    run = (ya - self.Sy) / vy
+                    parts.append(np.where(run > 0.5, self.Sq + run * vq + par.lgap, base))
+                    heights.append(np.where(run > 0.5, ya, near))
+                    gaps.append(np.full_like(base, par.lgap))
+                if par.eg:
+                    for ye in (y0 - par.lgap, y1 + par.lgap):
+                        t = (ye - self.Sy) / vy
+                        eq = self.Sq + t * vq
+                        for f in EDGE_FR:
+                            parts.append(np.where(t > 0.5, eq - f * self.w, base))
+                            heights.append(np.where(t > 0.5, ye, near))
+                            gaps.append(np.where(t > 0.5, -f * self.w, par.lgap))
         if par.ray:                                        # the leader exactly on the ray of the feature: one straight line
             lo, hi = 0.0 * yc, np.full_like(yc, np.inf)
             nq, ny = self.nq, self.ny
@@ -287,6 +353,9 @@ class _Lab:
         cost = ln + par.tw * np.where(ln < par.nostraight, 0.0, np.degrees(np.arccos(cosv)))
         ok = (dq * self.nq + dy * self.ny >= cone_cos * ln - 1e-9) | (ln < par.short)
         ok &= ~((self.Sq > aq + 1e-9) & (self.Sy > y0) & (self.Sy < y1))        # never through the label's own text
+        if par.eg:
+            lg = par.lgap
+            ok &= ~((self.Sq > q0 - lg) & (self.Sq < q0 + w + lg) & (self.Sy > y0 - lg) & (self.Sy < y1 + lg))   # the stub inside the grown box
         p = geo.padw
         nx, nyv = np.clip(0.0, q0 - p, q0 + w + p), np.clip(0.0, y0 - p, y1 + p)
         if self.shore == "out":
@@ -301,7 +370,15 @@ class _Lab:
         r0, r1 = np.abs(np.hypot(q0, y0) - ring), np.abs(np.hypot(q0, y1) - ring)
         near = np.where((d0 < d1) | ((d0 == d1) & (r0 <= r1)), r0, r1)
         far = np.minimum(np.abs(np.hypot(q0 + w, y0) - ring), np.abs(np.hypot(q0 + w, y1) - ring))
-        ok &= ~(far < near - 0.7)
+        if par.eg:                                         # LP-D13: no point of the box nearer the ring than the leader end by more than `back`
+            if self.shore == "out":
+                mn = np.hypot(np.clip(0.0, q0, q0 + w), np.clip(0.0, y0, y1)) - ring
+            else:
+                mn = ring - np.hypot(np.maximum(np.abs(q0), np.abs(q0 + w)), np.maximum(np.abs(y0), np.abs(y1)))
+            back = par.back if par.back >= 0 else 0.5 * h
+            ok &= (np.abs(np.hypot(aq, ya) - ring) - mn) <= back + 1e-9
+        else:
+            ok &= ~(far < near - 0.7)
         if geo.has[self.shore]:
             x0, x1 = (q0, q0 + w) if self.sx > 0 else (-(q0 + w), -q0)
             r = geo.padr
@@ -361,6 +438,18 @@ class _Placed:
         return self._arr
 
 
+class _View:
+    """_Placed without row k (the label being slid)."""
+
+    def __init__(self, pl: "_Placed", k: int):
+        self.pl, self.k = pl, k
+
+    def arrays(self):
+        pb, s0, s1 = self.pl.arrays()
+        keep = np.arange(len(pb)) != self.k
+        return pb[keep], s0[keep], s1[keep]
+
+
 class _Pending:
     """Exit rays of the labels of a shore that are not seated yet."""
 
@@ -415,16 +504,14 @@ class _Eng:
         bad = [k for k in range(n) if ys[k] < col[k].lo - 1e-6 or (k and ys[k] - ys[k - 1] < sep[k - 1] - 1e-6)]
         return ys, sep, bad
 
-    # ---- seat one label at y (or the first y further along its stack direction where it fits)
-    def try_at(self, L: _Lab, yy: float, pl: _Placed, pend: _Pending):
-        """The shortest leader at height yy that fits: ((box, attach point, yy, run), shortest run before the other
-        labels are looked at). (None, None) when the label has no spot at this height at all."""
+    def spots(self, L: _Lab, yy: float, want: float | None = None):
+        """The spots of this label at height yy with no other label placed: (q, cost, boxes, attach points, least cost) or None."""
         geo, par = self.geo, self.par
         y0, y1 = yy - 0.5 * L.h, yy + 0.5 * L.h
-        key = round(yy, 4)
-        if key not in L.memo:                              # the spots of this label at this height (no other label yet)
+        key = round(yy, 4) if want is None else (round(yy, 4), round(want, 2))
+        if key not in L.memo:
             ys = np.array([yy])
-            Q, YA, GA, _base = L.cands(ys, geo, par)
+            Q, YA, GA, _base = L.cands(ys, geo, par, want)
             ok, ln, _run = L.static(ys[:, None], Q, YA, GA, geo, par, par.cone_cos)
             idx = np.nonzero(ok[0])[0]
             if len(idx):
@@ -435,9 +522,18 @@ class _Eng:
                 L.memo[key] = (q, ln, boxes, att, float(ln.min()))
             else:
                 L.memo[key] = None
-        if L.memo[key] is None:
+        return L.memo[key]
+
+    # ---- seat one label at y (or the first y further along its stack direction where it fits)
+    def try_at(self, L: _Lab, yy: float, pl: _Placed, pend: _Pending, want: float | None = None):
+        """The shortest leader at height yy that fits: ((box, attach point, yy, run), shortest run before the other
+        labels are looked at). (None, None) when the label has no spot at this height at all."""
+        geo, par = self.geo, self.par
+        y0, y1 = yy - 0.5 * L.h, yy + 0.5 * L.h
+        memo = self.spots(L, yy, want)
+        if memo is None:
             return None, None
-        q, ln, boxes, att, alone = L.memo[key]
+        q, ln, boxes, att, alone = memo
         stub = np.broadcast_to(np.array(L.S, dtype=float), att.shape)
         good = np.ones(len(q), dtype=bool)
         lo, hi = min(L.Sy, y0) - par.lpad - 1.0, max(L.Sy, y1) + par.lpad + 1.0     # rows the boxes and leaders touch
@@ -473,7 +569,10 @@ class _Eng:
         if not good.any():
             return None, alone
         sel = np.nonzero(good)[0]
-        j = sel[int(np.argmin(ln[sel] + 1e-6 * np.abs(q[sel] - (L.Sq + par.lgap))))]
+        cost = ln[sel] + 1e-6 * np.abs(q[sel] - (L.Sq + par.lgap))
+        if want is not None:                              # a cluster being made symmetric: this label should lean by `want` degrees
+            cost = cost + SYM_K * (_sturn_arr(L.it.anchor, L.S, att[sel]) - want) ** 2
+        j = sel[int(np.argmin(cost))]
         return (tuple(float(v) for v in boxes[j]), (float(att[j][0]), float(att[j][1])), yy, float(ln[j])), alone
 
     def seat(self, L: _Lab, y: float, pl: _Placed, pend: _Pending, limit: float | None, tight: float | None):
@@ -553,6 +652,179 @@ class _Eng:
         q = L.Sq + self.par.lgap
         x0 = q if L.sx > 0 else -(q + L.w)
         return (x0, yy - 0.5 * L.h, x0 + L.w, yy + 0.5 * L.h), (L.sx * (q - self.par.lgap), yy - L.d * 0.5 * L.h), yy
+
+    # ---- symmetric fans (J2)
+    def symmetrize(self, recs: list, shore: str) -> tuple[list, dict]:
+        """A cluster is a chain of labels of one stack whose boxes touch (gap <= box gap + 3 px) with a leader that turns
+        at least 3 degrees. It is lopsided when |sum of signed turns| > half the sum of |turns| and the latter is at least
+        6 degrees. A lopsided cluster is shifted rigidly along its stack (heights of all its labels + delta), every label is
+        seated again at its shifted height, and the shift that balances the signed turns (largest turn not above the
+        old one) is kept. Everything else stays where it was."""
+        par = self.par
+        recs = list(recs)
+        info = {"clusters": 0, "lopsided": 0, "fixed": 0}
+        if not recs:
+            return recs, info
+        labs = [self.lab(r[0], shore, 1 if r[3] == "start" else -1) for r in recs]
+        pend = _Pending(labs)
+        for lb in labs:
+            pend.done(lb)
+        groups: dict = {}
+        for k, lb in enumerate(labs):
+            groups.setdefault((lb.sx, lb.upper), []).append(k)
+        chains = []
+        for ks in groups.values():
+            ks.sort(key=lambda k: recs[k][1][1])
+            cur = [ks[0]]
+            for k in ks[1:]:
+                if recs[k][1][1] - recs[cur[-1]][1][3] <= par.gap + 3.0:
+                    cur.append(k)
+                else:
+                    chains.append(cur)
+                    cur = [k]
+            chains.append(cur)
+        for chain in chains:
+            if len(chain) < 2:
+                continue
+            sturn = [_sturn(recs[k][2]) for k in chain]
+            if max(abs(v) for v in sturn) < 3.0:
+                continue
+            info["clusters"] += 1
+            tot, mag = sum(sturn), sum(abs(v) for v in sturn)
+            if not (abs(tot) > 0.5 * mag and mag >= 6.0):
+                continue
+            info["lopsided"] += 1
+            m = len(chain)
+            max0 = max(abs(v) for v in sturn)
+            len0 = sum(_plen(recs[k][2]) + par.tw * abs(v) for k, v in zip(chain, sturn))
+            yc = {k: 0.5 * (recs[k][1][1] + recs[k][1][3]) for k in chain}
+            span = recs[chain[-1]][1][3] - recs[chain[0]][1][1]
+            reach = min(0.4 * span + 8.0, 40.0) if m <= 8 else min(0.5 * span, 200.0)
+            stp = 4.0 if m <= 8 else reach / 8.0
+            tries = [0.0] + [v * x for x in np.arange(stp, reach + 0.1, stp) for v in (1.0, -1.0)]
+            big = max(range(m), key=lambda i: abs(sturn[i]))      # the end that carries the turn leans one way, the other end the other way
+            sgn = (1.0 if sturn[big] > 0 else -1.0) * (1.0 if big >= (m - 1) / 2 else -1.0)
+            cand = []
+            for amp in (0.5 * max0, max0):
+                ramp = []
+                for i in range(m):
+                    u = 2.0 * i / (m - 1) - 1.0                   # -1 .. 1 along the stack; the inner part stays straight
+                    ramp.append(sgn * amp * math.copysign(max(0.0, (abs(u) - 0.4) / 0.6), u))
+                for dl in tries:
+                    cost, okd = 0.0, True
+                    for i, k in enumerate(chain):
+                        mm = self.spots(labs[k], yc[k] + dl, ramp[i])
+                        if mm is None:
+                            okd = False
+                            break
+                        ang = _sturn_arr(recs[k][0].anchor, labs[k].S, mm[3])
+                        cost += float(np.min(mm[1] + SYM_K * (ang - ramp[i]) ** 2))
+                    if okd:
+                        cand.append((cost, dl, amp, ramp))
+            win = None
+            for _cost, dl, _amp, ramp in sorted(cand, key=lambda v: (v[0], abs(v[1])))[:(30 if m <= 8 else 10)]:
+                pl = _Placed()
+                for k in range(len(recs)):
+                    if k not in chain:
+                        pl.add(recs[k][1], labs[k].S, recs[k][2][-1])
+                new, fail = {}, False
+                for k in sorted(chain, key=lambda k: yc[k] * labs[k].d):
+                    res, _alone = self.try_at(labs[k], yc[k] + dl, pl, pend, ramp[chain.index(k)])
+                    if res is None:
+                        fail = True
+                        break
+                    box, att, _yy, _c = res
+                    pl.add(box, labs[k].S, att)
+                    new[k] = (box, [recs[k][0].anchor, labs[k].S, att])
+                if fail:
+                    continue
+                st = [_sturn(new[k][1]) for k in chain]
+                len1 = sum(_plen(new[k][1]) + par.tw * abs(v) for k, v in zip(chain, st))
+                mag1 = sum(abs(v) for v in st)
+                if abs(sum(st)) <= abs(tot) - 3.0 and max(abs(v) for v in st) <= max0 + 0.5 and len1 <= len0 + 6.0 * m:
+                    key = (round(abs(sum(st)) / max(mag1, 1.0), 1), len1)
+                    if win is None or key < win[0]:
+                        win = (key, new)
+            if win is not None:
+                for k in chain:
+                    it, _b, _p, align, tag = recs[k]
+                    recs[k] = (it, win[1][k][0], win[1][k][1], align, tag)
+                info["fixed"] += 1
+        return recs, info
+
+    # ---- slide toward the ring (LP-D14)
+    def slide(self, recs: list, shore: str) -> tuple[list, dict]:
+        """A leader that is straight, or leans, may end wherever its line first meets the grown box: every label of a finished
+        layout is seated again, alone, at its own height and at heights up to 26 px toward its equator (along its own line
+        toward the ring), with the same clearances as the seating (try_at); the new spot is kept when its leader is shorter
+        (cost = run + tw x turn, with a short run beside a corner counted as the turn it is, at least 0.5 px less), its turn
+        differs from the old one by at most 1 degree (a straight leader stays straight, the lean of a fan stays), and the
+        whole leader is at most 1.5 px longer."""
+        par = self.par
+        recs = list(recs)
+        info = {"tried": 0, "moved": 0, "saved_px": 0.0}
+        if not recs:
+            return recs, info
+        labs = [self.lab(r[0], shore, 1 if r[3] == "start" else -1) for r in recs]
+        pend = _Pending(labs)
+        for lb in labs:
+            pend.done(lb)
+
+        def build() -> _Placed:
+            pl = _Placed()
+            for k, r in enumerate(recs):
+                pl.add(r[1], labs[k].S, r[2][-1])
+            return pl
+
+        def lcost(L: _Lab, att) -> float:
+            vx, vy = att[0] - L.S[0], att[1] - L.S[1]
+            ln = math.hypot(vx, vy)
+            if ln < par.nostraight:
+                return ln
+            cosv = max(-1.0, min(1.0, (vx * L.nq * L.sx + vy * L.ny) / ln))
+            return ln + par.tw * math.degrees(math.acos(cosv))
+
+        for lb in self.cache.values():                     # in this pass a short run beside a box corner is a turn like any other
+            lb.memo.clear()
+        par.nostraight = 0.5
+        pl = build()
+        groups: dict = {}
+        for k, lb in enumerate(labs):
+            groups.setdefault((lb.sx, lb.upper), []).append(k)
+        for _round in range(2):
+            moved = 0
+            for ks in groups.values():
+                ks.sort(key=lambda k: 0.5 * (recs[k][1][1] + recs[k][1][3]) * labs[k].d)
+                for k in ks:
+                    L, (it, box, pts, align, tag) = labs[k], recs[k]
+                    cur = lcost(L, pts[-1])
+                    if math.dist(L.S, pts[-1]) < 3.5 and cur - math.dist(L.S, pts[-1]) < 1.0:
+                        continue                             # a stub on its own line: nothing to gain
+                    s_old = _sturn(pts)
+                    yc = 0.5 * (box[1] + box[3])
+                    view = _View(pl, k)
+                    best = None
+                    for step in (0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 11.0, 15.0, 20.0, 26.0):
+                        info["tried"] += 1
+                        res, _alone = self.try_at(L, yc - L.d * step, view, pend)
+                        if res is None or res[3] >= cur - 0.5 or (best is not None and res[3] >= best[0]):
+                            continue
+                        npts = [it.anchor, L.S, res[1]]
+                        if abs(_sturn(npts) - s_old) <= 1.0 and _plen(npts) <= _plen(pts) + 1.5:
+                            best = (res[3], res[0], npts)
+                    if best is not None:
+                        info["saved_px"] += _plen(pts) - _plen(best[2])
+                        recs[k] = (it, best[1], best[2], align, tag)
+                        pl = build()
+                        moved += 1
+                        info["moved"] += 1
+            if not moved:
+                break
+        par.nostraight = 3.0
+        for lb in self.cache.values():
+            lb.memo.clear()
+        info["saved_px"] = round(info["saved_px"], 1)
+        return recs, info
 
     # ---- outside shore
     def split(self, items: list[Item], cuts, far: bool = False):
@@ -783,6 +1055,13 @@ def place(items: list[Item], ctx: Ctx) -> list[dict]:
                 cuts_in = cuts
             if total(cur_out) + total(cur_in) < total(out_recs) - 1e-6:
                 out_recs, in_recs, cuts, stats, moves = cur_out, cur_in, cuts_in, cur_stats, len(sel_in)
+    sym_info = {}
+    if par.sym:
+        out_recs, sym_info["out"] = eng.symmetrize(out_recs, "out")
+        in_recs, sym_info["in"] = eng.symmetrize(in_recs, "in")
+    if par.slide:
+        out_recs, sym_info["slide_out"] = eng.slide(out_recs, "out")
+        in_recs, sym_info["slide_in"] = eng.slide(in_recs, "in")
     recs = out_recs + in_recs
     hide = bool(int(ctx.opt("hide", 0)))
     result = [emit(it, box, None if hide else pts, align=align, tag=tag) for it, box, pts, align, tag in recs]
@@ -793,6 +1072,6 @@ def place(items: list[Item], ctx: Ctx) -> list[dict]:
         inside=len(in_recs), outside=len(out_recs), asked_inside=len(inner_req), overflow=[i.text for i in overflow], moves=moves,
         total=round(sum(_plen(r[2]) for r in recs), 1), turn_sum=round(sum(_turn(r[2]) for r in recs), 1), R=round(geo.R, 2), B=round(geo.B, 2), Bb=round(geo.Bb, 2),
         A_in=round(geo.A_in, 2), zone_ok=geo.zone_ok, objects=geo.objects, raster=geo.has, tick_font=geo.tick_font,
-        cuts=[round(math.degrees(c), 1) for c in cuts] if cuts else None, stats=stats, check=_check(recs),
+        cuts=[round(math.degrees(c), 1) for c in cuts] if cuts else None, stats=stats, sym=sym_info, check=_check(recs),
     )
     return result
