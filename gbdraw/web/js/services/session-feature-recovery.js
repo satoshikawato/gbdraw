@@ -25,6 +25,43 @@ import {
 
 export { normalizeRenderedFeatureId } from './session-feature-metadata.js';
 
+/** @import { ExtractedFeature, ExtractFeatureMetadataOptions, LinearRegionSeq } from './feature-metadata-extraction.js' */
+/** @import { OrthogroupFeatureIndex } from './orthogroup-feature-metadata.js' */
+/** @import { RenderedFeatureIdentity, RenderedIdentityCollection } from './session-feature-metadata.js' */
+/** @import { SvgResultEntry } from './svg-result-ingestion.js' */
+
+/** @typedef {readonly (SvgResultEntry | null | undefined)[]} RecoveryResults The Results a Session holds. */
+/**
+ * What the recovery reads of a feature besides its identity keys.
+ * @typedef {{ qualifiers?: Record<string, unknown> | null, selector?: { qualifiers?: Record<string, unknown> | null } | null, [key: string]: unknown }} QualifiedFeatureSource
+ */
+/** @typedef {Map<string, unknown> | Record<string, unknown>} MigrationMaps Old key to new key, as a Map or a plain object. */
+/**
+ * The feature state of a Session: the recovered metadata and the edits keyed by feature id.
+ * @typedef {{
+ *   extractedFeatures?: ExtractedFeature[],
+ *   biologicalFeatures?: ExtractedFeature[],
+ *   featureRecordIds?: string[],
+ *   selectedFeatureRecordIdx?: number,
+ *   featureColorOverrides?: unknown,
+ *   [key: string]: unknown
+ * }} RecoveryFeatureState
+ */
+/** @typedef {{ featureStrokes?: { overrides?: unknown }, [key: string]: unknown }} RecoveryEditorState */
+/**
+ * The Session data the recovery reads; the loader builds it from the candidate drawing and the saved Results.
+ * @typedef {object} FeatureRecoverySnapshot
+ * @property {string} mode
+ * @property {string} cInputType
+ * @property {string} lInputType
+ * @property {{ c_gb?: File | null }} [files]
+ * @property {(LinearRegionSeq & { gb?: unknown })[]} [linearSeqs]
+ * @property {RecoveryResults} [results]
+ * @property {unknown} [selectedResultIndex]
+ * @property {RecoveryFeatureState} [featureState]
+ * @property {RecoveryEditorState} [editorState]
+ * @property {OrthogroupFeatureIndex | null} [orthogroupIndex]
+ */
 const MISSING_INPUTS_WARNING =
   'Feature metadata could not be recovered because the session does not include embedded GenBank inputs. Generate the diagram again or save a session with embedded inputs.';
 const UNSUPPORTED_INPUT_WARNING =
@@ -34,10 +71,15 @@ const EXTRACTION_FAILED_WARNING =
 const MIGRATION_SKIPPED_WARNING =
   'Feature metadata was recovered, but some old feature edits could not be matched to recovered feature IDs.';
 
+/** @param {unknown} value */
 const normalizeKey = (value) => String(value || '').trim();
 
 export const normalizeRecordIndex = normalizeFeatureRecordIndex;
 
+/**
+ * @param {Set<string>} ids
+ * @param {unknown} value
+ */
 const addNormalizedId = (ids, value) => {
   const normalized = normalizeRenderedFeatureId(value);
   if (normalized) ids.add(normalized);
@@ -45,8 +87,11 @@ const addNormalizedId = (ids, value) => {
 
 export const stableRecordKey = stableRenderedFeatureRecordKey;
 
+/** @param {RecoveryResults | null | undefined} results */
 export const collectRenderedFeatureIdsFromResults = (results) => {
+  /** @type {Set<string>[]} */
   const byResultIndex = [];
+  /** @type {RenderedIdentityCollection[]} */
   const identitiesByResultIndex = [];
   const allIds = new Set();
   const allIdentities = createRenderedIdentityCollection();
@@ -75,7 +120,9 @@ export const collectRenderedFeatureIdsFromResults = (results) => {
   };
 };
 
+/** @param {ExtractedFeature[] | null | undefined} features */
 const collectExactMetadataFeatureIds = (features) => {
+  /** @type {Set<string>} */
   const ids = new Set();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     addNormalizedId(ids, feature?.rendered_svg_id);
@@ -88,6 +135,7 @@ const collectExactMetadataFeatureIds = (features) => {
   return ids;
 };
 
+/** @param {ExtractedFeature | null | undefined} feature */
 export const featureStableCandidate = (feature) =>
   normalizeRenderedFeatureId(
     feature?.stable_svg_id ||
@@ -98,6 +146,7 @@ export const featureStableCandidate = (feature) =>
     feature?.svg_id
   );
 
+/** @param {ExtractedFeature | null | undefined} feature */
 export const featureRenderedCandidate = (feature) =>
   normalizeRenderedFeatureId(
     feature?.rendered_svg_id ||
@@ -106,11 +155,16 @@ export const featureRenderedCandidate = (feature) =>
     feature?.renderedFeatureSvgId
   );
 
+/** @param {ExtractedFeature | null | undefined} feature */
 export const featureRecordIndexCandidate = (feature) => {
   const status = nonnegativeIntegerAliasStatus(feature, RECORD_INDEX_KEYS);
   return status.valid && status.supplied ? status.value : null;
 };
 
+/**
+ * @param {ExtractedFeature | null | undefined} feature
+ * @param {RenderedFeatureIdentity | null | undefined} identity
+ */
 const featureAgreesWithRenderedIdentity = (feature, identity) => {
   if (!identity?.renderedId) return false;
   const stable = textAliasStatus(feature, STABLE_FEATURE_ID_KEYS);
@@ -136,7 +190,9 @@ const featureAgreesWithRenderedIdentity = (feature, identity) => {
   return true;
 };
 
+/** @param {ExtractedFeature[] | null | undefined} features */
 const collectAliasMetadataFeatureIds = (features) => {
+  /** @type {Set<string>} */
   const ids = new Set();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     addNormalizedId(ids, featureStableCandidate(feature));
@@ -144,6 +200,13 @@ const collectAliasMetadataFeatureIds = (features) => {
   return ids;
 };
 
+/**
+ * @param {{
+ *   results?: RecoveryResults | null,
+ *   selectedResultIndex?: unknown,
+ *   extractedFeatures?: ExtractedFeature[] | null
+ * }} input
+ */
 export const classifyFeatureMetadataState = ({
   results,
   selectedResultIndex,
@@ -202,9 +265,18 @@ export const classifyFeatureMetadataState = ({
   };
 };
 
+/** @param {ExtractedFeature | null | undefined} feature */
 const featureId = (feature) => normalizeKey(feature?.id);
+/** @param {ExtractedFeature | null | undefined} feature */
 const featureSvgId = (feature) => normalizeRenderedFeatureId(feature?.svg_id);
 
+/**
+ * @param {ExtractedFeature} feature
+ * @param {RenderedFeatureIdentity | null | undefined} identity
+ * @param {unknown} stableId
+ * @param {{ writeRenderedSvgIdToSvgId?: boolean }} [options]
+ * @returns {ExtractedFeature}
+ */
 const withRenderedFeatureIdentity = (
   feature,
   identity,
@@ -214,6 +286,7 @@ const withRenderedFeatureIdentity = (
   const renderedId = normalizeRenderedFeatureId(identity?.renderedId);
   if (!renderedId) return feature;
   const resolvedStableId = normalizeRenderedFeatureId(stableId || identity?.stableId);
+  /** @type {Record<string, unknown>} */
   const updates = {
     rendered_svg_id: renderedId,
     renderedSvgId: renderedId
@@ -227,6 +300,7 @@ const withRenderedFeatureIdentity = (
   return changed ? { ...feature, ...updates } : feature;
 };
 
+/** @param {ExtractedFeature} feature */
 const withoutRenderedFeatureIdentity = (feature) => {
   const renderedKeys = [
     'rendered_svg_id',
@@ -240,6 +314,10 @@ const withoutRenderedFeatureIdentity = (feature) => {
   return nextFeature;
 };
 
+/**
+ * @param {...unknown} values
+ * @returns {string}
+ */
 const firstPresentValue = (...values) => {
   for (const value of values) {
     if (Array.isArray(value)) {
@@ -253,6 +331,10 @@ const firstPresentValue = (...values) => {
   return '';
 };
 
+/**
+ * @param {QualifiedFeatureSource | null | undefined} feature
+ * @param {string} key
+ */
 const qualifierValues = (feature, key) => {
   const qualifiers = feature?.qualifiers && typeof feature.qualifiers === 'object' ? feature.qualifiers : {};
   const selectorQualifiers =
@@ -266,11 +348,13 @@ const qualifierValues = (feature, key) => {
   return normalizeKey(raw);
 };
 
+/** @param {ExtractedFeature | null | undefined} feature */
 const stableFeatureKey = (feature) => {
   const key = featureStableCandidate(feature);
   return key || '';
 };
 
+/** @param {ExtractedFeature | null | undefined} feature */
 const biologicalFeatureKey = (feature) => {
   const type = normalizeKey(feature?.type);
   const start = feature?.start;
@@ -291,8 +375,14 @@ const biologicalFeatureKey = (feature) => {
   });
 };
 
+/**
+ * @param {ExtractedFeature[] | null | undefined} features
+ * @param {(feature: ExtractedFeature) => string} keyFn
+ */
 const uniqueFeatureMap = (features, keyFn) => {
+  /** @type {Map<string, number>} */
   const counts = new Map();
+  /** @type {Map<string, ExtractedFeature>} */
   const items = new Map();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     const key = keyFn(feature);
@@ -300,6 +390,7 @@ const uniqueFeatureMap = (features, keyFn) => {
     counts.set(key, (counts.get(key) || 0) + 1);
     if (!items.has(key)) items.set(key, feature);
   });
+  /** @type {Map<string, ExtractedFeature | undefined>} */
   const unique = new Map();
   counts.forEach((count, key) => {
     if (count === 1) unique.set(key, items.get(key));
@@ -307,7 +398,9 @@ const uniqueFeatureMap = (features, keyFn) => {
   return unique;
 };
 
+/** @param {ExtractedFeature[]} features */
 const countFeatureStableCandidates = (features) => {
+  /** @type {Map<string, number>} */
   const counts = new Map();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     const stableId = featureStableCandidate(feature);
@@ -317,6 +410,7 @@ const countFeatureStableCandidates = (features) => {
   return counts;
 };
 
+/** @param {RenderedIdentityCollection | null | undefined} renderedIdentities */
 const identityCollectionOrEmpty = (renderedIdentities) => {
   if (renderedIdentities?.byRenderedId instanceof Map && renderedIdentities?.renderedIds instanceof Set) {
     return renderedIdentities;
@@ -324,12 +418,24 @@ const identityCollectionOrEmpty = (renderedIdentities) => {
   return createRenderedIdentityCollection();
 };
 
+/**
+ * @param {Record<string, string>} target
+ * @param {unknown} fromKey
+ * @param {unknown} toKey
+ */
 const plainMapWithEntry = (target, fromKey, toKey) => {
   const from = normalizeRenderedFeatureId(fromKey);
   const to = normalizeRenderedFeatureId(toKey);
   if (from && to && from !== to) target[from] = to;
 };
 
+/**
+ * @param {{
+ *   features?: ExtractedFeature[] | null,
+ *   renderedIdentities?: RenderedIdentityCollection | null,
+ *   writeRenderedSvgIdToSvgId?: boolean
+ * }} input
+ */
 export const alignRecoveredFeatureIdsToRenderedSvg = ({
   features,
   renderedIdentities,
@@ -338,9 +444,13 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
   const sourceFeatures = Array.isArray(features) ? features : [];
   const rendered = identityCollectionOrEmpty(renderedIdentities);
   const stableFeatureCounts = countFeatureStableCandidates(sourceFeatures);
+  /** @type {ExtractedFeature[]} */
   const nextFeatures = [];
+  /** @type {Record<string, string>} */
   const svgIdMap = {};
+  /** @type {Record<string, string>} */
   const featureIdMap = {};
+  /** @type {{ index: number, status: string, fromSvgId: string, renderedId: string, stableId: string, recordIndex?: number | null, method: string }[]} */
   const resolutions = [];
   let exactCount = 0;
   let alignedCount = 0;
@@ -397,7 +507,7 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
     const recordKey = stableRecordKey(stableId, recordIndex);
     const recordMatches = recordKey ? rendered.byStableRecordKey.get(recordKey) || [] : [];
     const stableMatches = stableId ? rendered.byStableId.get(stableId) || [] : [];
-    /** @type {Record<string, any> | null} */
+    /** @type {RenderedFeatureIdentity | null} */
     let match = null;
     let method = '';
 
@@ -469,7 +579,9 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
   };
 };
 
+/** @param {unknown} source */
 const normalizeMigrationMap = (source) => {
+  /** @type {Record<string, string>} */
   const normalized = {};
   if (source instanceof Map) {
     source.forEach((value, key) => {
@@ -488,6 +600,14 @@ const normalizeMigrationMap = (source) => {
   return normalized;
 };
 
+/**
+ * @param {{
+ *   previousFeatures?: ExtractedFeature[] | null,
+ *   recoveredFeatures?: ExtractedFeature[] | null,
+ *   featureIdMap?: MigrationMaps | null,
+ *   svgIdMap?: MigrationMaps | null
+ * }} input
+ */
 export const buildFeatureOverrideMigration = ({
   previousFeatures,
   recoveredFeatures,
@@ -499,6 +619,10 @@ export const buildFeatureOverrideMigration = ({
   const mappedOldFeatures = new Set();
   const mappedNewFeatures = new Set();
 
+  /**
+   * @param {ExtractedFeature | undefined} oldFeature
+   * @param {ExtractedFeature | undefined} newFeature
+   */
   const addFeatureMapping = (oldFeature, newFeature) => {
     if (!oldFeature || !newFeature || mappedOldFeatures.has(oldFeature) || mappedNewFeatures.has(newFeature)) return;
     mappedOldFeatures.add(oldFeature);
@@ -512,6 +636,7 @@ export const buildFeatureOverrideMigration = ({
     if (oldSvgId && newSvgId && !Object.prototype.hasOwnProperty.call(svgIdMap, oldSvgId)) svgIdMap[oldSvgId] = newSvgId;
   };
 
+  /** @param {(feature: ExtractedFeature) => string} keyFn */
   const addUniqueMatches = (keyFn) => {
     const oldByKey = uniqueFeatureMap(previousFeatures, keyFn);
     const newByKey = uniqueFeatureMap(recoveredFeatures, keyFn);
@@ -532,8 +657,11 @@ export const buildFeatureOverrideMigration = ({
   };
 };
 
+/** @param {ExtractedFeature[] | null | undefined} features */
 const recoveredKeySets = (features) => {
+  /** @type {Set<string>} */
   const featureIds = new Set();
+  /** @type {Set<string>} */
   const svgIds = new Set();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     const id = featureId(feature);
@@ -545,6 +673,10 @@ const recoveredKeySets = (features) => {
   return { featureIds, svgIds, all };
 };
 
+/**
+ * @param {MigrationMaps | null | undefined} mapLike
+ * @param {unknown} key
+ */
 const lookupMapValue = (mapLike, key) => {
   const normalized = normalizeKey(key);
   if (!normalized) return '';
@@ -553,7 +685,14 @@ const lookupMapValue = (mapLike, key) => {
   return '';
 };
 
+/**
+ * @param {unknown} source
+ * @param {ReadonlySet<string>} preserveKeys
+ * @param {MigrationMaps[]} mappingLookups
+ * @param {{ count: number }} skipped
+ */
 const rewriteOverrideMap = (source, preserveKeys, mappingLookups, skipped) => {
+  /** @type {Record<string, unknown>} */
   const rewritten = {};
   if (!source || typeof source !== 'object' || Array.isArray(source)) return rewritten;
 
@@ -579,12 +718,21 @@ const rewriteOverrideMap = (source, preserveKeys, mappingLookups, skipped) => {
   return rewritten;
 };
 
+/**
+ * @param {{
+ *   featureState?: RecoveryFeatureState | null,
+ *   editorState?: RecoveryEditorState | null,
+ *   migration?: { featureIdMap?: MigrationMaps, svgIdMap?: MigrationMaps } | null
+ * }} input
+ */
 export const migrateFeatureOverrideState = ({
   featureState,
   editorState,
   migration
 }) => {
+  /** @type {RecoveryFeatureState} */
   const nextFeatureState = cloneJsonValue(featureState || {}, {});
+  /** @type {RecoveryEditorState} */
   const nextEditorState = cloneJsonValue(editorState || {}, {});
   const keySets = recoveredKeySets(nextFeatureState.extractedFeatures);
   const skipped = { count: 0 };
@@ -620,6 +768,7 @@ export const migrateFeatureOverrideState = ({
   };
 };
 
+/** @param {Partial<FeatureRecoverySnapshot>} [snapshot] */
 const recoverability = (snapshot = {}) => {
   const { mode, cInputType, lInputType } = snapshot;
   if (mode === 'circular' && cInputType === 'gb') {
@@ -637,6 +786,11 @@ const recoverability = (snapshot = {}) => {
   return { recoverable: false, reason: 'unsupported-input-type', warning: UNSUPPORTED_INPUT_WARNING };
 };
 
+/**
+ * @param {FeatureRecoverySnapshot} snapshot
+ * @param {{ extractedFeatures?: ExtractedFeature[], biologicalFeatures?: ExtractedFeature[],
+ *   featureRecordIds?: string[], selectedFeatureRecordIdx?: number }} payload What the extraction returned.
+ */
 const buildRecoveredFeatureState = (snapshot, payload) => ({
   ...(snapshot.featureState || {}),
   extractedFeatures: Array.isArray(payload.extractedFeatures) ? payload.extractedFeatures : [],
@@ -649,11 +803,18 @@ const buildRecoveredFeatureState = (snapshot, payload) => ({
     : 0
 });
 
+/**
+ * @param {FeatureRecoverySnapshot | null | undefined} snapshot
+ * @param {number} selectedResultIndex
+ */
 const selectedRenderedIdentities = (snapshot, selectedResultIndex) => {
   const rendered = collectRenderedFeatureIdsFromResults(snapshot?.results);
   return rendered.identitiesByResultIndex[selectedResultIndex] || createRenderedIdentityCollection();
 };
 
+/**
+ * @param {{ snapshot: FeatureRecoverySnapshot | null | undefined, featureState: RecoveryFeatureState | null | undefined, selectedResultIndex: number }} input
+ */
 const alignFeatureStateToRenderedSvg = ({ snapshot, featureState, selectedResultIndex }) => {
   const renderedIdentities = selectedRenderedIdentities(snapshot, selectedResultIndex);
   const alignment = alignRecoveredFeatureIdsToRenderedSvg({
@@ -692,9 +853,11 @@ const alignFeatureStateToRenderedSvg = ({ snapshot, featureState, selectedResult
   };
 };
 
+/** @param {{ state?: string } | null | undefined} validation */
 const isClickReadyValidation = (validation) =>
   validation?.state === 'ready' || validation?.state === 'not-needed';
 
+/** @param {RecoveryFeatureState | null | undefined} featureState */
 export const hasUsableBiologicalFeatureCatalog = (featureState) => {
   const features = featureState?.biologicalFeatures;
   if (!Array.isArray(features) || features.length === 0) return false;
@@ -704,6 +867,7 @@ export const hasUsableBiologicalFeatureCatalog = (featureState) => {
   ));
 };
 
+/** @param {{ featureIdMap?: MigrationMaps, svgIdMap?: MigrationMaps } | null | undefined} migration */
 const hasMigrationEntries = (migration) =>
   Object.keys(migration?.featureIdMap || {}).length > 0 ||
   Object.keys(migration?.svgIdMap || {}).length > 0;
@@ -711,11 +875,11 @@ const hasMigrationEntries = (migration) =>
 // Reads the snapshot's GenBank sources with its crops, record selectors, and
 // orientations, as the renderer drew them.
 /**
- * @param {any} snapshot
+ * @param {FeatureRecoverySnapshot} snapshot
  * @param {{
  *   featureVisibilityTsv?: string,
- *   enrichFeature?: (feature: any, recordIndex?: number) => any,
- *   readFeatureExtractionDataImpl: any,
+ *   enrichFeature?: ExtractFeatureMetadataOptions['enrichFeature'],
+ *   readFeatureExtractionDataImpl?: ExtractFeatureMetadataOptions['readFeatureExtractionDataImpl'],
  *   extractFeatureMetadataForPreviewImpl?: typeof extractFeatureMetadataForPreview
  * }} options
  */
@@ -755,6 +919,13 @@ const extractSnapshotFeatures = (snapshot, {
  * thrown: the Load fails and keeps the previous Session instead of dropping
  * the edits as unmatched (OV-39).
  */
+/**
+ * @param {{
+ *   snapshot: FeatureRecoverySnapshot,
+ *   readFeatureExtractionDataImpl?: ExtractFeatureMetadataOptions['readFeatureExtractionDataImpl'],
+ *   extractFeatureMetadataForPreviewImpl?: typeof extractFeatureMetadataForPreview
+ * }} input
+ */
 export const extractSessionSourceFeatures = async ({
   snapshot,
   readFeatureExtractionDataImpl,
@@ -773,6 +944,14 @@ export const extractSessionSourceFeatures = async ({
   }
 };
 
+/**
+ * @param {{
+ *   snapshot: FeatureRecoverySnapshot,
+ *   featureVisibilityTsv?: string,
+ *   readFeatureExtractionDataImpl?: ExtractFeatureMetadataOptions['readFeatureExtractionDataImpl'],
+ *   extractFeatureMetadataForPreviewImpl?: typeof extractFeatureMetadataForPreview
+ * }} input
+ */
 export const buildSessionFeatureRecoveryPlan = async ({
   snapshot,
   featureVisibilityTsv,

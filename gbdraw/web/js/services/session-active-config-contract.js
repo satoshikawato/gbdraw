@@ -225,7 +225,7 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
  * Throws when `storedConfig` is not a current-writer active configuration:
  * a Session 46 slice of `mode`, or (`scopedDrafts`) the flat draft of a
  * Session 41-44, whose record display and placement rows name their mode.
- * @param {{ mode: string, storedConfig: Record<string, any>, scopedDrafts?: boolean }} input
+ * @param {{ mode: string, storedConfig: Record<string, any> | null | undefined, scopedDrafts?: boolean }} input
  * @returns {void}
  */
 export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false }) => {

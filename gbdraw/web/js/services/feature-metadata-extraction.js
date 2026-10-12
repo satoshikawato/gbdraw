@@ -370,7 +370,7 @@ const extractionRegionSpec = (regionSpec) => {
  * @property {string | null} [featureVisibilityTablePath]
  * @property {string} [featureVisibilityTsv]
  * @property {string[] | null} [selectedFeatures]
- * @property {(feature: any, inputIndex?: number) => any} [enrichFeature]
+ * @property {(feature: ExtractedFeature, inputIndex?: number) => ExtractedFeature | null | undefined} [enrichFeature]
  * @property {typeof readFeatureExtractionData} [readFeatureExtractionDataImpl]
  * @property {{ label: string, ms: number, details: string }[]} [timingEntries]
  */
@@ -389,7 +389,7 @@ export const extractFeatureMetadataForPreview = async ({
   featureVisibilityTablePath = null,
   featureVisibilityTsv = '',
   selectedFeatures = null,
-  enrichFeature = /** @type {(feature: any, inputIndex?: number) => any} */ ((feature) => feature),
+  enrichFeature = /** @type {(feature: ExtractedFeature, inputIndex?: number) => ExtractedFeature | null | undefined} */ ((feature) => feature),
   readFeatureExtractionDataImpl = readFeatureExtractionData,
   timingEntries = []
 }) => {
