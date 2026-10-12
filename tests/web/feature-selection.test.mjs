@@ -147,8 +147,11 @@ for (const [name, value] of Object.entries({
   'data-gbdraw-pairwise-match-id': 'comparison1_match1',
   role: 'button', tabindex: '0', 'aria-label': 'Pairwise match 1'
 })) pairwise.setAttribute(name, value);
+// Hover and drag feedback that was removed leaves an empty inline style.
+const emptiedStyle = new FakeElement();
+emptiedStyle.setAttribute('style', '');
 const previewRoot = fakeSvg(
-  [searchMatch, cursorStyle, layoutTarget, pairwise],
+  [searchMatch, cursorStyle, layoutTarget, pairwise, emptiedStyle],
   'gbdraw-preview-feature-search-results-active gbdraw-preview-feature-search-updating keep-root'
 );
 stripTransientPreviewState(previewRoot);
@@ -156,6 +159,7 @@ assert.equal(layoutTarget.getAttribute('class'), 'keep-layout');
 assert.equal(layoutTarget.getAttribute('style'), null);
 assert.equal(searchMatch.getAttribute('class'), 'keep');
 assert.equal(cursorStyle.getAttribute('style'), 'opacity: 0.8');
+assert.equal(emptiedStyle.getAttribute('style'), null);
 assert.equal(previewRoot.getAttribute('class'), 'keep-root');
 assert.equal(pairwise.getAttribute('data-gbdraw-pairwise-match-id'), 'comparison1_match1');
 for (const name of ['role', 'tabindex', 'aria-label']) assert.equal(pairwise.getAttribute(name), null);

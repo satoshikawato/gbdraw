@@ -156,7 +156,11 @@ const dragFixture = () => {
 
   try {
     const { legend, state, svg } = dragFixture();
-    const actions = createLegendDragActions({ state });
+    const commits = [];
+    const actions = createLegendDragActions({
+      state,
+      commitActiveResultEdit: (reason) => Boolean(commits.push(reason))
+    });
     actions.refreshLegendDragAffordances();
     assert.equal(legend.style.cursor, 'grab');
     assert.equal(legend.getAttribute('class'), 'gbdraw-preview-layout-target');
@@ -184,6 +188,24 @@ const dragFixture = () => {
       'pointer frames and drag completion must reuse the composition binding from drag start'
     );
     assert.equal(legend.style.cursor, 'grab');
+    assert.equal(legend.getAttribute('transform'), 'translate(22,36) rotate(2)');
+    assert.deepEqual(commits, ['legend-drag'], 'a drag that moved the legend commits the Result once');
+
+    // OV-608: a press that ends where it began is no edit. It commits nothing
+    // and leaves the transform as it was written, also after the pointer left
+    // the press point and came back.
+    const press = { clientX: 50, clientY: 60, preventDefault: () => {}, shiftKey: false, stopPropagation: () => {} };
+    legend.setAttribute('transform', 'translate(22.0, 36) rotate(2)');
+    actions.startLegendDrag(press);
+    await actions.endLegendDrag(press);
+    actions.startLegendDrag(press);
+    actions.onLegendDrag({ clientX: 70, clientY: 90 });
+    flushFrames();
+    assert.equal(legend.getAttribute('transform'), 'translate(42,66) rotate(2)');
+    await actions.endLegendDrag(press);
+    assert.equal(legend.getAttribute('transform'), 'translate(22.0, 36) rotate(2)');
+    assert.deepEqual(commits, ['legend-drag']);
+    assert.equal(legend.style.cursor, 'grab');
     state.layoutRepositionMode.value = false;
     actions.refreshLegendDragAffordances();
     assert.equal(legend.style.cursor, 'help');
@@ -192,7 +214,7 @@ const dragFixture = () => {
     state.layoutRepositionMode.value = true;
     actions.startLegendDrag({ shiftKey: true, preventDefault: () => assert.fail('Shift must retain selection') });
     assert.equal(state.legendDragging.value, false);
-    assert.equal(legend.getAttribute('transform'), 'translate(22,36) rotate(2)');
+    assert.equal(legend.getAttribute('transform'), 'translate(22.0, 36) rotate(2)');
     assert.deepEqual(state.legendCurrentOffset, { x: 12, y: 16 });
   } finally {
     globalThis.requestAnimationFrame = originalRequestAnimationFrame;

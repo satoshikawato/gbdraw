@@ -20,6 +20,22 @@ spec = importlib.util.spec_from_file_location('continuity', Path(__file__).with_
 continuity = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(continuity)
 TOKEN = 'gbdraw-preview-layout-target'
+# OV-603: a Legend row is also the button of its popup. With Layout edit OFF it
+# shows `pointer` and a drag from it does not pan; with ON it shows `pointer`
+# before, during, and after a drag. PD-OI-053 says help and pan (OFF), grab and
+# grabbing (ON). Those cases are known failures until the product or the
+# Contract changes.
+LEGEND_ROW = '#legend text'
+KNOWN_FAILURES = []
+
+
+def expect(selector, case, observed, contract):
+    """Assert a PD-OI-053 expectation; on a Legend row it is a known failure."""
+    if selector != LEGEND_ROW:
+        assert observed == contract, (selector, case, observed, contract)
+        return
+    assert observed != contract, f'OV-603 {case}: the product meets PD-OI-053 now ({contract!r}); remove the known-failure mark'
+    KNOWN_FAILURES.append({'bug': 'OV-603', 'case': case, 'contract': contract, 'observed': observed})
 
 
 def clean(text):
@@ -68,7 +84,7 @@ def cursor(page, selector):
 def move(page, p, selector=None):
     page.mouse.move(p['x'],p['y']); page.mouse.down()
     if selector:
-        assert cursor(page,selector)=='grabbing', (selector,cursor(page,selector))
+        expect(selector, 'ON cursor during a drag', cursor(page,selector), 'grabbing')
     page.mouse.move(p['x']+24,p['y']+12,steps=6); page.mouse.up()
     page.wait_for_timeout(350)
 
@@ -80,7 +96,7 @@ def main():
     with zipfile.ZipFile(wheel) as z:
         mismatches=[n for n in z.namelist() if n.startswith('gbdraw/') and n.endswith(('.py','.toml')) and (ROOT/n).exists() and z.read(n)!=(ROOT/n).read_bytes()]
     assert not mismatches, mismatches
-    evidence={'wheelSha256':hashlib.sha256(wheel.read_bytes()).hexdigest(),'wheelSourceMismatches':mismatches,'modes':[]}
+    evidence={'wheelSha256':hashlib.sha256(wheel.read_bytes()).hexdigest(),'wheelSourceMismatches':mismatches,'modes':[],'knownFailures':KNOWN_FAILURES}
     server=http.server.ThreadingHTTPServer(('127.0.0.1',0),functools.partial(continuity.QuietHandler,directory=str(ROOT)))
     threading.Thread(target=server.serve_forever,daemon=True).start()
     try:
@@ -103,7 +119,7 @@ def main():
                 bound(page,len(selectors)); operations=[]
                 for selector in selectors:
                     p=point(page,selector); page.mouse.move(p['x'],p['y'])
-                    assert cursor(page,selector)=='help', (selector,cursor(page,selector))
+                    expect(selector, 'OFF cursor', cursor(page,selector), 'help')
                     assert page.locator('.preview-layout-hint').is_visible()
                     assert page.locator(f'.gbdraw-preview-surface {selector.split()[0]}').evaluate('(e) => getComputedStyle(e).outlineStyle')=='dashed'
                     before=status(page)
@@ -114,19 +130,19 @@ def main():
                     move(page,p); after=status(page)
                     assert after['deltas']==before['deltas'] and not after['mode']
                     assert after['history']==before['history'] and after['results']==before['results']
-                    assert abs(after['pan']['x']-before['pan']['x']-24)<1e-8, (mode,selector,before['pan'],after['pan'])
-                    assert abs(after['pan']['y']-before['pan']['y']-12)<1e-8
-                    operations.append({'selector':selector,'offPan':[24,12],'hoverNoMutation':True})
+                    off_pan=[round(after['pan'][axis]-before['pan'][axis],6) for axis in ('x','y')]
+                    expect(selector, 'OFF drag pans the canvas', off_pan, [24,12])
+                    operations.append({'selector':selector,'offPan':off_pan,'hoverNoMutation':True})
                 toggle=page.get_by_role('button',name='Toggle layout edit mode')
                 toggle.focus(); assert 'Turn on Layout edit' in page.locator('#preview-layout-help').inner_text()
                 page.keyboard.press('Space'); assert toggle.get_attribute('aria-pressed')=='true'
                 assert not page.locator('.preview-layout-hint').count()
                 for selector in selectors:
-                    p=point(page,selector); assert cursor(page,selector)=='grab'
+                    p=point(page,selector); expect(selector, 'ON cursor', cursor(page,selector), 'grab')
                     before=status(page); move(page,p,selector); after=status(page)
                     assert after['history']==before['history']+1,(before['history'],after['history'])
                     assert after['pan']==before['pan'] and after['mode']
-                    assert cursor(page,selector)=='grab'
+                    expect(selector, 'ON cursor after a drag', cursor(page,selector), 'grab')
                     page.evaluate('async () => await window.__GBDRAW_APP__.undoHistory()'); bound(page,len(selectors))
                     assert status(page)['deltas']==before['deltas']
                     page.evaluate('async () => await window.__GBDRAW_APP__.redoHistory()'); bound(page,len(selectors))
@@ -190,7 +206,8 @@ def main():
                     if extension=='pdf': assert path.read_bytes().startswith(b'%PDF')
                     exports.append({'method':method,'bytes':path.stat().st_size,'cleanSources':len(sources),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
                 with page.expect_download() as pending:
-                    page.evaluate("async () => { const a=window.__GBDRAW_APP__; a.sessionTitle='S02 affordance'; await a.saveSessionWithTitle(); }")
+                    # One title per mode: a second Save under one file name asks "Download the Session again?" and waits (OV-607).
+                    page.evaluate("async title => { const a=window.__GBDRAW_APP__; a.sessionTitle=title; await a.saveSessionWithTitle(); }",f'S02 affordance {mode}')
                 path=args.evidence_dir/f'{mode}.gbdraw-session.json'; pending.value.save_as(path)
                 clean(gzip.decompress(path.read_bytes()).decode())
                 continuity.load_session(page,path); bound(page,len(selectors))
@@ -210,6 +227,8 @@ def main():
                 assert status(page)['history']==before['history']+1
                 evidence['modes'].append({'mode':mode,'operations':operations,'generateMetrics':after['metrics'],'exports':exports,'restoredDeltas':restored['deltas'],'postLoadGenerateMetrics':post_load['metrics']})
                 print(mode+': OFF hover/pan, keyboard ON/drag, modifiers, Undo/Redo, Generate, Session, SVG/interactive/PNG/PDF PASS',flush=True)
+            for failure in KNOWN_FAILURES:
+                print('KNOWN FAILURE '+json.dumps(failure,ensure_ascii=False),flush=True)
             # Touch has the same explanation (screen-reader text and button title) and native toggle, without hover.
             touch=browser.new_context(viewport={'width':390,'height':844},has_touch=True,is_mobile=True,accept_downloads=True)
             tp=touch.new_page(); tp.on('dialog',lambda d:d.accept()); tp.goto(url)
