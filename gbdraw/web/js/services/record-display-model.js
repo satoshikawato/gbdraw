@@ -5,9 +5,43 @@
 // (app/record-display-options.js) edit it.
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 
+/** @import { RecordEntryInput } from './record-options.js' */
+/** @typedef {'circular' | 'linear'} RecordDisplayScope */
+/**
+ * @typedef {{
+ *   anchor: 'five-prime' | 'midpoint' | 'three-prime' | null,
+ *   biologicalFeatureId: string,
+ *   offsetBp: number,
+ *   orientForward: boolean,
+ *   placement: 'anchor' | 'feature-end',
+ *   recordKey: string,
+ *   schema: 1
+ * }} AnchorIntent The feature a record's display is anchored to.
+ */
+/**
+ * The display a record row asks for; a draft holds every field.
+ * @typedef {{
+ *   topologyOverride?: boolean | null,
+ *   startCoordinate?: number | null,
+ *   reverseComplementOverride?: boolean | null
+ * }} RecordDisplayRequested
+ */
+/**
+ * What the row's source says about the draft's record: the row's cropped and
+ * reverse state.
+ * @typedef {{ cropped?: unknown, reverse?: unknown }} RecordDisplayContext
+ */
+/**
+ * A discovered record row as the surface reads it.
+ * @typedef {RecordDisplayContext & {
+ *   recordId?: unknown, recordLength?: number | null, detectedTopology?: unknown
+ * }} RecordDisplayRowView
+ */
+
 // A record display row or draft names its source input and record. A drawing
 // holds the drafts of its own mode's inputs (PD-OI-086): `circular`, or a
 // Linear File card's UID.
+/** @param {{ sourceUid?: string, selector: string }} identity */
 export const recordDisplayKey = ({ sourceUid, selector }) => {
   if (!sourceUid || !/^#[1-9]\d*$/.test(selector)) {
     throw new Error('Record display requires a source UID and exact record selector.');
@@ -15,6 +49,13 @@ export const recordDisplayKey = ({ sourceUid, selector }) => {
   return JSON.stringify([sourceUid, selector]);
 };
 
+/**
+ * @template {RecordEntryInput} T
+ * @param {{
+ *   scope: RecordDisplayScope, sourceUid: string, source: unknown,
+ *   records: readonly T[] | null | undefined, selector?: unknown
+ * }} input
+ */
 export const buildRecordDisplayRows = ({ scope, sourceUid, source, records, selector = '' }) => {
   const selection = resolveDisambiguatedRecordSelection(records, selector);
   if (!['unspecified', 'resolved'].includes(selection.status)) {
@@ -26,6 +67,13 @@ export const buildRecordDisplayRows = ({ scope, sourceUid, source, records, sele
   });
 };
 
+/**
+ * @template {{ sourceUid: string, selector: string }} D
+ * @param {readonly D[]} drafts
+ * @param {readonly { sourceUid?: string, selector: string }[]} discoveredRows
+ * @param {readonly string[]} [replacedSourceUids]
+ * @returns {D[]}
+ */
 export const reconcileRecordDisplayDrafts = (drafts, discoveredRows, replacedSourceUids = []) => {
   // Pass all discovered rows, including inactive selectors. A source replacement
   // purges its drafts even when the existing source card keeps its UID.
@@ -62,6 +110,10 @@ export const bindRecordDisplayDrafts = (drafts, rows) => {
   return moved ? /** @type {Drafts} */ (bound) : drafts;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {number | null}
+ */
 export const parseRecordDisplayStart = (value) => {
   if (value === null || (typeof value === 'string' && !value.trim())) return null;
   if (!['string', 'number'].includes(typeof value)) throw new Error('Display start must be an integer.');
@@ -82,6 +134,11 @@ const ANCHOR_INTENT_KEYS = [
   'schema'
 ];
 
+/**
+ * The value is untrusted; every field read below is checked before it is trusted.
+ * @param {Partial<Record<keyof AnchorIntent, unknown>> | null | undefined} intent
+ * @returns {AnchorIntent | null}
+ */
 export const validateAnchorIntent = (intent) => {
   if (intent === null) return null;
   if (!intent || Object.keys(intent).sort().join(',') !== ANCHOR_INTENT_KEYS.join(',')
@@ -89,17 +146,21 @@ export const validateAnchorIntent = (intent) => {
     || typeof intent.recordKey !== 'string' || !intent.recordKey || intent.recordKey.includes('\0')
     || typeof intent.biologicalFeatureId !== 'string' || !intent.biologicalFeatureId
     || intent.biologicalFeatureId.includes('\0')
-    || !['anchor', 'feature-end'].includes(intent.placement)
+    || !(/** @type {readonly unknown[]} */ (['anchor', 'feature-end'])).includes(intent.placement)
     || (intent.placement === 'anchor'
-      ? !['five-prime', 'midpoint', 'three-prime'].includes(intent.anchor)
+      ? !(/** @type {readonly unknown[]} */ (['five-prime', 'midpoint', 'three-prime'])).includes(intent.anchor)
       : intent.anchor !== null)
     || !Number.isSafeInteger(intent.offsetBp)
     || typeof intent.orientForward !== 'boolean') {
     throw new Error('Invalid record display anchor intent.');
   }
-  return intent;
+  return /** @type {AnchorIntent} */ (intent); // every field was checked above
 };
 
+/**
+ * @param {unknown} drafts
+ * @returns {unknown}
+ */
 export const migrateLegacyRecordDisplayDrafts = (drafts) => {
   if (!Array.isArray(drafts)) return drafts;
   return drafts.map((draft) => {
@@ -140,12 +201,16 @@ export const validateRecordDisplayDrafts = (drafts, { scoped = false } = {}) => 
   return drafts;
 };
 
-/** @param {{ topologyOverride?: boolean | null, startCoordinate?: number | null }} [draft] the row's requested display */
+/**
+ * @param {RecordDisplayRowView} row
+ * @param {RecordDisplayRequested} [draft] the row's requested display
+ * @param {RecordDisplayContext} [context]
+ */
 export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse = false } = {}) => {
   const override = draft.topologyOverride ?? null;
   if (override !== null && typeof override !== 'boolean') throw new Error('Topology override must be boolean or null.');
   const effectiveCircular = override ?? row.detectedTopology === 'circular';
-  const lengthKnown = Number.isSafeInteger(row.recordLength) && row.recordLength > 0;
+  const lengthKnown = Number.isSafeInteger(row.recordLength) && /** @type {number} */ (row.recordLength) > 0;
   const startEnabled = effectiveCircular && lengthKnown && !cropped;
   const currentStart = reverse ? (lengthKnown ? row.recordLength : null) : 1;
   return {
@@ -161,20 +226,32 @@ export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse
   };
 };
 
+/**
+ * @param {RecordDisplayRowView} row
+ * @param {RecordDisplayRequested} [draft]
+ * @param {RecordDisplayContext} [context]
+ */
 export const requestedRecordDisplay = (row, draft = {}, context = {}) => {
   const surface = recordDisplaySurface(row, draft, context);
   const start = parseRecordDisplayStart(draft.startCoordinate ?? null);
-  if (surface.startEnabled && start !== null && start > row.recordLength) {
+  if (surface.startEnabled && start !== null && start > /** @type {number} */ (row.recordLength)) { // startEnabled holds only for a known length
     throw new Error(`Display start for ${row.recordId} must be between 1 and ${row.recordLength}.`);
   }
   return { isCircular: draft.topologyOverride ?? null,
     startCoordinate: surface.startEnabled ? start : null };
 };
 
+/**
+ * @param {{ region?: { reverseComplement?: unknown } | null, presentation?: { reverseComplement?: unknown } | null } | null | undefined} record
+ */
 export const canonicalRecordReverseComplement = (record) => Boolean(
   record?.region ? record.region.reverseComplement : record?.presentation?.reverseComplement
 );
 
+/**
+ * @param {{ region?: { reverseComplement?: boolean } | null, presentation: { reverseComplement?: boolean } }} record
+ * @param {boolean} reverseComplement
+ */
 export const writeCanonicalRecordReverseComplement = (record, reverseComplement) => {
   if (typeof reverseComplement !== 'boolean') throw new Error('Record orientation must be boolean.');
   if (record.region) {
@@ -183,6 +260,11 @@ export const writeCanonicalRecordReverseComplement = (record, reverseComplement)
   } else record.presentation.reverseComplement = reverseComplement;
 };
 
+/**
+ * @param {RecordDisplayRowView} row
+ * @param {RecordDisplayRequested} [draft]
+ * @param {RecordDisplayContext} [context]
+ */
 export const effectiveRecordReverseComplement = (row, draft = {}, context = {}) => {
   const inherited = Boolean(context.reverse ?? row.reverse);
   if (Boolean(context.cropped ?? row.cropped)) return inherited;
@@ -193,11 +275,20 @@ export const effectiveRecordReverseComplement = (row, draft = {}, context = {}) 
   return override ?? inherited;
 };
 
+/**
+ * @param {RecordDisplayRowView} row
+ * @param {RecordDisplayRequested} [draft]
+ * @param {RecordDisplayContext} [context]
+ */
 export const requestedRecordTransform = (row, draft = {}, context = {}) => ({
   display: requestedRecordDisplay(row, draft, context),
   reverseComplement: effectiveRecordReverseComplement(row, draft, context)
 });
 
+/**
+ * @param {unknown} value
+ * @returns {boolean | null}
+ */
 export const requireReverseComplementOverride = (value) => {
   if (value !== null && typeof value !== 'boolean') {
     throw new Error('Reverse-complement override must be boolean or null.');

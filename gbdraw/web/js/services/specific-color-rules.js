@@ -4,9 +4,20 @@ import { parseSpecificRules } from './file-imports.js';
 import { ruleMatcher } from './rule-matchers.js';
 /** @import { PythonLegendKey, PythonLegendRow, SwatchColor } from './legend-svg.js' */
 
+/**
+ * A rule as the normalization reads it: a table row, a stored rule, or a rule built from a Legend row.
+ * @typedef {Readonly<{ feat?: unknown, qual?: unknown, val?: unknown, color?: unknown, cap?: unknown, fromFile?: unknown }> | null | undefined} SpecificRuleInput
+ */
+
+/** @param {unknown} value */
 const normalizeText = (value) => String(value ?? '').trim();
+/** @param {unknown} value */
 const normalizeColor = (value) => String(resolveColorToHex(normalizeText(value)) || '').toLowerCase();
 
+/**
+ * @param {SpecificRuleInput} rule
+ * @param {{ fromFile?: boolean }} [options]
+ */
 export const normalizeSpecificRule = (rule, { fromFile = Boolean(rule?.fromFile) } = {}) => ({
   feat: normalizeText(rule?.feat),
   qual: normalizeText(rule?.qual),
@@ -36,6 +47,7 @@ export const ruleCaptionsAreNormalized = (rules) => {
   });
 };
 
+/** @param {SpecificRuleInput} rule */
 export const specificRuleIdentity = (rule) => {
   const normalized = normalizeSpecificRule(rule);
   return [
@@ -47,8 +59,13 @@ export const specificRuleIdentity = (rule) => {
   ];
 };
 
+/** @param {SpecificRuleInput} rule */
 const identityKey = (rule) => JSON.stringify(specificRuleIdentity(rule));
 
+/**
+ * @param {unknown} canonicalRules
+ * @param {unknown} storedRules
+ */
 export const applySpecificRuleProvenance = (canonicalRules, storedRules) => {
   const storedFileIdentities = new Set(
     (Array.isArray(storedRules) ? storedRules : [])
@@ -72,6 +89,7 @@ export const applySpecificRuleProvenance = (canonicalRules, storedRules) => {
 // row Generate draws for a rule.
 
 // Python's _legend_fill_identity: lower-case #rrggbb, or none.
+/** @param {unknown} value */
 const fillIdentity = (value) => {
   const color = normalizeColor(value);
   return /^#[0-9a-f]{3}$/.test(color) ? `#${[...color.slice(1)].map((char) => char + char).join('')}` : color;
@@ -83,11 +101,20 @@ const fillOf = (value) => /** @type {SwatchColor} */ (fillIdentity(value));
 // N-06 allocates no "<caption> [<hex>]" key.
 /** @param {string} caption @returns {PythonLegendKey} */
 const captionRowKey = (caption) => /** @type {PythonLegendKey} */ (caption);
+/** @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
 const allocatedRowBase = (rule) => `${rule.cap} [${fillIdentity(rule.color)}]`;
+/**
+ * @param {string} caption
+ * @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule
+ */
 const isAllocatedRow = (caption, rule) => {
   const base = allocatedRowBase(rule);
   return caption === base || (caption.startsWith(`${base} (`) && /^\d+\)$/.test(caption.slice(base.length + 2)));
 };
+/**
+ * @param {RendererLegendRow} row
+ * @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule
+ */
 const drawsRow = (row, rule) => row.color === fillIdentity(rule.color)
   && (row.caption === rule.cap || isAllocatedRow(row.caption, rule));
 
@@ -267,7 +294,7 @@ const uniqueLegendKey = (reserved, preferred) => {
 
 /**
  * Returns rule -> the key of the Legend row Generate draws for that rule.
- * @param {Partial<SpecificColorRule>[]} [rules]
+ * @param {Partial<SpecificColorRule>[] | null} [rules]
  * @param {RendererLegendRow[]} [rendererRows]
  * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => PythonLegendKey}
  */
@@ -279,6 +306,7 @@ export const createRuleLegendCaptions = (rules = [], rendererRows = []) => {
   const reserved = new Set([...rowColors.keys(), ...normalizedRules.map((rule) => rule.cap).filter(Boolean)]);
   /** @type {Map<string, PythonLegendKey>} */
   const allocated = new Map();
+  /** @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
   const keyOf = (rule) => JSON.stringify([rule.cap, fillIdentity(rule.color)]);
   normalizedRules
     .filter((rule) => {
@@ -322,8 +350,13 @@ export const ruleLegendCaptions = (context) => {
   };
 };
 
+/**
+ * @param {Partial<SpecificColorRule>[] | null | undefined} rules
+ * @param {RendererLegendRow[]} [rendererRows]
+ */
 export const buildLegendIntents = (rules, rendererRows = []) => {
   const legendCaption = createRuleLegendCaptions(rules, rendererRows);
+  /** @type {Map<PythonLegendKey, { caption: PythonLegendKey, color: string }>} */
   const byCaption = new Map();
   for (const rule of rules || []) {
     const normalized = normalizeSpecificRule(rule);
@@ -351,12 +384,18 @@ export const legendRowRules = (key, context) => {
   return rules.filter((rule) => legendCaption(rule) === target);
 };
 
+/** @typedef {Record<string, any> & { caption: string, color: string }} DiffEntry A Legend entry with its caption and color normalized; its other fields are kept. */
+/**
+ * @param {readonly { caption?: unknown, color?: unknown }[] | null | undefined} currentEntries
+ * @param {readonly { caption?: unknown, color?: unknown }[] | null | undefined} desiredIntents
+ */
 export const diffLegendIntents = (currentEntries, desiredIntents) => {
   const desired = new Map(
     (Array.isArray(desiredIntents) ? desiredIntents : [])
       .map((entry) => /** @type {[string, string]} */ ([normalizeText(entry?.caption), normalizeColor(entry?.color)]))
       .filter(([caption]) => caption)
   );
+  /** @type {Map<string, DiffEntry>} */
   const current = new Map();
   (Array.isArray(currentEntries) ? currentEntries : []).forEach((entry) => {
     const caption = normalizeText(entry?.caption);
@@ -364,7 +403,7 @@ export const diffLegendIntents = (currentEntries, desiredIntents) => {
     current.set(caption, { ...entry, caption, color: normalizeColor(entry?.color) });
   });
 
-  /** @type {Record<'add' | 'update' | 'remove' | 'unchanged', Array<Record<string, any> & { caption: string, color: string }>>} */
+  /** @type {Record<'add' | 'update' | 'remove' | 'unchanged', DiffEntry[]>} */
   const diff = { add: [], update: [], remove: [], unchanged: [] };
   current.forEach((entry, caption) => {
     if (!desired.has(caption)) {
@@ -372,7 +411,7 @@ export const diffLegendIntents = (currentEntries, desiredIntents) => {
     } else if (desired.get(caption) === entry.color) {
       diff.unchanged.push(entry);
     } else {
-      diff.update.push({ ...entry, color: desired.get(caption) });
+      diff.update.push({ ...entry, color: /** @type {string} */ (desired.get(caption)) }); // `desired.has(caption)` held above
     }
     desired.delete(caption);
   });
@@ -380,6 +419,10 @@ export const diffLegendIntents = (currentEntries, desiredIntents) => {
   return diff;
 };
 
+/**
+ * @param {string | null | undefined} text
+ * @param {readonly SpecificRuleInput[]} [currentRules]
+ */
 export const prepareSpecificColorImport = (text, currentRules = []) => {
   const { rules } = parseSpecificRules(text);
   const retainedRules = (Array.isArray(currentRules) ? currentRules : [])

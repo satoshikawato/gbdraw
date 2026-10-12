@@ -2,9 +2,24 @@
 import { stableFeatureOverrideKey } from './feature-catalog.js';
 import { pythonDrawnAttribute } from './result-paint-bases.js';
 
+/**
+ * A feature as the override identity reads it: a catalog row, a feature read from
+ * the displayed Result, or a legacy saved feature. Its identity is read from `id`,
+ * `legacy_id`, `svg_id`, `rendered_svg_id`, `rendered_feature_svg_id`, `stable_svg_id`,
+ * `stable_feature_id`, `stable_override_key`, `record_key`, `record_id` and the
+ * record index keys (each also camelCase), and from `selector.hash`.
+ * @typedef {Readonly<Record<string, unknown>> & { selector?: { hash?: unknown } | null }} FeatureIdentitySource
+ */
+
+/** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
+/**
+ * @param {unknown} object
+ * @param {string} key
+ */
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 
+/** @param {FeatureIdentitySource | null | undefined} feature */
 const stableFeatureId = (feature) => text(
   feature?.stable_feature_id
   ?? feature?.stableFeatureId
@@ -13,14 +28,17 @@ const stableFeatureId = (feature) => text(
   ?? feature?.selector?.hash
 );
 
+/** @param {FeatureIdentitySource | null | undefined} feature */
 const recordKeyForFeature = (feature) => text(
   feature?.record_key ?? feature?.recordKey
 );
 
+/** @param {FeatureIdentitySource | null | undefined} feature */
 const recordIdForFeature = (feature) => text(
   feature?.record_id ?? feature?.recordId
 );
 
+/** @param {FeatureIdentitySource | null | undefined} feature */
 const recordIndexForFeature = (feature) => {
   const value = feature?.fileIdx
     ?? feature?.file_idx
@@ -31,6 +49,11 @@ const recordIndexForFeature = (feature) => {
   return Number.isInteger(index) ? index : null;
 };
 
+/**
+ * @param {FeatureIdentitySource | null | undefined} feature
+ * @param {number} index
+ * @param {{ includePositional?: boolean }} [options]
+ */
 const legacyFeatureAliases = (
   feature,
   index,
@@ -56,6 +79,7 @@ const legacyFeatureAliases = (
   return Array.from(new Set(candidates.map(text).filter(Boolean)));
 };
 
+/** @param {FeatureIdentitySource | null | undefined} feature */
 export const featureOverrideKey = (feature) => (
   stableFeatureOverrideKey(feature)
   || text(feature?.stable_override_key)
@@ -63,11 +87,29 @@ export const featureOverrideKey = (feature) => (
   || text(feature?.svg_id ?? feature?.svgId)
 );
 
+/**
+ * @template T
+ * @param {Readonly<Record<string, T>> | null | undefined} overrides
+ * @param {FeatureIdentitySource | null | undefined} feature
+ * @returns {T | undefined}
+ */
 export const getFeatureOverride = (overrides, feature) => {
   const key = featureOverrideKey(feature);
-  return key && hasOwn(overrides, key) ? overrides[key] : undefined;
+  // `hasOwn` holds only for an object, so `overrides` is one when it indexes.
+  return key && hasOwn(overrides, key) ? /** @type {Readonly<Record<string, T>>} */ (overrides)[key] : undefined;
 };
 
+/**
+ * Re-keys `overrides` in place from legacy feature keys to override keys.
+ * @param {Record<string, unknown> | null | undefined} overrides
+ * @param {readonly FeatureIdentitySource[] | null | undefined} features
+ * @param {{
+ *   warn?: (message: string) => void,
+ *   legacyFeatures?: readonly FeatureIdentitySource[] | null,
+ *   legacyRecordKeys?: readonly unknown[] | Readonly<Record<number, unknown>> | null,
+ *   onDiagnostic?: ((diagnostics: Record<string, number | boolean>) => void) | null
+ * }} [options]
+ */
 export const migrateLegacyFeatureOverrides = (
   overrides,
   features,
@@ -86,9 +128,12 @@ export const migrateLegacyFeatureOverrides = (
   };
   if (!overrides || typeof overrides !== 'object') return result;
 
+  /** @type {Set<string>} */
   const targets = new Set();
+  /** @type {Map<string, Set<string>>} */
   const targetsByAlias = new Map();
   const currentFeatures = Array.isArray(features) ? features : [];
+  /** @type {Map<string, { target: string, stableId: string, recordKey: string, recordId: string }[]>} */
   const currentDescriptorsByStableId = new Map();
   const diagnostics = {
     currentDescriptorCount: 0,
@@ -102,10 +147,15 @@ export const migrateLegacyFeatureOverrides = (
   const reportDiagnostic = () => {
     if (typeof onDiagnostic === 'function') onDiagnostic({ ...diagnostics });
   };
+  /**
+   * @param {string} alias
+   * @param {string} target
+   */
   const addAliasTarget = (alias, target) => {
     if (!alias || !target || alias === target) return;
     if (!targetsByAlias.has(alias)) targetsByAlias.set(alias, new Set());
-    targetsByAlias.get(alias).add(target);
+    // The line above makes sure the alias has its set.
+    /** @type {Set<string>} */ (targetsByAlias.get(alias)).add(target);
   };
   currentFeatures.forEach((feature, index) => {
     const target = stableFeatureOverrideKey(feature);
@@ -125,7 +175,10 @@ export const migrateLegacyFeatureOverrides = (
       if (!currentDescriptorsByStableId.has(descriptor.stableId)) {
         currentDescriptorsByStableId.set(descriptor.stableId, []);
       }
-      currentDescriptorsByStableId.get(descriptor.stableId).push(descriptor);
+      // The lines above make sure the stable ID has its list.
+      /** @type {{ target: string, stableId: string, recordKey: string, recordId: string }[]} */ (
+        currentDescriptorsByStableId.get(descriptor.stableId)
+      ).push(descriptor);
     }
   });
   if (targets.size === 0) {

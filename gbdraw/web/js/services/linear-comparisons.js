@@ -22,15 +22,15 @@ import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection
  * The options of `createLinearComparisonEdge`; every field may be absent or
  * unnormalized.
  * @typedef {object} LinearComparisonEdgeInit
- * @property {string} [id]
- * @property {string} [queryUid]
- * @property {string} [subjectUid]
- * @property {boolean} [included]
- * @property {boolean} [fileActive]
- * @property {boolean} [losatFilenameActive]
- * @property {string} [source]
- * @property {any} [file]
- * @property {string} [losatFilename]
+ * @property {unknown} [id]
+ * @property {unknown} [queryUid]
+ * @property {unknown} [subjectUid]
+ * @property {unknown} [included]
+ * @property {unknown} [fileActive]
+ * @property {unknown} [losatFilenameActive]
+ * @property {unknown} [source]
+ * @property {unknown} [file]
+ * @property {unknown} [losatFilename]
  */
 /**
  * @typedef {object} LinearComparisonPlan
@@ -75,6 +75,19 @@ import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection
  * @property {boolean} hasUploadIntent
  */
 /**
+ * A record of a drawn Linear row.
+ * @template S
+ * @typedef {{ uid: string, index: number, sequence: S }} LinearRowRecord
+ */
+/**
+ * A record card as the comparison reads it; the card's other fields are kept.
+ * @typedef {{ uid?: unknown }} LinearComparisonSequence
+ */
+/**
+ * A saved record row of the drawing.
+ * @typedef {{ uid?: unknown, row?: unknown }} LinearComparisonLayoutRow
+ */
+/**
  * One record-pair search a Generate requests.
  * @typedef {object} LosatJobSpec
  * @property {string} edgeKey
@@ -104,10 +117,13 @@ const VALID_LOSAT_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
 let comparisonCounter = 0;
 
+/** @param {unknown} value */
 const cleanUid = (value) => String(value || '').trim();
 
+/** @param {unknown} value */
 export const plainTextLinearRecordLabel = (value) => {
   let label = String(value ?? '');
+  /** @type {string | undefined} */
   let previous;
   do {
     previous = label;
@@ -145,6 +161,10 @@ const createComparisonId = () => {
   return `linear-comparison-${Date.now()}-${comparisonCounter}`;
 };
 
+/**
+ * @param {unknown} queryUid
+ * @param {unknown} subjectUid
+ */
 export const linearComparisonEdgeKey = (queryUid, subjectUid) => (
   `${cleanUid(queryUid)}->${cleanUid(subjectUid)}`
 );
@@ -182,8 +202,12 @@ export const createLinearComparisonEdge = ({
   losatFilename: String(losatFilename || '')
 });
 
+/**
+ * @param {unknown} edge
+ * @param {number} index
+ */
 const normalizeEdge = (edge, index) => {
-  const source = edge && typeof edge === 'object' ? edge : {};
+  const source = /** @type {Readonly<Record<string, unknown>>} */ (edge && typeof edge === 'object' ? edge : {});
   return createLinearComparisonEdge({
     ...source,
     id: cleanUid(source.id) || `linear-comparison-draft-${index + 1}`,
@@ -194,12 +218,15 @@ const normalizeEdge = (edge, index) => {
 };
 
 /**
- * @param {Record<string, any>} [plan] unvalidated plan (a session, a draft, or a live plan)
+ * @param {unknown} [plan] unvalidated plan (a session, a draft, or a live plan)
  * @returns {LinearComparisonPlan}
  */
 export const normalizeLinearComparisonPlan = (plan = {}) => {
-  const source = plan && typeof plan === 'object' && !Array.isArray(plan) ? plan : {};
+  const source = /** @type {{ edges?: unknown, mode?: unknown, defaultSource?: unknown }} */ (
+    plan && typeof plan === 'object' && !Array.isArray(plan) ? plan : {}
+  );
   const edges = (Array.isArray(source.edges) ? source.edges : []).map(normalizeEdge);
+  /** @type {Set<string>} */
   const usedIds = new Set();
   edges.forEach((edge, index) => {
     const baseId = cleanUid(edge.id) || `linear-comparison-draft-${index + 1}`;
@@ -219,15 +246,27 @@ export const normalizeLinearComparisonPlan = (plan = {}) => {
   };
 };
 
+/**
+ * @param {unknown} plan
+ * @param {readonly unknown[]} [_sequences]
+ */
 export const reconcileLinearComparisonPlan = (plan, _sequences = []) => (
   normalizeLinearComparisonPlan(plan)
 );
 
+/**
+ * @param {unknown} value
+ * @param {number} fallback
+ */
 const positiveRow = (value, fallback) => {
   const row = Number(value);
   return Number.isInteger(row) && row > 0 ? row : fallback;
 };
 
+/**
+ * @param {readonly LinearComparisonSequence[] | null} [sequences]
+ * @param {readonly LinearComparisonLayoutRow[] | null} [layout]
+ */
 export const normalizeLinearComparisonRows = (sequences = [], layout = []) => {
   const storedRows = new Map(
     (Array.isArray(layout) ? layout : []).map((entry) => [
@@ -241,16 +280,23 @@ export const normalizeLinearComparisonRows = (sequences = [], layout = []) => {
   }));
 };
 
+/**
+ * @template {LinearComparisonSequence} S
+ * @param {readonly S[] | null} [sequences]
+ * @param {readonly LinearComparisonLayoutRow[] | null} [layout]
+ */
 const linearComparisonRowTopology = (sequences = [], layout = []) => {
   const sequenceList = Array.isArray(sequences) ? sequences : [];
   const normalizedRows = normalizeLinearComparisonRows(sequenceList, layout);
   const rowByUid = new Map(normalizedRows.map((entry) => [entry.uid, entry.row]));
+  /** @type {Map<number, LinearRowRecord<S>[]>} */
   const recordsByRow = new Map();
   sequenceList.forEach((sequence, index) => {
     const uid = cleanUid(sequence?.uid);
     const row = rowByUid.get(uid) || index + 1;
     if (!recordsByRow.has(row)) recordsByRow.set(row, []);
-    recordsByRow.get(row).push({ uid, index, sequence });
+    // The line above makes sure the row has its list.
+    /** @type {LinearRowRecord<S>[]} */ (recordsByRow.get(row)).push({ uid, index, sequence });
   });
   const orderedRows = [...recordsByRow.keys()].sort((left, right) => left - right);
   return {
@@ -261,12 +307,19 @@ const linearComparisonRowTopology = (sequences = [], layout = []) => {
   };
 };
 
+/**
+ * @param {readonly LinearComparisonSequence[] | null} [sequences]
+ * @param {readonly LinearComparisonLayoutRow[] | null} [layout]
+ * @param {boolean} [allPairs]
+ */
 export const adjacentRowPairs = (sequences = [], layout = [], allPairs = false) => {
   const { recordsByRow, orderedRows } = linearComparisonRowTopology(sequences, layout);
+  /** @type {[string, string][]} */
   const pairs = [];
   for (let index = 0; index < orderedRows.length - 1; index += 1) {
-    const upper = recordsByRow.get(orderedRows[index]);
-    const lower = recordsByRow.get(orderedRows[index + 1]);
+    // Every ordered row is a key of `recordsByRow` (linearComparisonRowTopology).
+    const upper = /** @type {LinearRowRecord<LinearComparisonSequence>[]} */ (recordsByRow.get(orderedRows[index]));
+    const lower = /** @type {LinearRowRecord<LinearComparisonSequence>[]} */ (recordsByRow.get(orderedRows[index + 1]));
     if (allPairs) {
       upper.forEach(({ uid: queryUid }) => {
         lower.forEach(({ uid: subjectUid }) => pairs.push([queryUid, subjectUid]));
@@ -306,7 +359,12 @@ export const canonicalGridDisplayPairs = (sequences, rows) => {
   };
 };
 
-/** @param {LinearComparisonEdge | null} [edge] */
+/**
+ * @param {string} code
+ * @param {string} message
+ * @param {LinearComparisonEdgeInit | null} [edge]
+ * @returns {LinearComparisonIssue}
+ */
 const validationIssue = (code, message, edge = null) => ({
   code,
   message,
@@ -315,7 +373,11 @@ const validationIssue = (code, message, edge = null) => ({
 });
 
 /**
- * @param {{ edges?: any[], sequences?: any[], layout?: any[] }} [options]
+ * @param {{
+ *   edges?: readonly (LinearComparisonEdgeInit | null | undefined)[] | null,
+ *   sequences?: readonly LinearComparisonSequence[] | null,
+ *   layout?: readonly LinearComparisonLayoutRow[] | null
+ * }} [options]
  */
 export const validateLinearComparisonEdges = ({
   edges = [],
@@ -325,7 +387,9 @@ export const validateLinearComparisonEdges = ({
   const sequenceList = Array.isArray(sequences) ? sequences : [];
   const validUids = new Set(sequenceList.map((sequence) => cleanUid(sequence?.uid)).filter(Boolean));
   const { rowByUid, rowPositionByNumber } = linearComparisonRowTopology(sequenceList, layout);
+  /** @type {Set<string>} */
   const seen = new Set();
+  /** @type {LinearComparisonIssue[]} */
   const issues = [];
 
   (Array.isArray(edges) ? edges : []).forEach((edge) => {
@@ -345,8 +409,9 @@ export const validateLinearComparisonEdges = ({
       issues.push(validationIssue('self', 'A comparison cannot connect a record to itself.', edge));
       return;
     }
-    const queryRow = rowByUid.get(queryUid);
-    const subjectRow = rowByUid.get(subjectUid);
+    // Both uids are valid here, and every valid uid has a row (linearComparisonRowTopology).
+    const queryRow = /** @type {number} */ (rowByUid.get(queryUid));
+    const subjectRow = /** @type {number} */ (rowByUid.get(subjectUid));
     if (queryRow === subjectRow) {
       issues.push(validationIssue('same-row', 'Comparisons must connect records in different rows.', edge));
     } else if (
@@ -369,6 +434,12 @@ export const validateLinearComparisonEdges = ({
   return issues;
 };
 
+/**
+ * @param {{
+ *   edge: LinearComparisonEdgeInit | null | undefined, queryUid: string, subjectUid: string,
+ *   queryIndex: number, subjectIndex: number, source: LinearComparisonSource, ordinal: number
+ * }} input
+ */
 const resolvedEdge = ({ edge, queryUid, subjectUid, queryIndex, subjectIndex, source, ordinal }) => Object.freeze({
   id: cleanUid(edge?.id) || `linear-derived-${linearComparisonEdgeKey(queryUid, subjectUid)}`,
   queryUid,
@@ -389,7 +460,7 @@ const resolvedEdge = ({ edge, queryUid, subjectUid, queryIndex, subjectIndex, so
 // comes back with it; a pair that names a record without a card stays an issue.
 /**
  * @template {{ uid?: unknown }} T
- * @param {Record<string, unknown>} plan
+ * @param {unknown} plan
  * @param {readonly T[]} sequences Every record card.
  * @param {Iterable<unknown> | null | undefined} recordsOff
  */
@@ -408,10 +479,10 @@ const drawnComparisonInputs = (plan, sequences, recordsOff) => {
  * The plan a Generate runs: its pairs join the drawn records, and every index
  * is a position in the drawn list (`drawnLinearSequences`).
  * @param {{
- *   plan?: Record<string, any>,
- *   sequences?: any[],
+ *   plan?: unknown,
+ *   sequences?: readonly LinearComparisonSequence[] | null,
  *   recordsOff?: Iterable<unknown>,
- *   layout?: any[],
+ *   layout?: readonly LinearComparisonLayoutRow[] | null,
  *   losatProgram?: string,
  *   blastpMode?: string
  * }} [options]
@@ -429,6 +500,7 @@ export const resolveLinearComparisonPlan = ({
     plan, Array.isArray(sequences) ? sequences : [], recordsOff
   );
   const indexByUid = new Map(sequenceList.map((sequence, index) => [cleanUid(sequence?.uid), index]));
+  /** @type {Map<string, LinearComparisonEdge>} */
   const draftByEdgeKey = new Map();
   normalized.edges.forEach((edge) => {
     const edgeKey = linearComparisonEdgeKey(edge.queryUid, edge.subjectUid);
@@ -439,6 +511,7 @@ export const resolveLinearComparisonPlan = ({
     : 'blastn';
   const normalizedBlastpMode = String(blastpMode || 'orthogroup').trim().toLowerCase();
 
+  /** @type {LinearComparisonEdge[]} */
   let activeDrafts = [];
   if (normalized.mode === LINEAR_COMPARISON_MODES.SELECTED) {
     activeDrafts = normalized.edges.filter((edge) => edge.included === true);
@@ -486,8 +559,9 @@ export const resolveLinearComparisonPlan = ({
     edge,
     queryUid: cleanUid(edge.queryUid),
     subjectUid: cleanUid(edge.subjectUid),
-    queryIndex: indexByUid.get(cleanUid(edge.queryUid)),
-    subjectIndex: indexByUid.get(cleanUid(edge.subjectUid)),
+    // A uid without a card is an issue, and no consumer reads the indexes of an invalid resolution.
+    queryIndex: /** @type {number} */ (indexByUid.get(cleanUid(edge.queryUid))),
+    subjectIndex: /** @type {number} */ (indexByUid.get(cleanUid(edge.subjectUid))),
     source: normalizeSource(edge.source),
     ordinal
   }));
@@ -540,23 +614,35 @@ export const missingUploadPairsToResolve = (resolution) => {
   }));
 };
 
+/** @param {LinearComparisonResolution | null | undefined} resolution */
 export const hasLinearComparisonIntent = (resolution) => Boolean(resolution?.hasComparisonIntent);
+/** @param {LinearComparisonResolution | null | undefined} resolution */
 export const hasActiveLinearLosatIntent = (resolution) => Boolean(resolution?.hasLosatIntent);
+/** @param {LinearComparisonResolution | null | undefined} resolution */
 export const hasActiveLinearUploadIntent = (resolution) => Boolean(resolution?.hasUploadIntent);
 
+/** @param {{ file?: unknown, losatFilename?: unknown } | null | undefined} edge */
 const hasRetainedPayload = (edge) => Boolean(
   edge?.file || String(edge?.losatFilename || '').trim()
 );
 
+/**
+ * @param {unknown} plan
+ * @param {{ edges?: readonly LinearComparisonResolvedEdge[] } | null | undefined} resolution
+ * @returns {LinearComparisonPlan}
+ */
 export const materializeResolvedEdgesAsSelectedPlan = (plan, resolution) => {
   const normalized = normalizeLinearComparisonPlan(plan);
   const existingById = new Map(normalized.edges.map((edge) => [edge.id, edge]));
+  /** @type {Map<string, LinearComparisonEdge>} */
   const existingByKey = new Map();
   normalized.edges.forEach((edge) => {
     const edgeKey = linearComparisonEdgeKey(edge.queryUid, edge.subjectUid);
     if (!existingByKey.has(edgeKey)) existingByKey.set(edgeKey, edge);
   });
+  /** @type {Set<string>} */
   const activeKeys = new Set();
+  /** @type {Set<string>} */
   const activeIds = new Set();
   const selectedEdges = (Array.isArray(resolution?.edges) ? resolution.edges : []).map((edge) => {
     activeKeys.add(edge.edgeKey);
@@ -593,8 +679,20 @@ const STRUCTURAL_PRESENTATION_ISSUES = new Set([
   'non-adjacent'
 ]);
 
+/**
+ * @param {number | undefined} upperRow
+ * @param {number | undefined} lowerRow
+ */
 const boundaryKey = (upperRow, lowerRow) => `${upperRow}->${lowerRow}`;
 
+/**
+ * A uid without a row looks up `undefined` in `rowPositionByNumber`, which has no such key.
+ * @param {{
+ *   queryUid: string, subjectUid: string, rowByUid: ReadonlyMap<string, number>,
+ *   rowPositionByNumber: ReadonlyMap<number | undefined, number>,
+ *   boundariesByKey: ReadonlyMap<string, LinearComparisonBoundary>
+ * }} input
+ */
 const pairBoundary = ({ queryUid, subjectUid, rowByUid, rowPositionByNumber, boundariesByKey }) => {
   const queryRow = rowByUid.get(queryUid);
   const subjectRow = rowByUid.get(subjectUid);
@@ -612,6 +710,13 @@ const pairBoundary = ({ queryUid, subjectUid, rowByUid, rowPositionByNumber, bou
   return boundariesByKey.get(boundaryKey(upperRow, lowerRow)) || null;
 };
 
+/**
+ * @param {{
+ *   normalizedPlan: LinearComparisonPlan, candidateKind: LinearComparisonCandidateKind,
+ *   draft: LinearComparisonEdge | null, resolved: LinearComparisonResolvedEdge | null
+ * }} input
+ * @returns {LinearComparisonSource | 'none'}
+ */
 const presentationSource = ({ normalizedPlan, candidateKind, draft, resolved }) => {
   if (resolved) return resolved.source;
   if (
@@ -626,14 +731,33 @@ const presentationSource = ({ normalizedPlan, candidateKind, draft, resolved }) 
   return 'none';
 };
 
+/** @typedef {'zipped' | 'resolved' | 'draft'} LinearComparisonCandidateKind Where a pair came from. */
 /**
- * @typedef {{ upperRow: number, lowerRow: number, pairs: any[] }} LinearComparisonBoundary The pairs drawn between two adjacent rows.
+ * One pair of the timeline between two adjacent rows; `queryIndex` and `subjectIndex`
+ * are positions in the drawn list.
+ * @typedef {object} LinearComparisonPair
+ * @property {string} edgeKey
+ * @property {string} edgeId
+ * @property {string} queryUid
+ * @property {string} subjectUid
+ * @property {number | undefined} queryIndex
+ * @property {number | undefined} subjectIndex
+ * @property {LinearComparisonSource | 'none'} source
+ * @property {boolean} active
+ * @property {LinearComparisonCandidateKind} candidateKind
+ * @property {LinearComparisonEdge | null} draft
+ * @property {LinearComparisonResolvedEdge | null} resolved
+ */
+/**
+ * @typedef {{ upperRow: number, lowerRow: number, pairs: LinearComparisonPair[] }} LinearComparisonBoundary The pairs drawn between two adjacent rows.
  */
 
 /**
  * The rows of drawn records and the pairs between them; a pair that names an
  * OFF record is neither drawn nor listed as unplaced.
- * @param {{ sequences?: any[], recordsOff?: Iterable<unknown>, layout?: any[], plan?: Record<string, any>,
+ * @template {LinearComparisonSequence} S
+ * @param {{ sequences?: readonly S[] | null, recordsOff?: Iterable<unknown>,
+ *   layout?: readonly LinearComparisonLayoutRow[] | null, plan?: unknown,
  *   resolution?: LinearComparisonResolution | null }} [options]
  */
 export const buildLinearComparisonTimeline = ({
@@ -653,6 +777,7 @@ export const buildLinearComparisonTimeline = ({
     orderedRows,
     rowPositionByNumber
   } = linearComparisonRowTopology(sequenceList, layout);
+  /** @type {Map<string, LinearComparisonBoundary>} */
   const boundariesByKey = new Map();
   const rows = orderedRows.map((row, index) => {
     /** @type {LinearComparisonBoundary | null} */
@@ -668,11 +793,13 @@ export const buildLinearComparisonTimeline = ({
     }
     return {
       row,
-      records: recordsByRow.get(row),
+      // Every ordered row is a key of `recordsByRow`.
+      records: /** @type {LinearRowRecord<S>[]} */ (recordsByRow.get(row)),
       boundaryAfter
     };
   });
 
+  /** @type {Map<string, LinearComparisonIssue[]>} */
   const issuesByDraftId = new Map();
   validateLinearComparisonEdges({
     edges: normalizedPlan.edges,
@@ -681,22 +808,27 @@ export const buildLinearComparisonTimeline = ({
   }).forEach((issue) => {
     if (!STRUCTURAL_PRESENTATION_ISSUES.has(issue.code)) return;
     if (!issuesByDraftId.has(issue.edgeId)) issuesByDraftId.set(issue.edgeId, []);
-    issuesByDraftId.get(issue.edgeId).push(issue);
+    // The line above makes sure the draft has its list.
+    /** @type {LinearComparisonIssue[]} */ (issuesByDraftId.get(issue.edgeId)).push(issue);
   });
 
   const resolutionEdges = Array.isArray(resolution?.edges) ? resolution.edges : [];
+  /** @type {Map<string, LinearComparisonResolvedEdge>} */
   const resolvedCandidateByEdgeKey = new Map();
   resolutionEdges.forEach((edge) => {
     if (!resolvedCandidateByEdgeKey.has(edge.edgeKey)) {
       resolvedCandidateByEdgeKey.set(edge.edgeKey, edge);
     }
   });
+  /** @type {Map<string, LinearComparisonEdge[]>} */
   const draftsByEdgeKey = new Map();
   normalizedPlan.edges.forEach((draft) => {
     const edgeKey = linearComparisonEdgeKey(draft.queryUid, draft.subjectUid);
     if (!draftsByEdgeKey.has(edgeKey)) draftsByEdgeKey.set(edgeKey, []);
-    draftsByEdgeKey.get(edgeKey).push(draft);
+    // The line above makes sure the pair has its list.
+    /** @type {LinearComparisonEdge[]} */ (draftsByEdgeKey.get(edgeKey)).push(draft);
   });
+  /** @type {Map<string, LinearComparisonEdge>} */
   const ownerDraftByEdgeKey = new Map();
   draftsByEdgeKey.forEach((drafts, edgeKey) => {
     const resolvedId = cleanUid(resolvedCandidateByEdgeKey.get(edgeKey)?.id);
@@ -706,7 +838,9 @@ export const buildLinearComparisonTimeline = ({
     );
   });
 
+  /** @type {{ draft: LinearComparisonEdge, issues: LinearComparisonIssue[] }[]} */
   const unplacedDrafts = [];
+  /** @type {Map<string, LinearComparisonEdge>} */
   const draftByEdgeKey = new Map();
   normalizedPlan.edges.forEach((draft) => {
     const edgeKey = linearComparisonEdgeKey(draft.queryUid, draft.subjectUid);
@@ -744,6 +878,7 @@ export const buildLinearComparisonTimeline = ({
     draftByEdgeKey.set(edgeKey, draft);
   });
 
+  /** @type {Map<string, LinearComparisonResolvedEdge>} */
   const resolvedByEdgeKey = new Map();
   resolutionEdges.forEach((edge) => {
     const edgeDrafts = draftsByEdgeKey.get(edge.edgeKey) || [];
@@ -753,7 +888,9 @@ export const buildLinearComparisonTimeline = ({
     }
     if (!resolvedByEdgeKey.has(edge.edgeKey)) resolvedByEdgeKey.set(edge.edgeKey, edge);
   });
+  /** @type {Map<string, LinearComparisonPair>} */
   const pairByEdgeKey = new Map();
+  /** @param {{ queryUid: string, subjectUid: string, candidateKind: LinearComparisonCandidateKind }} input */
   const addPair = ({ queryUid, subjectUid, candidateKind }) => {
     const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
     const boundary = pairBoundary({
@@ -766,6 +903,7 @@ export const buildLinearComparisonTimeline = ({
     if (!boundary || pairByEdgeKey.has(edgeKey)) return;
     const draft = draftByEdgeKey.get(edgeKey) || null;
     const resolved = resolvedByEdgeKey.get(edgeKey) || null;
+    /** @type {LinearComparisonPair} */
     const pair = {
       edgeKey,
       edgeId: draft?.id || resolved?.id || `linear-derived-${edgeKey}`,
@@ -878,7 +1016,13 @@ export const buildLosatJobSpecs = ({
   }
   const edges = (resolution?.edges || []).filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
   const lastOrdinal = Math.max(0, edges.length - 1);
+  /** @type {LosatJobSpec[]} */
   const specs = [];
+  /**
+   * @param {number} queryIndex
+   * @param {number} subjectIndex
+   * @param {number} ordinal
+   */
   const push = (queryIndex, subjectIndex, ordinal) => {
     const edge = edges.find((candidate) => (
       candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
@@ -893,6 +1037,7 @@ export const buildLosatJobSpecs = ({
       program: normalizedProgram
     }));
   };
+  /** @param {boolean} withSelf */
   const pushPairs = (withSelf) => {
     for (let i = 0; i < recordCount; i += 1) {
       if (withSelf) push(i, i, Math.min(i, lastOrdinal));
