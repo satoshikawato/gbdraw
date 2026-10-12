@@ -561,7 +561,7 @@ export const buildOrthogroupFeatureIndex = (orthogroups) => {
 };
 
 /**
- * @param {OrthogroupFeatureIndex} index
+ * @param {OrthogroupFeatureIndex | null | undefined} index No index (a Map is required) resolves nothing.
  * @param {OrthogroupFeature} feature
  * @param {number | null} [fallbackRecordIndex]
  * @returns {OrthogroupMetadataEntry | null}
@@ -617,7 +617,7 @@ const resolveOrthogroupFeatureMetadata = (
 };
 
 /**
- * @param {OrthogroupFeatureIndex} index
+ * @param {OrthogroupFeatureIndex | null | undefined} index No index (a Map is required) resolves nothing.
  * @param {OrthogroupFeature} feature
  * @param {number | null} [fallbackRecordIndex]
  */

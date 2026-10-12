@@ -8,8 +8,28 @@ import {
   recordStructuralMetric
 } from './runtime-test-hooks.js';
 
+/** @import { DepthFilePayload } from './depth-file-codec.js' */
+/** @import { ResourcePayloadOwner } from './resource-payload-owner.js' */
+/** @import { FileLike } from './session-resource-backing.js' */
+
+/**
+ * A canonical render resource as a Session or request holds it: base64 text,
+ * or an encoded depth table, with the file's metadata.
+ * @typedef {{
+ *   size: number, encoding?: unknown, data?: string | DepthFilePayload | null,
+ *   name?: unknown, kind?: unknown, type?: unknown, lastModified?: unknown
+ * }} ResourceDescriptor
+ * @typedef {{ encoding?: unknown, data?: DepthFilePayload | null }} DepthResourceView
+ *   A descriptor as the depth codec reads it; base64 `data` is a string, which never matches the codec's `schema`.
+ */
+
 const BASE64_CHUNK_CHARACTERS = 1024 * 1024;
 
+/**
+ * @param {unknown} encoded
+ * @param {number} declaredSize
+ * @param {string} resourceId
+ */
 const decodeBase64ForTransfer = (encoded, declaredSize, resourceId) => {
   const source = String(encoded || '');
   if (source.length % 4 !== 0 || /\s/.test(source)) {
@@ -33,28 +53,41 @@ const decodeBase64ForTransfer = (encoded, declaredSize, resourceId) => {
   return bytes.buffer;
 };
 
+/**
+ * @param {string} resourceId
+ * @param {Partial<ResourceDescriptor> | null | undefined} descriptor
+ * @returns {ResourceDescriptor}
+ */
 const validateResourceDescriptor = (resourceId, descriptor) => {
   if (!descriptor || typeof descriptor !== 'object' || Array.isArray(descriptor)) {
     throw new Error(`Canonical render resource ${resourceId} must be an object.`);
   }
-  if (!Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
+  if (!Number.isSafeInteger(descriptor.size) || /** @type {number} */ (descriptor.size) < 0) {
     throw new Error(`Canonical render resource ${resourceId} has an invalid byte size.`);
   }
   if (
     descriptor.encoding !== 'base64'
-    && !isEncodedDepthFileEntry(descriptor)
+    && !isEncodedDepthFileEntry(/** @type {DepthResourceView} */ (descriptor))
   ) {
     throw new Error(`Canonical render resource ${resourceId} has an unsupported encoding.`);
   }
-  return descriptor;
+  // The checks above hold the object, its integer `size` and its `encoding`.
+  return /** @type {ResourceDescriptor} */ (descriptor);
 };
 
+/**
+ * @param {string} resourceId
+ * @param {ResourceDescriptor} descriptor
+ * @param {ResourcePayloadOwner | ResourceDescriptor | null} owner
+ */
 const descriptorTransferBuffer = async (resourceId, descriptor, owner) => {
   if (owner && owner !== descriptor) {
-    return takeFileBytesForTransfer(owner);
+    // An owner other than the descriptor is the File the user chose.
+    return takeFileBytesForTransfer(/** @type {FileLike} */ (owner));
   }
-  if (isEncodedDepthFileEntry(descriptor)) {
-    const bytes = new TextEncoder().encode(decodeDepthText(descriptor.data));
+  if (isEncodedDepthFileEntry(/** @type {DepthResourceView} */ (descriptor))) {
+    // The depth entry check above holds only for a `data` object.
+    const bytes = new TextEncoder().encode(decodeDepthText(/** @type {DepthFilePayload} */ (descriptor.data)));
     recordStructuralMetric('decodedByteCount', bytes.byteLength, { resourceId });
     return bytes.buffer;
   }
@@ -73,7 +106,7 @@ export const createDiagramResourceTransport = () => {
     nextCacheToken = 1;
   };
 
-  /** @param {{ request?: any, resources?: any }} [payload] */
+  /** @param {{ request?: unknown, resources?: Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>> | null }} [payload] */
   const prepare = async ({ request, resources } = {}) => {
     const previousCachedResources = cachedResources;
     const referencedIds = Array.from(collectCanonicalResourceIds(request));

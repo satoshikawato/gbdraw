@@ -17,17 +17,29 @@ import {
   isCanonicalResourceReferenceField
 } from './canonical-resource-references.js';
 
+/** @import { CanonicalRenderEnvelope } from './session-request.js' */
+/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+
+/**
+ * What the allocator reads of a resource's source: a Session resource
+ * (`descriptor`, `readBytes`) or bytes read from a file.
+ * @typedef {object} ResourceSource
+ * @property {string} [resourceId]
+ * @property {RawSessionResourceDescriptor} [descriptor]
+ * @property {Uint8Array} [bytes]
+ * @property {() => Promise<Uint8Array>} [readBytes]
+ */
+/** @typedef {{ name?: unknown, kind?: unknown, type?: unknown, lastModified?: unknown }} ResourceMetadata */
 /**
  * The shape `sessionResourceSource` returns: a single backing (`descriptor`,
  * `readBytes`) or a composite of backings (`descriptors`).
- * @typedef {{
- *   resourceId?: string,
- *   descriptor?: Record<string, any>,
- *   descriptors?: Record<string, any>[],
- *   readBytes?: () => any
- * }} SessionResourceSource
+ * @typedef {ResourceSource & { descriptors?: (ResourceSource & ResourceMetadata)[] }} SessionResourceSource
  */
+/** @typedef {ResourceSource & { size: unknown, bytesPromise: Promise<Uint8Array> | null, identityPromise: Promise<string> | null }} ResourceCandidate */
+/** @typedef {{ encoded: Map<unknown, Map<unknown, string>>, identities: Map<string, string>, pending: Map<string, ResourceCandidate> }} SizeBucket */
 
+/** @param {unknown} value */
 const safeResourceLeaf = (value) => {
   // split() returns at least one element, so pop() is a string.
   const basename = /** @type {string} */ (String(value || 'resource.dat')
@@ -40,6 +52,10 @@ const safeResourceLeaf = (value) => {
   return safe || 'resource.dat';
 };
 
+/**
+ * @param {{ name?: unknown, type?: unknown, lastModified?: unknown } | null | undefined} file
+ * @param {string} resourceId
+ */
 const bindingForFile = (file, resourceId) => ({
   resourceId,
   name: file?.name === undefined ? 'file' : String(file.name),
@@ -47,6 +63,10 @@ const bindingForFile = (file, resourceId) => ({
   lastModified: Number(file?.lastModified) || 0
 });
 
+/**
+ * @param {{ encoding?: unknown, data?: unknown, size?: unknown }} left
+ * @param {{ encoding?: unknown, data?: unknown, size?: unknown }} right
+ */
 const sameEncodedPayload = (left, right) => (
   left === right || (
     left.encoding === right.encoding
@@ -55,12 +75,19 @@ const sameEncodedPayload = (left, right) => (
   )
 );
 
+// A reference is replaced by another string id, so the rewritten value has the shape of `value`.
+/**
+ * @template T
+ * @param {T} value
+ * @param {Map<string, string>} aliases
+ * @returns {T}
+ */
 const rewriteResourceRefs = (value, aliases) => {
   if (Array.isArray(value)) {
-    return value.map((item) => rewriteResourceRefs(item, aliases));
+    return /** @type {T} */ (value.map((item) => rewriteResourceRefs(item, aliases)));
   }
   if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(
+  return /** @type {T} */ (Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
       (
@@ -71,18 +98,23 @@ const rewriteResourceRefs = (value, aliases) => {
         ? aliases.get(item)
         : rewriteResourceRefs(item, aliases)
     ])
-  );
+  ));
 };
 
+/**
+ * @param {CanonicalRenderEnvelope['webFiles'] | null | undefined} webFiles
+ * @param {Map<string, string>} aliases
+ * @returns {CanonicalRenderEnvelope['webFiles']}
+ */
 const rewriteOriginalNameHints = (webFiles, aliases) => {
   const identityAliases = [...aliases].every(([source, target]) => source === target);
   if (identityAliases) {
     const rewritten = { ...(webFiles || {}) };
     delete rewritten.bindings;
     if (Array.isArray(rewritten.linearRecordMetadata)) {
-      rewritten.linearRecordMetadata = rewritten.linearRecordMetadata.map((entry) => {
+      rewritten.linearRecordMetadata = rewritten.linearRecordMetadata.map((/** @type {unknown} */ entry) => {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
-        const { losatFilename: _losatFilename, ...metadata } = entry;
+        const { losatFilename: _losatFilename, ...metadata } = /** @type {Record<string, unknown>} */ (entry); // a non-array object
         return metadata;
       });
     }
@@ -108,9 +140,9 @@ const rewriteOriginalNameHints = (webFiles, aliases) => {
     ));
   });
   if (Array.isArray(rewritten.linearRecordMetadata)) {
-    rewritten.linearRecordMetadata = rewritten.linearRecordMetadata.map((entry) => {
+    rewritten.linearRecordMetadata = rewritten.linearRecordMetadata.map((/** @type {unknown} */ entry) => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
-      const { losatFilename: _losatFilename, ...metadata } = entry;
+      const { losatFilename: _losatFilename, ...metadata } = /** @type {Record<string, unknown>} */ (entry); // a non-array object
       return metadata;
     });
   }
@@ -124,6 +156,11 @@ const REQUEST_WEB_FILE_FIELDS = [
   'linearRecordMetadata', 'conservationLosatFastaSources', 'conservationSequenceSources',
   'circularInputOriginalName', 'conservationBlastSource'
 ];
+/**
+ * @param {CanonicalRenderEnvelope['webFiles']} webFiles
+ * @param {CanonicalRenderEnvelope['webFiles'] | null | undefined} otherWebFiles
+ * @param {Map<string, string>} aliases
+ */
 const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
   if (!otherWebFiles || typeof otherWebFiles !== 'object') return webFiles;
   const other = rewriteOriginalNameHints(otherWebFiles, aliases);
@@ -162,17 +199,22 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     throw new Error('A committed canonical render request is required to save a session.');
   }
 
+  /** @type {Record<string, RawSessionResourceDescriptor>} */
   const resources = {};
+  /** @type {Map<string, string>} */
   const aliases = new Map();
   const reuseEncodedResources = isAdoptedCanonicalSession(committedRequest);
   // A textual ID is canonical only within its own source table.
   const committedTable = adoptCurrentSessionResources(committedRequest?.resources || {});
+  /** @type {Map<unknown, SizeBucket>} */
   const candidatesBySize = new Map();
+  /** @type {WeakMap<WeakKey, ResourceCandidate>} */
   const candidatesByDescriptor = new WeakMap();
+  /** @type {Set<unknown>} */
   const usedNames = new Set();
   // Resources of an adopted table that nothing names yet: they keep their IDs
   // and names, and are written only when a binding or request uses them.
-  /** @type {Map<string, Record<string, any>>} */
+  /** @type {Map<string, RawSessionResourceDescriptor>} */
   const reserved = new Map();
   /** @param {string} id */
   const taken = (id) => Object.hasOwn(resources, id) || reserved.has(id);
@@ -186,44 +228,58 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     return id;
   };
   let nextResourceNumber = 1;
+  /** @type {Promise<unknown>} */
   let allocation = Promise.resolve();
 
   const nextResourceId = () => {
+    /** @type {string} */
     let resourceId;
     do {
       resourceId = `resource-${String(nextResourceNumber++).padStart(4, '0')}`;
     } while (taken(resourceId));
     return resourceId;
   };
+  /** @param {ResourceSource} source */
   const candidateFor = (source) => {
-    const key = source.descriptor || source.bytes;
+    // A source has a descriptor or bytes.
+    const key = /** @type {WeakKey} */ (source.descriptor || source.bytes);
     if (candidatesByDescriptor.has(key)) {
-      return candidatesByDescriptor.get(key);
+      return /** @type {ResourceCandidate} */ (candidatesByDescriptor.get(key));
     }
+    /** @type {ResourceCandidate} */
     const candidate = {
       ...source,
-      size: source.descriptor?.size ?? source.bytes.byteLength,
+      size: source.descriptor?.size ?? /** @type {Uint8Array} */ (source.bytes).byteLength,
       bytesPromise: null,
       identityPromise: null
     };
     candidatesByDescriptor.set(key, candidate);
     return candidate;
   };
+  /** @param {ResourceCandidate} candidate */
   const bytesFor = candidate => {
-    candidate.bytesPromise ??= Promise.resolve().then(() => candidate.bytes || candidate.readBytes());
+    // A candidate without bytes is a single backing, which has readBytes.
+    candidate.bytesPromise ??= Promise.resolve().then(
+      () => candidate.bytes || /** @type {() => Promise<Uint8Array>} */ (candidate.readBytes)()
+    );
     return candidate.bytesPromise;
   };
+  /** @param {ResourceCandidate} candidate */
   const identityFor = candidate => {
     candidate.identityPromise ??= bytesFor(candidate).then(bytes => {
-      // readBytes has already validated any declared checksum.
+      // readBytes has already validated any declared checksum, which is a string.
       if (candidate.descriptor?.checksum) {
-        return candidate.descriptor.checksum.trim().toLowerCase().replace(/^sha256:/, '');
+        return /** @type {string} */ (candidate.descriptor.checksum).trim().toLowerCase().replace(/^sha256:/, '');
       }
       recordStructuralMetric('resourceIdentityHashCount', 1);
       return sha256Hex(bytes);
     });
     return candidate.identityPromise;
   };
+  /**
+   * @param {string} id
+   * @param {ResourceCandidate} candidate
+   */
   const register = (id, candidate) => {
     let bucket = candidatesBySize.get(candidate.size);
     if (!bucket) {
@@ -237,8 +293,10 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
       if (!encoded.has(descriptor.data)) encoded.set(descriptor.data, id);
     }
     bucket.pending.set(id, candidate);
-    usedNames.add((resources[id] || reserved.get(id)).name);
+    // `id` is in `resources` or `reserved`.
+    usedNames.add((resources[id] || /** @type {RawSessionResourceDescriptor} */ (reserved.get(id))).name);
   };
+  /** @param {ResourceCandidate} candidate */
   const equivalentId = async candidate => {
     const bucket = candidatesBySize.get(candidate.size);
     if (!bucket) return null;
@@ -246,7 +304,7 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     const encodedId = descriptor && bucket.encoded.get(descriptor.encoding)?.get(descriptor.data);
     if (encodedId) return encodedId;
     const identity = await identityFor(candidate);
-    if (bucket.identities.has(identity)) return bucket.identities.get(identity);
+    if (bucket.identities.has(identity)) return /** @type {string} */ (bucket.identities.get(identity));
     for (const [id, existing] of bucket.pending) {
       const existingIdentity = await identityFor(existing);
       bucket.pending.delete(id);
@@ -255,12 +313,18 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     }
     return null;
   };
+  /**
+   * @param {ResourceSource} source
+   * @param {ResourceMetadata} metadata
+   * @param {string} [preferredId]
+   * @returns {Promise<string>}
+   */
   const allocate = (source, metadata, preferredId = '') => {
     // File arrays may resolve concurrently; allocation itself is one ordered
     // transaction so two equal sources cannot publish duplicate payloads.
     allocation = allocation.then(async () => {
       const candidate = candidateFor(source);
-      const existing = preferredId && (resources[preferredId] || reserved.get(preferredId));
+      const existing = preferredId ? (resources[preferredId] || reserved.get(preferredId)) : undefined;
       if (source.descriptor?.checksum && source.descriptor !== existing
         && source.descriptor.checksum !== existing?.checksum) await bytesFor(candidate);
       if (existing && source.descriptor && sameEncodedPayload(existing, source.descriptor)) {
@@ -273,7 +337,8 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
       const descriptor = source.descriptor;
       const safePreferred = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(preferredId)
         && !taken(preferredId)
-        && descriptor?.name === safeResourceLeaf(descriptor.name)
+        // A source with a `resourceId` (the only way a preferred id arises) has a descriptor.
+        && descriptor?.name === safeResourceLeaf(/** @type {RawSessionResourceDescriptor} */ (descriptor).name)
         && !usedNames.has(descriptor.name);
       let id = safePreferred ? preferredId : nextResourceId();
       let name = safePreferred ? descriptor.name : `${id}-${safeResourceLeaf(metadata.name)}`;
@@ -297,7 +362,8 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
       register(id, candidate);
       return id;
     });
-    return allocation;
+    // `allocation` is the promise just chained, which resolves to the allocated id.
+    return /** @type {Promise<string>} */ (allocation);
   };
 
   const committedResources = committedRequest?.resources || {};
@@ -319,7 +385,10 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
       } else {
         reserved.set(id, descriptor);
       }
-      register(id, candidateFor(sessionResourceSource(createSessionResourceFileView(committedTable, id))));
+      // A view of one resource id is a single backing.
+      register(id, candidateFor(/** @type {ResourceSource} */ (
+        sessionResourceSource(createSessionResourceFileView(committedTable, id))
+      )));
     });
   }
   for (const id of collectCanonicalResourceIds(committedRequest?.renderRequest)) {
@@ -327,12 +396,13 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
       throw new Error(`Committed render resource is missing: ${id}.`);
     }
     // A view of one resource id is a single backing, which always has readBytes.
-    const source = /** @type {SessionResourceSource & { readBytes: () => any }} */ (
+    const source = /** @type {SessionResourceSource & { descriptor: RawSessionResourceDescriptor, readBytes: () => Promise<Uint8Array> }} */ (
       sessionResourceSource(createSessionResourceFileView(committedTable, id))
     );
     if (!reuseEncodedResources) await source.readBytes();
     aliases.set(id, reuseEncodedResources ? id : await allocate(source, source.descriptor));
   }
+  /** @type {Map<string, string>} */
   const otherAliases = new Map();
   if (otherCommittedRequest) {
     const reuseOther = isAdoptedCanonicalSession(otherCommittedRequest);
@@ -343,7 +413,7 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
       if (!Object.hasOwn(otherCommittedRequest.resources, id)) {
         throw new Error(`Committed render resource is missing: ${id}.`);
       }
-      const source = /** @type {SessionResourceSource & { readBytes: () => any }} */ (
+      const source = /** @type {SessionResourceSource & { descriptor: RawSessionResourceDescriptor, readBytes: () => Promise<Uint8Array> }} */ (
         sessionResourceSource(createSessionResourceFileView(otherTable, id))
       );
       if (!reuseOther) await source.readBytes();
@@ -351,9 +421,14 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     }
   }
 
+  /**
+   * @param {ResourceSource} source
+   * @param {ResourceMetadata} metadata
+   */
   const bindSource = async (source, metadata) => bindingForFile(
     metadata, await allocate(source, metadata, source.resourceId)
   );
+  /** @param {FileLike | null | undefined} file */
   const bindFile = async file => {
     if (!file) return null;
     const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
@@ -367,6 +442,10 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     return bindSource({ bytes: await readFileBytes(file) }, file);
   };
 
+  /**
+   * @param {FileLike | FileLike[] | null | undefined} value
+   * @returns {Promise<unknown>}
+   */
   const bindFileValue = async (value) => {
     if (Array.isArray(value)) {
       return Promise.all(value.map((item) => bindFileValue(item)));
@@ -417,8 +496,8 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     }))),
     linearComparisons: await Promise.all(
       linearComparisons
-        .filter((comparison) => comparison?.file)
-        .map(async (comparison) => ({
+        .filter((/** @type {LinearComparisonEdge} */ comparison) => comparison?.file)
+        .map(async (/** @type {LinearComparisonEdge} */ comparison) => ({
           id: String(comparison?.id || ''),
           file: await bindFile(comparison.file)
         }))

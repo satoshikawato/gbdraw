@@ -37,6 +37,7 @@ import {
 } from './services/session-active-config-contract.js';
 export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat };
 const { ref, reactive, computed } = window.Vue;
+/** @type {<T>(value: T) => T} */
 const toRaw = window.Vue.toRaw || ((value) => value);
 
 // System State
@@ -121,6 +122,7 @@ const generateLinearSeqUid = () => {
   return `linear-seq-${Date.now()}-${linearSeqUidCounter}`;
 };
 
+/** @param {unknown} value */
 const normalizeLinearSeqNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
@@ -136,7 +138,7 @@ const normalizeLinearSeqNumber = (value) => {
  * @property {any} gff
  * @property {any} fasta
  * @property {any} depth
- * @property {number} losat_gencode
+ * @property {number | ''} losat_gencode `v-model.number` writes an empty string when the field is cleared
  * @property {string} definition
  * @property {string} record_subtitle
  * @property {string} file_definition
@@ -176,6 +178,11 @@ export const createLinearSeq = (overrides = {}) => {
   };
 };
 
+/**
+ * @param {readonly (Partial<LinearSeq> | Record<string, unknown> | null)[] | null | undefined} items
+ *   slots, or unvalidated data (a session, an import), as `createLinearSeq` takes them
+ * @returns {LinearSeq[]}
+ */
 export const normalizeLinearSeqList = (items) => {
   const baseItems = Array.isArray(items) && items.length > 0 ? items : [null];
   const seenUids = new Set();
@@ -190,8 +197,13 @@ export const normalizeLinearSeqList = (items) => {
   return normalized;
 };
 
+/** @param {LinearSeq | null | undefined} seq */
 const hasLinearSeqPrimaryInput = (seq) => Boolean(seq?.gb || seq?.gff || seq?.fasta);
 
+/**
+ * @param {readonly (Partial<LinearSeq> | Record<string, unknown> | null)[] | null | undefined} items
+ * @returns {LinearSeq[]}
+ */
 export const collapseEmptyLinearSeqList = (items) => {
   const previous = normalizeLinearSeqList(items);
   if (previous.length <= 1) return previous;
@@ -282,6 +294,8 @@ const showRightDrawer = ref(false);
 const rightDrawerTab = ref('features'); // 'legend' | 'features' | 'orthogroups'
 const linearReorderNotice = ref('');
 const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
+/** @import { CircularRecordDiscovery } from './services/record-discovery.js' */
+/** @type {CircularRecordDiscovery} */
 const circularRecordDiscovery = reactive({
   status: 'idle',
   error: '',
@@ -325,6 +339,16 @@ const ruleMatchingPending = ref(false);
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, activeDrawing().manualSpecificRules)
 );
+/**
+ * What state.js reads of a listed feature (the Features list rows and the
+ * extracted features, whose owner has no typedef).
+ * @typedef {{
+ *   id?: unknown, svg_id?: unknown, record_idx?: unknown, displayRecordId?: unknown,
+ *   rendered_svg_id?: unknown, renderedSvgId?: unknown, rendered_feature_svg_id?: unknown,
+ *   renderedFeatureSvgId?: unknown
+ * }} FeatureListRow
+ */
+/** @param {FeatureListRow | null | undefined} feature */
 const renderedFeatureSvgId = (feature) => {
   return String(
     feature?.rendered_svg_id ||
@@ -367,7 +391,7 @@ const selectedFeatures = computed(() => {
 
   const bySvgId = featuresBySvgId.value instanceof Map ? featuresBySvgId.value : new Map();
   const fallback = new Map();
-  (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
+  (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((/** @type {FeatureListRow} */ feature) => {
     const svgId = renderedFeatureSvgId(feature);
     if (svgId && !fallback.has(svgId)) fallback.set(svgId, feature);
   });
@@ -594,6 +618,7 @@ const generatedLegendPosition = ref('left');
 const generatedMode = ref('circular');
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
+/** @param {unknown} value */
 const normalizeCircularLegendPosition = (value) => String(value || '').trim().toLowerCase() || 'left';
 const shouldDeferCircularPreviewUpdates = computed(() => {
   const { form, adv } = drawings.circular;
@@ -690,13 +715,10 @@ const displayedResultMetadata = () => getCommittedSvgResultMetadata(toRaw(result
 // content (an editor edit, R1) keeps both, so it does not list the features
 // again. The rule matches the drawn state reads are recorded while
 // `ruleMatchingPending` holds, so the list follows its fall.
-/**
- * What the list reads of the displayed Result's committed metadata.
- * @typedef {{ selectedFeatureTypes?: string[] | null, renderedFeatureIdentities?: { renderedIds?: unknown } | null }} ListedResultMetadata
- */
-/** @typedef {{ list: readonly { name?: unknown }[], names: unknown[], metadata: ListedResultMetadata | null }} ListedResults */
+/** @import { CommittedSvgResultMetadata, SvgResultEntry } from './services/svg-result-ingestion.js' */
+/** @typedef {{ list: readonly SvgResultEntry[], names: unknown[], metadata: CommittedSvgResultMetadata | null }} ListedResults */
 const listedResults = computed((/** @type {ListedResults | undefined} */ previous) => {
-  /** @type {readonly { name?: unknown }[]} */
+  /** @type {readonly SvgResultEntry[]} */
   const list = results.value;
   const names = list.map((result) => result?.name);
   const metadata = displayedResultMetadata();
@@ -716,13 +738,14 @@ const featureList = computed(() => {
   const features = extractedFeatures.value;
   const renderedIds = names.length < 2 ? null : metadata?.renderedFeatureIdentities?.renderedIds;
   return {
-    rows: renderedIds instanceof Set ? features.filter((feature) => renderedIds.has(feature.svg_id)) : features,
+    rows: renderedIds instanceof Set ? features.filter((/** @type {FeatureListRow} */ feature) => renderedIds.has(feature.svg_id)) : features,
     drawn: null,
     rendered: null
   };
 });
 // A listed feature's drawn state and the rendered ID it is drawn with ('' when
 // the Result does not draw it).
+/** @param {VisibilityFeature | null | undefined} feature */
 const featureListState = (feature) => {
   const { drawn, rendered } = featureList.value;
   const raw = toRaw(feature);
@@ -733,7 +756,7 @@ const featureListState = (feature) => {
 };
 const featureRecordPickerVisible = computed(() => (
   featureRecordIds.value.length > 1
-  && new Set(featureList.value.rows.map((feature) => (
+  && new Set(featureList.value.rows.map((/** @type {FeatureListRow} */ feature) => (
     mode.value === 'circular' ? feature.record_idx : feature.displayRecordId
   ))).size > 1
 ));
@@ -783,7 +806,7 @@ const isFeatureDrawerMounted = computed(
 const featureListExpandedIndex = computed(() => (
   featureListExpandedId.value === null
     ? -1
-    : filteredFeatures.value.findIndex((feature) => feature.id === featureListExpandedId.value)
+    : filteredFeatures.value.findIndex((/** @type {FeatureListRow} */ feature) => feature.id === featureListExpandedId.value)
 ));
 /** @param {number} index */
 const featureListRowTop = (index) => (
@@ -829,7 +852,7 @@ const filteredEditableLabels = computed(() => {
   const query = String(labelSearch.value || '').trim().toLowerCase();
   if (!query) return editableLabels.value;
 
-  return editableLabels.value.filter((entry) => {
+  return editableLabels.value.filter((/** @type {{ text?: unknown, sourceText?: unknown, featureId?: unknown }} */ entry) => {
     return (
       String(entry.text || '').toLowerCase().includes(query) ||
       String(entry.sourceText || '').toLowerCase().includes(query) ||
@@ -858,9 +881,11 @@ export const sessionOperationAvailability = (
   return reason ? { status: 'busy', reason } : null;
 };
 
-/** @typedef {'circular' | 'linear'} DiagramMode */
+/** @import { ModeProfileName } from './mode-profiles.js' */
+/** @typedef {ModeProfileName} DiagramMode The diagram modes; `mode-profiles.js` owns the names. */
 
 /** @import { PythonLegendKey, RenderedFeatureId } from './services/legend-svg.js' */
+/** @import { FeatureVisibilityRuleDraft, VisibilityFeature } from './services/feature-visibility.js' */
 /** @typedef {string & { readonly __brand: 'LegendCaption' }} LegendCaption The caption a Legend row shows, which a rename writes. */
 /**
  * The color a Legend row records, never its identity (OV-288): one the user
@@ -937,6 +962,7 @@ const createDrawingState = (drawingMode) => {
     losatProgram: losatProgram.value,
     blastpMode: losat.blastp?.mode
   }));
+  /** @type {FeatureVisibilityRuleDraft[]} */
   const featureVisibilityManualRules = reactive([]);
   const pendingPaletteName = ref(defaultPaletteDraftState.pendingPaletteName);
   const labelFilters = createDefaultLabelFilterState();

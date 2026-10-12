@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
 /** @import { CommittedRecordRequest } from '../services/feature-identity.js' */
+/** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
 // Source-bound editable rotation intent. The request service owns serialization.
 import {
   bindRecordDisplayDrafts,
@@ -297,7 +298,8 @@ export const createRecordDisplayControls = ({
     });
   });
   const discoveryFor = (source) => {
-    if (source.scope === 'circular') return circularDiscoveryForInput(state);
+    // `state` is the state.js object, which holds the members the discovery reads.
+    if (source.scope === 'circular') return circularDiscoveryForInput(/** @type {CircularDiscoveryState<unknown>} */ (state));
     const sequence = state.linearSeqs.find((seq) => seq.uid === source.sourceUid);
     return { status: linearRecordStatusFor(sequence), error: linearRecordErrorFor(sequence) };
   };

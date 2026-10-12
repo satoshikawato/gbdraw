@@ -180,6 +180,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
+/** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -932,6 +933,7 @@ const selectorPayload = (rawValue) => {
   return { kind: 'recordId', value: raw };
 };
 
+/** @param {{ label?: unknown, subtitle?: unknown, reverseComplement?: unknown, gridRow?: number | null, gridColumn?: number | null }} [options] */
 const presentationPayload = ({
   label = null,
   subtitle = null,
@@ -4806,10 +4808,11 @@ export const projectCanonicalSessionRequest = ({
         : [])
     : [];
   const projectedLinearTrackSlots = renderRequest.mode === 'linear'
-    ? migrateLinearTrackSlotsToCurrentSchema(
+    // An array of rows migrates to an array of rows.
+    ? /** @type {LinearTrackSlot[]} */ (migrateLinearTrackSlotsToCurrentSchema(
         parseLinearTrackSlotSpecs(tracks.linearTrackSlots, options.dinucleotide || 'GC'),
         linearTrackSlotSchemaVersion
-      )
+      ))
     : [];
   const depthMetadataFields = [
     options.depthTrackLabels,

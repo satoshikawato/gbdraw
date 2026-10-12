@@ -24,14 +24,29 @@ import {
 } from './linear-comparisons.js';
 import { textToBase64, textToBytes } from './file-content-cache.js';
 import { SESSION_VERSION } from '../contracts/schema.generated.js';
+/** @import { ActiveWebConfig } from './session-active-config-contract.js' */
+/** @import { StoredLayoutPreferences } from './layout-preferences.js' */
+/** @typedef {{ losatCache?: { entries?: unknown } | null }} LosatCacheSession A Session as the conservation restore reads it. */
+/** @typedef {{ filename?: unknown, text?: unknown }} CachedLosatEntry */
+/** @import { LinearComparisonEdge } from './linear-comparisons.js' */
 
 
+/**
+ * @template T
+ * @param {T} value
+ * @returns {value is T & Record<string, unknown>}
+ */
 const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
 
+/** @param {unknown} value */
 const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 
+/**
+ * @param {readonly unknown[]} args
+ * @param {readonly string[]} names
+ */
 const optionValues = (args, names) => {
   const aliases = new Set(names);
   const values = [];
@@ -52,6 +67,7 @@ const optionValues = (args, names) => {
   return values;
 };
 
+/** @param {{ cliInvocation?: { args?: unknown } | null, config?: { cliOptions?: { rawArgs?: unknown } | null } | null }} session */
 const sessionArgs = (session) => {
   if (Array.isArray(session?.cliInvocation?.args)) {
     return session.cliInvocation.args.map((value) => String(value));
@@ -62,6 +78,7 @@ const sessionArgs = (session) => {
   return [];
 };
 
+/** @param {readonly unknown[]} args */
 const explicitRepeatRendering = (args) => {
   const assignments = optionValues(
     args,
@@ -78,6 +95,11 @@ const explicitRepeatRendering = (args) => {
   return null;
 };
 
+/**
+ * @param {readonly unknown[]} args
+ * @param {number} index
+ * @param {{ label?: string | null, subtitle?: string | null, reverseComplement?: unknown, gridRow?: number | null, gridColumn?: number | null }} [current]
+ */
 const presentationFromArgs = (args, index, current = {}) => {
   const labels = optionValues(args, ['--record_label', '--record-label']);
   const subtitles = optionValues(args, ['--record_subtitle', '--record-subtitle']);
@@ -93,6 +115,10 @@ const presentationFromArgs = (args, index, current = {}) => {
   return presentation;
 };
 
+/**
+ * @param {{ records?: unknown } | null | undefined} renderRequest
+ * @param {readonly unknown[]} args
+ */
 const hydrateRecordPresentations = (renderRequest, args) => {
   const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
   records.forEach((record, index) => {
@@ -100,6 +126,10 @@ const hydrateRecordPresentations = (renderRequest, args) => {
   });
 };
 
+/**
+ * @param {{ linearSeqs?: unknown } | null | undefined} filesData
+ * @param {readonly unknown[]} args
+ */
 const hydrateLinearFilePresentations = (filesData, args) => {
   const records = Array.isArray(filesData?.linearSeqs) ? filesData.linearSeqs : [];
   const labels = optionValues(args, ['--record_label', '--record-label']);
@@ -115,6 +145,10 @@ const hydrateLinearFilePresentations = (filesData, args) => {
   });
 };
 
+/**
+ * @param {CachedLosatEntry | null | undefined} entry
+ * @param {string} [fallbackName]
+ */
 const cachedLosatFile = (entry, fallbackName) => {
   const text = String(entry?.text || '');
   const bytes = textToBytes(text);
@@ -128,6 +162,7 @@ const cachedLosatFile = (entry, fallbackName) => {
   };
 };
 
+/** @param {LosatCacheSession | null | undefined} session */
 const conservationCacheEntries = (session) => (
   (Array.isArray(session?.losatCache?.entries) ? session.losatCache.entries : [])
     .filter((entry) => (
@@ -141,12 +176,18 @@ const conservationCacheEntries = (session) => (
     ))
 );
 
+/** @param {{ filename?: unknown } | null | undefined} entry */
 const conservationEntryLabel = (entry) => (
   String(entry?.filename || '')
     .replace(/\.circular_conservation\.losatn\.tsv$/i, '')
     .replace(/\.losatn\.tsv$/i, '')
 );
 
+/**
+ * @param {LosatCacheSession} session
+ * @param {Record<string, unknown>} filesData
+ * @param {{ enabled?: unknown, series?: unknown } | null | undefined} circularConservation
+ */
 const restoreConservationFiles = (session, filesData, circularConservation) => {
   if (Array.isArray(filesData.c_conservation_blasts) && filesData.c_conservation_blasts.length) {
     return;
@@ -185,6 +226,10 @@ const restoreConservationFiles = (session, filesData, circularConservation) => {
   filesData.c_conservation_blasts_source = 'losat-cache';
 };
 
+/**
+ * @param {{ config?: Partial<ActiveWebConfig> }} session
+ * @param {{ config?: Partial<ActiveWebConfig>, layoutPreferences: StoredLayoutPreferences | null | undefined, mode: string }} projection
+ */
 const mergedGuiConfig = (session, projection) => {
   const saved = migratePersistedGalleryConfig(
     isPlainObject(session.config) ? session.config : {}
@@ -215,6 +260,7 @@ const mergedGuiConfig = (session, projection) => {
   };
 };
 
+/** @param {Partial<ActiveWebConfig>} config */
 const migratePersistedGalleryConfig = (config) => {
   const migratedNames = migratePersistedWebStateFieldNames(config);
   const form = { ...(migratedNames.form || {}) };
@@ -247,6 +293,10 @@ const migratePersistedGalleryConfig = (config) => {
   };
 };
 
+/**
+ * @param {unknown} value
+ * @param {'upload' | 'losat'} [fallback]
+ */
 const legacyComparisonSource = (value, fallback = 'losat') => {
   const source = String(value || '').trim().toLowerCase();
   if (['upload', 'files', 'file'].includes(source)) return 'upload';
@@ -254,13 +304,21 @@ const legacyComparisonSource = (value, fallback = 'losat') => {
   return fallback;
 };
 
+/**
+ * @param {string} prefix
+ * @param {number} index
+ * @param {unknown} queryUid
+ * @param {unknown} subjectUid
+ */
 const stableMigratedComparisonId = (prefix, index, queryUid, subjectUid) => {
+  /** @param {unknown} value */
   const safe = (value) => String(value || '')
     .replace(/[^A-Za-z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'record';
   return `linear-comparison-migrated-${prefix}-${index + 1}-${safe(queryUid)}-${safe(subjectUid)}`;
 };
 
+/** @param {Partial<ActiveWebConfig> & { blastSource?: unknown }} config The legacy draft: `blastSource` is the pre-plan comparison source. */
 const stripLegacyComparisonConfig = (config) => {
   delete config.blastSource;
   if (isPlainObject(config.adv)) delete config.adv.blastSource;
@@ -269,6 +327,7 @@ const stripLegacyComparisonConfig = (config) => {
   }
 };
 
+/** @param {{ file?: unknown } | null | undefined} comparison */
 const legacyComparisonFile = (comparison) => comparison?.file || null;
 
 /**
@@ -286,21 +345,21 @@ export const migrateLegacyLinearComparisonDraft = ({
   const filesData = {
     ...(isPlainObject(sourceFiles) ? sourceFiles : {}),
     linearSeqs: (Array.isArray(sourceFiles?.linearSeqs) ? sourceFiles.linearSeqs : [])
-      .map((sequence) => ({ ...sequence }))
+      .map((/** @type {Record<string, unknown>} */ sequence) => ({ ...sequence }))
   };
-  const legacyRows = filesData.linearSeqs.map((sequence) => ({
+  const legacyRows = filesData.linearSeqs.map((/** @type {Record<string, unknown>} */ sequence) => ({
     uid: String(sequence?.uid || ''),
     blast: sequence?.blast || null,
     losatFilename: String(sequence?.losat_filename || '')
   }));
   const legacyFileComparisons = (Array.isArray(sourceFiles?.linearComparisons)
     ? sourceFiles.linearComparisons
-    : []).map((comparison) => ({ ...comparison }));
+    : []).map((/** @type {Record<string, unknown>} */ comparison) => ({ ...comparison }));
   const layout = isPlainObject(config.linearRecordLayout)
     ? config.linearRecordLayout
     : null;
   const explicitComparisons = Array.isArray(layout?.comparisons)
-    ? layout.comparisons.map((comparison) => ({ ...comparison }))
+    ? layout.comparisons.map((/** @type {Record<string, unknown>} */ comparison) => ({ ...comparison }))
     : null;
   const hasWebDraft = forceWebDraft === null
     ? Boolean(layout) || !isPlainObject(config.cliOptions)
@@ -316,7 +375,7 @@ export const migrateLegacyLinearComparisonDraft = ({
   ).at(-1) || 'none').trim().toLowerCase();
 
   stripLegacyComparisonConfig(config);
-  filesData.linearSeqs = filesData.linearSeqs.map((sequence) => {
+  filesData.linearSeqs = filesData.linearSeqs.map((/** @type {Record<string, unknown>} */ sequence) => {
     const { blast: _blast, losat_filename: _losatFilename, ...rest } = sequence;
     return rest;
   });
@@ -352,8 +411,8 @@ export const migrateLegacyLinearComparisonDraft = ({
     return { config, filesData };
   }
 
-  const uidIndex = new Map(legacyRows.map((row, index) => [row.uid, index]));
-  const legacyBindingEntries = legacyFileComparisons.map((comparison, index) => ({
+  const uidIndex = new Map(legacyRows.map((/** @type {{ uid: string }} */ row, /** @type {number} */ index) => [row.uid, index]));
+  const legacyBindingEntries = legacyFileComparisons.map((comparison, /** @type {number} */ index) => ({
     index,
     comparison,
     id: String(comparison?.id || ''),
@@ -372,11 +431,13 @@ export const migrateLegacyLinearComparisonDraft = ({
     }
   });
   const consumedBindingIndexes = new Set();
+  /** @param {{ file?: unknown, index: number } | null | undefined} entry */
   const consumeBinding = (entry) => {
     if (!entry?.file) return null;
     consumedBindingIndexes.add(entry.index);
     return entry.file;
   };
+  /** @param {number} index */
   const positionalFile = (index) => {
     const row = legacyRows[index];
     const next = legacyRows[index + 1];
@@ -391,6 +452,13 @@ export const migrateLegacyLinearComparisonDraft = ({
   };
   const usedPayloadGaps = new Set();
   const usedIds = new Set();
+  /**
+   * @param {unknown} candidate
+   * @param {string} prefix
+   * @param {number} index
+   * @param {unknown} queryUid
+   * @param {unknown} subjectUid
+   */
   const uniqueId = (candidate, prefix, index, queryUid, subjectUid) => {
     const base = String(candidate || '').trim()
       || stableMigratedComparisonId(prefix, index, queryUid, subjectUid);
@@ -403,6 +471,7 @@ export const migrateLegacyLinearComparisonDraft = ({
     usedIds.add(id);
     return id;
   };
+  /** @type {LinearComparisonEdge[]} */
   const edges = [];
   /** @param {Record<string, any>} edge */
   const addEdge = ({
@@ -436,7 +505,7 @@ export const migrateLegacyLinearComparisonDraft = ({
   let mode = legacyNone ? 'none' : 'adjacent';
   if (authoritativeExplicit) {
     mode = explicitComparisons.length > 0 ? 'selected' : 'none';
-    explicitComparisons.forEach((comparison, index) => {
+    explicitComparisons.forEach((/** @type {Record<string, unknown>} */ comparison, /** @type {number} */ index) => {
       const queryIndex = Number.isInteger(Number(comparison?.queryIndex))
         ? Number(comparison.queryIndex)
         : uidIndex.get(String(comparison?.queryUid || ''));
@@ -476,7 +545,7 @@ export const migrateLegacyLinearComparisonDraft = ({
     });
   }
 
-  legacyRows.slice(0, -1).forEach((row, index) => {
+  legacyRows.slice(0, -1).forEach((/** @type {{ uid: string, losatFilename: string }} */ row, /** @type {number} */ index) => {
     const file = positionalFile(index);
     const losatFilename = row.losatFilename;
     if ((!file && !losatFilename) || usedPayloadGaps.has(index)) return;
@@ -539,6 +608,11 @@ export const migrateLegacyLinearComparisonDraft = ({
   return { config, filesData };
 };
 
+/** @typedef {{ kind?: unknown, resourceId?: unknown, settings?: { alignOrthogroupFeature?: unknown } | null }} PreservedComparison */
+/**
+ * @param {{ renderRequest?: { comparisons?: unknown } | null, resources?: Record<string, unknown> | null }} session
+ * @param {{ renderRequest: { comparisons?: PreservedComparison[] }, resources: Record<string, unknown> }} promoted
+ */
 const preserveComparisonResources = (session, promoted) => {
   const comparisons = Array.isArray(session?.renderRequest?.comparisons)
     ? cloneJson(session.renderRequest.comparisons)
@@ -607,8 +681,8 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   );
   const projectedFiles = {
     ...projection.files,
-    linearSeqs: (projection.files.linearSeqs || []).map((record) => ({ ...record })),
-    linearComparisons: (projection.files.linearComparisons || []).map((comparison) => ({
+    linearSeqs: (projection.files.linearSeqs || []).map((/** @type {Record<string, unknown>} */ record) => ({ ...record })),
+    linearComparisons: (projection.files.linearComparisons || []).map((/** @type {Record<string, unknown>} */ comparison) => ({
       ...comparison
     }))
   };

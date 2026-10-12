@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
+/** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
@@ -16,7 +17,12 @@ import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
-const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value), has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+/**
+ * @template T
+ * @param {T} value
+ * @returns {value is T & Record<string, unknown>}
+ */
+const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value), has = /** @type {(value: unknown, key: string) => boolean} */ ((value, key) => Object.prototype.hasOwnProperty.call(value, key));
 /**
  * The Session's active Web configuration (`config` of the stored Session) in
  * its current writer format: the domains of `CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS`
@@ -139,10 +145,12 @@ const ANNOTATION_FIELDS = ['id', 'target', 'label', 'mark', 'lane', 'style', 'le
 const OBSOLETE_SLOT_KEYS = new Set(['gapAfter', 'gap_after', 'innerRadius', 'inner_radius', 'outerRadius',
   'outer_radius', 'placement', 'spacing', 'strict', 'compress', 'reserve']);
 const OBSOLETE_SLOT_PARAM_KEYS = new Set(['side', 'radius', 'width', 'spacing', 'inner_gap_px', 'outer_gap_px', 'strict', 'compress', 'reserve']);
+/** @param {Record<string, unknown>} value @param {Set<string>} fields @param {string} path */
 const assertFields = (value, fields, path) => {
   const unknown = Object.keys(value).filter((key) => !fields.has(key));
   if (unknown.length) throw new Error(`Current session active configuration contains unknown ${path} field(s): ${unknown.join(', ')}.`);
 };
+/** @param {Record<string, unknown>} config */
 const validateDomainShapes = (config) => {
   for (const [domain, shape] of Object.entries(DOMAIN_SHAPES)) {
     if (!has(config, domain) || (config[domain] === undefined && domain === 'cliOptions')) continue;
@@ -152,10 +160,16 @@ const validateDomainShapes = (config) => {
   if (has(config, 'colorsAreOverrides') && typeof config.colorsAreOverrides !== 'boolean')
     throw new Error('Current session compatibility field config.colorsAreOverrides must be a boolean.');
 };
+/** @param {unknown[]} rows @param {string[]} fields @param {string} path */
 const assertRows = (rows, fields, path) => rows.forEach((row, index) => {
   if (!isObject(row)) throw new Error(`Current session active configuration ${path}[${index}] must be an object.`);
   assertFields(row, new Set(fields), `${path}[${index}]`);
 });
+/**
+ * The first loop checks that every annotation set is an object, which the
+ * second loop reads.
+ * @param {{ annotationSets?: { annotations?: unknown }[], [domain: string]: unknown }} config
+ */
 const validateCollections = (config) => {
   for (const [domain, fields] of Object.entries(ROW_FIELDS))
     if (Array.isArray(config[domain])) assertRows(config[domain], fields, `config.${domain}`);
@@ -164,6 +178,7 @@ const validateCollections = (config) => {
     assertRows(set.annotations, ANNOTATION_FIELDS, `config.annotationSets[${index}].annotations`);
   });
 };
+/** @param {unknown} slots */
 const obsoleteCircularSlotField = (slots) => {
   if (!Array.isArray(slots)) return null;
   for (const [slotIndex, slot] of slots.entries()) {
@@ -210,7 +225,7 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
  * Throws when `storedConfig` is not a current-writer active configuration:
  * a Session 46 slice of `mode`, or (`scopedDrafts`) the flat draft of a
  * Session 41-44, whose record display and placement rows name their mode.
- * @param {{ mode: string, storedConfig: Record<string, any>, scopedDrafts?: boolean }} input
+ * @param {{ mode: string, storedConfig: Record<string, any> | null | undefined, scopedDrafts?: boolean }} input
  * @returns {void}
  */
 export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false }) => {
@@ -307,6 +322,7 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
   validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
 };
 
+/** @param {{ scale_font_size?: unknown, ruler_label_font_size?: unknown }} [adv] */
 const linearTypographyValuesMatch = (adv = {}) => (
   Object.is(adv.scale_font_size, adv.ruler_label_font_size)
 );
@@ -331,23 +347,79 @@ export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) 
 // Artifact metadata admission is shared by Session, History and Align/Reset.
 // The binding deliberately excludes current orientation, translations, labels and
 // row order: manual Reverse, style and stable reorder do not rewrite history.
+/** @param {unknown} value @returns {unknown} */
 const sortedValue = (value) => Array.isArray(value)
   ? value.map(sortedValue)
   : isObject(value) ? Object.fromEntries(Object.keys(value).sort()
     .map((key) => [key, sortedValue(value[key])])) : value;
 
+// The parts of a canonical request that the Alignment reset receipt reads. The
+// writer (`canonicalSimilarityAlignment` in session-request.js) owns the plan.
+/**
+ * @typedef {{
+ *   records: { recordKey: string, status?: string }[],
+ *   reference: { recordKey: string }
+ * }} AlignmentPlanView
+ */
+/**
+ * @typedef {{
+ *   recordKey: string, source: Record<string, string>, selector?: unknown,
+ *   region?: { start: number, end: number, reverseComplement?: unknown } | null,
+ *   presentation?: { reverseComplement?: unknown } | null, display?: unknown
+ * }} AlignmentResetRecord
+ */
+/**
+ * @typedef {{
+ *   mode: string, records: unknown[],
+ *   layout: { similarityAlignment?: AlignmentPlanView | null, recordTranslations?: { recordKey: string, x?: number }[] }
+ * }} AlignmentResetRequest
+ */
+/**
+ * @typedef {{
+ *   renderRequest?: AlignmentResetRequest | null,
+ *   resources?: Record<string, RawSessionResourceDescriptor> | null
+ * }} AlignmentResetCanonical
+ */
+/**
+ * A canonical session of a Linear Alignment: it holds the plan and the
+ * translations that the receipt compares.
+ * @typedef {{
+ *   renderRequest: {
+ *     mode: string, records: AlignmentResetRecord[],
+ *     layout: { similarityAlignment: AlignmentPlanView, recordTranslations: { recordKey: string, x?: number }[] }
+ *   },
+ *   resources?: Record<string, RawSessionResourceDescriptor> | null
+ * }} AlignmentResetPlannedCanonical
+ */
+/**
+ * What a reset writes beside the plan: the binding of the plan and the sources,
+ * the direction changes, and the reference record's shift (or null).
+ * @typedef {{
+ *   binding: string,
+ *   directions: { recordKey: string, before: boolean, after: boolean }[],
+ *   referenceDeltaX: { recordKey: string, deltaX: number } | null
+ * }} AlignmentResetReceipt
+ */
+
+/**
+ * @param {unknown} receipt The stored receipt, unvalidated: this function checks it.
+ * @param {AlignmentResetRequest | null | undefined} request
+ * @returns {AlignmentResetReceipt | null}
+ */
 export const validateAlignmentResetReceiptShape = (receipt, request) => {
   if (receipt === null || receipt === undefined) return null;
   // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
+  /** @type {() => never} */
   const invalid = () => { throw diagnosticError('ALIGNMENT_RESET_EVIDENCE'); };
   if (!isObject(receipt)
     || Object.keys(receipt).sort().join(',') !== 'binding,directions,referenceDeltaX'
-    || !/^[0-9a-f]{64}$/.test(receipt.binding)
+    || typeof receipt.binding !== 'string' || !/^[0-9a-f]{64}$/.test(receipt.binding)
     || !Array.isArray(receipt.directions)
     || request?.mode !== 'linear' || !request.layout?.similarityAlignment) invalid();
   const plan = request.layout.similarityAlignment;
   const eligible = new Set(plan.records.filter(({ status }) => status !== 'skipped')
     .map(({ recordKey }) => recordKey));
+  /** @type {Set<unknown>} */
   const keys = new Set();
   receipt.directions.forEach((delta) => {
     if (!isObject(delta) || Object.keys(delta).sort().join(',') !== 'after,before,recordKey'
@@ -362,17 +434,22 @@ export const validateAlignmentResetReceiptShape = (receipt, request) => {
     || delta.recordKey !== plan.reference.recordKey
     || typeof delta.deltaX !== 'number' || !Number.isFinite(delta.deltaX)
     || delta.deltaX === 0)) invalid();
-  return receipt;
+  // Every field was checked above.
+  return /** @type {AlignmentResetReceipt} */ (receipt);
 };
 
+/** @param {AlignmentResetCanonical} canonical */
 const resetBinding = async (canonical) => {
   const request = canonical?.renderRequest;
   if (request?.mode !== 'linear' || !request.layout?.similarityAlignment) {
     throw new Error('Alignment reset receipt requires an active canonical plan.');
   }
   const table = adoptCurrentSessionResources(canonical.resources);
+  /** @type {Map<string, Promise<string>>} */
   const fingerprints = new Map();
+  /** @param {Record<string, string>} source */
   const sourceIdentity = async (source) => {
+    /** @type {Record<string, string | undefined>} */
     const identity = {};
     for (const [key, value] of Object.entries(source)) {
       if (key === 'kind') identity[key] = value;
@@ -385,7 +462,8 @@ const resetBinding = async (canonical) => {
     }
     return identity;
   };
-  const records = await Promise.all(request.records.map(async (record) => ({
+  // The mode check above admits a Linear request only; the request writer gives each of its records a `recordKey` and a `source`.
+  const records = await Promise.all(/** @type {AlignmentResetRecord[]} */ (request.records).map(async (record) => ({
     recordKey: record.recordKey, source: await sourceIdentity(record.source),
     selector: record.selector,
     region: record.region ? { start: record.region.start, end: record.region.end } : null,
@@ -398,14 +476,22 @@ const resetBinding = async (canonical) => {
   return sha256Hex(textToBytes(JSON.stringify(sortedValue({ plan, records }))));
 };
 
+/**
+ * @param {unknown} receipt The stored receipt, unvalidated.
+ * @param {AlignmentResetCanonical | null | undefined} canonical
+ */
 export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
   const validated = validateAlignmentResetReceiptShape(receipt, canonical?.renderRequest);
-  if (validated && validated.binding !== await resetBinding(canonical)) {
+  // A receipt that passed the shape check needs `request.mode === 'linear'`, so `canonical` is set.
+  if (validated && validated.binding !== await resetBinding(/** @type {AlignmentResetCanonical} */ (canonical))) {
     throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
   }
   return validated;
 };
 
+/**
+ * @param {{ before: AlignmentResetPlannedCanonical, after: AlignmentResetPlannedCanonical }} sessions
+ */
 export const buildSimilarityAlignmentResetReceipt = async ({ before, after }) => {
   const previous = new Map(before.renderRequest.records.map((record) => [record.recordKey, record]));
   const directions = after.renderRequest.records.flatMap((record) => {
@@ -417,6 +503,7 @@ export const buildSimilarityAlignmentResetReceipt = async ({ before, after }) =>
       : [{ recordKey: record.recordKey, before: beforeReverse, after: afterReverse }];
   });
   const referenceKey = after.renderRequest.layout.similarityAlignment.reference.recordKey;
+  /** @param {AlignmentResetPlannedCanonical} canonical */
   const x = (canonical) => canonical.renderRequest.layout.recordTranslations
     .find(({ recordKey }) => recordKey === referenceKey)?.x ?? 0;
   const deltaX = x(after) - x(before);

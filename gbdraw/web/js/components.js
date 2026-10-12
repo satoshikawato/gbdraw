@@ -9,6 +9,7 @@ import {
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
+/** @import { UserFacingError } from './utils/error-normalization.js' */
 
 const { ref, reactive, computed, nextTick, watch, useId, onMounted } = window.Vue;
 
@@ -70,7 +71,7 @@ export const ChoiceDialog = {
     /** @type {{ value: HTMLElement | null }} */
     const panel = ref(null);
     const focusLost = () => !document.activeElement || document.activeElement === document.body;
-    watch(() => props.busy, async (busy) => {
+    watch(() => props.busy, async (/** @type {boolean} */ busy) => {
       const element = panel.value;
       if (!element) return;
       if (busy) {
@@ -129,6 +130,7 @@ export const GbdrawLoader = {
 export const HelpTip = {
   template: '#help-tip-template',
   props: ['text', 'id', 'label'],
+  /** @param {{ text?: string, id?: string | null, label?: string }} props */
   setup(props) {
     const automaticId = `help-tip-${useId()}`;
     const descriptionId = computed(() => props.id || automaticId);
@@ -172,9 +174,9 @@ export const HelpTip = {
       style.left = `${left}px`;
       style.transform = transform;
     };
-    watch(visible, (open) => { if (open) position(); });
+    watch(visible, (/** @type {boolean} */ open) => { if (open) position(); });
     // A touch tap also reports pointerenter; only a hovering pointer shows it.
-    const onEnter = (event) => { hovered.value = event.pointerType !== 'touch'; };
+    const onEnter = (/** @type {PointerEvent} */ event) => { hovered.value = event.pointerType !== 'touch'; };
     const onLeave = () => { hovered.value = false; };
     const onFocus = () => { keyboardFocus.value = Boolean(trigger.value?.matches?.(':focus-visible')); };
     const close = () => {
@@ -251,13 +253,17 @@ export const ColorValueControl = {
     ariaDescribedby: { type: String, default: null }
   },
   emits: ['update:modelValue'],
+  /**
+   * @param {{ modelValue: unknown, fallback: string }} props
+   * @param {{ emit: (event: 'update:modelValue', value: string | null) => void }} context
+   */
   setup(props, { emit }) {
     const controlAvailable = computed(() => !state.sessionOperationAvailability());
     const mode = computed(() => colorValueMode(props.modelValue));
     const pickerValue = computed(() => (
       toNativeColorInputValue(props.modelValue, props.fallback)
     ));
-    const updateMode = (event) => {
+    const updateMode = (/** @type {{ target: HTMLSelectElement }} */ event) => {
       const busy = state.sessionOperationAvailability();
       if (busy) return busy;
       const nextMode = String(event?.target?.value || 'auto');
@@ -266,7 +272,7 @@ export const ColorValueControl = {
         colorValueForMode(nextMode, props.modelValue, props.fallback)
       );
     };
-    const updateColor = (event) => {
+    const updateColor = (/** @type {{ target: HTMLInputElement }} */ event) => {
       const busy = state.sessionOperationAvailability();
       if (busy) return busy;
       emit(
@@ -303,6 +309,17 @@ export const ColorValueControl = {
   `
 };
 
+/**
+ * What FileUploader reads of its props. A static `request-clear="true"`
+ * attribute arrives as the string `'true'`.
+ * @typedef {object} FileUploaderProps
+ * @property {{ name?: string } | { name?: string }[] | null} [modelValue] the selected file, or the files of a `multiple` slot
+ * @property {boolean | string} [multiple]
+ * @property {boolean | string} [requestClear]
+ * @property {boolean} [artifactHistory]
+ * @property {(file: File | undefined) => unknown} [afterChange] runs after the selection is stored; a result of `false` is not committed
+ */
+
 // `inspectionFailed` is the slot's existing inspection status, passed by the
 // parent that shows its message (for example "No records were found"): a
 // selected file whose inspection failed is not shown as ready (UI-08).
@@ -310,6 +327,10 @@ export const FileUploader = {
   template: '#file-uploader-template',
   props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'artifactHistory', 'inspectionFailed'],
   emits: ['update:modelValue', 'clearRequest'],
+  /**
+   * @param {FileUploaderProps} props
+   * @param {{ emit: (event: 'update:modelValue' | 'clearRequest', value: File | File[] | never[] | EventTarget | null) => void }} context
+   */
   setup(props, { emit }) {
     const input = ref(null);
     const uploadAvailable = computed(() => !state.sessionOperationAvailability());
@@ -322,11 +343,11 @@ export const FileUploader = {
       const items = selectedFiles.value;
       if (items.length === 0) return '';
       if (items.length === 1) return items[0]?.name || 'Selected file';
-      const firstNames = items.slice(0, 2).map((file) => file?.name || 'file').join(', ');
+      const firstNames = items.slice(0, 2).map((/** @type {{ name?: string }} */ file) => file?.name || 'file').join(', ');
       const suffix = items.length > 2 ? ` +${items.length - 2}` : '';
       return `${items.length} files: ${firstNames}${suffix}`;
     });
-    const handleFile = (e) => {
+    const handleFile = (/** @type {{ target: HTMLInputElement }} */ e) => {
       const busy = state.sessionOperationAvailability();
       if (busy) { e.target.value = ''; return busy; }
       const nextFiles = Array.from(e.target.files || []);
@@ -344,7 +365,7 @@ export const FileUploader = {
         return await props.afterChange?.(nextFiles[0]);
       };
       if (props.artifactHistory) {
-        void history.runUndoableCheckpoint('Change uploaded file', apply, { shouldCommit: result => result !== false });
+        void history.runUndoableCheckpoint('Change uploaded file', apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
       } else if (history?.runUndoable) {
         void history.runUndoable('Change uploaded file', apply);
       } else {
@@ -352,7 +373,7 @@ export const FileUploader = {
       }
       e.target.value = '';
     };
-    const clearFile = (event) => {
+    const clearFile = (/** @type {Event} */ event) => {
       const busy = state.sessionOperationAvailability();
       if (busy) return busy;
       if (props.requestClear) {
@@ -386,12 +407,23 @@ export const RecordName = {
   template: `<span class="record-name" :title="title"><span v-if="prefix" class="record-name-part">{{ prefix + ' ' }}</span><span class="record-name-main">{{ name }}</span><span v-if="detail" class="record-name-part" data-record-name-detail>{{ ' · ' + detail }}</span></span>`
 };
 
+/**
+ * What RecordDisplayControl calls on `createRecordDisplayControls`' result,
+ * which the template passes as `controller`; the row is passed back untouched.
+ * @typedef {object} RecordDisplayControlPort
+ * @property {(row: unknown, value: string | number) => Promise<unknown>} setStart
+ * @property {(row: unknown) => { displayStart?: string | number | null }} surfaceFor
+ * @property {(row: unknown) => unknown} draftFor
+ */
+
 export const RecordDisplayControl = {
   template: '#record-display-control-template',
   props: ['row', 'controller'],
+  /** @param {{ row: unknown, controller: RecordDisplayControlPort }} props */
   setup(props) {
     const error = ref('');
-    const setStart = async (event) => {
+    // The Display start `<input>`: assigning a number sets its decimal text.
+    const setStart = async (/** @type {{ target: { value: string | number, checkValidity: () => boolean, validationMessage: string } }} */ event) => {
       const busy = state.sessionOperationAvailability();
       if (busy) return busy;
       try {
@@ -415,11 +447,12 @@ export const RecordDisplayControl = {
 export const OperationError = {
   template: '#operation-error-template',
   props: { error: { type: null, default: null }, recovery: { type: null, default: null }, compact: Boolean },
+  /** @param {{ error: string | Record<string, unknown> | null | undefined, recovery: string | null | undefined }} props */
   setup(props) {
     const model = computed(() => normalizeUserFacingError(props.error));
     const title = computed(() => operationErrorTitle(model.value?.operation));
     const recoveryText = computed(() => generationRecoveryGuidance(props.recovery));
-    const diagnostics = computed(() => (model.value?.details || []).map(section =>
+    const diagnostics = computed(() => (model.value?.details || []).map((/** @type {UserFacingError['details'][number]} */ section) =>
       `${section.label}\n${section.text}`).join('\n\n'));
     const details = ref(null);
     const diagnosticText = ref(null);

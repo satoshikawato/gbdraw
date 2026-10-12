@@ -30,6 +30,11 @@ const loadStandaloneInteractivity = () => {
   return standaloneInteractivityPromise;
 };
 
+/**
+ * @param {URL} url
+ * @param {string} label
+ * @returns {Promise<Event>} Resolves with the script's load event.
+ */
 const loadSameOriginScript = (url, label) => new Promise((resolve, reject) => {
   if (url.origin !== window.location.origin) {
     reject(new Error(`${label} must be loaded from the application origin.`));
@@ -66,15 +71,21 @@ const loadPdfLibraries = () => {
   return pdfLibrariesPromise;
 };
 
+/** @import { StandaloneInteractivityOptions } from './standalone-interactivity.js' */
+
 /**
  * @typedef {object} ExportSnapshot The captured preview an export action reads.
  * @property {string} name
  * @property {SVGSVGElement | null} [svg]
  * @property {string} [svgContent]
- * @property {unknown} [interactivity]
+ * @property {StandaloneInteractivityOptions} [interactivity]
  * @property {number | string} [dpi]
  */
 
+/**
+ * @param {ExportSnapshot} snapshot
+ * @param {string} extension
+ */
 const getDownloadName = (snapshot, extension) => {
   const baseName = snapshot.name;
   if (!extension) return baseName;
@@ -85,6 +96,10 @@ const getDownloadName = (snapshot, extension) => {
   return normalized;
 };
 
+/**
+ * @param {ExportSnapshot} snapshot
+ * @returns {SVGSVGElement}
+ */
 const getCurrentSvgClone = (snapshot) => {
   const clone = snapshot.svg || getSvgFromString(snapshot.svgContent);
   if (clone) {
@@ -104,10 +119,12 @@ const getCurrentSvgClone = (snapshot) => {
   return clone;
 };
 
+/** @param {ExportSnapshot} snapshot */
 const getCurrentSvgString = (snapshot) => (
   new XMLSerializer().serializeToString(getCurrentSvgClone(snapshot))
 );
 
+/** @param {ExportSnapshot} snapshot */
 const getInteractiveSvgString = async (snapshot) => {
   const { enrichSvgWithStandaloneInteractivity } = await loadStandaloneInteractivity();
   const clone = getCurrentSvgClone(snapshot);
@@ -118,6 +135,10 @@ const getInteractiveSvgString = async (snapshot) => {
   return new XMLSerializer().serializeToString(clone);
 };
 
+/**
+ * @param {string | null | undefined} svgString
+ * @returns {SVGSVGElement | null}
+ */
 const getSvgFromString = (svgString) => {
   if (!svgString) return null;
   const svgEl = document.createElement('div');
@@ -125,10 +146,11 @@ const getSvgFromString = (svgString) => {
   return svgEl.querySelector('svg');
 };
 
+/** @param {SVGSVGElement | null} svg */
 const getSvgDimensions = (svg) => {
   if (!svg) return null;
-  let w = parseFloat(svg.getAttribute('width'));
-  let h = parseFloat(svg.getAttribute('height'));
+  let w = parseFloat(svg.getAttribute('width') ?? '');
+  let h = parseFloat(svg.getAttribute('height') ?? '');
   if (!w || !h) {
     const viewBox = svg.getAttribute('viewBox');
     if (!viewBox) return null;
@@ -141,6 +163,7 @@ const getSvgDimensions = (svg) => {
   return { width: w, height: h };
 };
 
+/** @param {SVGSVGElement} svg */
 const moveGradientsToDefs = (svg) => {
   const defs = ensureSvgDefs(svg);
   svg.querySelectorAll('linearGradient, radialGradient').forEach((gradient) => {
@@ -150,6 +173,11 @@ const moveGradientsToDefs = (svg) => {
   });
 };
 
+/**
+ * @param {Element} target
+ * @param {Element} source
+ * @param {string[]} attributes
+ */
 const copyAttributes = (target, source, attributes) => {
   attributes.forEach((attr) => {
     const value = source.getAttribute(attr);
@@ -159,6 +187,10 @@ const copyAttributes = (target, source, attributes) => {
   });
 };
 
+/**
+ * @param {Element} target
+ * @param {Element | null | undefined} source
+ */
 const applyFontAndPaintStyles = (target, source) => {
   if (!source) return;
   const style = window.getComputedStyle(source);
@@ -181,6 +213,7 @@ const applyFontAndPaintStyles = (target, source) => {
   });
 };
 
+/** @param {SVGSVGElement} svg */
 const flattenTextPathsForPdf = (svg) => {
   const textElements = Array.from(svg.querySelectorAll('text')).filter((el) =>
     el.querySelector('textPath')
@@ -218,8 +251,8 @@ const flattenTextPathsForPdf = (svg) => {
       charText.textContent = char;
       // Without preserve, svg2pdf drops a whitespace-only text run from the text layer.
       if (!char.trim()) charText.setAttributeNS(XML_NS, 'xml:space', 'preserve');
-      charText.setAttribute('x', pos.x);
-      charText.setAttribute('y', pos.y);
+      charText.setAttribute('x', String(pos.x));
+      charText.setAttribute('y', String(pos.y));
       charText.setAttribute('text-anchor', 'start');
       charText.setAttribute('dominant-baseline', 'alphabetic');
       if (rotation) {
@@ -235,7 +268,9 @@ const flattenTextPathsForPdf = (svg) => {
 };
 
 // Reads and writes run in separate phases: interleaving them forces a layout per text.
+/** @param {ParentNode} svg */
 export const normalizeTextBaselinesForPdf = (svg) => {
+  /** @type {{ textEl: SVGTextElement, baseline: string, before: DOMRect }[]} */
   const pending = [];
   svg.querySelectorAll('text').forEach((textEl) => {
     const baseline = textEl.getAttribute('dominant-baseline');
@@ -249,7 +284,9 @@ export const normalizeTextBaselinesForPdf = (svg) => {
 
   pending.forEach(({ textEl }) => textEl.setAttribute('dominant-baseline', 'alphabetic'));
 
+  /** @type {{ textEl: SVGTextElement, baseline: string, before: DOMRect, after: DOMRect }[]} */
   const measured = [];
+  /** @type {typeof pending} */
   const unmeasurable = [];
   pending.forEach((entry) => {
     try {
@@ -278,18 +315,20 @@ export const normalizeTextBaselinesForPdf = (svg) => {
       const dyAttr = textEl.getAttribute('dy');
       const dyValue = dyAttr ? parseFloat(dyAttr) : 0;
       const nextDy = Number.isFinite(dyValue) ? dyValue + dy : dy;
-      textEl.setAttribute('dy', nextDy);
+      textEl.setAttribute('dy', String(nextDy));
     }
 
     textEl.removeAttribute('dominant-baseline');
   });
 };
 
+/** @param {SVGSVGElement | null} svg */
 const prepareSvgForPdf = (svg) => {
   if (!svg) {
     throw new Error('The current SVG could not be prepared for PDF export.');
   }
-  const clone = svg.cloneNode(true);
+  // The deep clone of an svg root element is an svg root element.
+  const clone = /** @type {SVGSVGElement} */ (svg.cloneNode(true));
   if (!clone.getAttribute('xmlns')) {
     clone.setAttribute('xmlns', SVG_NS);
   }
@@ -320,6 +359,10 @@ const prepareSvgForPdf = (svg) => {
   };
 };
 
+/**
+ * @param {string} svgString
+ * @param {string} filename
+ */
 const downloadSvgString = (svgString, filename) => {
   if (!svgString) {
     throw new Error('The SVG export produced no content.');

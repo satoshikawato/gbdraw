@@ -26,6 +26,7 @@ export const MODE_SCOPED_ROWS = MODE_SCOPED_SETTINGS.rows;
 /** @type {readonly string[]} */
 export const LOSAT_EXECUTION_FIELDS = MODE_SCOPED_SETTINGS.losatExecutionFields;
 
+/** @param {unknown} value */
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fieldsError = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
 /** @param {unknown} value */
