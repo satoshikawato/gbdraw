@@ -40,6 +40,15 @@ def test_generated_web_contracts_match_python_source() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+@pytest.mark.browser
+def test_the_contracts_directory_holds_only_the_generated_modules() -> None:
+    # R14: `contracts/` holds the modules that `--check` compares and nothing else.
+    generator = _generator()
+    targets = {generator.TARGET, generator.REQUEST_TARGET, generator.SESSION_TARGET}
+
+    assert set(generator.TARGET.parent.rglob("*")) == targets
+
+
 @pytest.mark.parametrize(
     ("web_name", "module", "name"),
     [

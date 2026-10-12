@@ -482,6 +482,12 @@
       "heading": "R14: Typed boundaries",
       "guards": [
         {
+          "path": "tests/test_web_contracts_generated.py",
+          "rootCause": "P4",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
           "path": "tests/web/explicit-any-ratchet.test.mjs",
           "rootCause": "P5",
           "job": "web-contracts-pr",

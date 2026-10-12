@@ -630,14 +630,24 @@ authority-only change. A new module is checked from its first commit.
   type naming another owner's factory result (`ReturnType<typeof createX>`) is
   a whole-object port.
 - A persisted contract (the Session, the canonical render request, the feature
-  catalog) has one typedef, in its writer beside its version constant
-  (`SESSION_VERSION`, `CANONICAL_REQUEST_SCHEMA`, `FEATURE_CATALOG_SCHEMA`),
-  for the current format only. A reader takes unvalidated data and returns that
-  typedef.
+  catalog) has one typedef, for the current format only. The Session and the
+  canonical render request are declared once, in Python.
+  `tools/generate_web_contracts.py` writes their typedefs, and the constants
+  of the persisted contracts (among them `SESSION_VERSION`,
+  `CANONICAL_REQUEST_SCHEMA`, and `FEATURE_CATALOG_SCHEMA`), to the modules
+  `js/contracts/*.generated.js`. `js/contracts/` holds only the modules that
+  tool writes. They are never edited by hand, and no other module declares a
+  typedef or a constant that one of them declares. The feature catalog's
+  typedef is in its writer, `services/feature-catalog.js`.
+- A reader of an unvalidated document takes `unknown`, or the generated input
+  type whose values are `unknown` (`SessionInput`, and `SessionEnvelope` once
+  `format` and `version` are read). The validator of each part returns that
+  part's type. `GbdrawSession` is the writer's type; no reader returns it.
 - Types are JSDoc in the module that owns them, imported with
   `/** @import { T } from './x.js' */`, never a `.d.ts` or a types module under
-  `gbdraw/web/`. A type import follows the layers of R13. The globals of
-  vendored scripts and the test hooks are declared once, as `any`, in
+  `gbdraw/web/` other than the generated modules of `js/contracts/`. A type
+  import follows the layers of R13. The globals of vendored scripts and the
+  test hooks are declared once, as `any`, in
   `tests/web/types/web-globals.d.ts`.
 - `@ts-ignore`, `@ts-expect-error`, and `@ts-nocheck` are not used: fix the
   type, cast with JSDoc, or fix the code.
@@ -662,7 +672,10 @@ authority-only change. A new module is checked from its first commit.
   feature id) take distinct named types, not one shared `string` alias.
 
 Guards: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
-run, declared factory parameters, no suppression, type-import direction),
+run, declared factory parameters, no suppression, type-import direction, no
+second declaration of a generated typedef or constant),
+`tests/test_web_contracts_generated.py` (the generated modules equal the
+tool's output, and `js/contracts/` holds nothing else),
 `tests/web/no-implicit-any-ratchet.test.mjs` (`noImplicitAny` diagnostics per
 module), and
 `tests/web/explicit-any-ratchet.test.mjs` (explicit `any` per module). They
