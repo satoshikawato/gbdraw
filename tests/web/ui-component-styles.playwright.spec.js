@@ -427,6 +427,49 @@ test('an upload zone whose file failed inspection does not look ready (UI-08)', 
   await expect(linearZone.locator('.ph-check-circle')).toHaveCount(0);
 });
 
+// OV-600: a file name wider than the zone is cut at its end with an ellipsis and the
+// icon stays, in the ready and the failed row; the whole name is the hover text.
+test('an upload zone cuts a long file name at its end and keeps its icon (OV-600)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+  const longName = `${'a-very-long-genbank-file-name-'.repeat(6)}.gbk`;
+  const shown = (zone) => zone.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const inside = (child) => {
+      const rect = child.getBoundingClientRect();
+      return rect.width > 0 && rect.left >= box.left && rect.right <= box.right;
+    };
+    const name = element.querySelector('i + span');
+    return {
+      icon: inside(element.querySelector('i')), name: inside(name), cut: name.scrollWidth > name.clientWidth,
+      overflow: getComputedStyle(name).textOverflow, title: name.getAttribute('title')
+    };
+  });
+  const cutAtTheEnd = { icon: true, name: true, cut: true, overflow: 'ellipsis', title: longName };
+
+  const zone = page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
+  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+    .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
+  await expect(zone).toHaveClass(/\bfailed\b/, { timeout: 120_000 });
+  await expect(zone).toContainText(longName);
+  expect(await shown(zone), 'Circular, failed').toEqual(cutAtTheEnd);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+    .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: genbank });
+  await expect(zone).toHaveClass(/\bready\b/, { timeout: 120_000 });
+  expect(await shown(zone), 'Circular, ready').toEqual(cutAtTheEnd);
+
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  const linearZone = page.getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true }).first();
+  await page.getByTestId('linear-genbank-1')
+    .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: genbank });
+  await expect(linearZone).toHaveClass(/\bready\b/, { timeout: 120_000 });
+  expect(await shown(linearZone), 'Linear, ready').toEqual(cutAtTheEnd);
+  await page.getByTestId('linear-genbank-1')
+    .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
+  await expect(linearZone).toHaveClass(/\bfailed\b/, { timeout: 120_000 });
+  expect(await shown(linearZone), 'Linear, failed').toEqual(cutAtTheEnd);
+});
+
 // Loader (Owner decision 2026-10-11). The boot splash stays up while app.js is blocked.
 const openBootSplash = async (page) => {
   await page.route('**/js/app.js*', (route) => route.abort());

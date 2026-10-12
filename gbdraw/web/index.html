@@ -8739,11 +8739,11 @@
             </div>
             <div v-else-if="inspectionFailed" class="upload-zone-failed-label font-bold truncate w-full px-2 flex items-center justify-center gap-1.5" :class="small ? 'text-[10px]' : 'text-xs'">
                 <i class="ph ph-warning-circle" aria-hidden="true"></i>
-                <span>{{ selectedLabel }}</span>
+                <span class="min-w-0 truncate" :title="selectedLabel">{{ selectedLabel }}</span>
             </div>
             <div v-else class="text-green-700 font-bold truncate w-full px-2 flex items-center justify-center gap-1.5" :class="small ? 'text-[10px]' : 'text-xs'">
                 <i class="ph ph-check-circle" aria-hidden="true"></i>
-                <span>{{ selectedLabel }}</span>
+                <span class="min-w-0 truncate" :title="selectedLabel">{{ selectedLabel }}</span>
             </div>
         </div>
     </div>
