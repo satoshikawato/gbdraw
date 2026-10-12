@@ -14,12 +14,13 @@
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { LegacyProteinCandidateEnvelope } from '../services/losat-cache.js' */
+/** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry } from '../services/losat-cache.js' */
 /** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
 /** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
+/** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
 /** @import { CircularConservationLike } from '../services/conservation-series.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
@@ -645,11 +646,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
 };
 
 /**
- * A derived cache entry that `isLosatDerivedCacheEntry` accepts: a plain object with a plain-object `payload`.
- * @typedef {{ mode?: unknown, payload: Record<string, unknown> }} LosatDerivedCacheEntry
- */
-
-/**
+ * @param {Map<string, unknown> | null | undefined} cacheMap The derived cache; an entry is read as unchecked.
  * @param {string} key
  * @param {unknown} manifest
  */
@@ -6017,6 +6014,13 @@ export const createRunAnalysis = ({
   // the diagnostic Generate raises for it (R6, OV-06). The rerender also draws
   // the Legend again, so the Legend it draws is the generated inventory, as
   // after Generate (OV-42, OV-43): the next edit compares against it.
+  /**
+   * @param {Extract<Awaited<ReturnType<typeof executeCanonicalRenderCandidate>>, { status: 'ok' }>['commit']} commit The rerender's commit.
+   * @param {number} resultIndex
+   * @param {() => boolean} isCurrentReflow
+   * @param {LabelDiagramOptions | null | undefined} diagramOptions The `diagramOptions` of the request the rerender drew.
+   * @param {EditorPaintState} drawnPaint
+   */
   const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint) => {
     const result = commit.results[resultIndex];
     const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
