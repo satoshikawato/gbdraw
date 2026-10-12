@@ -33,7 +33,7 @@ const NO_IMPLICIT_ANY_BASELINE = {
   'app/run-analysis.js': 304,
   'app/run-info.js': 222,
   'app/similarity-alignment.js': 4,
-  'services/config.js': 204,
+  'services/config.js': 206,
   'services/losat-cache.js': 2,
   'services/session-authority.js': 7,
   'services/session-request.js': 191

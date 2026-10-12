@@ -434,7 +434,6 @@ const recognizedCauseOr = (error, fallback) => {
 /** @param {unknown} value */
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-/** @param {Record<string, string> | null | undefined} colors */
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
 const hasColorEntries = (colors) =>
@@ -496,7 +495,6 @@ const splitLegacyFeatureVisibilityRules = (features = {}) => {
 
 // The identity-keyed per-feature edit draft; a Session or History value is
 // checked as the request rows are (services/feature-placement.js).
-/** @param {FeatureOverrideDraft | null | undefined} value */
 const featureOverridesForState = (value) => featureDraftMap(
   canonicalFeatureOverrides(isPlainObject(value) ? value : {})
 );
@@ -1710,14 +1708,18 @@ const validateSessionLosatArtifactsForImport = async (data, sourceSessionVersion
 };
 
 /**
- * @param {{ legacyRawCandidates?: { entries?: readonly unknown[] } | null,
- *   legacyDerivedEvidence?: { entries?: readonly unknown[] } | null }} options
+ * The envelopes of retired LOSAT artifacts a Session keeps, as they were read.
+ * @typedef {{ entries?: readonly unknown[] }} LegacyArtifactEnvelope
+ */
+/**
+ * @param {{ legacyRawCandidates?: LegacyArtifactEnvelope | null,
+ *   legacyDerivedEvidence?: LegacyArtifactEnvelope | null }} options
  */
 export const buildSessionLegacyArtifacts = ({
   legacyRawCandidates,
   legacyDerivedEvidence
 }) => {
-  /** @type {NonNullable<GbdrawSession['legacyArtifacts']>} */
+  /** @type {{ proteinRawCandidates?: LegacyArtifactEnvelope, proteinDerivedEvidence?: LegacyArtifactEnvelope }} */
   const legacyArtifacts = {};
   if (legacyRawCandidates?.entries?.length) {
     legacyArtifacts.proteinRawCandidates = legacyRawCandidates;
