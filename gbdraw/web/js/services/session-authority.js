@@ -338,8 +338,7 @@ const hasInput = value => Array.isArray(value) ? value.some(hasInput) : value !=
 export const hasBiologicalSessionInputs = (files = {}) => (
   ['c_gb', 'c_gff', 'c_fasta', 'c_conservation_fastas', 'c_conservation_sequence_sources']
     .some(key => hasInput(files[key]))
-  // A Session's row can be null (`validateWebFileBindings` lets it through): a row without inputs (OV-566).
-  || (files.linearSeqs || []).some((/** @type {Record<string, unknown> | null | undefined} */ row) => ['gb', 'gff', 'fasta'].some(key => hasInput(row?.[key])))
+  || (files.linearSeqs || []).some((/** @type {Record<string, unknown>} */ row) => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
 );
 
 /**
@@ -356,7 +355,11 @@ const validateSettingsOnlyDocument = data => {
     || ['c_gb', 'c_gff', 'c_fasta'].some(key => !Object.hasOwn(bindings, key))) {
     throw new Error('Settings-only Session requires resources and an explicit Web input inventory.');
   }
-  if (hasBiologicalSessionInputs(bindings)
+  // Every Linear row is an object, as Python's reader requires
+  // (`_validate_settings_only_session`); `validateWebFileBindings` lets a
+  // null row through (OV-566).
+  if (bindings.linearSeqs.some((/** @type {unknown} */ row) => !isPlainObject(row))
+    || hasBiologicalSessionInputs(bindings)
     || Object.keys(data.webFiles).some(key => key !== 'bindings')) {
     throw new Error('Settings-only Session cannot contain biological sources.');
   }
