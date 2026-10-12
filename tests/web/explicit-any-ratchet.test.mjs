@@ -91,7 +91,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/circular-track-measure.js': 1,
   'services/circular-track-slot-model.js': 6,
   'services/config.js': 118,
-  'services/depth-track-state.js': 11,
+  'services/depth-track-state.js': 4,
   'services/diagram-generation.js': 11,
   'services/diagram-resource-staging.js': 2,
   'services/feature-catalog.js': 7,
@@ -128,7 +128,6 @@ const EXPLICIT_ANY_BASELINE = {
   'services/specific-color-rules.js': 1,
   'services/standalone-interactivity.js': 2,
   'services/svg-result-ingestion.js': 10,
-  'services/track-slot-display.js': 1,
   'services/track-slot-validation.js': 1,
   'state.js': 5,
   'utils/error-normalization.js': 4

@@ -173,6 +173,7 @@ import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
 
 /** @import { SessionResourceSource } from './session-resources.js' */
+/** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
@@ -1745,6 +1746,7 @@ const conservationSeriesForValidation = ({
   )
     ? filesData.c_conservation_blasts
     : filesData.c_conservation_fastas;
+  /** @type {OrderedConservationSource[]} */
   let ordered = [];
   try {
     ordered = orderedConservationSources(
@@ -4197,11 +4199,12 @@ export const projectCanonicalSessionRequest = ({
     const originalInputFields = renderRequest.mode === 'circular'
       ? ['c_gb', 'c_gff', 'c_fasta']
       : ['linearSeqs'];
-    const hasOriginalInputs = originalInputFields.some((field) => (
-      Array.isArray(explicitBindings[field])
-        ? explicitBindings[field].length > 0
-        : explicitBindings[field] != null
-    ));
+    // A const, so that the narrowing of `explicitBindings` reaches the closure.
+    const bindings = explicitBindings;
+    const hasOriginalInputs = originalInputFields.some((field) => {
+      const value = bindings[field];
+      return Array.isArray(value) ? value.length > 0 : value != null;
+    });
     explicitBindings = Object.fromEntries(Object.entries(explicitBindings).filter(
       ([field, value]) => (hasOriginalInputs && originalInputFields.includes(field))
         || (value != null && (!Array.isArray(value) || value.length > 0))
