@@ -210,7 +210,7 @@ test('alignment rings and the reference line stay transient and share the panel 
   await expect.poll(() => firstFeature.evaluate((element) => element.style.opacity))
     .toBe('0.7');
   await expect(secondRadio).toBeChecked();
-  // D-12: nothing opens the feature popup while the review is open.
+  // No gesture on the figure opens the feature popup while the review is open.
   const referenceSvgId = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const anchor = app.similarityAlignmentDraft.response.reference;
@@ -264,8 +264,10 @@ test('alignment rings and the reference line stay transient and share the panel 
     window.dispatchEvent(new Event('resize'));
   }, firstSvgId);
   await expect(candidateRing(page, first.key)).toBeHidden();
-  await firstRadio.check();
-  await expect(firstRadio).toBeChecked();
+  // A candidate the Result does not show is listed last; its row still chooses it.
+  const hiddenRadio = radios.and(page.locator(`[aria-label=${JSON.stringify(await firstRadio.getAttribute('aria-label'))}]`));
+  await hiddenRadio.check();
+  await expect(hiddenRadio).toBeChecked();
   await page.evaluate((svgId) => {
     document.querySelectorAll('[data-gbdraw-feature-id="' + CSS.escape(svgId) + '"]')
       .forEach((element) => element.removeAttribute('display'));
@@ -378,8 +380,24 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const dialog = page.getByRole('dialog', { name: 'Review alignment' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await expect(dialog.getByRole('heading', { name: 'Review alignment' })).toBeFocused();
-  await expect(dialog).toHaveAttribute('aria-describedby', 'similarity-alignment-application-help');
-  await expect(dialog.locator('#similarity-alignment-application-help')).toHaveText('Apply required: nothing changes until Apply succeeds. Cancel keeps the current Result.');
+  // The description counts what the section headings count, then says what Apply means.
+  await expect(dialog).toHaveAttribute('aria-describedby',
+    'similarity-alignment-dialog-description similarity-alignment-application-help');
+  const sectionCounts = await dialog.locator('[data-alignment-section]').evaluateAll((headings) => Object.fromEntries(
+    headings.map((heading) => [heading.dataset.alignmentSection, Number(heading.querySelector('.count').textContent)])));
+  const summaryParts = [
+    ['choose', (n) => `${n} ${n === 1 ? 'needs' : 'need'} a choice`], ['several', (n) => `${n} with several candidates`],
+    ['single', (n) => `${n} with one candidate`], ['none', (n) => `${n} without a usable candidate`]
+  ].filter(([id]) => sectionCounts[id]).map(([id, words]) => words(sectionCounts[id]));
+  const recordCount = await dialog.locator('.alignment-review-card').count();
+  await expect(dialog.locator('#similarity-alignment-dialog-description')).toHaveText(
+    `Similarity group ${await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDraft.response.groupId)}: `
+    + [`${recordCount} records`, ...summaryParts].join(', ') + '.');
+  const applyChip = dialog.locator('#similarity-alignment-application-help');
+  await expect(applyChip).toBeVisible();
+  await expect(applyChip).toHaveText('Apply required: nothing changes until Apply succeeds. Cancel keeps the current Result.');
+  // The reference gene is placed in text as a candidate row is.
+  await expect(dialog.locator('[data-similarity-alignment-reference] .alignment-review-place')).toHaveText(/^[\d,]+\.\.[\d,]+ bp \(.+\)$/);
   // The reference card names its record and gene; it says more only when its record is reversed.
   const referenceCard = dialog.locator('[data-similarity-alignment-reference]');
   await expect(referenceCard).toContainText('Reference');
@@ -976,7 +994,8 @@ test('one usable member applies directly through one Worker resolve and one Hist
     .toHaveCount(0);
   // One usable candidate: a compact card whose Skip checkbox is the only choice.
   await expect(resolvedReview.getByRole('radio', { name: /Select .*bp, strand/ })).toHaveCount(0);
-  await expect(resolvedReview.locator('[data-alignment-section="single"]')).toContainText('One candidate');
+  await expect(resolvedReview.locator('[data-alignment-section="single"]')).toHaveText('One candidate1 (1 record)');
+  await expect(resolvedReview.locator('[data-alignment-record-key] .alignment-review-place')).toHaveText(/^[\d,]+\.\.[\d,]+ bp \(.+\)$/);
   await expect(resolvedReview.locator('[data-alignment-record-key]')).toContainText('a0');
   await resolvedReview.getByRole('checkbox', { name: /^Skip / }).check();
   await expect(resolvedReview).toContainText('Unchanged: Skipped by user.');
@@ -1030,6 +1049,13 @@ test('one usable member applies directly through one Worker resolve and one Hist
       }
     }).observe(document.body, { childList: true, subtree: true });
   });
+  // A one-click Align shows no review, so nothing is taken over: the Editor is never closed.
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    window.__alignmentDrawerChanges = [];
+    window.Vue.watch(() => app.showRightDrawer, (open) => window.__alignmentDrawerChanges.push(open), { flush: 'sync' });
+  });
+  const viewBeforeAlign = await previewView(page);
   await normalAlign.click();
   await expect(page.getByRole('dialog', { name: 'Review alignment' })).toHaveCount(0);
   await expect.poll(() => page.evaluate(async () => {
@@ -1045,6 +1071,9 @@ test('one usable member applies directly through one Worker resolve and one Hist
     resolves: window.__alignmentWorkerResolves,
     paletteMounts: window.__alignmentPaletteMounts
   }))).toEqual({ resolves: 1, paletteMounts: 0 });
+  expect(await page.evaluate(() => window.__alignmentDrawerChanges)).toEqual([]);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)).toBe(true);
+  expect(await previewView(page)).toEqual(viewBeforeAlign);
 
   // Layout editing keeps record drag ahead of pan and consumes the active plan
   // through the existing alignment lifecycle, as one undoable action.
@@ -2470,7 +2499,6 @@ const applyReview = async (page, dialog) => {
   await expect(dialog).toBeHidden({ timeout: 180000 });
 };
 
-// A3, A4, D-11, D-12.
 test('the docked review takes the popup, the Editor and the view, and gives them back after Cancel and Apply', async ({ page }) => {
   test.setTimeout(600000);
   const pageErrors = [];
@@ -2512,7 +2540,7 @@ test('the docked review takes the popup, the Editor and the view, and gives them
   })).toBe(true);
   const fitted = await previewView(page);
 
-  // D-11: a Session saved during the review holds the view from before it.
+  // A Session saved during the review holds the view from before it.
   const savedView = await evaluateWithRetainedPromise(page, async () => {
     const { exportSession } = await import('./js/services/config.js');
     const result = await exportSession('saved during review');
@@ -2522,8 +2550,8 @@ test('the docked review takes the popup, the Editor and the view, and gives them
   });
   expect(savedView).toEqual({ status: 'saved', ...before });
 
-  // D-12: nothing opens or retargets the popup: a click on another feature, and
-  // Open in the feature search row, which still moves the view.
+  // No gesture on the figure opens, retargets or closes the hidden popup: a click on another
+  // feature, a Ctrl-click and a Shift-click (which select), a click on the paper.
   const otherFeatureId = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const draft = app.similarityAlignmentDraft;
@@ -2531,19 +2559,16 @@ test('the docked review takes the popup, the Editor and the view, and gives them
       .concat([draft.response.reference.biologicalFeatureId]));
     return app.extractedFeatures.find((item) => item.type === 'CDS' && !used.has(item.biologicalFeatureId)).svg_id;
   });
-  await page.locator(`[data-gbdraw-feature-id="${otherFeatureId}"]`).first()
-    .dispatchEvent('click', { clientX: -100, clientY: -100 });
+  const otherFeature = page.locator(`[data-gbdraw-feature-id="${otherFeatureId}"]`).first();
+  for (const gesture of [{}, { ctrlKey: true }, { shiftKey: true }]) {
+    await otherFeature.dispatchEvent('click', { clientX: -100, clientY: -100, ...gesture });
+    expect(await clicked(), JSON.stringify(gesture)).toBe(clickedBefore);
+  }
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedFeatures.length)).toBeGreaterThan(0);
+  await page.locator('.gbdraw-preview-surface svg').dispatchEvent('click', { clientX: -100, clientY: -100 });
   expect(await clicked()).toBe(clickedBefore);
   await expect(popup).toBeHidden();
-  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
-  await search.fill('neoA');
-  await search.press('Enter');
-  const openActive = page.getByRole('button', { name: 'Open active feature', exact: true });
-  await expect(openActive).toBeEnabled();
-  await openActive.click();
-  await expect.poll(() => previewView(page)).not.toEqual(fitted);
-  expect(await clicked()).toBe(clickedBefore);
-  await expect(popup).toBeHidden();
+  expect(await previewView(page)).toEqual(fitted);
 
   // Escape ends the review: the popup, the Editor tab, the view and the focus are back.
   await dialog.getByRole('heading', { name: 'Review alignment' }).focus();
@@ -2567,12 +2592,63 @@ test('the docked review takes the popup, the Editor and the view, and gives them
   await applyReview(page, dialog);
   await expect.poll(() => previewView(page)).toEqual(before);
   await expect(popup).toBeVisible();
+  await expect(popupReview).toBeFocused();
   expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
   await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore);
   await expect.poll(() => previewView(page)).toEqual(before);
   expect(pageErrors).toEqual([]);
+});
+
+// The search row's Open is a command, not a gesture on the figure: it moves the view and
+// retargets the hidden popup, which is shown at its feature when the review ends.
+test('Open in the feature search row retargets the hidden popup, shown at its feature when the review ends', async ({ page }) => {
+  test.setTimeout(600000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  // The whole figure is in the view the review will give back.
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  await expect.poll(async () => (await previewView(page)).zoom).toBeLessThan(1);
+  const before = await previewView(page);
+  const { dialog, popup } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  const clicked = () => page.evaluate(() => window.__GBDRAW_APP__.clickedFeature?.svg_id
+    || window.__GBDRAW_APP__.clickedFeature?.feat?.svg_id || null);
+  const clickedBefore = await clicked();
+  await expect.poll(async () => (await previewView(page)).zoom).toBeLessThan(before.zoom);
+  const fitted = await previewView(page);
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  await search.fill('neoA');
+  await search.press('Enter');
+  const openActive = page.getByRole('button', { name: 'Open active feature', exact: true });
+  await expect(openActive).toBeEnabled();
+  await openActive.click();
+  await expect.poll(() => previewView(page)).not.toEqual(fitted);
+  await expect.poll(clicked).not.toBe(clickedBefore);
+  const opened = await clicked();
+  expect(opened).toBeTruthy();
+  await expect(popup).toBeHidden();
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(popup).toBeVisible();
+  await expect(popup).toContainText('neoA');
+  await expect.poll(() => previewView(page)).toEqual(before);
+  // At the feature in the view the review gave back: beside, below or above its centre, 12 px away.
+  const offFeature = () => page.evaluate((svgId) => {
+    const rects = [...document.querySelectorAll(`.gbdraw-preview-surface [data-gbdraw-feature-id="${svgId}"]`)]
+      .map((element) => element.getBoundingClientRect());
+    const x = (Math.min(...rects.map((rect) => rect.left)) + Math.max(...rects.map((rect) => rect.right))) / 2;
+    const y = (Math.min(...rects.map((rect) => rect.top)) + Math.max(...rects.map((rect) => rect.bottom))) / 2;
+    const box = document.querySelector('.feature-popup[role="dialog"]').getBoundingClientRect();
+    return [Math.max(box.left - x, x - box.right, 0), Math.max(box.top - y, y - box.bottom, 0)]
+      .map(Math.round).sort((a, b) => a - b);
+  }, opened);
+  await expect.poll(offFeature).toEqual([0, 12]);
+  expect(await clicked()).toBe(opened);
 });
 
 // A4: what the review took is given back only while the Result is still the review's.
@@ -2611,7 +2687,7 @@ test('a Session loaded under an open review keeps its own view and Editor when t
   expect((await editorDrawer(page)).open).toBe(false);
 });
 
-// B1, B2, C3, C4, D1, D-10: the majanivirus og_13 review opens with records that need a choice.
+// The majanivirus og_13 review opens with records that need a choice.
 test('records that need a choice come first; a ring or a row chooses, and the chosen box is on the line', async ({ page }) => {
   test.setTimeout(600000);
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -2632,7 +2708,10 @@ test('records that need a choice come first; a ring or a row chooses, and the ch
   expect(opened.slice(0, 2)).toEqual(['reference', '#choose']);
   expect(opened.slice(2, 2 + needKeys.length).sort()).toEqual([...needKeys].sort());
   expect(opened[2 + needKeys.length] ?? '#').toMatch(/^#/);
-  await expect(dialog.locator('[data-alignment-section="choose"]')).toHaveText(`Choose a gene${needKeys.length}`);
+  await expect(dialog.locator('[data-alignment-section="choose"]'))
+    .toHaveText(`Choose a gene${needKeys.length} (${needKeys.length} record${needKeys.length === 1 ? '' : 's'})`);
+  await expect(dialog.locator('#similarity-alignment-dialog-description'))
+    .toContainText(`${needKeys.length} ${needKeys.length === 1 ? 'needs' : 'need'} a choice`);
   await expect(page.locator('#similarity-alignment-apply-reason')).toContainText(/Choose a candidate or Skip for \d+ record/);
   await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
   // No number joins a row to the figure.
@@ -2684,9 +2763,20 @@ test('records that need a choice come first; a ring or a row chooses, and the ch
   await expect.poll(async () => (await chosenBox())?.key).toBe(boxKeys[0]);
   expect((await chosenBox()).offLine).toBeLessThan(0.01);
   await expect(candidateRing(page, boxKeys[0])).toHaveAttribute('aria-pressed', 'true');
-  // D-10: the record keeps its place under the heading it opened with.
+  // The record keeps its place under the heading it opened with.
   expect(await order()).toEqual(opened);
   await expect(card).not.toHaveClass(/is-need/);
+  // On the Run info tab the figure is not shown and nothing is measured: the strips keep the
+  // figure they had, and the rings return with the preview.
+  const stripCount = await dialog.locator('[data-alignment-strip]').count();
+  await page.evaluate(() => { window.__GBDRAW_APP__.resultPanelTab = 'run-info'; });
+  await card.getByRole('radio', { name: /Select .*bp, strand/ }).nth(1).check();
+  await expect.poll(async () => (await chosenBox())?.key).toBe(boxKeys[1]);
+  expect((await chosenBox()).offLine).toBeLessThan(0.01);
+  await expect(dialog.locator('[data-alignment-strip]')).toHaveCount(stripCount);
+  await page.evaluate(() => { window.__GBDRAW_APP__.resultPanelTab = 'preview'; });
+  await expect(candidateRing(page, boxKeys[1])).toHaveAttribute('aria-pressed', 'true');
+  await expect(candidateRing(page, boxKeys[1])).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
 });
@@ -2790,6 +2880,7 @@ test('a reference and candidates drawn in several parts get the line, rings and 
   const line = page.locator('.gbdraw-alignment-line:not(.casing)');
   await expect(line).toHaveCount(1);
   // The view is fitted when the panel opens: the line follows the feature until both rest.
+  await page.waitForFunction(() => !document.querySelector('.gbdraw-preview-surface').getAnimations().length);
   const lineOffReference = async () => {
     const lineX = await line.evaluate((element) => {
       const rect = element.getBoundingClientRect();
@@ -2802,7 +2893,15 @@ test('a reference and candidates drawn in several parts get the line, rings and 
   const referenceRing = await page.locator('.gbdraw-alignment-ring.is-reference').boundingBox();
   expect(Math.abs(centre(referenceRing) - reference.x)).toBeLessThanOrEqual(1);
   expect(referenceRing.width).toBeGreaterThanOrEqual(reference.right - reference.left);
-  await expect(page.locator('.gbdraw-alignment-flag')).toContainText('· reference');
+  // The long gene name is cut in the flag; "· reference" stays whole.
+  expect(await page.locator('.gbdraw-alignment-flag').evaluate((flag) => {
+    const range = document.createRange();
+    range.selectNodeContents(flag.lastChild);
+    const words = range.getBoundingClientRect();
+    const box = flag.getBoundingClientRect();
+    return { words: flag.lastChild.textContent, inside: words.left >= box.left && words.right <= box.right,
+      nameCut: flag.firstElementChild.scrollWidth > flag.firstElementChild.clientWidth };
+  })).toEqual({ words: ' · reference', inside: true, nameCut: true });
   await expect(dialog.locator('[data-alignment-strip]')).toHaveCount(review.cards);
   // A candidate in several parts has one ring around all of them.
   const drawn = await drawnSpans(page, review.candidates);

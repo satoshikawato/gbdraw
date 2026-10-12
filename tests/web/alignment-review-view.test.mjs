@@ -150,9 +150,9 @@ const referenceOf = (view) => view.groups[0].cards[0];
 
 test('the reference card comes first and each record is in the section it had when the review opened', () => {
   const rows = reviewRows();
-  const needsChoiceAtOpen = recordsNeedingChoice(rows);
-  assert.deepEqual([...needsChoiceAtOpen], ['two']);
-  const view = buildAlignmentReviewView({ rows, directions: directions(), geometry: reviewGeometry(), needsChoiceAtOpen, width: 350 });
+  const openedWithoutChoice = recordsNeedingChoice(rows);
+  assert.deepEqual(openedWithoutChoice, ['two']);
+  const view = buildAlignmentReviewView({ rows, directions: directions(), geometry: reviewGeometry(), openedWithoutChoice, width: 350 });
   assert.deepEqual(view.groups.map(({ id, title, cards }) => [id, title, cards.map(({ recordKey }) => recordKey)]), [
     ['reference', '', ['ref']],
     ['choose', 'Choose a gene', ['two']],
@@ -160,28 +160,31 @@ test('the reference card comes first and each record is in the section it had wh
     ['none', 'No usable candidate', ['still']]
   ]);
   assert.equal(referenceOf(view).kind, 'reference');
+  // The summary counts what the headings count.
+  assert.equal(view.summary, '4 records, 1 needs a choice, 1 with one candidate, 1 without a usable candidate.');
   const [two] = sectionsOf(view)[0].cards;
   assert.deepEqual({ kind: two.kind, needsChoice: two.needsChoice, skipped: two.skipped, chosenKey: two.chosenKey },
     { kind: 'several', needsChoice: true, skipped: false, chosenKey: '' });
 
-  // A choice removes the amber frame; the card keeps its section and its layout (D-10).
+  // A choice removes the amber frame; the card keeps its section and its layout.
   rows[0] = { ...rows[0], choice: { kind: 'select', candidateKey: 'left' } };
-  const chosen = buildAlignmentReviewView({ rows, directions: directions(), geometry: reviewGeometry(), needsChoiceAtOpen, width: 350 });
+  const chosen = buildAlignmentReviewView({ rows, directions: directions(), geometry: reviewGeometry(), openedWithoutChoice, width: 350 });
   assert.deepEqual(chosen.groups.map(({ id }) => id), ['reference', 'choose', 'single', 'none']);
   const [after] = sectionsOf(chosen)[0].cards;
   assert.deepEqual({ needsChoice: after.needsChoice, chosenKey: after.chosenKey }, { needsChoice: false, chosenKey: 'left' });
   close(centre(boxOf(after.strip, 'left')), chosen.lineX, 'the new choice is on the line');
-  // A record that opened with a choice and several candidates is "Recommended gene chosen".
-  const preselected = buildAlignmentReviewView({ rows, directions: directions(), geometry: reviewGeometry(), needsChoiceAtOpen: new Set() });
+  // A record that opened with a choice and several candidates is under "Several candidates".
+  const preselected = buildAlignmentReviewView({ rows, directions: directions(), geometry: reviewGeometry(), openedWithoutChoice: [] });
   assert.deepEqual(sectionsOf(preselected).map(({ id, title, cards }) => [id, title, cards.length]),
-    [['recommended', 'Recommended gene chosen', 1], ['single', 'One candidate', 1], ['none', 'No usable candidate', 1]]);
+    [['several', 'Several candidates', 1], ['single', 'One candidate', 1], ['none', 'No usable candidate', 1]]);
   assert.equal(preselected.stripWidth, 350);
+  assert.equal(preselected.summary, '4 records, 1 with several candidates, 1 with one candidate, 1 without a usable candidate.');
 });
 
 test('candidates are listed left to right as the figure draws them, undrawn ones last', () => {
   const rows = reviewRows();
   const view = buildAlignmentReviewView({
-    rows, directions: directions(), geometry: reviewGeometry(), needsChoiceAtOpen: recordsNeedingChoice(rows), width: 350
+    rows, directions: directions(), geometry: reviewGeometry(), openedWithoutChoice: recordsNeedingChoice(rows), width: 350
   });
   const [two] = sectionsOf(view)[0].cards;
   assert.deepEqual(two.candidates.map(({ key }) => key), ['left', 'right', 'undrawn']);
@@ -193,13 +196,13 @@ test('the cards carry the strips of one layout, and a reversed record its mirror
   rows[0] = { ...rows[0], choice: { kind: 'select', candidateKey: 'right' } };
   const reversed = directions();
   reversed[0] = { ...reversed[0], status: 'aligned', reversed: true, beforeCenterX: 160, afterCenterX: 40 };
-  const view = buildAlignmentReviewView({ rows, directions: reversed, geometry: reviewGeometry(), needsChoiceAtOpen: new Set(), width: 350 });
+  const view = buildAlignmentReviewView({ rows, directions: reversed, geometry: reviewGeometry(), openedWithoutChoice: [], width: 350 });
   close(centre(boxOf(referenceOf(view).strip, ALIGNMENT_REFERENCE_KEY)), view.lineX, 'reference');
   const [two] = sectionsOf(view)[0].cards;
   close(centre(boxOf(two.strip, 'right')), view.lineX, 'chosen');
   assert.ok(centre(boxOf(two.strip, 'left')) > view.lineX, 'mirrored: the other candidate is right of the line');
 
-  const withoutFigure = buildAlignmentReviewView({ rows, directions: reversed, geometry: null, needsChoiceAtOpen: new Set(), width: 350 });
+  const withoutFigure = buildAlignmentReviewView({ rows, directions: reversed, geometry: null, openedWithoutChoice: [], width: 350 });
   assert.equal(withoutFigure.lineX, null);
   assert.equal(referenceOf(withoutFigure).strip, null);
   assert.deepEqual(sectionsOf(withoutFigure)[0].cards[0].candidates.map(({ key }) => key), ['right', 'undrawn', 'left']);

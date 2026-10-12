@@ -350,24 +350,19 @@ export const createPanZoom = (state) => {
     if (wasPanning) endPreviewTransformInteraction('pan');
   };
 
-  // D-11: a view shown only for a while (the fitted figure of Review alignment) is not what a
-  // Session or an artifact checkpoint keeps. The view from before it is held here, and
-  // `previewViewportToPersist` is the one reader the Session writer and the UI capture use.
-  /** @returns {PersistedPreviewViewport} */
-  const livePreviewViewport = () => ({ zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } });
+  // A view shown only for a while (the fitted figure of Review alignment) is not what a Session
+  // or an artifact checkpoint keeps. The view from before it is held here, and the Session
+  // writer and the UI capture read it through `heldPreviewViewport`.
   /** @type {PersistedPreviewViewport | null} */
-  let heldPreviewViewport = null;
-  const holdPreviewViewport = () => { heldPreviewViewport ??= livePreviewViewport(); };
+  let held = null;
+  const holdPreviewViewport = () => { held ??= { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } }; };
   /** @param {{ restore: boolean }} options `restore` shows the held view again; without it the hold is dropped. */
   const releasePreviewViewport = ({ restore }) => {
-    const held = heldPreviewViewport;
-    heldPreviewViewport = null;
-    if (held && restore) setPreviewViewport(held.canvasPan, held.zoom);
+    const view = held;
+    held = null;
+    if (view && restore) setPreviewViewport(view.canvasPan, view.zoom);
   };
-  /** @returns {PersistedPreviewViewport} */
-  const previewViewportToPersist = () => (heldPreviewViewport
-    ? { zoom: heldPreviewViewport.zoom, canvasPan: { ...heldPreviewViewport.canvasPan } }
-    : livePreviewViewport());
+  const heldPreviewViewport = () => held;
 
   const disposePanZoom = () => {
     cancelPreviewTransformInteraction({ reconcile: false });
@@ -383,7 +378,7 @@ export const createPanZoom = (state) => {
     fitPreviewToViewport,
     holdPreviewViewport,
     releasePreviewViewport,
-    previewViewportToPersist,
+    heldPreviewViewport,
     cancelPreviewTransformInteraction,
     disposePanZoom,
     previewTransformInteraction
@@ -421,7 +416,7 @@ export const createSidebarResize = (state) => {
  * @property {(callback: () => void) => void} onMounted
  * @property {(callback: () => void) => void} onUnmounted
  * @property {() => void} closeRightDrawer
- * @property {() => boolean} previewPopupsHeld The popup owner's hold: the feature and match popups stay as they are.
+ * @property {() => boolean} previewPopupsHeld While it holds, a click outside leaves the feature and match popups as they are.
  */
 
 /** @param {GlobalUiEventsOptions} options */

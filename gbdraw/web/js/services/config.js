@@ -4327,16 +4327,19 @@ const resetSessionBaseline = () => {
  * The preview zoom and pan as a Session's `ui` holds them.
  * @typedef {{ zoom: number, canvasPan: { x: number, y: number } }} PersistedPreviewViewport
  */
-// D-11: the view to save is not always the shown one (Review alignment shows the figure fitted
-// and keeps the view from before it). The composition root registers the pan/zoom owner's
-// reader; the Session writer and the UI capture with navigation read through it.
-/** @type {(() => PersistedPreviewViewport) | null} */
-let previewViewportReader = null;
-/** @param {(() => PersistedPreviewViewport) | null} reader */
-export const setPreviewViewportReader = (reader) => { previewViewportReader = reader; };
+// The view to save is not always the shown one: Review alignment shows the figure fitted and
+// the pan/zoom owner holds the view from before it. The composition root registers that owner's
+// reader of the held view; the Session writer and the UI capture with navigation save the held
+// view while there is one, and the shown view otherwise.
+/** @type {(() => PersistedPreviewViewport | null) | null} */
+let heldPreviewViewportReader = null;
+/** @param {(() => PersistedPreviewViewport | null) | null} reader */
+export const setHeldPreviewViewportReader = (reader) => { heldPreviewViewportReader = reader; };
 /** @returns {PersistedPreviewViewport} */
-const previewViewportToPersist = () => previewViewportReader?.()
-  ?? { zoom: state.zoom.value, canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y } };
+const previewViewportToPersist = () => {
+  const { zoom, canvasPan } = heldPreviewViewportReader?.() ?? { zoom: state.zoom.value, canvasPan: state.canvasPan };
+  return { zoom, canvasPan: { x: canvasPan.x, y: canvasPan.y } };
+};
 
 /** @param {DrawingState} drawing */
 export const buildUiStateData = (drawing, { includePreviewNavigation = true } = {}) => {

@@ -125,16 +125,16 @@ export const layoutAlignmentStrips = ({ geometry, records, width }) => {
 /** The key of the reference feature among a record's drawn candidates. */
 export const ALIGNMENT_REFERENCE_KEY = 'reference';
 
-/** @typedef {'reference' | 'choose' | 'recommended' | 'single' | 'none'} AlignmentReviewGroupId */
+/** @typedef {'reference' | 'choose' | 'several' | 'single' | 'none'} AlignmentReviewGroupId */
 
 // The reference card comes first, without a heading; then the sections.
-/** @type {readonly { id: AlignmentReviewGroupId, title: string }[]} */
+/** @type {readonly { id: AlignmentReviewGroupId, title: string, count: (records: number) => string }[]} */
 const GROUPS = Object.freeze([
-  { id: 'reference', title: '' },
-  { id: 'choose', title: 'Choose a gene' },
-  { id: 'recommended', title: 'Recommended gene chosen' },
-  { id: 'single', title: 'One candidate' },
-  { id: 'none', title: 'No usable candidate' }
+  { id: 'reference', title: '', count: () => '' },
+  { id: 'choose', title: 'Choose a gene', count: (n) => `${n} ${n === 1 ? 'needs' : 'need'} a choice` },
+  { id: 'several', title: 'Several candidates', count: (n) => `${n} with several candidates` },
+  { id: 'single', title: 'One candidate', count: (n) => `${n} with one candidate` },
+  { id: 'none', title: 'No usable candidate', count: (n) => `${n} without a usable candidate` }
 ]);
 
 /**
@@ -164,6 +164,9 @@ const GROUPS = Object.freeze([
  * @property {AlignmentOverlayCandidate[]} candidates
  */
 
+/** A record needs a choice until the user selects a candidate or skips it. @param {{ choice: unknown }} row */
+const needsChoice = ({ choice }) => choice === null;
+
 /** @param {ReviewRowLike['choice']} choice */
 const chosenKeyOf = (choice) => (choice?.kind === 'select' ? String(choice.candidateKey ?? '') : '');
 
@@ -176,7 +179,7 @@ const chosenKeyOf = (choice) => (choice?.kind === 'select' ? String(choice.candi
 export const alignmentOverlayRecords = (rows) => rows.map((row) => ({
   recordKey: row.recordKey,
   chosenKey: chosenKeyOf(row.choice),
-  needsChoice: row.choice === null,
+  needsChoice: needsChoice(row),
   skipped: row.choice?.kind === 'skip',
   candidates: row.candidates.map(({ key, anchor, name, label, coordinates }) => ({
     key, anchor, name, accessibleName: `Select ${label}, ${coordinates} for ${row.recordLabel}`
@@ -216,16 +219,15 @@ export const alignmentOverlayRecords = (rows) => rows.map((row) => ({
  * @property {number | null} lineX Null when the figure gives no strips.
  * @property {{ id: AlignmentReviewGroupId, title: string, cards: AlignmentReviewCard<Row, Direction>[] }[]} groups
  *   Only the groups that have a record, records in figure order.
+ * @property {string} summary The record count and the count of each section, in words.
  */
 
 /**
- * The records without a choice; taken when the review opens, they keep their section (D-10).
- * @param {readonly ReviewRowLike[]} rows
- * @returns {Set<string>}
+ * The keys of the records without a choice.
+ * @param {readonly { recordKey: string, choice: unknown }[]} rows
+ * @returns {string[]}
  */
-export const recordsNeedingChoice = (rows) => new Set(
-  rows.filter(({ choice }) => choice === null).map(({ recordKey }) => recordKey)
-);
+export const recordsNeedingChoice = (rows) => rows.filter(needsChoice).map(({ recordKey }) => recordKey);
 
 /**
  * @template {ReviewRowLike} Row
@@ -234,11 +236,13 @@ export const recordsNeedingChoice = (rows) => new Set(
  * @param {readonly Row[]} options.rows
  * @param {readonly Direction[]} options.directions
  * @param {AlignmentFigureGeometry | null} options.geometry
- * @param {ReadonlySet<string>} options.needsChoiceAtOpen
+ * @param {readonly string[]} options.openedWithoutChoice The records without a choice when the review opened:
+ *   they stay under "Choose a gene" and keep their radio rows while the user chooses.
  * @param {number} [options.width] The strip width.
  * @returns {AlignmentReviewView<Row, Direction>}
  */
-export const buildAlignmentReviewView = ({ rows, directions, geometry, needsChoiceAtOpen, width = STRIP_WIDTH }) => {
+export const buildAlignmentReviewView = ({ rows, directions, geometry, openedWithoutChoice, width = STRIP_WIDTH }) => {
+  const choose = new Set(openedWithoutChoice);
   const rowByKey = new Map(rows.map((row) => [row.recordKey, row]));
   const drawnByKey = new Map((geometry?.records || []).map((record) => [record.recordKey, record]));
   /** @type {{ group: AlignmentReviewGroupId, card: AlignmentReviewCard<Row, Direction> }[]} */
@@ -259,14 +263,13 @@ export const buildAlignmentReviewView = ({ rows, directions, geometry, needsChoi
         .sort((a, b) => Number(drawnLeft.get(a.key)) - Number(drawnLeft.get(b.key))),
       ...row.candidates.filter(({ key }) => !drawnLeft.has(key))
     ];
-    const openedWithoutChoice = needsChoiceAtOpen.has(recordKey);
-    const several = candidates.length > 1 || (candidates.length === 1 && openedWithoutChoice);
+    const several = candidates.length > 1 || (candidates.length === 1 && choose.has(recordKey));
     placed.push({
-      group: openedWithoutChoice ? 'choose'
-        : candidates.length > 1 ? 'recommended' : candidates.length ? 'single' : 'none',
+      group: choose.has(recordKey) ? 'choose'
+        : candidates.length > 1 ? 'several' : candidates.length ? 'single' : 'none',
       card: { recordKey, direction, strip: null, row, candidates,
         kind: several ? 'several' : candidates.length ? 'single' : 'none',
-        needsChoice: row.choice === null,
+        needsChoice: needsChoice(row),
         skipped: row.choice?.kind === 'skip',
         chosenKey: chosenKeyOf(row.choice) }
     });
@@ -280,11 +283,14 @@ export const buildAlignmentReviewView = ({ rows, directions, geometry, needsChoi
   });
   const stripByKey = new Map(layout?.rows.map((row) => [row.recordKey, row]));
   placed.forEach(({ card }) => { card.strip = stripByKey.get(card.recordKey) ?? null; });
+  const groups = GROUPS.map(({ id, title, count }) => ({
+    id, title, count, cards: placed.filter(({ group }) => group === id).map(({ card }) => card)
+  })).filter(({ cards }) => cards.length > 0);
   return {
     stripWidth: width,
     lineX: layout?.lineX ?? null,
-    groups: GROUPS.map(({ id, title }) => ({
-      id, title, cards: placed.filter(({ group }) => group === id).map(({ card }) => card)
-    })).filter(({ cards }) => cards.length > 0)
+    groups: groups.map(({ id, title, cards }) => ({ id, title, cards })),
+    summary: `${placed.length} record${placed.length === 1 ? '' : 's'}`
+      + groups.filter(({ title }) => title).map(({ count, cards }) => `, ${count(cards.length)}`).join('') + '.'
   };
 };

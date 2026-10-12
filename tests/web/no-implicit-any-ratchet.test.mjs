@@ -83,7 +83,7 @@ const NO_IMPLICIT_ANY_BASELINE = {
   'app/rule-matching.js': 36,
   'app/run-analysis.js': 313,
   'app/run-info.js': 222,
-  'app/similarity-alignment.js': 269,
+  'app/similarity-alignment.js': 267,
   'app/svg-styles.js': 18,
   'app/track-slot-colors.js': 5,
   'app/ui.js': 26,

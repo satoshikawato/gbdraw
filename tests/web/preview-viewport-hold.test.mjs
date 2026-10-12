@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { gunzipSync } from 'node:zlib';
 
-// D-11: while Review alignment is open the figure is fitted, and what is saved or captured is the
-// view from before the review. The pan/zoom owner holds it; the Session writer and the UI capture
-// with navigation read it through the one reader the composition root registers.
+// While Review alignment is open the figure is fitted, and what is saved or captured is the view
+// from before the review. The pan/zoom owner holds it; the Session writer and the UI capture with
+// navigation read it through the reader the composition root registers.
 globalThis.window = {
   Vue: {
     ref: value => ({ value }), reactive: value => value,
@@ -17,7 +17,7 @@ globalThis.document = {
   body: { appendChild: () => {} },
   createElement: () => ({ addEventListener: () => {}, click: () => {}, parentNode: null })
 };
-const { exportSession, buildUiStateData, setPreviewViewportReader } = await import('../../gbdraw/web/js/services/config.js');
+const { exportSession, buildUiStateData, setHeldPreviewViewportReader } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { createPanZoom } = await import('../../gbdraw/web/js/app/ui.js');
 
@@ -29,30 +29,30 @@ const fitted = { zoom: 0.31, canvasPan: { x: -40, y: 3 } };
 
 test('the pan/zoom owner holds the view from before the review and restores or drops it', () => {
   setLive(0.46, 12, -7);
-  assert.deepEqual(panZoom.previewViewportToPersist(), before);
+  assert.equal(panZoom.heldPreviewViewport(), null);
   panZoom.holdPreviewViewport();
   setLive(0.31, -40, 3);
-  assert.deepEqual(panZoom.previewViewportToPersist(), before);
+  assert.deepEqual(panZoom.heldPreviewViewport(), before);
   // A second hold keeps the first view.
   panZoom.holdPreviewViewport();
-  assert.deepEqual(panZoom.previewViewportToPersist(), before);
+  assert.deepEqual(panZoom.heldPreviewViewport(), before);
 
   panZoom.releasePreviewViewport({ restore: true });
   assert.deepEqual(live(), before);
-  assert.deepEqual(panZoom.previewViewportToPersist(), before);
+  assert.equal(panZoom.heldPreviewViewport(), null);
 
   panZoom.holdPreviewViewport();
   setLive(0.31, -40, 3);
   panZoom.releasePreviewViewport({ restore: false });
   assert.deepEqual(live(), fitted);
-  assert.deepEqual(panZoom.previewViewportToPersist(), fitted);
+  assert.equal(panZoom.heldPreviewViewport(), null);
   // Without a hold, a release changes nothing.
   panZoom.releasePreviewViewport({ restore: true });
   assert.deepEqual(live(), fitted);
 });
 
 test('the UI capture with navigation reads the held view, and the capture without it has none', () => {
-  setPreviewViewportReader(panZoom.previewViewportToPersist);
+  setHeldPreviewViewportReader(panZoom.heldPreviewViewport);
   setLive(0.46, 12, -7);
   panZoom.holdPreviewViewport();
   setLive(0.31, -40, 3);
@@ -72,7 +72,7 @@ test('a Session saved during the hold stores the view from before it', async () 
     assert.equal(result.status, 'saved');
     return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer()))).ui;
   };
-  setPreviewViewportReader(panZoom.previewViewportToPersist);
+  setHeldPreviewViewportReader(panZoom.heldPreviewViewport);
   setLive(0.46, 12, -7);
   panZoom.holdPreviewViewport();
   setLive(0.31, -40, 3);
@@ -83,7 +83,7 @@ test('a Session saved during the hold stores the view from before it', async () 
   assert.deepEqual({ zoom: after.zoom, canvasPan: after.canvasPan }, before);
 
   // Without a registered reader the writers read the live view, as before.
-  setPreviewViewportReader(null);
+  setHeldPreviewViewportReader(null);
   setLive(0.31, -40, 3);
   const unregistered = await savedUi('no reader');
   assert.deepEqual({ zoom: unregistered.zoom, canvasPan: unregistered.canvasPan }, fitted);

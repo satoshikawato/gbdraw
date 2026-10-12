@@ -94,6 +94,8 @@ export {
  * @property {FeatureSelectionPort | null} [featureSelection]
  *   The preview owner's projection of feature visibility changes.
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
+ * @property {() => boolean} [previewPopupsHeld] While it holds (the Review alignment panel is open, the popups
+ *   hidden), no gesture on the figure opens, retargets or closes a popup.
  */
 
 /**
@@ -180,7 +182,8 @@ export const createFeatureSvgActions = ({
   // prepared; the composition root injects the visibility owner's preparation.
   prepareDrawnFeatureMatches = () => true,
   featureSelection = null,
-  previewTransformInteraction = null
+  previewTransformInteraction = null,
+  previewPopupsHeld = () => false
 }) => {
   const {
     orthogroups,
@@ -199,12 +202,6 @@ export const createFeatureSvgActions = ({
   } = state;
   /** @type {DelegatedFeatureHandlers | null} */
   let delegatedFeatureHandlers = null;
-  // While the Review alignment panel is open the popups are hidden, and none opens, retargets
-  // or closes, whatever asks (a click on the figure, a key, Open in the feature search).
-  let previewPopupsHeld = false;
-  /** @param {boolean} held */
-  const holdPreviewPopups = (held) => { previewPopupsHeld = held; };
-  const arePreviewPopupsHeld = () => previewPopupsHeld;
   const isPreviewTransformInteractionActive = () => Boolean(
     previewTransformInteraction?.isActive?.()
   );
@@ -517,7 +514,7 @@ export const createFeatureSvgActions = ({
    * @param {PopupOrigin | null} [eventLike]
    */
   const openPreparedFeatureEditor = (drawing, feat, eventLike = null) => {
-    if (!feat || previewPopupsHeld) return null;
+    if (!feat) return null;
     if (!svgContainer.value) return null;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return null;
@@ -570,6 +567,24 @@ export const createFeatureSvgActions = ({
         state, () => [prepareDrawnFeatureMatches({ strict: true, view: true })], () => openPreparedFeatureEditor(drawing, feat, eventLike)
       )
     );
+  };
+
+  // A popup retargeted while it was hidden was placed for the view of that moment. Once the
+  // Result rests in the view it returned to, the popup opens again beside its feature.
+  const showFeaturePopupAtFeature = async () => {
+    const shown = clickedFeature.value;
+    const surface = /** @type {HTMLElement | null} */ (svgContainer.value);
+    if (!shown || !surface) return;
+    await new Promise((resolve) => { window.requestAnimationFrame(resolve); });
+    await Promise.allSettled(surface.getAnimations().map(({ finished }) => finished));
+    if (clickedFeature.value !== shown) return;
+    const rects = getFeatureFillElements(surface.querySelector('svg'), shown.svg_id)
+      .map((block) => block.getBoundingClientRect());
+    if (!rects.length) return;
+    openFeatureEditorForFeature(shown.feat, {
+      clientX: (Math.min(...rects.map(({ left }) => left)) + Math.max(...rects.map(({ right }) => right))) / 2,
+      clientY: (Math.min(...rects.map(({ top }) => top)) + Math.max(...rects.map(({ bottom }) => bottom))) / 2
+    });
   };
 
   const hoverSummaryIsAllowed = () => {
@@ -775,7 +790,7 @@ export const createFeatureSvgActions = ({
 
   const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {
     const drawing = state.activeDrawing();
-    if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos || previewPopupsHeld) return null;
+    if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos || previewPopupsHeld()) return null;
     const payload = buildMatchPayload(drawing, matchElement, featureLookup);
     if (!payload) return null;
     hideHoverSummary();
@@ -790,7 +805,7 @@ export const createFeatureSvgActions = ({
   // row opens only when the drawing lists it (not a track-data row).
   /** @param {{ element: Element, item: import('../preview-item-popup.js').PreviewItem }} target @param {{ clientX?: number, clientY?: number }} eventLike */
   const openPreviewItemPopup = ({ element, item }, eventLike) => {
-    if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value || previewPopupsHeld) return false;
+    if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
     if (item.kind === 'legend-entry') {
       /** @type {import('../../state.js').LegendEntry[]} */
       const entries = state.activeDrawing().legendEntries.value || [];
@@ -1114,6 +1129,10 @@ export const createFeatureSvgActions = ({
       handlerState.previewAlignmentCandidate = previewAlignmentCandidate;
       handlerState.clearAlignmentCandidatePreview = clearAlignmentCandidatePreview;
 
+      // A block the Result shows: hidden ones get no ring, no strip box and no place in a strip.
+      /** @param {Element} block */
+      const isDrawnBlock = (block) => block.isConnected && block.getClientRects().length === 1
+        && window.getComputedStyle(block).visibility !== 'hidden';
       // A feature drawn in several parts (exons) is one span from its first block to its last:
       // the alignment centres that whole span.
       /** @param {AliasSource} anchor */
@@ -1126,7 +1145,7 @@ export const createFeatureSvgActions = ({
         if (matches.length !== 1) return null;
         const [svgId] = matches[0];
         const blocks = getFeatureFillElements(svg, svgId, ensureFeaturePaths());
-        return blocks.length ? { svgId, blocks } : null;
+        return blocks.length && blocks.every(isDrawnBlock) ? { svgId, blocks } : null;
       };
 
       const clearAlignmentOverlay = () => {
@@ -1171,7 +1190,7 @@ export const createFeatureSvgActions = ({
         const featurePaths = ensureFeaturePaths();
         featurePaths.forEach((_elements, svgId) => getFeatureFillElements(svg, svgId, featurePaths).forEach((block) => {
           const recordKey = recordKeyOf(block);
-          if (!recordKey) return;
+          if (!recordKey || !isDrawnBlock(block)) return;
           if (!featuresByRecord.has(recordKey)) featuresByRecord.set(recordKey, []);
           featuresByRecord.get(recordKey)?.push(spanOf(block));
         }));
@@ -1217,7 +1236,9 @@ export const createFeatureSvgActions = ({
         referenceRing.className = 'gbdraw-alignment-ring is-reference is-chosen';
         const flag = document.createElement('span');
         flag.className = 'gbdraw-alignment-flag';
-        flag.textContent = reference.name + ' · reference';
+        const flagName = document.createElement('span');
+        flagName.textContent = reference.name;
+        flag.append(flagName, ' · reference');
         const tag = document.createElement('span');
         tag.className = 'gbdraw-alignment-tag';
         [referenceRing, flag, tag].forEach((part) => part.setAttribute('aria-hidden', 'true'));
@@ -1279,14 +1300,13 @@ export const createFeatureSvgActions = ({
         viewport.appendChild(element);
 
         /**
-         * The box around a feature's blocks in the viewport, or null when the Result does not
-         * show every block.
+         * The box around a feature's drawn blocks in the viewport, or null when its centre is
+         * outside the viewport.
          * @param {Element[] | null | undefined} blocks
          * @param {DOMRect} frame
          */
         const boxIn = (blocks, frame) => {
-          if (!blocks?.length || blocks.some((block) => !block.isConnected || block.getClientRects().length !== 1
-            || window.getComputedStyle(block).visibility === 'hidden')) return null;
+          if (!blocks?.length) return null;
           const rects = blocks.map((block) => block.getBoundingClientRect());
           const box = {
             left: Math.min(...rects.map((rect) => rect.left)) - frame.left,
@@ -1624,6 +1644,7 @@ export const createFeatureSvgActions = ({
           e.stopPropagation();
           hideHoverSummary();
           featureSelection?.markPlainFeatureClick?.(svgId);
+          if (previewPopupsHeld()) return;
           const feat = ensureFeatureLookup().get(svgId);
           if (feat) {
             openFeatureEditorForFeature(feat, e);
@@ -1647,7 +1668,7 @@ export const createFeatureSvgActions = ({
         }
         if (isBackgroundPreviewClick(e.target, svg)) {
           featureSelection?.clearFeatureSelection?.({ clearStatus: true });
-          if (previewPopupsHeld) return;
+          if (previewPopupsHeld()) return;
           if (clickedFeature.value) clickedFeature.value = null;
           if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
         }
@@ -1843,8 +1864,7 @@ export const createFeatureSvgActions = ({
     clearAlignmentCandidatePreview,
     showAlignmentOverlay,
     clearAlignmentOverlay,
-    holdPreviewPopups,
-    previewPopupsHeld: arePreviewPopupsHeld,
+    showFeaturePopupAtFeature,
     preparePairwiseInteractionAffordances,
     preparePreviewItemAffordances,
     dispose

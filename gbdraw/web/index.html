@@ -1064,6 +1064,9 @@
             white-space: nowrap;
             box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 1px 3px rgba(15, 23, 42, 0.25);
         }
+        /* A long gene name gives way; "· reference" stays whole. */
+        .gbdraw-alignment-flag:not([hidden]) { display: flex; white-space: pre; }
+        .gbdraw-alignment-flag span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .gbdraw-alignment-flag { border: 1px solid #1d4ed8; background: #1d4ed8; color: #fff; }
         .gbdraw-alignment-tag { border: 1.5px solid #1d4ed8; background: #dbeafe; color: #1e3a8a; line-height: 15px; }
         .preview-layout-off .gbdraw-preview-layout-target:hover {
@@ -1519,8 +1522,8 @@
             }
         }
         .alignment-review-panel > header { flex: none; padding: 12px 16px 10px; border-bottom: 1px solid #e2e8f0; }
-        .alignment-review-title { display: flex; align-items: center; gap: 8px; }
-        .alignment-review-title h2 { margin: 0; color: #1e293b; font-size: 15px; font-weight: 700; }
+        .alignment-review-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+        .alignment-review-title h2 { margin: 0; color: #1e293b; font-size: 15px; font-weight: 700; white-space: nowrap; }
         .alignment-review-title button { margin-left: auto; }
         .alignment-review-group {
             padding: 1px 6px;
@@ -1561,9 +1564,9 @@
             letter-spacing: 0.03em;
             text-transform: uppercase;
         }
-        .alignment-review-section span { padding: 0 6px; border-radius: 999px; background: #f1f5f9; color: #475569; letter-spacing: 0; }
+        .alignment-review-section .count { padding: 0 6px; border-radius: 999px; background: #f1f5f9; color: #475569; letter-spacing: 0; }
         .alignment-review-section.is-need { color: #92400e; }
-        .alignment-review-section.is-need span { background: #b45309; color: #fff; }
+        .alignment-review-section.is-need .count { background: #b45309; color: #fff; }
         .alignment-review-card { min-width: 0; margin: 0; padding: 4px 0 5px; border: 0; border-bottom: 1px solid #f1f5f9; }
         .alignment-review-card.is-reference { margin: 0 -8px; padding: 4px 8px 7px; border-bottom: 0; border-radius: 6px; background: #eff6ff; }
         .alignment-review-card.is-need { margin: 4px -8px 3px; padding: 4px 7px 7px; border: 1px solid #f59e0b; border-radius: 6px; background: #fffdf5; }
@@ -1576,6 +1579,7 @@
         .alignment-review-arrow { color: #64748b; font-size: 13px; line-height: 1; }
         .alignment-review-chip { flex: none; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; }
         .alignment-review-chip.is-reference { background: #2563eb; color: #fff; font-weight: 700; }
+        .alignment-review-chip.is-apply { border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: 10px; }
         .alignment-review-chip.is-reversed { background: #fef3c7; color: #92400e; }
         .alignment-review-chip.is-recommended { background: #d1fae5; color: #065f46; }
         .alignment-review-chip.is-evidence { background: #f1f5f9; color: #475569; font-weight: 500; white-space: normal; }
@@ -1597,6 +1601,7 @@
         .alignment-review-gene code,
         .alignment-review-facts code { color: #64748b; font-family: ui-monospace, monospace; font-size: 11px; overflow-wrap: anywhere; }
         .alignment-review-gene.is-hover { box-shadow: 0 0 0 2px #bfdbfe; }
+        .alignment-review-place { color: #64748b; font-size: 11px; white-space: nowrap; }
         .alignment-review-skip { display: flex; flex: none; align-items: center; gap: 4px; margin-left: auto; color: #64748b; font-size: 11px; cursor: pointer; }
         .alignment-review-skip input { width: 12px; height: 12px; margin: 0; }
         .alignment-review-note { margin: 2px 0 0; color: #64748b; font-size: 11px; overflow-wrap: anywhere; }
@@ -7298,7 +7303,7 @@
                 <section v-if="similarityAlignmentDialogOpen"
                          role="dialog"
                          aria-labelledby="similarity-alignment-dialog-title"
-                         aria-describedby="similarity-alignment-application-help"
+                         aria-describedby="similarity-alignment-dialog-description similarity-alignment-application-help"
                          data-history-scope="transient"
                          data-similarity-alignment-overlay
                          data-similarity-alignment-dialog
@@ -7307,7 +7312,9 @@
                         <div class="alignment-review-title">
                             <h2 id="similarity-alignment-dialog-title" tabindex="-1"
                                 class="focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Review alignment</h2>
-                            <span class="alignment-review-group"><span class="sr-only">Similarity group </span>{{ similarityAlignmentDraft?.response.groupId }}</span>
+                            <span class="alignment-review-group" aria-hidden="true">{{ similarityAlignmentDraft?.response.groupId }}</span>
+                            <span id="similarity-alignment-application-help" data-alignment-application-help
+                                  class="alignment-review-chip is-apply">Apply required<span class="sr-only">: nothing changes until Apply succeeds. Cancel keeps the current Result.</span></span>
                             <button type="button"
                                     @click="cancelSimilarityAlignmentDialog"
                                     aria-label="Cancel similarity alignment"
@@ -7316,7 +7323,7 @@
                             </button>
                         </div>
                         <p class="alignment-review-lead">Records slide until the chosen genes line up with <b>{{ similarityAlignmentDraft?.reference.name }}</b>.</p>
-                        <p id="similarity-alignment-application-help" data-alignment-application-help class="sr-only">Apply required: nothing changes until Apply succeeds. Cancel keeps the current Result.</p>
+                        <p id="similarity-alignment-dialog-description" data-similarity-alignment-count class="sr-only">Similarity group {{ similarityAlignmentDraft?.response.groupId }}: {{ similarityAlignmentReview?.summary }}</p>
                     </header>
 
                     <div class="alignment-review-body custom-scrollbar">
@@ -7333,7 +7340,7 @@
                             </div>
                             <template v-for="group in similarityAlignmentReview.groups" :key="group.id">
                                 <h3 v-if="group.title" class="alignment-review-section" :class="{ 'is-need': group.id === 'choose' }"
-                                    :data-alignment-section="group.id">{{ group.title }}<span>{{ group.cards.length }}</span></h3>
+                                    :data-alignment-section="group.id">{{ group.title }}<span class="count" aria-hidden="true">{{ group.cards.length }}</span><span class="sr-only"> ({{ group.cards.length }} {{ group.cards.length === 1 ? 'record' : 'records' }})</span></h3>
                                 <template v-for="card in group.cards" :key="card.recordKey">
                                 <component :is="card.kind === 'reference' ? 'section' : 'fieldset'"
                                            v-for="record in [card.row || similarityAlignmentDraft.reference]"
@@ -7381,7 +7388,8 @@
                                               :x="box.x" y="3" :width="box.width" height="11" rx="2"></rect>
                                     </svg>
                                     <template v-if="card.kind === 'reference'">
-                                        <p class="alignment-review-gene"><b>{{ record.name }}</b> <code v-if="record.ids">{{ record.ids }}</code></p>
+                                        <p class="alignment-review-gene"><b>{{ record.name }}</b> <code v-if="record.ids">{{ record.ids }}</code>
+                                            <span class="alignment-review-place">{{ record.coordinates }} ({{ record.displayedStrand }})</span></p>
                                         <p v-if="similarityAlignmentDirectionPreview.referenceShift" class="alignment-review-note" data-similarity-alignment-reference-correction>
                                             {{ similarityAlignmentDirectionPreview.referenceShift }}
                                         </p>
@@ -7393,6 +7401,7 @@
                                          @mouseleave="clearSimilarityAlignmentCandidatePreview">
                                         <b>{{ card.candidates[0].name }}</b>
                                         <code v-if="card.candidates[0].ids">{{ card.candidates[0].ids }}</code>
+                                        <span class="alignment-review-place">{{ card.candidates[0].coordinates }} ({{ card.candidates[0].displayedStrand }})</span>
                                         <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.join(', ') || 'no direct hit' }}</span>
                                         <label class="alignment-review-skip">
                                             <input type="checkbox" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500"

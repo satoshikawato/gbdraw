@@ -72,10 +72,10 @@ import {
   serializeResults,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
-  setPreviewViewportReader
+  setHeldPreviewViewportReader
 } from '../services/config.js';
 import {
-  ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView, recordsNeedingChoice
+  ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView
 } from '../services/alignment-review-view.js';
 import { setMainSessionComparisonFrameConverter } from '../services/main-session-comparison-frame.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
@@ -1578,10 +1578,10 @@ export const createAppSetup = () => {
     previewTransformInteraction,
     holdPreviewViewport,
     releasePreviewViewport,
-    previewViewportToPersist
+    heldPreviewViewport
   } = createPanZoom(state);
-  // The Session writer and the artifact checkpoint save the view the pan/zoom owner gives them.
-  setPreviewViewportReader(previewViewportToPersist);
+  // The Session writer and the artifact checkpoint save the view the pan/zoom owner holds.
+  setHeldPreviewViewportReader(heldPreviewViewport);
   const { startResizing } = createSidebarResize(state);
 
   const specificRuleNotice = ref('');
@@ -1681,12 +1681,20 @@ export const createAppSetup = () => {
       : project();
   };
   paletteRulePorts.projectPaletteAndRules = projectPaletteAndRules;
-  const featureSelection = createFeatureSelection(/** @type {any} */ ({ state, onMounted, onUnmounted }));
+  // What the Review alignment panel took over while it is shown, given back when it ends: the
+  // Editor drawer reopens on its tab, the popups (hidden meanwhile) show again, and the view
+  // from before the fit returns. While it is set, no gesture on the figure and no click
+  // outside opens, retargets or closes a popup.
+  /** @type {{ drawerOpen: boolean, popup: unknown } | null} */
+  let similarityAlignmentTakeover = null;
+  const previewPopupsHeld = () => similarityAlignmentTakeover !== null;
+  const featureSelection = createFeatureSelection(/** @type {any} */ ({ state, onMounted, onUnmounted, previewPopupsHeld }));
   // The palette owner comes before the feature editor, whose popup sets a
   // type's default color through it (D-15).
   const resultsManager = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
   const featureActions = createFeatureEditor({
     state,
+    previewPopupsHeld,
     rulePreparation,
     evaluateLabelRules: evaluateRules,
     runUndoable: history.runUndoable,
@@ -1795,7 +1803,7 @@ export const createAppSetup = () => {
     onMounted,
     onUnmounted,
     closeRightDrawer: rightDrawerActions.closeRightDrawer,
-    previewPopupsHeld: featureActions.previewPopupsHeld
+    previewPopupsHeld
   });
   setupHistoryShortcuts({ history, onMounted, onUnmounted });
   onMounted(async () => {
@@ -4475,14 +4483,10 @@ export const createAppSetup = () => {
   // returns the figure geometry the strips are laid out from.
   const similarityAlignmentCanvasHover = ref(/** @type {{ recordKey: string, candidateKey: string } | null} */ (null));
   const similarityAlignmentGeometry = shallowRef(/** @type {AlignmentFigureGeometry | null} */ (null));
-  const similarityAlignmentNeedsChoiceAtOpen = shallowRef(/** @type {ReadonlySet<string>} */ (new Set()));
-  // What the review took over when it opened, given back when it closes (Cancel, the close
-  // button, Escape, Apply): the Editor drawer reopens on its tab, and the view from before the
-  // fit returns. The pan/zoom owner holds that view, so a Session saved or a Result
-  // checkpointed meanwhile keeps it (D-11).
-  /** @type {{ drawerOpen: boolean } | null} */
-  let similarityAlignmentTakeover = null;
-  // While Apply runs, the ending waits for its outcome, and its new Result is the review's own.
+  // The takeover ends with the review (Cancel, the close button, Escape, Apply). The pan/zoom
+  // owner holds the view from before the fit, so a Session saved or a Result checkpointed
+  // meanwhile keeps that view. While Apply runs, the ending waits for its outcome, and its new
+  // Result is the review's own.
   let similarityAlignmentApplying = false;
   // Something else replaced the Result under the open review (a Session load, History, a mode
   // switch, a new Generate): the view and the drawer are that change's, and the review gives
@@ -4507,9 +4511,12 @@ export const createAppSetup = () => {
     }
     if (!similarityAlignmentActions.isDraftArtifactCurrent()) {
       featureActions.clearAlignmentOverlay();
+      similarityAlignmentGeometry.value = null;
       dropSimilarityAlignmentView();
       return;
     }
+    // Without a mounted preview (the Run info tab) nothing is measured: the strips keep the
+    // geometry of the same Result.
     similarityAlignmentGeometry.value = featureActions.showAlignmentOverlay({
       reference: { key: ALIGNMENT_REFERENCE_KEY, recordKey: current.reference.recordKey,
         anchor: current.response.reference, name: current.reference.name },
@@ -4518,19 +4525,21 @@ export const createAppSetup = () => {
       onHover: (recordKey, candidateKey) => {
         similarityAlignmentCanvasHover.value = recordKey ? { recordKey, candidateKey } : null;
       }
-    });
+    }) ?? similarityAlignmentGeometry.value;
   };
   watch([
     similarityAlignmentActions.dialogOpen,
     () => similarityAlignmentActions.draft.value?.rows,
     similarityAlignmentActions.status
   ], similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
+  // The preview is shown again after this flush's watchers have run: measure on the next tick.
+  watch(resultPanelTab, () => nextTick(similarityAlignmentPorts.refreshCanvas));
   const similarityAlignmentReview = computed(() => {
     const draft = similarityAlignmentActions.draft.value;
     const directions = similarityAlignmentActions.directionPreview.value?.records;
     return draft && directions ? buildAlignmentReviewView({
       rows: draft.rows, directions, geometry: similarityAlignmentGeometry.value,
-      needsChoiceAtOpen: similarityAlignmentNeedsChoiceAtOpen.value
+      openedWithoutChoice: draft.openedWithoutChoice
     }) : null;
   });
   /** @type {HTMLElement | null} */
@@ -4548,20 +4557,20 @@ export const createAppSetup = () => {
     const takeover = similarityAlignmentTakeover;
     if (!takeover || similarityAlignmentApplying) return;
     similarityAlignmentTakeover = null;
-    featureActions.holdPreviewPopups(false);
     if (takeover.drawerOpen) rightDrawerActions.openRightDrawerTab(rightDrawerTab.value);
     // The drawer narrows the visible frame, so the view returns after it.
     releasePreviewViewport({ restore: true });
+    // Open in the feature search row retargeted the hidden popup for the fitted view.
+    if (clickedFeature.value && clickedFeature.value !== takeover.popup) void featureActions.showFeaturePopupAtFeature();
   };
   watch(similarityAlignmentActions.dialogOpen, (/** @type {boolean} */ open) => {
     if (!open) {
       endSimilarityAlignmentTakeover();
       return;
     }
-    similarityAlignmentNeedsChoiceAtOpen.value = recordsNeedingChoice(similarityAlignmentActions.draft.value.rows);
-    similarityAlignmentTakeover = { drawerOpen: showRightDrawer.value };
+    // A review shown again while an Apply is pending keeps what the first one took.
+    similarityAlignmentTakeover ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value };
     holdPreviewViewport();
-    featureActions.holdPreviewPopups(true);
     rightDrawerActions.closeRightDrawer();
   }, { flush: 'sync' });
   const rememberSimilarityAlignmentInvoker = (event) => {
@@ -6612,7 +6621,6 @@ export const createAppSetup = () => {
     similarityAlignmentNotice: similarityAlignmentActions.notice,
     similarityAlignmentRepair: similarityAlignmentActions.repair,
     similarityAlignmentDialogOpen: similarityAlignmentActions.dialogOpen,
-    similarityAlignmentUnresolvedCount: similarityAlignmentActions.unresolvedCount,
     similarityAlignmentApplyDisabledReason: similarityAlignmentActions.applyDisabledReason,
     similarityAlignmentDrawerReferenceKey: similarityAlignmentActions.drawerReferenceKey,
     featureDetailsPending,
