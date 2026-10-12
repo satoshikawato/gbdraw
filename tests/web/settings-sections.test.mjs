@@ -57,3 +57,12 @@ test('the settings pane keeps no second copy of a section title beside its icon'
   }
   assert.deepEqual(copies, []);
 });
+
+test('an index entry is named "Go to <title>" in one place, so it shares no name with the section it opens', () => {
+  const template = html.slice(html.indexOf('id="settings-section-index-template"'));
+  const index = template.slice(0, template.indexOf('</script>'));
+  assert.equal(index.split(':aria-label="\'Go to \' + section.title"').length - 1, 1, 'the entry name');
+  assert.equal(html.split('Go to ').length - 1, 1, 'index.html spells the entry name once');
+  // The hover text stays the bare title.
+  assert.ok(index.includes('{{ tip.title }}'));
+});

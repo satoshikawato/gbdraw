@@ -195,7 +195,7 @@ export const HelpTip = {
 // (services/settings-sections.js), which the section index shows too.
 export const SettingsSectionTitle = {
   props: { section: { type: String, required: true } },
-  /** @param {{ section: string }} props */
+  /** @param {{ section: SettingsSectionKey }} props */
   setup: (props) => ({ entry: SETTINGS_SECTIONS.find((section) => section.key === props.section) }),
   template: '<i class="ph" :class="entry.icon" aria-hidden="true"></i> {{ entry.title }}'
 };
@@ -210,8 +210,9 @@ export const SettingsSectionTitle = {
 //   of the visible settings; an activated entry stays marked while its section
 //   stays where the activation left it, so a short last section keeps its mark;
 // - the hover text is the section title, for a hovering pointer and for
-//   keyboard focus. The button is named by its aria-label, so the text is
-//   hidden from assistive technology and no `title` attribute repeats it.
+//   keyboard focus. The button is named "Go to <title>" by its aria-label (the
+//   section's own disclosure keeps the bare title), so the text is hidden from
+//   assistive technology and no `title` attribute repeats it.
 export const SettingsSectionIndex = {
   template: '#settings-section-index-template',
   props: { mode: { type: String, required: true }, controls: { type: String, required: true } },
@@ -279,6 +280,13 @@ export const SettingsSectionIndex = {
       if (tip.value) tip.value.left = Math.max(8 + half, Math.min(tip.value.left, window.innerWidth - 8 - half));
     };
     const hideTip = () => { tip.value = null; };
+    // Escape hides a shown text and stops there; with none shown it goes on to the page's own handler.
+    /** @param {KeyboardEvent} event */
+    const onEscape = (event) => {
+      if (!tip.value) return;
+      event.stopPropagation();
+      hideTip();
+    };
     // A touch tap also reports pointerenter; only a hovering pointer shows the text.
     /** @param {SettingsSection} section @param {PointerEvent} event */
     const onEnter = (section, event) => { if (event.pointerType !== 'touch') showTip(section, event); };
@@ -298,9 +306,13 @@ export const SettingsSectionIndex = {
       cardEdge.disconnect();
       window.removeEventListener('scroll', onScroll, { capture: true });
     });
-    watch(() => props.mode, () => nextTick(mark));
+    // A mode change may remove the entry whose text is shown, and the marked section.
+    watch(() => props.mode, () => {
+      hideTip();
+      nextTick(mark);
+    });
 
-    return { sections, current, tip, tipElement, inset, activate, hideTip, onEnter, onFocus };
+    return { sections, current, tip, tipElement, inset, activate, hideTip, onEscape, onEnter, onFocus };
   }
 };
 

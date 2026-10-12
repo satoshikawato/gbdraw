@@ -40,8 +40,10 @@ const SECTIONS = {
   ]
 };
 
+// An entry is named for what it does; the section's own disclosure keeps the bare title.
+const entryName = (title) => `Go to ${title}`;
 const index = (page) => page.getByRole('navigation', { name: 'Settings sections' });
-const entry = (page, title) => index(page).getByRole('button', { name: title, exact: true });
+const entry = (page, title) => index(page).getByRole('button', { name: entryName(title), exact: true });
 const tip = (page) => index(page).locator('.settings-index-tip');
 const setMode = (page, mode) => page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
 
@@ -78,6 +80,7 @@ const sectionState = (page, key) => page.evaluate((key) => {
 }, key);
 
 const marked = (page) => index(page).locator('[aria-current="true"]');
+const expectMarked = (page, title) => expect(marked(page)).toHaveAttribute('aria-label', entryName(title));
 
 test('the index lists the sections of each mode in card order, before the settings in Tab order', async ({ page }) => {
   test.setTimeout(180_000);
@@ -96,6 +99,7 @@ test('the index lists the sections of each mode in card order, before the settin
       const buttons = Array.from(nav?.querySelectorAll('button') || []);
       return {
         first: pane.firstElementChild === nav && nav.nextElementSibling === area,
+        historyIgnore: nav.hasAttribute('data-history-ignore'),
         controls: buttons.every((button) => button.getAttribute('aria-controls') === area.id && area.id),
         firstStops: stops.slice(0, buttons.length).every((stop, order) => stop === buttons[order]),
         entries: buttons.map((button) => ({
@@ -121,9 +125,10 @@ test('the index lists the sections of each mode in card order, before the settin
     });
     const expected = SECTIONS[mode];
     expect(found.first, `${mode}: the index is the first child of the pane, before the scroll area`).toBe(true);
+    expect(found.historyIgnore, `${mode}: a click on an entry begins no History step`).toBe(true);
     expect(found.controls, `${mode}: each entry names the scroll area it moves`).toBeTruthy();
     expect(found.firstStops, `${mode}: the entries are the first Tab stops of the pane`).toBe(true);
-    expect(found.entries.map((item) => item.title), mode).toEqual(expected.map(([, title]) => title));
+    expect(found.entries.map((item) => item.title), mode).toEqual(expected.map(([, title]) => entryName(title)));
     expect(found.sections.map((section) => section.key), `${mode}: one section per entry, same order`)
       .toEqual(expected.map(([key]) => key));
     for (const [order, item] of found.entries.entries()) {
@@ -133,10 +138,11 @@ test('the index lists the sections of each mode in card order, before the settin
       expect(item.icon, `${mode} ${item.title}: an icon`).toMatch(/^ph-[a-z-]+$/);
       // The card heading shows the same title and icon as the entry.
       expect(section.icon, `${mode} ${item.title}: heading icon`).toBe(item.icon);
-      expect(section.heading.startsWith(item.title), `${mode}: "${section.heading}" starts with "${item.title}"`).toBe(true);
+      const title = expected[order][1];
+      expect(section.heading.startsWith(title), `${mode}: "${section.heading}" starts with "${title}"`).toBe(true);
       expect(section.focusable, `${mode} ${item.title}: heading can take focus`).toBe(true);
     }
-    expect(found.marked, `${mode}: Input Genomes is marked before any scroll`).toEqual(['Input Genomes=true']);
+    expect(found.marked, `${mode}: Input Genomes is marked before any scroll`).toEqual([`${entryName('Input Genomes')}=true`]);
   }
 });
 
@@ -161,9 +167,8 @@ test('an entry opens its section, brings it to the top, focuses its heading, and
   await entry(page, 'Labels').click();
   const labels = await sectionState(page, 'labels');
   expect(labels, 'at once, without smooth scrolling')
-    .toMatchObject({ open: true, headingFocused: true, marked: ['Labels'], atEnd: true, outside: [0, 0, 0, 0] });
-  expect(labels.offset).toBeGreaterThanOrEqual(0);
-  expect(labels.offset).toBeLessThan(150);
+    .toMatchObject({ open: true, headingFocused: true, marked: [entryName('Labels')], outside: [0, 0, 0, 0] });
+  expect(Math.abs(labels.offset) <= 2 || labels.atEnd, `at the top edge or at the end of the scroll (offset ${labels.offset})`).toBe(true);
   await expect(marked(page)).toHaveCount(1);
   // The row stays where it was: only the settings scroll area moved.
   expect(await index(page).evaluate((nav) => Math.round(nav.getBoundingClientRect().top))).toBe(pinnedAt);
@@ -171,7 +176,7 @@ test('an entry opens its section, brings it to the top, focuses its heading, and
   // An entry never closes a section. In a lower window the same section reaches the top edge.
   await page.setViewportSize({ width: 1600, height: 640 });
   await entry(page, 'Labels').click();
-  expect(await sectionState(page, 'labels')).toMatchObject({ open: true, headingFocused: true, marked: ['Labels'], outside: [0, 0, 0, 0] });
+  expect(await sectionState(page, 'labels')).toMatchObject({ open: true, headingFocused: true, marked: [entryName('Labels')], outside: [0, 0, 0, 0] });
   expect(Math.abs((await sectionState(page, 'labels')).offset)).toBeLessThanOrEqual(2);
   await page.setViewportSize({ width: 1600, height: 1000 });
 
@@ -179,7 +184,7 @@ test('an entry opens its section, brings it to the top, focuses its heading, and
   await entry(page, 'Comparison').focus();
   await page.keyboard.press('Enter');
   const comparison = await sectionState(page, 'comparison');
-  expect(comparison).toMatchObject({ open: null, headingFocused: true, marked: ['Comparison'], outside: [0, 0, 0, 0] });
+  expect(comparison).toMatchObject({ open: null, headingFocused: true, marked: [entryName('Comparison')], outside: [0, 0, 0, 0] });
   expect(Math.abs(comparison.offset)).toBeLessThanOrEqual(2);
   await page.keyboard.press('Tab');
   expect((await sectionState(page, 'comparison')).focusInside, 'Tab continues inside Comparison').toBe(true);
@@ -188,7 +193,7 @@ test('an entry opens its section, brings it to the top, focuses its heading, and
   await entry(page, 'Features').focus();
   await page.keyboard.press('Space');
   const features = await sectionState(page, 'features');
-  expect(features).toMatchObject({ open: true, headingFocused: true, marked: ['Features'], outside: [0, 0, 0, 0] });
+  expect(features).toMatchObject({ open: true, headingFocused: true, marked: [entryName('Features')], outside: [0, 0, 0, 0] });
   expect(Math.abs(features.offset)).toBeLessThanOrEqual(2);
   await page.keyboard.press('Tab');
   expect((await sectionState(page, 'features')).focusInside, 'Tab continues inside Features').toBe(true);
@@ -196,7 +201,7 @@ test('an entry opens its section, brings it to the top, focuses its heading, and
   // Enter on a closed summary section leaves it open (the key does not toggle the focused summary).
   await entry(page, 'Colors').focus();
   await page.keyboard.press('Enter');
-  expect(await sectionState(page, 'colors')).toMatchObject({ open: true, headingFocused: true, marked: ['Colors'] });
+  expect(await sectionState(page, 'colors')).toMatchObject({ open: true, headingFocused: true, marked: [entryName('Colors')] });
 
   // Scrolling marks the section at the top edge; the top of the settings is Input Genomes.
   const scrollTo = (key) => page.evaluate((key) => {
@@ -205,11 +210,11 @@ test('an entry opens its section, brings it to the top, focuses its heading, and
     area.scrollTop = section ? area.scrollTop + section.getBoundingClientRect().top - area.getBoundingClientRect().top + 30 : 0;
   }, key);
   await scrollTo('colors');
-  await expect(marked(page)).toHaveAttribute('aria-label', 'Colors');
+  await expectMarked(page, 'Colors');
   await scrollTo('layout');
-  await expect(marked(page)).toHaveAttribute('aria-label', 'Layout');
+  await expectMarked(page, 'Layout');
   await scrollTo(null);
-  await expect(marked(page)).toHaveAttribute('aria-label', 'Input Genomes');
+  await expectMarked(page, 'Input Genomes');
   await expect(marked(page)).toHaveCount(1);
 
   // The last section is too short to reach the top: its entry stays marked
@@ -222,20 +227,31 @@ test('an entry opens its section, brings it to the top, focuses its heading, and
   expect(last.offset, 'the last section cannot reach the top').toBeGreaterThan(20);
   // Two frames: the scroll event of the activation has been handled.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  await expect(marked(page)).toHaveAttribute('aria-label', 'Dinucleotide content/skew');
+  await expectMarked(page, 'Dinucleotide content/skew');
   await page.evaluate(() => { document.querySelector('.settings-scroll').scrollTop -= 10; });
-  await expect(marked(page)).not.toHaveAttribute('aria-label', 'Dinucleotide content/skew');
+  await expect(marked(page)).not.toHaveAttribute('aria-label', entryName('Dinucleotide content/skew'));
   await expect(marked(page)).toHaveCount(1);
 
   // No setting, History step, or Result changed (a button click commits on a timer).
   await page.waitForTimeout(100);
   expect(await snapshot()).toBe(before);
 
-  // A mode without the marked section marks the section at its own top edge.
+  // A mode without the marked section marks the section at its own top edge:
+  // the one the geometry gives after the switch, which is not the first here.
   await entry(page, 'Comparison').click();
-  await expect(marked(page)).toHaveAttribute('aria-label', 'Comparison');
+  await expectMarked(page, 'Comparison');
   await setMode(page, 'circular');
-  await expect(marked(page)).toHaveCount(1);
+  const atTopEdge = () => page.evaluate(() => {
+    const area = document.querySelector('.settings-scroll');
+    const edge = area.getBoundingClientRect().top;
+    const sections = Array.from(area.querySelectorAll('[data-settings-section]'))
+      .filter((section) => section.checkVisibility());
+    const reached = sections.filter((section) => section.getBoundingClientRect().top <= edge + 1);
+    return (reached.at(-1) ?? sections[0]).dataset.settingsSection;
+  });
+  const titleOf = Object.fromEntries(SECTIONS.circular);
+  expect(await atTopEdge(), 'the settings stay scrolled past Input Genomes').not.toBe('input-genomes');
+  await expect.poll(async () => await marked(page).getAttribute('aria-label') === entryName(titleOf[await atTopEdge()])).toBe(true);
   await expect(index(page).locator('[aria-current]')).toHaveCount(1);
 });
 
@@ -270,8 +286,17 @@ test('the section title shows below an entry on hover and on keyboard focus, ins
   await page.keyboard.press('Shift+Tab');
   await expect(entry(page, 'Input Genomes')).toBeFocused();
   await expect(tip(page)).toHaveText('Input Genomes');
+  // Escape hides a shown text and goes no further; with no text shown it reaches the page as usual.
+  await page.evaluate(() => {
+    window.__escapes = 0;
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') window.__escapes += 1; });
+  });
   await page.keyboard.press('Escape');
   await expect(tip(page)).toBeHidden();
+  await expect(entry(page, 'Input Genomes')).toBeFocused();
+  expect(await page.evaluate(() => window.__escapes)).toBe(0);
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => window.__escapes)).toBe(1);
   await expect(entry(page, 'Input Genomes')).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(tip(page)).toHaveText('Comparison');
@@ -283,6 +308,15 @@ test('the section title shows below an entry on hover and on keyboard focus, ins
   await expect(tip(page)).toBeVisible();
   await page.getByRole('button', { name: 'Linear', exact: true }).focus();
   await expect(tip(page)).toBeHidden();
+  // A mode change (Undo, a loaded Session) that removes the focused entry removes its text.
+  await entry(page, 'Input Genomes').focus();
+  await page.keyboard.press('Tab');
+  await expect(tip(page)).toHaveText('Comparison');
+  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'circular'; });
+  await expect(index(page).getByRole('button')).toHaveCount(SECTIONS.circular.length);
+  await expect(tip(page)).toBeHidden();
+  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'linear'; });
+  await expect(index(page).getByRole('button')).toHaveCount(SECTIONS.linear.length);
 
   // At every pane width the text of the first and of the last entry stays 8 px inside the viewport,
   // and the row neither overflows nor scrolls sideways; a narrow pane wraps it onto a second row.
@@ -354,10 +388,10 @@ test.describe('390 px touch', () => {
     expect(Math.abs(state.belowHeader), 'the section top is just below the sticky header').toBeLessThanOrEqual(2);
     expect(state.pageOverflow, 'no horizontal page scroll').toBeLessThanOrEqual(0);
     await expect(tip(page)).toBeHidden();
-    await expect(marked(page)).toHaveAttribute('aria-label', 'Labels');
+    await expectMarked(page, 'Labels');
     // Back at the top of the page, the first section is the marked one again.
     await page.evaluate(() => window.scrollTo(0, 0));
-    await expect(marked(page)).toHaveAttribute('aria-label', 'Input Genomes');
+    await expectMarked(page, 'Input Genomes');
   });
 });
 

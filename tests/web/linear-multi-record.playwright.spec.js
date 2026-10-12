@@ -1445,7 +1445,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await expect.poll(() => page.evaluate(() => (
     window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs[0]).length
   ))).toBe(3);
-  await page.getByRole('button', { name: 'Advanced comparison and layout' }).press('Enter');
+  await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).press('Enter');
   await expect(page.getByLabel('Arrange linear records in rows')).toBeChecked();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(({ row }) => row)))
     .toEqual([1, 1]);
@@ -1622,7 +1622,7 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
     ))
   ))).toEqual([3, 3, 3, 3]);
 
-  await page.getByRole('button', { name: 'Advanced comparison and layout' }).press('Enter');
+  await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).press('Enter');
   await page.getByLabel('Arrange linear records in rows').check();
   await page.getByLabel('Linear record row for sequence 1').fill('1');
   await page.getByLabel('Linear record row for sequence 2').fill('1');
@@ -1712,7 +1712,8 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
 
   await expect(restoredPage.locator('[data-linear-record-card]')).toHaveCount(4);
   await restoredPage.getByRole('button', {
-    name: 'Advanced comparison and layout'
+    name: 'Advanced comparison and layout',
+    exact: true
   }).press('Enter');
   const restoredRows = restoredPage.getByRole('spinbutton', {
     name: /^Linear record row for sequence \d+$/
@@ -3577,7 +3578,7 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   await openApp(page);
   await uploadCompleteRecordSources(page);
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatMode('blastn'));
-  await page.getByRole('button', { name: 'Advanced comparison and layout' }).click();
+  await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).click();
   const controls = page.getByRole('spinbutton', { name: /^Linear record row for sequence \d+$/ });
   await expect(controls).toHaveCount(5);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
@@ -3608,7 +3609,7 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows
     .map((entry) => entry.row))).toEqual([1, 1, 2, 2, 3]);
-  await page.getByRole('button', { name: 'Advanced comparison and layout' }).click();
+  await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).click();
   await expect(controls).toHaveCount(5);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
   await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(2);

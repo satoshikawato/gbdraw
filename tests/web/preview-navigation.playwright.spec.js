@@ -282,7 +282,10 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
   await page.mouse.down();
   await page.mouse.move(handle.x + handle.width / 2 + 45, handle.y + handle.height / 2, { steps: 5 });
+  // OV-534: the drag resizes the pane and selects no page text on its way.
+  expect(await page.evaluate(() => String(getSelection()))).toBe('');
   await page.mouse.up();
+  expect(await page.evaluate(() => String(getSelection()))).toBe('');
   const afterResize = await page.locator('[aria-label="Result Preview"]').evaluate((element) => element.clientWidth);
   expect(beforeResize).toBeGreaterThan(640);
   expect(afterResize).toBeLessThanOrEqual(640);

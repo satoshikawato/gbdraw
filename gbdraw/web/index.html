@@ -5288,7 +5288,7 @@
 
         <!-- Resize Handle -->
         <div class="resize-handle w-1 bg-slate-200 hover:bg-blue-400 cursor-col-resize transition-colors shrink-0 mx-2"
-             @mousedown="startResizing"
+             @mousedown.prevent="startResizing"
              title="Drag to resize"></div>
 
         <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0 focus:outline-none" tabindex="-1">
@@ -8334,9 +8334,9 @@
 <script type="text/x-template" id="settings-section-index-template">
     <nav class="settings-index" aria-label="Settings sections" data-history-ignore :style="{ marginRight: inset + 'px' }">
         <button v-for="section in sections" :key="section.key" type="button"
-                :aria-label="section.title" :aria-controls="controls" :aria-current="section.key === current ? 'true' : null"
+                :aria-label="'Go to ' + section.title" :aria-controls="controls" :aria-current="section.key === current ? 'true' : null"
                 @pointerenter="onEnter(section, $event)" @pointerleave="hideTip"
-                @focus="onFocus(section, $event)" @blur="hideTip" @keydown.esc.stop="hideTip"
+                @focus="onFocus(section, $event)" @blur="hideTip" @keydown.esc="onEscape"
                 @click="activate(section.key)">
             <i class="ph" :class="section.icon" aria-hidden="true"></i>
         </button>
