@@ -18,6 +18,7 @@ import { base64ToBytes } from '../services/byte-utils.js';
 import { DISPLAY_PLACEMENT_SCHEMA, FEATURE_OVERRIDE_SCHEMA } from '../contracts/schema.generated.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalDepthTrack, CanonicalFeatureOverride, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
+/** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
 
 /**
  * @typedef {{ path?: unknown, name?: unknown, kind?: unknown, slot?: unknown }} FileMetadataInput One file's metadata as a caller supplies it.
@@ -38,7 +39,6 @@ import { DISPLAY_PLACEMENT_SCHEMA, FEATURE_OVERRIDE_SCHEMA } from '../contracts/
  * @typedef {{ kind: 'genbank' | 'gffFasta', ids: string[] }} SourceSpec The resource ids that one record needs.
  * @typedef {{ path: string, name: string, slot: string }} RecipeHelperFile A file the recipe or the replay needs beside the uploaded inputs.
  * @typedef {{ program: string, kind: string, version: string | null, source: string, path: string | null }} LosatRuntimeRecord
- * @typedef {{ program?: unknown, runtime?: { program?: unknown, kind?: unknown, version?: unknown, source?: unknown, path?: unknown } | null }} LosatCacheEntryRuntimeView What the runtime summary reads of a LOSAT cache entry.
  * @typedef {object} SourceRecipe
  * @property {boolean} available
  * @property {'circular' | 'linear'} mode
@@ -2105,7 +2105,7 @@ export const formatLosatRuntime = ({ program, kind, version, source, path }) => 
 // CLI made. Entries saved before runtimes were recorded show "not recorded".
 /**
  * @param {readonly ({ key?: string, display?: boolean } | null | undefined)[] | null | undefined} cacheInfo
- * @param {{ get(key: string): LosatCacheEntryRuntimeView | undefined } | null | undefined} cacheMap
+ * @param {{ get(key: string): RawLosatCacheEntry | undefined } | null | undefined} cacheMap
  */
 export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
   const runtimes = new Map();
@@ -2113,7 +2113,8 @@ export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
     if (!info?.key || info.display === false) return;
     const entry = cacheMap?.get?.(info.key);
     if (!entry || typeof entry !== 'object') return;
-    const runtime = entry.runtime && typeof entry.runtime === 'object' ? entry.runtime : null;
+    // An entry's `runtime` that is an object is read as the runtime record, each field unchecked.
+    const runtime = entry.runtime && typeof entry.runtime === 'object' ? /** @type {LosatCacheRuntime} */ (entry.runtime) : null;
     const record = {
       program: String(runtime?.program || entry.program || ''),
       kind: runtime ? String(runtime.kind || '') : '',

@@ -201,7 +201,8 @@ import {
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry } from '../services/losat-cache.js' */
+/** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
+/** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
@@ -431,13 +432,9 @@ export const buildLosatCachePayload = ({
  */
 
 /**
- * A raw LOSAT cache entry; `classifyRawLosatCacheEntry` tells which shape it holds.
- * @typedef {Record<string, unknown>} RawLosatCacheEntry
- */
-
-/**
- * A cache entry under its key.
- * @typedef {{ key: string, entry: RawLosatCacheEntry }} RawLosatCacheMatch
+ * A match in one of Generate's cache maps, whose keys are text (`RawLosatCacheMatch` of services/losat-cache.js
+ * leaves the key open: its reader takes any `Map`).
+ * @typedef {RawLosatCacheMatch & { key: string }} TextKeyedLosatCacheMatch
  */
 
 /**
@@ -446,13 +443,13 @@ export const buildLosatCachePayload = ({
  * @param {LosatCacheMetadata} metadata
  * @param {Record<string, any> | null} [manifest]
  * @param {object | null} [identityIndex]
- * @returns {RawLosatCacheMatch | null}
+ * @returns {TextKeyedLosatCacheMatch | null}
  */
 const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
   if (!cacheMap) return null;
   const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, { identityIndex });
   // `getCurrentRawLosatCacheEntry` returns the `cacheKey` it was given (its `unknown` parameter widens the type).
-  if (direct) return /** @type {RawLosatCacheMatch} */ (direct);
+  if (direct) return /** @type {TextKeyedLosatCacheMatch} */ (direct);
   if (metadata?.identityKind === 'protein') return null;
 
   const expectedProgram = String(metadata?.program || '');
@@ -480,7 +477,7 @@ const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, id
 /**
  * @param {Map<string, RawLosatCacheEntry> | null | undefined} cacheMap
  * @param {string} cacheKey
- * @param {RawLosatCacheMatch | null | undefined} found
+ * @param {TextKeyedLosatCacheMatch | null | undefined} found
  * @param {LosatCacheMetadata} metadata
  */
 const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
@@ -1479,7 +1476,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @typedef {object} RunAnalysisOptions
  * @property {WebState} state App state (state.js).
  * @property {RulePreparation | null} [rulePreparation] The rule owner's preparation, which Generate runs before it draws.
- * @property {(feature: Record<string, any>) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
+ * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
@@ -4114,7 +4111,7 @@ export const createRunAnalysis = ({
             proteinIdMap: result.proteinIdMap || {}
           });
           // `getCurrentRawLosatCacheEntry` returns the `cacheKey` it was given (its `unknown` parameter widens the type).
-          return /** @type {RawLosatCacheMatch} */ (verified);
+          return /** @type {TextKeyedLosatCacheMatch} */ (verified);
         };
 
         /**
