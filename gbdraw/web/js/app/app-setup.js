@@ -5355,7 +5355,7 @@ export const createAppSetup = () => {
     onError: (error) => { errorLog.value = normalizeUserFacingError(error); },
     // UJ-09: a saved download is the History position Load Session compares with.
     // The notice names the file the download started.
-    onSaved: (/** @type {{ filename: string }} */ { filename }) => {
+    onSaved: (/** @type {{ filename?: string }} */ { filename }) => {
       history.markSavePoint();
       showNotice({ text: `Session saved: ${filename}. Find it in your browser's downloads.` });
     }
