@@ -38,6 +38,11 @@
  * An input source of the record display (the File card and its optional pair).
  * @typedef {{ scope: string, sourceUid: string, source: unknown, paired?: unknown }} RecordDisplaySource
  */
+/**
+ * A feature as `isCurrentFeature` reads it. A catalog feature's `record_key` is text
+ * (services/feature-catalog.js); a feature row of a Session before 40 is stored unchecked.
+ * @typedef {{ record_key?: unknown }} RecordKeyedFeature
+ */
 
 /** @param {unknown} value */
 const normalizeText = (value) => String(value ?? '').trim();
@@ -260,7 +265,7 @@ export const committedRecordUsesSource = (request, record, source) => source.sco
 // the current input `sources`, the `boundSources` captured when that request
 // was committed, and `matchesSavedSource(file, resourceId)` for its Session.
 /**
- * @param {{ record_key: string }} feature
+ * @param {RecordKeyedFeature} feature
  * @param {{
  *   request: CommittedRecordRequest | null | undefined,
  *   sources: RecordDisplaySource[],
@@ -269,7 +274,9 @@ export const committedRecordUsesSource = (request, record, source) => source.sco
  * }} binding
  */
 export const isCurrentFeature = (feature, { request, sources, boundSources, matchesSavedSource }) => {
-  const record = committedRecordForKey(request, feature.record_key);
+  // A record key that is not text names no committed record (OV-618).
+  const key = feature.record_key;
+  const record = typeof key === 'string' ? committedRecordForKey(request, key) : undefined;
   if (!record) return false;
   return sources.some((source) => source.source && committedRecordUsesSource(request, record, source)
     && boundSources.some((bound) => bound.scope === source.scope && bound.sourceUid === source.sourceUid
