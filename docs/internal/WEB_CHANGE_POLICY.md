@@ -384,9 +384,13 @@ The checker reads the registry from the trusted base.
 - A count is a ceiling. Its test asserts observed ≤ recorded, per key for a
   map, and a key without an entry counts as 0. Lowering or removing an entry
   is a contraction and is optional; the test names what may be lowered.
-  Raising an entry or adding a key is an expansion. A baseline that would gain
-  keys when code moves between modules is kept as one total (`count`,
-  `py-count`).
+  Raising an entry or adding a key is an expansion. The two R6 site counts
+  (`UNCLASSIFIED_THROW_BASELINE`, `UNPROVEN_BASELINE`) are one total each
+  (`count`, `py-count`), so a site that moves to another module with its code
+  changes nothing. The four maps keyed by module path
+  (`NO_IMPLICIT_ANY_BASELINE`, `EXPLICIT_ANY_BASELINE`,
+  `OUTSIDE_OWNER_BASELINE`, `TYPE_DEBT_BASELINE`) stay per module, so a new or
+  moved module starts at 0.
 
 Root-cause patterns (boundary audit of 2026-10-10):
 

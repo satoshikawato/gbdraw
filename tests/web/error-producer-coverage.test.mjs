@@ -1,12 +1,13 @@
-// R6 / G-G(2): JS validation owners raise user-correctable failures through
-// diagnosticError(code, context); the English message classifier may only
-// shrink. Both baselines are registered design-rule allowlists
+// R6 / G-G(2): Web JavaScript raises user-correctable failures through
+// diagnosticError(code, context), and the English message classifier does not
+// grow. Both baselines are registered design-rule allowlists
 // (tools/web-design-rule-guards.json, R6): an observed count may not exceed
 // its baseline, lowering a baseline is optional, and raising one is an
 // authority-only change (the Python half is
 // tests/test_web_error_producer_coverage.py).
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { sep } from 'node:path';
 import test from 'node:test';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
@@ -15,45 +16,20 @@ const WEB_ROOT = new URL('../../gbdraw/web/js/', import.meta.url);
 const UNCLASSIFIED = new Set(['UNKNOWN', 'VALIDATION_UNCLASSIFIED']);
 const FILLS = ['', '0', '1', 'PRIVATE', '#1'];
 
-// The validation owners whose throw sites are counted. The Result admission
-// and preview binding owners are counted too, because a failure there ends
-// Generate (OV-13).
-const VALIDATION_OWNERS = [
-  'app/annotations/table-codec.js',
-  'app/annotations/validation.js',
-  'app/annotations/record-catalog.js',
-  'app/candidate-render.js',
-  'app/circular-track-slots.js',
-  'app/feature-editor/label-actions.js',
-  'app/legend-layout/decoration-continuity.js',
-  'app/linear-track-slots.js',
-  'app/preview-runtime.js',
-  'app/record-display-options.js',
-  'app/run-analysis.js',
-  'mode-profiles.js',
-  'services/circular-track-slot-model.js',
-  'services/config.js',
-  'services/current-option-values.js',
-  'services/feature-metadata-extraction.js',
-  'services/file-imports.js',
-  'services/linear-track-slot-model.js',
-  'services/record-display-model.js',
-  'services/session-file.js',
-  'services/session-import-client.js',
-  'services/session-request.js',
-  'services/svg-result-ingestion.js',
-  'services/track-slot-validation.js',
-  'utils/feature-rendering.js',
-  'utils/optional-positive-number.js'
-];
+// Every `.js` file under gbdraw/web/js/, workers included. The throw sites are
+// counted in all of them, as the Python half counts the whole package: a
+// hand-kept list of owners would free its sites for the other modules whenever
+// a file left it.
+const WEB_MODULES = readdirSync(WEB_ROOT, { recursive: true })
+  .map((file) => file.split(sep).join('/'))
+  .filter((file) => file.endsWith('.js'))
+  .sort();
 
-// The throw sites of all validation owners whose message normalizes to UNKNOWN
-// or VALIDATION_UNCLASSIFIED (mostly internal invariants today). One total
-// (kind `count`), so a site that moves to another owner with its code does not
+// The throw sites of all modules whose message normalizes to UNKNOWN or
+// VALIDATION_UNCLASSIFIED (mostly internal invariants today). One total (kind
+// `count`), so a site that moves to another module with its code does not
 // change it.
-const UNCLASSIFIED_THROW_BASELINE = 270;
-
-const fileExists = (file) => existsSync(new URL(file, WEB_ROOT));
+const UNCLASSIFIED_THROW_BASELINE = 631;
 
 // Literal parts of the first argument of `throw new Error(`; null is a hole.
 const literalAt = (source, index) => {
@@ -108,19 +84,16 @@ const unclassifiedThrowSites = (file) => {
   return sites;
 };
 
-test('JS validation throw sites normalize to a recognized diagnostic or shrink (G-G(2))', (t) => {
-  const sitesByOwner = VALIDATION_OWNERS.map((file) => {
-    assert.ok(fileExists(file), `${file}: no such file; name the module that now holds its checks in VALIDATION_OWNERS`);
-    return [file, unclassifiedThrowSites(file).length];
-  });
-  const total = sitesByOwner.reduce((sum, [, sites]) => sum + sites, 0);
+test('JS throw sites normalize to a recognized diagnostic or do not grow in number (G-G(2))', (t) => {
+  const sitesByModule = WEB_MODULES.map((file) => [file, unclassifiedThrowSites(file).length]);
+  const total = sitesByModule.reduce((sum, [, sites]) => sum + sites, 0);
   if (total < UNCLASSIFIED_THROW_BASELINE) {
     t.diagnostic(`UNCLASSIFIED_THROW_BASELINE may be lowered: ${UNCLASSIFIED_THROW_BASELINE} -> ${total}`);
   }
   assert.ok(total <= UNCLASSIFIED_THROW_BASELINE,
-    `${total} unclassified throw sites in the validation owners, above UNCLASSIFIED_THROW_BASELINE ${UNCLASSIFIED_THROW_BASELINE}; `
-      + 'raise the new ones with diagnosticError(code, context). Sites per owner (compare with dev):\n'
-      + sitesByOwner.filter(([, sites]) => sites).map(([file, sites]) => `${file} ${sites}`).join('\n'));
+    `${total} unclassified throw sites under gbdraw/web/js/, above UNCLASSIFIED_THROW_BASELINE ${UNCLASSIFIED_THROW_BASELINE}; `
+      + 'raise the new ones with diagnosticError(code, context). Sites per module (compare with dev):\n'
+      + sitesByModule.filter(([, sites]) => sites).map(([file, sites]) => `${file} ${sites}`).join('\n'));
 });
 
 // The message-classification tables in the JS wording owner (R6 ratchet).

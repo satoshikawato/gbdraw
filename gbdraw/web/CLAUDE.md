@@ -270,7 +270,9 @@ reactive object holds display values only, never a copy of an owner's data.
 
 One projection means one call shape: a domain's projection function is called
 from outside its owner in one form, not re-implemented or re-sequenced per
-caller. The distinct call shapes per domain may only decrease (R13).
+caller. The count of distinct call shapes per domain stays at or below its
+baseline (R13): lowering an entry is optional, and adding or raising one is an
+authority-only change.
 
 A live edit shows on the Result what the next Generate draws (PD-OI-066). A
 change to a live-edit path is done when the case for its edit kind in
@@ -341,12 +343,12 @@ classifier that matches message text.
 Guards:
 
 - `tests/web/error-producer-coverage.test.mjs`: the total of unclassified
-  `throw new Error` sites in the validation owners and each message-table size
-  stay at or below their baselines.
+  `throw new Error` sites in all modules under `js/`, workers included, and
+  each message-table size stay at or below their baselines.
 - `tests/test_web_error_producer_coverage.py`: the total of `ValidationError`
-  sites without a diagnostic and each Python adapter table size stay at or
-  below their baselines, and the Python vocabulary is a subset of the Web
-  wording owner.
+  sites of the package that neither carry a diagnostic nor classify and each
+  Python adapter table size stay at or below their baselines, and the Python
+  vocabulary is a subset of the Web wording owner.
 - `tests/web/error-normalization.test.mjs`: table-driven producer cases and
   code, reason, and context-key parity.
 
@@ -363,7 +365,9 @@ the draft.
 Guards: `tests/web/option-input-integrity.test.mjs` (every projected numeric
 draft field either rejects `NaN`, `1e-50x`, `-5`, `0`, and `12.5` with a typed
 diagnostic or sends them literally; the count of draft assignments on the
-Generate path in `app/run-analysis.js` may only decrease) and
+Generate path in `app/run-analysis.js` stays at or below its baseline, where
+lowering the baseline is optional and raising it is an authority-only change)
+and
 `tests/fixtures/option_domain_vectors.json` with
 `tests/test_option_domain_parity.py` (the CLI, the typed request, and the Web give
 the same field and reason).
@@ -548,7 +552,7 @@ modules (`app/*.js` and `app/*/` factories), then the composition roots
 `app/legend-layout.js`), then `app.js`, `components.js`, and the template. A
 module imports its own layer and lower ones; a state-free module never imports
 `state.js`, and an owner module never imports a composition root. `contracts/`
-holds the generated contract modules; like every leaf they import only leaves.
+is a leaf: like every leaf its modules import only leaves.
 
 - An owner never imports, holds, or calls another owner object. It receives
   ports: a port is one function, in one direction, named for the reaction it
@@ -578,9 +582,10 @@ holds the generated contract modules; like every leaf they import only leaves.
   outside its owner (R3).
 
 The baseline of the current violations is recorded in
-`tests/web/owner-graph-baseline.test.mjs` and may only shrink: a pull request
-may remove the subjects it fixes from the baseline (the test names them), and
-an addition is an authority-only change (`tools/web-design-rule-guards.json`,
+`tests/web/owner-graph-baseline.test.mjs`: the count of a subject stays at or
+below its entry, and a subject without an entry has none. Lowering or removing
+an entry is optional (the test names what may be lowered). Adding or raising an
+entry is an authority-only change (`tools/web-design-rule-guards.json`,
 WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 `tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
 closures `owner-graph.forward-closure.v2`, state backdoors, whole-object ports,
@@ -644,8 +649,8 @@ authority-only change. A new module is checked from its first commit.
   including a new module, has none: a new parameter or variable declares its
   type, or the collection a callback iterates is typed. Lowering or removing
   an entry is optional. Adding or raising an entry is an authority-only
-  change. When the map is empty, `noImplicitAny` is turned on in the guard
-  config and the ratchet is deleted.
+  change. When the map is empty, an authority-only pull request turns
+  `noImplicitAny` on in the guard config and deletes the ratchet.
 - Explicit `any` in JSDoc (`any`, `*`, `Object`, or a type that resolves to
   `any`, such as an alias of it) is type debt. `EXPLICIT_ANY_BASELINE` in
   `tests/web/explicit-any-ratchet.test.mjs` records it per module: a module

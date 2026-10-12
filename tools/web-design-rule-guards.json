@@ -550,7 +550,7 @@
           "path": "tests/test_mode_split_vectors.py",
           "rootCause": "P3",
           "job": "core-pr",
-          "retireWhen": "services/mode-scoped-migration.js is deleted and Python alone splits a Session 27-44 (boundary-audit M2, multi-drawing X step)"
+          "retireWhen": "never"
         },
         {
           "path": "tests/web/drawing-context.test.mjs",
