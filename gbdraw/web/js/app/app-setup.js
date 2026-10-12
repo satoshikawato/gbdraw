@@ -35,6 +35,7 @@
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 /** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
+/** @import { LosatCacheInfoEntry, MultiRecordPosition } from './run-analysis.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 /** @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput The Session file input's change event, or an object with its `target`; the type `importSession` of services/config.js declares inline. */
 import { createRulePreparation } from './rule-matching.js';
@@ -595,7 +596,7 @@ export const createAppSetup = () => {
     const resolvedByEdgeKey = new Map(
       drawing.linearComparisonResolution.value.edges.map((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.edgeKey, edge])
     );
-    losatCacheInfo.value = losatCacheInfo.value.flatMap((entry) => {
+    losatCacheInfo.value = losatCacheInfo.value.flatMap((/** @type {LosatCacheInfoEntry} */ entry) => {
       const edgeKey = String(entry?.edgeKey || '');
       if (!edgeKey) return [entry];
       const resolved = resolvedByEdgeKey.get(edgeKey);
@@ -623,7 +624,7 @@ export const createAppSetup = () => {
     files.linearCanonicalComparisons = [];
     if (Array.isArray(losatCacheInfo.value)) {
       if (preserveLosatCacheInfo) reindexLinearLosatCacheInfo(drawing);
-      else losatCacheInfo.value = losatCacheInfo.value.filter((entry) => !entry?.edgeKey);
+      else losatCacheInfo.value = losatCacheInfo.value.filter((/** @type {LosatCacheInfoEntry} */ entry) => !entry?.edgeKey);
     }
   };
 
@@ -1329,8 +1330,8 @@ export const createAppSetup = () => {
   });
   const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
     (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [])
-      .filter((entry) => String(entry?.edgeKey || ''))
-      .map((entry) => [String(entry.edgeKey), entry])
+      .filter((/** @type {LosatCacheInfoEntry} */ entry) => String(entry?.edgeKey || ''))
+      .map((/** @type {LosatCacheInfoEntry} */ entry) => [String(entry.edgeKey), entry])
   ));
 
   // The Linear rows whose next record discovery may expand them, each with
@@ -5810,7 +5811,7 @@ export const createAppSetup = () => {
     }));
   };
 
-  /** @param {{ row?: unknown } | null | undefined} position */
+  /** @param {MultiRecordPosition | null | undefined} position */
   const getCircularRecordRow = (position) => {
     const drawing = state.drawings.circular;
     const rowValue = Number(position?.row);
@@ -5830,14 +5831,14 @@ export const createAppSetup = () => {
   const sortCircularRecordPositionsByRow = (drawing) => {
     if (!Array.isArray(drawing.adv.multi_record_positions) || drawing.adv.multi_record_positions.length <= 1) return;
     const sorted = drawing.adv.multi_record_positions
-      .map((/** @type {{ row?: unknown }} */ entry, /** @type {number} */ index) => ({ ...entry, __index: index }))
-      .sort((/** @type {{ row?: unknown, __index: number }} */ left, /** @type {{ row?: unknown, __index: number }} */ right) => {
+      .map((/** @type {MultiRecordPosition} */ entry, /** @type {number} */ index) => ({ ...entry, __index: index }))
+      .sort((/** @type {MultiRecordPosition & { __index: number }} */ left, /** @type {MultiRecordPosition & { __index: number }} */ right) => {
         const leftRow = Number(left.row);
         const rightRow = Number(right.row);
         if (leftRow !== rightRow) return leftRow - rightRow;
         return left.__index - right.__index;
       })
-      .map((/** @type {{ row?: unknown, __index: number }} */ { __index, ...entry }) => entry);
+      .map((/** @type {MultiRecordPosition & { __index: number }} */ { __index, ...entry }) => entry);
     drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...sorted);
   };
 

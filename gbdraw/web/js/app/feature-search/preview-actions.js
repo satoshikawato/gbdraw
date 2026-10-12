@@ -24,11 +24,7 @@ import { ownEntry } from '../../utils/own-entry.js';
 /** @import { FeatureSearchIndex } from './search-core.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { FeatureElementIndex } from './preview-svg.js' */
-
-/**
- * What the search reads of an editable label (the owner, `state.js` `editableLabels`, has no typedef).
- * @typedef {{ featureId: string, sourceText?: string, text?: string }} SearchEditableLabel
- */
+/** @import { EditableLabelEntry } from '../feature-editor/label-actions.js' */
 
 /**
  * @typedef {object} PreviewFeatureSearchOptions
@@ -111,8 +107,8 @@ export const createPreviewFeatureSearch = ({
   /** @param {DrawingState} drawing */
   const ensureSearchIndex = (drawing) => {
     if (!searchIndex) {
-      /** @type {Map<string, SearchEditableLabel>} */
-      const labels = new Map((state.editableLabels?.value || []).map((/** @type {SearchEditableLabel} */ entry) => [entry.featureId, entry]));
+      /** @type {Map<string, EditableLabelEntry>} */
+      const labels = new Map((state.editableLabels?.value || []).map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry]));
       featuresBySearchId = new Map();
       searchIndex = buildFeatureSearchIndex({
         features: featureList.value.rows.map((/** @type {FeatureLike} */ feature) => {
@@ -449,7 +445,7 @@ export const createPreviewFeatureSearch = ({
     invalidateFeatureElementIndex();
   });
   watch([
-    () => (state.editableLabels?.value || []).map((/** @type {SearchEditableLabel} */ entry) => [entry.featureId, entry.sourceText, entry.text]),
+    () => (state.editableLabels?.value || []).map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry.sourceText, entry.text]),
     () => Object.values(state.activeDrawing().featureOverrides || {}).map((row) => [row.recordKey, row.biologicalFeatureId, row.labelText]),
     () => state.activeDrawing().labelTextBulkOverrides,
     () => state.activeDrawing().orthogroupNameOverrides,

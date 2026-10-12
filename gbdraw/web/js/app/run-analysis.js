@@ -400,8 +400,8 @@ export const buildLosatCachePayload = ({
  * One row of `state.losatCacheInfo`, the pairs a Generate keeps cache entries for: a circular conservation
  * comparison carries `key`, `filename` and `display`, a linear comparison also its edge.
  * @typedef {object} LosatCacheInfoEntry
- * @property {string} key The raw cache key.
- * @property {string} filename
+ * @property {unknown} key The raw cache key: a string from Generate; a Session load stores the saved key (truthy, unchecked).
+ * @property {unknown} filename A string from Generate; a Session load stores the saved name (truthy, unchecked) or a default.
  * @property {boolean} display
  * @property {string} [edgeKey]
  * @property {number} [ordinal]
@@ -1461,7 +1461,7 @@ export const executeCanonicalRenderCandidate = async ({
 
 /**
  * A built generated artifact before it replaces the shown one: the owners' values and the runtime state to publish.
- * @typedef {{ readonly ownerSet: Readonly<Record<string, any>>,
+ * @typedef {{ readonly ownerSet: Readonly<Parameters<RunAnalysisOptions['installGeneratedArtifactOwnerSet']>[0]>,
  *   readonly runtimeState: { files?: unknown, archiveName?: unknown, losatTelemetry?: unknown } | null }} GeneratedArtifactCandidate
  */
 
@@ -1759,7 +1759,6 @@ export const createRunAnalysis = ({
     sessionImportRollbackInProgress?.value
   );
 
-  /** @param {DrawingState} drawing */
   /**
    * @param {DrawingState} drawing
    * @param {{ helperFiles?: readonly RecipeHelperFile[] } | null | undefined} runInfo
@@ -1833,7 +1832,7 @@ export const createRunAnalysis = ({
   };
 
   /**
-   * @param {any} cause
+   * @param {unknown} cause A caught value or a diagnostic.
    * @param {string} [operation]
    * @param {string} [stage]
    */
@@ -2427,7 +2426,7 @@ export const createRunAnalysis = ({
       ))
     ) {
       // An entry is activated after its promise is assigned.
-      return /** @type {Promise<any>} */ (inflightRefresh.promise);
+      return /** @type {NonNullable<typeof inflightRefresh.promise>} */ (inflightRefresh.promise);
     }
     const entry = { fingerprint, promise: /** @type {Promise<any> | null} */ (null) };
     entry.promise = runCircularRecordRefresh(options).finally(() => {
@@ -6230,7 +6229,7 @@ export const createRunAnalysis = ({
     if (!losatCacheInfo.value || losatCacheInfo.value.length === 0) return;
     const cacheMap = losatCache.value;
     if (!cacheMap || cacheMap.size === 0) return;
-    const hydratedEntries = (await Promise.all(losatCacheInfo.value.map(async (entry, idx) => {
+    const hydratedEntries = (await Promise.all(losatCacheInfo.value.map(async (/** @type {LosatCacheInfoEntry} */ entry, /** @type {number} */ idx) => {
       const cached = cacheMap.get(entry.key);
       if (!isCurrentRawLosatCacheEntry(cached)) return null;
       return {
