@@ -206,6 +206,7 @@ export const validateRecordDisplayDrafts = (drafts, { scoped = false } = {}) => 
       || (scoped && !['circular', 'linear'].includes(draft.scope))
       || typeof draft.recordId !== 'string' || draft.recordId.includes('\0')
       || typeof draft.sourceUid !== 'string' || draft.sourceUid.includes('\0')
+      || typeof draft.selector !== 'string'
       || (draft.topologyOverride !== null && typeof draft.topologyOverride !== 'boolean')
       || (draft.reverseComplementOverride !== null
         && typeof draft.reverseComplementOverride !== 'boolean')

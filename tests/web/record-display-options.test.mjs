@@ -104,8 +104,11 @@ test('record display drafts use one exact transform and provenance contract', ()
     { ...draft, extra: true },
     { ...draft, scope: 'linear' },
     { ...draft, reverseComplementOverride: 'true' },
-    { ...draft, anchorIntent: { ...anchorIntent, schema: 2 } }
-  ]) assert.throws(() => validateRecordDisplayDrafts([invalid]));
+    { ...draft, anchorIntent: { ...anchorIntent, schema: 2 } },
+    // OV-575: the selector is a string, as gbdraw/session_io.py requires.
+    { ...draft, selector: ['#1'] },
+    { ...draft, selector: 1 }
+  ]) assert.throws(() => validateRecordDisplayDrafts([invalid]), JSON.stringify(invalid.selector));
 });
 
 test('complete orientation override has one owner while cropped reverse stays region-owned', () => {
