@@ -1,47 +1,9 @@
 // @ts-check
+import { EXPECTED_WEB_RUNTIME_CAPABILITIES } from '../contracts/schema.generated.js';
+
+export { EXPECTED_WEB_RUNTIME_CAPABILITIES };
 export const DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE =
   'The diagram engine is incompatible with this Web app. Reload the page; if the problem persists, contact the site administrator.';
-
-export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
-  schema: 1,
-  renderProtocol: 2,
-  request: Object.freeze({
-    currentSchema: 9,
-    supportedSchemas: Object.freeze([1, 2, 5, 6, 7, 8, 9]),
-    unknownFieldPolicy: 'reject'
-  }),
-  resources: Object.freeze({
-    encodings: Object.freeze(['base64', 'gbdraw-depth-table-v1'])
-  }),
-  rendering: Object.freeze({
-    optionSchema: 3,
-    featureRenderings: Object.freeze(['arrow', 'rectangle', 'underlay']),
-    circularTrackRenderers: Object.freeze([
-      'annotations',
-      'depth',
-      'dinucleotide_content',
-      'dinucleotide_skew',
-      'features',
-      'sequence_conservation',
-      'spacer',
-      'ticks'
-    ]),
-    linearTrackRenderers: Object.freeze([
-      'annotations',
-      'depth',
-      'dinucleotide_content',
-      'dinucleotide_skew',
-      'features',
-      'spacer'
-    ])
-  }),
-  analysis: Object.freeze({
-    proteinLosatCacheSchema: 4,
-    nucleotideLosatCacheSchema: 2,
-    losatDerivedCacheSchema: 3,
-    proteinIdentityManifestSchema: 2
-  })
-});
 
 export class DiagramRuntimeCompatibilityError extends Error {
   constructor(diagnostic) {

@@ -291,12 +291,6 @@ const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mod
   return { renderedById: new Map(), biological };
 };
 
-// The last Session version whose `hash` color rules a Web writer filled with
-// the hash of the drawn feature (release 0.13.0: Session 30, first-parent main:
-// Session 44); `hash=` names the source-record hash after it (OV-401, release
-// D-39). The twin of DRAWN_HASH_RULE_SESSION_MAX_VERSION in gbdraw/session_io.py.
-export const DRAWN_HASH_RULE_SESSION_MAX_VERSION = 44;
-
 /**
  * A feature a saved diagram drew: its identity key, the hash it was drawn with,
  * its source index, and its one-based record position in its Result.

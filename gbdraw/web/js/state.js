@@ -19,6 +19,7 @@ import {
   resolveLinearComparisonPlan
 } from './services/linear-comparisons.js';
 import { WEB_UX_PROFILE } from './web-ux-profile.js';
+import { PROTEIN_IDENTITY_MANIFEST_SCHEMA } from './contracts/schema.generated.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import {
   getCommittedSvgContent,
@@ -271,7 +272,7 @@ const losatThreadingStatus = ref({
 const losatCache = ref(new Map());
 const losatDerivedCache = ref(new Map());
 const proteinIdentityManifest = ref({
-  schema: 2,
+  schema: PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   proteinSets: {},
   recordAnalyses: {},
   recordInstances: {}

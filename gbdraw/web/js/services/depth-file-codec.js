@@ -1,6 +1,5 @@
 // @ts-check
-const DEPTH_FILE_SCHEMA = 1;
-const DEPTH_FILE_ENCODING = 'gbdraw-depth-table-v1';
+import { DEPTH_FILE_ENCODING, DEPTH_FILE_SCHEMA } from '../contracts/schema.generated.js';
 
 const DEPTH_COLUMNS = ['reference_name', 'position', 'depth'];
 const RUN_START = 0;

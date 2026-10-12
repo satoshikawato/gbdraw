@@ -23,11 +23,13 @@ import {
   resolveLinearComparisonPlan
 } from './linear-comparisons.js';
 import { textToBase64, textToBytes } from './file-content-cache.js';
+import { SESSION_VERSION } from '../contracts/schema.generated.js';
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
 /** @typedef {{ losatCache?: { entries?: unknown } | null }} LosatCacheSession A Session as the conservation restore reads it. */
 /** @typedef {{ filename?: unknown, text?: unknown }} CachedLosatEntry */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+
 
 /**
  * @template T
@@ -718,9 +720,8 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const promoted = ({
     ...session,
     format: 'gbdraw-session',
-    // The current Session version (services/config.js SESSION_VERSION); the
-    // flat draft goes to its mode slice when publication prepares it.
-    version: 46,
+    // The flat draft goes to its mode slice when publication prepares it.
+    version: SESSION_VERSION,
     config: cloneJson(config),
     renderRequest: promotedCore.renderRequest,
     resources: promotedCore.resources,
