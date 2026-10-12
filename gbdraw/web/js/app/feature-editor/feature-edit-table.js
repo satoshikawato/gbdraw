@@ -12,7 +12,8 @@ import {
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { cloneFileBytesForTransfer } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
-/** @import { FeatureOverrideDraft, FeatureOverrideDraftRow, FeatureOverrideRow, FeatureRequestRecord } from '../../services/feature-placement.js' */
+/** @import { FeatureOverrideDraftRow } from '../../contracts/session.generated.js' */
+/** @import { FeatureOverrideDraft, FeatureOverrideRow, FeatureRequestRecord } from '../../services/feature-placement.js' */
 /** @import { LabelTableInput } from './label-actions.js' */
 
 // Export and Load Feature Edits TSV (design Q4 6.4, Owner Q2 = A): the
