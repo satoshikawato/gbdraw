@@ -91,14 +91,16 @@ const removeClassToken = (element, token) => {
   }
 };
 
+// Also drops an inline style that Preview feedback (a cursor, a hover, a drag)
+// left empty when it was removed.
 /** @param {Element | null | undefined} svg */
 const stripEditorOnlyCursorStyles = (svg) => {
   if (!svg) return;
   svg.querySelectorAll('[style]').forEach((element) => {
-    const style = element.getAttribute('style');
-    if (!style || !/\bcursor\s*:/i.test(style)) return;
-    // `[style]` selects HTML and SVG elements, which carry inline styles.
-    /** @type {HTMLElement | SVGElement} */ (element).style.removeProperty('cursor');
+    if (/\bcursor\s*:/i.test(element.getAttribute('style') || '')) {
+      // `[style]` selects HTML and SVG elements, which carry inline styles.
+      /** @type {HTMLElement | SVGElement} */ (element).style.removeProperty('cursor');
+    }
     if (!element.getAttribute('style')?.trim()) {
       element.removeAttribute('style');
     }
