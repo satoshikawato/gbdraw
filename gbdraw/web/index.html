@@ -7342,7 +7342,7 @@
                                 <span class="alignment-review-key"><i class="is-chosen"></i>chosen<i class="is-other"></i>other candidate<i class="is-line"></i>reference line</span>
                             </div>
                             <template v-for="group in similarityAlignmentReview.groups" :key="group.id">
-                                <h3 v-if="group.title" class="alignment-review-section" :class="{ 'is-need': group.id === 'choose' }"
+                                <h3 v-if="group.title" class="alignment-review-section" :class="{ 'is-need': group.cards.some((card) => card.needsChoice) }"
                                     :data-alignment-section="group.id">{{ group.title }}<span class="count" aria-hidden="true">{{ group.cards.length }}</span><span class="sr-only"> ({{ group.cards.length }} {{ group.cards.length === 1 ? 'record' : 'records' }})</span></h3>
                                 <template v-for="card in group.cards" :key="card.recordKey">
                                 <component :is="card.kind === 'reference' ? 'section' : 'fieldset'"

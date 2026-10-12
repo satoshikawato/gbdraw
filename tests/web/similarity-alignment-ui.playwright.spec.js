@@ -2729,6 +2729,8 @@ test('records that need a choice come first; a ring or a row chooses, and the ch
   const card = dialog.locator(`[data-alignment-record-key="${needKey}"]`);
   const strip = card.locator('[data-alignment-strip]');
   await expect(card).toHaveClass(/is-need/);
+  const chooseHeading = dialog.locator('[data-alignment-section="choose"]');
+  await expect(chooseHeading).toHaveClass(/is-need/);
   await expect(card).toContainText('Choose the gene to line up, or skip this record.');
   await expect(strip).toHaveCount(1);
   await expect(strip.locator('.candidate.is-chosen')).toHaveCount(0);
@@ -2773,6 +2775,9 @@ test('records that need a choice come first; a ring or a row chooses, and the ch
   // The record keeps its place under the heading it opened with.
   expect(await order()).toEqual(opened);
   await expect(card).not.toHaveClass(/is-need/);
+  // The heading is amber only while a record under it still needs a choice.
+  await expect.poll(() => chooseHeading.evaluate((heading) => heading.classList.contains('is-need')))
+    .toBe(needKeys.length > 1);
   // On the Run info tab the figure is not shown and nothing is measured: the strips keep the
   // figure they had, and the rings return with the preview.
   const stripCount = await dialog.locator('[data-alignment-strip]').count();
