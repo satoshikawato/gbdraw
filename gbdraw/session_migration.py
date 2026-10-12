@@ -14,6 +14,7 @@ from typing import Any, Mapping, NamedTuple, Sequence, cast
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+    FLAT_DRAFT_TOP_LEVEL_FIELDS,
     MODE_SCOPED_SESSION_MIN_VERSION,
     RETIRED_RENDERED_ID_FEATURE_FIELDS,
     SessionDraftMigration,
@@ -382,7 +383,7 @@ def project_session_adjunct_for_current_write(
         # catalog makes the figure certain (R-7). The request keeps the targets
         # that drew the figure.
         migration = migrate_session_flat_draft(session, source_features=source_features)
-        for key in ("config", "features"):
+        for key in sorted(FLAT_DRAFT_TOP_LEVEL_FIELDS):
             if key in migration.session:
                 adjunct[key] = migration.session[key]
             else:

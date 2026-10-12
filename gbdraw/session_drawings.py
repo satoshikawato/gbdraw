@@ -33,6 +33,7 @@ from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
     CURRENT_SESSION_VERSION,
     OTHER_MODE_RESULT_EDITOR_FIELDS,
+    OTHER_MODE_RESULT_FIELDS,
     OTHER_MODE_RESULT_LEGEND_FIELDS,
     OTHER_MODE_RESULT_UI_FIELDS,
     session_mode,
@@ -45,8 +46,9 @@ DRAWING_NAMES: Mapping[str, str] = MappingProxyType(
 
 # The Web reader names a document it cannot lay out as a Session field error.
 _LAYOUT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
-# The fields of one committed Result set, named as at the top level.
-_SET_FIELDS = frozenset({"renderRequest", "results", "runMetadata", "cliInvocation"})
+# The fields of one committed Result set, named as at the top level: the set's
+# own fields, and its part of the two objects it shares with the other fields.
+_SET_FIELDS = OTHER_MODE_RESULT_FIELDS - {"editorState", "ui"}
 _SET_EDITOR_FIELDS = OTHER_MODE_RESULT_EDITOR_FIELDS - {"legend"}
 
 

@@ -537,38 +537,6 @@ def test_current_session_version_matches_web_config() -> None:
         {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
     )
 
-    authority_source = Path(
-        "gbdraw/web/js/services/session-authority.js"
-    ).read_text(encoding="utf-8")
-    forbidden_match = re.search(
-        r"CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS\s*=\s*Object\.freeze\(\["
-        r"([\s\S]*?)\]\)",
-        authority_source,
-    )
-    assert forbidden_match is not None
-    web_forbidden_fields = frozenset(
-        re.findall(r"'([^']+)'", forbidden_match.group(1))
-    )
-    assert session_io_module.CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS == (
-        web_forbidden_fields
-    )
-    authority_match = re.search(
-        r"SESSION_TOP_LEVEL_AUTHORITY\s*=\s*Object\.freeze\(\{"
-        r"([\s\S]*?)\}\);",
-        authority_source,
-    )
-    assert authority_match is not None
-    web_authority_fields = frozenset(
-        re.findall(
-            r"^\s{2}([A-Za-z][A-Za-z0-9]*):",
-            authority_match.group(1),
-            flags=re.MULTILINE,
-        )
-    )
-    assert session_io_module.CURRENT_SESSION_TOP_LEVEL_FIELDS == (
-        web_authority_fields
-    )
-
 
 def test_current_session_feature_catalog_is_single_and_lossless(
     tmp_path: Path,

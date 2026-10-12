@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import fields
-import gzip
 import inspect
-import json
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -15,6 +13,7 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
+from gbdraw.contract_shapes import INTEGER, STRING, array, literal, nullable, obj, record
 from gbdraw.api.requests import (
     CircularDiagramRequest,
     InMemoryRecordSource,
@@ -32,68 +31,17 @@ from gbdraw.session_request_codec import (
     encode_canonical_request,
 )
 from tests import test_session_request_codec as codec_tests
+from tests.utils.contract_shape_check import load_json, stored_json_files, violations
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DESCRIPTION = describe_canonical_request()
 TYPES: dict[str, Any] = DESCRIPTION["types"]
 ROOT: dict[str, Any] = {"kind": "ref", "name": DESCRIPTION["root"]}
 
-_SCALAR_CHECKS = {
-    "string": lambda value: isinstance(value, str),
-    "boolean": lambda value: isinstance(value, bool),
-    "integer": lambda value: isinstance(value, int) and not isinstance(value, bool),
-    "number": lambda value: isinstance(value, (int, float)) and not isinstance(value, bool),
-    "null": lambda value: value is None,
-}
 
 
-def violations(value: object, shape: dict[str, Any], path: str = "renderRequest") -> list[str]:
-    """Where ``value`` leaves ``shape``: an unknown field, a missing one, or a wrong value."""
-
-    kind = shape["kind"]
-    if kind == "unknown":
-        return []
-    if kind == "ref":
-        return violations(value, TYPES[shape["name"]], path)
-    if kind in _SCALAR_CHECKS:
-        return [] if _SCALAR_CHECKS[kind](value) else [f"{path}: {value!r} is not {kind}"]
-    if kind == "literal":
-        allowed = any(value == item and type(value) is type(item) for item in shape["values"])
-        return [] if allowed else [f"{path}: {value!r} is not one of {shape['values']!r}"]
-    if kind == "union":
-        found = [violations(value, option, path) for option in shape["options"]]
-        return min(found, key=len) if all(found) else []
-    if kind in {"array", "tuple"}:
-        if not isinstance(value, list):
-            return [f"{path}: {value!r} is not an array"]
-        if kind == "tuple" and len(value) != len(shape["items"]):
-            return [f"{path}: expected {len(shape['items'])} items"]
-        items = shape["items"] if kind == "tuple" else [shape["items"]] * len(value)
-        return [
-            problem
-            for index, (item, item_shape) in enumerate(zip(value, items))
-            for problem in violations(item, item_shape, f"{path}[{index}]")
-        ]
-    if not isinstance(value, dict):
-        return [f"{path}: {value!r} is not an object"]
-    if kind == "record":
-        return [
-            problem
-            for key, item in value.items()
-            for problem in violations(item, shape["values"], f"{path}.{key}")
-        ]
-    assert kind == "object", kind
-    fields = shape["fields"]
-    problems = [f"{path}.{key}: unknown field" for key in value if key not in fields]
-    problems += [
-        f"{path}.{key}: required field is absent"
-        for key in fields
-        if key not in value and key not in shape["optional"]
-    ]
-    for key, item in value.items():
-        if key in fields:
-            problems += violations(item, fields[key], f"{path}.{key}")
-    return problems
+def _problems(value: object, shape: dict[str, Any]) -> list[str]:
+    return violations(value, shape, TYPES, "renderRequest")
 
 
 def _resolved(shape: dict[str, Any]) -> dict[str, Any]:
@@ -144,7 +92,7 @@ def _objects(
     if kind == "ref":
         yield from _objects(value, TYPES[shape["name"]], path)
     elif kind == "union":
-        match = next(option for option in shape["options"] if not violations(value, option))
+        match = next(option for option in shape["options"] if not _problems(value, option))
         yield from _objects(value, match, path)
     elif kind in {"array", "tuple"}:
         assert isinstance(value, list)
@@ -236,7 +184,7 @@ def test_every_encoded_request_matches_the_description(
 ) -> None:
     if not encoded_requests[name]:
         pytest.skip("This test of the codec encodes no request.")
-    assert [violations(payload, ROOT) for payload, _resources in encoded_requests[name]] == [
+    assert [_problems(payload, ROOT) for payload, _resources in encoded_requests[name]] == [
         [] for _item in encoded_requests[name]
     ]
 
@@ -265,9 +213,17 @@ def _smallest_request(mode: str, tmp_path: Path) -> Encoded:
 
 
 # Where one change cannot show that the decoder and the description agree, and why.
+# An entry with positions differs only there and agrees at every other position.
 _COERCED = "accepted", "the typed constructor reads null as a value (str, bool, a default); no writer writes null"
 _TOGETHER = "refused", "a decision's status, rationale and anchor are checked together; none encoded is skipped"
-_KNOWN_DIFFERENCES = {
+_REFERENCE = (
+    "refused", "the plan's reference must equal the anchor of its reference record",
+    ("linear:layout.similarityAlignment.reference",),
+)
+_CIRCULAR_PLACEMENT = "circular:diagramOptions.featurePlacements.[].placement"
+_LINEAR_PLACEMENT = "linear:diagramOptions.featurePlacements.[].placement"
+_LANE_SIDE = "a lane side belongs to one mode (FeaturePlacementOverride.from_mapping); the row is one typedef"
+_KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]] = {
     "CanonicalAnnotationSet.id = null": _COERCED,
     "CanonicalRegionAnnotation.id = null": _COERCED,
     "CanonicalRegionAnnotation.label = null": _COERCED,
@@ -288,25 +244,175 @@ _KNOWN_DIFFERENCES = {
     "CanonicalLinearTrackOptions.linearTrackSlots = null": (
         "refused", "the encoded request has an axis index, which requires the slots"
     ),
+    "CanonicalAlignmentAnchorIdentity.biologicalFeatureId = another string": _REFERENCE,
+    "CanonicalAlignmentAnchorIdentity.sourceFeatureIndex = another integer": _REFERENCE,
+    "CanonicalAlignmentAnchorIdentity.sourceFeatureIndex = null": _REFERENCE,
+    "CanonicalAlignmentAnchorIdentity.stableFeatureSvgId = another string": _REFERENCE,
+    "CanonicalAlignmentAnchorIdentity.stableFeatureSvgId = null": _REFERENCE,
+    "CanonicalFeaturePlacement.placement[lane].side = 'above'": ("refused", _LANE_SIDE, (_CIRCULAR_PLACEMENT,)),
+    "CanonicalFeaturePlacement.placement[lane].side = 'below'": ("refused", _LANE_SIDE, (_CIRCULAR_PLACEMENT,)),
+    "CanonicalFeaturePlacement.placement[lane].side = 'inward'": ("refused", _LANE_SIDE, (_LINEAR_PLACEMENT,)),
+    "CanonicalFeaturePlacement.placement[lane].side = 'outward'": ("refused", _LANE_SIDE, (_LINEAR_PLACEMENT,)),
+    "CanonicalRecord.cardinality = 'all'": (
+        "refused", "a Circular record of every cardinality needs a grouping, a selector and a region that agree",
+        ("circular:records.[]",),
+    ),
+    "CanonicalRequestOutput.interactiveMetadataPolicy = 'required'": (
+        "refused", "requires interactive_svg among the formats; no request encoded there has it",
+        ("circular:output.[]", "linear:output"),
+    ),
+    "CanonicalDepthTrack.height = a fraction": (
+        "refused", "a depth track has a height only in a Linear diagram", ("circular:diagramOptions.depthTracks.[]",)
+    ),
+    "CanonicalDepthTrack.height = another integer": (
+        "refused", "a depth track has a height only in a Linear diagram", ("circular:diagramOptions.depthTracks.[]",)
+    ),
+    "CanonicalRecordPresentation.gridColumn = another integer": (
+        "refused", "grid_column requires grid_row; no Linear request encoded has a grid row",
+        ("linear:records.[].presentation",),
+    ),
+}
+# The decoder refuses another string, at every position: Python names the
+# values the field takes and the description types it ``string``. The type is
+# wider than Python there, as the Linear slot scalar was (OV-530, OV-597); a
+# field joins this list only with a reason it cannot be a literal union.
+_NAMES_TYPED_STRING: tuple[str, ...] = (
+    "CanonicalCircularOutputOptions.legend",
+    "CanonicalCircularTrackSlot.renderer",
+    "CanonicalCircularTrackSlot.side",
+    "CanonicalLinearOutputOptions.legend",
+    "CanonicalLinearTrackSlot.renderer",
+    "CanonicalLinearTrackSlot.side",
+    "CanonicalProteinComparisonSettings.collinearityAnchorMode",
+    "CanonicalProteinComparisonSettings.collinearityColorMode",
+    "CanonicalProteinComparisonSettings.collinearitySearchScope",
+    "CanonicalProteinComparisonSettings.collinearityUnitMode",
+    "CanonicalProteinComparisonSettings.orthogroupMembershipMode",
+)
+# The decoder refuses a value of a kind the description allows, at every
+# position: Python checks the value itself (a resource, record or feature that
+# must exist, a range, a colour, an array that must hold an item), which no
+# type can say.
+_VALUE_CHECKED: dict[str, tuple[str, ...]] = {
+    "CanonicalAlignmentAnchorIdentity.recordKey": ("another string",),
+    "CanonicalAlignmentRecordDecision.recordKey": ("another string",),
+    "CanonicalCircularDiagramOptions.depthTracks": ("an array",),
+    "CanonicalCircularDiagramOptions.dinucleotide": ("another string",),
+    "CanonicalCircularLayout.multiRecordMinRadiusRatio": ("another integer",),
+    "CanonicalCircularRenderRequest.output": ("an array",),
+    "CanonicalCircularRenderRequest.records": ("an array",),
+    "CanonicalCollinearityResultComparison.resourceId": ("another string",),
+    "CanonicalDepthTrack.source": ("an array",),
+    "CanonicalFeaturePlacement.placement[lane].level": ("another integer",),
+    "CanonicalFeatureSpan.selectors": ("an array",),
+    "CanonicalFileRef.resourceId": ("another string",),
+    "CanonicalGenbankRecordSource.resourceId": ("another string",),
+    "CanonicalGffFastaRecordSource.fastaResourceId": ("another string",),
+    "CanonicalGffFastaRecordSource.gffResourceId": ("another string",),
+    "CanonicalHatchStyle.color": ("another string",),
+    "CanonicalLinearDiagramOptions.depthTracks": ("an array",),
+    "CanonicalLinearDiagramOptions.dinucleotide": ("another string",),
+    "CanonicalLinearRecordTranslation.recordKey": ("another string",),
+    "CanonicalLinearRenderRequest.records": ("an array",),
+    "CanonicalLinearTrackOptions.linearTrackAxisIndex": ("another integer",),
+    "CanonicalLinearTrackOptions.linearTrackSlots": ("an array",),
+    "CanonicalNucleotideBlastComparison.queryRecordIndex": ("another integer",),
+    "CanonicalNucleotideBlastComparison.resourceId": ("another string",),
+    "CanonicalOrthogroupResultComparison.resourceId": ("another string",),
+    "CanonicalPrecomputedProteinComparison.queryRecordIndex": ("another integer",),
+    "CanonicalPrecomputedProteinComparison.resourceId": ("another string",),
+    "CanonicalRegionAnnotationStyle.fill": ("another string",),
+    "CanonicalRegionAnnotationStyle.fillOpacity": ("another integer",),
+    "CanonicalRegionAnnotationStyle.labelColor": ("another string",),
+    "CanonicalRegionAnnotationStyle.stroke": ("another string",),
+    "CanonicalRequestOutput.formats": ("an array",),
+    "CanonicalSimilarityAlignmentPlan.records": ("an array",),
+    "CanonicalTableRef.resourceId": ("another string",),
+}
+# The decoder takes a value of a kind the description refuses, at every
+# position: the typed constructor converts it (str, int, bool) or reads an
+# empty array as no value. No writer writes it; the type is narrower than
+# Python there (OV-528, OV-596).
+_CONVERTED: dict[str, tuple[str, ...]] = {
+    "CanonicalAnnotationSet.id": ("a fraction", "a null item", "an array", "another integer"),
+    "CanonicalAnnotationSet.legendLabel": ("a fraction", "a null item", "an array", "another integer"),
+    "CanonicalCircularDiagramOptions.conservationReference": ("an array",),
+    "CanonicalCoordinateSpan.wrapsOrigin": ("an array",),
+    "CanonicalFeatureSelector.key": ("a fraction", "a null item", "an array", "another integer"),
+    "CanonicalFeatureSelector.value": ("a fraction", "a null item", "an array", "another integer"),
+    "CanonicalGeneratedProteinComparison.mode": ("an array",),
+    "CanonicalHatchStyle.cross": ("a fraction", "a null item", "an array", "another integer", "another string"),
+    "CanonicalRegionAnnotation.id": ("a fraction", "a null item", "an array", "another integer"),
+    "CanonicalRegionAnnotation.label": ("a fraction", "a null item", "an array", "another integer"),
+    "CanonicalRegionAnnotation.lane": ("a fraction",),
+    "CanonicalRegionAnnotation.legendLabel": ("a fraction", "a null item", "an array", "another integer"),
+    "CanonicalRegionAnnotationStyle.fill": ("an array",),
+}
+_EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
+    **{
+        change: (entry[0], list(entry[2]) if len(entry) == 3 else None)
+        for change, entry in _KNOWN_DIFFERENCES.items()
+    },
+    **{
+        f"{field} = {value}": (verdict, None)
+        for verdict, table in (
+            ("refused", {field: ("another string",) for field in _NAMES_TYPED_STRING}),
+            ("refused", _VALUE_CHECKED),
+            ("accepted", _CONVERTED),
+        )
+        for field, values in table.items()
+        for value in values
+    },
 }
 
 
-def test_the_decoder_agrees_with_the_description_on_every_object(
-    encoded_requests: dict[str, list[Encoded]], tmp_path: Path
-) -> None:
-    """Remove each field, set it to null and to each named value, add an unknown one.
+_UNNAMED = "valueTheDescriptionDoesNotName"
 
-    A cross-field rule can refuse one request and accept another, so a change
-    the description allows must decode in some request, and one it refuses in none.
+
+def _other_values(held: object) -> list[tuple[str, object]]:
+    """A value of each JSON kind beside the one a field holds.
+
+    The values do not depend on the description, so a description made wider
+    (a literal as its scalar, an integer as a number, a string as a string or
+    an integer, an array that takes null, a value beside null) allows one of
+    them where the decoder refuses it.
     """
 
-    accepted: dict[tuple[str, bool], set[bool]] = {}
+    integer = isinstance(held, int) and not isinstance(held, bool)
+    return [
+        ("another integer", held + 1 if integer else 7),
+        ("a fraction", 0.5),
+        ("another string", _UNNAMED),
+        ("an array", []),
+        ("a null item", [*held, None] if isinstance(held, list) else [None]),
+    ]
+
+
+def _position(mode: str, path: tuple[str | int, ...]) -> str:
+    """Where an object is in a request of a mode; every item of an array is one position."""
+
+    return f"{mode}:" + ".".join("[]" if isinstance(step, int) else step for step in path)
+
+
+def _differences(
+    encoded_requests: dict[str, list[Encoded]], tmp_path: Path
+) -> tuple[dict[str, tuple[str, list[str] | None]], set[str]]:
+    """Each change the decoder and the description judge differently, and the objects reached.
+
+    Returns ``{change: (what the decoder does, positions)}``; the positions
+    are ``None`` when the two differ wherever the change was tried. A
+    cross-field rule can refuse one request and accept another, so at one
+    position a change the description allows must decode in some request, and
+    one it refuses in none.
+    """
+
+    accepted: dict[tuple[str, str, bool], set[bool]] = {}
     reached: set[str] = set()
     decodable = [
         item
         for found in encoded_requests.values()
         for item in found
-        if not violations(item[0], ROOT) and _decodes(*item, tmp_path)
+        if not _problems(item[0], ROOT) and _decodes(*item, tmp_path)
     ]
     for mode in ("circular", "linear"):
         decodable.append(_smallest_request(mode, tmp_path / mode))
@@ -314,32 +420,54 @@ def test_the_decoder_agrees_with_the_description_on_every_object(
         for path, shape in _objects(payload, ROOT):
             label = LABELS[id(shape)]
             reached.add(label)
+            where = _position(payload["mode"], path)
             holder: Any = payload
             for step in path:
                 holder = holder[step]
             changes: list[tuple[str, bool, tuple[object, ...]]] = [
-                (f"{label}: an unknown field", False, ("fieldTheDescriptionDoesNotName", None)),
+                (f"{label}: an unknown field", shape["open"], ("fieldTheDescriptionDoesNotName", None)),
             ]
             for key, field in shape["fields"].items():
                 if key in holder:
                     changes.append((f"{label}.{key} removed", key in shape["optional"], (key,)))
-                changes.append((f"{label}.{key} = null", violations(None, field) == [], (key, None)))
+                changes.append((f"{label}.{key} = null", _problems(None, field) == [], (key, None)))
                 changes += [
                     (f"{label}.{key} = {value!r}", True, (key, value))
                     for value in _literal_values(field)
                     if value is not None
                 ]
+                changes += [
+                    (f"{label}.{key} = {name}", _problems(value, field) == [], (key, value))
+                    for name, value in _other_values(holder.get(key))
+                ]
             for change, allowed, arguments in changes:
                 unchanged = len(arguments) == 2 and arguments[0] in holder and holder[arguments[0]] == arguments[1]
-                accepted.setdefault((change, allowed), set()).add(
+                accepted.setdefault((change, where, allowed), set()).add(
                     unchanged or _decodes(_with(payload, path, *arguments), resources, tmp_path)
                 )
-    differences = {
-        change: "refused" if allowed else "accepted"
-        for (change, allowed), found in accepted.items()
-        if (True in found) != allowed
-    }
-    assert differences == {key: value for key, (value, _reason) in _KNOWN_DIFFERENCES.items()}
+    found_by_change: dict[str, tuple[str, list[str], list[str]]] = {}
+    for (change, where, allowed), found in sorted(accepted.items()):
+        entry = found_by_change.setdefault(change, ("refused" if allowed else "accepted", [], []))
+        entry[1 if (True in found) != allowed else 2].append(where)
+    return {
+        change: (verdict, differs if agrees else None)
+        for change, (verdict, differs, agrees) in found_by_change.items()
+        if differs
+    }, reached
+
+
+def test_the_decoder_agrees_with_the_description_at_every_position(
+    encoded_requests: dict[str, list[Encoded]], tmp_path: Path
+) -> None:
+    """Remove each field, set it to null, to each named value and to a value just
+    outside its shape, and add an unknown field: at each position of each mode.
+
+    A typedef used at several positions is judged at each one, so a value one
+    position accepts cannot hide that another always refuses it (OV-530).
+    """
+
+    differences, reached = _differences(encoded_requests, tmp_path)
+    assert differences == _EXPECTED_DIFFERENCES
     assert {label for label, _shape in OBJECTS} - reached == set()
 
 
@@ -404,9 +532,9 @@ def test_every_described_field_is_held_by_a_request_or_named_by_the_decoder(
 
     held: set[str] = set()
     requests = [payload for found in encoded_requests.values() for payload, _resources in found]
-    requests += [request for path in _session_files() for request in _stored_requests(_load(path))]
+    requests += [request for path in stored_json_files() for request in _stored_requests(load_json(path))]
     for payload in requests:
-        if violations(payload, ROOT):
+        if _problems(payload, ROOT):
             continue
         for path, shape in _objects(payload, ROOT):
             holder: Any = payload
@@ -428,32 +556,15 @@ def _stored_requests(value: object) -> Iterator[dict[str, Any]]:
             yield from _stored_requests(item)
 
 
-def _session_files() -> list[Path]:
-    return sorted(
-        path
-        for folder in (
-            "tests/fixtures", "tests/web/fixtures", "tests/test_inputs", "docs/images",
-            "gbdraw/web/gallery/sessions",
-        )
-        for path in (REPO_ROOT / folder).rglob("*.json*")
-        if path.suffix in {".json", ".gz"}
-    )
-
-
-def _load(path: Path) -> object:
-    raw = path.read_bytes()
-    return json.loads(gzip.decompress(raw) if path.suffix == ".gz" else raw)
-
-
 def test_requests_stored_in_current_sessions_match_the_description() -> None:
     """The Web wrote the Gallery Sessions; the CLI wrote the documentation Sessions."""
 
     modes: list[str] = []
     problems: dict[str, list[str]] = {}
-    for path in _session_files():
-        for request in _stored_requests(_load(path)):
+    for path in stored_json_files():
+        for request in _stored_requests(load_json(path)):
             modes.append(request["mode"])
-            found = violations(request, ROOT)
+            found = _problems(request, ROOT)
             if found:
                 problems[str(path.relative_to(REPO_ROOT))] = found
     assert problems == {}
@@ -463,21 +574,19 @@ def test_requests_stored_in_current_sessions_match_the_description() -> None:
 @pytest.mark.parametrize(
     ("value", "shape", "expected"),
     [
-        ({"a": 1}, {"kind": "object", "fields": {}, "optional": []}, ["renderRequest.a: unknown field"]),
-        (
-            {},
-            {"kind": "object", "fields": {"a": {"kind": "integer"}}, "optional": []},
-            ["renderRequest.a: required field is absent"],
-        ),
-        ({}, {"kind": "object", "fields": {"a": {"kind": "integer"}}, "optional": ["a"]}, []),
-        (True, {"kind": "integer"}, ["renderRequest: True is not integer"]),
-        (1, {"kind": "literal", "values": [True]}, ["renderRequest: 1 is not one of [True]"]),
-        ([1, "a"], {"kind": "array", "items": {"kind": "integer"}}, ["renderRequest[1]: 'a' is not integer"]),
-        (None, {"kind": "union", "options": [{"kind": "string"}, {"kind": "null"}]}, []),
-        ({"k": 1}, {"kind": "record", "values": {"kind": "string"}}, ["renderRequest.k: 1 is not string"]),
+        ({"a": 1}, obj({}), ["renderRequest.a: unknown field"]),
+        ({"a": 1}, obj({}, open=True), []),
+        ({}, obj({"a": INTEGER}), ["renderRequest.a: required field is absent"]),
+        ({"a": "x", "b": 1}, obj({"a": INTEGER}, open=True), ["renderRequest.a: 'x' is not integer"]),
+        ({}, obj({"a": INTEGER}, optional=["a"]), []),
+        (True, INTEGER, ["renderRequest: True is not integer"]),
+        (1, literal(True), ["renderRequest: 1 is not one of [True]"]),
+        ([1, "a"], array(INTEGER), ["renderRequest[1]: 'a' is not integer"]),
+        (None, nullable(STRING), []),
+        ({"k": 1}, record(STRING), ["renderRequest.k: 1 is not string"]),
     ],
 )
 def test_the_structural_checker_reports_each_kind_of_violation(
     value: object, shape: dict[str, Any], expected: list[str]
 ) -> None:
-    assert violations(value, shape) == expected
+    assert _problems(value, shape) == expected

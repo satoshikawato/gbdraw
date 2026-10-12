@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import copy
 import json
-import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -76,10 +75,6 @@ from gbdraw.features.overrides import FeatureOverride
 from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from gbdraw.features.shapes import resolve_feature_rendering
 from gbdraw.features.source import build_source_feature_catalog
-from gbdraw.session_io import (
-    CURRENT_SESSION_TOP_LEVEL_FIELDS,
-    FLAT_DRAFT_TOP_LEVEL_FIELDS,
-)
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -3213,48 +3208,6 @@ def test_feature_overrides_require_schema9_and_the_current_row_shape(
             resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
             output_directory=tmp_path / "output",
         )
-
-
-def _jsdoc_typedef_property_names(source: str, typedef_name: str) -> set[str]:
-    """Return the `@property` names of one JSDoc `@typedef`, or fail loudly."""
-    blocks = [
-        block
-        for block in re.findall(r"/\*\*.*?\*/", source, flags=re.DOTALL)
-        if re.search(rf"@typedef\s+\{{[^}}]*\}}\s+{re.escape(typedef_name)}\b", block)
-    ]
-    assert len(blocks) == 1, f"expected exactly one JSDoc @typedef {typedef_name}, found {len(blocks)}"
-    names = re.findall(
-        r"^\s*\*\s*@property\s+\{[^}]*\}\s+\[?([A-Za-z_]\w*)\]?",
-        blocks[0],
-        flags=re.MULTILINE,
-    )
-    assert names, f"JSDoc @typedef {typedef_name} declares no @property"
-    assert len(names) == len(set(names)), f"JSDoc @typedef {typedef_name} repeats a @property"
-    return set(names)
-
-
-_WEB_CONFIG_JS = Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "services" / "config.js"
-
-
-def test_web_gbdraw_session_typedef_matches_session_io_fields() -> None:
-    source = _WEB_CONFIG_JS.read_text(encoding="utf-8")
-    # `files` is accepted only for Sessions older than version 40, and the flat
-    # `config` and `features` only for Sessions older than version 46; the
-    # current writer never writes them and the current reader rejects them.
-    assert _jsdoc_typedef_property_names(source, "GbdrawSession") == (
-        set(CURRENT_SESSION_TOP_LEVEL_FIELDS) - {"files"} - FLAT_DRAFT_TOP_LEVEL_FIELDS
-    )
-
-
-def test_jsdoc_typedef_property_parser_is_strict() -> None:
-    with pytest.raises(AssertionError, match="expected exactly one"):
-        _jsdoc_typedef_property_names("/** @typedef {object} Other\n * @property {number} a\n */", "Missing")
-    with pytest.raises(AssertionError, match="declares no @property"):
-        _jsdoc_typedef_property_names("/**\n * @typedef {object} Empty\n */", "Empty")
-    assert _jsdoc_typedef_property_names(
-        "/**\n * @typedef {object} Mixed\n * @property {string} a\n * @property {number} [b]\n */",
-        "Mixed",
-    ) == {"a", "b"}
 
 
 def test_typed_tree_codec_resolves_type_hints_once_per_class(

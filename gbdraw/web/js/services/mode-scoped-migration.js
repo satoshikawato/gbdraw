@@ -7,6 +7,8 @@
 // gbdraw/session_io.py; tests/fixtures/sessions/mode-split-vectors.json pins
 // both.
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
+// `FLAT_DRAFT_TOP_LEVEL_FIELDS`: the top-level homes that Session 46 moved into `modes`.
+import { FLAT_DRAFT_TOP_LEVEL_FIELDS } from '../contracts/schema.generated.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { cloneJsonData } from './json-clone.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -241,8 +243,6 @@ const HISTORICAL_FLAT_PROFILE_VALUES = Object.freeze({ pairwise_match_style: 'ri
 // A registry value that a Session 44 or older saved elsewhere.
 /** @type {Record<string, [string, string]>} */
 const FLAT_DRAFT_SOURCES = Object.freeze({ 'ui.selectedFeatureRecordIdx': ['features', 'selectedFeatureRecordIdx'] });
-// The top-level homes that Session 46 moved into `modes`.
-const FLAT_DRAFT_TOP_LEVEL_FIELDS = Object.freeze(['config', 'features']);
 /** @type {ReadonlyArray<[string, ReadonlySet<string>]>} */
 const RETIRED_NESTED_FIELDS = Object.freeze([
   ['editorState', new Set(['featureStrokes'])],

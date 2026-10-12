@@ -201,26 +201,6 @@ def test_the_other_set_has_the_web_readers_rules(change, message) -> None:
         validate_session(session)
 
 
-def test_the_other_set_field_lists_match_the_web_reader() -> None:
-    """One rule in both validators (services/session-authority.js)."""
-    source = (Path(__file__).resolve().parents[1] / "gbdraw" / "web" / "js" / "services" / "session-authority.js").read_text(
-        encoding="utf-8"
-    )
-
-    def js_set(name: str) -> set[str]:
-        body = re.search(rf"const {name} = new Set\(\[(.*?)\]\);", source, re.S)
-        assert body, name
-        return set(re.findall(r"'([^']+)'", body.group(1)))
-
-    import gbdraw.session_io as session_io
-
-    assert js_set("OTHER_MODE_RESULT_FIELDS") == set(session_io.OTHER_MODE_RESULT_FIELDS)
-    assert js_set("OTHER_MODE_RESULT_UI_FIELDS") == set(session_io.OTHER_MODE_RESULT_UI_FIELDS)
-    assert js_set("OTHER_MODE_RESULT_EDITOR_FIELDS") == set(session_io.OTHER_MODE_RESULT_EDITOR_FIELDS)
-    assert js_set("OTHER_MODE_RESULT_LEGEND_FIELDS") == set(session_io.OTHER_MODE_RESULT_LEGEND_FIELDS)
-    assert js_set("OTHER_MODE_RESULT_RUN_METADATA_FIELDS") == set(session_io.OTHER_MODE_RESULT_RUN_METADATA_FIELDS)
-
-
 def test_a_drawing_view_lacks_the_per_set_fields_its_set_lacks() -> None:
     session = two_mode_session()
     session["ui"].update(appliedPaletteName="tableau", appliedPaletteColors={"CDS": "#111111"}, selectedResultIndex=0)
