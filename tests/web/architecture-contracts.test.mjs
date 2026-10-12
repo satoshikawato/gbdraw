@@ -5843,6 +5843,10 @@ test('design-rule allowlists cannot expand alongside runtime files', () => {
     ['WRITERS', { writers: "{\n  'app/app-setup.js': { removeCircularDepthTrack: 'transition' },\n  'services/reset.js': { resetSettings: 'restore' }\n}" }],
     ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 4, 'app/b.js': 0 }" }],
     ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 3, 'app/b.js': 0, 'app/c.js': 1 }" }],
+    // A new key is new even when Object.prototype has a member of that name.
+    ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 3, 'app/b.js': 0, constructor: 1 }" }],
+    ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 3, 'app/b.js': 0, '__proto__': 1 }" }],
+    ['WRITERS', { writers: "{\n  'app/app-setup.js': { removeCircularDepthTrack: 'reconcile' },\n  'services/reset.js': { resetSettings: 'restore' },\n  constructor: {}\n}" }],
     ['BASELINE', { baseline: 47 }]
   ];
   expansions.forEach(([symbol, overrides]) => {

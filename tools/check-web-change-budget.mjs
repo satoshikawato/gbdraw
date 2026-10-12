@@ -816,7 +816,7 @@ const classifyAllowlistDelta = (kind, before, after) => {
     if (!isCountMap(before) || !isCountMap(after)) return 'unreadable';
     let contracted = false;
     for (const [key, value] of Object.entries(after)) {
-      if (!(key in before) || value > before[key]) return 'expansion';
+      if (!Object.hasOwn(before, key) || value > before[key]) return 'expansion';
       if (value < before[key]) contracted = true;
     }
     if (Object.keys(after).length < Object.keys(before).length) contracted = true;
@@ -826,9 +826,9 @@ const classifyAllowlistDelta = (kind, before, after) => {
     if (!isWriterMap(before) || !isWriterMap(after)) return 'unreadable';
     let contracted = false;
     for (const [path, inner] of Object.entries(after)) {
-      if (!(path in before)) return 'expansion';
+      if (!Object.hasOwn(before, path)) return 'expansion';
       for (const [name, category] of Object.entries(inner)) {
-        if (!(name in before[path]) || before[path][name] !== category) return 'expansion';
+        if (!Object.hasOwn(before[path], name) || before[path][name] !== category) return 'expansion';
       }
       if (Object.keys(inner).length < Object.keys(before[path]).length) contracted = true;
     }
