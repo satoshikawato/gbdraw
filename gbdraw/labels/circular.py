@@ -4794,13 +4794,13 @@ def _prepare_label_list_today(
                     inner_labels.append(label_entry)
 
     _proto_design = _proto_design_from_env()
-    if _proto_design and _proto_design[0] in "BCDEFGHIJK" and not _PROTO_STATE["bypass"]:
+    if _proto_design and _proto_design[0] in "BCDEFGHIJKL" and not _PROTO_STATE["bypass"]:
         from .proto import run_design
 
         _arc = cfg.labels
         _off = cfg.labels.unified_adjustment.outer_labels
         _inner_today = []
-        _inner_proto = {"inner_labels": inner_labels} if _proto_design[0] in "IJK" else {}   # designs I, J, K place them themselves
+        _inner_proto = {"inner_labels": inner_labels} if _proto_design[0] in "IJKL" else {}   # designs I, J, K place them themselves
         if inner_labels and not _inner_proto:
             # study only: labels inside the ring (--labels both) keep today's placement
             _saved = dict(_PROTO_STATE)
