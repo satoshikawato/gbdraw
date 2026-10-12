@@ -12,6 +12,8 @@ import { collectCanonicalResourceIds } from './canonical-resource-references.js'
 import { LOSAT_EXECUTION_FIELDS, MODE_SCOPED_ROWS, SLICE_MODES, validateModeSliceFields } from './mode-scoped-migration.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import {
+  CANONICAL_SESSION_MIN_VERSION,
+  CURRENT_AUTHORITY_SESSION_MIN_VERSION,
   FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
   MODE_SCOPED_SESSION_VERSION,
   TYPED_DRAFT_SESSION_VERSION
@@ -571,16 +573,16 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION].includes(Number(version))) {
     throw new Error('Web binding schema 2 requires session version 41, 42, 44, or 46.');
   }
-  if (Number(version) < 31) return;
+  if (Number(version) < CANONICAL_SESSION_MIN_VERSION) return;
   if (
-    Number(version) >= 40 &&
+    Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION &&
     Object.prototype.hasOwnProperty.call(sessionData, 'files')
   ) {
     throw new Error(
       `Session version ${String(version)} cannot contain legacy files; use resources and webFiles.`
     );
   }
-  if (Number(version) >= 40) {
+  if (Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
     validateCurrentComparisonAuthority(sessionData);
     for (const field of ['cInputType', 'lInputType']) {
       if (

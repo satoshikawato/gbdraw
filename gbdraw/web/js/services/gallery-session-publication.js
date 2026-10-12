@@ -42,7 +42,7 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
-/** @import { CanonicalRenderRequest } from './session-request.js' */
+/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 /** @typedef {Partial<ActiveWebConfig> & Record<string, unknown>} PublicationConfig A Session 46 slice may omit a field; it reads that mode's default (plan 4.1). */
 /** @typedef {PublicationConfig & Pick<ActiveWebConfig, 'form' | 'adv'>} PublishedConfig The configuration the publication rebuilds: it always has `form` and `adv`. */
@@ -63,10 +63,20 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
  * @typedef {PublicationSessionFields & Record<string, unknown>} PublicationSession
  */
 /**
+ * A Session's request as publication reads it. Before admission it is unvalidated and of any schema that
+ * admission promotes (5 to 9); a current request (`CanonicalRenderRequest`) is one of these.
+ * @typedef {object} PublicationRequest
+ * @property {unknown} [schema]
+ * @property {string} mode
+ * @property {{ config?: unknown, colors?: { defaultColors?: unknown, defaultColorsFile?: unknown } }} [diagramOptions]
+ * @property {{ kind?: unknown }[]} [comparisons]
+ * @property {unknown} [output]
+ */
+/**
  * @typedef {object} PublicationSessionFields
  * @property {string} [format]
  * @property {number} [version]
- * @property {CanonicalRenderRequest} renderRequest
+ * @property {PublicationRequest} renderRequest
  * @property {Record<string, { kind?: unknown, encoding?: unknown, data?: unknown }>} [resources]
  * @property {Record<string, unknown>} [webFiles]
  * @property {unknown} [files]
@@ -120,7 +130,7 @@ const modeSlice = (session) => {
   const slice = isObject(session?.modes) ? session.modes[session.renderRequest?.mode] : null;
   return isObject(slice) ? slice : null;
 };
-/** @param {CanonicalRenderRequest['output']} output */
+/** @param {unknown} output */
 const outputEntries = (output) => {
   const entries = Array.isArray(output) ? output : [output];
   return entries.every(isObject) ? entries : null;
@@ -237,7 +247,7 @@ const publishedSession = (session, config, layout, projection, features) => {
   return { ...published, ui, modes: { [mode]: { ...slice, ui: { ...(slice.ui || {}), layoutPreferences: clone(layout[mode]) } } } };
 };
 /**
- * @param {CanonicalRenderRequest} request
+ * @param {PublicationRequest} request
  * @param {GallerySessionPublicationOwners['promoteRequest']} promoteRequest
  * @param {{ featureCatalog?: FeatureCatalog | null, legacyOrthogroupState?: Record<string, unknown> | null }} [options]
  */
@@ -349,7 +359,7 @@ const mergeReplayResources = (prepared, replayed) => {
  * @property {(input: Record<string, any>) => { state: Record<string, any>, drawing: Record<string, any>, features: Record<string, unknown> }} buildRequestState
  *   The request inputs of a Session: project inputs and artifacts (`state`), settings and edits (`drawing`),
  *   and the drawing's per-feature edits as the draft stores them (`features`).
- * @property {(request: CanonicalRenderRequest, promotion?: Record<string, any>) => CanonicalRenderRequest} promoteRequest
+ * @property {(request: PublicationRequest, promotion?: Record<string, any>) => CanonicalRenderRequest} promoteRequest
  * @property {(input: Record<string, any>) => PublicationProjection} projectRequest
  * @property {(input: Record<string, any>) => any} resolveComparisonPlan
  */

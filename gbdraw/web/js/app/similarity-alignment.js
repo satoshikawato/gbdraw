@@ -13,6 +13,7 @@ import {
 import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
 import { isInternalProteinDisplayId } from '../services/feature-utils.js';
 import { recordsNeedingChoice } from '../services/alignment-review-view.js';
+import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
 
 const { computed, ref, watch } = window.Vue;
 
@@ -343,7 +344,7 @@ const baseReverseComplement = canonicalRecordReverseComplement;
  * }} [options]
  */
 const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = null } = {}) => {
-  if (!plan || plan.schema !== 2 || !Array.isArray(plan.records)) return null;
+  if (!plan || plan.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA || !Array.isArray(plan.records)) return null;
   const records = new Map(
     (Array.isArray(linearSeqs) ? linearSeqs : [])
       .map((record) => [String(record?.uid || ''), Boolean(record.region_reverse)])
@@ -499,7 +500,7 @@ const validateAmbiguity = (value, path) => {
 
 const validatePlan = (value, response, path) => {
   const raw = exactObject(value, ['schema', 'groupId', 'reference', 'records'], path);
-  if (raw.schema !== 2 || raw.groupId !== response.groupId || !Array.isArray(raw.records)
+  if (raw.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA || raw.groupId !== response.groupId || !Array.isArray(raw.records)
     || !sameJson(validateAnchor(raw.reference, `${path}.reference`), response.reference)) {
     throw new Error(`${path} does not match its resolution.`);
   }
@@ -515,7 +516,7 @@ const validatePlan = (value, response, path) => {
       })) throw new Error(`${path} differs from helper decisions.`);
     return fields;
   });
-  return { schema: 2, groupId: raw.groupId, reference: raw.reference, records };
+  return { schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA, groupId: raw.groupId, reference: raw.reference, records };
 };
 
 const validateProjection = (value, request) => {
@@ -660,7 +661,7 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
     'schema', 'status', 'groupId', 'reference', 'referenceDisplayedStrand',
     'referenceDisplayCenter', 'records', 'plan', 'projection'
   ], 'alignment helper response');
-  if (raw.schema !== 2 || !['resolved', 'ambiguous'].includes(raw.status)
+  if (raw.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA || !['resolved', 'ambiguous'].includes(raw.status)
     || raw.groupId !== request.groupId || !Array.isArray(raw.records)
     || ![null, -1, 1].includes(raw.referenceDisplayedStrand)
     || !Number.isFinite(raw.referenceDisplayCenter)) {
@@ -699,7 +700,7 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
     throw new Error('Alignment helper response status does not match its records.');
   }
   const response = {
-    schema: 2, status: raw.status, groupId: raw.groupId, reference,
+    schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA, status: raw.status, groupId: raw.groupId, reference,
     referenceDisplayedStrand: raw.referenceDisplayedStrand,
     referenceDisplayCenter: raw.referenceDisplayCenter,
     records, plan: /** @type {Record<string, any> | null} */ (null),
@@ -850,7 +851,7 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
   }
 
   return deepFreeze({
-    schema: 2,
+    schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
     groupId: groupStatus.value,
     records,
     reference: exactMember.payload.anchor,

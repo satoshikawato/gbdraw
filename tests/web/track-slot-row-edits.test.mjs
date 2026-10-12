@@ -15,7 +15,7 @@ import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-track-slot-row-edits-'));
-for (const directory of ['app', 'utils']) {
+for (const directory of ['app', 'utils', 'contracts']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', directory), join(tempRoot, directory), { recursive: true });
 }
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');

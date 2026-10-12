@@ -1,4 +1,6 @@
 // @ts-check
+import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+
 /** @param {unknown} value */
 export const normalizeCollinearAnchorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
@@ -25,21 +27,21 @@ export const normalizeOrthogroupMembershipMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   /** @type {Record<string, string>} */
   const aliases = {
-    legacy: 'anchor_core_v1',
-    rbh: 'anchor_core_v1',
-    rbh_only: 'anchor_core_v1',
-    merge: 'anchor_core_v1',
-    family: 'anchor_core_v1',
-    family_merge: 'anchor_core_v1',
-    local_split: 'anchor_core_v1',
-    density_split: 'anchor_core_v1',
-    outparalog_split: 'anchor_core_v1',
-    distribution_split: 'anchor_core_v1',
-    orthogroups: 'anchor_core_v1',
-    anchor_core: 'anchor_core_v1'
+    legacy: ORTHOGROUP_INFERENCE_VERSION,
+    rbh: ORTHOGROUP_INFERENCE_VERSION,
+    rbh_only: ORTHOGROUP_INFERENCE_VERSION,
+    merge: ORTHOGROUP_INFERENCE_VERSION,
+    family: ORTHOGROUP_INFERENCE_VERSION,
+    family_merge: ORTHOGROUP_INFERENCE_VERSION,
+    local_split: ORTHOGROUP_INFERENCE_VERSION,
+    density_split: ORTHOGROUP_INFERENCE_VERSION,
+    outparalog_split: ORTHOGROUP_INFERENCE_VERSION,
+    distribution_split: ORTHOGROUP_INFERENCE_VERSION,
+    orthogroups: ORTHOGROUP_INFERENCE_VERSION,
+    anchor_core: ORTHOGROUP_INFERENCE_VERSION
   };
   const resolved = aliases[normalized] || normalized;
-  return resolved === 'anchor_core_v1' ? resolved : 'anchor_core_v1';
+  return resolved === ORTHOGROUP_INFERENCE_VERSION ? resolved : ORTHOGROUP_INFERENCE_VERSION;
 };
 
 /** @param {unknown} value */

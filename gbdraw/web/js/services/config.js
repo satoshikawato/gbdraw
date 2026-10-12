@@ -235,9 +235,12 @@ import {
 
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import {
+  CANONICAL_SESSION_MIN_VERSION,
   CURRENT_ARTIFACT_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
   DRAWN_HASH_RULE_SESSION_MAX_VERSION,
+  LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
+  LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
   MODE_SCOPED_SESSION_VERSION,
   SESSION_VERSION,
@@ -292,7 +295,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 ));
 
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
-/** @import { CanonicalRenderEnvelope, CanonicalRenderRequest } from './session-request.js' */
+/** @import { CanonicalRenderEnvelope } from './session-request.js' */
+/** @import { CanonicalLinearLayout, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
@@ -1497,7 +1501,7 @@ const normalizeSessionData = (data, droppedLegendColors) => {
       `Session version ${version} cannot contain legacy files; use resources and webFiles.`
     );
   }
-  if (version >= 31) {
+  if (version >= CANONICAL_SESSION_MIN_VERSION) {
     if (!isPlainObject(data.renderRequest)) {
       throw new Error(`Session version ${version} requires a canonical renderRequest object.`);
     }
@@ -1940,7 +1944,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   }
 
   const promotedData = !currentSession && (
-    sourceSessionVersion >= 31 &&
+    sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
     Number(normalizedData.renderRequest?.schema) === 2
   )
     ? promoteGallerySessionToCurrent(normalizedData)
@@ -2004,7 +2008,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   const settingsOnly = isSettingsOnlySessionDocument(data);
   const canonicalProjection = settingsOnly
     ? projectSettingsOnlySession(data, currentResourceTable)
-    : sourceSessionVersion >= 31
+    : sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
     ? projectCanonicalSessionRequest({
         renderRequest: projectionRenderRequest,
         resources: data.resources,
@@ -2034,10 +2038,11 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
       featureCatalog: data.editorState?.featureCatalog || null,
       legacyOrthogroupState: data.orthogroupState || null
     });
+    // Only a Linear request has a legacy similarity alignment; its layout may be empty.
     canonicalProjection.config.linearRecordLayout = {
       ...canonicalProjection.config.linearRecordLayout,
-      recordTranslations: promotedRequest.layout.recordTranslations,
-      similarityAlignment: promotedRequest.layout.similarityAlignment
+      recordTranslations: /** @type {Partial<CanonicalLinearLayout>} */ (promotedRequest.layout).recordTranslations,
+      similarityAlignment: /** @type {Partial<CanonicalLinearLayout>} */ (promotedRequest.layout).similarityAlignment
     };
   }
   let restoredConfig = canonicalProjection
@@ -3227,7 +3232,7 @@ const applyLosatCache = (
   const restoredEnvelope = normalizeLegacyProteinCandidateEnvelope(legacyEnvelope);
   const importedEnvelope = createLegacyProteinCandidateEnvelope(legacyEntries);
   state.legacyProteinRawCandidates.value = {
-    schema: 1,
+    schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA,
     entries: [...restoredEnvelope.entries, ...importedEnvelope.entries]
   };
 };
@@ -3242,16 +3247,16 @@ const pruneLosatDerivedCache = (map) => {
 };
 
 const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
-  schema: 1,
+  schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   entries: [
     ...(
-      isPlainObject(value) && value.schema === 1 && Array.isArray(value.entries)
+      isPlainObject(value) && value.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA && Array.isArray(value.entries)
         ? value.entries
         : []
     ),
     ...fallbackEntries
   ]
-    .filter((entry) => isLosatDerivedCacheEntry(entry) && entry.schema === 1)
+    .filter((entry) => isLosatDerivedCacheEntry(entry) && entry.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA)
     .map((entry) => cloneJsonData(entry))
 });
 
@@ -3266,7 +3271,7 @@ const applyLosatDerivedCache = (
   if (Array.isArray(entries)) {
     entries.forEach((entry) => {
       if (!isLosatDerivedCacheEntry(entry)) return;
-      if (entry.schema === 1) {
+      if (entry.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA) {
         legacyEntries.push(entry);
         return;
       }
@@ -4291,8 +4296,8 @@ const resetSessionBaseline = () => {
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
   state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
-  state.legacyProteinRawCandidates.value = { schema: 1, entries: [] };
-  state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
+  state.legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
+  state.legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
   state.losatCacheInfo.value = [];
   state.orthogroups.value = [];
   state.collinearGroups.value = [];
@@ -5711,7 +5716,7 @@ const importSessionDocument = async (e, options = {}) => {
               {}
         },
       {
-        legacyRecords: sourceSessionVersion <= 39 ? data.renderRequest?.records : null,
+        legacyRecords: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION ? data.renderRequest?.records : null,
         catalogFeatureState: currentCatalogFeatureState
       }
     );
