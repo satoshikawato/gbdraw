@@ -52,6 +52,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {(index: number) => any} selectResult The preview owner's selection of a Result.
  * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
+ * @property {() => boolean} [previewPopupsHeld] The root's hold of the popups while a review hides them.
  * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('./candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3).
  * @property {() => any} projectFeatureEdits
@@ -87,6 +88,7 @@ export const createFeatureEditor = ({
   selectResult,
   isPatternEditAvailable = () => true,
   previewTransformInteraction = null,
+  previewPopupsHeld = () => false,
   projectPaletteAndRules,
   projectFeatureEdits,
   evaluateLabelRules,
@@ -112,7 +114,8 @@ export const createFeatureEditor = ({
     prepareDrawnFeatureMatches: (...args) => editorPorts.prepareDrawnFeatureMatches(...args),
     onFeaturePopupOpened: (...args) => editorPorts.syncLabelEditor(...args),
     featureSelection,
-    previewTransformInteraction
+    previewTransformInteraction,
+    previewPopupsHeld
   });
   const colorActions = createFeatureColorActions({
     state,
@@ -249,6 +252,7 @@ export const createFeatureEditor = ({
     clearAlignmentCandidatePreview: featureSvgActions.clearAlignmentCandidatePreview,
     showAlignmentOverlay: featureSvgActions.showAlignmentOverlay,
     clearAlignmentOverlay: featureSvgActions.clearAlignmentOverlay,
+    showFeaturePopupAtFeature: featureSvgActions.showFeaturePopupAtFeature,
     dispose: featureSvgActions.dispose,
     openFeatureEditorForFeature,
     getEditableLabelByFeatureId: labelActions.getEditableLabelByFeatureId,

@@ -4323,6 +4323,24 @@ const resetSessionBaseline = () => {
   state.generatedCircularPlotTitlePosition.value = 'none';
 };
 
+/**
+ * The preview zoom and pan as a Session's `ui` holds them.
+ * @typedef {{ zoom: number, canvasPan: { x: number, y: number } }} PersistedPreviewViewport
+ */
+// The view to save is not always the shown one: Review alignment shows the figure fitted and
+// the pan/zoom owner holds the view from before it. The composition root registers that owner's
+// reader of the held view; the Session writer and the UI capture with navigation save the held
+// view while there is one, and the shown view otherwise.
+/** @type {(() => PersistedPreviewViewport | null) | null} */
+let heldPreviewViewportReader = null;
+/** @param {(() => PersistedPreviewViewport | null) | null} reader */
+export const setHeldPreviewViewportReader = (reader) => { heldPreviewViewportReader = reader; };
+/** @returns {PersistedPreviewViewport} */
+const previewViewportToPersist = () => {
+  const { zoom, canvasPan } = heldPreviewViewportReader?.() ?? { zoom: state.zoom.value, canvasPan: state.canvasPan };
+  return { zoom, canvasPan: { x: canvasPan.x, y: canvasPan.y } };
+};
+
 /** @param {DrawingState} drawing */
 export const buildUiStateData = (drawing, { includePreviewNavigation = true } = {}) => {
   const ui = {
@@ -4358,10 +4376,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     plotTitleUserOffset: { ...state.plotTitleUserOffset }
   };
 
-  if (includePreviewNavigation) {
-    ui.zoom = state.zoom.value;
-    ui.canvasPan = { x: state.canvasPan.x, y: state.canvasPan.y };
-  }
+  if (includePreviewNavigation) Object.assign(ui, previewViewportToPersist());
 
   return ui;
 };
@@ -5948,8 +5963,7 @@ export const exportSession = (titleOverride = null, options = {}) => {
     const artifactUi = artifactUiState(artifact);
     const savedUi = {
       mode: state.mode.value,
-      zoom: state.zoom.value,
-      canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y },
+      ...previewViewportToPersist(),
       selectedResultIndex: artifactUi.selectedResultIndex,
       generatedLegendPosition: artifactUi.generatedLegendPosition,
       generatedMultiRecordCanvas: artifactUi.generatedMultiRecordCanvas,

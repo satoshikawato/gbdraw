@@ -750,30 +750,63 @@ fails, the Keep draft opens so you can correct it and retry.
 
 Choose **Review alignment options…** beside **Align…** to inspect anchors,
 choose **Skip**, or change display directions before commitment. Ambiguity
-opens the same **Review alignment** dialog automatically. It shows one card
-per displayed record in diagram order; the reference card is marked **Reference**. Python selects the only usable
+opens the same **Review alignment** panel automatically. The panel is docked
+in the Result: beside the figure when the Result is wide, below it when
+narrow. While it is open, the figure is fitted to the room that remains, the
+Editor is closed, and the feature popup is hidden. **Cancel**, Escape, or a
+successful **Apply** closes the panel and brings back the popup, the Editor
+tab, and the zoom and pan from before the review; a Session saved during the
+review stores that earlier zoom and pan. A one-click **Align…** that applies
+without a review leaves the Editor, the popup, and the view as they are.
+
+The header carries the label **Apply required**: nothing changes until
+**Apply** succeeds. The panel shows one card per displayed record. The
+reference card is first and is marked **Reference**. Records that need a
+choice follow under **Choose a gene**, then **Several candidates** (a
+candidate or **Skip** was already chosen when the review opened), **One
+candidate**, and **No usable candidate**, each in figure order; a record keeps
+the section it opened in. Each heading shows its record count, and screen
+readers hear the group and the same counts in the panel's description.
+Python selects the only usable
 candidate or unique direct reciprocal-best-hit (RBH) candidate. For remaining
-ambiguity, it recommends the unique representative or candidate 1 in stable
+ambiguity, it recommends the unique representative or the first candidate in stable
 identity order. Recommendation reasons are visible; they are convenience
 heuristics; they do not show that an anchor is biologically better. A hidden
 member is usable when its center maps into the displayed crop; a member outside
 that crop is unusable. RBH query/subject direction is symmetric.
 
-In a record with several candidates, each candidate shows its name, protein or
-feature ID, source coordinates, current display strand, representative status,
-and how it is directly linked to the reference (**reciprocal best hit**,
-**near-reciprocal hit**, **local paralog hit**, or **no direct hit**). The
+Under **After Apply**, each card draws its record as it will lie after
+**Apply**: the reference line, the chosen gene on the line, and the other
+candidates. A record that **Apply** reverses is drawn reversed.
+
+In a record with several candidates, the candidates are listed in figure
+order, left to right. Each shows its name, how it is directly linked to the
+reference (**reciprocal best hit**, **near-reciprocal hit**, **local paralog
+hit**, or **no direct hit**), representative status, protein or feature ID,
+source coordinates, and current display strand. The
 recommended candidate always carries a **Recommended** chip. A record with one
-usable candidate shows a compact card with that candidate's name, ID, coordinates
-and strand and a **Skip** checkbox; it does not show the link or
-representative status. A record that still needs a choice is marked **Choose
-one**, and **Apply** stays disabled until each such record has a candidate or
+usable candidate shows a compact card with that candidate's name, ID, source
+coordinates, display strand, and link to the reference, and a **Skip**
+checkbox; the reference card shows the same facts for the reference gene. A
+record that still needs a choice
+has an amber frame and says **Choose the gene to line up, or skip this
+record.**, and **Apply** stays disabled until each such record has a candidate or
 **Skip**.
-A thin line marks the reference center and numbered badges locate visible
-candidates. Hover a row or its feature to highlight the other; clicking a
-feature or badge selects the same anchor as its row control. Candidates without
-a visible badge remain selectable. Pan and zoom stay available. Guides and
-badges appear only in the preview, never in downloads or saved Sessions.
+
+On the figure, a line marks the reference center, a ring surrounds each
+visible candidate, and an arrow shows where the chosen gene moves. A gene
+drawn in several parts, such as exons, has one ring around all of them, and
+its center is the middle of that whole span. Hover a
+row, its ring, or its feature to highlight the others and show the gene name
+on the figure; clicking a ring or a candidate feature selects the same anchor
+as its row control. Candidates without a visible ring remain selectable in
+their rows. While the panel is open, a click on the figure, a selection
+(Ctrl-click, Shift-click, or a marquee), and a click outside neither open nor
+close the hidden popup. **Open** in the feature search row still moves the
+view to its feature and makes that feature the popup's; the popup appears
+beside it when the panel closes. Pan and zoom stay available; changes made to
+them during the review are dropped when the panel closes. The line, rings,
+and arrows appear only in the preview, never in downloads or saved Sessions.
 
 ### Choose display directions
 
@@ -827,13 +860,13 @@ superseded work leaves the previous Result and History intact.
 
 **Cancel**, **Escape**, or Close commits nothing and returns focus to the initiating
 control when available. Start again if source, crop, group or committed Result
-changes during review. The review does not trap keyboard focus. On narrow
-screens it docks below the canvas with a scrolling list and reachable footer;
-Editor closes while retaining its tab, cannot reopen during review, and can be
-explicitly reopened afterward. The disabled Editor toggle explains why reopening
-is unavailable during review. Short screens may require page and list scrolling
-to reach the footer; narrow reviews cannot be freely dragged. On wide screens
-the review can be dragged.
+changes during review. The review does not trap keyboard focus. At every
+width the panel is docked and cannot be dragged: beside the canvas when the
+Result is wide, below it with a scrolling list and a reachable footer when
+narrow. The Editor closes while retaining its tab, cannot reopen during the
+review, and reopens on that tab when the review ends. The disabled Editor
+toggle explains why reopening is unavailable during review. Short screens may
+require page and list scrolling to reach the footer.
 
 A successful Apply commits directions, positions and the plan together as one
 History action. Alignment uses the last committed diagram: pending form edits
