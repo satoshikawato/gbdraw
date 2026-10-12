@@ -6318,52 +6318,72 @@ test('the design-rule guard registry parser validates each schema 2 field and ke
   }, 'rules[0].allowlists[0].kind: expected one of count, count-map, set, writer-map', 1);
 });
 
-// Every rule a registry names exists in its rules file, every guard exists,
-// and every allowlist literal is present where the Gate will read it.
+// Every rule a registry names exists in its rules file and every guard exists.
 const assertDesignRuleRegistryResolves = (registry, root) => {
   assert.ok([1, 2].includes(registry.schemaVersion), 'schemaVersion');
-  const read = (path) => readFileSync(join(root, path), 'utf8');
   registry.rules.forEach((rule) => {
     // The numbered Web rules are `###` headings; a rule with its own rulesPath may sit at any level.
     const level = rule.rulesPath ? /^#{1,6} / : /^### /;
-    const headings = read(rule.rulesPath || registry.rulesPath).split(/\r?\n/)
+    const headings = readFileSync(join(root, rule.rulesPath || registry.rulesPath), 'utf8').split(/\r?\n/)
       .filter((line) => level.test(line)).map((line) => line.replace(/^#+ /, ''));
     assert.ok(headings.includes(rule.heading), `${rule.id}: ${rule.heading}`);
     rule.guards.forEach((guard) => {
       const path = typeof guard === 'string' ? guard : guard.path;
       assert.ok(existsSync(join(root, path)), `${rule.id}: ${path}`);
     });
-    rule.allowlists.forEach(({ path, symbol, kind }) => {
-      const source = read(path);
-      const subject = `${rule.id}: ${path}#${symbol}`;
-      if (kind === 'json-entries') assert.ok(Array.isArray(JSON.parse(source)[symbol]), subject);
-      else {
-        assert.match(source, kind.startsWith('py-')
-          ? new RegExp(`^${symbol}[ \\t]*(?::[^=\\n]*)?=`, 'm')
-          : new RegExp(`^[ \\t]*(?:export\\s+)?const\\s+${symbol}\\s*=`, 'm'), subject);
-      }
-    });
   });
+};
+// The Gate reads the registry from the trusted base and fails closed: a
+// malformed registry fails every later pull request, and a literal the Gate
+// cannot read fails every later pull request that changes its file together
+// with production code. So a candidate registry goes through the Gate itself
+// before it merges. The registry and every registered literal's file are the
+// base, and each file then gains one blank line, which makes the Gate read
+// every literal with its registered kind on both sides.
+const assertGateReadsDesignRuleRegistry = (registrySource, root) => {
+  const paths = [...new Set(
+    JSON.parse(registrySource).rules.flatMap((rule) => rule.allowlists.map(({ path }) => path))
+  )];
+  const sources = Object.fromEntries(paths.map((path) => [path, readFileSync(join(root, path), 'utf8')]));
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    paths.forEach((path) => write(path, `${sources[path]}\n`));
+    const { output } = execute();
+    assert.doesNotMatch(output, /trusted design-rule guard registry:/);
+    assert.match(output, /Registry: \d+ rule\(s\) from the trusted base/);
+    // A literal that is missing or unreadable shows as an expansion; a readable one is unchanged.
+    assert.deepEqual(output.split('\n').filter((line) => /^- (?:expansion|contraction): /.test(line)), []);
+  }, { registry: registrySource, sources });
 };
 
 test('the head-registry check resolves schema 2 guards, a rule\'s own rulesPath, and Python and JSON literals', () => {
-  withDesignRuleGuardRepository2(({ root, write }) => {
+  withDesignRuleGuardRepository2(({ root, write, writeGuards }) => {
     write(WEB_DESIGN_RULES_PATH, '## Design rules\n\n### R10: A watcher does not repair state\n');
     write('CLAUDE.md', '# CLAUDE.md\n\n## Coding Conventions\n\n#### Type checking\n');
     const registry = JSON.parse(designRuleGuardRegistrySource(designRuleRules2(), 2));
     assertDesignRuleRegistryResolves(registry, root);
-    const broken = (mutate, expected) => {
+    assertGateReadsDesignRuleRegistry(JSON.stringify(registry), root);
+    const broken = (mutate, expected, check = assertDesignRuleRegistryResolves) => {
       const candidate = structuredClone(registry);
       mutate(candidate);
-      assert.throws(() => assertDesignRuleRegistryResolves(candidate, root), expected);
+      assert.throws(() => check(check === assertDesignRuleRegistryResolves ? candidate : JSON.stringify(candidate), root), expected);
     };
     broken((candidate) => { candidate.schemaVersion = 3; }, /schemaVersion/);
     broken((candidate) => { candidate.rules[1].heading = 'Type debt'; }, /TYPE-DEBT: Type debt/);
     broken((candidate) => { delete candidate.rules[1].rulesPath; }, /TYPE-DEBT: Type checking/);
     broken((candidate) => { candidate.rules[1].guards[0].path = 'tests/test_missing.py'; }, /tests\/test_missing\.py/);
-    broken((candidate) => { candidate.rules[1].allowlists[0].symbol = 'DEBT_BASELINE'; }, /#DEBT_BASELINE/);
-    broken((candidate) => { candidate.rules[0].allowlists[0].symbol = 'WRITERS'; }, /#WRITERS/);
-    broken((candidate) => { candidate.rules[0].allowlists[2].symbol = 'allowed'; }, /#allowed/);
+    // A registered literal the Gate does not find, or finds and cannot read.
+    const unreadable = (symbol, status) => new RegExp(`#${symbol} \\(unreadable in the trusted base \\(${status}\\)\\)`);
+    const gate = assertGateReadsDesignRuleRegistry;
+    broken((candidate) => { candidate.schemaVersion = 3; }, /trusted design-rule guard registry:/, gate);
+    broken((candidate) => { candidate.rules[1].allowlists[0].symbol = 'DEBT_BASELINE'; }, unreadable('DEBT_BASELINE', 'missing'), gate);
+    broken((candidate) => { candidate.rules[0].allowlists[0].symbol = 'WRITERS'; }, unreadable('WRITERS', 'missing'), gate);
+    broken((candidate) => { candidate.rules[0].allowlists[2].symbol = 'allowed'; }, unreadable('allowed', 'missing'), gate);
+    // A literal that is read but is not of its registered kind.
+    broken((candidate) => { candidate.rules[1].allowlists[3].kind = 'py-set'; }, /#CAP \(unreadable\)/, gate);
+    broken((candidate) => { candidate.rules[1].allowlists[0].path = 'tests/test_missing.py'; }, /ENOENT/, gate);
+    writeGuards({ typeDebt: 'dict(_OTHER)', frozen: "Object.freeze(['normalizeSlots'])\n  .concat(MORE)" });
+    assert.throws(() => gate(JSON.stringify(registry), root), unreadable('TYPE_DEBT_BASELINE', 'unreadable'));
+    assert.throws(() => gate(JSON.stringify(registry), root), unreadable('FROZEN', 'unreadable'));
   });
 });
 
@@ -6379,17 +6399,11 @@ test('the Web design rules and the guard registry are pre-registered guard and a
   }
   if (existsSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH))) {
     // Once the registry is activated, every rule it names exists in its rules
-    // file, every guard exists, and every allowlist literal is present.
+    // file, every guard exists, and the Gate parses the registry and reads
+    // every allowlist literal with its registered kind.
     const source = readFileSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH), 'utf8');
     assertDesignRuleRegistryResolves(JSON.parse(source), REPOSITORY_ROOT);
-    // The Gate reads the registry from the trusted base and fails closed on a
-    // malformed one, so the candidate registry must pass the Gate's own parser
-    // before it merges.
-    withDesignRuleGuardRepository(({ execute }) => {
-      const result = execute();
-      assert.doesNotMatch(result.output, /trusted design-rule guard registry:/);
-      assert.match(result.output, /Registry: \d+ rule\(s\) from the trusted base/);
-    }, { registry: source });
+    assertGateReadsDesignRuleRegistry(source, REPOSITORY_ROOT);
   }
 });
 
