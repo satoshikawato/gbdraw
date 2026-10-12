@@ -1,8 +1,77 @@
 // @ts-check
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
 
+/**
+ * A `{ value, unit }` Width or Radius draft. Both fields are checked on read.
+ * @typedef {object} CircularMeasureObject
+ * @property {unknown} [value]
+ * @property {unknown} [unit]
+ */
+
+/**
+ * A row of a Custom Track Slots array as the plan validator reads it: keys of
+ * unknown values. An element that is no object is reported as `slot_not_object`
+ * and every key of it reads as undefined, as it does on a missing row.
+ * @typedef {Record<string, unknown> | null | undefined} TrackSlotRow
+ */
+
+/**
+ * @typedef {object} TrackSlotGlobalIssue A problem of the whole plan.
+ * @property {string} code
+ * @property {string} field
+ * @property {string} message
+ * @property {'error'} severity
+ */
+
+/**
+ * @typedef {object} TrackSlotRowIssue A problem of one row.
+ * @property {string} code
+ * @property {string} field
+ * @property {string} message
+ * @property {number} rowIndex
+ * @property {string | null} slotId
+ * @property {'error'} severity
+ */
+
+/** @typedef {TrackSlotGlobalIssue | TrackSlotRowIssue} TrackSlotIssue */
+
+/**
+ * An enabled row the plan validator normalized: the row's own keys with these
+ * overwritten.
+ * @typedef {Record<string, unknown> & { id: string, renderer: string, enabled: boolean, side: string, z: number, params: Record<string, unknown> }} EnabledTrackSlot
+ */
+
+/**
+ * @typedef {object} CustomTrackPlan The validated Custom Track draft.
+ * @property {TrackSlotRow[]} draftSlots Detached copies of the rows.
+ * @property {EnabledTrackSlot[]} enabledSlots
+ * @property {number | null} emittedAxisIndex null when the Axis boundary is invalid.
+ * @property {Map<number, TrackSlotRowIssue[]>} rowIssues By row index.
+ * @property {TrackSlotGlobalIssue[]} globalIssues
+ */
+
+/**
+ * @typedef {object} CustomTrackPlanInput What the plan validator reads of a draft.
+ * @property {string} [mode] 'circular' or 'linear'; any other value is reported.
+ * @property {unknown} [slots] The rows; a non-array is reported.
+ * @property {unknown} [axisIndex] The Axis boundary; blank infers it.
+ * @property {unknown} [trackType] The track preset or Linear layout.
+ * @property {number | null} [depthTrackCount] null or undefined skips the Depth range check.
+ * @property {unknown} [depthSourcedTrackIndexes] The Depth series that have a source; a non-array skips that check.
+ * @property {unknown} [annotationSetIds] The annotation sets (ids or { id } entries); null or undefined skips the check.
+ * @property {unknown} [conservationSeries] The Comparison Series entries.
+ */
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 const normalizedString = (value) => String(value ?? '').trim().toLowerCase();
 
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
 const normalizedOptionalString = (value) => {
   const text = normalizedString(value);
   return text || null;
@@ -23,6 +92,11 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = new Set([
   'spacing', 'strict', 'compress', 'reserve'
 ]);
 
+/**
+ * @param {unknown} value
+ * @param {string} fieldName
+ * @returns {number}
+ */
 const parseSlotZIndex = (value, fieldName) => {
   if (value === null || value === undefined || value === '') return 0;
   if (typeof value === 'boolean') {
@@ -56,6 +130,12 @@ const decimalValue = (value) => {
   return DECIMAL_TEXT.test(text) ? Number(text) : Number.NaN;
 };
 
+/**
+ * @param {unknown} value A number, or text with an optional px suffix; null, undefined and blank text mean auto.
+ * @param {string} fieldName The field the message names.
+ * @param {{ allowZero: boolean }} options
+ * @returns {number | null} null for auto.
+ */
 export const parseOptionalPixel = (value, fieldName, { allowZero }) => {
   if (value === null || value === undefined) return null;
   const invalid = () => new Error(
@@ -80,16 +160,19 @@ export const parseOptionalPixel = (value, fieldName, { allowZero }) => {
 };
 
 /**
- * @param {any} value A Width or Radius draft: text, a number, or { value, unit }.
+ * @param {unknown} value A Width or Radius draft: text, a number, or { value, unit }.
  * @param {string} [fieldName] The field the message names.
+ * @returns {{ value: number, unit: string } | null} null for auto.
  */
 export const parseOptionalCircularScalar = (value, fieldName = 'Circular measure') => {
   if (value === null || value === undefined || value === '') return null;
   const invalid = () => new Error(`${fieldName} must be a number greater than 0, in px or ×R.`);
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    if (typeof value.value !== 'number' && typeof value.value !== 'string') throw invalid();
-    const numeric = decimalValue(value.value);
-    const unit = normalizedString(value.unit);
+    // A non-array object: its value and unit are read as unknown and checked below.
+    const measure = /** @type {CircularMeasureObject} */ (value);
+    if (typeof measure.value !== 'number' && typeof measure.value !== 'string') throw invalid();
+    const numeric = decimalValue(measure.value);
+    const unit = normalizedString(measure.unit);
     if (!Number.isFinite(numeric) || numeric <= 0 || !['px', 'factor'].includes(unit)) {
       throw invalid();
     }
@@ -112,6 +195,12 @@ export const parseOptionalCircularScalar = (value, fieldName = 'Circular measure
   return { value: resolved, unit: isPx ? 'px' : 'factor' };
 };
 
+/**
+ * @param {Record<string, unknown>} slot The row.
+ * @param {string} id
+ * @param {string} layoutKind 'linear' or 'circular'; anything else throws.
+ * @returns {void}
+ */
 const validateSlotGeometry = (slot, id, layoutKind) => {
   if (layoutKind === 'linear') {
     parseOptionalPixel(slot.height, `Linear track slot '${id}' height`, { allowZero: false });
@@ -150,6 +239,12 @@ const validateSlotGeometry = (slot, id, layoutKind) => {
   );
 };
 
+/**
+ * @param {Record<string, unknown>} params
+ * @param {string} id
+ * @param {string} layoutKind 'linear' selects the Linear keys; any other value the Circular keys.
+ * @returns {void}
+ */
 const validateGenericParams = (params, id, layoutKind) => {
   const genericKeys = layoutKind === 'linear'
     ? LINEAR_GENERIC_LAYOUT_KEYS
@@ -172,12 +267,36 @@ const validateGenericParams = (params, id, layoutKind) => {
 };
 
 /**
+ * @typedef {object} TrackSlotBindingOptions
+ * @property {string} modeLabel 'Circular' or 'Linear', for the messages.
+ * @property {string} layoutKind 'linear' or 'circular'.
+ * @property {Iterable<string> | null | undefined} supportedRenderers
+ * @property {Iterable<string> | null | undefined} supportedSides
+ * @property {Iterable<string> | null | undefined} anchorlessRenderers Renderers an annotation cannot anchor to.
+ * @property {number | null | undefined} [depthTrackCount] null or undefined skips the Depth range check.
+ */
+
+/**
+ * A row the binding validator normalized.
+ * @typedef {object} BoundTrackSlot
+ * @property {string} id
+ * @property {string} renderer
+ * @property {boolean} enabled
+ * @property {string | null} side
+ * @property {number} z
+ * @property {Record<string, unknown>} params
+ */
+
+/**
  * Validate structural and binding invariants shared by canonical slots and
  * persisted UI slots.
  *
  * The returned objects are detached normalized views used only for validation;
  * callers remain responsible for committing their original state after every
  * preflight check succeeds.
+ * @param {unknown} slots Anything; a non-array throws.
+ * @param {TrackSlotBindingOptions} options
+ * @returns {BoundTrackSlot[]}
  */
 export const validateTrackSlotBindingInvariants = (
   slots,
@@ -187,7 +306,7 @@ export const validateTrackSlotBindingInvariants = (
     supportedRenderers,
     supportedSides,
     anchorlessRenderers,
-    depthTrackCount = /** @type {number | null | undefined} */ (null)
+    depthTrackCount = null
   }
 ) => {
   if (!Array.isArray(slots)) {
@@ -376,6 +495,7 @@ export const validateTrackSlotBindingInvariants = (
   return normalized;
 };
 
+/** @type {Readonly<Record<string, ReadonlySet<string>>>} */
 const CUSTOM_TRACK_RENDERERS = Object.freeze({
   circular: new Set([
     'features',
@@ -397,6 +517,7 @@ const CUSTOM_TRACK_RENDERERS = Object.freeze({
   ])
 });
 
+/** @type {Readonly<Record<string, ReadonlySet<string>>>} */
 const CUSTOM_TRACK_SIDES = Object.freeze({
   circular: new Set(['inside', 'outside', 'overlay']),
   linear: new Set(['above', 'below', 'overlay'])
@@ -435,6 +556,10 @@ const PARAM_OWNER = new Map([
   ['style_override', 'annotations']
 ]);
 
+/**
+ * @param {TrackSlotRow} slot
+ * @returns {TrackSlotRow}
+ */
 const cloneValidationSlot = (slot) => {
   if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return slot;
   return {
@@ -447,6 +572,10 @@ const cloneValidationSlot = (slot) => {
   };
 };
 
+/**
+ * @param {{ code: string, field: string, message: string, rowIndex: number, slotId?: string | null }} issue
+ * @returns {TrackSlotRowIssue}
+ */
 const issueForRow = ({
   code,
   field,
@@ -462,6 +591,10 @@ const issueForRow = ({
   severity: 'error'
 });
 
+/**
+ * @param {{ code: string, field: string, message: string }} issue
+ * @returns {TrackSlotGlobalIssue}
+ */
 const globalIssue = ({ code, field, message }) => ({
   code,
   field,
@@ -469,16 +602,29 @@ const globalIssue = ({ code, field, message }) => ({
   severity: 'error'
 });
 
+/**
+ * @param {Map<number, TrackSlotRowIssue[]>} rowIssues
+ * @param {number} index
+ * @param {{ code: string, field: string, message: string, slotId?: string | null }} issue
+ * @returns {void}
+ */
 const addRowIssue = (rowIssues, index, issue) => {
   const current = rowIssues.get(index) || [];
   current.push(issueForRow({ ...issue, rowIndex: index }));
   rowIssues.set(index, current);
 };
 
+/** @param {string} mode */
 const customTrackModeLabel = (mode) => (
   mode === 'circular' ? 'Circular' : 'Linear'
 );
 
+/**
+ * @param {TrackSlotRow} slot
+ * @param {string} mode
+ * @param {unknown} trackType
+ * @returns {string}
+ */
 const defaultSideForSlot = (slot, mode, trackType) => {
   const renderer = normalizedString(slot?.renderer);
   if (mode === 'linear') {
@@ -491,8 +637,10 @@ const defaultSideForSlot = (slot, mode, trackType) => {
   }
   if (renderer === 'annotations') return 'outside';
   if (renderer !== 'features') return 'inside';
+  // A params value that is no object (a params_not_object issue) reads both keys as undefined.
   const lane = normalizedOptionalString(
-    slot?.params?.lane_direction ?? slot?.params?.lanes
+    /** @type {Record<string, unknown> | undefined} */ (slot?.params)?.lane_direction ??
+    /** @type {Record<string, unknown> | undefined} */ (slot?.params)?.lanes
   );
   if (lane === 'split') return 'overlay';
   if (lane === 'inside' || lane === 'outside') return lane;
@@ -502,6 +650,12 @@ const defaultSideForSlot = (slot, mode, trackType) => {
   return 'inside';
 };
 
+/**
+ * @param {TrackSlotRow[]} slots
+ * @param {string} mode
+ * @param {unknown} trackType
+ * @returns {number}
+ */
 const inferredCustomTrackAxisIndex = (slots, mode, trackType) => {
   const onAxisIndex = slots.findIndex((slot) => (
     slot?.enabled !== false &&
@@ -529,6 +683,10 @@ const inferredCustomTrackAxisIndex = (slots, mode, trackType) => {
   return firstInner < 0 ? slots.length : firstInner;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {number | null} NaN for an invalid value.
+ */
 const nonnegativeFiniteNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'boolean') return Number.NaN;
@@ -536,6 +694,11 @@ const nonnegativeFiniteNumber = (value) => {
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : Number.NaN;
 };
 
+/**
+ * @param {string} renderer
+ * @param {string} key
+ * @returns {boolean}
+ */
 const paramsAllowedForRenderer = (renderer, key) => {
   const owner = PARAM_OWNER.get(key);
   if (!owner) return true;
@@ -562,12 +725,20 @@ export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntri
     .filter(([key]) => key !== 'legend_label' && paramsAllowedForRenderer(renderer, normalizedString(key)))
 );
 
+/**
+ * @param {unknown} values
+ * @returns {Set<string>}
+ */
 const normalizedInventoryIds = (values) => new Set(
   (Array.isArray(values) ? values : [])
     .map((value) => String(value?.id ?? value ?? '').trim())
     .filter(Boolean)
 );
 
+/**
+ * @param {unknown} series
+ * @returns {{ keys: Set<string>, indexes: Set<number>, indexesByKey: Map<string, Set<number>> }}
+ */
 const conservationInventory = (series) => {
   const keys = new Set();
   const indexes = new Set();
@@ -596,6 +767,10 @@ const conservationInventory = (series) => {
   return { keys, indexes, indexesByKey };
 };
 
+/**
+ * @param {CustomTrackPlanInput & { mode: string }} input
+ * @returns {CustomTrackPlan}
+ */
 const collectCustomTrackIssues = ({
   mode,
   slots,
@@ -606,7 +781,9 @@ const collectCustomTrackIssues = ({
   annotationSetIds,
   conservationSeries
 }) => {
+  /** @type {Map<number, TrackSlotRowIssue[]>} */
   const rowIssues = new Map();
+  /** @type {TrackSlotGlobalIssue[]} */
   const globalIssues = [];
   const draftSlots = Array.isArray(slots)
     ? slots.map(cloneValidationSlot)
@@ -666,6 +843,7 @@ const collectCustomTrackIssues = ({
     }));
   }
 
+  /** @type {number[]} */
   const enabledIndexes = [];
   draftSlots.forEach((slot, index) => {
     if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
@@ -722,6 +900,7 @@ const collectCustomTrackIssues = ({
         .filter((slot) => slot && typeof slot === 'object' && slot.enabled !== false)
         .length;
 
+  /** @type {Map<string, number[]>} */
   const idsToIndexes = new Map();
   enabledIndexes.forEach((index) => {
     const slot = draftSlots[index];
@@ -749,6 +928,7 @@ const collectCustomTrackIssues = ({
     }));
   });
 
+  /** @type {EnabledTrackSlot[]} */
   const normalizedEnabled = [];
   const rowIndexByNormalizedSlot = new WeakMap();
   enabledIndexes.forEach((index) => {
@@ -783,6 +963,7 @@ const collectCustomTrackIssues = ({
       }
     }
 
+    /** @type {Record<string, unknown> | null} */
     const params = (
       slot.params && typeof slot.params === 'object' && !Array.isArray(slot.params)
         ? { ...slot.params }
@@ -1198,6 +1379,8 @@ const collectCustomTrackIssues = ({
  * Python remains authoritative for the complete typed schema. This validator
  * intentionally covers only constraints that the Web editor can create and
  * explain locally.
+ * @param {CustomTrackPlanInput} [options]
+ * @returns {CustomTrackPlan}
  */
 export const validateCustomTrackPlan = (options = {}) => collectCustomTrackIssues({
   mode: normalizedString(options.mode),
@@ -1211,6 +1394,7 @@ export const validateCustomTrackPlan = (options = {}) => collectCustomTrackIssue
 });
 
 export class CustomTrackPlanValidationError extends Error {
+  /** @param {TrackSlotIssue[]} issues */
   constructor(issues) {
     const issueList = Array.isArray(issues) ? issues : [];
     const first = issueList[0];
@@ -1226,6 +1410,10 @@ export class CustomTrackPlanValidationError extends Error {
   }
 }
 
+/**
+ * @param {CustomTrackPlan | null | undefined} plan
+ * @returns {TrackSlotIssue[]}
+ */
 export const customTrackPlanIssues = (plan) => {
   if (!plan || typeof plan !== 'object') return [];
   const rowIssues = plan.rowIssues instanceof Map
@@ -1234,6 +1422,10 @@ export const customTrackPlanIssues = (plan) => {
   return [...rowIssues, ...(Array.isArray(plan.globalIssues) ? plan.globalIssues : [])];
 };
 
+/**
+ * @param {CustomTrackPlan} plan
+ * @returns {CustomTrackPlan} The plan itself; throws when it has an issue.
+ */
 export const assertValidCustomTrackPlan = (plan) => {
   const issues = customTrackPlanIssues(plan);
   if (issues.length > 0) throw new CustomTrackPlanValidationError(issues);

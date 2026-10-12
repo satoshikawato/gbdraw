@@ -73,7 +73,6 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.shapes import resolve_feature_rendering
 from gbdraw.session_io import (
     CURRENT_SESSION_TOP_LEVEL_FIELDS,
-    CURRENT_SESSION_VERSION,
     FLAT_DRAFT_TOP_LEVEL_FIELDS,
 )
 from gbdraw.session_request_codec import (
@@ -3070,13 +3069,12 @@ def test_web_canonical_render_request_typedef_matches_codec_top_level_fields() -
     assert _jsdoc_typedef_property_names(source, "CanonicalRenderRequest") == set(
         _TOP_LEVEL_FIELDS_V5
     )
-    assert f"export const CANONICAL_REQUEST_SCHEMA = {CANONICAL_REQUEST_SCHEMA};" in source
 
 
 _WEB_CONFIG_JS = Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "services" / "config.js"
 
 
-def test_web_gbdraw_session_typedef_matches_session_io_fields_and_version() -> None:
+def test_web_gbdraw_session_typedef_matches_session_io_fields() -> None:
     source = _WEB_CONFIG_JS.read_text(encoding="utf-8")
     # `files` is accepted only for Sessions older than version 40, and the flat
     # `config` and `features` only for Sessions older than version 46; the
@@ -3084,7 +3082,6 @@ def test_web_gbdraw_session_typedef_matches_session_io_fields_and_version() -> N
     assert _jsdoc_typedef_property_names(source, "GbdrawSession") == (
         set(CURRENT_SESSION_TOP_LEVEL_FIELDS) - {"files"} - FLAT_DRAFT_TOP_LEVEL_FIELDS
     )
-    assert f"export const SESSION_VERSION = {CURRENT_SESSION_VERSION};" in source
 
 
 def test_jsdoc_typedef_property_parser_is_strict() -> None:

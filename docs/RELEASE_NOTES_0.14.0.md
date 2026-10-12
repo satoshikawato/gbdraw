@@ -181,7 +181,10 @@ To line up records on one reference feature, choose **Align…** in the feature
 popup or in the Similarity Groups drawer. When each record has one clear
 anchor, gbdraw applies the alignment at once and keeps each record's
 direction. When the choice is ambiguous, or when you choose **Review alignment
-options…**, the **Review alignment** dialog opens with one card per record:
+options…**, the **Review alignment** panel opens beside the figure (below it in
+a narrow window) with one card per record. Each card draws its record as it
+will lie after **Apply**, and rings on the figure mark the candidates; a click
+on a ring chooses that gene:
 
 - A record with several candidates lists them with how each links to the
   reference, marks one **Recommended**, and offers **Skip**. A record with one

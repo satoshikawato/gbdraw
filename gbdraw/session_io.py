@@ -29,6 +29,11 @@ from .analysis.protein_artifacts import (
     is_current_derived_protein_artifact,
     validate_current_derived_protein_artifacts,
 )
+from .analysis.protein_colinearity import (
+    PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+    PROTEIN_LOSAT_CACHE_SCHEMA,
+)
+from .comparisons.losat_jobs import NUCLEOTIDE_LOSAT_CACHE_SCHEMA
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
 from .io.colors import named_color_hex
@@ -62,11 +67,8 @@ SUPPORTED_SESSION_VERSIONS = frozenset(
     {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
-PROTEIN_LOSAT_CACHE_SCHEMA = 4
-NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
 LEGACY_LOSAT_DERIVED_CACHE_SCHEMA = 1
-PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
 FEATURE_CATALOG_SCHEMA = 1
 FEATURE_CATALOG_ENCODING = "biological-authority-v1"

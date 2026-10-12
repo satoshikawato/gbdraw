@@ -1,10 +1,10 @@
 // R14 "Typed boundaries" (gbdraw/web/CLAUDE.md): the explicit-any ratchet.
 // Explicit `any` in JSDoc is type debt. EXPLICIT_ANY_BASELINE records it per
 // module under gbdraw/web/js/ (paths relative to it); a module without an
-// entry, including a new module, has none. The guard asserts that each module
-// holds exactly its entry: a module above its entry fails (type the value, use
-// `unknown`, or narrow), and a module below it fails until the entry is
-// lowered, so the map only shrinks.
+// entry, including a new module, has none. The guard asserts that no module
+// holds more than its entry: a module above its entry fails (type the value,
+// use `unknown`, or narrow). Lowering or removing an entry is optional; the
+// test names the entries that may be lowered.
 //
 // What counts: each JSDoc type node whose type, as the TypeScript checker of
 // the R14 guard config (tests/web/types/tsconfig.json) resolves it, is
@@ -18,16 +18,17 @@
 // `noImplicitAny` is off as well.
 //
 // EXPLICIT_ANY_BASELINE is a registered design-rule allowlist
-// (tools/web-design-rule-guards.json, R14, kind `count-map`): a pull request
-// lowers or removes the entries of the modules it types, and adding an entry
-// or raising one is an authority-only change. Owner decision R15-5
-// (2026-10-09); values at dev ffa5a3ba.
+// (tools/web-design-rule-guards.json, R14, kind `count-map`): adding an entry
+// or raising one is an authority-only change. Owner decisions R15-5
+// (2026-10-09) and BA-D04 (2026-10-10).
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+
+import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
 
 const EXPLICIT_ANY_BASELINE = {
   'app/annotations.js': 8,
@@ -46,7 +47,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/feature-editor/pattern-drafts.js': 3,
   'app/feature-editor/placement-actions.js': 10,
   'app/feature-editor/rule-actions.js': 29,
-  'app/feature-editor/svg-actions.js': 22,
+  'app/feature-editor/svg-actions.js': 16,
   'app/feature-editor/visibility-actions.js': 8,
   'app/feature-search/preview-actions.js': 8,
   'app/feature-search/preview-svg.js': 2,
@@ -88,46 +89,36 @@ const EXPLICIT_ANY_BASELINE = {
   'app/watchers.js': 19,
   'services/annotation-state.js': 1,
   'services/artifact-slot.js': 10,
-  'services/circular-track-measure.js': 1,
-  'services/circular-track-slot-model.js': 6,
   'services/config.js': 118,
   'services/depth-track-state.js': 4,
-  'services/diagram-generation.js': 11,
-  'services/diagram-resource-staging.js': 2,
+  'services/diagram-generation.js': 1,
   'services/feature-catalog.js': 7,
   'services/feature-edit-migration.js': 13,
-  'services/feature-metadata-extraction.js': 7,
+  'services/feature-metadata-extraction.js': 3,
   'services/feature-placement.js': 12,
   'services/feature-utils.js': 2,
-  'services/feature-visibility.js': 15,
+  'services/feature-visibility.js': 11,
   'services/file-imports.js': 1,
   'services/gallery-session-migration.js': 13,
-  'services/gallery-session-publication.js': 18,
+  'services/gallery-session-publication.js': 11,
   'services/history-snapshot.js': 67,
   'services/history.js': 9,
-  'services/linear-comparisons.js': 14,
-  'services/linear-sources.js': 4,
-  'services/linear-track-slot-model.js': 1,
+  'services/linear-comparisons.js': 2,
   'services/losat-cache.js': 8,
   'services/losat.js': 2,
   'services/main-session-comparison-frame.js': 2,
-  'services/match-sequences.js': 12,
+  'services/match-sequences.js': 11,
   'services/mode-scoped-migration.js': 26,
-  'services/record-options.js': 1,
-  'services/reset.js': 5,
   'services/result-normalization.js': 1,
   'services/right-drawer-state.js': 8,
   'services/rule-matchers.js': 10,
   'services/session-active-config-contract.js': 24,
   'services/session-authority.js': 24,
-  'services/session-feature-recovery.js': 5,
   'services/session-file.js': 1,
   'services/session-request.js': 72,
-  'services/session-resources.js': 10,
+  'services/session-resources.js': 4,
   'services/specific-color-rules.js': 1,
-  'services/standalone-interactivity.js': 2,
-  'services/svg-result-ingestion.js': 10,
-  'services/track-slot-validation.js': 1,
+  'services/svg-result-ingestion.js': 3,
   'state.js': 5,
   'utils/error-normalization.js': 4
 };
@@ -216,34 +207,30 @@ const explicitAnyByModule = async () => {
   }
 };
 
-test('R14: each module holds exactly its EXPLICIT_ANY_BASELINE count of explicit any in JSDoc', async (t) => {
+test('R14: no module holds more explicit any in JSDoc than its EXPLICIT_ANY_BASELINE entry', async (t) => {
   Object.entries(EXPLICIT_ANY_BASELINE).forEach(([path, count]) => {
     assert.ok(Number.isInteger(count) && count > 0, `EXPLICIT_ANY_BASELINE['${path}'] must be a positive integer`);
   });
   const observed = await explicitAnyByModule();
-  const failures = [];
-  [...new Set([...observed.keys(), ...Object.keys(EXPLICIT_ANY_BASELINE)])].sort().forEach((path) => {
-    const lines = observed.get(path) || [];
-    const recorded = EXPLICIT_ANY_BASELINE[path] || 0;
-    if (lines.length > recorded) {
-      // Every line once: `39 ×4` for four on one line, `54 Alias` for a type
-      // other than a bare `any`.
-      const byLine = new Map();
-      lines.forEach(({ line, type }) => byLine.set(line, [...(byLine.get(line) || []), type]));
-      const listed = [...byLine].map(([line, types]) => {
-        const named = [...new Set(types.filter((type) => type !== 'any'))];
-        return `${line}${types.length > 1 ? ` ×${types.length}` : ''}${named.length ? ` ${named.join(' ')}` : ''}`;
-      });
-      failures.push(`${path}: ${lines.length} explicit any, above its entry ${recorded}. `
-        + 'Type the value, use `unknown`, or narrow it; raising an entry is an authority-only change.\n'
-        + `      gbdraw/web/js/${path} lines ${listed.join(', ')}`);
-    } else if (lines.length < recorded) {
-      failures.push(lines.length
-        ? `${path}: ${lines.length} explicit any, below its entry ${recorded}: lower its entry to ${lines.length}`
-        : `${path}: no explicit any left: remove its entry (${recorded})`);
-    }
+  const { above, lowerable } = compareCountBaseline(
+    Object.fromEntries([...observed].map(([path, lines]) => [path, lines.length])),
+    EXPLICIT_ANY_BASELINE
+  );
+  const failures = above.map(({ key: path, observed: count, recorded }) => {
+    // Every line once: `39 ×4` for four on one line, `54 Alias` for a type
+    // other than a bare `any`.
+    const byLine = new Map();
+    observed.get(path).forEach(({ line, type }) => byLine.set(line, [...(byLine.get(line) || []), type]));
+    const listed = [...byLine].map(([line, types]) => {
+      const named = [...new Set(types.filter((type) => type !== 'any'))];
+      return `${line}${types.length > 1 ? ` ×${types.length}` : ''}${named.length ? ` ${named.join(' ')}` : ''}`;
+    });
+    return `${path}: ${count} explicit any, above its entry ${recorded}. `
+      + 'Type the value, use `unknown`, or narrow it; raising an entry is an authority-only change.\n'
+      + `      gbdraw/web/js/${path} lines ${listed.join(', ')}`;
   });
   const total = [...observed.values()].reduce((sum, lines) => sum + lines.length, 0);
   t.diagnostic(`explicit any: ${total} in ${observed.size} modules`);
-  assert.deepEqual(failures, [], `EXPLICIT_ANY_BASELINE does not match gbdraw/web/js/:\n  ${failures.join('\n  ')}`);
+  reportLowerable(t, 'EXPLICIT_ANY_BASELINE', lowerable);
+  assert.deepEqual(failures, [], `gbdraw/web/js/ holds more explicit any than EXPLICIT_ANY_BASELINE:\n  ${failures.join('\n  ')}`);
 });

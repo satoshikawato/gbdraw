@@ -10,13 +10,18 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from './runtime-test-hooks.js';
+import {
+  ANCHOR_FEATURE_CATALOG_SCHEMA,
+  FEATURE_CATALOG_SCHEMA,
+  LEGACY_FEATURE_CATALOG_SCHEMA
+} from '../contracts/schema.generated.js';
 
 const FEATURE_CATALOG_RELOAD_MESSAGE =
   'The diagram engine returned incompatible feature metadata. Reload the page and Generate again.';
 
 // Schema 4 added source-anchor profiles; schema 5 adds each rendered feature's
 // drawn selector values (`drawnSelector`), which live rule matching reads (R4).
-export const FEATURE_CATALOG_SCHEMA = 5;
+export { FEATURE_CATALOG_SCHEMA };
 
 /**
  * One catalog row the Python engine writes (a biological feature, a rendered
@@ -64,8 +69,6 @@ export const FEATURE_CATALOG_SCHEMA = 5;
  * projections. It is never persisted.
  * @typedef {{ catalog: FeatureCatalog } & Record<string, any>} FeatureCatalogAdmission
  */
-const ANCHOR_FEATURE_CATALOG_SCHEMA = 4;
-const LEGACY_FEATURE_CATALOG_SCHEMA = 3;
 const adoptedFeatureCatalogs = new WeakSet();
 const featureCatalogAdmissions = new WeakMap();
 

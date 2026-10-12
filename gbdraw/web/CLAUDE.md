@@ -174,8 +174,10 @@ update canonical state only.
 ## Design rules R1-R15
 
 Each rule names one owner and the guard that enforces it. Cite the rule id in PR
-descriptions and tests. Change the code and its guard together, and lower a
-shrink-only baseline in the change that removes the last site it counted.
+descriptions and tests. Change the code and its guard together. A count
+baseline is a ceiling: the observed count stays at or below it, lowering it is
+optional (its test names what may be lowered), and raising it is an
+authority-only change.
 
 ### R1: Three writers of the Result
 
@@ -268,14 +270,17 @@ reactive object holds display values only, never a copy of an owner's data.
 
 One projection means one call shape: a domain's projection function is called
 from outside its owner in one form, not re-implemented or re-sequenced per
-caller. The distinct call shapes per domain may only decrease (R13).
+caller. The count of distinct call shapes per domain stays at or below its
+baseline (R13): lowering an entry is optional, and adding or raising one is an
+authority-only change.
 
 A live edit shows on the Result what the next Generate draws (PD-OI-066). A
 change to a live-edit path is done when the case for its edit kind in
 `tests/web/live-generate-parity.playwright.spec.js` passes with Auto Reflow on
 and off and with the popup opened and not. A difference the Result may show
 until Generate is listed with its decision in
-`tests/web/contracts/live-generate-parity-allowed.json`. A mismatch the matrix
+`tests/web/contracts/live-generate-parity-allowed.json`; adding or changing an
+entry is an authority-only change. A mismatch the matrix
 finds is a bug: the case stays `test.fail` with its finding id until the fix
 makes it pass.
 
@@ -337,10 +342,13 @@ classifier that matches message text.
 
 Guards:
 
-- `tests/web/error-producer-coverage.test.mjs`: unclassified `throw new Error`
-  sites per validation owner and the message-table sizes are shrink-only.
-- `tests/test_web_error_producer_coverage.py`: the Python adapter tables are
-  shrink-only, and the Python vocabulary is a subset of the Web wording owner.
+- `tests/web/error-producer-coverage.test.mjs`: the total of unclassified
+  `throw new Error` sites in all modules under `js/`, workers included, and
+  each message-table size stay at or below their baselines.
+- `tests/test_web_error_producer_coverage.py`: the total of `ValidationError`
+  sites of the package that neither carry a diagnostic nor classify and each
+  Python adapter table size stay at or below their baselines, and the Python
+  vocabulary is a subset of the Web wording owner.
 - `tests/web/error-normalization.test.mjs`: table-driven producer cases and
   code, reason, and context-key parity.
 
@@ -357,7 +365,9 @@ the draft.
 Guards: `tests/web/option-input-integrity.test.mjs` (every projected numeric
 draft field either rejects `NaN`, `1e-50x`, `-5`, `0`, and `12.5` with a typed
 diagnostic or sends them literally; the count of draft assignments on the
-Generate path in `app/run-analysis.js` may only decrease) and
+Generate path in `app/run-analysis.js` stays at or below its baseline, where
+lowering the baseline is optional and raising it is an authority-only change)
+and
 `tests/fixtures/option_domain_vectors.json` with
 `tests/test_option_domain_parity.py` (the CLI, the typed request, and the Web give
 the same field and reason).
@@ -378,9 +388,11 @@ BLAST outfmt 6 tables are read only by `read_comparison_table` in
 (`normalize_comparison_dataframe`). An unreadable row raises `ValidationError`
 and is never skipped. GenBank headers follow R4.
 
-Guard: `tests/test_comparison_tables.py` (`test_outfmt_table_columns_have_one_reader`
+Guards: `tests/test_comparison_tables.py` (`test_outfmt_table_columns_have_one_reader`
 scans the Python and Web JavaScript sources for a second mapping onto
-`COMPARISON_COLUMNS`, and the shared vectors run through every entry point).
+`COMPARISON_COLUMNS`, and the shared vectors run through every entry point) and
+`tests/web/genbank-header-reader-owner.test.mjs` (no Web module other than
+`services/genbank-header.js` matches a GenBank header keyword).
 
 ### R10: A watcher does not repair state
 
@@ -495,8 +507,8 @@ Guards:
   another Result (B20).
 - `tests/web/history-config-restore.test.mjs`: catalog identity through Undo,
   Redo, and Session rollback, and unset settings that stay unset through intent
-  and checkpoint Undo and Redo (also `session-draft-authority.test.mjs` for the
-  rollback).
+  and checkpoint Undo and Redo (also
+  `tests/web/session-draft-authority.test.mjs` for the rollback).
 - `tests/web/non-edit-state-preservation.playwright.spec.js` (G-H rows): Undo^n
   Redo^n through mixed edits and a mode round trip, and Reset Settings Undo and
   Redo, leave user-owned state unchanged.
@@ -529,9 +541,9 @@ tip is a reachable disclosure).
 
 ### R13: Owner layering and ports
 
-Modules sit in layers, lowest first: leaves (`utils/`, `config.js`,
-`web-ux-profile.js`, `mode-profiles.js`, `mode-profiles.generated.js`,
-`mode-scoped-settings.generated.js`), then
+Modules sit in layers, lowest first: leaves (`utils/`, `contracts/`,
+`config.js`, `web-ux-profile.js`, `mode-profiles.js`,
+`mode-profiles.generated.js`, `mode-scoped-settings.generated.js`), then
 state-free `services/`, then
 `state.js`, then the two state-bound services (`services/config.js`,
 `services/reset.js`), the only services that import `state.js`, then owner
@@ -539,7 +551,8 @@ modules (`app/*.js` and `app/*/` factories), then the composition roots
 (`app/app-setup.js`, `app/feature-editor.js`, `app/legend.js`,
 `app/legend-layout.js`), then `app.js`, `components.js`, and the template. A
 module imports its own layer and lower ones; a state-free module never imports
-`state.js`, and an owner module never imports a composition root.
+`state.js`, and an owner module never imports a composition root. `contracts/`
+is a leaf: like every leaf its modules import only leaves.
 
 - An owner never imports, holds, or calls another owner object. It receives
   ports: a port is one function, in one direction, named for the reaction it
@@ -569,9 +582,10 @@ module imports its own layer and lower ones; a state-free module never imports
   outside its owner (R3).
 
 The baseline of the current violations is recorded in
-`tests/web/owner-graph-baseline.test.mjs` and may only shrink: a runtime change
-removes the subjects it fixes from the baseline in the same pull request, and
-an addition is an authority-only change (`tools/web-design-rule-guards.json`,
+`tests/web/owner-graph-baseline.test.mjs`: the count of a subject stays at or
+below its entry, and a subject without an entry has none. Lowering or removing
+an entry is optional (the test names what may be lowered). Adding or raising an
+entry is an authority-only change (`tools/web-design-rule-guards.json`,
 WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 `tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
 closures `owner-graph.forward-closure.v2`, state backdoors, whole-object ports,
@@ -594,8 +608,11 @@ a record, ask the Owner before implementing it.
 
 Guards: `tests/web/owner-graph-baseline.test.mjs` (every observed subject is in
 the baseline with a count no higher than recorded, per detector, and no module
-imports from a higher layer) and
-`tests/web/owner-graph-detectors.test.mjs` (the detectors).
+imports from a higher layer),
+`tests/web/owner-graph-detectors.test.mjs` (the detectors), and
+`tests/web/owner-graph-replay.test.mjs` (the detectors report the couplings
+that past merges introduced; it reads the revision history and runs in the
+`web-change-budget` job).
 
 ### R14: Typed boundaries
 
@@ -627,24 +644,27 @@ authority-only change. A new module is checked from its first commit.
 - `noImplicitAny` is not yet on in the guard config.
   `tests/web/types/tsconfig.no-implicit-any.json` is the guard config plus
   `noImplicitAny`, and `NO_IMPLICIT_ANY_BASELINE` in
-  `tests/web/no-implicit-any-ratchet.test.mjs` caps its diagnostics across
-  `js/`. A pull request keeps the count at or below the cap and may lower the
-  cap to the new count: a new parameter or variable declares its type, or the
-  collection a callback iterates is typed. Raising the cap is an
-  authority-only change.
+  `tests/web/no-implicit-any-ratchet.test.mjs` records its diagnostics per
+  module. A module stays at or below its entry, and a module without an entry,
+  including a new module, has none: a new parameter or variable declares its
+  type, or the collection a callback iterates is typed. Lowering or removing
+  an entry is optional. Adding or raising an entry is an authority-only
+  change. When the map is empty, an authority-only pull request turns
+  `noImplicitAny` on in the guard config and deletes the ratchet.
 - Explicit `any` in JSDoc (`any`, `*`, `Object`, or a type that resolves to
   `any`, such as an alias of it) is type debt. `EXPLICIT_ANY_BASELINE` in
-  `tests/web/explicit-any-ratchet.test.mjs` records it per module and only
-  goes down: a pull request that removes some lowers the module's entry, and
-  new code declares a type or uses `unknown`. A module without an entry,
-  including a new module, has none. Adding or raising an entry is an
+  `tests/web/explicit-any-ratchet.test.mjs` records it per module: a module
+  stays at or below its entry, and new code declares a type or uses
+  `unknown`. A module without an entry, including a new module, has none.
+  Lowering or removing an entry is optional. Adding or raising an entry is an
   authority-only change.
 - Distinct identity values (a Python key, a display caption, a swatch color, a
   feature id) take distinct named types, not one shared `string` alias.
 
 Guards: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
 run, declared factory parameters, no suppression, type-import direction),
-`tests/web/no-implicit-any-ratchet.test.mjs` (the `noImplicitAny` cap), and
+`tests/web/no-implicit-any-ratchet.test.mjs` (`noImplicitAny` diagnostics per
+module), and
 `tests/web/explicit-any-ratchet.test.mjs` (explicit `any` per module). They
 run the `typescript` version pinned in `package.json` and fail until `npm ci`
 has installed it.
@@ -719,6 +739,9 @@ Current owners in the initial automated scope:
 - Observation uses `services/runtime-test-hooks.js` (`recordStructuralMetric`),
   History `getDiagnostics()`, and the Worker tracking in
   `tests/web/helpers/app-lifecycle.cjs`.
+
+Guards: `tests/web/computation-ownership.test.mjs` and
+`tests/web/computation-ownership.playwright.spec.js`.
 
 ## Request and session boundary
 

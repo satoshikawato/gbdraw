@@ -103,6 +103,8 @@ def test_registry_rows_match_the_phase_e_registry_table() -> None:
     assert rows == {(f"{row.domain}.{row.path}", row.modes, row.key, row.migrate) for row in MODE_SCOPED_SETTINGS}
 
 
+# The `browser` marker puts this test in the jobs a Web-only pull request runs.
+@pytest.mark.browser
 def test_generated_web_mode_scoped_settings_match_python_source() -> None:
     result = subprocess.run(
         [sys.executable, "tools/generate_mode_scoped_settings.py", "--check"],

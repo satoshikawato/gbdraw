@@ -95,6 +95,11 @@ export const FEATURE_VISIBILITY_NARROWED_NOTICE = (count) => (
  */
 
 /**
+ * The input of `migrateSessionFeatureEdits`: an older Session has no `features`.
+ * @typedef {Omit<FeatureEditMigrationInput, 'features'> & { features: Record<string, unknown> | null | undefined }} SessionFeatureEditMigrationInput
+ */
+
+/**
  * @param {unknown} value
  * @returns {value is Record<string, any>}
  */
@@ -285,12 +290,6 @@ const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mod
   });
   return { renderedById: new Map(), biological };
 };
-
-// The last Session version whose `hash` color rules a Web writer filled with
-// the hash of the drawn feature (release 0.13.0: Session 30, first-parent main:
-// Session 44); `hash=` names the source-record hash after it (OV-401, release
-// D-39). The twin of DRAWN_HASH_RULE_SESSION_MAX_VERSION in gbdraw/session_io.py.
-export const DRAWN_HASH_RULE_SESSION_MAX_VERSION = 44;
 
 /**
  * A feature a saved diagram drew: its identity key, the hash it was drawn with,
@@ -631,7 +630,7 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
  * become `featureOverrides`. When a label map is migrated, the saved label
  * table is cleared: it was the copy of those maps built at the last Generate
  * (the same invariant the editor keeps when label edits change).
- * @param {FeatureEditMigrationInput} input
+ * @param {SessionFeatureEditMigrationInput} input
  * @returns {{
  *   features: Record<string, any>,
  *   droppedCount: number,

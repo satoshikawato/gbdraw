@@ -1,51 +1,35 @@
-// R6 / G-G(2): JS validation owners raise user-correctable failures through
-// diagnosticError(code, context); the English message classifier may only
-// shrink. Both counts are shrink-only baselines: a file may never gain an
-// unclassified throw site, and a baseline is lowered as soon as a site is
-// migrated (the Python half is tests/test_web_error_producer_coverage.py).
+// R6 / G-G(2): Web JavaScript raises user-correctable failures through
+// diagnosticError(code, context), and the English message classifier does not
+// grow. Both baselines are registered design-rule allowlists
+// (tools/web-design-rule-guards.json, R6): an observed count may not exceed
+// its baseline, lowering a baseline is optional, and raising one is an
+// authority-only change (the Python half is
+// tests/test_web_error_producer_coverage.py).
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { sep } from 'node:path';
 import test from 'node:test';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
 
 const WEB_ROOT = new URL('../../gbdraw/web/js/', import.meta.url);
 const UNCLASSIFIED = new Set(['UNKNOWN', 'VALIDATION_UNCLASSIFIED']);
 const FILLS = ['', '0', '1', 'PRIVATE', '#1'];
 
-// Shrink-only: validation owner -> throw sites whose message normalizes to
-// UNKNOWN or VALIDATION_UNCLASSIFIED (mostly internal invariants today). The
-// Result admission and preview binding owners are counted too, because a
-// failure there ends Generate (OV-13).
-const UNCLASSIFIED_THROW_BASELINE = {
-  'app/annotations/table-codec.js': 13,
-  'app/annotations/validation.js': 0,
-  'app/annotations/record-catalog.js': 0,
-  'app/candidate-render.js': 3,
-  'app/circular-track-slots.js': 0,
-  'app/feature-editor/label-actions.js': 0,
-  'app/legend-layout/decoration-continuity.js': 0,
-  'app/linear-track-slots.js': 0,
-  'app/preview-runtime.js': 7,
-  'app/record-display-options.js': 4,
-  'app/run-analysis.js': 17,
-  'mode-profiles.js': 2,
-  'services/circular-track-slot-model.js': 2,
-  'services/config.js': 15,
-  'services/current-option-values.js': 7,
-  'services/feature-metadata-extraction.js': 2,
-  'services/file-imports.js': 0,
-  'services/linear-track-slot-model.js': 34,
-  'services/record-display-model.js': 13,
-  'services/session-file.js': 6,
-  'services/session-import-client.js': 0,
-  'services/session-request.js': 89,
-  'services/svg-result-ingestion.js': 22,
-  'services/track-slot-validation.js': 31,
-  'utils/feature-rendering.js': 3,
-  'utils/optional-positive-number.js': 0
-};
+// Every `.js` file under gbdraw/web/js/, workers included. The throw sites are
+// counted in all of them, as the Python half counts the whole package: a
+// hand-kept list of owners would free its sites for the other modules whenever
+// a file left it.
+const WEB_MODULES = readdirSync(WEB_ROOT, { recursive: true })
+  .map((file) => file.split(sep).join('/'))
+  .filter((file) => file.endsWith('.js'))
+  .sort();
 
-const fileExists = (file) => existsSync(new URL(file, WEB_ROOT));
+// The throw sites of all modules whose message normalizes to UNKNOWN or
+// VALIDATION_UNCLASSIFIED (mostly internal invariants today). One total (kind
+// `count`), so a site that moves to another module with its code does not
+// change it.
+const UNCLASSIFIED_THROW_BASELINE = 631;
 
 // Literal parts of the first argument of `throw new Error(`; null is a hole.
 const literalAt = (source, index) => {
@@ -100,20 +84,22 @@ const unclassifiedThrowSites = (file) => {
   return sites;
 };
 
-test('JS validation throw sites normalize to a recognized diagnostic or shrink (G-G(2))', () => {
-  for (const [file, baseline] of Object.entries(UNCLASSIFIED_THROW_BASELINE)) {
-    assert.ok(fileExists(file), `${file}: no such file; delete its key and register the moved file in an authority-only pull request`);
-    const sites = unclassifiedThrowSites(file);
-    assert.ok(sites.length <= baseline,
-      `${file}: new unclassified throw sites; raise them with diagnosticError(code, context):\n${sites.join('\n')}`);
-    assert.equal(sites.length, baseline, `${file}: lower UNCLASSIFIED_THROW_BASELINE to ${sites.length}`);
+test('JS throw sites normalize to a recognized diagnostic or do not grow in number (G-G(2))', (t) => {
+  const sitesByModule = WEB_MODULES.map((file) => [file, unclassifiedThrowSites(file).length]);
+  const total = sitesByModule.reduce((sum, [, sites]) => sum + sites, 0);
+  if (total < UNCLASSIFIED_THROW_BASELINE) {
+    t.diagnostic(`UNCLASSIFIED_THROW_BASELINE may be lowered: ${UNCLASSIFIED_THROW_BASELINE} -> ${total}`);
   }
+  assert.ok(total <= UNCLASSIFIED_THROW_BASELINE,
+    `${total} unclassified throw sites under gbdraw/web/js/, above UNCLASSIFIED_THROW_BASELINE ${UNCLASSIFIED_THROW_BASELINE}; `
+      + 'raise the new ones with diagnosticError(code, context). Sites per module (compare with dev):\n'
+      + sitesByModule.filter(([, sites]) => sites).map(([file, sites]) => `${file} ${sites}`).join('\n'));
 });
 
 // The message-classification tables in the JS wording owner (R6 ratchet).
 const NATIVE_VALIDATION_BASELINE = { exactMessages: 92, patterns: 19 };
 
-test('the JS message-classification tables only shrink (R6 ratchet)', async () => {
+test('the JS message-classification tables only shrink (R6 ratchet)', async (t) => {
   const source = readFileSync(new URL('utils/error-normalization.js', WEB_ROOT), 'utf8');
   // The module has no imports, so a copy can expose its private table size.
   const probe = await import(`data:text/javascript,${encodeURIComponent(
@@ -124,6 +110,8 @@ test('the JS message-classification tables only shrink (R6 ratchet)', async () =
     exactMessages: probe.nativeValidationSize,
     patterns: (body.match(/\/\^/g) || []).length
   };
-  assert.deepEqual(actual, NATIVE_VALIDATION_BASELINE,
-    'Raise new failures with diagnosticError and lower NATIVE_VALIDATION_BASELINE when a row or pattern is removed.');
+  const { above, lowerable } = compareCountBaseline(actual, NATIVE_VALIDATION_BASELINE);
+  reportLowerable(t, 'NATIVE_VALIDATION_BASELINE', lowerable);
+  assert.deepEqual(above.map(({ key, observed, recorded }) => `${key}: ${observed}, above ${recorded}`), [],
+    'Raise new failures with diagnosticError; raising NATIVE_VALIDATION_BASELINE is an authority-only change.');
 });

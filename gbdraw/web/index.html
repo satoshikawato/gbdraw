@@ -989,49 +989,86 @@
         .gbdraw-preview-feature-search-updating rect[id^="f"] {
             transition: none !important;
         }
+        /* Review alignment on the figure: the reference line and its flag, a ring on the reference
+           feature and on each candidate, and an arrow from each chosen candidate to the line.
+           Every stroke has a white casing so it reads on any figure colour. */
         .gbdraw-alignment-overlay {
             position: absolute;
             inset: 0;
             z-index: 2;
+            overflow: hidden;
             pointer-events: none;
         }
         .gbdraw-alignment-overlay[hidden],
-        .gbdraw-alignment-guide[hidden],
-        .gbdraw-alignment-badge[hidden] {
+        .gbdraw-alignment-overlay [hidden] {
             display: none;
         }
-        .gbdraw-alignment-guide {
+        .gbdraw-alignment-overlay > svg {
             position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 1px;
-            background: rgba(37, 99, 235, 0.55);
-            box-shadow: 0 0 2px white;
+            inset: 0;
+            width: 100%;
+            height: 100%;
         }
-        .gbdraw-alignment-badge {
+        .gbdraw-alignment-line { stroke: #2563eb; stroke-width: 1.5; }
+        .gbdraw-alignment-line.casing { stroke: #fff; stroke-width: 4; opacity: 0.85; }
+        .gbdraw-alignment-arrow { --tone: #2563eb; }
+        .gbdraw-alignment-arrow path { fill: none; }
+        .gbdraw-alignment-arrow .casing { stroke: #fff; stroke-width: 4.5; }
+        .gbdraw-alignment-arrow .casing.head { fill: #fff; stroke-width: 3; }
+        .gbdraw-alignment-arrow .shaft { stroke: var(--tone); stroke-width: 1.8; }
+        .gbdraw-alignment-arrow.is-other .shaft { stroke-dasharray: 4 3; }
+        .gbdraw-alignment-arrow .head:not(.casing) { fill: var(--tone); }
+        /* The ring is drawn on the box edge: the outline is the stroke, the shadows its casing. */
+        .gbdraw-alignment-ring {
+            --tone: #2563eb;
+            --stroke: 1.8px;
             position: absolute;
-            display: grid;
-            place-items: center;
-            min-width: 1.5rem;
-            height: 1.5rem;
-            padding: 0 0.25rem;
-            transform: translate(-50%, -50%);
-            border: 1px solid #1d4ed8;
-            border-radius: 999px;
-            background: #dbeafe;
-            color: #1e40af;
-            font-size: 0.75rem;
-            font-weight: 700;
-            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.3);
-            pointer-events: auto;
-            cursor: pointer;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            background: transparent;
+            outline: var(--stroke) dashed var(--tone);
+            outline-offset: calc(var(--stroke) / -2);
+            box-shadow: 0 0 0 calc(var(--stroke) / 2 + 1.25px) #fff, inset 0 0 0 calc(var(--stroke) / 2 + 1.25px) #fff;
         }
-        .gbdraw-alignment-badge:hover,
-        .gbdraw-alignment-badge:focus-visible {
-            background: #2563eb;
-            color: white;
-            outline: 2px solid white;
+        button.gbdraw-alignment-ring { pointer-events: auto; cursor: pointer; }
+        .gbdraw-alignment-ring.is-need,
+        .gbdraw-alignment-arrow.is-need { --tone: #d97706; }
+        .gbdraw-alignment-ring.is-skipped,
+        .gbdraw-alignment-arrow.is-skipped { --tone: #94a3b8; }
+        .gbdraw-alignment-ring.is-reference { --tone: #1d4ed8; }
+        .gbdraw-alignment-ring.is-chosen,
+        .gbdraw-alignment-ring.is-hover,
+        .gbdraw-alignment-ring:focus-visible {
+            --stroke: 2.5px;
+            outline-style: solid;
         }
+        .gbdraw-alignment-ring:focus-visible {
+            box-shadow: 0 0 0 2.5px #fff, inset 0 0 0 2.5px #fff, 0 0 0 5.5px #1e3a8a;
+        }
+        .gbdraw-alignment-flag,
+        .gbdraw-alignment-tag {
+            position: absolute;
+            box-sizing: border-box;
+            max-width: min(18rem, calc(100% - 8px));
+            height: 18px;
+            padding: 0 6px;
+            overflow: hidden;
+            border-radius: 9px;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 16px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 1px 3px rgba(15, 23, 42, 0.25);
+        }
+        /* A long gene name gives way; "· reference" stays whole. */
+        .gbdraw-alignment-flag:not([hidden]) { display: flex; white-space: pre; }
+        .gbdraw-alignment-flag span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .gbdraw-alignment-flag { border: 1px solid #1d4ed8; background: #1d4ed8; color: #fff; }
+        .gbdraw-alignment-tag { border: 1.5px solid #1d4ed8; background: #dbeafe; color: #1e3a8a; line-height: 15px; }
         .preview-layout-off .gbdraw-preview-layout-target:hover {
             outline: 1px dashed #94a3b8;
             outline-offset: 4px;
@@ -1186,7 +1223,6 @@
             --right-drawer-width: min(100vw, var(--right-drawer-max-width));
             container-type: inline-size;
         }
-        [aria-label="Result Preview"] { --alignment-review-compact: 0; }
         .right-drawer {
             width: var(--right-drawer-width);
             min-height: 0;
@@ -1437,11 +1473,184 @@
             }
         }
 
+        /* Review alignment panel, docked in the Result workspace: below the figure, or a right
+           column 24rem wide when the workspace is at least 56rem wide (the pane is the size
+           container and is 2px wider than the workspace). These are the page's own rules, not
+           bound utility classes, so the panel has its size at the first measurement (OV-515). */
+        .alignment-review-panel {
+            z-index: 31;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+            border-top: 1px solid #e2e8f0;
+            background: #fff;
+            color: #334155;
+            font-size: 12px;
+            line-height: 1.35;
+        }
+        .preview-workspace:has(> .alignment-review-panel) {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-rows: minmax(200px, 1fr) clamp(15rem, 29dvh, 18rem);
+        }
+        .preview-workspace:has(> .alignment-review-panel) > .preview-viewport { grid-area: 1 / 1; }
+        .preview-workspace > .alignment-review-panel { grid-area: 2 / 1; }
+        .preview-workspace:has(> .alignment-review-panel) > .drawer-toggle { top: 0.5rem; transform: none; }
+        .preview-workspace:has(> .alignment-review-panel) .preview-canvas { scroll-margin-top: 9rem; }
+        .drawer-toggle:disabled { opacity: 0.55; cursor: not-allowed; }
+        @container (min-width: 56.125rem) {
+            .preview-workspace:has(> .alignment-review-panel) {
+                display: flex;
+                padding-right: 24rem;
+            }
+            .preview-workspace > .alignment-review-panel {
+                position: absolute;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                width: 24rem;
+                border-top: 0;
+                border-left: 1px solid #e2e8f0;
+            }
+            .preview-workspace:has(> .alignment-review-panel) > .drawer-toggle {
+                top: 50%;
+                right: 24rem;
+                transform: translateY(-50%);
+            }
+        }
+        .alignment-review-panel > header { flex: none; padding: 12px 16px 10px; border-bottom: 1px solid #e2e8f0; }
+        .alignment-review-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+        .alignment-review-title h2 { margin: 0; color: #1e293b; font-size: 15px; font-weight: 700; white-space: nowrap; }
+        .alignment-review-title button { margin-left: auto; }
+        .alignment-review-group {
+            padding: 1px 6px;
+            border-radius: 999px;
+            background: #f1f5f9;
+            color: #475569;
+            font-family: ui-monospace, monospace;
+            font-size: 11px;
+        }
+        .alignment-review-lead { margin: 4px 0 0; color: #475569; overflow-wrap: anywhere; }
+        .alignment-review-lead b { color: #1d4ed8; }
+        .alignment-review-body { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 10px 16px 12px; }
+        .alignment-review-caption {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 2px 8px;
+            margin-bottom: 2px;
+            color: #64748b;
+            font-size: 11px;
+        }
+        .alignment-review-caption > span:first-child { color: #475569; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+        .alignment-review-key { display: flex; align-items: center; gap: 4px; }
+        .alignment-review-key i { display: inline-block; margin-left: 7px; }
+        .alignment-review-key i:first-child { margin-left: 0; }
+        .alignment-review-key .is-chosen { width: 11px; height: 9px; border-radius: 2px; background: #2563eb; }
+        .alignment-review-key .is-other { width: 10px; height: 8px; border: 1.3px dashed #2563eb; border-radius: 2px; }
+        .alignment-review-key .is-line { width: 1.5px; height: 12px; background: #2563eb; }
+        .alignment-review-section {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 9px 0 0;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+        .alignment-review-section .count { padding: 0 6px; border-radius: 999px; background: #f1f5f9; color: #475569; letter-spacing: 0; }
+        .alignment-review-section.is-need { color: #92400e; }
+        .alignment-review-section.is-need .count { background: #b45309; color: #fff; }
+        .alignment-review-card { min-width: 0; margin: 0; padding: 4px 0 5px; border: 0; border-bottom: 1px solid #f1f5f9; }
+        .alignment-review-card.is-reference { margin: 0 -8px; padding: 4px 8px 7px; border-bottom: 0; border-radius: 6px; background: #eff6ff; }
+        .alignment-review-card.is-need { margin: 4px -8px 3px; padding: 4px 7px 7px; border: 1px solid #f59e0b; border-radius: 6px; background: #fffdf5; }
+        .alignment-review-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
+        .alignment-review-record { min-width: 0; color: #1e293b; font-weight: 600; overflow-wrap: anywhere; }
+        .alignment-review-detail { color: #64748b; font-size: 11px; overflow-wrap: anywhere; }
+        .alignment-review-card.is-skipped .alignment-review-record,
+        .alignment-review-card.is-skipped .alignment-review-gene b { color: #64748b; }
+        .alignment-review-direction { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; margin-left: auto; }
+        .alignment-review-arrow { color: #64748b; font-size: 13px; line-height: 1; }
+        .alignment-review-chip { flex: none; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+        .alignment-review-chip.is-reference { background: #2563eb; color: #fff; font-weight: 700; }
+        .alignment-review-chip.is-apply { border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: 10px; }
+        .alignment-review-chip.is-reversed { background: #fef3c7; color: #92400e; }
+        .alignment-review-chip.is-recommended { background: #d1fae5; color: #065f46; }
+        .alignment-review-chip.is-evidence { background: #f1f5f9; color: #475569; font-weight: 500; white-space: normal; }
+        /* One strip per record, drawn in a 17-unit-high box and stretched to the card's width. */
+        .alignment-strip { --tone: #2563eb; display: block; width: 100%; height: 17px; margin: 1px 0; }
+        .alignment-strip.is-need { --tone: #d97706; }
+        .alignment-strip.is-skipped { --tone: #94a3b8; }
+        .alignment-strip * { vector-effect: non-scaling-stroke; }
+        .alignment-strip .axis { stroke: #e2e8f0; stroke-width: 1; }
+        .alignment-strip .feature { fill: #cbd5e1; }
+        .alignment-strip .line { stroke: #2563eb; stroke-width: 1.2; }
+        .alignment-strip .candidate { fill: #fff; stroke: var(--tone); stroke-width: 1.4; stroke-dasharray: 3 2; }
+        .alignment-strip.is-need .candidate { stroke-dasharray: none; }
+        .alignment-strip .candidate.is-chosen { fill: var(--tone); stroke: #fff; stroke-width: 1; stroke-dasharray: none; }
+        .alignment-strip .candidate.is-hover { fill: #dbeafe; stroke: var(--tone); stroke-width: 2; stroke-dasharray: none; }
+        .alignment-strip .candidate.is-chosen.is-hover { fill: var(--tone); stroke: #1e3a8a; }
+        .alignment-review-gene { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px 4px; margin: 1px 0 0; border-radius: 4px; }
+        .alignment-review-gene b { color: #1e293b; overflow-wrap: anywhere; }
+        .alignment-review-gene code,
+        .alignment-review-facts code { color: #64748b; font-family: ui-monospace, monospace; font-size: 11px; overflow-wrap: anywhere; }
+        .alignment-review-gene.is-hover { box-shadow: 0 0 0 2px #bfdbfe; }
+        .alignment-review-place { color: #64748b; font-size: 11px; white-space: nowrap; }
+        /* The second line of a one-candidate card: evidence at the left, Skip at the right. */
+        .alignment-review-evidence { display: flex; flex: 0 0 100%; align-items: center; gap: 4px; min-width: 0; }
+        .alignment-review-evidence .alignment-review-chip { flex: 0 1 auto; }
+        .alignment-review-skip { display: flex; flex: none; align-items: center; gap: 4px; margin-left: auto; color: #64748b; font-size: 11px; cursor: pointer; }
+        .alignment-review-skip input { width: 12px; height: 12px; margin: 0; }
+        .alignment-review-note { margin: 2px 0 0; color: #64748b; font-size: 11px; overflow-wrap: anywhere; }
+        .alignment-review-note b { color: #92400e; font-weight: 600; }
+        .alignment-review-candidates { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; margin-top: 4px; }
+        .alignment-review-candidate {
+            display: flex;
+            align-items: flex-start;
+            gap: 7px;
+            min-width: 0;
+            padding: 4px 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+        }
+        .alignment-review-candidate > input { flex: none; width: 13px; height: 13px; margin: 2px 0 0; accent-color: #2563eb; }
+        .alignment-review-candidate.is-chosen { border-color: #2563eb; background: #eff6ff; }
+        .alignment-review-candidate:hover,
+        .alignment-review-candidate.is-hover { border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }
+        .alignment-review-candidate:focus-within { outline: 2px solid #2563eb; outline-offset: 1px; }
+        .alignment-review-candidate.is-busy { cursor: wait; opacity: 0.6; }
+        .alignment-review-candidate.is-skip { align-items: center; padding: 2px 8px; border-style: dashed; color: #64748b; font-size: 11px; }
+        .alignment-review-candidate.is-skip > input { margin: 0; }
+        .alignment-review-candidate.is-skip.is-chosen { border-color: #94a3b8; background: #f8fafc; }
+        .alignment-review-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+        .alignment-review-name b { color: #1e293b; font-size: 12.5px; overflow-wrap: anywhere; }
+        .alignment-review-facts { display: block; color: #64748b; font-size: 11px; overflow-wrap: anywhere; }
+        .alignment-review-directions { min-width: 0; margin-top: 10px; padding-top: 9px; border-top: 1px solid #e2e8f0; }
+        .alignment-review-panel > footer {
+            display: flex;
+            flex: none;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 8px;
+            padding: 10px 16px;
+            border-top: 1px solid #e2e8f0;
+            background: #f8fafc;
+        }
+        .alignment-review-panel > footer p { flex: 1 1 0; min-width: 8rem; margin: 0; color: #64748b; font-size: 11.5px; }
+        .alignment-review-panel > footer p.is-need { color: #92400e; font-weight: 600; }
+
         /* The same canvas and Editor dock below the search on compact cards. */
         @container (max-width: 40rem) {
             .result-pane > [aria-label="Result Preview"] {
                 flex: none;
-                --alignment-review-compact: 1;
                 min-height: 0;
                 overflow: visible;
                 --editor-toggle-width: 2.25rem;
@@ -1483,11 +1692,10 @@
                 grid-area: 1 / 1;
                 min-height: 200px;
             }
-            .alignment-review-dock {
-                grid-area: 2 / 1;
-                min-width: 0;
-                min-height: 0;
-            }
+            .alignment-review-panel > header,
+            .alignment-review-panel > footer { padding: 0.5rem 0.75rem; }
+            .alignment-review-body { padding: 0.5rem 0.75rem; }
+            .alignment-review-panel > footer .btn { flex: 1; min-width: 0; }
             .preview-workspace .right-drawer {
                 position: relative;
                 grid-area: 3 / 1;
@@ -1622,21 +1830,16 @@
         .settings-scroll { margin-bottom: 5.875rem; }
         .settings-pane:has(.generate-bar > div) .settings-scroll { margin-bottom: 9.875rem; }
 
-        .result-pane:has(.alignment-review-compact) {
+        /* While the Review alignment panel is docked, the pane scrolls it into reach. */
+        .result-pane:has(.alignment-review-panel) {
             height: auto !important;
             min-height: 0 !important;
             overflow-y: auto !important;
         }
-        .alignment-review-compact .preview-canvas { scroll-margin-top: 9rem; }
-        .alignment-review-panel > header, .alignment-review-panel > footer { padding: .5rem .75rem; }
-        .alignment-review-panel > header { cursor: default; touch-action: auto; }
-        .alignment-review-panel > footer > .flex { flex-direction: row; }
-        .alignment-review-panel > footer .btn { flex: 1; min-width: 0; }
-        .alignment-review-compact .drawer-toggle:disabled { opacity: .55; cursor: not-allowed; }
         /* A wrapped sticky header can consume the entire short viewport.
-           During compact review, page scroll must expose its native controls. */
+           During the review, page scroll must expose its native controls. */
         @media (max-height: 32rem) {
-            body:has(.alignment-review-compact) .app-header { position: relative; }
+            body:has(.alignment-review-panel) .app-header { position: relative; }
         }
     </style>
     <style type="text/tailwindcss">
@@ -5334,7 +5537,7 @@
                 </div>
             </operation-error>
 
-            <div v-if="results.length > 0" role="region" aria-label="Result Preview" :class="{ 'alignment-review-compact': similarityAlignmentCompact && similarityAlignmentDialogOpen }" class="card p-0 flex flex-col flex-grow overflow-clip relative">
+            <div v-if="results.length > 0" role="region" aria-label="Result Preview" class="card p-0 flex flex-col flex-grow overflow-clip relative">
                 <div class="card-header mb-0 py-2 pl-5 pr-6 border-b border-slate-200 flex justify-between items-center shrink-0 flex-wrap gap-x-2 gap-y-1">
                     <div class="flex items-center gap-3 flex-wrap min-w-0">
                         <h2 class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 min-w-0">
@@ -5738,8 +5941,9 @@
 
                     <Teleport to="body">
                     <!-- Feature Editor Popup -->
+                    <!-- Hidden, not closed, while the Review alignment panel is open. -->
                     <div v-if="clickedFeature"
-                         v-show="!similarityAlignmentCompact || !similarityAlignmentDialogOpen"
+                         v-show="!similarityAlignmentDialogOpen"
                          v-dialog-focus
                          ref="featurePopupRef"
                          @mousedown="startFeaturePopupDrag"
@@ -6261,6 +6465,7 @@
                     <!-- Pairwise Match Popup -->
                     <!-- The same frame shows a legend entry or a record definition (previewItem). -->
                     <div v-if="clickedPairwiseMatch"
+                         v-show="!similarityAlignmentDialogOpen"
                          ref="pairwiseMatchPopupRef"
                          @mousedown="startPairwiseMatchPopupDrag"
                          role="dialog"
@@ -7103,9 +7308,219 @@
                     </div>
                 </div>
 
-                <div data-similarity-alignment-dock
-                     v-show="similarityAlignmentCompact && similarityAlignmentDialogOpen"
-                     class="alignment-review-dock shrink-0 min-w-0"></div>
+                <!-- Review alignment panel: docked below the figure, or at its right when the workspace is wide. -->
+                <section v-if="similarityAlignmentDialogOpen"
+                         role="dialog"
+                         aria-labelledby="similarity-alignment-dialog-title"
+                         aria-describedby="similarity-alignment-dialog-description similarity-alignment-application-help"
+                         data-history-scope="transient"
+                         data-similarity-alignment-overlay
+                         data-similarity-alignment-dialog
+                         class="alignment-review-panel">
+                    <header>
+                        <div class="alignment-review-title">
+                            <h2 id="similarity-alignment-dialog-title" tabindex="-1"
+                                class="focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Review alignment</h2>
+                            <span class="alignment-review-group" aria-hidden="true">{{ similarityAlignmentDraft?.response.groupId }}</span>
+                            <span id="similarity-alignment-application-help" data-alignment-application-help
+                                  class="alignment-review-chip is-apply">Apply required<span class="sr-only">: nothing changes until Apply succeeds. Cancel keeps the current Result.</span></span>
+                            <button type="button"
+                                    @click="cancelSimilarityAlignmentDialog"
+                                    aria-label="Cancel similarity alignment"
+                                    class="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
+                                <i class="ph ph-x text-lg" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <p class="alignment-review-lead">Records slide until the chosen genes line up with <b>{{ similarityAlignmentDraft?.reference.name }}</b>.</p>
+                        <p id="similarity-alignment-dialog-description" data-similarity-alignment-count class="sr-only">Similarity group {{ similarityAlignmentDraft?.response.groupId }}: {{ similarityAlignmentReview?.summary }}</p>
+                    </header>
+
+                    <div class="alignment-review-body custom-scrollbar">
+                        <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery"
+                           tabindex="-1" class="mb-2 text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
+                           data-similarity-alignment-error>
+                            <p class="mt-2">Keep these choices and retry Apply below, or edit the choices before applying.</p>
+                        </operation-error>
+                        <template v-if="similarityAlignmentReview">
+                            <!-- The strips are a picture of the rows below them; the rows carry everything they show. -->
+                            <div v-if="similarityAlignmentReview.lineX !== null" class="alignment-review-caption" aria-hidden="true">
+                                <span>After Apply</span>
+                                <span class="alignment-review-key"><i class="is-chosen"></i>chosen<i class="is-other"></i>other candidate<i class="is-line"></i>reference line</span>
+                            </div>
+                            <template v-for="group in similarityAlignmentReview.groups" :key="group.id">
+                                <h3 v-if="group.title" class="alignment-review-section" :class="{ 'is-need': group.cards.some((card) => card.needsChoice) }"
+                                    :data-alignment-section="group.id">{{ group.title }}<span class="count" aria-hidden="true">{{ group.cards.length }}</span><span class="sr-only"> ({{ group.cards.length }} {{ group.cards.length === 1 ? 'record' : 'records' }})</span></h3>
+                                <template v-for="card in group.cards" :key="card.recordKey">
+                                <component :is="card.kind === 'reference' ? 'section' : 'fieldset'"
+                                           v-for="record in [card.row || similarityAlignmentDraft.reference]"
+                                           :key="card.recordKey"
+                                           :data-alignment-record-key="card.kind === 'reference' ? null : card.recordKey"
+                                           :data-similarity-alignment-reference="card.kind === 'reference' ? '' : null"
+                                           :aria-label="card.kind === 'reference' ? 'Exact alignment reference' : null"
+                                           class="alignment-review-card"
+                                           :class="{ 'is-reference': card.kind === 'reference', 'is-need': card.needsChoice, 'is-skipped': card.skipped }">
+                                    <legend v-if="card.kind !== 'reference'" class="sr-only">{{ record.recordLabel }}</legend>
+                                    <div class="alignment-review-head">
+                                        <span v-if="card.kind === 'reference'" class="alignment-review-chip is-reference">Reference</span>
+                                        <span class="alignment-review-record">{{ record.recordName }}</span>
+                                        <span v-if="record.recordDetail" class="alignment-review-detail">{{ record.recordDetail }}</span>
+                                        <span class="alignment-review-direction" data-similarity-alignment-direction>
+                                            <span :id="'alignment-direction-' + card.recordKey" class="sr-only">{{ card.direction.description }}</span>
+                                            <span v-if="card.direction.reversed" aria-hidden="true" class="flex items-center gap-1">
+                                                <span class="alignment-review-arrow line-through decoration-slate-300">{{ card.direction.beforeArrow === 1 ? '→' : card.direction.beforeArrow === -1 ? '←' : '?' }}</span>
+                                                <span class="alignment-review-arrow font-bold text-amber-700">{{ card.direction.afterArrow === 1 ? '→' : card.direction.afterArrow === -1 ? '←' : '?' }}</span>
+                                                <span class="alignment-review-chip is-reversed">reversed</span>
+                                            </span>
+                                            <span v-else-if="card.direction.afterArrow !== null" aria-hidden="true" class="alignment-review-arrow">{{ card.direction.afterArrow === 1 ? '→' : '←' }}</span>
+                                            <select v-if="similarityAlignmentDraft.intent.mode === 'custom'"
+                                                    :value="similarityAlignmentDraft.intent.byRecordKey[card.recordKey] || 'keep'"
+                                                    :aria-label="'Direction for ' + card.direction.label"
+                                                    :aria-describedby="'alignment-direction-' + card.recordKey"
+                                                    :disabled="!semanticMutationAvailable || similarityAlignmentBusy || Boolean(card.direction.exclusion)"
+                                                    @change="setSimilarityAlignmentCustomDirection(card.recordKey, $event.target.value)"
+                                                    class="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-700 disabled:opacity-50">
+                                                <option value="keep">Keep</option><option value="right">Right →</option><option value="left">Left ←</option>
+                                            </select>
+                                        </span>
+                                    </div>
+                                    <svg v-if="card.strip" class="alignment-strip" :class="{ 'is-need': card.needsChoice, 'is-skipped': card.skipped }"
+                                         v-bind="{ viewBox: '0 0 ' + similarityAlignmentReview.stripWidth + ' 17' }" preserveAspectRatio="none"
+                                         aria-hidden="true" data-alignment-strip>
+                                        <line class="axis" :x1="card.strip.baseline.x" :x2="card.strip.baseline.x + card.strip.baseline.width" y1="8.5" y2="8.5"></line>
+                                        <rect v-for="(feature, featureIndex) in card.strip.features" :key="featureIndex" class="feature"
+                                              :x="feature.x" y="6" :width="feature.width" height="5" rx="1"></rect>
+                                        <line class="line" :x1="similarityAlignmentReview.lineX" :x2="similarityAlignmentReview.lineX" y1="0" y2="17" data-alignment-strip-line></line>
+                                        <rect v-for="box in card.strip.candidates" :key="box.key" class="candidate"
+                                              :class="{ 'is-chosen': box.key === card.chosenKey,
+                                                        'is-hover': similarityAlignmentCanvasHover?.recordKey === card.recordKey && (card.kind === 'reference' || similarityAlignmentCanvasHover.candidateKey === box.key) }"
+                                              :data-alignment-candidate-key="box.key"
+                                              :x="box.x" y="3" :width="box.width" height="11" rx="2"></rect>
+                                    </svg>
+                                    <template v-if="card.kind === 'reference'">
+                                        <p class="alignment-review-gene"><b>{{ record.name }}</b> <code v-if="record.ids">{{ record.ids }}</code>
+                                            <span class="alignment-review-place">{{ record.coordinates }} ({{ record.displayedStrand }})</span></p>
+                                        <p v-if="similarityAlignmentDirectionPreview.referenceShift" class="alignment-review-note" data-similarity-alignment-reference-correction>
+                                            {{ similarityAlignmentDirectionPreview.referenceShift }}
+                                        </p>
+                                    </template>
+                                    <div v-else-if="card.kind === 'single'"
+                                         class="alignment-review-gene"
+                                         :class="{ 'is-hover': similarityAlignmentCanvasHover?.recordKey === card.recordKey }"
+                                         @mouseenter="previewSimilarityAlignmentCandidate(card.candidates[0].anchor)"
+                                         @mouseleave="clearSimilarityAlignmentCandidatePreview">
+                                        <b>{{ card.candidates[0].name }}</b>
+                                        <code v-if="card.candidates[0].ids">{{ card.candidates[0].ids }}</code>
+                                        <span class="alignment-review-place">{{ card.candidates[0].coordinates }} ({{ card.candidates[0].displayedStrand }})</span>
+                                        <span class="alignment-review-evidence">
+                                            <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.join(', ') || 'no direct hit' }}</span>
+                                            <span v-if="card.candidates[0].representative" class="alignment-review-chip is-evidence">group representative</span>
+                                            <label class="alignment-review-skip">
+                                                <input type="checkbox" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                                                       :checked="card.skipped"
+                                                       :disabled="similarityAlignmentBusy"
+                                                       :aria-label="'Skip ' + record.recordLabel"
+                                                       @change="$event.target.checked ? skipSimilarityAlignmentRecord(card.recordKey) : selectSimilarityAlignmentCandidate(card.recordKey, card.candidates[0].anchor)">
+                                                Skip
+                                            </label>
+                                        </span>
+                                    </div>
+                                    <template v-else-if="card.kind === 'several'">
+                                        <!-- One line: what to do in a record that still needs a choice, and why a candidate is recommended. -->
+                                        <p v-if="card.needsChoice || record.recommendedKey" class="alignment-review-note" data-similarity-alignment-reason>
+                                            <b v-if="card.needsChoice">Choose the gene to line up, or skip this record. </b>
+                                            <template v-if="record.recommendedKey">Recommended: {{ record.candidates.find(candidate => candidate.key === record.recommendedKey)?.name }}, {{ record.recommendationReasonLabel }}.</template>
+                                        </p>
+                                        <div class="alignment-review-candidates">
+                                            <label v-for="candidate in card.candidates"
+                                                   :key="candidate.key"
+                                                   class="alignment-review-candidate"
+                                                   :class="{ 'is-chosen': card.chosenKey === candidate.key,
+                                                             'is-hover': similarityAlignmentCanvasHover?.recordKey === card.recordKey && similarityAlignmentCanvasHover.candidateKey === candidate.key,
+                                                             'is-busy': similarityAlignmentBusy }"
+                                                   @mouseenter="previewSimilarityAlignmentCandidate(candidate.anchor)"
+                                                   @mouseleave="clearSimilarityAlignmentCandidatePreview"
+                                                   @focusin="previewSimilarityAlignmentCandidate(candidate.anchor)"
+                                                   @focusout="clearSimilarityAlignmentCandidatePreview">
+                                                <input type="radio"
+                                                       :name="'alignment-choice-' + card.recordKey"
+                                                       :checked="card.chosenKey === candidate.key"
+                                                       :disabled="similarityAlignmentBusy"
+                                                       @change="selectSimilarityAlignmentCandidate(card.recordKey, candidate.anchor)"
+                                                       :aria-label="'Select ' + candidate.label + ', ' + candidate.coordinates + ', strand ' + candidate.displayedStrand + ' for ' + record.recordLabel">
+                                                <span class="min-w-0 flex-1">
+                                                    <span class="alignment-review-name">
+                                                        <b>{{ candidate.name }}</b>
+                                                        <span v-if="record.recommendedKey === candidate.key" class="alignment-review-chip is-recommended">Recommended</span>
+                                                    </span>
+                                                    <span class="alignment-review-facts">{{ candidate.evidence.join(', ') || 'no direct hit' }}{{ candidate.representative ? ' · group representative' : '' }}<template v-if="candidate.ids"> · <code>{{ candidate.ids }}</code></template> · {{ candidate.coordinates }} ({{ candidate.displayedStrand }})</span>
+                                                </span>
+                                            </label>
+                                            <label class="alignment-review-candidate is-skip" :class="{ 'is-chosen': card.skipped, 'is-busy': similarityAlignmentBusy }">
+                                                <input type="radio"
+                                                       :name="'alignment-choice-' + card.recordKey"
+                                                       :checked="card.skipped"
+                                                       :disabled="similarityAlignmentBusy"
+                                                       @change="skipSimilarityAlignmentRecord(card.recordKey)"
+                                                       :aria-label="'Skip ' + record.recordLabel">
+                                                Skip this record
+                                            </label>
+                                        </div>
+                                    </template>
+                                    <p v-if="card.direction.exclusion && card.direction.exclusion !== 'selection_required'" class="alignment-review-note">
+                                        {{ card.direction.exclusionLabel }}
+                                    </p>
+                                </component>
+                                </template>
+                            </template>
+                        </template>
+                        <fieldset class="alignment-review-directions" data-similarity-alignment-direction-mode aria-describedby="alignment-direction-scope">
+                            <legend class="text-[12px] font-semibold text-slate-700">Arrow direction</legend>
+                            <div class="mt-1.5 flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
+                                <label v-for="option in [{value:'keep',label:'Keep as is'},{value:'right',label:'All right',arrow:'→'},{value:'left',label:'All left',arrow:'←'},{value:'custom',label:'Custom'}]" :key="option.value"
+                                       :class="[
+                                         'relative flex flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-md px-1.5 py-1 text-[12px] font-semibold focus-within:ring-2 focus-within:ring-blue-600',
+                                         similarityAlignmentDraft?.intent.mode === option.value ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-300' : 'text-slate-600 hover:text-slate-800'
+                                       ]">
+                                    <!-- The native radio covers its segment, transparent, so a click or tap lands on it. -->
+                                    <input type="radio" name="alignment-direction-mode" class="absolute inset-0 m-0 h-full w-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-not-allowed"
+                                           :value="option.value" :checked="similarityAlignmentDraft?.intent.mode === option.value"
+                                           :disabled="!semanticMutationAvailable || similarityAlignmentBusy" @change="setSimilarityAlignmentDirectionMode(option.value)">
+                                    {{ option.label }}<span v-if="option.arrow" aria-hidden="true">&nbsp;{{ option.arrow }}</span>
+                                </label>
+                            </div>
+                            <p id="alignment-direction-scope" role="status" aria-live="polite" aria-atomic="true" class="mt-1.5 text-[11px] text-slate-600">
+                                {{ similarityAlignmentDirectionPreview?.effect }}
+                            </p>
+                        </fieldset>
+                        <details class="mt-3 rounded-lg border border-slate-200 px-3 py-2 text-[11px] text-slate-600">
+                            <summary class="cursor-pointer font-semibold text-slate-700">How alignment works</summary>
+                            <ul class="mt-1.5 list-disc space-y-1 pl-4">
+                                <li>Nothing changes until Apply. Cancel keeps the current diagram.</li>
+                                <li>The reference feature keeps its place; each record moves so its chosen feature lines up with it.</li>
+                                <li>Reversing flips a whole record with its labels and ribbons. Strands in the data (+/−) do not change.</li>
+                                <li>The direction choice covers the reference and every chosen feature with a known direction. Skipped records and records without a usable candidate stay where they are.</li>
+                                <li>Reciprocal best hit: the two proteins are each other's best match.</li>
+                                <li>Automatic diagram fitting and zoom may move records on screen.</li>
+                            </ul>
+                        </details>
+                    </div>
+                    <footer>
+                        <p id="similarity-alignment-apply-reason" :class="{ 'is-need': !canApplySimilarityAlignment }">
+                            {{ canApplySimilarityAlignment ? 'Nothing changes until Apply.' : similarityAlignmentApplyDisabledReason }}
+                        </p>
+                        <button type="button"
+                                @click="cancelSimilarityAlignmentDialog"
+                                class="btn btn-secondary py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Cancel</button>
+                        <button type="button"
+                                @click="applySimilarityAlignmentDraft"
+                                :disabled="!semanticMutationAvailable || (!canApplySimilarityAlignment)"
+                                aria-describedby="similarity-alignment-apply-reason"
+                                class="btn btn-primary py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
+                            <span v-if="similarityAlignmentStatus === 'applying'">Applying…</span>
+                            <span v-else>Apply</span>
+                        </button>
+                    </footer>
+                </section>
                 <!-- Right-side editor drawer -->
                 <button v-if="svgContent && resultPanelTab === 'preview'"
                         @click="toggleRightDrawer"
@@ -7662,238 +8077,6 @@
         </span>
         <!-- GBDRAW_HOSTED_BUILD_LABEL -->
     </footer>
-    <Teleport v-if="results.length > 0" :to="similarityAlignmentCompact ? '[data-similarity-alignment-dock]' : 'body'">
-        <section v-if="similarityAlignmentDialogOpen"
-                 ref="similarityAlignmentPaletteRef"
-                 role="dialog"
-                 aria-labelledby="similarity-alignment-dialog-title"
-                 aria-describedby="similarity-alignment-dialog-description similarity-alignment-application-help"
-                 data-history-scope="transient"
-                 data-similarity-alignment-overlay
-                 data-similarity-alignment-dialog
-                 :style="similarityAlignmentPaletteStyle"
-                 :class="similarityAlignmentCompact ? 'alignment-review-panel h-full w-full' : 'fixed right-3 top-3 w-[calc(100vw-1.5rem)] max-w-[30rem] shadow-2xl'"
-                 class="z-[55] flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <header class="shrink-0 cursor-move select-none border-b border-slate-200 px-4 py-3 touch-none"
-                        @pointerdown="startSimilarityAlignmentPaletteDrag">
-                    <div class="flex items-start justify-between gap-4">
-                        <div class="min-w-0">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <h2 id="similarity-alignment-dialog-title" tabindex="-1"
-                                    class="text-base font-bold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-                                    Review alignment
-                                </h2>
-                                <span id="similarity-alignment-application-help" data-alignment-application-help
-                                      class="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">Apply required<span class="sr-only">: nothing changes until Apply succeeds. Cancel keeps the current Result.</span></span>
-                            </div>
-                            <p id="similarity-alignment-dialog-description" data-similarity-alignment-count class="mt-0.5 text-[12px] text-slate-500">
-                                Similarity group <span class="font-semibold text-slate-700">{{ similarityAlignmentDraft?.response.groupId }}</span>
-                                · {{ (similarityAlignmentDraft?.rows.length || 0) + 1 }} records
-                                <template v-if="similarityAlignmentDirectionPreview?.severalCandidateCount">· {{ similarityAlignmentDirectionPreview.severalCandidateCount }} with several candidates</template>
-                                <span v-if="similarityAlignmentUnresolvedCount" class="font-semibold text-amber-700"> · {{ similarityAlignmentUnresolvedCount }} {{ similarityAlignmentUnresolvedCount === 1 ? 'needs' : 'need' }} a choice</span>
-                            </p>
-                        </div>
-                        <button type="button"
-                                @click="cancelSimilarityAlignmentDialog"
-                                aria-label="Cancel similarity alignment"
-                                class="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-                            <i class="ph ph-x text-lg" aria-hidden="true"></i>
-                        </button>
-                    </div>
-                </header>
-
-                <div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 custom-scrollbar sm:p-4">
-                    <div class="space-y-3">
-                        <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery"
-                           tabindex="-1" class="text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
-                           data-similarity-alignment-error>
-                            <p class="mt-2">Keep these choices and retry Apply below, or edit the choices before applying.</p>
-                        </operation-error>
-                        <fieldset class="min-w-0" data-similarity-alignment-direction-mode aria-describedby="alignment-direction-scope">
-                            <legend class="text-[12px] font-semibold text-slate-700">Arrow direction</legend>
-                            <div class="mt-1.5 flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
-                                <label v-for="option in [{value:'keep',label:'Keep as is'},{value:'right',label:'All right',arrow:'→'},{value:'left',label:'All left',arrow:'←'},{value:'custom',label:'Custom'}]" :key="option.value"
-                                       :class="[
-                                         'relative flex flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-md px-1.5 py-1 text-[12px] font-semibold focus-within:ring-2 focus-within:ring-blue-600',
-                                         similarityAlignmentDraft?.intent.mode === option.value ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-300' : 'text-slate-600 hover:text-slate-800'
-                                       ]">
-                                    <!-- The native radio covers its segment, transparent, so a click or tap lands on it. -->
-                                    <input type="radio" name="alignment-direction-mode" class="absolute inset-0 m-0 h-full w-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-not-allowed"
-                                           :value="option.value" :checked="similarityAlignmentDraft?.intent.mode === option.value"
-                                           :disabled="!semanticMutationAvailable || similarityAlignmentBusy" @change="setSimilarityAlignmentDirectionMode(option.value)">
-                                    {{ option.label }}<span v-if="option.arrow" aria-hidden="true">&nbsp;{{ option.arrow }}</span>
-                                </label>
-                            </div>
-                            <p id="alignment-direction-scope" role="status" aria-live="polite" aria-atomic="true" class="mt-1.5 text-[11px] text-slate-600">
-                                {{ similarityAlignmentDirectionPreview?.effect }}
-                            </p>
-                        </fieldset>
-                        <div class="space-y-2">
-                            <p class="text-[12px] font-semibold text-slate-700">Feature to line up in each record</p>
-                            <template v-for="direction in (similarityAlignmentDirectionPreview?.records || [])" :key="'alignment-card-' + direction.recordKey">
-                                <component :is="direction.status === 'reference' ? 'section' : 'fieldset'"
-                                           v-for="record in [direction.status === 'reference' ? similarityAlignmentDraft.reference : similarityAlignmentDraft.rows.find(row => row.recordKey === direction.recordKey)]"
-                                           :key="direction.recordKey"
-                                           :data-alignment-record-key="direction.status === 'reference' ? null : direction.recordKey"
-                                           :data-similarity-alignment-reference="direction.status === 'reference' ? '' : null"
-                                           :aria-label="direction.status === 'reference' ? 'Exact alignment reference' : null"
-                                           :class="[
-                                             'min-w-0 rounded-lg border px-3 py-2.5',
-                                             direction.status === 'reference' ? 'border-blue-200 bg-blue-50/60'
-                                               : record.choice === null ? 'border-amber-400 ring-1 ring-amber-300'
-                                               : 'border-slate-200'
-                                           ]">
-                                    <legend v-if="direction.status !== 'reference'" class="sr-only">{{ record.recordLabel }}</legend>
-                                    <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-                                        <div class="min-w-0 flex-1">
-                                            <p class="[overflow-wrap:anywhere] text-[13px] font-semibold text-slate-800">{{ record.recordName }}</p>
-                                            <p v-if="record.recordDetail" class="[overflow-wrap:anywhere] text-[11px] text-slate-500">{{ record.recordDetail }}</p>
-                                        </div>
-                                        <div class="ml-auto flex flex-wrap items-center justify-end gap-2" data-similarity-alignment-direction>
-                                            <span v-if="direction.status === 'reference'" class="flex items-center gap-1 rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white"><i class="ph ph-push-pin" aria-hidden="true"></i>Reference</span>
-                                            <span v-else-if="record.choice === null" class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">Choose one</span>
-                                            <span v-else-if="record.candidates.length > 1" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">{{ record.candidates.length }} candidates</span>
-                                            <span :id="'alignment-direction-' + direction.recordKey" class="sr-only">{{ direction.description }}</span>
-                                            <span v-if="direction.reversed" aria-hidden="true" class="flex items-center gap-1">
-                                                <span class="text-base leading-none text-slate-400 line-through decoration-slate-300">{{ direction.beforeArrow === 1 ? '→' : direction.beforeArrow === -1 ? '←' : '?' }}</span>
-                                                <span class="text-base font-bold leading-none text-amber-700">{{ direction.afterArrow === 1 ? '→' : direction.afterArrow === -1 ? '←' : '?' }}</span>
-                                                <span class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">reversed</span>
-                                            </span>
-                                            <span v-else-if="direction.afterArrow !== null" aria-hidden="true" class="text-base leading-none text-slate-500">{{ direction.afterArrow === 1 ? '→' : '←' }}</span>
-                                            <select v-if="similarityAlignmentDraft.intent.mode === 'custom'"
-                                                    :value="similarityAlignmentDraft.intent.byRecordKey[direction.recordKey] || 'keep'"
-                                                    :aria-label="'Direction for ' + direction.label"
-                                                    :aria-describedby="'alignment-direction-' + direction.recordKey"
-                                                    :disabled="!semanticMutationAvailable || similarityAlignmentBusy || Boolean(direction.exclusion)"
-                                                    @change="setSimilarityAlignmentCustomDirection(direction.recordKey, $event.target.value)"
-                                                    class="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-700 disabled:opacity-50">
-                                                <option value="keep">Keep</option><option value="right">Right →</option><option value="left">Left ←</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <template v-if="direction.status === 'reference'">
-                                        <p class="mt-1.5 [overflow-wrap:anywhere] text-[12px] text-slate-700"><span class="font-semibold">{{ record.name }}</span> <span v-if="record.ids" class="font-mono text-[11px] text-slate-500">{{ record.ids }}</span> · <span class="text-slate-500">{{ record.coordinates }} · strand {{ record.displayedStrand }}</span></p>
-                                        <p class="mt-1 text-[11px] text-blue-900" data-similarity-alignment-reference-correction>
-                                            {{ similarityAlignmentDirectionPreview.referenceShift || 'Stays in place. The other records move to line up with it.' }}
-                                        </p>
-                                    </template>
-                                    <div v-else-if="record.candidates.length === 1 && record.choice !== null"
-                                         :class="['mt-1.5 flex items-center justify-between gap-2 rounded', similarityAlignmentCanvasHover?.recordKey === record.recordKey ? 'ring-2 ring-blue-500' : '']"
-                                         @mouseenter="previewSimilarityAlignmentCandidate(record.candidates[0].anchor)"
-                                         @mouseleave="clearSimilarityAlignmentCandidatePreview">
-                                        <p class="min-w-0 [overflow-wrap:anywhere] text-[12px] text-slate-700"><span class="font-semibold">{{ record.candidates[0].name }}</span> <span v-if="record.candidates[0].ids" class="font-mono text-[11px] text-slate-500">{{ record.candidates[0].ids }}</span> · <span class="text-slate-500">{{ record.candidates[0].coordinates }} · strand {{ record.candidates[0].displayedStrand }} · only candidate</span></p>
-                                        <label class="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-slate-600">
-                                            <input type="checkbox" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-                                                   :checked="record.choice.kind === 'skip'"
-                                                   :disabled="similarityAlignmentBusy"
-                                                   :aria-label="'Skip ' + record.recordLabel"
-                                                   @change="$event.target.checked ? skipSimilarityAlignmentRecord(record.recordKey) : selectSimilarityAlignmentCandidate(record.recordKey, record.candidates[0].anchor)">
-                                            Skip
-                                        </label>
-                                    </div>
-                                    <template v-else-if="record.candidates.length">
-                                        <!-- One line: the recommendation, and in a record that still needs a choice, what to do. -->
-                                        <p v-if="record.choice === null || record.recommendedKey"
-                                           :class="['mt-1 text-[11px]', record.choice === null ? 'text-amber-800' : 'text-slate-600']"
-                                           data-similarity-alignment-reason>
-                                            <i v-if="record.choice === null" class="ph ph-warning" aria-hidden="true"></i>
-                                            {{ record.choice === null ? 'Choose a feature to line up, or skip this record.' : '' }}
-                                            <template v-if="record.recommendedKey">Recommended: {{ record.candidates.find(candidate => candidate.key === record.recommendedKey)?.name }}, {{ record.recommendationReasonLabel }}.</template>
-                                        </p>
-                                        <div class="mt-2 grid min-w-0 gap-1.5">
-                                            <label v-for="(candidate, candidateIndex) in record.candidates"
-                                                   :key="candidate.key"
-                                                   :class="[
-                                                     'flex min-w-0 cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 transition-colors focus-within:ring-2 focus-within:ring-blue-500',
-                                                     record.choice?.kind === 'select' && record.choice.candidateKey === candidate.key
-                                                       ? 'border-blue-500 bg-blue-50'
-                                                       : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50',
-                                                     similarityAlignmentCanvasHover?.recordKey === record.recordKey && similarityAlignmentCanvasHover?.candidateKey === candidate.key ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50' : '',
-                                                     similarityAlignmentBusy ? 'cursor-wait opacity-60' : ''
-                                                   ]"
-                                                   @mouseenter="previewSimilarityAlignmentCandidate(candidate.anchor)"
-                                                   @mouseleave="clearSimilarityAlignmentCandidatePreview"
-                                                   @focusin="previewSimilarityAlignmentCandidate(candidate.anchor)"
-                                                   @focusout="clearSimilarityAlignmentCandidatePreview">
-                                                <input type="radio"
-                                                       :name="'alignment-choice-' + record.recordKey"
-                                                       :checked="record.choice?.kind === 'select' && record.choice.candidateKey === candidate.key"
-                                                       :disabled="similarityAlignmentBusy"
-                                                       @change="selectSimilarityAlignmentCandidate(record.recordKey, candidate.anchor)"
-                                                       :aria-label="'Select ' + candidate.label + ', ' + candidate.coordinates + ', strand ' + candidate.displayedStrand + ' for ' + record.recordLabel"
-                                                       class="mt-0.5 border-slate-300 text-blue-600 focus:ring-blue-500">
-                                                <span class="min-w-0 flex-1">
-                                                    <span class="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-                                                        <span class="shrink-0 rounded bg-blue-100 px-1 text-[10px] font-semibold text-blue-800" title="Number on the diagram">{{ candidateIndex + 1 }}</span>
-                                                        <span class="min-w-0 [overflow-wrap:anywhere] text-[13px] font-semibold text-slate-800">{{ candidate.name }}</span>
-                                                        <span v-if="candidate.ids" class="break-all font-mono text-[11px] text-slate-500">{{ candidate.ids }}</span>
-                                                        <span v-if="record.recommendedKey === candidate.key" class="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900">Recommended</span>
-                                                        <span v-for="evidence in candidate.evidence" :key="evidence" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">{{ evidence }}</span>
-                                                        <span v-if="!candidate.evidence.length" class="text-[10px] text-slate-500">no direct hit</span>
-                                                    </span>
-                                                    <span class="mt-0.5 block text-[11px] text-slate-500">{{ candidate.coordinates }} · strand {{ candidate.displayedStrand }}{{ candidate.representative ? ' · group representative' : '' }}</span>
-                                                </span>
-                                            </label>
-                                            <label :class="[
-                                                     'flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px] text-slate-600 focus-within:ring-2 focus-within:ring-amber-500',
-                                                     record.choice?.kind === 'skip' ? 'border-amber-400 bg-amber-50' : 'border-dashed border-slate-300 bg-white hover:border-amber-300',
-                                                     similarityAlignmentBusy ? 'cursor-wait opacity-60' : ''
-                                                   ]">
-                                                <input type="radio"
-                                                       :name="'alignment-choice-' + record.recordKey"
-                                                       :checked="record.choice?.kind === 'skip'"
-                                                       :disabled="similarityAlignmentBusy"
-                                                       @change="skipSimilarityAlignmentRecord(record.recordKey)"
-                                                       :aria-label="'Skip ' + record.recordLabel"
-                                                       class="border-slate-300 text-amber-600 focus:ring-amber-500">
-                                                Skip this record (position and direction unchanged)
-                                            </label>
-                                        </div>
-                                    </template>
-                                    <p v-if="direction.exclusion && direction.exclusion !== 'selection_required'" class="mt-1 text-[11px] text-slate-600">
-                                        {{ direction.exclusionLabel }}
-                                    </p>
-                                </component>
-                            </template>
-                        </div>
-                        <details class="rounded-lg border border-slate-200 px-3 py-2 text-[11px] text-slate-600">
-                            <summary class="cursor-pointer font-semibold text-slate-700">How alignment works</summary>
-                            <ul class="mt-1.5 list-disc space-y-1 pl-4">
-                                <li>Nothing changes until Apply. Cancel keeps the current diagram.</li>
-                                <li>The reference feature keeps its place; each record moves so its chosen feature lines up with it.</li>
-                                <li>Reversing flips a whole record with its labels and ribbons. Strands in the data (+/−) do not change.</li>
-                                <li>The direction choice covers the reference and every chosen feature with a known direction. Skipped records and records without a usable candidate stay where they are.</li>
-                                <li>Reciprocal best hit: the two proteins are each other's best match.</li>
-                                <li>Automatic diagram fitting and zoom may move records on screen.</li>
-                            </ul>
-                        </details>
-                    </div>
-                </div>
-                <footer class="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3">
-                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <p id="similarity-alignment-apply-reason"
-                           class="text-[12px]"
-                           :class="canApplySimilarityAlignment ? 'text-slate-600' : 'font-medium text-amber-800'">
-                            <i :class="canApplySimilarityAlignment ? 'ph ph-check-circle text-emerald-700' : 'ph ph-warning'" aria-hidden="true"></i>
-                            {{ canApplySimilarityAlignment ? 'Ready. Apply regenerates the diagram; Cancel keeps it.' : similarityAlignmentApplyDisabledReason }}
-                        </p>
-                        <div class="flex flex-wrap justify-end gap-2 sm:shrink-0 sm:flex-nowrap">
-                            <button type="button"
-                                    @click="cancelSimilarityAlignmentDialog"
-                                    class="btn btn-secondary min-w-24 py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Cancel</button>
-                            <button type="button"
-                                    @click="applySimilarityAlignmentDraft"
-                                    :disabled="!semanticMutationAvailable || (!canApplySimilarityAlignment)"
-                                    aria-describedby="similarity-alignment-apply-reason"
-                                    class="btn btn-primary min-w-24 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-                                <span v-if="similarityAlignmentStatus === 'applying'">Applying…</span>
-                                <span v-else>Apply</span>
-                            </button>
-                        </div>
-                    </div>
-                </footer>
-        </section>
-    </Teleport>
     <Teleport to="body">
         <div v-if="similarityAlignmentResetDialogOpen"
              class="fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/45 p-3"

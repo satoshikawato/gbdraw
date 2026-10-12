@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
@@ -11,6 +12,7 @@ import {
 } from '../services/feature-identity.js';
 import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
 import { isInternalProteinDisplayId } from '../services/feature-utils.js';
+import { recordsNeedingChoice } from '../services/alignment-review-view.js';
 
 const { computed, ref, watch } = window.Vue;
 
@@ -1148,12 +1150,15 @@ export const createSimilarityAlignmentActions = ({
       expectedBinding: draft.value?.binding || response.projection.binding,
       intent: draft.value?.intent || { mode: 'keep' }, choices })
   );
-  const installReviewDraft = (response, request) => {
+  // The draft as the review opens with it. The records without a choice then are a fact of
+  // the draft: they keep their section while the user chooses.
+  const installReviewDraft = (response, request,
+    rows = reviewRows(response, request, displayFacts, recordLabels), extra = {}) => {
     if (!response.projection) throw new Error('Source-bound alignment facts are required.');
     draft.value = deepFreeze({ response, binding: response.projection.binding,
       intent: { mode: 'keep' },
       reference: referenceView(response, request, displayFacts, recordLabels),
-      rows: reviewRows(response, request, displayFacts, recordLabels) });
+      rows, openedWithoutChoice: recordsNeedingChoice(rows), ...extra });
     status.value = 'reviewing';
   };
 
@@ -1234,10 +1239,11 @@ export const createSimilarityAlignmentActions = ({
     }
     activeRequest = request;
     error.value = null;
+    // A resolved one-click Align applies without a review: none is shown unless it fails.
+    automaticApply.value = mode === 'align' && response.status === 'resolved';
     installReviewDraft(response, request);
-    if (mode === 'align' && response.status === 'resolved') {
+    if (automaticApply.value) {
       status.value = 'applying';
-      automaticApply.value = true;
       try { return await applyPlan(response, expectedActionId, projectDraft(response, [])); }
       finally { automaticApply.value = false; }
     }
@@ -1494,7 +1500,8 @@ export const createSimilarityAlignmentActions = ({
         reference.x -= delta.deltaX;
       }
       const restore = new Map(scope === 'positions-and-directions'
-        ? receipt.directions.map(delta => [delta.recordKey, delta.before]) : []);
+        // `resetPreview` rejects this scope above unless the receipt is set.
+        ? /** @type {AlignmentResetReceipt} */ (receipt).directions.map(delta => [delta.recordKey, delta.before]) : []);
       const orientations = current.request.records.map(record => ({recordKey: record.recordKey,
         reverseComplement: restore.has(record.recordKey) ? restore.get(record.recordKey) : baseReverseComplement(record)}));
       if (orientations.some((direction, index) => direction.reverseComplement
@@ -1600,11 +1607,7 @@ export const createSimilarityAlignmentActions = ({
         ? { ...row, choice: null, repairRequired: true }
         : row
     ));
-    draft.value = deepFreeze({
-      response, binding: response.projection.binding, intent:{mode:'keep'},
-      reference: referenceView(response, repairRequest, displayFacts, recordLabels),
-      rows, repair: true
-    });
+    installReviewDraft(response, repairRequest, rows, { repair: true });
     repair.value = deepFreeze({
       kind: 'targets',
       groupId: plan.groupId,
@@ -1792,8 +1795,7 @@ export const createSimilarityAlignmentActions = ({
     const referenceShift = shift
       ? `${reference.name} stays where it is; the record's left edge moves ${Math.abs(shift).toLocaleString('en-US')} px (at 100% zoom) to the ${shift > 0 ? 'right' : 'left'}.`
       : '';
-    const severalCandidateCount = rows.filter(row => row.candidates.length > 1).length;
-    return { ...projected, effect, referenceShift, records, severalCandidateCount };
+    return { ...projected, effect, referenceShift, records };
   });
   const setDirectionIntent = (intent) => {
     if (!draft.value || status.value !== 'reviewing') return {status:'rejected'};
@@ -1808,9 +1810,7 @@ export const createSimilarityAlignmentActions = ({
   const setCustomDirection = (recordKey, direction) => setDirectionIntent({mode:'custom',
     byRecordKey:{...draft.value?.intent?.byRecordKey, [recordKey]:direction}});
 
-  const unresolvedCount = computed(() => (
-    draft.value?.rows?.filter(({ choice }) => choice === null).length || 0
-  ));
+  const unresolvedCount = computed(() => recordsNeedingChoice(draft.value?.rows || []).length);
 
   const applyDisabledReason = computed(() => {
     if (status.value === 'applying') return 'Applying the alignment plan.';

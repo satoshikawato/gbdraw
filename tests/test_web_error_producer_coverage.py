@@ -2,8 +2,11 @@
 
 Every ``raise ValidationError(...)`` in the package either carries a producer
 ``diagnostic=`` or has a message the Web adapter classifies. The remaining
-sites form a shrink-only baseline: a file may never gain an unproven site, and
-the baseline must be lowered as soon as a site is migrated.
+sites are counted by ``UNPROVEN_BASELINE``, and the adapter's message tables by
+``NATIVE_TABLE_BASELINE``. Both are registered design-rule allowlists
+(``tools/web-design-rule-guards.json``, R6): an observed count may not exceed
+its baseline, lowering a baseline is optional, and raising one is an
+authority-only change.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import ast
 import itertools
 import re
 import subprocess
+import warnings
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
@@ -27,88 +31,17 @@ UNCLASSIFIED = {"UNKNOWN", "VALIDATION_UNCLASSIFIED"}
 # Placeholder values for interpolations: empty, numbers, private text, a #index.
 FILLS = ("", "0", "1", "PRIVATE", "#1")
 
-# Shrink-only sizes of the adapter's message-classification tables (R6). A
-# producer migrated to diagnostic= removes its row; lower the count with it.
+# Sizes of the adapter's message-classification tables (R6, kind
+# `py-count-map`). A producer migrated to diagnostic= removes its row.
 NATIVE_TABLE_BASELINE = {"_EXACT": 26, "_TEMPLATES": 20, "_CONSTRAINTS": 22}
 
-_TYPED_API = "typed Python API and request contract checks (types, shapes, cross-field rules)"
-_SESSION = "Session document and request decoding checks; the Web Session reader reports Session format errors"
-_COMPARISON = "comparison and protein-comparison checks, mostly invariants of already validated inputs"
-_DEPTH = "depth track input shape checks (sources, labels, per-record values)"
-_ANNOTATIONS = "region annotation model, reader, and planner checks"
-_CLI = "CLI adapter checks that the CLI prints as ERROR messages"
-_CONFIG = "typed configuration model and override path checks"
-_LAYOUT = "layout and placement planner conflicts on typed plans"
-_FEATURES = "feature model and feature placement override checks"
-_TABLES = "CLI and Web table readers whose messages carry private cell values"
-_INTERNAL = "internal protocol or renderer state checks; not user-correctable input"
-
-# Shrink-only: path -> (unproven ValidationError sites, what they check).
-# None of these sites is migrated to diagnostic= yet; lower a count when one is.
-UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
-    "gbdraw/analysis/collinearity.py": (10, _COMPARISON),
-    "gbdraw/analysis/collinearity_units.py": (2, _COMPARISON),
-    "gbdraw/analysis/conservation.py": (6, _COMPARISON),
-    "gbdraw/analysis/depth_tracks.py": (27, _DEPTH),
-    "gbdraw/analysis/gc.py": (2, _CONFIG),
-    "gbdraw/analysis/ortholog_paths.py": (25, _COMPARISON),
-    "gbdraw/analysis/protein_artifacts.py": (4, _COMPARISON),
-    "gbdraw/analysis/protein_colinearity.py": (115, _COMPARISON),
-    "gbdraw/annotations/feature_underlays.py": (1, _ANNOTATIONS),
-    "gbdraw/annotations/io.py": (7, _ANNOTATIONS),
-    "gbdraw/annotations/layout.py": (5, _ANNOTATIONS),
-    "gbdraw/annotations/models.py": (47, _ANNOTATIONS),
-    "gbdraw/annotations/planning.py": (1, _ANNOTATIONS),
-    "gbdraw/annotations/resolve.py": (8, _ANNOTATIONS),
-    "gbdraw/api/config.py": (1, _TYPED_API),
-    "gbdraw/api/diagram.py": (64, _TYPED_API),
-    "gbdraw/api/io.py": (7, _TYPED_API),
-    "gbdraw/api/options.py": (61, _TYPED_API),
-    "gbdraw/api/prepared.py": (3, _TYPED_API),
-    "gbdraw/api/record_planning.py": (39, _TYPED_API),
-    "gbdraw/api/render.py": (10, _TYPED_API),
-    "gbdraw/api/request_render.py": (47, _TYPED_API),
-    "gbdraw/api/requests.py": (92, _TYPED_API),
-    "gbdraw/api/session_compat.py": (38, _SESSION),
-    "gbdraw/circular.py": (3, _CLI),
-    "gbdraw/cli_utils/common.py": (3, _CLI),
-    "gbdraw/cli_utils/session.py": (11, _SESSION),
-    "gbdraw/config/models/canvas.py": (10, _CONFIG),
-    "gbdraw/config/models/labels.py": (6, _CONFIG),
-    "gbdraw/config/models/objects.py": (19, _CONFIG),
-    "gbdraw/config/models/render_profiles.py": (1, _CONFIG),
-    "gbdraw/config/modify.py": (11, _CONFIG),
-    "gbdraw/diagrams/linear/assemble.py": (5, _LAYOUT),
-    "gbdraw/diagrams/linear/orthogroup_alignment.py": (5, _COMPARISON),
-    "gbdraw/features/factory.py": (1, _FEATURES),
-    "gbdraw/features/ids.py": (2, _FEATURES),
-    "gbdraw/features/placement.py": (18, _FEATURES),
-    "gbdraw/features/source.py": (1, _FEATURES),
-    "gbdraw/features/tracks.py": (4, _FEATURES),
-    "gbdraw/interface.py": (34, _TYPED_API),
-    "gbdraw/io/cli_tables.py": (40, _TABLES),
-    "gbdraw/io/colors.py": (2, _TABLES),
-    "gbdraw/io/genome.py": (5, _TABLES),
-    "gbdraw/labels/circular_radial.py": (5, _LAYOUT),
-    "gbdraw/labels/circular_types.py": (2, _LAYOUT),
-    "gbdraw/labels/policy.py": (2, _LAYOUT),
-    "gbdraw/layout/linear_multi_record.py": (20, _LAYOUT),
-    "gbdraw/layout/record_coordinates.py": (13, _LAYOUT),
-    "gbdraw/layout/record_placement.py": (19, _LAYOUT),
-    "gbdraw/layout/similarity_alignment.py": (58, _COMPARISON),
-    "gbdraw/linear.py": (6, _CLI),
-    "gbdraw/linear_comparison.py": (9, _COMPARISON),
-    "gbdraw/losat_setup.py": (7, _COMPARISON),
-    "gbdraw/mode_profiles.py": (2, _INTERNAL),
-    "gbdraw/render/interactive_context.py": (2, _INTERNAL),
-    "gbdraw/render/output_paths.py": (6, _INTERNAL),
-    "gbdraw/session.py": (1, _TYPED_API),
-    "gbdraw/session_io.py": (189, _SESSION),
-    "gbdraw/session_request_codec.py": (3, _SESSION),
-    "gbdraw/web_support/config_overrides.py": (8, _CONFIG),
-    "gbdraw/web_support/request_render.py": (24, _INTERNAL),
-    "gbdraw/web_support/similarity_alignment.py": (17, _COMPARISON),
-}
+# The ValidationError sites of the whole package that neither carry
+# diagnostic= nor classify (R6, kind `py-count`): typed API and request
+# contract checks, Session decoding, comparison invariants, depth and
+# annotation input checks, CLI adapter and table reader messages, and internal
+# renderer state. One total, so a site that moves to another module does not
+# change it.
+UNPROVEN_BASELINE = 1196
 
 
 def _package_sources() -> list[Path]:
@@ -226,23 +159,14 @@ def _unproven_by_file() -> Counter:
 
 def test_unproven_validation_producers_only_shrink():
     actual = _unproven_by_file()
-    grown = {
-        path: (count, UNPROVEN_BASELINE.get(path, (0, ""))[0])
-        for path, count in actual.items()
-        if count > UNPROVEN_BASELINE.get(path, (0, ""))[0]
-    }
-    assert not grown, (
-        "New ValidationError sites classify as UNKNOWN or VALIDATION_UNCLASSIFIED "
-        "(path: (actual, baseline)). Raise them with diagnostic= instead: "
-        f"{grown}"
+    total = sum(actual.values())
+    assert total <= UNPROVEN_BASELINE, (
+        f"{total} ValidationError sites classify as UNKNOWN or VALIDATION_UNCLASSIFIED, "
+        f"above UNPROVEN_BASELINE {UNPROVEN_BASELINE}. Raise the new ones with diagnostic= "
+        f"instead. Sites per file (compare with dev): {dict(sorted(actual.items()))}"
     )
-    shrunk = {
-        path: (actual.get(path, 0), baseline)
-        for path, (baseline, _reason) in UNPROVEN_BASELINE.items()
-        if actual.get(path, 0) < baseline
-    }
-    assert not shrunk, f"Lower UNPROVEN_BASELINE to the new counts (path: (actual, baseline)): {shrunk}"
-    assert all(reason for _count, reason in UNPROVEN_BASELINE.values())
+    if total < UNPROVEN_BASELINE:
+        warnings.warn(f"UNPROVEN_BASELINE may be lowered: {UNPROVEN_BASELINE} -> {total}")
 
 
 def _constant_items(node: ast.Dict) -> dict[str, object]:
@@ -321,11 +245,15 @@ def test_python_diagnostic_vocabulary_matches_the_web_wording_owner():
 
 
 def test_native_message_tables_only_shrink():
-    actual = {name: len(getattr(error_adapter, name)) for name in NATIVE_TABLE_BASELINE}
-    assert actual == NATIVE_TABLE_BASELINE, (
+    actual = {name: len(getattr(error_adapter, name)) for name in ("_EXACT", "_TEMPLATES", "_CONSTRAINTS")}
+    grown = {name: size for name, size in actual.items() if size > NATIVE_TABLE_BASELINE.get(name, 0)}
+    assert not grown, (
         "The adapter's English classification tables may only shrink; raise new "
-        f"failures with diagnostic= and lower NATIVE_TABLE_BASELINE (actual: {actual})"
+        f"failures with diagnostic= (above NATIVE_TABLE_BASELINE: {grown})"
     )
+    lowerable = {name: size for name, size in actual.items() if size < NATIVE_TABLE_BASELINE.get(name, 0)}
+    if lowerable:
+        warnings.warn(f"NATIVE_TABLE_BASELINE may be lowered: {lowerable}")
 
 
 def _producer_messages() -> set[str]:

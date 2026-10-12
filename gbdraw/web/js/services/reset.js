@@ -10,20 +10,32 @@ import {
   createDefaultPriorityRule,
   createDefaultSpecificRule
 } from '../state.js';
-/** @import { DrawingState, LegendCaption, LegendEntry } from '../state.js' */
+/** @import { DrawingState, LegendCaption, LegendEntry, state as AppState } from '../state.js' */
+/** @import { LinearComparisonEdge } from './linear-comparisons.js' */
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 
+// Every caller passes plain data (defaults, palette colors, JSON-like rows), so
+// the copy has the shape of the value.
+/**
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
 const clonePlain = (value) => {
-  if (Array.isArray(value)) return value.map((entry) => clonePlain(entry));
+  if (Array.isArray(value)) return /** @type {T} */ (value.map((entry) => clonePlain(entry)));
   if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(
+  return /** @type {T} */ (Object.fromEntries(
     Object.entries(value).map(([key, entry]) => [key, clonePlain(entry)])
-  );
+  ));
 };
 
+/**
+ * @param {Record<string, unknown>} target
+ * @param {Record<string, unknown>} source
+ */
 const replaceReactiveObject = (target, source) => {
   Object.keys(target).forEach((key) => {
     delete target[key];
@@ -33,16 +45,22 @@ const replaceReactiveObject = (target, source) => {
   });
 };
 
+/**
+ * @param {unknown[]} target
+ * @param {readonly unknown[]} [source]
+ */
 const replaceReactiveArray = (target, source = []) => {
   target.splice(0, target.length, ...source.map((entry) => clonePlain(entry)));
 };
 
+/** @param {Record<string, unknown>} target */
 const clearReactiveObject = (target) => {
   Object.keys(target).forEach((key) => {
     delete target[key];
   });
 };
 
+/** @param {Pick<typeof AppState, 'paletteDefinitions'>} state */
 const defaultPaletteColors = (state) => {
   const definitions = state.paletteDefinitions?.value || {};
   const colors = definitions.default && typeof definitions.default === 'object'
@@ -52,7 +70,7 @@ const defaultPaletteColors = (state) => {
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {typeof AppState} state
  * @param {DrawingState} drawing
  */
 const resetPaletteState = (state, drawing) => {
@@ -69,7 +87,7 @@ const resetPaletteState = (state, drawing) => {
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {typeof AppState} state
  * @param {DrawingState} drawing
  */
 const resetLayoutPreferenceState = (state, drawing) => {
@@ -81,7 +99,7 @@ const resetLayoutPreferenceState = (state, drawing) => {
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {typeof AppState} state
  * @param {DrawingState} drawing
  */
 const resetRuleDraftState = (state, drawing) => {
@@ -102,7 +120,7 @@ const resetRuleDraftState = (state, drawing) => {
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {typeof AppState} state
  * @param {DrawingState} drawing
  */
 const resetEditorDraftState = (state, drawing) => {
@@ -145,8 +163,8 @@ const resetLinearComparisonPlan = (drawing) => {
   const plan = drawing.linearComparisonPlan;
   if (!plan || typeof plan !== 'object') return;
   const retainedEdges = (Array.isArray(plan.edges) ? plan.edges : [])
-    .filter((edge) => Boolean(edge?.file) || String(edge?.losatFilename || '').trim())
-    .map((edge) => ({
+    .filter((/** @type {LinearComparisonEdge} */ edge) => Boolean(edge?.file) || String(edge?.losatFilename || '').trim())
+    .map((/** @type {LinearComparisonEdge} */ edge) => ({
       ...edge,
       included: false,
       fileActive: false,
@@ -160,7 +178,7 @@ const resetLinearComparisonPlan = (drawing) => {
 
 // Reset Settings returns both drawings to their own mode's defaults
 // (PD-OI-070), and the app-level LOSAT execution and popup settings.
-/** @param {Record<string, any>} state */
+/** @param {typeof AppState} state */
 export const resetSettings = (state) => {
   Object.assign(state.losatExecution, createDefaultLosatExecution());
   state.richFeaturePopup.value = true;
@@ -186,6 +204,7 @@ export const resetSettings = (state) => {
   });
 };
 
+/** @param {Pick<typeof AppState, 'zoom' | 'isPanning' | 'panStart' | 'canvasPan' | 'showCanvasControls'>} state */
 export const resetLayoutState = (state) => {
   state.zoom.value = 1.0;
   state.isPanning.value = false;

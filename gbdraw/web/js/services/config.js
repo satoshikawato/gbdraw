@@ -71,7 +71,6 @@ import {
   ANNOTATION_TARGET_MIGRATION_NOTICE,
   FEATURE_EDIT_MIGRATION_WARNING,
   FEATURE_VISIBILITY_NARROWED_NOTICE,
-  DRAWN_HASH_RULE_SESSION_MAX_VERSION,
   HASH_SELECTOR_UNMAPPED_NOTICE,
   RENDERED_ID_FEATURE_EDIT_FIELDS,
   hasHashColorRules,
@@ -165,7 +164,6 @@ import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance } from './specific-color-rules.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
-  LOSAT_DERIVED_CACHE_SCHEMA,
   buildValidatedProteinIdentityIndex,
   classifyRawLosatCacheEntry,
   createLegacyProteinCandidateEnvelope,
@@ -191,11 +189,9 @@ import {
   isAdoptedCanonicalSession,
   hasBiologicalSessionInputs,
   isSettingsOnlySessionDocument,
-  MODE_SCOPED_SESSION_VERSION,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
-  TYPED_DRAFT_SESSION_VERSION,
   validateSessionAuthorityInventory
 } from './session-authority.js';
 import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
@@ -238,6 +234,16 @@ import {
 } from './imported-comparison-intent.js';
 
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
+import {
+  CURRENT_ARTIFACT_SESSION_MIN_VERSION,
+  CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+  DRAWN_HASH_RULE_SESSION_MAX_VERSION,
+  LOSAT_DERIVED_CACHE_SCHEMA,
+  MODE_SCOPED_SESSION_VERSION,
+  SESSION_VERSION,
+  SUPPORTED_SESSION_VERSIONS,
+  TYPED_DRAFT_SESSION_VERSION
+} from '../contracts/schema.generated.js';
 import {
   SLICE_MODES,
   sessionDepthSourceWidths,
@@ -392,13 +398,9 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  * @typedef {((svg: Element, data: LegacyResultSvgData) => boolean)
  *   & { appliesToContent: (content: unknown) => boolean }} LegacyResultSvgTransform
  */
-export const SESSION_VERSION = 46;
-const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
+export { SESSION_VERSION };
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
-const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, SESSION_VERSION
-]);
-const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
+const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 // D-25 (PD-OI-079): a Result without current feature metadata (a legacy
 // Session) is saved only after one Generate; the error offers that Generate.
@@ -1480,7 +1482,7 @@ const SESSION_FORMAT_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'sc
 const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
 const validateSessionVersion = version => {
   if (!Number.isInteger(version)) throw SESSION_FORMAT_ERROR();
-  if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSIONS.has(version)) {
+  if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSION_SET.has(version)) {
     throw SESSION_FIELDS_ERROR();
   }
 };
@@ -4321,6 +4323,24 @@ const resetSessionBaseline = () => {
   state.generatedCircularPlotTitlePosition.value = 'none';
 };
 
+/**
+ * The preview zoom and pan as a Session's `ui` holds them.
+ * @typedef {{ zoom: number, canvasPan: { x: number, y: number } }} PersistedPreviewViewport
+ */
+// The view to save is not always the shown one: Review alignment shows the figure fitted and
+// the pan/zoom owner holds the view from before it. The composition root registers that owner's
+// reader of the held view; the Session writer and the UI capture with navigation save the held
+// view while there is one, and the shown view otherwise.
+/** @type {(() => PersistedPreviewViewport | null) | null} */
+let heldPreviewViewportReader = null;
+/** @param {(() => PersistedPreviewViewport | null) | null} reader */
+export const setHeldPreviewViewportReader = (reader) => { heldPreviewViewportReader = reader; };
+/** @returns {PersistedPreviewViewport} */
+const previewViewportToPersist = () => {
+  const { zoom, canvasPan } = heldPreviewViewportReader?.() ?? { zoom: state.zoom.value, canvasPan: state.canvasPan };
+  return { zoom, canvasPan: { x: canvasPan.x, y: canvasPan.y } };
+};
+
 /** @param {DrawingState} drawing */
 export const buildUiStateData = (drawing, { includePreviewNavigation = true } = {}) => {
   const ui = {
@@ -4356,10 +4376,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     plotTitleUserOffset: { ...state.plotTitleUserOffset }
   };
 
-  if (includePreviewNavigation) {
-    ui.zoom = state.zoom.value;
-    ui.canvasPan = { x: state.canvasPan.x, y: state.canvasPan.y };
-  }
+  if (includePreviewNavigation) Object.assign(ui, previewViewportToPersist());
 
   return ui;
 };
@@ -5946,8 +5963,7 @@ export const exportSession = (titleOverride = null, options = {}) => {
     const artifactUi = artifactUiState(artifact);
     const savedUi = {
       mode: state.mode.value,
-      zoom: state.zoom.value,
-      canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y },
+      ...previewViewportToPersist(),
       selectedResultIndex: artifactUi.selectedResultIndex,
       generatedLegendPosition: artifactUi.generatedLegendPosition,
       generatedMultiRecordCanvas: artifactUi.generatedMultiRecordCanvas,

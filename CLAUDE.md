@@ -227,11 +227,14 @@ The `gbdraw/render/` module has a two-tier architecture:
   checks `gbdraw/` except `gbdraw/web/`. Third-party packages are `Any` to it,
   so their imports need no `# type: ignore`.
 - A file's type debt is its mypy errors plus its `# type: ignore` comments.
-  `TYPE_DEBT_BASELINE` in `tests/test_type_check_ratchet.py` only goes down:
-  lower or remove a file's entry when its debt falls. A file without an
-  entry, including a new file, has no debt. Fix the type, use
-  `typing.cast`, or fix the code instead of adding `# type: ignore`. Raising
-  an entry or relaxing `[tool.mypy]` needs the Owner's approval.
+  `TYPE_DEBT_BASELINE` in `tests/test_type_check_ratchet.py` is its ceiling
+  per file: a file stays at or below its entry, and a file without an entry,
+  including a new file, has no debt. Lowering or removing an entry is
+  optional. Fix the type, use `typing.cast`, or fix the code instead of adding
+  `# type: ignore`. The baseline is registered in
+  `tools/web-design-rule-guards.json` (`TYPE-DEBT`), so adding or raising an
+  entry is an authority-only change; that and relaxing `[tool.mypy]` need the
+  Owner's approval.
 - Class-body annotations are runtime data. `get_type_hints` reads dataclass
   fields in `gbdraw/config/modify.py` (config overrides) and
   `gbdraw/session_request_codec.py` (canonical request validation), and
