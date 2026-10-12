@@ -23,6 +23,7 @@ Options: clear 3, inside 1, cone 70, lgap 2.5, lpad 2.4, stub 1, edge 1, fl 12, 
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from pathlib import Path
 
@@ -46,6 +47,12 @@ NEAR = [0.0, 1.0, 2.0, 4.0, 6.0, 9.0]
 PUSH = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
 while PUSH[-1] < 4000.0:
     PUSH.append(round(PUSH[-1] * 1.12 + 1.0, 1))
+
+# Prototype P (LP-D22 to LP-D25): the 12 contact points of the ink box, in the label frame (fraction along the text from the end that
+# faces the leader, fraction of the height from the top): 4 vertices, the middle of each short side, middle and quarter points of each long side.
+PORTS = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.0, 0.5), (1.0, 0.5), (0.25, 0.0), (0.5, 0.0), (0.75, 0.0), (0.25, 1.0), (0.5, 1.0), (0.75, 1.0)]
+PORT_NAMES = {(0.0, 0.0): "TL", (1.0, 0.0): "TR", (0.0, 1.0): "BL", (1.0, 1.0): "BR", (0.0, 0.5): "L", (1.0, 0.5): "R",
+              (0.25, 0.0): "T1", (0.5, 0.0): "T2", (0.75, 0.0): "T3", (0.25, 1.0): "B1", (0.5, 1.0): "B2", (0.75, 1.0): "B3"}
 
 
 def _plen(pts) -> float:
@@ -161,6 +168,30 @@ def _font_tables():
     return _INK["font"]
 
 
+def _ink_rel(text: str, size: float, anchor: str) -> tuple[float, float, float, float]:
+    """Prototype P (LP-D23, LP-D25): the ink box (left, top, right, bottom) of a text drawn at the origin with dominant-baseline="middle":
+    ink left to ink right, top of the tallest letter to the lowest ink (what Inkscape shows as the bounding box).  Same model as scripts/lp_ports.py."""
+    if "full" not in _INK:
+        tt = TTFont(str(FONT_FILE))
+        _INK["full"] = (tt.getBestCmap(), tt["glyf"], tt["hmtx"], tt["head"].unitsPerEm, tt["OS/2"].sxHeight)
+    cmap, glyf, hmtx, upm, xh = _INK["full"]
+    s = size / upm
+    adv, x0, x1, top, bot = 0, None, 0, 0, 0
+    for ch in text:
+        g = cmap[ord(ch)]
+        a, _lsb = hmtx[g]
+        gl = glyf[g]
+        if gl.numberOfContours:
+            if x0 is None:
+                x0 = adv + gl.xMin
+            x1 = adv + gl.xMax
+            top, bot = max(top, gl.yMax), min(bot, gl.yMin)
+        adv += a
+    shift = -adv * s if anchor == "end" else (-adv * s / 2 if anchor == "middle" else 0.0)
+    base = xh * s / 2
+    return (shift + (x0 or 0) * s, base - top * s, shift + x1 * s, base - bot * s)
+
+
 def _ink(text: str, fs: float, mirror: bool) -> _Ink:
     key = (text, round(fs, 3), mirror)
     if key not in _INK:
@@ -205,6 +236,16 @@ class _Par:
         self.ink = ctx.opt("ink", 3.4)                   # wanted distance of a leader end to the ink of its own text (px)
         self.inkmin, self.inkmax = ctx.opt("inkmin", 2.5), ctx.opt("inkmax", 4.5)   # ... the end is refused outside this range
         self.um = ctx.opt("um", 0.7)                     # an end is nearer to its own ink than to another label's ink by 1 px + this margin
+        self.port = int(ctx.opt("port", 0))              # 1: prototype P (LP-D22 to LP-D25): ink boxes, 12 contact points, straight-first clusters; replaces face, mid, strt, fan, sym, slide
+        self.pslide = ctx.opt("pslide", 8.0)             # P: a straight label may sit this many px farther along its ray than its nearest allowed seat (LP-D16)
+        self.bend = ctx.opt("bend", 6.0)                 # P: px of cost of a bent leader in the cluster construction
+        self.minlast = ctx.opt("minlast", 6.0)           # P: the last piece of a bent leader is at least this long (drawn)
+        self.pwin = ctx.opt("pwin", 30.0)                # P: rows a label of a cluster may move (px each way)
+        self.pcone = ctx.opt("pcone", 44.0)              # P: the way out kept free for a label not seated yet leaves its ray this many degrees at most (the contact points take 45)
+        self.pvert = ctx.opt("pvert", 4.0)               # P: px of cost of ending at a vertex rather than at the middle of a side (LP-D18)
+        self.cluster = int(ctx.opt("cluster", 1))        # P: 1: the cluster construction runs
+        if self.port:
+            self.face = self.mid = self.fan = self.strt = self.sym = self.slide = 0
         self.font = float(ctx.font_size)
         self.nostraight = 3.0                            # a run shorter than this does not turn (the metric drops pieces under 3 px)
         self.grid_out, self.grid_in = 80, 140
@@ -347,7 +388,7 @@ class _Lab:
         self.fld = _ink(it.text, float(it.src.get("font_size", par.font)), sx < 0) if par.face else None
         self.lo, self.hi = -math.inf, math.inf
         # the way out that is kept free until the label is seated: straight along the stack direction, inside the cone
-        lim = math.radians(par.cone - 1.5)
+        lim = math.radians(par.pcone if par.port else par.cone - 1.5)      # P: the reserved way out is a leader that a contact point can take
         an, av = math.atan2(self.ny, self.nq), math.atan2(self.d, 0.0)
         turn = (av - an + math.pi) % (2.0 * math.pi) - math.pi
         a = an + max(-lim, min(lim, turn))
@@ -361,6 +402,9 @@ class _Lab:
     def cands(self, yc, geo: _Geo, par: _Par, lean: float | None = None):
         """Candidates, shape (len(yc), n): near end q0, attach height ya, leader-to-text gap; and the nearest allowed q0."""
         yc = yc[:, None]
+        if par.port:
+            qs, ya, ga, base, _pid = self.cands_port(yc, geo, par)
+            return qs, ya, ga, base
         y0, y1 = yc - 0.5 * self.h, yc + 0.5 * self.h
         near = np.clip(self.Sy, y0, y1)                    # the leader meets the end of the text at the nearest height
         far = np.where(self.Sy < yc, y1, y0)               # ... or at the far corner (a label on its exit ray)
@@ -452,6 +496,52 @@ class _Lab:
             ya, ga = self.snap(yc, qs, ya, ga, par)
         return qs, ya, ga, base
 
+    def port_end(self, j: int, yc, q0, par: _Par):
+        """Prototype P: the leader S -> contact point j of the ink box (q0, yc +- h/2) stops lgap before the point.  (attach height, gap q0 - attach q);
+        NaN where the direction may not use that point (LP-D23: a short-side middle within 45 degrees of its normal, a vertex between 20 and 70
+        degrees from outside its corner, a long-side point within 45 degrees of its normal)."""
+        fq, fy = PORTS[j]
+        yc, q0 = np.broadcast_arrays(np.asarray(yc, dtype=float), np.asarray(q0, dtype=float))
+        pq, py = q0 + fq * self.w, yc + (fy - 0.5) * self.h
+        dq, dy = pq - self.Sq, py - self.Sy
+        n = np.maximum(np.hypot(dq, dy), 1e-9)
+        ax, ay = -dq / n, -dy / n                                          # where the leader comes from, seen from the point
+        nqn = -1.0 if fq == 0.0 else (1.0 if fq == 1.0 else 0.0)
+        nyn = -1.0 if fy == 0.0 else (1.0 if fy == 1.0 else 0.0)
+        if nqn and nyn:
+            deg = np.degrees(np.arctan2(np.abs(ay), np.abs(ax)))
+            ok = (ax * nqn > 0) & (ay * nyn > 0) & (deg >= 20.0 - 1e-6) & (deg <= 70.0 + 1e-6)
+        else:
+            ok = (ax * nqn + ay * nyn) / math.hypot(nqn, nyn) >= math.cos(math.radians(45.0)) - 1e-6
+        ok &= n > par.lgap + 0.05
+        aq, ya = pq - par.lgap * dq / n, py - par.lgap * dy / n
+        return np.where(ok, ya, np.nan), np.where(ok, q0 - aq, np.nan)
+
+    def cands_port(self, yc, geo: _Geo, par: _Par, offs=OFFS):
+        """Prototype P: candidates (q0, attach height, gap, nearest allowed q0, contact point) for every contact point, each at the box
+        positions base + offs and, where the point lies on the feature's own ray at this row, on that ray (a straight leader)."""
+        h = self.h
+        if self.shore == "out":
+            dyn = np.maximum(np.abs(yc) - 0.5 * h - geo.padw, 0.0)
+            hug = np.where(dyn < geo.R, np.sqrt(np.maximum(geo.R ** 2 - dyn ** 2, 0.0)) + geo.padw + 1e-6, -1e9)
+        else:
+            dyf = np.abs(yc) + 0.5 * h + geo.padw
+            hug = np.where(dyf < geo.Bb, geo.padw + 1e-6 - np.sqrt(np.maximum(geo.Bb ** 2 - dyf ** 2, 0.0)), 1e9)
+        base = np.maximum(self.Sq + par.lgap, hug)
+        qs, heights, gaps, pids = [], [], [], []
+        for j, (fq, fy) in enumerate(PORTS):
+            q0 = base + np.asarray(offs)[None, :] + 0.0 * yc
+            if abs(self.ny) > 1e-6:                           # the point on the feature's own ray at this row
+                t = (yc + (fy - 0.5) * h - self.Sy) / self.ny
+                q0 = np.concatenate([q0, np.where(t > 0.5, self.Sq + t * self.nq - fq * self.w, base)], axis=1)
+            ya, ga = self.port_end(j, yc, q0, par)
+            qs.append(q0)
+            heights.append(ya)
+            gaps.append(ga)
+            pids.append(np.full(q0.shape, j))
+        return (np.concatenate(qs, axis=1), np.concatenate(heights, axis=1), np.concatenate(gaps, axis=1), base,
+                np.concatenate(pids, axis=1))
+
     def snap(self, yc, q0, ya, ga, par: _Par):
         """face=1: the end of every candidate moves along its own line (stub S through the old end) to where it stands `ink` px from
         the ink of its own text, or touches the box when the ink stays farther inside; NaN gap where that is not within
@@ -489,6 +579,8 @@ class _Lab:
         cost = ln + par.tw * np.where(ln < par.nostraight, 0.0, np.degrees(np.arccos(cosv)))
         ok = (dq * self.nq + dy * self.ny >= cone_cos * ln - 1e-9) | (ln < par.short)
         ok &= ~((self.Sq > aq + 1e-9) & (self.Sy > y0) & (self.Sy < y1))        # never through the label's own text
+        if par.port:                                       # R6: the last piece of a bent leader is at least `minlast` long
+            ok &= ~((cosv < math.cos(math.radians(1.5))) & (ln < par.minlast))
         if par.face:                                       # LP-D15 (the metric's own test, a little stricter): the end is on the half of the box that faces the leader
             s10 = math.sin(math.radians(9.5))
             seen = ln >= 3.0
@@ -687,7 +779,7 @@ class _Eng:
         """The shortest leader at height yy that fits: ((box, attach point, yy, run), shortest run before the other
         labels are looked at). (None, None) when the label has no spot at this height at all. `extra`: more spots
         (q, cost, boxes, attach points) that have passed the static tests; `only`: these and no others."""
-        geo, par = self.geo, self.par
+        par = self.par
         y0, y1 = yy - 0.5 * L.h, yy + 0.5 * L.h
         memo = None if only else self.spots(L, yy, want)
         if extra is not None and len(extra[0]):
@@ -696,8 +788,22 @@ class _Eng:
             return None, None
         q, ln, boxes, att, alone = memo
         stub = np.broadcast_to(np.array(L.S, dtype=float), att.shape)
-        good = np.ones(len(q), dtype=bool)
         lo, hi = min(L.Sy, y0) - par.lpad - 1.0, max(L.Sy, y1) + par.lpad + 1.0     # rows the boxes and leaders touch
+        good = self.legal(L, boxes, att, stub, pl, pend, lo, hi)
+        if not good.any():
+            return None, alone
+        sel = np.nonzero(good)[0]
+        cost = ln[sel] + 1e-6 * np.abs(q[sel] - (L.Sq + par.lgap))
+        if want is not None:                              # a cluster being made symmetric: this label should lean by `want` degrees
+            cost = cost + SYM_K * (_sturn_arr(L.it.anchor, L.S, att[sel]) - want) ** 2
+        j = sel[int(np.argmin(cost))]
+        return (tuple(float(v) for v in boxes[j]), (float(att[j][0]), float(att[j][1])), yy, float(ln[j])), alone
+
+    def legal(self, L: _Lab, boxes, att, stub, pl: _Placed, pend: _Pending, lo: float, hi: float) -> np.ndarray:
+        """Which candidate boxes and leaders pass the tests against the labels placed (`pl`), the exit rays of the labels still to be seated
+        (`pend`), the other objects and (face=1) the ink: box gap, leader to box clearance, leader crossings.  lo, hi: rows the candidates touch."""
+        geo, par = self.geo, self.par
+        good = np.ones(len(boxes), dtype=bool)
         pb, s0, s1 = pl.arrays()
         if len(pb):
             pb = pb[(pb[:, 3] > lo - par.gap) & (pb[:, 1] < hi + par.gap)]
@@ -730,14 +836,7 @@ class _Eng:
         if par.face and good.any():
             sel = np.nonzero(good)[0]
             good[sel[~self.ink_clear(L, boxes[sel], att[sel], pl)]] = False
-        if not good.any():
-            return None, alone
-        sel = np.nonzero(good)[0]
-        cost = ln[sel] + 1e-6 * np.abs(q[sel] - (L.Sq + par.lgap))
-        if want is not None:                              # a cluster being made symmetric: this label should lean by `want` degrees
-            cost = cost + SYM_K * (_sturn_arr(L.it.anchor, L.S, att[sel]) - want) ** 2
-        j = sel[int(np.argmin(cost))]
-        return (tuple(float(v) for v in boxes[j]), (float(att[j][0]), float(att[j][1])), yy, float(ln[j])), alone
+        return good
 
     def ink_clear(self, L: _Lab, boxes, att, pl) -> np.ndarray:
         """face=1 (LP-D15): the end of a leader is nearer to the ink of its own text than to the ink of any other label by more than
@@ -775,6 +874,15 @@ class _Eng:
                 alt = self._search(L, y, pl, pend, limit, tight)
             finally:
                 par.face, L.memo, L.memo_r = 1, L.memo_r, L.memo
+            if alt is not None and (best is None or alt[0] + par.relax < best[0]):
+                best = alt
+                self.stats["relaxed"] = self.stats.get("relaxed", 0) + 1
+        if par.port and par.relax > 0 and (best is None or best[1] > par.relax):     # P: no contact-point seat within reach: the J2 seat (a leader ends on the box edge); counted as relaxed
+            par.port, L.memo, L.memo_r = 0, L.memo_r, L.memo
+            try:
+                alt = self._search(L, y, pl, pend, limit, tight)
+            finally:
+                par.port, L.memo, L.memo_r = 1, L.memo_r, L.memo
             if alt is not None and (best is None or alt[0] + par.relax < best[0]):
                 best = alt
                 self.stats["relaxed"] = self.stats.get("relaxed", 0) + 1
@@ -1205,6 +1313,181 @@ class _Eng:
         info["added_px"] = round(info["added_px"], 1)
         return recs, info
 
+    # ---- prototype P: one cluster construction (R3 to R6)
+    def chain_nodes(self, L: _Lab, rec, bg: _Placed, pend: _Pending):
+        """Every seat of one label of a chain that passes the tests against the labels outside the chain: the rows within `pwin` px of its own
+        row, every contact point, and the straight seats (the point on the feature's own ray) from the nearest one to `pslide` px farther
+        out.  A seat is straight (turn under 0.5 degrees) or bent (3 degrees or more, last piece at least `minlast`); its cost is run + tw x turn
+        (+ `bend` for a bent one).  The label's present seat is one of them."""
+        par, geo = self.par, self.geo
+        yc0 = 0.5 * (rec[1][1] + rec[1][3])
+        rows = yc0 + np.arange(-par.pwin, par.pwin + 0.5, 1.0)
+        Q, YA, GA, _b, PID = L.cands_port(rows[:, None], geo, par)
+        ok, cost, run = L.static(rows[:, None], Q, YA, GA, geo, par, par.cone_cos)
+        ri, ci = np.nonzero(ok)
+        yc, q0, ya, ga, pid, cst, rn = rows[ri], Q[ri, ci], YA[ri, ci], GA[ri, ci], PID[ri, ci], cost[ri, ci], run[ri, ci]
+        ts = np.arange(0.5, 400.0, 0.5)
+        parts = [(yc, q0, ya, ga, pid, cst, rn)]
+        for j, (fq, fy) in enumerate(PORTS):               # the point on the feature's own ray at distance t from the stub
+            ys_, qs_ = L.Sy + ts * L.ny - (fy - 0.5) * L.h, L.Sq + ts * L.nq - fq * L.w
+            yas, gas = L.port_end(j, ys_, qs_, par)
+            oks, costs, runs = L.static(ys_[:, None], qs_[:, None], yas[:, None], gas[:, None], geo, par, par.cone_cos)
+            sel = oks[:, 0]
+            parts.append((ys_[sel], qs_[sel], yas[sel], gas[sel], np.full(int(sel.sum()), j), costs[sel, 0], runs[sel, 0]))
+        yc, q0, ya, ga, pid, cst, rn = (np.concatenate([p[i] for p in parts]) for i in range(7))
+        x0 = q0 if L.sx > 0 else -(q0 + L.w)
+        box = np.stack([x0, yc - 0.5 * L.h, x0 + L.w, yc + 0.5 * L.h], axis=1)
+        att = np.stack([L.sx * (q0 - ga), ya], axis=1)
+        turn = np.abs(_sturn_arr(L.it.anchor, L.S, att))
+        straight = turn < 0.5
+        keep = straight | (turn >= 3.0)
+        t = rn + par.lgap                                   # distance of the point from the stub (straight seats)
+        if (keep & straight).any():                         # R5: no farther than `pslide` px along the ray than the nearest allowed seat
+            keep &= ~straight | (t <= t[keep & straight].min() + par.pslide)
+        stub = np.broadcast_to(np.array(L.S, dtype=float), att.shape)
+        idx = np.nonzero(keep)[0]
+        if len(idx):
+            lo, hi = min(L.Sy, box[idx, 1].min()) - par.lpad - 1.0, max(L.Sy, box[idx, 3].max()) + par.lpad + 1.0
+            idx = idx[self.legal(L, box[idx], att[idx], stub[idx], bg, pend, lo, hi)]
+        cost2 = cst + np.where(straight, 0.0, par.bend) + par.pvert * np.isin(pid, (0, 1, 2, 3))     # a vertex is the last choice among the points that serve
+        chosen: dict = {}                                   # bent seats: the cheapest of each (row, point), then the cheapest few of each row
+        out = [i for i in idx if straight[i]]
+        for i in sorted((i for i in idx if not straight[i]), key=lambda i: cost2[i]):
+            chosen.setdefault((int(round(yc[i] * 2)), int(pid[i])), i)
+        per_row: dict = {}
+        for (r, _p), i in sorted(chosen.items(), key=lambda kv: cost2[kv[1]]):
+            per_row.setdefault(r, []).append(i)
+        out += [i for v in per_row.values() for i in v[:6]]
+        out = sorted(out, key=lambda i: cost2[i])[:700]
+        cur_pts = rec[2]
+        cur_turn = abs(_sturn(cur_pts))
+        cur_cost = _plen(cur_pts[1:]) + par.tw * cur_turn + (0.0 if cur_turn < 0.5 else par.bend)
+        sel = np.array(out, dtype=int)
+        return {"box": np.vstack([box[sel], np.array([rec[1]], dtype=float)]), "att": np.vstack([att[sel], np.array([cur_pts[-1]], dtype=float)]),
+                "yc": np.concatenate([yc[sel], [yc0]]), "cost": np.concatenate([cost2[sel], [cur_cost]]),
+                "straight": np.concatenate([straight[sel], [cur_turn < 0.5]]), "stub": np.array(L.S, dtype=float)}
+
+    def chain_pair(self, a: dict, b: dict, d: float) -> np.ndarray:
+        """(Na, Nb): seat i of label a and seat j of label b (b the next one along the stack) stand together: order along the stack, box gap,
+        leader to box clearance both ways, no crossing."""
+        par = self.par
+        g = par.gap - 1e-6
+        ab, bb = a["box"], b["box"]
+        ok = ~((ab[:, None, 0] < bb[None, :, 2] + g) & (bb[None, :, 0] < ab[:, None, 2] + g)
+               & (ab[:, None, 1] < bb[None, :, 3] + g) & (bb[None, :, 1] < ab[:, None, 3] + g))
+        ok &= (b["yc"][None, :] - a["yc"][:, None]) * d > 0
+        sa = np.broadcast_to(a["stub"], a["att"].shape)
+        sb = np.broadcast_to(b["stub"], b["att"].shape)
+        ok &= ~_seg_box_hit(sa, a["att"], bb, par.lpad)
+        ok &= ~_seg_box_hit(sb, b["att"], ab, par.lpad).T
+        ok &= ~_seg_cross_matrix(sa, a["att"], sb, b["att"])
+        return ok
+
+    @staticmethod
+    def chain_dp(nodes: list, compat: list):
+        """Cheapest choice of one seat per label along the stack with the order bent* straight* bent* (R3).  The index of the seat of every
+        label, or None."""
+        INF = 1e18
+        n0 = nodes[0]
+        c = [np.where(~n0["straight"], n0["cost"], INF), np.where(n0["straight"], n0["cost"], INF), np.full(len(n0["cost"]), INF)]
+        back = []
+        for k in range(1, len(nodes)):
+            nb, comp = nodes[k], compat[k - 1]
+            mins, args = [], []
+            for ph in range(3):
+                m = np.where(comp, c[ph][:, None], INF)
+                args.append(m.argmin(axis=0))
+                mins.append(m.min(axis=0))
+            pick1, pick2 = mins[0] <= mins[1], mins[1] <= mins[2]
+            c = [np.where(~nb["straight"], mins[0] + nb["cost"], INF),
+                 np.where(nb["straight"], np.where(pick1, mins[0], mins[1]) + nb["cost"], INF),
+                 np.where(~nb["straight"], np.where(pick2, mins[1], mins[2]) + nb["cost"], INF)]
+            back.append((args, pick1, pick2))
+        best = min(range(3), key=lambda ph: c[ph].min())
+        if c[best].min() >= INF / 2:
+            return None
+        j, ph, pick = int(c[best].argmin()), best, [0] * len(nodes)
+        for k in range(len(nodes) - 1, -1, -1):
+            pick[k] = j
+            if k == 0:
+                break
+            args, pick1, pick2 = back[k - 1]
+            prev = 0 if ph == 0 else ((0 if pick1[j] else 1) if ph == 1 else (1 if pick2[j] else 2))
+            j, ph = int(args[prev][j]), prev
+        return pick
+
+    def cluster(self, recs: list, shore: str) -> tuple[list, dict]:
+        """R3 to R6 as one construction.  A chain of one stack (boxes at most gap + 3 px apart; a lone label is a chain of one) is seated again
+        as a whole: every label takes one of its seats (chain_nodes) so that the sum of the leader costs is least and the leaders read
+        bent* straight* bent* along the stack (chain_dp).  The result is kept when every label passes all tests against every other (try-at
+        rules); otherwise the chain keeps its seats."""
+        par = self.par
+        recs = list(recs)
+        info = {"chains": 0, "built": 0, "kept_nodes": 0, "kept_dp": 0, "kept_check": 0, "changed": 0}
+        if not recs:
+            return recs, info
+        labs = [self.lab(r[0], shore, 1 if r[3] == "start" else -1) for r in recs]
+        pend = _Pending(labs)
+        for lb in labs:
+            pend.done(lb)
+        groups: dict = {}
+        for k, lb in enumerate(labs):
+            groups.setdefault((lb.sx, lb.upper), []).append(k)
+        for ks in groups.values():
+            ks.sort(key=lambda k: 0.5 * (recs[k][1][1] + recs[k][1][3]) * labs[k].d)
+            chains, cur = [], [ks[0]]
+            for k in ks[1:]:
+                a, b = recs[cur[-1]][1], recs[k][1]
+                if max(b[1] - a[3], a[1] - b[3]) <= par.gap + 3.0:
+                    cur.append(k)
+                else:
+                    chains.append(cur)
+                    cur = [k]
+            chains.append(cur)
+            for chain in chains:
+                info["chains"] += 1
+                bg = _Placed()
+                for j, r in enumerate(recs):
+                    if j not in chain:
+                        bg.add(r[1], labs[j].S, r[2][-1], labs[j])
+                nodes = [self.chain_nodes(labs[k], recs[k], bg, pend) for k in chain]
+                if len(chain) > 40:                             # a dense stack: keep the cheapest seats only
+                    for nd in nodes:
+                        keep = np.argsort(nd["cost"])[:250]
+                        keep = np.union1d(keep, [len(nd["cost"]) - 1])
+                        for key in ("box", "att", "yc", "cost", "straight"):
+                            nd[key] = nd[key][keep]
+                compat = [self.chain_pair(nodes[i], nodes[i + 1], labs[chain[0]].d) for i in range(len(chain) - 1)]
+                pick = self.chain_dp(nodes, compat)
+                if pick is None:
+                    info["kept_dp"] += 1
+                    continue
+                new = {}
+                for k, nd, i in zip(chain, nodes, pick):
+                    box = tuple(float(v) for v in nd["box"][i])
+                    new[k] = (box, [recs[k][0].anchor, labs[k].S, (float(nd["att"][i][0]), float(nd["att"][i][1]))])
+                bad = False
+                for k in chain:                                  # every label against every other, with the whole new chain in place
+                    others = _Placed()
+                    for j, r in enumerate(recs):
+                        if j != k:
+                            b, pts = (new[j][0], new[j][1]) if j in new else (r[1], r[2])
+                            others.add(b, labs[j].S, pts[-1], labs[j])
+                    bx = np.array([new[k][0]], dtype=float)
+                    at = np.array([new[k][1][-1]], dtype=float)
+                    if not self.legal(labs[k], bx, at, np.array([labs[k].S], dtype=float), others, pend, min(labs[k].Sy, bx[0, 1]) - par.lpad - 1.0, max(labs[k].Sy, bx[0, 3]) + par.lpad + 1.0)[0]:
+                        bad = True
+                        break
+                if bad:
+                    info["kept_check"] += 1
+                    continue
+                info["built"] += 1
+                for k in chain:
+                    if new[k][0] != tuple(recs[k][1]) or new[k][1][-1] != recs[k][2][-1]:
+                        info["changed"] += 1
+                    recs[k] = (recs[k][0], new[k][0], new[k][1], recs[k][3], recs[k][4])
+        return recs, info
+
     # ---- slide toward the ring (LP-D14)
     def slide(self, recs: list, shore: str) -> tuple[list, dict]:
         """A leader that is straight, or leans, may end wherever its line first meets the grown box: every label of a finished
@@ -1467,9 +1750,44 @@ def _check(recs) -> dict:
 
 # ====================================================================== entry point
 
+def _ink_item(it: Item, default_size: float) -> Item:
+    """Prototype P (R1, LP-D25): the label's box is the ink box of its text."""
+    x0, top, x1, bot = _ink_rel(it.text, float(it.src.get("font_size", default_size)), "start")
+    return dataclasses.replace(it, w=x1 - x0, h=bot - top)
+
+
+def _port_name(box, pts) -> str | None:
+    """The contact point (name) the last piece of the leader points at, or None."""
+    kept = [p for k, p in enumerate(pts) if k == 0 or math.dist(p, pts[k - 1]) >= 3.0]
+    a, e = (kept[-2], pts[-1]) if len(kept) >= 2 else (pts[0], pts[-1])
+    n = math.dist(a, e)
+    if n < 1e-9:
+        return None
+    d = ((e[0] - a[0]) / n, (e[1] - a[1]) / n)
+    best = None
+    for (fx, fy), name in PORT_NAMES.items():             # fx: fraction of the width from the left (real coordinates)
+        qx, qy = box[0] + fx * (box[2] - box[0]), box[1] + fy * (box[3] - box[1])
+        ahead = (qx - e[0]) * d[0] + (qy - e[1]) * d[1]
+        off = abs((qx - e[0]) * d[1] - (qy - e[1]) * d[0])
+        if -0.5 <= ahead <= 5.0 and off <= 0.75 and (best is None or off < best[1]):
+            best = (name, off)
+    return best[0] if best else None
+
+
+def _emit_ink(it: Item, box, pts, align: str, tag: str, default_size: float) -> dict:
+    """emit() for a label whose box is the ink box: the text origin is shifted so that the ink fills the box."""
+    label = emit(it, box, pts, align=align, tag=tag)
+    x0, top, _x1, _bot = _ink_rel(it.text, float(it.src.get("font_size", default_size)), {"start": "start", "end": "end", "middle": "middle"}[align])
+    label.update(text_x=box[0] - x0, text_y=box[1] - top, start_x=box[0] - x0, start_y=box[1] - top, port=_port_name(box, pts) if pts else None)
+    return label
+
+
 def place(items: list[Item], ctx: Ctx) -> list[dict]:
     par = _Par(ctx)
     inner_req = list(getattr(ctx, "inner_items", []) or [])
+    if par.port:
+        items = [_ink_item(i, par.font) for i in items]
+        inner_req = [_ink_item(i, par.font) for i in inner_req]
     geo = _Geo(items + inner_req, ctx, par)
     eng = _Eng(ctx, geo, par)
     out_items = list(items)
@@ -1563,9 +1881,15 @@ def place(items: list[Item], ctx: Ctx) -> list[dict]:
     if par.face and par.fan:
         out_recs, sym_info["fan_out"] = eng.fan(out_recs, "out")
         in_recs, sym_info["fan_in"] = eng.fan(in_recs, "in")
+    if par.port and par.cluster:
+        out_recs, sym_info["cluster_out"] = eng.cluster(out_recs, "out")
+        in_recs, sym_info["cluster_in"] = eng.cluster(in_recs, "in")
     recs = out_recs + in_recs
     hide = bool(int(ctx.opt("hide", 0)))
-    result = [emit(it, box, None if hide else pts, align=align, tag=tag) for it, box, pts, align, tag in recs]
+    if par.port:
+        result = [_emit_ink(it, box, None if hide else pts, align, tag, par.font) for it, box, pts, align, tag in recs]
+    else:
+        result = [emit(it, box, None if hide else pts, align=align, tag=tag) for it, box, pts, align, tag in recs]
     if hide:
         for label in result:
             label["text_fill"] = "none"
