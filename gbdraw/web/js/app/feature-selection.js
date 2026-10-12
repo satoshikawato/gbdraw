@@ -272,10 +272,12 @@ const angleOnClockwiseInterval = (startAngle, endAngle, angle) => {
  * @property {FeatureSelectionState} state
  * @property {((callback: () => void) => void) | null} [onMounted] Vue `onMounted`.
  * @property {((callback: () => void) => void) | null} [onUnmounted] Vue `onUnmounted`.
+ * @property {() => boolean} [previewPopupsHeld] While it holds, a selection gesture leaves the feature
+ *   and match popups as they are.
  */
 
 /** @param {FeatureSelectionOptions} options */
-export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = null }) => {
+export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = null, previewPopupsHeld = () => false }) => {
   const {
     selectedFeatureIds,
     selectedFeatureAnchorId,
@@ -321,9 +323,10 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
   };
 
   const closePreviewPopups = () => {
+    if (clickedLabel?.value) clickedLabel.value = null;
+    if (previewPopupsHeld()) return;
     if (clickedFeature?.value) clickedFeature.value = null;
     if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
-    if (clickedLabel?.value) clickedLabel.value = null;
   };
 
   const syncFeatureSelectionClasses = (svg = getCurrentSvg()) => {

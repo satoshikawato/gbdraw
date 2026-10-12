@@ -771,7 +771,7 @@
     },
     {
       "title": "Align the rows on similarity group og_6",
-      "body": "To line up the shared genes, align the rows on one similarity group. In the preview, click the neoU CDS of BGC0000709 (row 2), which belongs to og_6, and choose Review alignment options…. The dialog has one card per other record. BGC0000708 has two og_6 members: livU (CAG38700.1), the representative member with a reciprocal best hit, is preselected and marked Recommended; the transport protein CAG38692.1 near the left end of the cluster is the other candidate. Keep livU, leave Arrow direction at Keep as is, and click Apply. Apply regenerates the preview, so you do not click Generate Diagram.",
+      "body": "To line up the shared genes, align the rows on one similarity group. In the preview, click the neoU CDS of BGC0000709 (row 2), which belongs to og_6, and choose Review alignment options…. The Review alignment panel opens beside the figure: a Reference card for neoU, then one card per other record, grouped under sections such as Several candidates and One candidate. The figure rings the candidates and draws a reference line. BGC0000708 has two og_6 members: livU (CAG38700.1), the representative member with a reciprocal best hit, is preselected and marked Recommended; the transport protein CAG38692.1 near the left end of the cluster is the other candidate. Keep livU, leave Arrow direction at Keep as is, and click Apply. Apply regenerates the preview, so you do not click Generate Diagram.",
       "note": "Align… applies the same recommended anchors without the review. Choose Skip in a record card to leave that record where it is. Reset alignment… undoes an alignment; see the Web alignment reference for its scopes.",
       "replay": [
         {
@@ -891,7 +891,7 @@
           "dataDependent": true,
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-07-02-anchor-candidates.webp",
-            "alt": "Review alignment card for BGC0000708 with two og_6 candidates: the transport protein CAG38692.1 and livU CAG38700.1, which is selected and marked Recommended.",
+            "alt": "Review alignment card for BGC0000708 with its After Apply strip and the note that livU is recommended as the only candidate with a reciprocal best hit. The choices are the transport protein CAG38692.1, livU CAG38700.1 (selected, Recommended), and Skip this record.",
             "caption": "BGC0000708 has two og_6 members; keep the selected, Recommended livU · CAG38700.1."
           },
           "capture": {
@@ -975,7 +975,7 @@
           "dataDependent": true,
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-07-03-alignment-direction.webp",
-            "alt": "Arrow direction choices in the Review alignment dialog with Keep as is selected.",
+            "alt": "Arrow direction choices in the Review alignment panel with Keep as is selected, and the note that no record is reversed.",
             "caption": "Leave Arrow direction at Keep as is, then click Apply."
           },
           "capture": {

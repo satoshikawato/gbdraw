@@ -1,6 +1,8 @@
 // @ts-check
 /** @import { DrawingState, PopupPosition } from '../../state.js' */
 /** @import { PopupOrigin } from '../../utils/popup-bounds.js' */
+/** @import { AliasSource } from '../../services/feature-identity.js' */
+/** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { placePopupNearPoint, popupViewportBounds } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
@@ -92,6 +94,8 @@ export {
  * @property {FeatureSelectionPort | null} [featureSelection]
  *   The preview owner's projection of feature visibility changes.
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
+ * @property {() => boolean} [previewPopupsHeld] While it holds (the Review alignment panel is open, the popups
+ *   hidden), no gesture on the figure opens, retargets or closes a popup.
  */
 
 /**
@@ -107,24 +111,31 @@ export {
  */
 
 /**
- * The Similarity alignment overlay over the preview. `observer` is set once the
- * overlay is built and stays null without ResizeObserver.
- * @typedef {object} AlignmentOverlay
- * @property {HTMLElement} element
- * @property {HTMLElement} scrollRoot
- * @property {number} frame
- * @property {ResizeObserver | null} observer
- * @property {() => void} schedule
- * @property {(recordKey: string, anchor: any) => void} onSelect
+ * @typedef {object} AlignmentOverlayRequest
+ * @property {{ key: string, recordKey: string, anchor: AliasSource, name: string }} reference
+ * @property {AlignmentOverlayRecord[]} records
+ * @property {(recordKey: string, anchor: AliasSource) => void} onSelect
  * @property {(recordKey: string, candidateKey: string) => void} onHover
  */
 
 /**
- * @typedef {object} AlignmentOverlayRequest
- * @property {any} reference
- * @property {any[]} [ambiguities]
- * @property {(recordKey: string, anchor: any) => void} onSelect
- * @property {(recordKey: string, candidateKey: string) => void} onHover
+ * A candidate the Result draws, with its blocks and its ring button.
+ * @typedef {AlignmentOverlayCandidate & { record: AlignmentOverlayRecord, svgId: string, blocks: Element[], button: HTMLButtonElement }} AlignmentOverlayRing
+ */
+
+/**
+ * The Similarity alignment overlay over the preview viewport. `resizeObserver` stays null
+ * without ResizeObserver.
+ * @typedef {object} AlignmentOverlay
+ * @property {HTMLElement} element
+ * @property {HTMLElement} scrollRoot
+ * @property {number} frame
+ * @property {ResizeObserver | null} resizeObserver
+ * @property {MutationObserver} transformObserver
+ * @property {AlignmentOverlayRing | null} hover
+ * @property {() => void} schedule
+ * @property {(ring: AlignmentOverlayRing | null) => void} setHover
+ * @property {(recordKey: string, anchor: AliasSource) => void} onSelect
  */
 
 /**
@@ -151,10 +162,10 @@ export {
  * @property {string} alignmentCandidateSvgId
  * @property {{ featureSvgId: string | null, matchElement: Element | null } | null} alignmentCandidateRestore
  * @property {AlignmentOverlay | null} alignmentOverlay
- * @property {Map<string, any>} alignmentCandidatesBySvgId
- * @property {((request: AlignmentOverlayRequest) => void) | null} showAlignmentOverlay
+ * @property {Map<string, AlignmentOverlayRing>} alignmentCandidatesBySvgId
+ * @property {((request: AlignmentOverlayRequest) => AlignmentFigureGeometry | null) | null} showAlignmentOverlay
  * @property {(() => void) | null} clearAlignmentOverlay
- * @property {((anchor: any) => boolean) | null} previewAlignmentCandidate
+ * @property {((anchor: AliasSource) => boolean) | null} previewAlignmentCandidate
  * @property {((options?: { restore?: boolean }) => void) | null} clearAlignmentCandidatePreview
  * @property {((eventLike: any, kind?: string) => void) | null} beginPreviewTransformInteraction
  * @property {((options?: { reconcile?: boolean }) => void) | null} endPreviewTransformInteraction
@@ -171,7 +182,8 @@ export const createFeatureSvgActions = ({
   // prepared; the composition root injects the visibility owner's preparation.
   prepareDrawnFeatureMatches = () => true,
   featureSelection = null,
-  previewTransformInteraction = null
+  previewTransformInteraction = null,
+  previewPopupsHeld = () => false
 }) => {
   const {
     orthogroups,
@@ -557,6 +569,24 @@ export const createFeatureSvgActions = ({
     );
   };
 
+  // A popup retargeted while it was hidden was placed for the view of that moment. Once the
+  // Result rests in the view it returned to, the popup opens again beside its feature.
+  const showFeaturePopupAtFeature = async () => {
+    const shown = clickedFeature.value;
+    const surface = /** @type {HTMLElement | null} */ (svgContainer.value);
+    if (!shown || !surface) return;
+    await new Promise((resolve) => { window.requestAnimationFrame(resolve); });
+    await Promise.allSettled(surface.getAnimations().map(({ finished }) => finished));
+    if (clickedFeature.value !== shown) return;
+    const rects = getFeatureFillElements(surface.querySelector('svg'), shown.svg_id)
+      .map((block) => block.getBoundingClientRect());
+    if (!rects.length) return;
+    openFeatureEditorForFeature(shown.feat, {
+      clientX: (Math.min(...rects.map(({ left }) => left)) + Math.max(...rects.map(({ right }) => right))) / 2,
+      clientY: (Math.min(...rects.map(({ top }) => top)) + Math.max(...rects.map(({ bottom }) => bottom))) / 2
+    });
+  };
+
   const hoverSummaryIsAllowed = () => {
     if (clickedFeature.value) return false;
     if (clickedPairwiseMatch?.value) return false;
@@ -760,7 +790,7 @@ export const createFeatureSvgActions = ({
 
   const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {
     const drawing = state.activeDrawing();
-    if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos) return null;
+    if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos || previewPopupsHeld()) return null;
     const payload = buildMatchPayload(drawing, matchElement, featureLookup);
     if (!payload) return null;
     hideHoverSummary();
@@ -775,7 +805,7 @@ export const createFeatureSvgActions = ({
   // row opens only when the drawing lists it (not a track-data row).
   /** @param {{ element: Element, item: import('../preview-item-popup.js').PreviewItem }} target @param {{ clientX?: number, clientY?: number }} eventLike */
   const openPreviewItemPopup = ({ element, item }, eventLike) => {
-    if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value) return false;
+    if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
     if (item.kind === 'legend-entry') {
       /** @type {import('../../state.js').LegendEntry[]} */
       const entries = state.activeDrawing().legendEntries.value || [];
@@ -1049,6 +1079,7 @@ export const createFeatureSvgActions = ({
         if (!handlerState.alignmentCandidateSvgId && !handlerState.alignmentCandidateRestore) return;
         clearTrackedHoverStyles();
         handlerState.alignmentCandidateSvgId = '';
+        handlerState.alignmentOverlay?.setHover(null);
         const previous = handlerState.alignmentCandidateRestore;
         handlerState.alignmentCandidateRestore = null;
         if (!restore || !previous) return;
@@ -1065,6 +1096,7 @@ export const createFeatureSvgActions = ({
         }
       };
 
+      /** @param {AliasSource} anchor */
       const previewAlignmentCandidate = (anchor) => {
         const requested = featureIdentity(anchor);
         if (!requested.usable) return false;
@@ -1090,12 +1122,20 @@ export const createFeatureSvgActions = ({
         const [svgId] = matches[0];
         setFeatureHover(svgId);
         handlerState.alignmentCandidateSvgId = svgId;
+        handlerState.alignmentOverlay?.setHover(handlerState.alignmentCandidatesBySvgId.get(svgId) ?? null);
         return true;
       };
 
       handlerState.previewAlignmentCandidate = previewAlignmentCandidate;
       handlerState.clearAlignmentCandidatePreview = clearAlignmentCandidatePreview;
 
+      // A block the Result shows: hidden ones get no ring, no strip box and no place in a strip.
+      /** @param {Element} block */
+      const isDrawnBlock = (block) => block.isConnected && block.getClientRects().length === 1
+        && window.getComputedStyle(block).visibility !== 'hidden';
+      // A feature drawn in several parts (exons) is one span from its first block to its last:
+      // the alignment centres that whole span.
+      /** @param {AliasSource} anchor */
       const uniqueRenderedFeature = (anchor) => {
         const requested = featureIdentity(anchor);
         if (!requested.usable) return null;
@@ -1105,7 +1145,7 @@ export const createFeatureSvgActions = ({
         if (matches.length !== 1) return null;
         const [svgId] = matches[0];
         const blocks = getFeatureFillElements(svg, svgId, ensureFeaturePaths());
-        return blocks.length === 1 ? { svgId, element: blocks[0] } : null;
+        return blocks.length && blocks.every(isDrawnBlock) ? { svgId, blocks } : null;
       };
 
       const clearAlignmentOverlay = () => {
@@ -1114,115 +1154,271 @@ export const createFeatureSvgActions = ({
         if (overlay.frame) window.cancelAnimationFrame(overlay.frame);
         overlay.scrollRoot.removeEventListener('scroll', overlay.schedule);
         window.removeEventListener('resize', overlay.schedule);
-        overlay.observer?.disconnect();
+        overlay.resizeObserver?.disconnect();
+        overlay.transformObserver.disconnect();
         overlay.element.remove();
         handlerState.alignmentOverlay = null;
         handlerState.alignmentCandidatesBySvgId.clear();
         clearAlignmentCandidatePreview();
       };
 
+      // The figure as the strips of the Review alignment panel need it: spans in SVG user
+      // units from the Result's left edge, which the preview zoom does not change.
+      /**
+       * @param {AlignmentOverlayRequest['reference']} reference
+       * @param {Element[]} referenceBlocks
+       * @param {AlignmentOverlayRing[]} rings
+       * @returns {AlignmentFigureGeometry | null}
+       */
+      const measureAlignmentGeometry = (reference, referenceBlocks, rings) => {
+        const frame = svg.getBoundingClientRect();
+        const unit = frame.width / (/** @type {SVGSVGElement} */ (svg).viewBox?.baseVal?.width || 0);
+        if (!(unit > 0) || !Number.isFinite(unit)) return null;
+        /** @param {Element} element @returns {FigureSpan} */
+        const spanOf = (element) => {
+          const rect = element.getBoundingClientRect();
+          return { left: (rect.left - frame.left) / unit, right: (rect.right - frame.left) / unit };
+        };
+        /** @param {FigureSpan[]} spans @returns {FigureSpan} */
+        const around = (spans) => ({
+          left: Math.min(...spans.map(({ left }) => left)), right: Math.max(...spans.map(({ right }) => right))
+        });
+        /** @param {Element} element */
+        const recordKeyOf = (element) => element.closest('[data-record-key]')?.getAttribute('data-record-key') || '';
+        /** @type {Map<string, FigureSpan[]>} */
+        const featuresByRecord = new Map();
+        const featurePaths = ensureFeaturePaths();
+        featurePaths.forEach((_elements, svgId) => getFeatureFillElements(svg, svgId, featurePaths).forEach((block) => {
+          const recordKey = recordKeyOf(block);
+          if (!recordKey || !isDrawnBlock(block)) return;
+          if (!featuresByRecord.has(recordKey)) featuresByRecord.set(recordKey, []);
+          featuresByRecord.get(recordKey)?.push(spanOf(block));
+        }));
+        const referenceSpan = around(referenceBlocks.map(spanOf));
+        const drawnCandidates = [
+          { recordKey: reference.recordKey, key: reference.key, span: referenceSpan },
+          ...rings.map(({ record, key, blocks }) => ({ recordKey: record.recordKey, key, span: around(blocks.map(spanOf)) }))
+        ];
+        const records = Array.from(svg.querySelectorAll('g[data-record-key]')).flatMap((group) => {
+          const recordKey = group.getAttribute('data-record-key') || '';
+          const features = featuresByRecord.get(recordKey) || [];
+          // The record's axis is its own line; a label's leader line is not.
+          const axis = Array.from(group.querySelectorAll(':scope > line:not([data-label-feature-id])')).map(spanOf);
+          const spans = [...axis, ...features];
+          if (!spans.length) return [];
+          return [{
+            recordKey, features, extent: around(spans),
+            candidates: drawnCandidates.filter((candidate) => candidate.recordKey === recordKey)
+              .map(({ key, span }) => ({ key, span }))
+          }];
+        });
+        return { referenceCenter: (referenceSpan.left + referenceSpan.right) / 2, records };
+      };
+
       /** @param {AlignmentOverlayRequest} request */
-      const showAlignmentOverlay = ({ reference, ambiguities, onSelect, onHover }) => {
+      const showAlignmentOverlay = ({ reference, records, onSelect, onHover }) => {
+        // A choice rebuilds the overlay; the ring that had the focus keeps it.
+        const focused = document.activeElement?.closest?.('.gbdraw-alignment-ring');
+        const focusedKeys = focused instanceof HTMLElement && handlerState.alignmentOverlay?.element.contains(focused)
+          ? { ...focused.dataset } : null;
         clearAlignmentOverlay();
         const scrollRoot = svgContainer.value?.parentElement;
         const viewport = scrollRoot?.parentElement;
-        if (!scrollRoot || !viewport || !svg.isConnected) return;
-        const referenceFeature = uniqueRenderedFeature(reference);
-        const candidates = [];
-        (ambiguities || []).forEach((record) => record.candidates.forEach((candidate, index) => {
-          const rendered = uniqueRenderedFeature(candidate.anchor);
-          if (rendered) candidates.push({
-            ...rendered, recordKey: record.recordKey, anchor: candidate.anchor,
-            key: candidate.key, number: index + 1,
-            accessibleName: 'Select ' + record.recordLabel + ' candidate ' + (index + 1)
-              + ': ' + candidate.label + ', ' + candidate.coordinates
-          });
-        }));
-        const counts = new Map();
-        candidates.forEach(({ svgId }) => counts.set(svgId, (counts.get(svgId) || 0) + 1));
-        const visibleCandidates = candidates.filter(({ svgId }) => counts.get(svgId) === 1);
-        visibleCandidates.forEach((candidate) => {
-          handlerState.alignmentCandidatesBySvgId.set(candidate.svgId, candidate);
-        });
+        if (!scrollRoot || !viewport || !svg.isConnected) return null;
+        const referenceFeature = uniqueRenderedFeature(reference.anchor);
 
         const element = document.createElement('div');
         element.className = 'gbdraw-alignment-overlay';
         element.setAttribute('data-similarity-alignment-canvas', '');
-        const guide = document.createElement('div');
-        guide.className = 'gbdraw-alignment-guide';
-        guide.setAttribute('aria-hidden', 'true');
-        element.appendChild(guide);
-        const badges = visibleCandidates.map((candidate) => {
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'gbdraw-alignment-badge';
-          button.textContent = String(candidate.number);
-          button.setAttribute('data-alignment-record-key', candidate.recordKey);
-          button.setAttribute('data-alignment-candidate-key', candidate.key);
-          button.setAttribute('aria-label', candidate.accessibleName);
-          button.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onSelect(candidate.recordKey, candidate.anchor);
-          });
-          button.addEventListener('mouseenter', () => onHover(candidate.recordKey, candidate.key));
-          button.addEventListener('mouseleave', () => onHover('', ''));
-          button.addEventListener('focus', () => onHover(candidate.recordKey, candidate.key));
-          button.addEventListener('blur', () => onHover('', ''));
-          element.appendChild(button);
-          return { candidate, button };
-        });
-        viewport.appendChild(element);
+        const drawing = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        drawing.setAttribute('aria-hidden', 'true');
+        const referenceRing = document.createElement('span');
+        referenceRing.className = 'gbdraw-alignment-ring is-reference is-chosen';
+        const flag = document.createElement('span');
+        flag.className = 'gbdraw-alignment-flag';
+        const flagName = document.createElement('span');
+        flagName.textContent = reference.name;
+        flag.append(flagName, ' · reference');
+        const tag = document.createElement('span');
+        tag.className = 'gbdraw-alignment-tag';
+        [referenceRing, flag, tag].forEach((part) => part.setAttribute('aria-hidden', 'true'));
+        element.append(drawing, referenceRing);
 
-        const geometry = (target, viewportRect) => {
-          if (!target?.isConnected || target.getClientRects().length !== 1
-            || window.getComputedStyle(target).visibility === 'hidden') return null;
-          const rect = target.getBoundingClientRect();
-          if (!rect.width || !rect.height || rect.right <= viewportRect.left
-            || rect.left >= viewportRect.right || rect.bottom <= viewportRect.top) return null;
-          return {
-            x: (rect.left + rect.right) / 2 - viewportRect.left,
-            y: (rect.top + rect.bottom) / 2 - viewportRect.top
-          };
-        };
         /** @type {AlignmentOverlay} */
         const overlay = {
           element,
           scrollRoot,
           frame: 0,
-          observer: null,
+          resizeObserver: null,
+          transformObserver: new MutationObserver(() => overlay.schedule()),
+          hover: null,
           schedule: () => {
             if (!overlay.frame) overlay.frame = window.requestAnimationFrame(update);
           },
-          onSelect,
-          onHover
+          setHover: (ring) => {
+            if (overlay.hover === ring) return;
+            overlay.hover = ring;
+            onHover(ring?.record.recordKey || '', ring?.key || '');
+            overlay.schedule();
+          },
+          onSelect
         };
+
+        /** @type {AlignmentOverlayRing[]} */
+        const candidates = records.flatMap((record) => record.candidates.flatMap((candidate) => {
+          const rendered = uniqueRenderedFeature(candidate.anchor);
+          return rendered ? [{ ...candidate, ...rendered, record, button: document.createElement('button') }] : [];
+        }));
+        const counts = new Map();
+        candidates.forEach(({ svgId }) => counts.set(svgId, (counts.get(svgId) || 0) + 1));
+        const rings = candidates.filter(({ svgId }) => counts.get(svgId) === 1);
+        rings.forEach((ring) => {
+          const { button, record } = ring;
+          const chosen = !record.skipped && record.chosenKey === ring.key;
+          handlerState.alignmentCandidatesBySvgId.set(ring.svgId, ring);
+          button.type = 'button';
+          button.className = 'gbdraw-alignment-ring';
+          button.classList.toggle('is-chosen', chosen);
+          button.classList.toggle('is-need', record.needsChoice);
+          button.classList.toggle('is-skipped', record.skipped);
+          button.dataset.alignmentRecordKey = record.recordKey;
+          button.dataset.alignmentCandidateKey = ring.key;
+          button.setAttribute('aria-label', ring.accessibleName);
+          button.setAttribute('aria-pressed', String(chosen));
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onSelect(record.recordKey, ring.anchor);
+          });
+          button.addEventListener('mouseenter', () => overlay.setHover(ring));
+          button.addEventListener('mouseleave', () => overlay.setHover(null));
+          button.addEventListener('focus', () => overlay.setHover(ring));
+          button.addEventListener('blur', () => overlay.setHover(null));
+          element.appendChild(button);
+        });
+        element.append(flag, tag);
+        viewport.appendChild(element);
+
+        /**
+         * The box around a feature's drawn blocks in the viewport, or null when its centre is
+         * outside the viewport.
+         * @param {Element[] | null | undefined} blocks
+         * @param {DOMRect} frame
+         */
+        const boxIn = (blocks, frame) => {
+          if (!blocks?.length) return null;
+          const rects = blocks.map((block) => block.getBoundingClientRect());
+          const box = {
+            left: Math.min(...rects.map((rect) => rect.left)) - frame.left,
+            right: Math.max(...rects.map((rect) => rect.right)) - frame.left,
+            top: Math.min(...rects.map((rect) => rect.top)) - frame.top,
+            bottom: Math.max(...rects.map((rect) => rect.bottom)) - frame.top
+          };
+          if (!(box.right > box.left) || !(box.bottom > box.top)) return null;
+          const x = (box.left + box.right) / 2;
+          const y = (box.top + box.bottom) / 2;
+          return x < 0 || x > frame.width || y < 0 || y > frame.height ? null : { ...box, x, y };
+        };
+        /**
+         * @param {HTMLElement} ring
+         * @param {NonNullable<ReturnType<typeof boxIn>> | null} box
+         */
+        const placeRing = (ring, box) => {
+          ring.hidden = !box;
+          if (!box) return;
+          const width = Math.max(box.right - box.left, 8) + 6;
+          Object.assign(ring.style, { left: (box.x - width / 2) + 'px', top: (box.top - 3) + 'px',
+            width: width + 'px', height: (box.bottom - box.top + 6) + 'px' });
+        };
+        /**
+         * A label centred on `x`, kept inside the viewport.
+         * @param {HTMLElement} label
+         * @param {number} x
+         * @param {number} top
+         * @param {number} frameWidth
+         */
+        const placeLabel = (label, x, top, frameWidth) => {
+          label.hidden = false;
+          const width = label.offsetWidth;
+          label.style.left = Math.max(4, Math.min(x - width / 2, frameWidth - width - 4)) + 'px';
+          label.style.top = top + 'px';
+        };
+        // Down from the candidate, then along to the reference line.
+        /**
+         * @param {NonNullable<ReturnType<typeof boxIn>>} box
+         * @param {number} lineX
+         * @param {string} tone
+         */
+        const arrowTo = (box, lineX, tone) => {
+          if (Math.abs(box.x - lineX) < 8) return '';
+          const side = box.x > lineX ? 1 : -1;
+          const y = box.bottom + 8;
+          const shaft = `M${box.x.toFixed(1)},${(box.bottom + 4).toFixed(1)} V${y.toFixed(1)} H${(lineX + side * 7).toFixed(1)}`;
+          const head = `M${(lineX + side * 1.5).toFixed(1)},${y.toFixed(1)} l${side * 7},-4 v8 z`;
+          return `<g class="gbdraw-alignment-arrow ${tone}"><path class="casing" d="${shaft}"/><path class="casing head" d="${head}"/>`
+            + `<path class="shaft" d="${shaft}"/><path class="head" d="${head}"/></g>`;
+        };
+        let settled = '';
         const update = () => {
           overlay.frame = 0;
           if (!element.isConnected || delegatedFeatureHandlers !== handlerState) return;
-          const rect = viewport.getBoundingClientRect();
-          const referencePoint = geometry(referenceFeature?.element, rect);
-          guide.hidden = !referencePoint || referencePoint.x < 0 || referencePoint.x > rect.width;
-          if (referencePoint && !guide.hidden) guide.style.left = referencePoint.x + 'px';
-          badges.forEach(({ candidate, button }) => {
-            const point = geometry(candidate.element, rect);
-            button.hidden = !point || point.x < 0 || point.x > rect.width
-              || point.y < 0 || point.y > rect.height;
-            if (point && !button.hidden) {
-              button.style.left = point.x + 'px';
-              button.style.top = point.y + 'px';
+          const frame = viewport.getBoundingClientRect();
+          const paper = svgContainer.value.getBoundingClientRect();
+          const referenceBox = boxIn(referenceFeature?.blocks, frame);
+          const lineX = referenceBox?.x ?? null;
+          placeRing(referenceRing, referenceBox);
+          let shapes = '';
+          flag.hidden = lineX === null;
+          if (lineX !== null) {
+            const top = Math.max(paper.top - frame.top - 8, 22);
+            const bottom = Math.min(paper.bottom - frame.top, frame.height);
+            const line = `x1="${lineX.toFixed(1)}" x2="${lineX.toFixed(1)}" y1="${top.toFixed(1)}" y2="${bottom.toFixed(1)}"`;
+            shapes += `<line class="gbdraw-alignment-line casing" ${line}/><line class="gbdraw-alignment-line" ${line}/>`;
+            placeLabel(flag, lineX, top - 19, frame.width);
+          }
+          const hover = overlay.hover;
+          tag.hidden = true;
+          rings.forEach((ring) => {
+            const box = boxIn(ring.blocks, frame);
+            const hovered = hover === ring;
+            placeRing(ring.button, box);
+            ring.button.classList.toggle('is-hover', hovered);
+            if (!box) return;
+            if (hovered) {
+              tag.textContent = ring.name;
+              placeLabel(tag, box.x, box.top - 25, frame.width);
             }
+            // The chosen candidate's arrow gives way to the hovered candidate of its record.
+            const chosen = ring.button.classList.contains('is-chosen');
+            if (lineX === null || !(hovered || (chosen && hover?.record !== ring.record))) return;
+            shapes += arrowTo(box, lineX, [
+              ring.record.needsChoice ? 'is-need' : ring.record.skipped ? 'is-skipped' : '', chosen ? '' : 'is-other'
+            ].join(' '));
           });
+          drawing.innerHTML = shapes;
+          // A zoom or a fit moves the Result through a transition: follow it until it rests.
+          const position = [paper.left, paper.top, paper.width, frame.width, frame.height].join(',');
+          if (position !== settled || svgContainer.value.getAnimations().length > 0) {
+            settled = position;
+            overlay.schedule();
+          }
         };
         scrollRoot.addEventListener('scroll', overlay.schedule, { passive: true });
         window.addEventListener('resize', overlay.schedule);
         if (window.ResizeObserver) {
-          overlay.observer = new ResizeObserver(overlay.schedule);
-          overlay.observer.observe(viewport);
-          overlay.observer.observe(svgContainer.value);
+          overlay.resizeObserver = new ResizeObserver(overlay.schedule);
+          overlay.resizeObserver.observe(viewport);
+          overlay.resizeObserver.observe(svgContainer.value);
         }
+        // Zoom and pan are the surface's transform.
+        overlay.transformObserver.observe(svgContainer.value, { attributes: true, attributeFilter: ['style'] });
         handlerState.alignmentOverlay = overlay;
         overlay.schedule();
+        if (focusedKeys) {
+          rings.find(({ button }) => button.dataset.alignmentRecordKey === focusedKeys.alignmentRecordKey
+            && button.dataset.alignmentCandidateKey === focusedKeys.alignmentCandidateKey)?.button.focus({ preventScroll: true });
+        }
+        return referenceFeature ? measureAlignmentGeometry(reference, referenceFeature.blocks, rings) : null;
       };
 
       handlerState.showAlignmentOverlay = showAlignmentOverlay;
@@ -1263,14 +1459,13 @@ export const createFeatureSvgActions = ({
         }
         handlerState.activeHoverSvgId = svgId;
         handlerState.activeHoverKey = hoverKey;
-        const candidate = handlerState.alignmentCandidatesBySvgId.get(svgId);
-        handlerState.alignmentOverlay?.onHover(candidate?.recordKey || '', candidate?.key || '');
+        handlerState.alignmentOverlay?.setHover(handlerState.alignmentCandidatesBySvgId.get(svgId) ?? null);
         scheduleHoverSummary(ensureFeatureLookup().get(svgId), featureEl, eventLike);
         return true;
       };
 
       const activateMatchHover = (matchEl, eventLike) => {
-        handlerState.alignmentOverlay?.onHover('', '');
+        handlerState.alignmentOverlay?.setHover(null);
         clearActiveFeatureHover();
         const matchKey = getMatchHoverKey(matchEl);
         if (handlerState.activeMatchHoverKey !== matchKey && handlerState.activeMatchHoverElement) {
@@ -1287,7 +1482,7 @@ export const createFeatureSvgActions = ({
 
       handlerState.beginPreviewTransformInteraction = (eventLike, kind = '') => {
         if (handlerState.alignmentOverlay) handlerState.alignmentOverlay.element.hidden = true;
-        handlerState.alignmentOverlay?.onHover('', '');
+        handlerState.alignmentOverlay?.setHover(null);
         if (handlerState.hoverReconcileFrame !== null) {
           window.cancelAnimationFrame(handlerState.hoverReconcileFrame);
           handlerState.hoverReconcileFrame = null;
@@ -1382,7 +1577,7 @@ export const createFeatureSvgActions = ({
           const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
           if (relatedFeature && getFeatureHoverKey(getFeatureIdentity(relatedFeature)) === handlerState.activeHoverKey) return;
           clearActiveFeatureHover();
-          handlerState.alignmentOverlay?.onHover('', '');
+          handlerState.alignmentOverlay?.setHover(null);
           hideHoverSummary();
           return;
         }
@@ -1443,12 +1638,13 @@ export const createFeatureSvgActions = ({
             e.preventDefault();
             e.stopPropagation();
             hideHoverSummary();
-            handlerState.alignmentOverlay?.onSelect(candidate.recordKey, candidate.anchor);
+            handlerState.alignmentOverlay?.onSelect(candidate.record.recordKey, candidate.anchor);
             return;
           }
           e.stopPropagation();
           hideHoverSummary();
           featureSelection?.markPlainFeatureClick?.(svgId);
+          if (previewPopupsHeld()) return;
           const feat = ensureFeatureLookup().get(svgId);
           if (feat) {
             openFeatureEditorForFeature(feat, e);
@@ -1472,6 +1668,7 @@ export const createFeatureSvgActions = ({
         }
         if (isBackgroundPreviewClick(e.target, svg)) {
           featureSelection?.clearFeatureSelection?.({ clearStatus: true });
+          if (previewPopupsHeld()) return;
           if (clickedFeature.value) clickedFeature.value = null;
           if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
         }
@@ -1605,6 +1802,7 @@ export const createFeatureSvgActions = ({
     hoverSummaryState.element = null;
   };
 
+  /** @param {AliasSource} anchor */
   const previewAlignmentCandidate = (anchor) => (
     delegatedFeatureHandlers?.previewAlignmentCandidate?.(anchor) || false
   );
@@ -1613,9 +1811,9 @@ export const createFeatureSvgActions = ({
     delegatedFeatureHandlers?.clearAlignmentCandidatePreview?.();
   };
 
-  const showAlignmentOverlay = (request) => {
-    delegatedFeatureHandlers?.showAlignmentOverlay?.(request);
-  };
+  // Shows the overlay and returns the figure geometry the panel's strips are laid out from.
+  /** @param {AlignmentOverlayRequest} request */
+  const showAlignmentOverlay = (request) => delegatedFeatureHandlers?.showAlignmentOverlay?.(request) ?? null;
 
   const clearAlignmentOverlay = () => {
     delegatedFeatureHandlers?.clearAlignmentOverlay?.();
@@ -1667,6 +1865,7 @@ export const createFeatureSvgActions = ({
     clearAlignmentCandidatePreview,
     showAlignmentOverlay,
     clearAlignmentOverlay,
+    showFeaturePopupAtFeature,
     preparePairwiseInteractionAffordances,
     preparePreviewItemAffordances,
     dispose

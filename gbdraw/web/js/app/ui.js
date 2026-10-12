@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { PersistedPreviewViewport } from '../services/config.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 
 // Keep one burst alive through the existing 0.2 s transform transition. This
@@ -393,6 +394,20 @@ export const createPanZoom = (state) => {
     if (wasPanning) endPreviewTransformInteraction('pan');
   };
 
+  // A view shown only for a while (the fitted figure of Review alignment) is not what a Session
+  // or an artifact checkpoint keeps. The view from before it is held here, and the Session
+  // writer and the UI capture read it through `heldPreviewViewport`.
+  /** @type {PersistedPreviewViewport | null} */
+  let held = null;
+  const holdPreviewViewport = () => { held ??= { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } }; };
+  /** @param {{ restore: boolean }} options `restore` shows the held view again; without it the hold is dropped. */
+  const releasePreviewViewport = ({ restore }) => {
+    const view = held;
+    held = null;
+    if (view && restore) setPreviewViewport(view.canvasPan, view.zoom);
+  };
+  const heldPreviewViewport = () => held;
+
   const disposePanZoom = () => {
     cancelPreviewTransformInteraction({ reconcile: false });
     previewTransformInteractionListeners.clear();
@@ -405,6 +420,9 @@ export const createPanZoom = (state) => {
     endPan,
     resetPreviewViewport,
     fitPreviewToViewport,
+    holdPreviewViewport,
+    releasePreviewViewport,
+    heldPreviewViewport,
     cancelPreviewTransformInteraction,
     disposePanZoom,
     previewTransformInteraction
@@ -443,6 +461,7 @@ export const createSidebarResize = (state) => {
  * @property {(callback: () => void) => void} onMounted
  * @property {(callback: () => void) => void} onUnmounted
  * @property {() => void} closeRightDrawer
+ * @property {() => boolean} previewPopupsHeld While it holds, a click outside leaves the feature and match popups as they are.
  */
 
 /** @param {GlobalUiEventsOptions} options */
@@ -450,7 +469,8 @@ export const setupGlobalUiEvents = ({
   state,
   onMounted,
   onUnmounted,
-  closeRightDrawer
+  closeRightDrawer,
+  previewPopupsHeld
 }) => {
   const {
     clickedFeature,
@@ -487,9 +507,10 @@ export const setupGlobalUiEvents = ({
       // The notice banner's Dismiss is not a click on the diagram.
       && !e.target.closest('[data-app-notice]')
     ) {
+      if (clickedLabel.value) clickedLabel.value = null;
+      if (previewPopupsHeld()) return;
       if (clickedFeature.value) clickedFeature.value = null;
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
-      if (clickedLabel.value) clickedLabel.value = null;
     }
   };
 

@@ -144,6 +144,19 @@ jobs:
       - name: Check Web architecture contracts
         run: node --test tests/web/architecture-contracts.test.mjs
 
+      - name: Replay the owner-graph detectors on history
+        env:
+          OWNER_GRAPH_REPLAY_HISTORY: required
+        run: |
+          # This checkout holds no old file contents (filter: blob:none). Fetch every
+          # version of the Web modules in one request; the replay would otherwise
+          # fetch them one file at a time.
+          git rev-list --objects --missing=print HEAD -- gbdraw/web/js tools/web-owner-graph.json \
+            | sed -n 's/^?//p' \
+            | git -c fetch.negotiationAlgorithm=noop fetch origin --no-tags --no-write-fetch-head \
+              --recurse-submodules=no --filter=blob:none --stdin
+          node --test tests/web/owner-graph-replay.test.mjs
+
   core:
     name: Core (Python ${{ matrix.python-version }})
     needs: ci-impact
@@ -421,10 +434,9 @@ jobs:
       - name: Run Web JavaScript tests
         timeout-minutes: 5
         run: |
-          find tests/web -maxdepth 1 -type f \
+          find tests/web -type f \
             -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs' \
             -print0 | xargs -0 node --test
-          node --test --test-concurrency=1 tests/web/contracts/vibrio-sequence-source-coverage.test.mjs
           node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz
           node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json
 
@@ -517,11 +529,10 @@ jobs:
         run: python tools/prepare_browser_wheel.py
 
       - name: Run fast Web JavaScript contracts
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: >-
-          find tests/web -maxdepth 1 -type f
+          find tests/web -type f
           -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs'
-          ! -name 'gallery-session-publication.test.mjs'
           -print0 | xargs -0 node --test
 
       - name: Run non-slow Python browser tests
