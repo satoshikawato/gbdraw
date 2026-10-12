@@ -5663,8 +5663,9 @@ const publicationResourceIdentity = async (resources, id, normalize, path, cache
   const resourceId = String(id || '').trim();
   if (!resourceId) throw new Error('Canonical request contains an empty resourceId.');
   const table = publicationTable(path);
-  const resource = resources?.[resourceId], key = resource?.encoding === 'base64' && !table && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
-  const kind = table ? table[0] : String(resource.kind || '');
+  // Own key (OV-614); a resource the table lacks is refused by `publicationBytes` below.
+  const resource = ownEntry(resources, resourceId), key = resource?.encoding === 'base64' && !table && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
+  const kind = table ? table[0] : String(resource?.kind || '');
   let digest = key ? cache.get(key) : null;
   if (!digest) { digest = normalizedPublicationBytes(resource, resourceId, normalize, path).then((bytes) => sha256Hex(bytes)); if (key) cache.set(key, digest); }
   return { kind, decodedPayloadSha256: await digest };
