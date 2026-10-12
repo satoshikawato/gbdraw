@@ -28,7 +28,8 @@ const { computed, nextTick, onMounted, onUnmounted, ref, watch } = window.Vue;
  * Brings a setting into view and focuses it: opens the disclosures around
  * `focus`, docks the entry of the section when the rail shows, and scrolls
  * the settings alone. `align: 'start'` puts `target` at the top edge;
- * otherwise a target that is not fully in view is centred.
+ * otherwise a target that is not fully in view is centred. A target outside
+ * the settings takes the focus where it is.
  * @typedef {(target: HTMLElement, options?: { align?: 'start', focus?: HTMLElement }) => Promise<void>} RevealSetting
  */
 
@@ -71,7 +72,7 @@ export const createSettingsPaneController = ({ state }) => {
   const revealSetting = async (target, { align, focus = target } = {}) => {
     const section = /** @type {HTMLElement | null} */ (target.closest('[data-settings-section]'));
     const area = section?.closest('.settings-scroll');
-    if (!section || !area) return;
+    if (!section || !area) return focus.focus();
     for (let details = focus.closest('details'); details && area.contains(details);
       details = details.parentElement?.closest('details') ?? null) {
       details.open = true;

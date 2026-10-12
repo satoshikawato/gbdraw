@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import {
-  SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf
+  SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryIn, settingsEntryOf
 } from '../../gbdraw/web/js/services/settings-sections.js';
 
 const html = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'utf8');
@@ -66,6 +66,27 @@ test('every section is docked by exactly one rail entry of each mode that shows 
   assert.equal(settingsEntryOf('preserved-settings'), 'input-genomes');
 });
 
+// A docked entry follows a mode change to the entry of the same section: its
+// own, or the one with the same title (Axis & Scale is one card per mode).
+// Comparison and Pairwise Comparisons share a short name, not a title.
+test('the entry of a section in a mode is its own or the one of the same title', () => {
+  for (const mode of MODES) {
+    const entries = settingsEntriesOf(mode, 'rail');
+    for (const section of SETTINGS_SECTIONS) {
+      const entry = settingsEntryOf(section.key);
+      const title = SETTINGS_SECTIONS.find((candidate) => candidate.key === entry).title;
+      const expected = entries.find((candidate) => candidate.key === entry) ?? entries.find((candidate) => candidate.title === title);
+      assert.equal(settingsEntryIn(mode, section.key), expected?.key, `${mode} ${section.key}`);
+    }
+  }
+  assert.equal(settingsEntryIn('linear', 'circular-axis'), 'linear-axis');
+  assert.equal(settingsEntryIn('circular', 'linear-axis'), 'circular-axis');
+  assert.equal(settingsEntryIn('circular', 'comparison'), undefined);
+  assert.equal(settingsEntryIn('linear', 'pairwise-comparisons'), undefined);
+  assert.equal(settingsEntryIn('circular', 'advanced-comparison'), undefined);
+  assert.equal(settingsEntryIn('linear', 'basic'), 'input-genomes');
+});
+
 // The elements of a template slice with their nesting depth, and the depth
 // at its end. A quoted attribute value may hold `>`.
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
@@ -116,6 +137,34 @@ test('every top-level child of the settings scroll area is a section, so a rail 
   const nested = area.filter((element) => element.depth > 1 && /\sv-settings-section=/.test(element.attributes))
     .map((element) => element.attributes.match(/v-settings-section="'([^']*)'"/)[1]);
   assert.deepEqual(nested, ['comparison'], 'Comparison is the one section inside another');
+});
+
+// With a nested section docked, the rail folds away what stands beside it:
+// the other children of the card, and the blocks beside the section inside the
+// card's block. The style rule names their tags, so a child with another tag
+// would stay on screen.
+test('what stands beside a nested section has a tag the rail folds away', () => {
+  const rule = html.match(/\[data-settings-in-dock="false"\]:not\(:has[^{]*\{ display: none; \}/)[0];
+  const tagsAfter = (path) => new Set(rule.split(',').map((selector) => selector.trim().split(`[data-settings-in-dock="false"] > ${path}`)[1])
+    .filter((rest) => rest !== undefined && /^[a-z]+(?![a-z >])/.test(rest)).map((rest) => rest.match(/^[a-z]+/)[0]));
+  const start = html.indexOf('<div id="settings-sections"');
+  const { elements: area } = elementsOf(html.slice(start, html.indexOf('<div class="generate-bar', start)));
+  const nested = area.findIndex((element) => element.depth > 1 && /\sv-settings-section=/.test(element.attributes));
+  assert.equal(area[nested].depth, 3, 'the nested section is a grandchild of its card');
+  const parentOf = (index) => area.findLastIndex((element, order) => order < index && element.depth === area[index].depth - 1);
+  const childrenOf = (index) => {
+    const end = area.findIndex((element, order) => order > index && element.depth <= area[index].depth);
+    return area.slice(index + 1, end < 0 ? undefined : end).filter((element) => element.depth === area[index].depth + 1);
+  };
+  const block = parentOf(nested);
+  const card = parentOf(block);
+  assert.equal(area[block].name, 'div');
+  assert.match(area[card].attributes, /\sv-settings-section=/);
+  for (const [holder, path] of [[card, ''], [block, 'div > ']]) {
+    const folded = tagsAfter(path);
+    assert.ok(folded.size > 0, `tags of "${path}"`);
+    assert.deepEqual([...new Set(childrenOf(holder).map((element) => element.name))].filter((name) => !folded.has(name)), [], `children of "${path || 'the card'}"`);
+  }
 });
 
 test('the settings pane keeps no second copy of a section title beside its icon', () => {

@@ -105,6 +105,36 @@ const sectionState = (page, key) => page.evaluate((key) => {
   };
 }, key);
 
+// Whether an element lies inside what the settings scroll area shows.
+const inSettingsView = (locator) => locator.evaluate((element) => {
+  const area = document.querySelector('.settings-scroll').getBoundingClientRect();
+  const box = element.getBoundingClientRect();
+  return box.height > 0 && box.top >= area.top - 1 && box.bottom <= area.bottom + 1;
+});
+
+// The entries of the rail in the column that scrolls them.
+const railFit = (page) => page.evaluate(() => {
+  const nav = document.querySelector('nav[aria-label="Settings sections"]');
+  const view = nav.getBoundingClientRect();
+  const bar = document.querySelector('.generate-bar').getBoundingClientRect();
+  const entries = Array.from(nav.querySelectorAll('button'));
+  const boxes = entries.map((button) => button.getBoundingClientRect());
+  const names = entries.map((button) => button.querySelector('span'));
+  const outside = (inner, outer) => inner.left < outer.left - 0.5 || inner.right > outer.right + 0.5
+    || inner.top < outer.top - 0.5 || inner.bottom > outer.bottom + 0.5;
+  return {
+    scrolls: nav.scrollHeight > nav.clientHeight,
+    scrollbar: nav.offsetWidth - nav.clientWidth,
+    // Entries the column does not show in full, by short name.
+    cut: entries.filter((button, order) => outside(boxes[order], view)).map((button) => button.textContent.trim()),
+    underBar: boxes.filter((box) => box.bottom > bar.top).length,
+    overlap: boxes.filter((box, order) => order > 0 && box.top < boxes[order - 1].bottom - 0.5).length,
+    smallestName: Math.min(...names.map((name) => parseFloat(getComputedStyle(name).fontSize))),
+    cutNames: names.filter((name, order) => outside(name.getBoundingClientRect(), boxes[order])).length,
+    minHeight: Math.round(Math.min(...boxes.map((box) => box.height)))
+  };
+});
+
 const near = (actual, expected, label) => expect(Math.abs(actual - expected), `${label}: ${actual} px, expected about ${expected}`)
   .toBeLessThanOrEqual(3);
 
@@ -279,11 +309,13 @@ test('Linear: Input docks without Comparison, Compare docks alone, and a mode ch
       otherContent: Array.from(card.querySelectorAll('input, select, textarea, button, a[href]'))
         .filter((control) => visible(control) && !section.contains(control)).length,
       offset: Math.round(section.getBoundingClientRect().top - area.top),
-      width: Math.round(section.getBoundingClientRect().width)
+      width: Math.round(section.getBoundingClientRect().width),
+      // Nothing beside the section takes room: the card is as tall as the section.
+      roomBeside: Math.round(card.getBoundingClientRect().height - section.getBoundingClientRect().height)
     };
   });
   expect(compare).toEqual({ section: true, headingFocused: true, cardHeader: false,
-    frame: ['0px', '0px', '0px', 'none', 'rgba(0, 0, 0, 0)'], otherContent: 0, offset: 0, width: 312 });
+    frame: ['0px', '0px', '0px', 'none', 'rgba(0, 0, 0, 0)'], otherContent: 0, offset: 0, width: 312, roomBeside: 0 });
   expect(await paneState(page)).toMatchObject({ docked: 'comparison', shown: ['input-genomes', 'comparison'], marked: ['Go to Comparison'] });
   await expect(page.locator('#output-prefix')).toBeHidden();
 
@@ -310,6 +342,31 @@ test('Linear: Input docks without Comparison, Compare docks alone, and a mode ch
   await entry(page, 'About & Citation').click();
   expect(await paneState(page)).toMatchObject({ docked: 'about', shown: ['about'], marked: ['Go to About & Citation'] });
   expect(await sectionState(page, 'about')).toMatchObject({ open: true, headingFocused: true, offset: 0 });
+
+  // Axis & Scale is one card per mode under one title: the docked entry follows the mode, in both directions.
+  await entry(page, 'Axis & Scale').click();
+  expect(await paneState(page)).toMatchObject({ docked: 'circular-axis', shown: ['circular-axis'], marked: ['Go to Axis & Scale'] });
+  await setMode(page, 'linear');
+  await expect(page.locator('.settings-pane')).toHaveAttribute('data-settings-docked', 'linear-axis');
+  expect(await paneState(page)).toMatchObject({ shown: ['linear-axis'], marked: ['Go to Axis & Scale'] });
+  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'circular'; });
+  await expect(page.locator('.settings-pane')).toHaveAttribute('data-settings-docked', 'circular-axis');
+  expect(await paneState(page)).toMatchObject({ shown: ['circular-axis'], marked: ['Go to Axis & Scale'] });
+
+  // The row has no entry for About & Citation: after Expand settings from it, the row marks the section at the
+  // top of the settings at once, by the rule it follows while the settings scroll.
+  await entry(page, 'About & Citation').click();
+  await toStacked(page).click();
+  const row = await page.evaluate(() => {
+    const area = document.querySelector('.settings-scroll');
+    const entries = Array.from(document.querySelectorAll('nav[aria-label="Settings sections"] button'));
+    const reached = entries.filter((button) => area.querySelector(`[data-settings-section="${button.dataset.settingsEntry}"]`)
+      .getBoundingClientRect().top <= area.getBoundingClientRect().top + 1);
+    return { marked: entries.filter((button) => button.getAttribute('aria-current') === 'true').map((button) => button.getAttribute('aria-label')),
+      atTop: reached.at(-1).getAttribute('aria-label'), aboutShown: area.querySelector('[data-settings-section="about"] > details').open };
+  });
+  expect(row.marked).toEqual([row.atTop]);
+  expect(row.aboutShown).toBe(true);
 });
 
 test('the browser remembers the display and nothing else; storage that fails gives the stacked display', async ({ page, browser, baseURL }) => {
@@ -400,10 +457,11 @@ test('a path that leads to a setting docks its section when the rail is alone', 
     if (await closeSection(page).count()) await closeSection(page).click();
     expect(await paneState(page)).toMatchObject({ display: 'rail', docked: null, areaShown: false });
   };
-  const inView = (locator) => locator.evaluate((element) => {
-    const area = document.querySelector('.settings-scroll').getBoundingClientRect();
-    const box = element.getBoundingClientRect();
-    return box.height > 0 && box.top >= area.top - 1 && box.bottom <= area.bottom + 1;
+  const inView = (locator) => inSettingsView(locator);
+  const comparisonAtTop = () => page.evaluate(() => {
+    const card = document.querySelector('[data-linear-comparison-card]');
+    return { offset: Math.round(card.getBoundingClientRect().top - document.querySelector('.settings-scroll').getBoundingClientRect().top),
+      focusInside: card.contains(document.activeElement) && document.activeElement.matches('button') };
   });
 
   // The record popup's Show in settings: the record's field, in Input.
@@ -428,6 +486,12 @@ test('a path that leads to a setting docks its section when the rail is alone', 
   await expect(execution).toBeFocused();
   expect(await paneState(page)).toMatchObject({ docked: 'comparison', marked: ['Go to Comparison'] });
   expect(await inView(execution), 'the Execution setting is inside the panel').toBe(true);
+  // A comparison error whose cause has no control: the Comparison section at the top, its first button focused.
+  await alone();
+  await page.evaluate(() => { window.__GBDRAW_APP__.errorLog = { code: 'COMPARISON_IDENTITY', stage: 'comparison' }; });
+  await page.getByRole('button', { name: 'Show in Comparison', exact: true }).click();
+  expect(await paneState(page)).toMatchObject({ docked: 'comparison', marked: ['Go to Comparison'] });
+  expect(await comparisonAtTop()).toEqual({ offset: 0, focusInside: true });
   await page.evaluate(() => { window.__GBDRAW_APP__.errorLog = null; });
 
   // Record Labels visibility, reached from the Layout note: the field's setting, in Titles.
@@ -461,6 +525,14 @@ test('a path that leads to a setting docks its section when the rail is alone', 
   expect(await inView(canvas), 'stacked: the canvas setting is in view').toBe(true);
   expect(await page.evaluate(() => [document.querySelector('.app-main').scrollTop, document.querySelector('.settings-pane').scrollTop,
     document.scrollingElement.scrollTop]), 'only the settings scroll area moved').toEqual([0, 0, 0]);
+  // Stacked, the comparison error without a control: the Comparison section goes to the top.
+  await setMode(page, 'linear');
+  await page.evaluate(() => {
+    document.querySelector('.settings-scroll').scrollTop = 0;
+    window.__GBDRAW_APP__.errorLog = { code: 'COMPARISON_IDENTITY', stage: 'comparison' };
+  });
+  await page.getByRole('button', { name: 'Show in Comparison', exact: true }).click();
+  expect(await comparisonAtTop()).toEqual({ offset: 0, focusInside: true });
 });
 
 test('phone width shows the stacked settings without the switch, whatever is remembered', async ({ page }) => {
@@ -624,7 +696,7 @@ test('an open Review alignment stays docked in the Result through every display 
   await expectDocked('1280 stacked again', 'beside', 908);
 });
 
-test('the rail fits low windows: every entry is reachable and About is readable (1280x720)', async ({ page }) => {
+test('at 1280x720 the rail shows every entry without scrolling, with a section docked and alone', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.addInitScript((key) => { localStorage.setItem(key, 'rail'); }, STORAGE_KEY);
@@ -633,27 +705,268 @@ test('the rail fits low windows: every entry is reachable and About is readable 
     await setMode(page, mode);
     for (const closed of [false, true]) {
       if (closed) await closeSection(page).click();
-      const fit = await page.evaluate(() => {
-        const wrap = document.querySelector('.settings-index').getBoundingClientRect();
-        const bar = document.querySelector('.generate-bar').getBoundingClientRect();
-        const entries = Array.from(document.querySelectorAll('nav[aria-label="Settings sections"] button'));
-        const boxes = entries.map((button) => button.getBoundingClientRect());
-        const names = entries.map((button) => button.querySelector('span'));
-        const outside = (inner, outer) => inner.left < outer.left - 0.5 || inner.right > outer.right + 0.5
-          || inner.top < outer.top - 0.5 || inner.bottom > outer.bottom + 0.5;
-        return {
-          clipped: boxes.filter((box) => box.top < wrap.top - 0.5 || box.bottom > wrap.bottom + 0.5).length,
-          underBar: boxes.filter((box) => box.bottom > bar.top).length,
-          overlap: boxes.filter((box, order) => order > 0 && box.top < boxes[order - 1].bottom - 0.5).length,
-          smallestName: Math.min(...names.map((name) => parseFloat(getComputedStyle(name).fontSize))),
-          cutNames: names.filter((name, order) => outside(name.getBoundingClientRect(), boxes[order])).length,
-          minHeight: Math.round(Math.min(...boxes.map((box) => box.height)))
-        };
-      });
-      expect(fit, `${mode}, ${closed ? 'rail alone' : 'docked'}`).toMatchObject({ clipped: 0, underBar: 0, overlap: 0, cutNames: 0 });
+      const fit = await railFit(page);
+      expect(fit, `${mode}, ${closed ? 'rail alone' : 'docked'}`).toMatchObject({ scrolls: false, cut: [], underBar: 0, overlap: 0, cutNames: 0 });
       expect(fit.smallestName, `${mode}: name size`).toBeGreaterThanOrEqual(9);
       expect(fit.minHeight, `${mode}: entry height`).toBeGreaterThanOrEqual(30);
       if (closed) await entry(page, 'Input Genomes').click();
+    }
+  }
+});
+
+// A lower window: the column scrolls. Headless Chromium hides scrollbars, so
+// this case runs in its own browser with scrollbars shown.
+test('a rail too low for its entries scrolls with a scrollbar and brings the focused and the docked entry into view (1366x650)', async ({ playwright, baseURL }) => {
+  test.setTimeout(180_000);
+  const browser = await playwright.chromium.launch({ ignoreDefaultArgs: ['--hide-scrollbars'] });
+  try {
+    const page = await browser.newPage({ baseURL, viewport: { width: 1366, height: 650 } });
+    await page.addInitScript((key) => { localStorage.setItem(key, 'rail'); }, STORAGE_KEY);
+    await openApp(page);
+    await setMode(page, 'linear');
+    const column = index(page);
+    const toTop = () => column.evaluate((nav) => { nav.scrollTop = 0; });
+    const tip = page.locator('.settings-index-tip');
+
+    // Linear, Input docked: the last entries are below the column's edge, and a 4 px scrollbar shows it.
+    const low = await railFit(page);
+    expect(low).toMatchObject({ scrolls: true, scrollbar: 4, overlap: 0, cutNames: 0 });
+    expect(low.cut).toContain('About');
+    expect(low.smallestName).toBeGreaterThanOrEqual(9);
+    expect(low.minHeight).toBeGreaterThanOrEqual(30);
+
+    // The text of a hovered entry goes when the column scrolls under the pointer.
+    await entry(page, 'Input Genomes').hover();
+    await expect(tip).toHaveText('Input Genomes');
+    await page.mouse.wheel(0, 60);
+    await expect.poll(() => column.evaluate((nav) => nav.scrollTop)).toBeGreaterThan(0);
+    await expect(tip).toHaveCount(0);
+    await page.mouse.move(700, 300);
+
+    // The keyboard reaches every entry: the focused one comes into view, and its text stays beside it.
+    await toTop();
+    await toStacked(page).focus();
+    for (let stop = 0; stop < RAIL.linear.length; stop += 1) await page.keyboard.press('Tab');
+    await expect(entry(page, 'About & Citation')).toBeFocused();
+    expect((await railFit(page)).cut).not.toContain('About');
+    await expect(tip).toHaveText('About & Citation');
+    await expect.poll(async () => {
+      const [target, shown] = [await entry(page, 'About & Citation').boundingBox(), await tip.boundingBox()];
+      return Math.abs((shown.y + shown.height / 2) - (target.y + target.height / 2));
+    }).toBeLessThanOrEqual(2);
+
+    // Close section returns the focus to the docked entry, in view.
+    await entry(page, 'About & Citation').click();
+    await toTop();
+    await closeSection(page).click();
+    await expect(entry(page, 'About & Citation')).toBeFocused();
+    expect((await railFit(page)).cut).not.toContain('About');
+
+    // A path that docks an entry below the column's edge brings that entry into view.
+    await toTop();
+    await page.evaluate(() => window.__GBDRAW_APP__.revealSetting(document.querySelector('[data-settings-section="about"] summary')));
+    await expect(page.locator('.settings-pane')).toHaveAttribute('data-settings-docked', 'about');
+    await expect.poll(async () => (await railFit(page)).cut).not.toContain('About');
+  } finally {
+    await browser.close();
+  }
+});
+
+// A color rule with a pattern Python rejects fails with an error in the Result
+// that offers Edit pattern: the pattern field of the Colors section.
+test('Edit pattern of a failed color rule leads to the pattern field in every display', async ({ page }) => {
+  test.setTimeout(420_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await openApp(page);
+  await loadSession(page, 'HmmtDNA_basic_circular.gbdraw-session.json');
+  await entry(page, 'Colors').click();
+  await page.getByLabel('Qualifier name', { exact: true }).fill('product');
+  const pattern = page.getByLabel('New color rule pattern', { exact: true });
+  await pattern.fill('(?<enzyme>NADH)');
+  await page.getByRole('button', { name: 'Add color rule', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.errorLog?.code ?? null), { timeout: 180_000 }).toBe('REGEX_SYNTAX');
+  const edit = page.getByRole('button', { name: 'Edit pattern', exact: true });
+  const area = page.locator('.settings-scroll');
+
+  // Stacked: the field out of view, then inside a closed Colors section.
+  await area.evaluate((element) => { element.scrollTop = 0; });
+  expect(await inSettingsView(pattern)).toBe(false);
+  await edit.click();
+  await expect(pattern).toBeFocused();
+  expect(await inSettingsView(pattern), 'stacked: the field is in view').toBe(true);
+  await area.evaluate((element) => {
+    element.querySelector('[data-settings-section="colors"] > details').open = false;
+    element.scrollTop = 0;
+  });
+  await edit.click();
+  await expect(pattern).toBeFocused();
+  expect(await inSettingsView(pattern), 'stacked, Colors closed: the field is in view').toBe(true);
+
+  // The rail with another section docked, then the rail alone: Colors is docked and the field focused.
+  await toRail(page).click();
+  for (const display of ['another section docked', 'rail alone']) {
+    if (display === 'rail alone') await closeSection(page).click();
+    else await entry(page, 'Layout').click();
+    expect((await paneState(page)).docked, display).toBe(display === 'rail alone' ? null : 'layout');
+    await edit.click();
+    await expect(pattern, display).toBeFocused();
+    expect(await paneState(page), display).toMatchObject({ docked: 'colors', marked: ['Go to Colors'] });
+    expect(await inSettingsView(pattern), `${display}: the field is inside the panel`).toBe(true);
+  }
+});
+
+// The layout warning of Circular pairwise rings: a note above Generate, and
+// beside the rail alone the mark of a help tip. In every display its text is
+// the description of Generate in the accessibility tree.
+test('beside the rail alone Generate is compact and a layout warning is a tip that a tap opens without starting Generate', async ({ browser, baseURL }) => {
+  test.setTimeout(300_000);
+  const context = await browser.newContext({ baseURL, viewport: { width: 1024, height: 768 }, hasTouch: true });
+  try {
+    const page = await context.newPage();
+    await openApp(page);
+    const accessibility = await context.newCDPSession(page);
+    await accessibility.send('Accessibility.enable');
+    const description = async () => {
+      const { nodes } = await accessibility.send('Accessibility.getFullAXTree');
+      const button = nodes.find((node) => node.role?.value === 'button' && node.name?.value === 'Generate Diagram');
+      return button ? button.description?.value ?? '' : 'no Generate button in the tree';
+    };
+    const lastStops = () => page.evaluate(() => {
+      const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
+      return Array.from(document.querySelector('.settings-pane').querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex]'))
+        .filter((element) => visible(element) && !element.disabled && element.tabIndex >= 0).slice(-2).map((element) => element.getAttribute('aria-label'));
+    });
+    const note = page.locator('.generate-bar > div');
+    const mark = page.getByRole('button', { name: 'Layout warning', exact: true });
+    const text = page.locator('body > [role="tooltip"]');
+    expect(await description()).toBe('');
+    await expect(note).toHaveCount(0);
+
+    // Five uploaded tables for Circular pairwise rings, with GC content and skew on: the warning shows.
+    await entry(page, 'Pairwise Comparisons').click();
+    await page.getByLabel('Upload BLAST', { exact: true }).check();
+    await page.locator('[data-settings-section="pairwise-comparisons"] input[type="file"]').first().setInputFiles(
+      ['LvMJNV.TrcuMJNV', 'MeenMJNV.MejoMJNV', 'MelaMJNV.PemoMJNVA', 'MellatMJNV.MeenMJNV', 'MjeNMV.MelaMJNV']
+        .map((pair) => join(process.cwd(), 'examples', `${pair}.tblastx.out`)));
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularConservationLayoutWarning)).toContain('pairwise comparison ring');
+    const warning = await page.evaluate(() => window.__GBDRAW_APP__.circularConservationLayoutWarning);
+
+    // Stacked, and the rail with a section: the note above the button; the mark is not shown.
+    const stackedGap = (await paneState(page)).generateButton.bottomGap;
+    for (const display of ['stacked', 'rail with a section']) {
+      if (display !== 'stacked') await toRail(page).click();
+      await expect(note, display).toBeVisible();
+      await expect(note, display).toHaveText(warning);
+      await expect(mark, display).toHaveCount(0);
+      expect(await description(), display).toBe(warning);
+      expect((await lastStops())[1], display).toBe('Generate Diagram');
+    }
+
+    // The rail alone: the mark in place of the note, before Generate in Tab order; the description at rest.
+    await closeSection(page).click();
+    await expect(note).toBeHidden();
+    await expect(mark).toBeVisible();
+    await expect(mark).toHaveAttribute('aria-expanded', 'false');
+    await expect(text).toHaveCount(0);
+    expect(await page.evaluate(() => document.activeElement?.closest('.generate-bar') === null)).toBe(true);
+    expect(await description()).toBe(warning);
+    expect(await lastStops()).toEqual(['Layout warning', 'Generate Diagram']);
+    const compact = await paneState(page);
+    expect(compact.generateButton).toEqual({ size: '60x60', bottomGap: stackedGap });
+    expect(compact.generate.width).toBe(60);
+    const [markBox, buttonBox] = [await mark.boundingBox(), await generate(page).boundingBox()];
+    expect(markBox.y + markBox.height).toBeLessThanOrEqual(buttonBox.y);
+    expect(Math.round(markBox.width)).toBe(60);
+
+    // A tap opens the text and starts nothing; Escape closes it.
+    await mark.tap();
+    await expect(text).toHaveText(warning);
+    await expect(mark).toHaveAttribute('aria-expanded', 'true');
+    expect(await page.evaluate(() => { const app = window.__GBDRAW_APP__; return [app.processing, app.errorLog, app.results.length]; }))
+      .toEqual([false, null, 0]);
+    const shown = await text.boundingBox();
+    expect(shown.x).toBeGreaterThanOrEqual(0);
+    expect(shown.y + shown.height).toBeLessThanOrEqual(markBox.y);
+    await page.keyboard.press('Escape');
+    await expect(text).toHaveCount(0);
+    await expect(mark).toHaveAttribute('aria-expanded', 'false');
+
+    // Disabled by a Session operation, and while Generate runs: the same 60 px button, the loader alone.
+    await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = true; });
+    await expect(generate(page)).toBeDisabled();
+    expect((await paneState(page)).generateButton).toEqual({ size: '60x60', bottomGap: stackedGap });
+    await page.evaluate(() => { Object.assign(window.__GBDRAW_APP__, { sessionSavePending: false, processing: true }); });
+    await expect(generate(page)).toBeDisabled();
+    await expect(page.locator('.generate-bar > button .gbdraw-loader')).toBeVisible();
+    await expect(page.locator('.generate-bar > button .generate-bar-long')).toBeHidden();
+    expect((await paneState(page)).generateButton).toEqual({ size: '60x60', bottomGap: stackedGap });
+    await page.evaluate(() => { window.__GBDRAW_APP__.processing = false; });
+    await expect(generate(page)).toBeEnabled();
+  } finally {
+    await context.close();
+  }
+});
+
+// In the phone layout the page scrolls the settings and the Generate bar is
+// fixed over its bottom edge: a setting under the bar is not in view.
+test('phone width: Record Labels brings its setting into view above the fixed Generate bar', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await setMode(page, 'linear');
+  const visibility = page.locator('select[id^="linear-label-visibility-"]').first();
+  const key = (await visibility.getAttribute('id')).replace('linear-label-visibility-', '');
+  const place = () => visibility.evaluate((select) => {
+    const box = select.getBoundingClientRect();
+    return { aboveBar: Math.round(document.querySelector('.generate-bar').getBoundingClientRect().top - box.bottom),
+      belowHeader: Math.round(box.top - document.querySelector('.app-header').getBoundingClientRect().bottom) };
+  });
+  // The setting lies in the strip the bar covers.
+  await visibility.evaluate((select) => {
+    for (let details = select.closest('details'); details; details = details.parentElement?.closest('details')) details.open = true;
+    window.scrollBy(0, select.getBoundingClientRect().top - document.querySelector('.generate-bar').getBoundingClientRect().top - 4);
+  });
+  expect((await place()).aboveBar).toBeLessThan(0);
+  await page.evaluate((key) => window.__GBDRAW_APP__.focusLinearLabelVisibility(key), key);
+  await expect(visibility).toBeFocused();
+  const shown = await place();
+  expect(shown.aboveBar, 'the setting ends above the Generate bar').toBeGreaterThanOrEqual(0);
+  expect(shown.belowHeader, 'the setting starts below the header').toBeGreaterThanOrEqual(0);
+});
+
+// The close button sits over the top right corner of the docked panel and
+// stays there while the section scrolls. With the section at its top, where
+// it cannot be scrolled further down, no text and no control lies under it.
+test('nothing of a docked section lies under the close button while the section is at its top', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await openApp(page);
+  await loadSession(page, LINEAR_SESSION);
+  await toRail(page).click();
+  for (const mode of ['linear', 'circular']) {
+    await setMode(page, mode);
+    for (const [short, title] of RAIL[mode]) {
+      await entry(page, title).click();
+      const under = await page.evaluate(() => {
+        const area = document.querySelector('.settings-scroll');
+        const close = document.querySelector('.settings-dock-close').getBoundingClientRect();
+        const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
+        const covered = (box) => box.width > 0 && box.height > 0 && box.right > close.left && box.left < close.right
+          && box.bottom > close.top && box.top < close.bottom;
+        const found = [];
+        const walker = document.createTreeWalker(area, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.textContent.trim() || !visible(node.parentElement)) continue;
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          if (Array.from(range.getClientRects()).some(covered)) found.push(node.textContent.trim().slice(0, 40));
+        }
+        for (const control of area.querySelectorAll('button, input, select, textarea, a[href], i')) {
+          if (visible(control) && covered(control.getBoundingClientRect())) found.push(control.getAttribute('aria-label') || control.className);
+        }
+        return { scrollTop: area.scrollTop, found };
+      });
+      expect(under, `${mode}, ${short}`).toEqual({ scrollTop: 0, found: [] });
     }
   }
 });

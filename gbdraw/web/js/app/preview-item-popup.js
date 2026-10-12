@@ -1,6 +1,5 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry, LinearSeq } from '../state.js' */
-/** @import { RevealSetting } from './settings-pane.js' */
 // The legend-entry and record-definition popups of the preview. A click (or
 // Enter) on a Legend row or a record definition opens the match popup frame
 // with a `previewItem`; this owner derives what the popup shows from the
@@ -55,10 +54,15 @@ import {
  */
 
 /**
+ * The root's way to bring a setting of the settings pane into view and focus it.
+ * @typedef {(setting: HTMLElement) => unknown} RevealSetting
+ */
+
+/**
  * @typedef {object} PreviewItemPopupOptions
  * @property {PreviewItemState} state
  * @property {<T>(getter: () => T) => { readonly value: T }} computed Vue `computed`
- * @property {RevealSetting} revealSetting Brings a setting of the settings pane into view and focuses it.
+ * @property {RevealSetting} revealSetting
  * @property {(entry: LegendEntry) => string} readLegendEntryColor
  *   The color the Legend panel shows for a row.
  * @property {(entry: LegendEntry) => readonly ColorRuleLike[]} readLegendRowRules

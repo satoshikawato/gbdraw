@@ -1732,7 +1732,8 @@ export const createAppSetup = () => {
     readUserDefaultColor: resultsManager.readUserDefaultColor,
     setDefaultColor: resultsManager.setDefaultColor,
     askChoice,
-    showNotice
+    showNotice,
+    revealSetting: settingsPaneActions.revealSetting
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;

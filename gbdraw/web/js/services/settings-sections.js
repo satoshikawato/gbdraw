@@ -83,6 +83,16 @@ export const settingsEntryOf = (key) => {
   return section && 'dock' in section ? section.dock : key;
 };
 
+// The rail entry of a mode that shows a section: the section's entry, or the
+// mode's entry with the same title (Axis & Scale is one card per mode). A mode
+// without either has none.
+/** @param {'circular' | 'linear'} mode @param {SettingsSectionKey} key @returns {SettingsSectionKey | undefined} */
+export const settingsEntryIn = (mode, key) => {
+  const own = SETTINGS_SECTIONS.filter(hasEntry).find((entry) => entry.key === settingsEntryOf(key));
+  const entries = settingsEntriesOf(mode, 'rail');
+  return (entries.find((entry) => entry === own) ?? entries.find((entry) => entry.title === own?.title))?.key;
+};
+
 // What scrolls the settings: their scroll area, or the page in the phone
 // layout, where the area does not scroll.
 /** @param {Element} area The settings scroll area. */
@@ -90,7 +100,8 @@ export const settingsScrollOwner = (area) =>
   (getComputedStyle(area).overflowY !== 'visible' ? area : document.scrollingElement);
 
 // What scrolls the settings, and the top and bottom edges of what it shows:
-// the scroll area and its box, or the page below its sticky header.
+// the scroll area and its box, or the page between its sticky header and the
+// Generate bar, which is fixed over the page's bottom edge in that layout.
 /** @param {Element} area The settings scroll area. */
 export const settingsView = (area) => {
   const owner = settingsScrollOwner(area);
@@ -98,5 +109,9 @@ export const settingsView = (area) => {
     const { top, bottom } = area.getBoundingClientRect();
     return { owner, top, bottom };
   }
-  return { owner, top: document.querySelector('.app-header')?.getBoundingClientRect().bottom ?? 0, bottom: window.innerHeight };
+  return {
+    owner,
+    top: document.querySelector('.app-header')?.getBoundingClientRect().bottom ?? 0,
+    bottom: document.querySelector('.generate-bar')?.getBoundingClientRect().top ?? window.innerHeight
+  };
 };

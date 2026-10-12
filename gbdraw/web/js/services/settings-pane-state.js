@@ -3,7 +3,7 @@
 // stacked settings, or an icon rail with at most one docked entry: the
 // sections of that entry beside the rail. Nothing is docked in the stacked
 // display, and a docked entry is always one the mode has.
-import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf } from './settings-sections.js';
+import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryIn } from './settings-sections.js';
 
 /** @import { SettingsSectionKey } from './settings-sections.js' */
 
@@ -20,14 +20,10 @@ import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf } from './setting
 export const SETTINGS_PANE_DISPLAYS = Object.freeze(['stacked', 'rail']);
 export const DEFAULT_SETTINGS_PANE_DISPLAY = SETTINGS_PANE_DISPLAYS[0];
 
-// The rail entry that shows a section in a mode: the section's own entry, or
-// the first entry (Input) when the mode has no such entry.
+// The rail entry that shows a section in a mode, or the first entry (Input)
+// when the mode has no entry for it.
 /** @param {DiagramMode} mode @param {SettingsSectionKey} section */
-const entryIn = (mode, section) => {
-  const entries = settingsEntriesOf(mode, 'rail');
-  const key = settingsEntryOf(section);
-  return (entries.find((entry) => entry.key === key) ?? entries[0]).key;
-};
+const entryIn = (mode, section) => settingsEntryIn(mode, section) ?? settingsEntriesOf(mode, 'rail')[0].key;
 
 /**
  * Switches to the rail with the entry of `section` docked.
@@ -64,7 +60,8 @@ export const closeDockedSettingsEntry = (state) => {
 };
 
 /**
- * A mode change: a docked entry the mode lacks gives way to Input.
+ * A mode change: a docked entry the mode lacks gives way to the mode's entry
+ * of the same title, or to Input when the mode has none.
  * @param {SettingsPaneRefs} state
  * @param {DiagramMode} mode
  */

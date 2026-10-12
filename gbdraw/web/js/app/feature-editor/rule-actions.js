@@ -47,6 +47,12 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  */
 
 /**
+ * The root's way to bring a setting of the settings pane into view and focus
+ * it: the pattern field a failed rule write offers for editing.
+ * @typedef {(setting: HTMLElement) => unknown} RevealSetting
+ */
+
+/**
  * A Legend row a rule commit draws in the place of the row `at` (OV-158).
  * @typedef {{ caption: string, at: string }} LegendPlacement
  */
@@ -81,10 +87,11 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
  * @property {AskChoice} [askChoice] The root's choice dialog: a pattern that may match slowly asks first.
  * @property {ShowNotice} [showNotice] The root's notice banner.
+ * @property {RevealSetting} [revealSetting] Without a settings pane, the field takes the focus where it is.
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {} }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -123,7 +130,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return busy || (canRetrySpecificRuleFailure.value ? ruleFailure.value.retry() : false);
   };
   const editSpecificRuleFailure = () => {
-    if (canEditSpecificRuleFailure.value) ruleFailure.value.input.focus();
+    if (canEditSpecificRuleFailure.value) revealSetting(ruleFailure.value.input);
   };
   // The legend rows the candidate rules draw on the features the displayed
   // Result draws (OV-344: not on another batch Result's features or a hidden

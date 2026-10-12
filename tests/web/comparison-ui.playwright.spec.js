@@ -1228,23 +1228,25 @@ test('comparison controls drive appearance and current Session round trips', { t
   await expect(inference).not.toBeChecked();
 });
 
+const configureLinearRecords = (page, records) => page.evaluate((contents) => {
+  const app = window.__GBDRAW_APP__;
+  app.lInputType = 'gb';
+  while (app.linearSeqs.length < contents.length) app.addLinearSeq();
+  contents.forEach((content, index) => app.setLinearSeqPrimaryFile(
+    index,
+    'gb',
+    new File([content], `error-record-${index + 1}.gbk`, {
+      type: 'text/plain',
+      lastModified: index + 1
+    })
+  ));
+}, records);
+
 test('structured comparison errors open and focus their owning disclosure', async ({ page }) => {
   test.setTimeout(300000);
   await openLinear(page);
 
-  const configureRecords = async (records) => page.evaluate((contents) => {
-    const app = window.__GBDRAW_APP__;
-    app.lInputType = 'gb';
-    while (app.linearSeqs.length < contents.length) app.addLinearSeq();
-    contents.forEach((content, index) => app.setLinearSeqPrimaryFile(
-      index,
-      'gb',
-      new File([content], `error-record-${index + 1}.gbk`, {
-        type: 'text/plain',
-        lastModified: index + 1
-      })
-    ));
-  }, records);
+  const configureRecords = (records) => configureLinearRecords(page, records);
 
   // D-54: an Upload pair without a file asks at Generate instead of failing;
   // Choose opens its disclosure and its file chooser.
@@ -1363,6 +1365,88 @@ test('structured comparison errors open and focus their owning disclosure', asyn
 });
 
 // Two uploaded GenBank records joined by one uploaded-table comparison (CO-06).
+// The same paths while the settings pane shows the icon rail: the Comparison
+// section is docked beside the rail and the control is brought into view inside it.
+test('with the icon rail, comparison issues and pair actions show their control in the docked Comparison section', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await openLinear(page);
+  const pane = page.locator('.settings-pane');
+  const closeSection = page.getByRole('button', { name: 'Close section', exact: true });
+  const railAlone = async () => {
+    if (await closeSection.count()) await closeSection.click();
+    await expect(pane).not.toHaveAttribute('data-settings-docked');
+  };
+  // The focused control is inside the docked panel's view.
+  const focusInPanel = () => page.evaluate(() => {
+    const area = document.querySelector('.settings-scroll').getBoundingClientRect();
+    const box = document.activeElement.getBoundingClientRect();
+    return box.height > 0 && box.top >= area.top - 1 && box.bottom <= area.bottom + 1;
+  });
+  await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
+  await expect(pane).toHaveAttribute('data-settings-display', 'rail');
+
+  // Choose file in an issue: the pair's file chooser, the Selected pairs disclosure, the pair's file control.
+  await configureLinearRecords(page, [makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct')]);
+  const edgeKey = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearComparisonGlobalAction('losat');
+    const key = app.linearComparisonResolution.edges[0].edgeKey;
+    app.setLinearComparisonGapAction(key, 'upload');
+    return key;
+  });
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Go to Comparison', exact: true }).click();
+  await expect(pane).toHaveAttribute('data-settings-docked', 'comparison');
+  await selectedPairs(page).evaluate((details) => { details.open = false; });
+  const chooserOpened = page.waitForEvent('filechooser');
+  await comparisonCard(page).locator('[data-linear-comparison-issue="missing-upload"]')
+    .getByRole('button', { name: 'Choose file for #1 → #2', exact: true }).click();
+  expect(await (await chooserOpened).element().getAttribute('aria-label')).toBe('BLAST TSV for #1 to #2');
+  await expect(selectedPairs(page)).toHaveAttribute('open', '');
+  await expect.poll(() => page.locator(`[data-edge-key="${edgeKey}"]`).evaluate((element) => element.contains(document.activeElement)
+    && Boolean(document.activeElement?.closest('[data-linear-comparison-pair-upload]')))).toBe(true);
+  expect(await focusInPanel(), 'the pair file control is inside the panel').toBe(true);
+
+  // Generate stops on a comparison issue while the rail is alone: Comparison is docked at the setting to change.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await expect(pane).toHaveAttribute('data-settings-display', 'rail');
+  await configureLinearRecords(page, [makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct'), makeGenbank('ErrorC', 'gga')]);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('collinear');
+    const [losatEdgeKey, uploadEdgeKey] = app.linearComparisonResolution.edges.map((edge) => edge.edgeKey);
+    app.setLinearComparisonGapAction(losatEdgeKey, 'losat');
+    app.setLinearComparisonGapAction(uploadEdgeKey, 'upload');
+    document.querySelector('[data-linear-comparison-disclosure="settings"]')?.removeAttribute('open');
+  });
+  await railAlone();
+  const stopped = await evaluateWithRetainedPromise(page, async () => {
+    const result = await window.__GBDRAW_APP__.runAnalysis();
+    return { status: result.status, reason: window.__GBDRAW_APP__.errorLog?.context?.reason };
+  });
+  expect(stopped).toEqual({ status: 'error', reason: 'SELECTED_PAIRS_NEED_PAIRWISE' });
+  await expect(pane).toHaveAttribute('data-settings-docked', 'comparison');
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
+  await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toBeFocused();
+  expect(await focusInPanel(), 'the LOSATP mode setting is inside the panel').toBe(true);
+
+  // Add in Selected pairs: the new pair's first control, inside the panel.
+  const [first, second] = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.clearSelectedLinearComparisons();
+    return app.linearSeqs.map((sequence) => sequence.uid);
+  });
+  await selectedPairs(page).evaluate((details) => { details.open = true; });
+  await selectedPairs(page).getByRole('button', { name: 'Add', exact: true }).click();
+  await expect.poll(() => page.locator(`fieldset[data-edge-key="${first}->${second}"]`)
+    .evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  expect(await focusInPanel(), 'the added pair is inside the panel').toBe(true);
+});
+
 const prepareUploadedTablePair = async (page) => {
   await openLinear(page);
   await page.evaluate(async (records) => {

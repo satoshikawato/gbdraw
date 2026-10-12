@@ -65,13 +65,15 @@ test('closing leaves the rail alone', () => {
   assert.deepEqual(read(state), ['rail', null]);
 });
 
-test('a mode change docks Input in place of an entry the mode lacks, and leaves the rail alone as it is', () => {
+// Axis & Scale is one card per mode with one title: its entry follows the mode.
+// Comparison and Pairwise Comparisons are different sections under one short name.
+test('a mode change docks the entry of the same title, or Input, in place of an entry the mode lacks, and leaves the rail alone as it is', () => {
   for (const [mode, docked, expected] of [
     ['circular', 'comparison', 'input-genomes'],
     ['circular', 'advanced-comparison', 'input-genomes'],
-    ['circular', 'linear-axis', 'input-genomes'],
+    ['circular', 'linear-axis', 'circular-axis'],
     ['linear', 'pairwise-comparisons', 'input-genomes'],
-    ['linear', 'circular-axis', 'input-genomes'],
+    ['linear', 'circular-axis', 'linear-axis'],
     ['linear', 'comparison', 'comparison'],
     ['circular', 'labels', 'labels'],
     ['linear', 'about', 'about'],
