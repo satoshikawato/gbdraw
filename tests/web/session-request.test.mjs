@@ -1433,6 +1433,41 @@ assert.deepEqual(
     priority: 'original-priority.tsv'
   }
 );
+// OV-525: a request rebuilt for publication keeps a label whitelist that was
+// written as a table (Python stores `label_whitelist_table` as canonical TSV).
+{
+  const committed = structuredClone(semanticCanonical);
+  const options = committed.renderRequest.diagramOptions;
+  const tableRef = {
+    resourceId: options.labelWhitelistFile.resourceId,
+    representation: 'canonicalTsv'
+  };
+  delete options.labelWhitelistFile;
+  options.labelWhitelistTable = tableRef;
+  const table = Buffer.from('CDS\tgene\talpha\n', 'utf8');
+  committed.resources[tableRef.resourceId] = {
+    kind: 'canonical-tsv',
+    name: 'label-whitelist.tsv',
+    encoding: 'base64',
+    size: table.length,
+    data: table.toString('base64')
+  };
+  // Load backs each file with its Session resource; the writer reads the kind from it.
+  const { adoptCurrentSessionResources } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'session-resource-backing.js'))
+  );
+  const projection = projectCanonicalSessionRequest({
+    ...committed,
+    sessionResourceTable: adoptCurrentSessionResources(committed.resources)
+  });
+  assert.deepEqual(projection.config.whitelist, [{ feat: 'CDS', qual: 'gene', key: 'alpha' }]);
+  const rebuilt = buildCanonicalRenderRequestRaw({
+    state: { ...state, canonicalPublicationFiles: projection.requestTableFiles },
+    filesData
+  });
+  assert.deepEqual(rebuilt.renderRequest.diagramOptions.labelWhitelistTable, tableRef);
+  assert.equal(rebuilt.renderRequest.diagramOptions.labelWhitelistFile, undefined);
+}
 // OV-23: a pasted tab or line break in a Label whitelist or Qualifier priority cell
 // must not add a column; the writers normalize like the Feature visibility writer.
 state.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: 'two\twords\nmore ' });

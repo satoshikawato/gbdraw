@@ -1689,7 +1689,7 @@ export const createAppSetup = () => {
   /** @type {{ drawerOpen: boolean, popup: unknown } | null} */
   let similarityAlignmentTakeover = null;
   const previewPopupsHeld = () => similarityAlignmentTakeover !== null;
-  const featureSelection = createFeatureSelection(/** @type {any} */ ({ state, onMounted, onUnmounted, previewPopupsHeld }));
+  const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted, previewPopupsHeld });
   // The palette owner comes before the feature editor, whose popup sets a
   // type's default color through it (D-15).
   const resultsManager = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
@@ -4279,7 +4279,8 @@ export const createAppSetup = () => {
       ? { catalog, error: '' }
       : {
           catalog: null,
-          error: drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => error?.code)
+          // A stored '' (no error) has no `code`: the read is undefined, as for null.
+          error: drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => /** @type {UserFacingError} */ (error)?.code)
             || catalogIssueError(catalog)
         };
   }
@@ -5336,6 +5337,7 @@ export const createAppSetup = () => {
       recordSessionLifecycleEvent('session-save-catalog-preparation-start');
       /** @type {Awaited<ReturnType<typeof prepareLinearRecordCatalog>>['catalog']} */
       let catalog = null;
+      /** @type {Awaited<ReturnType<typeof prepareLinearRecordCatalog>>['error']} */
       let error = '';
       if (draftRequest) {
         ({ catalog, error } = await prepareLinearRecordCatalog({ privateCandidate: true }));

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the browser's schema and version constants of persisted contracts."""
+"""Generate the browser's constants and typedefs of persisted contracts."""
 
 from __future__ import annotations
 
@@ -8,9 +8,11 @@ import importlib
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET = REPO_ROOT / "gbdraw" / "web" / "js" / "contracts" / "schema.generated.js"
+REQUEST_TARGET = TARGET.with_name("request.generated.js")
 sys.path.insert(0, str(REPO_ROOT))
 
 # (Web name, Python module that defines the value, Python name). The Web keeps
@@ -22,16 +24,21 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("MODE_SCOPED_SESSION_VERSION", "gbdraw.session_io", "MODE_SCOPED_SESSION_MIN_VERSION"),
     ("CURRENT_AUTHORITY_SESSION_MIN_VERSION", "gbdraw.session_io", "CURRENT_AUTHORITY_SESSION_MIN_VERSION"),
     ("CURRENT_ARTIFACT_SESSION_MIN_VERSION", "gbdraw.session_io", "CURRENT_ARTIFACT_SESSION_MIN_VERSION"),
+    ("CANONICAL_SESSION_MIN_VERSION", "gbdraw.session_io", "CANONICAL_SESSION_MIN_VERSION"),
     ("DRAWN_HASH_RULE_SESSION_MAX_VERSION", "gbdraw.session_io", "DRAWN_HASH_RULE_SESSION_MAX_VERSION"),
     ("CANONICAL_REQUEST_SCHEMA", "gbdraw.session_request_codec", "CANONICAL_REQUEST_SCHEMA"),
+    ("DISPLAY_PLACEMENT_SCHEMA", "gbdraw.session_request_codec", "DISPLAY_PLACEMENT_SCHEMA"),
     ("FEATURE_OVERRIDE_SCHEMA", "gbdraw.session_request_codec", "FEATURE_OVERRIDE_SCHEMA"),
     ("SUPPORTED_CANONICAL_REQUEST_SCHEMAS", "gbdraw.session_request_codec", "SUPPORTED_CANONICAL_REQUEST_SCHEMAS"),
+    ("SIMILARITY_ALIGNMENT_PLAN_SCHEMA", "gbdraw.layout.similarity_alignment", "SIMILARITY_ALIGNMENT_PLAN_SCHEMA"),
     ("FEATURE_CATALOG_SCHEMA", "gbdraw.session_io", "CURRENT_FEATURE_CATALOG_SCHEMA"),
     ("ANCHOR_FEATURE_CATALOG_SCHEMA", "gbdraw.web_support.feature_catalog", "ANCHOR_FEATURE_CATALOG_SCHEMA"),
     ("LEGACY_FEATURE_CATALOG_SCHEMA", "gbdraw.web_support.feature_catalog", "LEGACY_FEATURE_CATALOG_SCHEMA"),
     ("FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION", "gbdraw.session_io", "FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION"),
     ("PROTEIN_LOSAT_CACHE_SCHEMA", "gbdraw.analysis.protein_colinearity", "PROTEIN_LOSAT_CACHE_SCHEMA"),
+    ("LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA", "gbdraw.analysis.protein_colinearity", "LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA"),
     ("PROTEIN_IDENTITY_MANIFEST_SCHEMA", "gbdraw.analysis.protein_colinearity", "PROTEIN_IDENTITY_MANIFEST_SCHEMA"),
+    ("ORTHOGROUP_INFERENCE_VERSION", "gbdraw.analysis.protein_colinearity", "ORTHOGROUP_INFERENCE_VERSION"),
     ("NUCLEOTIDE_LOSAT_CACHE_SCHEMA", "gbdraw.comparisons.losat_jobs", "NUCLEOTIDE_LOSAT_CACHE_SCHEMA"),
     ("LOSAT_DERIVED_CACHE_SCHEMA", "gbdraw.analysis.protein_artifacts", "CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA"),
     ("LEGACY_LOSAT_DERIVED_CACHE_SCHEMA", "gbdraw.session_io", "LEGACY_LOSAT_DERIVED_CACHE_SCHEMA"),
@@ -99,27 +106,117 @@ def render_web_contracts_module() -> str:
     return "\n".join(parts)
 
 
+_JSDOC_SCALARS = {
+    "string": "string",
+    "integer": "number",
+    "number": "number",
+    "boolean": "boolean",
+    "null": "null",
+    "unknown": "unknown",
+}
+
+
+def _jsdoc_literal(value: object) -> str:
+    if value is None or isinstance(value, bool):
+        return {None: "null", True: "true", False: "false"}[value]
+    return _scalar(value)
+
+
+def _jsdoc_type(shape: dict[str, Any]) -> str:
+    """Render one shape of ``gbdraw.contract_shapes`` as a JSDoc type."""
+    kind = shape["kind"]
+    if kind in _JSDOC_SCALARS:
+        return _JSDOC_SCALARS[kind]
+    if kind == "ref":
+        return shape["name"]
+    if kind == "literal":
+        return " | ".join(_jsdoc_literal(value) for value in shape["values"])
+    if kind == "union":
+        return " | ".join(_jsdoc_type(option) for option in shape["options"])
+    if kind == "array":
+        items = _jsdoc_type(shape["items"])
+        several = shape["items"]["kind"] == "union" or len(shape["items"].get("values", ())) > 1
+        return f"({items})[]" if several else f"{items}[]"
+    if kind == "tuple":
+        return "[" + ", ".join(_jsdoc_type(item) for item in shape["items"]) + "]"
+    if kind == "record":
+        return f"Record<string, {_jsdoc_type(shape['values'])}>"
+    if kind != "object":
+        raise TypeError(f"Unsupported contract shape: {kind!r}")
+    if not shape["fields"]:
+        return "Record<string, never>"
+    members = (
+        f"{_property_name(name)}{'?' if name in shape['optional'] else ''}: {_jsdoc_type(item)}"
+        for name, item in shape["fields"].items()
+    )
+    return "{ " + ", ".join(members) + " }"
+
+
+def _property_name(name: str) -> str:
+    if not _IDENTIFIER.fullmatch(name):
+        raise TypeError(f"Unsupported Web contract key: {name!r}")
+    return name
+
+
+def _typedefs(types: dict[str, dict[str, Any]]) -> str:
+    """Render named shapes as JSDoc typedefs; an object lists its properties."""
+    parts = []
+    for name, shape in types.items():
+        if shape["kind"] != "object" or not shape["fields"]:
+            parts.append(f"/** @typedef {{{_jsdoc_type(shape)}}} {name} */\n")
+            continue
+        lines = [f" * @typedef {{object}} {name}"]
+        for field, item in shape["fields"].items():
+            key = f"[{_property_name(field)}]" if field in shape["optional"] else _property_name(field)
+            lines.append(f" * @property {{{_jsdoc_type(item)}}} {key}")
+        parts.append("/**\n" + "\n".join(lines) + "\n */\n")
+    return "".join(parts)
+
+
+def render_request_typedefs_module() -> str:
+    from gbdraw.session_request_codec import describe_canonical_request
+
+    return (
+        "// @ts-check\n"
+        "// Generated by tools/generate_web_contracts.py from describe_canonical_request()\n"
+        "// in gbdraw/session_request_codec.py; do not edit manually.\n"
+        "// The canonical render request of the current schema, as Python writes and reads it.\n"
+        "\n"
+        + _typedefs(describe_canonical_request()["types"])
+        + "export {};\n"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Fail if the generated browser contract constants are out of sync.",
+        help="Fail if the generated browser contract modules are out of sync.",
     )
     args = parser.parse_args()
 
-    expected = render_web_contracts_module()
+    modules = {
+        TARGET: render_web_contracts_module(),
+        REQUEST_TARGET: render_request_typedefs_module(),
+    }
     if args.check:
-        if not TARGET.is_file() or TARGET.read_text(encoding="utf-8") != expected:
+        stale = [
+            target.name
+            for target, expected in modules.items()
+            if not target.is_file() or target.read_text(encoding="utf-8") != expected
+        ]
+        if stale:
             print(
-                "Browser contract constants are stale. "
+                f"Browser contract modules are stale ({', '.join(stale)}). "
                 "Run: python tools/generate_web_contracts.py"
             )
             return 1
         return 0
 
-    TARGET.parent.mkdir(parents=True, exist_ok=True)
-    TARGET.write_text(expected, encoding="utf-8", newline="\n")
+    for target, expected in modules.items():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(expected, encoding="utf-8", newline="\n")
     return 0
 
 

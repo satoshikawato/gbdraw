@@ -30,6 +30,7 @@ import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
 } from '../../services/feature-visibility.js';
 import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
+/** @import { PatternDraft } from './pattern-drafts.js' */
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the
 // palette and the specific-color rules (R3); this owner calls it after a rule
@@ -501,10 +502,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         return applied;
       } catch (cause) {
         if (!current() || cause?.canceled || cause?.name === 'AbortError' || ['canceled', 'stale', 'superseded'].includes(cause?.status)) return false;
-        patternDrafts.get(row).error = normalizeUserFacingError(cause, { operation: 'evaluateRules', stage: 'resource-staging' });
+        // `current()` above holds, so the row has a draft of this token.
+        /** @type {PatternDraft} */ (patternDrafts.get(row)).error = normalizeUserFacingError(cause, { operation: 'evaluateRules', stage: 'resource-staging' });
         return false;
       } finally {
-        if (patternDrafts.isCurrent(row, token)) patternDrafts.get(row).pending = false;
+        // `isCurrent` holds, so the row has a draft of this token.
+        if (patternDrafts.isCurrent(row, token)) /** @type {PatternDraft} */ (patternDrafts.get(row)).pending = false;
       }
     }, () => !patternDrafts.isCurrent(row, token));
   };

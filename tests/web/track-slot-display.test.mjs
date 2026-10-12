@@ -29,6 +29,11 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'current-option-values.js'),
   join(tempRoot, 'services', 'current-option-values.js')
 );
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'contracts'),
+  join(tempRoot, 'contracts'),
+  { recursive: true }
+);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // track-slot-display.js reads the generated size-class boundaries.
 await cp(

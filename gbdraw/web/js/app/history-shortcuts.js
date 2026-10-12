@@ -1,4 +1,12 @@
 // @ts-check
+/**
+ * @typedef {{ tagName?: string, type?: string, isContentEditable?: boolean }} EditableCandidate
+ *   The members of the closest editable ancestor that the check reads.
+ * @typedef {{ isContentEditable?: boolean, closest?: (selectors: string) => EditableCandidate | null }} KeyEventTarget
+ *   The members of a keydown target that the check reads; the document has neither.
+ */
+
+/** @param {KeyEventTarget | null} target */
 const isTextEditingTarget = (target) => {
   if (!target) return false;
   if (target.isContentEditable) return true;
@@ -27,11 +35,14 @@ const isTextEditingTarget = (target) => {
 
 /** @param {HistoryShortcutsOptions} options */
 export const setupHistoryShortcuts = ({ history, onMounted, onUnmounted }) => {
+  /** @param {KeyboardEvent} event */
   const handleKeyDown = (event) => {
     if (!history) return;
     if (!(event.ctrlKey || event.metaKey)) return;
     if (event.altKey) return;
-    if (isTextEditingTarget(event.target)) return;
+    // A keydown target is an Element or the document; the check reads only
+    // the optional members of KeyEventTarget, and `closest?.` covers a target without them.
+    if (isTextEditingTarget(/** @type {KeyEventTarget | null} */ (event.target))) return;
 
     const key = String(event.key || '').toLowerCase();
     const wantsUndo = key === 'z' && !event.shiftKey;

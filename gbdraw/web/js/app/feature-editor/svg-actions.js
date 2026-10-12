@@ -63,9 +63,9 @@ export {
  * @property {(selectionId: string, options?: { additive?: boolean }) => any} [selectFeatureRange]
  * @property {(options?: { clearStatus?: boolean }) => any} [clearFeatureSelection]
  * @property {(svgId: string) => any} [markPlainFeatureClick]
- * @property {(event: Event, svg: Element) => boolean} [startMarqueePointer]
- * @property {(event: Event) => boolean} [moveMarqueePointer]
- * @property {(event: Event) => boolean} [commitMarqueePointer]
+ * @property {(event: PointerEvent, svg: Element) => boolean} [startMarqueePointer]
+ * @property {(event: PointerEvent) => boolean} [moveMarqueePointer]
+ * @property {(event: PointerEvent) => boolean} [commitMarqueePointer]
  * @property {() => any} [cancelMarqueePointer]
  */
 
@@ -73,7 +73,7 @@ export {
  * The preview owner's pan and zoom interaction, which pauses feature hover.
  * @typedef {object} PreviewTransformInteractionPort
  * @property {() => boolean} [isActive]
- * @property {(listener: (change: { active: boolean, kind: string, event: Event, reconcile: boolean }) => void) => (() => void) | void} [subscribe]
+ * @property {(listener: (change: { active: boolean, kind: string, event: Event | null, reconcile: boolean }) => void) => (() => void) | void} [subscribe]
  */
 
 /**
@@ -1786,7 +1786,8 @@ export const createFeatureSvgActions = ({
     reconcile
   }) => {
     if (active) {
-      delegatedFeatureHandlers?.beginPreviewTransformInteraction?.(event, kind);
+      // A start (`active`) carries the event that began it; only the end carries null.
+      delegatedFeatureHandlers?.beginPreviewTransformInteraction?.(/** @type {Event} */ (event), kind);
       return;
     }
     delegatedFeatureHandlers?.endPreviewTransformInteraction?.({ reconcile });

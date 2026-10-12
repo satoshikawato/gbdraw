@@ -5,14 +5,23 @@ import { losatRecordGencode, losatSearchSequences, planLosatSourceJobs } from '.
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
 import { losatThreadingPrecondition } from '../services/losat.js';
+/** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
+/** @import { LinearSeq } from '../state.js' */
 
 const { computed, ref, watch, onMounted } = window.Vue;
 
+/** @typedef {{ value: string, label: string }} IntegerOption */
+
+/** @param {unknown} value */
 const parsePositiveInteger = (value) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= 1 ? parsed : null;
 };
 
+/**
+ * @param {number} maxValue
+ * @returns {IntegerOption[]}
+ */
 const createPositiveIntegerOptions = (maxValue) =>
   Array.from({ length: Math.max(0, Math.floor(maxValue)) }, (_unused, index) => {
     const value = index + 1;
@@ -22,6 +31,11 @@ const createPositiveIntegerOptions = (maxValue) =>
     };
   });
 
+/**
+ * @param {IntegerOption[]} options
+ * @param {unknown} requestedValue
+ * @param {number} effectiveValue
+ */
 const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) => {
   const requested = parsePositiveInteger(requestedValue);
   if (requested === null) return options;
@@ -55,7 +69,7 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * The refs and reactive objects of `state.js` this module reads. A ref is
  * `{ value }` because Vue comes from `window.Vue`, which is `any`.
  * @typedef {object} LosatSettingsState
- * @property {Record<string, any>[]} linearSeqs
+ * @property {LinearSeq[]} linearSeqs
  * @property {() => LosatSettingsDrawing} activeDrawing
  * @property {LosatExecutionValues} losatExecution
  * @property {{ value?: { state?: string } }} [losatThreadingStatus]
@@ -64,7 +78,7 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
 /**
  * The members of a drawing (`DrawingState` of state.js) this module reads.
  * @typedef {object} LosatSettingsDrawing
- * @property {{ value: any }} linearComparisonResolution
+ * @property {{ value: LinearComparisonResolution }} linearComparisonResolution
  * @property {LosatSettingsValues} losat
  * @property {{ value: string }} losatProgram
  * @property {readonly string[]} [recordsOff]
@@ -187,6 +201,7 @@ export const createLosatSettings = ({ state }) => {
 
   watch(
     losatTotalThreadBudgetOptions,
+    /** @param {IntegerOption[]} options */
     (options) => {
       if (!hasValidLosatIntent(state.activeDrawing())) return;
       const raw = String(losatExecution.totalThreadBudget || 'safe').trim().toLowerCase();

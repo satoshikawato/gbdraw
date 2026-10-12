@@ -15,11 +15,19 @@ const TEXT_INPUT_TYPES = new Set([
   'week'
 ]);
 
+/**
+ * A control the adapter tracks: an input, textarea, select, button, or
+ * contenteditable element. `type` and `disabled` exist on some of them only.
+ * @typedef {Element & { type?: string, disabled?: boolean, isContentEditable?: boolean }} HistoryControl
+ */
+
+/** @param {HistoryControl | null | undefined} target */
 export const isIgnoredTarget = (target) =>
   Boolean(
     target?.closest?.('[data-history-ignore], [data-history-managed], [data-history-scope="transient"]')
   );
 
+/** @param {HistoryControl | null} element */
 const isEditableControl = (element) => {
   if (!element) return false;
   const tag = String(element.tagName || '').toLowerCase();
@@ -28,6 +36,7 @@ const isEditableControl = (element) => {
   return TEXT_INPUT_TYPES.has(String(element.type || '').toLowerCase());
 };
 
+/** @param {HistoryControl | null} element */
 const controlLabel = (element) => {
   if (!element) return 'Edit';
   const tag = String(element.tagName || '').toLowerCase();
@@ -93,6 +102,7 @@ export const createDialogChoice = ({ mutationPending, runUndoable, ref }) => {
   ) => {
     if (pending.value || mutationPending()) return undefined;
     if (choice === 'cancel') return cancel();
+    /** @type {(() => unknown)[]} */
     const queued = closes = [];
     pending.value = true;
     return runUndoable(label(), () => handler(choice, ...rest)).finally(() => {
@@ -113,11 +123,18 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   const appRoot = root || document.getElementById('app');
   if (!appRoot || !history) return () => {};
 
+  /** @type {WeakMap<HistoryControl, T>} */
   const txByElement = new WeakMap();
+  /** @type {WeakMap<HistoryControl, Promise<T | null>>} */
   const beginByElement = new WeakMap();
   /** @type {Promise<void> | null} */
   let pendingCommit = null;
 
+  /**
+   * @param {HistoryControl | null} element
+   * @param {string} [source]
+   * @returns {Promise<T | null>}
+   */
   const beginForElement = (element, source = 'input-adapter') => {
     if (!element || element.disabled || isIgnoredTarget(element)) return Promise.resolve(null);
     const pendingBegin = beginByElement.get(element);
@@ -138,6 +155,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     return start;
   };
 
+  /** @param {HistoryControl} element */
   const commitElement = async (element) => {
     const pendingBegin = beginByElement.get(element);
     if (pendingBegin) await pendingBegin;
@@ -158,13 +176,21 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     }
   };
 
+  // The adapter listens on one root element, and the pointer, focus, key,
+  // change, and click events it handles are dispatched to Elements, so a target
+  // that is not null is an Element.
+  /**
+   * @param {EventTarget | null} eventTarget
+   * @returns {HistoryControl | null}
+   */
   const findControl = (eventTarget) =>
-    eventTarget?.closest?.('input, textarea, select, button, [contenteditable="true"]') || null;
+    /** @type {Element | null} */ (eventTarget)?.closest?.('input, textarea, select, button, [contenteditable="true"]') || null;
 
   // R11: a discrete control begins in the capture phase of its committing
   // event (checkbox, radio, and file input: change; button: click), so a
   // pointer, its label, the keyboard, and a picker opened by another button
   // record the same one step. Text-like controls begin on focus.
+  /** @param {PointerEvent} event */
   const onPointerDown = (event) => {
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target) || target.closest?.('button')) return;
@@ -175,6 +201,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     }
   };
 
+  /** @param {FocusEvent} event */
   const onFocusIn = (event) => {
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target)) return;
@@ -183,6 +210,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     }
   };
 
+  /** @param {KeyboardEvent} event */
   const onKeyDown = (event) => {
     // A shortcut chord is not an edit of the focused control.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -193,6 +221,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     }
   };
 
+  /** @param {Event} event */
   const onChangeCapture = (event) => {
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target)) return;
@@ -200,6 +229,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     if (type === 'checkbox' || type === 'radio' || type === 'file') void beginForElement(target);
   };
 
+  /** @param {Event} event */
   const onChange = (event) => {
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target)) return;
@@ -213,6 +243,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     }
   };
 
+  /** @param {FocusEvent} event */
   const onFocusOut = (event) => {
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target)) return;
@@ -221,15 +252,17 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     }
   };
 
+  /** @param {MouseEvent} event */
   const onClick = (event) => {
-    const button = event.target?.closest?.('button');
+    const button = /** @type {Element | null} */ (event.target)?.closest?.('button');
     if (!button || isIgnoredTarget(button)) return;
     // Commit after the click handlers and the state they update in this task.
     setTimeout(() => { void commitElement(button); }, 0);
   };
 
+  /** @param {MouseEvent} event */
   const onClickCapture = (event) => {
-    const button = event.target?.closest?.('button');
+    const button = /** @type {Element | null} */ (event.target)?.closest?.('button');
     if (!button || isIgnoredTarget(button)) return;
     void beginForElement(button);
   };

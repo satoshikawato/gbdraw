@@ -17,12 +17,15 @@ import {
 import { diffLegendIntents, legendRowRules } from '../../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 
+/** @param {unknown} value */
 const normalizedColor = (value) => {
   const resolved = String(resolveColorToHex(String(value || '').trim()) || value || '').trim().toLowerCase();
   return resolved.startsWith('#') ? toNativeColorInputValue(resolved) : resolved;
 };
 
+/** @param {EntryRecord | null | undefined} entry */
 const legendCaption = (entry) => String(entry?.caption || '').trim();
+/** @param {EntryRecord | null | undefined} entry */
 const generatedCaption = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
 
 // The entries in a caption order: entries the order does not list follow in
@@ -87,6 +90,7 @@ export const createLegendEntryActions = ({
   /** @type {Set<string>} */
   const replayedInventoryResults = new Set();
 
+  /** @param {(options?: { commit?: boolean }) => unknown} handler The root's refresh of the Legend geometry. */
   const setLegendGeometryChangedHandler = (handler) => {
     legendGeometryChangedHandler = typeof handler === 'function' ? handler : null;
   };
@@ -107,6 +111,7 @@ export const createLegendEntryActions = ({
   const adoptRestoredLegend = ({ from = null } = {}) => {
     const drawing = state.activeDrawing();
     const svg = svgContainer.value?.querySelector?.('svg');
+    /** @type {EntryRecord[]} */
     const restored = drawing.legendEntries.value || [];
     if (!svg || results.value.length < 2 || !Array.isArray(from)) return false;
     const mounted = listLegendRows(svg, { entries: restored, dormant: drawing.dormantLegendEntries.value || [], asShown: true });
@@ -197,6 +202,7 @@ export const createLegendEntryActions = ({
       if (!provenance.has(caption)) provenance.set(caption, new Set());
       provenance.get(caption)?.add(normalizedColor(entry?.color));
     }
+    /** @type {{ caption: string, color: string }[]} */
     const listed = (drawing.legendEntries.value || [])
       .map((/** @type {EntryRecord} */ entry) => ({ caption: legendCaption(entry), color: normalizedColor(entry.color) }));
     const owned = listed.filter((entry) => provenance.get(entry.caption)?.has(entry.color));
@@ -339,7 +345,7 @@ export const createLegendEntryActions = ({
   const drawnInventory = (drawing, { inventory, orderEdited, generatedCaptions, rendered }) => {
     const retainedCaptions = new Set([
       ...generatedCaptions,
-      ...drawing.deletedLegendEntries.value.map(entry => entry.originalCaption || entry.caption)
+      ...(/** @type {EntryRecord[]} */ (drawing.deletedLegendEntries.value)).map(entry => entry.originalCaption || entry.caption)
     ]);
     const surviving = inventory.filter(caption => retainedCaptions.has(caption));
     if (orderEdited) return [...new Set([...surviving, ...rendered])];
@@ -352,6 +358,7 @@ export const createLegendEntryActions = ({
     });
     return order;
   };
+  /** @param {{ entries: ListedEntry[], generatedCaptions: Set<string> }} listing */
   const renderedCaptions = ({ entries, generatedCaptions }) => entries
     .map(entry => entry.originalCaption)
     .filter(caption => generatedCaptions.has(caption));
@@ -365,7 +372,7 @@ export const createLegendEntryActions = ({
    */
   const dormantAfterDraw = (drawing, { previous, drawn }) => {
     const drawnOriginals = new Set(drawn.map((entry) => String(entry?.originalCaption || entry?.caption || '').trim()));
-    const deleted = new Set(drawing.deletedLegendEntries.value
+    const deleted = new Set((/** @type {EntryRecord[]} */ (drawing.deletedLegendEntries.value))
       .map((entry) => String(entry?.originalCaption || entry?.caption || '').trim()));
     /** @type {Set<string>} */
     const seen = new Set();
@@ -578,6 +585,7 @@ export const createLegendEntryActions = ({
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    /** @type {EntryRecord[]} */
     const deleted = drawing.deletedLegendEntries.value || [];
     const picked = new Set(indexes ?? deleted.map((/** @type {unknown} */ _, /** @type {number} */ index) => index));
     const returning = deleted.filter((/** @type {unknown} */ _, /** @type {number} */ index) => picked.has(index));
@@ -587,7 +595,8 @@ export const createLegendEntryActions = ({
     let entries = [...(drawing.legendEntries.value || [])];
     for (const entry of returning) {
       const caption = legendCaption(entry);
-      const color = String(drawing.legendColorOverrides[caption] || legendRowRules(legendEntryKey(entry), context)[0]?.color || entry.color);
+      const recorded = Object.hasOwn(drawing.legendColorOverrides, caption) ? drawing.legendColorOverrides[caption] : undefined;
+      const color = String(recorded || legendRowRules(legendEntryKey(entry), context)[0]?.color || entry.color);
       entries = withEntryAtDefaultPlace(entries, { ...entry, color }, inventory);
     }
     drawing.deletedLegendEntries.value = deleted.filter((/** @type {unknown} */ _, /** @type {number} */ index) => !picked.has(index));

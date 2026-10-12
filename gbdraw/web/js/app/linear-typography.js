@@ -1,4 +1,9 @@
 // @ts-check
+/** @import { SessionBusy } from '../state.js' */
+
+/** @typedef {number | string | null} FontSizeInput A font size input: a number, the raw text when it is not numeric, or null when empty. */
+
+/** @param {unknown} value */
 const optionalNumberInputValue = (value) => {
   const text = String(value ?? '').trim();
   if (text === '') return null;
@@ -8,13 +13,14 @@ const optionalNumberInputValue = (value) => {
 
 /**
  * @typedef {Object} LinearTypographyControllerOptions
- * @property {Record<string, any>} adv Advanced-options state owned by `state.js`.
+ * @property {{ scale_font_size: FontSizeInput, ruler_label_font_size: FontSizeInput }} adv The two font sizes of the advanced-options state owned by `state.js`.
  * @property {{ value: boolean }} linked The ref that links the two font sizes.
- * @property {() => any} [mutationAvailability] Returns a busy outcome while a Session operation blocks edits.
+ * @property {() => SessionBusy | null} [mutationAvailability] Returns a busy outcome while a Session operation blocks edits.
  */
 
 /** @param {LinearTypographyControllerOptions} options */
 export const createLinearTypographyController = ({ adv, linked, mutationAvailability = () => null }) => {
+  /** @param {unknown} value */
   const setScaleFontSize = (value) => {
     const sessionBusy = mutationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -24,6 +30,7 @@ export const createLinearTypographyController = ({ adv, linked, mutationAvailabi
     return nextValue;
   };
 
+  /** @param {unknown} value */
   const setRulerLabelFontSize = (value) => {
     const sessionBusy = mutationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -32,6 +39,7 @@ export const createLinearTypographyController = ({ adv, linked, mutationAvailabi
     return true;
   };
 
+  /** @param {unknown} nextLinked */
   const setLinked = (nextLinked) => {
     const sessionBusy = mutationAvailability();
     if (sessionBusy) return sessionBusy;

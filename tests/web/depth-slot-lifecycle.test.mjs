@@ -12,7 +12,7 @@ import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-depth-slot-lifecycle-'));
-for (const directory of ['app', 'utils']) {
+for (const directory of ['app', 'utils', 'contracts']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', directory), join(tempRoot, directory), { recursive: true });
 }
 // circular-track-slots.js reads the conservation-series row helpers.

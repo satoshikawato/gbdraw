@@ -15,6 +15,7 @@ import {
 import { countGenBankRecords } from '../services/genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
+import { DISPLAY_PLACEMENT_SCHEMA, FEATURE_OVERRIDE_SCHEMA } from '../contracts/schema.generated.js';
 
 const SAFE_SHELL_TOKEN_RE = /^[A-Za-z0-9_@%+=:,./-]+$/;
 
@@ -454,9 +455,9 @@ const validateCurrentSemanticCoverage = (request) => {
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
     const path = `records[${index}]`;
     coverObject(coverage, record, path, [
-      'cardinality', 'source', 'selector', 'region', 'presentation', ...(request.schema >= 7 ? ['display'] : [])
+      'cardinality', 'source', 'selector', 'region', 'presentation', ...(request.schema >= DISPLAY_PLACEMENT_SCHEMA ? ['display'] : [])
     ], ['recordKey']);
-    if (request.schema >= 7) coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
+    if (request.schema >= DISPLAY_PLACEMENT_SCHEMA) coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
     if (!['all', 'exactly_one'].includes(record.cardinality)) {
       throw new SourceRecipeUnavailable(
         `Source recipe unavailable: record cardinality "${String(record.cardinality || 'missing')}" has no current CLI projection.`
@@ -517,8 +518,8 @@ const validateCurrentSemanticCoverage = (request) => {
   const options = request.diagramOptions;
   coverObject(coverage, options, 'diagramOptions', new Set([
     ...DIAGRAM_OPTION_FIELDS,
-    ...(request.schema >= 7 ? ['featurePlacements'] : []),
-    ...(request.schema >= 9 ? ['featureOverrides'] : [])
+    ...(request.schema >= DISPLAY_PLACEMENT_SCHEMA ? ['featurePlacements'] : []),
+    ...(request.schema >= FEATURE_OVERRIDE_SCHEMA ? ['featureOverrides'] : [])
   ]));
   (options.featureOverrides || []).forEach((row, index) => {
     coverObject(coverage, row, `diagramOptions.featureOverrides[${index}]`, [
@@ -812,8 +813,8 @@ const appendInputArgs = async (args, request, files) => {
   if (recordsTableRequired) {
     const requestedTableRows = requestedRows;
     const columns = inputKind === 'genbank'
-      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= 7 ? ['topology', 'display_start'] : [])]
-      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= 7 ? ['topology', 'display_start'] : [])];
+      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= DISPLAY_PLACEMENT_SCHEMA ? ['topology', 'display_start'] : [])]
+      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= DISPLAY_PLACEMENT_SCHEMA ? ['topology', 'display_start'] : [])];
     const rows = records.map((record, index) => {
       const region = isPlainObject(record.region) ? record.region : null;
       const selector = selectorText(region?.selector || record.selector);

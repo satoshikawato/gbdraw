@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { LinearComparisonIssue, LinearComparisonResolution, LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
+/** @import { LinearComparisonIssue, LinearComparisonPlan, LinearComparisonResolution, LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -7,6 +7,7 @@ import {
   normalizeLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import { comparisonStateForMode } from '../mode-profiles.js';
+/** @import { ComparisonState } from '../mode-profiles.js' */
 
 const LINEAR_COMPARISON_INTENT_KEYS = Object.freeze({
   NONE: 'none',
@@ -135,17 +136,32 @@ const EMPTY_PLAN_NOTICES = Object.freeze({
   [LINEAR_COMPARISON_INTENT_KEYS.UPLOAD]: 'No pair has a BLAST TSV yet, so Generate draws no comparison. Choose a file for a pair under Selected pairs.'
 });
 
+/**
+ * The four result filters of a comparison; each value is unvalidated.
+ * @typedef {Partial<Record<keyof ComparisonState, unknown>>} ComparisonFilterValues
+ */
+
+/**
+ * @param {Record<string, unknown>} value
+ * @param {string} key
+ */
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 
+/**
+ * @param {number} count
+ * @param {string} qualifier
+ */
 const pluralizedPairs = (count, qualifier) => (
   `${count} ${qualifier} pair${count === 1 ? '' : 's'}`
 );
 
+/** @param {unknown} value */
 const normalizeLosatProgram = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['blastn', 'tblastx', 'blastp'].includes(normalized) ? normalized : 'blastn';
 };
 
+/** @param {unknown} value */
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['pairwise', 'orthogroup', 'collinear'].includes(normalized)
@@ -188,6 +204,7 @@ const intentKeyForPlan = (plan, adjacentEdgeKeys) => {
     : LINEAR_COMPARISON_INTENT_KEYS.LOSAT;
 };
 
+/** @param {LinearComparisonPlan} plan */
 const plannedSources = (plan) => {
   if (plan.mode === LINEAR_COMPARISON_MODES.NONE) {
     return Object.freeze({ hasLosat: false, hasUpload: false });
@@ -205,6 +222,7 @@ const plannedSources = (plan) => {
   });
 };
 
+/** @param {readonly LinearComparisonResolvedEdge[]} edges */
 const projectSourceBreakdown = (edges) => {
   const losat = edges.filter((edge) => edge?.source === LINEAR_COMPARISON_SOURCES.LOSAT).length;
   const upload = edges.filter((edge) => edge?.source === LINEAR_COMPARISON_SOURCES.UPLOAD).length;
@@ -225,6 +243,10 @@ const projectSourceBreakdown = (edges) => {
   return Object.freeze({ key, losat, upload, label });
 };
 
+/**
+ * @param {LinearComparisonPlan} plan
+ * @param {readonly LinearComparisonResolvedEdge[]} activeEdges
+ */
 const retainedDormantDraftCount = (plan, activeEdges) => {
   const activeById = new Map(activeEdges.map((edge) => [String(edge?.id || ''), edge]));
   return plan.edges.filter((draft) => {
@@ -250,6 +272,10 @@ const retainedDormantDraftCount = (plan, activeEdges) => {
   }).length;
 };
 
+/**
+ * @param {unknown} left
+ * @param {unknown} right
+ */
 const valuesEquivalent = (left, right) => {
   const leftNumber = Number(left);
   const rightNumber = Number(right);
@@ -264,11 +290,13 @@ const valuesEquivalent = (left, right) => {
   return String(left ?? '').trim() === String(right ?? '').trim();
 };
 
+/** @param {unknown} value */
 const displayFilterValue = (value) => {
   if (value === null || value === undefined || String(value).trim() === '') return 'unset';
   return String(value).trim();
 };
 
+/** @param {ComparisonFilterValues} filters */
 const projectFilterSummary = (filters) => {
   const defaults = comparisonStateForMode('linear');
   const source = filters && typeof filters === 'object' && !Array.isArray(filters)
@@ -288,10 +316,12 @@ const projectFilterSummary = (filters) => {
     `Identity >= ${displayFilterValue(values.identity)}%`,
     `Length >= ${displayFilterValue(values.alignment_length)}`
   ].join(' · ');
-  const isDefault = Object.keys(values).every((key) => valuesEquivalent(values[key], defaults[key]));
+  // `values` has exactly the four keys of ComparisonState, built above.
+  const isDefault = /** @type {(keyof ComparisonState)[]} */ (Object.keys(values)).every((key) => valuesEquivalent(values[key], defaults[key]));
   return Object.freeze({ text, isDefault });
 };
 
+/** @param {string} activeKey */
 const projectLosatModes = (activeKey) => Object.freeze(LOSAT_MODES.map((mode) => Object.freeze({
   key: mode.key,
   label: mode.label,
@@ -301,6 +331,10 @@ const projectLosatModes = (activeKey) => Object.freeze(LOSAT_MODES.map((mode) =>
   requiredIntentActionKey: null
 })));
 
+/**
+ * @param {LinearComparisonPlan} plan
+ * @param {string} activeKey
+ */
 const projectLosatpModes = (plan, activeKey) => Object.freeze(LOSATP_MODES.map((mode) => {
   const selectable = !(plan.mode === LINEAR_COMPARISON_MODES.SELECTED && mode.adjacentOnly);
   return Object.freeze({
@@ -313,6 +347,16 @@ const projectLosatpModes = (plan, activeKey) => Object.freeze(LOSATP_MODES.map((
   });
 }));
 
+/**
+ * @typedef {object} SettingsSectionInput
+ * @property {string} intentKey
+ * @property {ReturnType<typeof plannedSources>} planned
+ * @property {string} losatModeKey
+ * @property {string} losatpModeKey
+ * @property {boolean} selectedTopology
+ */
+
+/** @param {SettingsSectionInput} input */
 const projectSettingsSectionKeys = ({
   intentKey,
   planned,
@@ -357,10 +401,7 @@ const projectSettingsSectionKeys = ({
   return Object.freeze(keys);
 };
 
-/**
- * @param {{ intentKey: string, planned: ReturnType<typeof plannedSources>, losatModeKey: string,
- *   losatpModeKey: string, selectedTopology: boolean, dormantDraftCount: number }} input
- */
+/** @param {SettingsSectionInput & { dormantDraftCount: number }} input */
 const projectSectionKeys = ({
   intentKey,
   planned,
@@ -416,8 +457,11 @@ const issueActions = (code, pairLabel) => Object.freeze((code === 'missing-uploa
     : [{ key: 'show', label: 'Show pair', ariaLabel: pairLabel ? `Show pair ${pairLabel}` : 'Show pair' }]
 ).map((action) => Object.freeze({ ariaLabel: action.label, ...action })));
 
+// Number.isInteger is true only for a number, so a defined edge with both
+// indexes is what the casts in the template read.
+/** @param {LinearComparisonResolvedEdge | undefined} edge */
 const pairLabelOf = (edge) => (Number.isInteger(edge?.queryIndex) && Number.isInteger(edge?.subjectIndex)
-  ? `#${edge.queryIndex + 1} → #${edge.subjectIndex + 1}` : '');
+  ? `#${/** @type {{ queryIndex: number }} */ (edge).queryIndex + 1} → #${/** @type {{ subjectIndex: number }} */ (edge).subjectIndex + 1}` : '');
 
 // A Selected plan breaks the LOSATP mode: the text names the pairs set to
 // Upload BLAST TSV, or says that the pairs are set one by one when every one
@@ -471,6 +515,10 @@ const projectPairIssueText = (issues) => {
   return Object.freeze(texts);
 };
 
+/**
+ * @param {LinearComparisonPlan} plan
+ * @param {number} activePairCount
+ */
 const projectTopology = (plan, activePairCount) => {
   if (plan.mode === LINEAR_COMPARISON_MODES.NONE) {
     return Object.freeze({
@@ -545,12 +593,12 @@ export const projectLinearComparisonLosatpModeSelection = ({
 
 /**
  * @param {{
- *   plan?: Record<string, any>,
+ *   plan?: unknown,
  *   resolution?: Partial<LinearComparisonResolution>,
  *   adjacentEdgeKeys?: readonly string[],
  *   losatProgram?: string,
  *   blastpMode?: string,
- *   filters?: Record<string, any>
+ *   filters?: ComparisonFilterValues
  * }} [options]
  */
 export const projectLinearComparisonUi = ({

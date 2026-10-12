@@ -19,7 +19,11 @@ import {
   resolveLinearComparisonPlan
 } from './services/linear-comparisons.js';
 import { WEB_UX_PROFILE } from './web-ux-profile.js';
-import { PROTEIN_IDENTITY_MANIFEST_SCHEMA } from './contracts/schema.generated.js';
+import {
+  LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
+  LEGACY_PROTEIN_CANDIDATE_SCHEMA,
+  PROTEIN_IDENTITY_MANIFEST_SCHEMA
+} from './contracts/schema.generated.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import {
   getCommittedSvgContent,
@@ -277,8 +281,8 @@ const proteinIdentityManifest = ref({
   recordAnalyses: {},
   recordInstances: {}
 });
-const legacyProteinRawCandidates = ref({ schema: 1, entries: [] });
-const legacyProteinDerivedEvidence = ref({ schema: 1, entries: [] });
+const legacyProteinRawCandidates = ref({ schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] });
+const legacyProteinDerivedEvidence = ref({ schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] });
 const orthogroups = ref([]);
 const collinearGroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
@@ -860,6 +864,8 @@ const filteredEditableLabels = computed(() => {
     );
   });
 });
+
+/** @typedef {{ status: string, reason: string }} SessionBusy What `sessionOperationAvailability` returns while a Session operation blocks edits. */
 
 // Pending is owned by the existing Session lifecycle; availability stores no lock.
 // 'history' words why History rejects Undo/Redo; History decides when (D-28).

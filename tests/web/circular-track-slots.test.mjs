@@ -494,3 +494,15 @@ test('Reset and the preset resets omit Ticks while Show Coordinate Scale is off'
   assert.deepEqual(plain.adv.circular_track_slots, preset.adv.circular_track_slots);
   assert.equal(plain.adv.circular_track_slots_axis_index, preset.adv.circular_track_slots_axis_index);
 });
+
+// OV-529: a renderer name from a hand-edited Session reads no inherited member of the renderer tables.
+test('a renderer named like an inherited member keeps its own name as the label', () => {
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(createState()) });
+
+  for (const renderer of ['constructor', '__proto__', 'toString']) {
+    assert.equal(editor.circularTrackRendererLabel(renderer), renderer);
+    assert.equal(editor.circularTrackSlotDisplayLabel({ ...spacerSlot(), renderer }), renderer);
+  }
+  assert.equal(editor.circularTrackRendererLabel('depth'), 'Depth');
+  assert.equal(editor.circularTrackSlotDisplayLabel(spacerSlot()), 'Spacer');
+});

@@ -33,6 +33,7 @@ export const createRightDrawerController = ({
   focusReturn = null
 }) => {
   const currentOrthogroupCount = () => orthogroupTabContentCountFromState(state);
+  /** @param {string} tab */
   const isTabAvailable = (tab) => ALWAYS_AVAILABLE_TABS.has(tab) || isRightDrawerTabAvailable(
     tab,
     currentOrthogroupCount()

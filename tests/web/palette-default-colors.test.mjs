@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createResultsManager } from '../../gbdraw/web/js/app/results.js';
+import { createPaletteLoader } from '../../gbdraw/web/js/app/palettes.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { normalizePaletteColors } from '../../gbdraw/web/js/utils/color-utils.js';
@@ -370,4 +371,23 @@ test('a palette change leaves a Legend row that a rule draws', async () => {
   const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00' });
   assert.deepEqual([...panel.listed], [['other tRNAs', '#333333']]);
   assert.equal(compiled.colorOf('CDS'), '#00aa00');
+});
+
+// OV-527: a hand-edited Session may name a palette `constructor` or `__proto__`;
+// the table lookup must read own keys only, so the drawing falls back to `default`.
+test('a palette named like an inherited member falls back to the default palette', () => {
+  for (const name of ['constructor', '__proto__', 'toString']) {
+    const circular = {
+      selectedPalette: ref(name), currentColors: ref({}), pendingPaletteName: ref(''), pendingPaletteColors: ref({})
+    };
+    const linear = {
+      selectedPalette: ref('default'), currentColors: ref({}), pendingPaletteName: ref(''), pendingPaletteColors: ref({})
+    };
+    const state = {
+      paletteDefinitions: ref({}), paletteNames: ref([]), appliedPaletteName: ref(''), appliedPaletteColors: ref({}),
+      drawings: { circular, linear }, activeDrawing: () => circular
+    };
+    assert.equal(createPaletteLoader({ state }).applyPalettes(PALETTES), true);
+    assert.equal(circular.selectedPalette.value, 'default', name);
+  }
 });
