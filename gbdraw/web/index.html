@@ -4736,7 +4736,7 @@
                                         <input type="color" v-model="newSpecRule.color" aria-label="New color rule color" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="flex gap-1">
-                                        <input v-model="newSpecRule.cap" aria-label="New color rule legend caption" placeholder="Legend caption (optional)" class="form-input form-input-compact min-w-0 flex-grow" :disabled="!semanticMutationAvailable">
+                                        <input v-model="newSpecRule.cap" aria-label="New color rule legend name" placeholder="Legend name (optional)" class="form-input form-input-compact min-w-0 flex-grow" :disabled="!semanticMutationAvailable">
                                         <button aria-label="Add color rule" @click="addSpecificRule" class="btn btn-secondary h-7 whitespace-nowrap px-2 text-xs" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> Add color rule</button>
                                     </div>
                                 </div>
@@ -4749,7 +4749,7 @@
                                 <div class="mt-2">
                                     <file-uploader label="Specific rules file" v-model="files.t_color" :after-change="waitForAuxiliaryFileImport" :artifact-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
-                                        <help-tip text="TSV file of rules: feature type, qualifier, regular expression, color, and optional legend caption."></help-tip>
+                                        <help-tip text="TSV file of rules: feature type, qualifier, regular expression, color, and optional legend name."></help-tip>
                                         Optional TSV of specific rules.
                                     </div>
                                 </div>
@@ -4829,7 +4829,7 @@
 
                             <div data-setting="feature-visibility">
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <span class="input-label mb-0">Feature Visibility <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></span>
+                                    <span class="input-label mb-0">Feature Visibility <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and leaves it out of protein search; Leave out of protein search keeps its visibility and leaves it out of protein search."></help-tip></span>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
@@ -4884,7 +4884,7 @@
                                             <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" :aria-label="`Visibility rule ${i + 1} action`" class="form-input form-input-compact col-span-3" :disabled="!semanticMutationAvailable">
                                                 <option value="show">Show</option>
                                                 <option value="off">Off</option>
-                                                <option value="exclude_matching">Exclude from matching</option>
+                                                <option value="exclude_matching">Leave out of protein search</option>
                                             </select>
                                         </div>
                                         <div>
@@ -6262,7 +6262,7 @@
                             <select v-if="popupLegendGroups.length > 0"
                                     :disabled="!semanticMutationAvailable" @change="joinLegendGroup(popupLegendGroups[$event.target.value].group); $event.target.value = ''"
                                     data-history-managed
-                                    aria-label="Legend captions of color rules"
+                                    aria-label="Legend names of color rules"
                                     class="mt-1 w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
                                 <option value="">Choose from color rules…</option>
                                 <option v-for="({ group, shownName }, index) in popupLegendGroups"
@@ -8630,7 +8630,7 @@
                         <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="font-semibold text-blue-700 underline disabled:opacity-40">Revert</button>
                     </div>
                 </div>
-                <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend caption`" placeholder="Legend caption" class="form-input form-input-compact w-full" :disabled="!available">
+                <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend name`" placeholder="Legend name" class="form-input form-input-compact w-full" :disabled="!available">
                 <div class="flex items-center justify-end gap-0.5">
                     <button aria-label="Move rule up" @click="$emit('move-up', i)" :disabled="!available || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
                     <button aria-label="Move rule down" @click="$emit('move-down', i)" :disabled="!available || (i === rules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>

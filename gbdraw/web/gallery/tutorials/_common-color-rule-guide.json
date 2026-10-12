@@ -16,14 +16,14 @@
       "body": "Rule values are treated as matching patterns, so broad words can recolor unrelated features. Prefer specific names, anchored patterns, or accessions when possible."
     },
     {
-      "title": "Set a legend caption",
-      "body": "Legend caption is optional. When provided, it becomes the figure legend label for matching features. Use a concise biological name rather than the raw qualifier value."
+      "title": "Set a legend name",
+      "body": "Legend name is optional. When provided, it becomes the figure legend label for matching features. Use a concise biological name rather than the raw qualifier value."
     },
     {
       "title": "Example rules",
-      "body": "These examples show the feature type, qualifier, value, color, and legend caption fields used by the web app.",
+      "body": "These examples show the feature type, qualifier, value, color, and legend name fields used by the web app.",
       "table": {
-        "columns": ["Feature", "Qualifier", "Value pattern", "Color", "Legend caption"],
+        "columns": ["Feature", "Qualifier", "Value pattern", "Color", "Legend name"],
         "rows": [
           ["CDS", "gene", "^dnaA$", "#d95f02", "DnaA"],
           ["CDS", "product", "transposase", "#8da0cb", "Transposase"],

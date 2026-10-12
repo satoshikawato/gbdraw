@@ -528,7 +528,7 @@ def _assert_feature_presentation_svg(report: dict[str, Any]) -> None:
         if not any(
             row.get("product") == "ATP synthase F0 subunit 6" for row in metadata
         ):
-            raise AssertionError("Exclude from matching incorrectly hid ATP6")
+            raise AssertionError("Leave out of protein search incorrectly hid ATP6")
 
     foreground = [feature for feature in features if not feature.get("underlay")]
     if not foreground:

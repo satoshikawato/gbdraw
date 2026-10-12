@@ -545,8 +545,8 @@ const colorRuleMatcher = (context) => {
 
 // "Is this feature drawn?" as Generate answers it
 // (gbdraw/features/visibility.py::should_render_feature): the feature's
-// identity-keyed override decides when On or Off, and Exclude from matching
-// skips the rules; else the first matching visibility rule decides when Show
+// identity-keyed override decides when On or Off, and Leave out of protein
+// search skips the rules; else the first matching visibility rule decides when Show
 // or Off; else the selected feature types, where a feature of another type is
 // drawn when a specific color rule matches it. Python matches the rules
 // (app/rule-matching.js, R4); the shared vectors in

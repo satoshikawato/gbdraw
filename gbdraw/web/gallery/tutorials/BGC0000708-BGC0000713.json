@@ -1153,7 +1153,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"New color rule legend caption\"]",
+          "selector": "input[aria-label=\"New color rule legend name\"]",
           "value": "Core biosynthetic genes"
         },
         {
@@ -1186,7 +1186,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"New color rule legend caption\"]",
+          "selector": "input[aria-label=\"New color rule legend name\"]",
           "value": "Additional biosynthetic genes"
         },
         {
@@ -1219,7 +1219,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"New color rule legend caption\"]",
+          "selector": "input[aria-label=\"New color rule legend name\"]",
           "value": "Transport-related genes"
         },
         {
@@ -1252,7 +1252,7 @@
         },
         {
           "type": "fill",
-          "selector": "input[aria-label=\"New color rule legend caption\"]",
+          "selector": "input[aria-label=\"New color rule legend name\"]",
           "value": "Regulatory genes"
         },
         {
@@ -1276,7 +1276,7 @@
               "Qualifier",
               "Value pattern",
               "Color",
-              "Legend caption"
+              "Legend name"
             ],
             "rows": [
               [
@@ -2266,8 +2266,8 @@
       "body": "When gene_kind is absent, product can group functional categories, but terms such as protein, enzyme, or transporter may match more features than intended."
     },
     {
-      "title": "Use descriptive legend captions",
-      "body": "Use captions such as Core biosynthetic genes and Transport-related genes instead of raw qualifier values."
+      "title": "Use descriptive legend names",
+      "body": "Use names such as Core biosynthetic genes and Transport-related genes instead of raw qualifier values."
     }
   ],
   "losatTips": [

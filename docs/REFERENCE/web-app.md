@@ -1454,7 +1454,7 @@ Feature Search and Interactive SVG search. TSV columns and pattern semantics
 are specified in [Input formats and TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
 
 Each specific color rule is one line: its color, then a summary of feature
-type, qualifier, pattern and legend caption. The summary opens the rule's
+type, qualifier, pattern and legend name. The summary opens the rule's
 editor with those fields and the **Move rule up**, **Move rule down** and
 **Delete rule** buttons.
 
