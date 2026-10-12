@@ -376,7 +376,12 @@ const validateSettingsOnlyDocument = data => {
   // Session 46: each mode's slice holds that mode's settings draft, with its
   // `form` and `adv` (`_validate_settings_only_session`, OV-591).
   if (data.version >= MODE_SCOPED_SESSION_VERSION) {
-    const config = data.modes?.[data.ui?.mode]?.config;
+    // `ui.mode` is a Session value: the slice is read by its own key (OV-612).
+    const mode = data.ui?.mode;
+    const slice = isPlainObject(data.modes) && typeof mode === 'string' && Object.hasOwn(data.modes, mode)
+      ? data.modes[mode]
+      : undefined;
+    const config = slice?.config;
     if (!isPlainObject(config) || !isPlainObject(config.form) || !isPlainObject(config.adv)) {
       throw new Error('Settings-only Session requires the settings of its mode.');
     }

@@ -51,6 +51,16 @@ test('OV-591: a settings-only Session 46 needs form and adv in the settings of i
   assert.equal(adoptCurrentSessionDocument(other, SESSION_VERSION).canonical, null);
 });
 
+test('OV-612: a settings-only Session 46 names its mode slice by a string that is a key of modes', async () => {
+  // `modes[ui.mode]` converted `["circular"]` to the key "circular"; Python requires `ui.mode` to be a diagram mode.
+  const fresh = await savedDocument('mode key');
+  for (const mode of [['circular'], [['linear']], 'constructor', '__proto__', 0]) {
+    const document = structuredClone(fresh);
+    document.ui.mode = mode;
+    assert.throws(() => adoptCurrentSessionDocument(document, SESSION_VERSION), /settings of its mode/, JSON.stringify(mode));
+  }
+});
+
 test('source-free Save emits no render metadata and preserves valid raw scalar drafts', async () => {
   const freshConfig = buildConfigData(state.activeDrawing());
   const fresh = await savedDocument('fresh settings');
