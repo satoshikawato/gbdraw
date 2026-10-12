@@ -33,7 +33,7 @@ def proto_options() -> dict[str, str]:
 
 
 def run_design(design, outer_labels, *, total_length, radius, gap_px, font_size, arc_x_radius, arc_y_radius,
-               radial_layout=None, feature_colors=None):
+               radial_layout=None, feature_colors=None, inner_labels=None):
     items = make_items(outer_labels, total_length)
     ctx = Ctx.build(
         items,
@@ -46,11 +46,12 @@ def run_design(design, outer_labels, *, total_length, radius, gap_px, font_size,
         options=proto_options(),
     )
     ctx.radial_layout, ctx.feature_colors = radial_layout, feature_colors or {}
+    ctx.inner_items = make_items(inner_labels, total_length) if inner_labels else []   # design I only
     module = importlib.import_module(f".design_{design[0].lower()}", __package__)
-    placed = module.place(items, ctx) if items else []
+    placed = module.place(items, ctx) if items or ctx.inner_items else []
     LAST_RESULT.clear()
     LAST_RESULT.update(
-        design=design, requested=len(items), placed=len(placed), dropped=list(ctx.dropped),
+        design=design, requested=len(items) + len(ctx.inner_items), placed=len(placed), dropped=list(ctx.dropped),
         font_size=font_size, notes=dict(ctx.notes),
     )
     logger.warning(

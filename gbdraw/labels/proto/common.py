@@ -61,6 +61,7 @@ class Ctx:
     notes: dict[str, Any] = field(default_factory=dict)
     radial_layout: Any = None   # CircularRadialLayout (inner tracks, ticks, title radius); used by design G
     feature_colors: dict[str, Any] = field(default_factory=dict)   # stable_id -> feature colour; used by design G
+    inner_items: list = field(default_factory=list)   # labels asked for inside the ring (--labels both); design I only
 
     @classmethod
     def build(cls, items, *, total_length, radius, gap, font_size, arc_x_radius, arc_y_radius, options):
