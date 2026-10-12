@@ -3,6 +3,7 @@ import { resolveFeatureAnchor } from './feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
 /** @import { CommittedDisplayRow, ResolvedRecordTransform } from '../record-display-options.js' */
 /** @import { AnchorIntent } from './feature-anchor.js' */
+/** @import { SessionBusy } from '../../state.js' */
 
 /**
  * One capability verdict as the popup shows it.
@@ -42,7 +43,7 @@ const sameFeatureIdentity = (feature, identity) => {
  *   composition root port: runs the candidate and commits the target draft
  * @property {((identity: { recordKey: string, biologicalFeatureId: string }) => PopupFeature | null) | null} [resolveCurrentFeature]
  * @property {((feature: PopupFeature) => boolean) | null} [isCurrentFeature]
- * @property {(() => Promise<Record<string, any>>) | null} [readRecords]
+ * @property {(() => Promise<Record<string, any>> | SessionBusy) | null} [readRecords]
  */
 
 /**

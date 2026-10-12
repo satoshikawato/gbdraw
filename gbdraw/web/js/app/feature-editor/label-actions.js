@@ -28,7 +28,7 @@ import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
  */
 /**
  * What the label code reads of a render request's `diagramOptions`.
- * @typedef {{ configOverrides?: Readonly<Record<string, unknown>>, featureShapes?: Readonly<Record<string, unknown>> }} LabelDiagramOptions
+ * @typedef {{ configOverrides?: Readonly<Record<string, unknown>> | null, featureShapes?: Readonly<Record<string, unknown>> | null }} LabelDiagramOptions
  */
 /** @typedef {{ x: number, y: number }} LabelPoint */
 /** @typedef {{ id: string, x: number, y: number, groupId: string }} FeatureCentroid */
