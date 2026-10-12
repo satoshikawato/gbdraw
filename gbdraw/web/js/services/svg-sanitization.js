@@ -182,6 +182,15 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
   FORBID_ATTR: ['name', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onerror']
 });
 
+/**
+ * The part of DOMPurify that this module calls.
+ * @typedef {{ sanitize?: (source: string, options: Readonly<Record<string, unknown>>) => unknown }} SvgSanitizer
+ */
+
+/**
+ * @param {unknown} rawSvg The SVG text; anything else is rejected.
+ * @param {SvgSanitizer} [sanitizer] A DOMPurify-compatible sanitizer.
+ */
 export const sanitizeSvgContent = (
   rawSvg,
   sanitizer = globalThis.DOMPurify

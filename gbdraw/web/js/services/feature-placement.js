@@ -69,6 +69,7 @@ const SIDES = Object.freeze({ circular: ['outward', 'inward'], linear: ['above',
 // A malformed row can come only from a Session file; the editor writes exact rows.
 const invalidRow = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
 
+/** @param {unknown} value */
 const validIdentityText = (value) => typeof value === 'string' && Boolean(value.trim()) && !value.includes('\0');
 
 /**
@@ -113,9 +114,14 @@ export const parseFeatureIdentityKey = (key) => {
  */
 export const featureDraftMap = (rows) => Object.fromEntries(rows.map((row) => [featureIdentityKeyOf(row), row]));
 
+/**
+ * @param {string} left
+ * @param {string} right
+ */
 const compareSourceIdentity = (left, right) => {
-  const a = Array.from(left, (value) => value.codePointAt(0));
-  const b = Array.from(right, (value) => value.codePointAt(0));
+  // Each element of a string iteration holds at least one code point.
+  const a = Array.from(left, (value) => /** @type {number} */ (value.codePointAt(0)));
+  const b = Array.from(right, (value) => /** @type {number} */ (value.codePointAt(0)));
   for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
     if (a[index] !== b[index]) return a[index] - b[index];
   }
@@ -124,9 +130,18 @@ const compareSourceIdentity = (left, right) => {
 
 // Validates a draft map (or a request array) of identity rows with one row
 // check, and returns the rows in code-point order of their identity.
+/**
+ * @template {{ recordKey: string, biologicalFeatureId: string }} Row
+ * @template {{ recordKey: string, biologicalFeatureId: string }} Projected
+ * @param {Record<string, Row> | Row[] | null | undefined} overrides
+ * @param {(row: Row, draft: boolean) => Projected} projectRow
+ * @returns {Projected[]}
+ */
 const canonicalIdentityRows = (overrides, projectRow) => {
   const draft = !Array.isArray(overrides);
-  const rows = draft ? Object.entries(overrides || {}) : overrides.map((row) => [null, row]);
+  const rows = draft
+    ? Object.entries(overrides || {})
+    : /** @type {Row[]} */ (overrides).map((row) => /** @type {[string | null, Row]} */ ([null, row]));
   const identities = new Set();
   return rows.map(([key, row]) => {
     if (!row || typeof row !== 'object'
@@ -232,8 +247,13 @@ export const normalizeFeatureOverrideLabelText = (value) => {
   return text.trim() ? text : null;
 };
 
+/** @param {Readonly<Record<string, unknown>>} row */
 const hasEdit = (row) => FEATURE_OVERRIDE_EDIT_FIELDS.some((field) => row[field] !== null);
 
+/**
+ * @param {FeatureOverrideRow & { labelSourceText?: string | null }} row
+ * @param {boolean} draft
+ */
 const checkedOverrideRow = (row, draft) => {
   if (Object.keys(row).sort().join(',') !== (draft ? DRAFT_OVERRIDE_FIELDS : REQUEST_OVERRIDE_FIELDS)
     || !(row.featureVisibility === null || FEATURE_VISIBILITY_VALUES.has(row.featureVisibility))
@@ -323,7 +343,7 @@ const emptyOverrideRow = ({ recordKey, biologicalFeatureId }) => ({
  */
 export const featureOverrideValue = (overrides, feature, field) => {
   const key = featureIdentityKeyOf(feature);
-  return key ? overrides?.[key]?.[field] ?? null : null;
+  return key ? /** @type {Record<string, unknown> | undefined} */ (overrides?.[key])?.[field] ?? null : null;
 };
 
 // Sets fields of one feature's (or draft row's) draft row and deletes a row
@@ -342,7 +362,8 @@ export const updateFeatureOverride = (overrides, feature, patch) => {
   const next = { ...(overrides[key] || emptyOverrideRow(/** @type {FeatureIdentity} */ (parseFeatureIdentityKey(key)))) };
   Object.entries(patch || {}).forEach(([field, value]) => {
     if (!(field in next) || ['recordKey', 'biologicalFeatureId'].includes(field)) return;
-    next[field] = value === undefined ? null : value;
+    // `field in next` holds, so the write stays inside the row's own fields.
+    /** @type {Record<string, unknown>} */ (next)[field] = value === undefined ? null : value;
   });
   const keep = hasEdit(next) || next.labelSourceText !== null;
   if (JSON.stringify(overrides[key] || null) === JSON.stringify(keep ? next : null)) return false;
@@ -352,6 +373,7 @@ export const updateFeatureOverride = (overrides, feature, patch) => {
 };
 
 const FEATURE_IDENTITY_NOTICE_STATUSES = new Set(['crop_excluded', 'absent', 'unresolved']);
+/** @type {Set<unknown>} */
 const FEATURE_IDENTITY_NOTICE_KINDS = new Set(['placement', 'feature_visibility', 'label_visibility', 'label_text']);
 // Python's featureIdentityNotices metadata, as Generate admitted it (design Q4 3.4).
 /**
@@ -370,7 +392,7 @@ export const validateFeatureIdentityNotices = (notices, results) => {
       || typeof notice.biologicalFeatureId !== 'string' || !notice.biologicalFeatureId
       || !FEATURE_IDENTITY_NOTICE_STATUSES.has(notice.status)
       || !Array.isArray(notice.kinds) || notice.kinds.length === 0
-      || notice.kinds.some((kind) => !FEATURE_IDENTITY_NOTICE_KINDS.has(kind))
+      || notice.kinds.some((/** @type {unknown} */ kind) => !FEATURE_IDENTITY_NOTICE_KINDS.has(kind))
       || !Number.isInteger(notice.resultIndex) || notice.resultIndex < 0 || notice.resultIndex >= resultCount) {
       throw new Error('runMetadata.featureIdentityNotices contains an invalid notice.');
     }

@@ -47,6 +47,9 @@ export const classifyOptionalPositiveNumber = (value) => {
  * R7 request projection: blank -> null, number -> the same number, anything
  * else -> typed INPUT_INVALID. It never converts or range-checks a value; the
  * Python typed layer owns the domain. `context` names the field or configPath.
+ * @param {unknown} value
+ * @param {Record<string, unknown>} [context]
+ * @returns {number | null}
  */
 export const projectOptionalNumber = (value, context = {}) => {
   const classified = classifyOptionalNumber(value);

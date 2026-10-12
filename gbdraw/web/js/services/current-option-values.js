@@ -1,27 +1,55 @@
 // @ts-check
+/**
+ * @param {unknown} value
+ * @param {string} fallback
+ */
 const normalizedValue = (value, fallback) => {
   const normalized = String(value ?? '').trim().toLowerCase();
   return normalized || fallback;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
 
+/**
+ * @param {unknown} value
+ * @param {string} key
+ */
 const hasOwn = (value, key) => (
   isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, key)
 );
 
+/**
+ * @template T
+ * @param {T} source
+ * @param {string} obsoleteName
+ * @param {string} currentName
+ * @returns {T}
+ */
 const migrateOwnField = (source, obsoleteName, currentName) => {
   if (!hasOwn(source, obsoleteName)) return source;
-  const migrated = { ...source };
+  /** @type {Record<string, unknown>} */
+  // `hasOwn` above holds only for a plain object.
+  const migrated = { .../** @type {Record<string, unknown>} */ (source) };
   if (!hasOwn(migrated, currentName)) {
     migrated[currentName] = migrated[obsoleteName];
   }
   delete migrated[obsoleteName];
-  return migrated;
+  // The copy keeps the shape of `source`, with the obsolete name moved to the current one.
+  return /** @type {T} */ (migrated);
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} fallback
+ * @param {readonly string[]} supported
+ * @param {string} label
+ */
 const requireCurrentValue = (value, fallback, supported, label) => {
   const normalized = normalizedValue(value, fallback);
   if (!supported.includes(normalized)) {
@@ -30,6 +58,7 @@ const requireCurrentValue = (value, fallback, supported, label) => {
   return normalized;
 };
 
+/** @param {unknown} value */
 export const requireCurrentCircularMultiRecordSizeMode = (value) => (
   requireCurrentValue(
     value,
@@ -39,6 +68,7 @@ export const requireCurrentCircularMultiRecordSizeMode = (value) => (
   )
 );
 
+/** @param {unknown} value */
 export const requireCurrentLinearTrackLayout = (value) => (
   requireCurrentValue(
     value,
@@ -48,6 +78,7 @@ export const requireCurrentLinearTrackLayout = (value) => (
   )
 );
 
+/** @param {unknown} value */
 export const requireCurrentLinearLabelPlacement = (value) => (
   requireCurrentValue(
     value,
@@ -57,6 +88,10 @@ export const requireCurrentLinearLabelPlacement = (value) => (
   )
 );
 
+/**
+ * @param {unknown} value
+ * @param {unknown} fallback
+ */
 export const normalizeCurrentPairwiseMatchStyle = (value, fallback) => {
   const supported = ['ribbon', 'curve'];
   const normalizedFallback = String(fallback ?? '').trim().toLowerCase();
@@ -67,6 +102,7 @@ export const normalizeCurrentPairwiseMatchStyle = (value, fallback) => {
   return supported.includes(normalized) ? normalized : normalizedFallback;
 };
 
+/** @param {unknown} value */
 export const requireCurrentProteinBlastpMode = (value) => (
   requireCurrentValue(
     value,
@@ -76,6 +112,7 @@ export const requireCurrentProteinBlastpMode = (value) => (
   )
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearSearchScope = (value) => (
   requireCurrentValue(
     value,
@@ -86,6 +123,7 @@ export const requireCurrentCollinearSearchScope = (value) => (
 );
 
 // Older saved pipelines omit this field; fresh Web state explicitly supplies false.
+/** @param {unknown} [value] */
 export const requireCurrentCollinearInferOrthogroups = (value = true) => {
   if (typeof value !== 'boolean') {
     throw new Error('Collinear orthogroup inference must be a boolean.');
@@ -93,6 +131,7 @@ export const requireCurrentCollinearInferOrthogroups = (value = true) => {
   return value;
 };
 
+/** @param {unknown} value */
 export const requireCurrentProteinBlastpCandidateLimit = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
@@ -102,6 +141,14 @@ export const requireCurrentProteinBlastpCandidateLimit = (value) => {
   return numeric;
 };
 
+/**
+ * @template {number | null} F
+ * @param {unknown} value
+ * @param {F} fallback
+ * @param {number} minimum
+ * @param {string} label
+ * @returns {F | number}
+ */
 const requireCurrentInteger = (value, fallback, minimum, label) => {
   if (value === null || value === undefined || value === '') return fallback;
   const numeric = Number(value);
@@ -112,34 +159,42 @@ const requireCurrentInteger = (value, fallback, minimum, label) => {
   return numeric;
 };
 
+/** @param {unknown} value */
 export const requireCurrentProteinBlastpMaxHits = (value) => (
   requireCurrentInteger(value, 5, 1, 'Protein BLASTP Pairwise max hits')
 );
 
+/** @param {unknown} value */
 export const requireCurrentOrthogroupMemberMaxHits = (value) => (
   requireCurrentInteger(value, null, 1, 'Protein BLASTP member hits per protein')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMinAnchors = (value) => (
   requireCurrentInteger(value, 1, 1, 'Collinear minimum anchors')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMaxUnitGap = (value) => (
   requireCurrentInteger(value, 0, 0, 'Collinear maximum unit gap')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMaxDiagonalDrift = (value) => (
   requireCurrentInteger(value, 0, 0, 'Collinear maximum diagonal drift')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMaxConflicts = (value) => (
   requireCurrentInteger(value, 1, 0, 'Collinear maximum conflicts in merge gap')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMaxParalogLinks = (value) => (
   requireCurrentInteger(value, 2, 1, 'Collinear maximum paralog links per orthogroup')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearUnitMode = (value) => (
   requireCurrentValue(
     value,
@@ -149,6 +204,7 @@ export const requireCurrentCollinearUnitMode = (value) => (
   )
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearAnchorMode = (value) => (
   requireCurrentValue(
     value,
@@ -158,6 +214,7 @@ export const requireCurrentCollinearAnchorMode = (value) => (
   )
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMergeOrientation = (value) => (
   requireCurrentValue(
     value,
@@ -167,6 +224,7 @@ export const requireCurrentCollinearMergeOrientation = (value) => (
   )
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearColorMode = (value) => {
   const normalized = String(value ?? '').trim().toLowerCase().replace(/-/g, '_');
   const resolved = normalized === 'identity' ? 'average_identity' : normalized;
@@ -179,6 +237,7 @@ export const requireCurrentCollinearColorMode = (value) => {
   return resolved;
 };
 
+/** @param {unknown} value */
 export const requireCurrentOrthogroupMembershipMode = (value) => (
   requireCurrentValue(
     value,
@@ -188,6 +247,7 @@ export const requireCurrentOrthogroupMembershipMode = (value) => (
   )
 );
 
+/** @param {unknown} value */
 export const migratePersistedCircularMultiRecordSizeMode = (value) => {
   const normalized = normalizedValue(value, 'auto');
   return requireCurrentCircularMultiRecordSizeMode(
@@ -195,6 +255,7 @@ export const migratePersistedCircularMultiRecordSizeMode = (value) => {
   );
 };
 
+/** @param {unknown} value */
 export const migratePersistedLinearTrackLayout = (value) => {
   const normalized = normalizedValue(value, 'middle');
   if (normalized === 'spreadout') return 'above';
@@ -202,6 +263,7 @@ export const migratePersistedLinearTrackLayout = (value) => {
   return requireCurrentLinearTrackLayout(normalized);
 };
 
+/** @param {unknown} value */
 export const migratePersistedLinearLabelPlacement = (value) => {
   const normalized = normalizedValue(value, 'auto');
   return requireCurrentLinearLabelPlacement(
@@ -209,8 +271,20 @@ export const migratePersistedLinearLabelPlacement = (value) => {
   );
 };
 
+/**
+ * The sections of a Web config document that callers read after the migration. A document without a section, or
+ * with a non-object one, holds `undefined` or that value there, so callers check a section with `isPlainObject`
+ * before they write to it. The type states the shape callers rely on while `config.js` types its documents.
+ * @typedef {{ form: Record<string, unknown>, adv: Record<string, unknown> }} PersistedWebSections
+ */
+
+/**
+ * @template {{ adv?: unknown, losat?: unknown }} T
+ * @param {T} config
+ * @returns {T & PersistedWebSections}
+ */
 export const migratePersistedWebStateFieldNames = (config) => {
-  if (!isPlainObject(config)) return config;
+  if (!isPlainObject(config)) return /** @type {T & PersistedWebSections} */ (config);
 
   let adv = migrateOwnField(
     config.adv,
@@ -238,13 +312,18 @@ export const migratePersistedWebStateFieldNames = (config) => {
     }
   }
 
-  return {
+  return /** @type {T & PersistedWebSections} */ ({
     ...config,
     ...(adv === undefined ? {} : { adv }),
     ...(losat === undefined ? {} : { losat })
-  };
+  });
 };
 
+/**
+ * @template {{ adv?: { depth_tracks?: unknown } | null, losat?: { blastp?: unknown } | null } | null | undefined} T
+ * @param {T} config
+ * @returns {T}
+ */
 export const requireCurrentWebStateFieldNames = (config) => {
   const adv = isPlainObject(config) ? config.adv : null;
   for (const field of ['linear_show_accession', 'linear_show_length']) {

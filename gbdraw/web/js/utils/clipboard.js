@@ -1,4 +1,5 @@
 // @ts-check
+/** @param {unknown} text */
 export const copyTextToClipboard = async (text) => {
   const value = String(text ?? '');
   if (globalThis.isSecureContext && navigator.clipboard?.writeText) {

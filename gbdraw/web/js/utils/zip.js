@@ -13,6 +13,10 @@ const CRC32_TABLE = (() => {
 
 const textEncoder = new TextEncoder();
 
+/**
+ * @param {unknown} data
+ * @returns {Uint8Array}
+ */
 const toBytes = (data) => {
   if (data instanceof Uint8Array) return data;
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
@@ -20,6 +24,7 @@ const toBytes = (data) => {
   return textEncoder.encode(String(data ?? ''));
 };
 
+/** @param {Uint8Array} bytes */
 const crc32 = (bytes) => {
   let crc = 0xFFFFFFFF;
   for (let i = 0; i < bytes.length; i += 1) {
@@ -45,6 +50,10 @@ const dosTimestamp = (date = new Date()) => {
   return { time, date: packedDate };
 };
 
+/**
+ * @param {unknown} name
+ * @param {unknown} fallback
+ */
 const sanitizeZipPath = (name, fallback) => {
   const raw = String(name || fallback || 'file').replace(/\\/g, '/');
   const parts = raw
@@ -54,6 +63,10 @@ const sanitizeZipPath = (name, fallback) => {
   return parts.join('/') || String(fallback || 'file');
 };
 
+/**
+ * @param {unknown} name
+ * @param {Set<string>} usedNames The paths already taken; the result is added.
+ */
 const uniqueZipPath = (name, usedNames) => {
   const normalized = sanitizeZipPath(name, `file-${usedNames.size + 1}`);
   if (!usedNames.has(normalized)) {
@@ -77,7 +90,17 @@ const uniqueZipPath = (name, usedNames) => {
   return candidate;
 };
 
+/**
+ * @param {DataView} view
+ * @param {number} offset
+ * @param {number} value
+ */
 const writeUint16 = (view, offset, value) => view.setUint16(offset, value, true);
+/**
+ * @param {DataView} view
+ * @param {number} offset
+ * @param {number} value
+ */
 const writeUint32 = (view, offset, value) => view.setUint32(offset, value >>> 0, true);
 
 /**
@@ -89,8 +112,11 @@ const writeUint32 = (view, offset, value) => view.setUint32(offset, value >>> 0,
  * @returns {Blob}
  */
 export const createZipBlob = (files) => {
+  /** @type {Uint8Array[]} */
   const localParts = [];
+  /** @type {Uint8Array[]} */
   const centralParts = [];
+  /** @type {Set<string>} */
   const usedNames = new Set();
   const { time, date } = dosTimestamp();
   let offset = 0;
@@ -155,5 +181,6 @@ export const createZipBlob = (files) => {
   writeUint32(eocdView, 16, centralOffset);
   writeUint16(eocdView, 20, 0);
 
-  return new Blob([...localParts, ...centralParts, eocd], { type: 'application/zip' });
+  // Entry bytes never sit in shared memory, which a Blob part rejects.
+  return new Blob(/** @type {BlobPart[]} */ ([...localParts, ...centralParts, eocd]), { type: 'application/zip' });
 };

@@ -731,6 +731,11 @@ for (const invalidRecordIndex of [
   ]) {
     await assert.rejects(failing(error), (thrown) => thrown === error, error.code || error.name);
   }
+  // OV-315: a falsy rejection is an unknown failure too (OV-70). It fails the
+  // Load with the caught value, not with a TypeError from the catch block.
+  for (const value of [undefined, null, 0, '']) {
+    await assert.rejects(failing(value), (thrown) => thrown === value, `falsy rejection ${String(value)}`);
+  }
 }
 
 console.log('session feature metadata tests passed');

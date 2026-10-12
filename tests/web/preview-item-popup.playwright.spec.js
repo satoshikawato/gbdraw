@@ -124,6 +124,11 @@ test('a record definition opens its popup; its edits write the record settings',
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('Popup subtitle');
   expect(await undoCount(page)).toBe(before + 3);
+  // Show in settings focuses the record's own name field. This File has one
+  // record, so the field is on its File card, not in Record options (OV-508).
+  await dialog.getByRole('button', { name: 'Show in settings', exact: true }).click();
+  await expect(page.getByLabel('Definition for sequence 1', { exact: true })).toBeFocused();
+  await expect(dialog).toBeHidden();
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle || '')).not.toBe('Popup subtitle');

@@ -7,9 +7,11 @@ const LABEL_OVERRIDE_COLUMN_COUNT = 5;
 const PRIMARY_HEADER = ['record_id', 'feature_type', 'qualifier', 'value', 'label_text'];
 const LEGACY_HEADER = ['record', 'feature_type', 'qualifier_key', 'qualifier_value_regex', 'label_text'];
 
+/** @param {Record<string, unknown> | null | undefined} obj */
 const toSortedKeys = (obj) =>
   Object.keys(obj || {}).sort((a, b) => String(a || '').localeCompare(String(b || '')));
 
+/** @param {unknown} parts */
 const isHeaderRow = (parts) => {
   if (!Array.isArray(parts) || parts.length !== LABEL_OVERRIDE_COLUMN_COUNT) return false;
   const normalized = parts.map((part) => String(part || '').trim().toLowerCase());
@@ -17,6 +19,11 @@ const isHeaderRow = (parts) => {
   if (primary) return true;
   return LEGACY_HEADER.every((value, idx) => normalized[idx] === value);
 };
+
+/**
+ * A displayed label: the feature it labels and the text it shows before any edit.
+ * @typedef {{ identityKey: string, sourceText?: unknown }} BulkLabelTarget
+ */
 
 /**
  * Projects the bulk label edits (`labelTextBulkOverrides`, {sourceText: text})
@@ -27,20 +34,29 @@ const isHeaderRow = (parts) => {
  * draft rows recorded (any Result, B6), as those features' `labelText`; a
  * feature's own text wins. A source text that no known label shows, and a
  * blank text, stay a `* * label ^text$` row of the label table.
+ * @param {Record<string, unknown>} bulkOverrides
+ * @param {{ labelTargets?: BulkLabelTarget[], featureOverrides?: Record<string, { labelSourceText?: string | null }> | null }} [options]
  */
 export const buildBulkLabelProjection = (bulkOverrides, options = {}) => {
+  /** @type {Record<string, string>} */
   const bulkLabelText = {};
+  /** @type {string[]} */
   const rows = [];
   const sourceTexts = toSortedKeys(bulkOverrides);
   if (sourceTexts.length === 0) return { bulkLabelText, rows };
   const labelTargets = Array.isArray(options.labelTargets) ? options.labelTargets : [];
   const featureOverrides = options.featureOverrides || {};
   recordStructuralMetric('labelOverrideTableBuildCount', 1, { featureCount: labelTargets.length });
+  /** @type {Map<string, Set<string>>} */
   const identitiesBySourceText = new Map();
+  /**
+   * @param {string | null | undefined} sourceText
+   * @param {string | null | undefined} identityKey
+   */
   const add = (sourceText, identityKey) => {
     if (!sourceText || !identityKey) return;
     if (!identitiesBySourceText.has(sourceText)) identitiesBySourceText.set(sourceText, new Set());
-    identitiesBySourceText.get(sourceText).add(identityKey);
+    /** @type {Set<string>} */ (identitiesBySourceText.get(sourceText)).add(identityKey); // set just above
   };
   labelTargets.forEach((entry) => add(String(entry?.sourceText ?? ''), entry?.identityKey));
   Object.entries(featureOverrides || {}).forEach(([identityKey, row]) => add(row?.labelSourceText, identityKey));
@@ -59,6 +75,9 @@ export const buildBulkLabelProjection = (bulkOverrides, options = {}) => {
   return { bulkLabelText, rows };
 };
 
+/**
+ * @param {readonly { recordId?: unknown, record_id?: unknown, featureType?: unknown, feature_type?: unknown, qualifier?: unknown, valueRegex?: unknown, value?: unknown, labelText?: unknown, label_text?: unknown }[] | null | undefined} rows
+ */
 export const serializeLabelOverrideRows = (rows) => {
   const serialized = (Array.isArray(rows) ? rows : [])
     .map((row) => [
@@ -73,7 +92,23 @@ export const serializeLabelOverrideRows = (rows) => {
   return serialized.length > 0 ? `${serialized.join('\n')}\n` : '';
 };
 
+/**
+ * @typedef {object} LabelOverrideTsvRow
+ * @property {number} lineNo
+ * @property {string} recordId
+ * @property {string} featureType
+ * @property {string} qualifier
+ * @property {string} valueRegex
+ * @property {string} labelText
+ * @property {boolean} isGlobalLabelRule
+ */
+
+/**
+ * @param {unknown} text
+ * @returns {LabelOverrideTsvRow[]}
+ */
 export const parseLabelOverrideTsv = (text) => {
+  /** @type {LabelOverrideTsvRow[]} */
   const rows = [];
   const sourceText = String(text ?? '');
   const lines = sourceText.split(/\r?\n/);

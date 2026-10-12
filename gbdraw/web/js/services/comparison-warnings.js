@@ -1,6 +1,26 @@
 // @ts-check
 // Comparison table rows whose sequence IDs match no displayed record are drawn by
 // position (PD-OI-074). The Worker carries the warning the CLI logs.
+/**
+ * @typedef {{
+ *   code: 'comparison_record_id_unmatched',
+ *   queryRecordIndex: number,
+ *   subjectRecordIndex: number,
+ *   queryRecordId: string,
+ *   subjectRecordId: string,
+ *   rowCount: number,
+ *   exampleIds: string[],
+ *   message: string,
+ *   resultIndex: number,
+ *   resultName: string
+ * }} ComparisonWarning
+ */
+
+/**
+ * @param {unknown} warnings
+ * @param {ReadonlyArray<{ name?: unknown }> | null | undefined} results
+ * @returns {ComparisonWarning[]}
+ */
 export const validateComparisonWarnings = (warnings, results) => {
   if (warnings === undefined) return [];
   const fields = ['code', 'queryRecordIndex', 'subjectRecordIndex', 'queryRecordId',
@@ -14,7 +34,7 @@ export const validateComparisonWarnings = (warnings, results) => {
       .some((field) => typeof warning[field] !== 'string')
     || !warning.message
     || !Array.isArray(warning.exampleIds)
-    || warning.exampleIds.some((id) => typeof id !== 'string')
+    || warning.exampleIds.some((/** @type {unknown} */ id) => typeof id !== 'string')
     || ['queryRecordIndex', 'subjectRecordIndex', 'resultIndex']
       .some((field) => !Number.isSafeInteger(warning[field]) || warning[field] < 0)
     || !Number.isSafeInteger(warning.rowCount) || warning.rowCount < 1

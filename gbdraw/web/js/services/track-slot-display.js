@@ -1,11 +1,19 @@
 // @ts-check
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
 export const normalizeOptionalText = (value) => {
   const text = String(value ?? '').trim();
   return text.length > 0 ? text : null;
 };
 
+/**
+ * @param {unknown} value
+ * @param {number} [digits]
+ */
 const roundDisplayNumber = (value, digits = 1) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '';
@@ -13,6 +21,7 @@ const roundDisplayNumber = (value, digits = 1) => {
   return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 };
 
+/** @param {unknown} value */
 export const isManualSlotValue = (value) => normalizeOptionalText(value) !== null;
 
 /**
@@ -88,6 +97,7 @@ export const formatRadiusFactorAuto = (value, { estimate = false, awayFromAxis =
 // tick_sides_for_tick_label_layout (gbdraw/tracks/circular.py): the side of
 // the anchor the tick marks grow to. tick_only follows the row's side;
 // label_only draws no marks.
+/** @type {Readonly<Partial<Record<string, 'inside' | 'outside'>>>} */
 const TICK_SIDE_BY_LAYOUT = Object.freeze({ label_out_tick_in: 'inside', label_in_tick_out: 'outside' });
 
 /**
@@ -116,8 +126,30 @@ export const tickAnchorRadiusFactor = (slotGeometry, axisRadiusPx, tickLabelLayo
 };
 
 /**
+ * One rendered slot of the Python track geometry.
+ * @typedef {object} TrackSlotGeometry
+ * @property {unknown} [slotId]
+ * @property {unknown} [radiusFactor]
+ * @property {unknown} [widthPx]
+ * @property {unknown} [side]
+ * @property {unknown} [innerGapPx]
+ * @property {unknown} [outerGapPx]
+ * @property {unknown} [heightPx]
+ * @property {unknown} [spacingAfterPx]
+ */
+
+/**
+ * One rendered record of the Python track geometry.
+ * @typedef {object} TrackSlotGeometryRecord
+ * @property {unknown} [resultIndex]
+ * @property {unknown} [recordIndex]
+ * @property {unknown} [axisRadiusPx]
+ * @property {TrackSlotGeometry[]} [slots]
+ */
+
+/**
  * @typedef {object} FindTrackSlotGeometryOptions
- * @property {{ records?: any[] } | null} [geometry] The Python track geometry.
+ * @property {{ records?: TrackSlotGeometryRecord[] } | null} [geometry] The Python track geometry.
  * @property {number} [resultIndex]
  * @property {number} [recordIndex]
  * @property {string | null} [slotId]

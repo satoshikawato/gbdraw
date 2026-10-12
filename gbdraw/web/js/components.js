@@ -8,6 +8,7 @@ import {
 
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
+import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsScrollOwner, settingsSectionsOf } from './services/settings-sections.js';
 
 /** @import { SettingsSection, SettingsSectionKey } from './services/settings-sections.js' */
@@ -583,5 +584,23 @@ export const MarkupPreview = {
   /** @param {{ text?: string | null }} props */
   setup(props) {
     return { segments: computed(() => italicSegments(props.text)) };
+  }
+};
+
+// A Linear record's own name fields. The File card of a one-record File and
+// the Record options of every other record render this one component on the
+// record's state; `linearFileCardRecord` decides which place shows it.
+export const LinearRecordNames = {
+  template: '#linear-record-names-template',
+  components: { MarkupPreview },
+  props: {
+    seq: { type: Object, required: true },
+    source: { type: Object, required: true },
+    idx: { type: Number, required: true },
+    disabled: Boolean
+  },
+  emits: ['reset-definition', 'reset-subtitle'],
+  setup() {
+    return { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition };
   }
 };

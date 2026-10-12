@@ -3,6 +3,17 @@
 // dependency-free formula for the match popup, FASTA headers and the
 // Interactive SVG payload.
 
+/**
+ * The input-file span of a displayed record: `start`..`end` in input-file
+ * coordinates, read in the direction `step` (1 or -1).
+ * @typedef {{ start: number, end: number, step: 1 | -1 }} RecordSourceSpan
+ */
+
+/**
+ * An element of the displayed SVG; an SVG element names its root as `ownerSVGElement`.
+ * @typedef {Element & { ownerSVGElement?: SVGSVGElement | null }} RecordSourceElement
+ */
+
 const RECORD_SOURCE_ATTRIBUTES = ['start', 'end', 'step']
   .map((name) => `data-gbdraw-record-source-${name}`);
 
@@ -11,6 +22,9 @@ const RECORD_SOURCE_ATTRIBUTES = ['start', 'end', 'step']
  *
  * The renderer marks only cropped or reverse-complemented records; any other
  * record shows its input file one to one and returns null.
+ * @param {RecordSourceElement | null | undefined} element
+ * @param {unknown} recordIndex
+ * @returns {RecordSourceSpan | null}
  */
 export const readRecordSourceSpan = (element, recordIndex) => {
   const root = element?.ownerSVGElement || element?.closest?.('svg') || null;
@@ -30,11 +44,15 @@ export const readRecordSourceSpan = (element, recordIndex) => {
  * for popups, FASTA headers and the Interactive SVG. `table` is the search
  * frame of comparison tables (the cropped record in the source strand) and is
  * returned only when it differs from the source coordinates.
+ * @param {RecordSourceSpan | null | undefined} sourceSpan
+ * @param {unknown} startRaw
+ * @param {unknown} endRaw
+ * @returns {{ start: number, end: number, table: { start: number, end: number } | null } | null}
  */
 export const recordSourceInterval = (sourceSpan, startRaw, endRaw) => {
   const local = [Number(startRaw), Number(endRaw)];
   if (!sourceSpan || !local.every((value) => Number.isInteger(value) && value >= 1)) return null;
-  const toSource = (value) => (sourceSpan.step === 1
+  const toSource = (/** @type {number} */ value) => (sourceSpan.step === 1
     ? sourceSpan.start + value - 1
     : sourceSpan.end - value + 1);
   const [start, end] = local.map(toSource);

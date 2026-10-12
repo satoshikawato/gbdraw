@@ -11,6 +11,7 @@ import {
   HelpTip,
   FileUploader,
   GbdrawLoader,
+  LinearRecordNames,
   MarkupPreview,
   RecordName,
   SettingsSectionIndex,
@@ -24,7 +25,7 @@ import { formatFeatureLocation } from './services/feature-utils.js';
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, GbdrawLoader, HelpTip, MarkupPreview, RecordName, SettingsSectionIndex, SettingsSectionTitle },
+  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, RecordName, SettingsSectionIndex, SettingsSectionTitle },
   methods: { formatFeatureLocation },
   setup: createAppSetup
 });

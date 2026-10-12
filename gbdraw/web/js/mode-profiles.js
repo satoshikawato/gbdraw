@@ -3,15 +3,42 @@ import { MODE_PROFILE_DATA } from './mode-profiles.generated.js';
 import { diagnosticError } from './utils/error-normalization.js';
 import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
 
+/**
+ * The shape of the generated `MODE_PROFILE_DATA` (tools/generate_mode_profiles.py)
+ * that this module reads.
+ * @typedef {'circular' | 'linear'} ModeProfileName
+ * @typedef {{ integer: boolean, maximum: number | null, minimum: number, reason: string }} ComparisonDomain
+ * @typedef {{
+ *   comparison: { alignmentLength: number, bitscore: number, evalue: number, identity: number },
+ *   linearAxisColor: string | null,
+ *   linearRulerAxisColor: string | null,
+ *   tracks: { gc: boolean, skew: boolean }
+ * }} ModeProfile
+ * @typedef {{
+ *   comparisonDomains: Record<string, ComparisonDomain>,
+ *   featureTypes: string[],
+ *   modes: Record<ModeProfileName, ModeProfile>,
+ *   version: number
+ * }} ModeProfileData
+ * @typedef {{ bitscore: number, evalue: string, identity: number, alignment_length: number }} ComparisonFilters
+ * @typedef {{ min_bitscore: number, evalue: string, identity: number, alignment_length: number }} ComparisonState
+ */
+
+/** @type {readonly string[]} */
 const MODE_NAMES = Object.freeze(['circular', 'linear']);
+/**
+ * @param {unknown} mode
+ * @returns {ModeProfileName}
+ */
 const normalizeMode = (mode) => {
   const normalized = String(mode || '').trim().toLowerCase();
   if (!MODE_NAMES.includes(normalized)) {
     throw new TypeError(`Unsupported diagram mode: ${String(mode)}`);
   }
-  return normalized;
+  return /** @type {ModeProfileName} */ (normalized); // checked against MODE_NAMES above
 };
 
+/** @param {unknown} value */
 const formatEvalue = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return String(value);
@@ -22,6 +49,10 @@ const formatEvalue = (value) => {
     .replace(/e\+?(-?)0+(\d+)/, 'e$1$2');
 };
 
+/**
+ * @param {unknown} left
+ * @param {unknown} right
+ */
 const valuesEquivalent = (left, right) => {
   const leftBlank = left === null || left === undefined ||
     (typeof left === 'string' && left.trim() === '');
@@ -39,11 +70,13 @@ const valuesEquivalent = (left, right) => {
   return String(left ?? '').trim() === String(right ?? '').trim();
 };
 
-export const MODE_PROFILE_VERSION = MODE_PROFILE_DATA.version;
-export const MODE_DEFAULT_FEATURE_TYPES = Object.freeze([...MODE_PROFILE_DATA.featureTypes]);
+export const MODE_PROFILE_VERSION = /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).version;
+export const MODE_DEFAULT_FEATURE_TYPES = Object.freeze([.../** @type {ModeProfileData} */ (MODE_PROFILE_DATA).featureTypes]);
 
-export const modeProfile = (mode) => MODE_PROFILE_DATA.modes[normalizeMode(mode)];
+/** @param {unknown} mode */
+export const modeProfile = (mode) => /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).modes[normalizeMode(mode)];
 
+/** @param {unknown} mode */
 export const trackDefaultsForMode = (mode) => {
   const tracks = modeProfile(mode).tracks;
   return {
@@ -52,6 +85,10 @@ export const trackDefaultsForMode = (mode) => {
   };
 };
 
+/**
+ * @param {unknown} mode
+ * @returns {ComparisonFilters}
+ */
 export const comparisonFiltersForMode = (mode) => {
   const comparison = modeProfile(mode).comparison;
   return {
@@ -62,6 +99,10 @@ export const comparisonFiltersForMode = (mode) => {
   };
 };
 
+/**
+ * @param {unknown} mode
+ * @returns {ComparisonState}
+ */
 export const comparisonStateForMode = (mode) => {
   const filters = comparisonFiltersForMode(mode);
   return {
@@ -73,6 +114,7 @@ export const comparisonStateForMode = (mode) => {
 };
 
 // [draft key, generated domain key, diagnostic field]
+/** @type {ReadonlyArray<readonly [string, string, keyof ComparisonFilters]>} */
 const COMPARISON_THRESHOLDS = Object.freeze([
   ['min_bitscore', 'bitscore', 'bitscore'],
   ['evalue', 'evalue', 'evalue'],
@@ -86,12 +128,16 @@ const COMPARISON_THRESHOLDS = Object.freeze([
  * mode-profiles.generated.js. A violation is a typed INPUT_INVALID with the
  * same field and reason Python reports; the draft is never rewritten. The
  * e-value keeps its trimmed text so derived cache keys keep their shape.
+ * @param {Record<string, unknown> | null | undefined} adv
+ * @param {unknown} mode
+ * @returns {Record<string, string | number>} by generated domain key
  */
 export const resolveComparisonThresholds = (adv, mode) => {
   const defaults = comparisonFiltersForMode(mode);
+  /** @type {Record<string, string | number>} */
   const resolved = {};
   for (const [draftKey, domainKey, field] of COMPARISON_THRESHOLDS) {
-    const domain = MODE_PROFILE_DATA.comparisonDomains[domainKey];
+    const domain = /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).comparisonDomains[domainKey];
     const raw = adv?.[draftKey];
     const blank = raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '');
     const value = blank ? defaults[field] : raw;
@@ -111,14 +157,19 @@ export const resolveComparisonThresholds = (adv, mode) => {
   return resolved;
 };
 
+/**
+ * @param {unknown} mode
+ * @param {string} field
+ */
 export const comparisonProfileDefault = (mode, field) => {
   const defaults = comparisonStateForMode(mode);
   if (!Object.prototype.hasOwnProperty.call(defaults, field)) {
     throw new TypeError(`Unsupported comparison field: ${String(field)}`);
   }
-  return defaults[field];
+  return defaults[/** @type {keyof ComparisonState} */ (field)]; // an own key, checked above
 };
 
+/** @param {unknown} mode */
 export const managedAdvStateForMode = (mode) => ({
   ...comparisonStateForMode(mode),
   axis_stroke_color: modeProfile(mode).linearAxisColor,
@@ -127,6 +178,7 @@ export const managedAdvStateForMode = (mode) => ({
   def_font_size: null
 });
 
+/** @param {unknown} mode */
 const managedStateForMode = (mode) => ({ ...managedAdvStateForMode(mode), plot_title: '' });
 
 // Whether Ruler on Axis can draw; otherwise the flag is ignored, as in
@@ -138,6 +190,10 @@ export const linearAxisRulerApplies = (form) => (
   ['above', 'below'].includes(form.linear_track_layout)
 );
 
+/**
+ * @param {{ axisColor?: unknown, rulerOnAxis?: boolean, managed?: boolean }} [options]
+ * @returns {string | null}
+ */
 export const effectiveLinearAxisColor = ({
   axisColor = null,
   rulerOnAxis = false,
@@ -163,6 +219,7 @@ export const effectiveLinearAxisColor = ({
  * @param {unknown} value
  */
 export const isModeProfileDefault = (mode, field, value) => {
+  /** @type {Record<string, unknown>} */
   const defaults = managedStateForMode(mode);
   return Object.prototype.hasOwnProperty.call(defaults, field) && valuesEquivalent(value, defaults[field]);
 };
