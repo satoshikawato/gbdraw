@@ -64,7 +64,8 @@ export const createPaletteLoader = ({ state }) => {
    */
   const initializeDrawingPalette = (drawing, normalizedPalettes) => {
     const requestedPalette = String(drawing.selectedPalette.value || 'default').trim() || 'default';
-    const resolvedPalette = normalizedPalettes[requestedPalette] ? requestedPalette : 'default';
+    const resolvedPalette = Object.hasOwn(normalizedPalettes, requestedPalette) && normalizedPalettes[requestedPalette]
+      ? requestedPalette : 'default';
     const resolvedColors = normalizePaletteColors(
       normalizedPalettes[resolvedPalette] || normalizedPalettes.default || {}
     );
