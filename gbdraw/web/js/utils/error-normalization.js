@@ -543,7 +543,7 @@ const contextFor = (value) => {
   return context;
 };
 
-/** @typedef {{ operation?: string, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions */
+/** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
 
 /**
  * The sole public diagnostic model. Raw messages, causes, logs and stacks are never copied.

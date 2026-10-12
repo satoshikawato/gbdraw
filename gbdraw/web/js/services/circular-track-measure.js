@@ -1,15 +1,22 @@
 // @ts-check
 import { parseOptionalCircularScalar } from './track-slot-validation.js';
 
+/** @import { CircularMeasureObject } from './track-slot-validation.js' */
+
+/**
+ * @param {unknown} value
+ * @returns {value is CircularMeasureObject} A non-array object: a typed `{ value, unit }` draft (its fields are checked on read).
+ */
 const isTypedMeasure = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
+/** @type {(unit: unknown) => asserts unit is 'px' | 'factor'} */
 const requireEditorUnit = (unit) => {
   if (unit !== 'px' && unit !== 'factor') throw new Error('Circular measure editor unit must be px or factor.');
 };
 
 /**
  * Read a detached view. The slot scalar remains the only persisted draft.
- * @param {any} scalar A slot Width or Radius draft.
+ * @param {unknown} scalar A slot Width or Radius draft.
  * @param {string} [fieldName] The field label an invalid value's message names (TK-12).
  */
 export const readCircularMeasure = (scalar, fieldName = 'Value') => {
@@ -36,7 +43,11 @@ export const readCircularMeasure = (scalar, fieldName = 'Value') => {
   return { valueText, selectedUnit, isAuto, error };
 };
 
-/** Numeric edit and approved suffix adapter, returning one existing draft scalar. */
+/**
+ * Numeric edit and approved suffix adapter, returning one existing draft scalar.
+ * @param {unknown} valueText The edited text; anything else throws.
+ * @param {unknown} selectedUnit The unit selector; anything but px or factor throws.
+ */
 export const writeCircularMeasureValue = (valueText, selectedUnit) => {
   requireEditorUnit(selectedUnit);
   if (typeof valueText !== 'string') throw new Error('Circular measure editor value must be text.');
@@ -50,7 +61,11 @@ export const writeCircularMeasureValue = (valueText, selectedUnit) => {
   return { value: text, unit: selectedUnit };
 };
 
-/** Reinterpret the same numeric lexeme; do not convert using a radius or Result. */
+/**
+ * Reinterpret the same numeric lexeme; do not convert using a radius or Result.
+ * @param {unknown} scalar A slot Width or Radius draft.
+ * @param {unknown} nextUnit The unit selector; anything but px or factor throws.
+ */
 export const changeCircularMeasureUnit = (scalar, nextUnit) => {
   requireEditorUnit(nextUnit);
   const view = readCircularMeasure(scalar);
@@ -61,7 +76,10 @@ export const changeCircularMeasureUnit = (scalar, nextUnit) => {
     : { value: typeof scalar === 'string' ? view.valueText : scalar, unit: nextUnit };
 };
 
-/** Request-to-draft projection shares the editor view; invalid objects stay invalid. */
+/**
+ * Request-to-draft projection shares the editor view; invalid objects stay invalid.
+ * @param {unknown} scalar A slot Width or Radius draft.
+ */
 export const projectCircularMeasureDraft = (scalar) => {
   if (scalar === null || scalar === undefined) return null;
   if (!isTypedMeasure(scalar)) return scalar;
