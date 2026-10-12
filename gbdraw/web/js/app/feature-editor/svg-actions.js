@@ -61,9 +61,9 @@ export {
  * @property {(selectionId: string, options?: { additive?: boolean }) => any} [selectFeatureRange]
  * @property {(options?: { clearStatus?: boolean }) => any} [clearFeatureSelection]
  * @property {(svgId: string) => any} [markPlainFeatureClick]
- * @property {(event: Event, svg: Element) => boolean} [startMarqueePointer]
- * @property {(event: Event) => boolean} [moveMarqueePointer]
- * @property {(event: Event) => boolean} [commitMarqueePointer]
+ * @property {(event: PointerEvent, svg: Element) => boolean} [startMarqueePointer]
+ * @property {(event: PointerEvent) => boolean} [moveMarqueePointer]
+ * @property {(event: PointerEvent) => boolean} [commitMarqueePointer]
  * @property {() => any} [cancelMarqueePointer]
  */
 

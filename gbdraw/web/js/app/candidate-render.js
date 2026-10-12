@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
-/** @import { LegendStrokeOperation, SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
+/** @import { FeatureOverrideRow } from '../services/feature-placement.js' */
+/** @import { LegendStrokeOperation, SavedFeatureColorEdit, SavedStrokeEdit, SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 /** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
 /** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { DrawnTrack, TrackLegendRows } from '../services/track-legend-rows.js' */
@@ -21,25 +22,36 @@ import {
 } from '../services/svg-result-ingestion.js';
 
 /**
+ * A Legend entry as the compile reads it: a listed, deleted, or dormant row
+ * (`LegendEntry`), or one a Session saved. Every field is unvalidated.
+ * @typedef {{ caption?: unknown, originalCaption?: unknown, color?: unknown, xPos?: unknown, yPos?: unknown, featureIds?: unknown }} LegendEntryInput
+ */
+
+/**
+ * A Legend entry after `normalizedLegendEntries`.
+ * @typedef {{ caption: string, originalCaption: string, color: string, xPos: number | null, yPos: number | null, featureIds: readonly string[] }} NormalizedLegendEntry
+ */
+
+/**
  * The committed editor state a direct mutation plan compiles. Python and the
- * editor owners define the row shapes (R7), so each map is a record here.
+ * editor owners define the row shapes (R7).
  * @typedef {object} EditorPlanOptions
  * @property {EditorAddressing} catalogAdmission The feature catalog's admission, or the addressing of
  *   a Result without a catalog (`displayedFeatureAddressing`).
- * @property {Record<string, any>} [featureColorOverrides]
- * @property {Record<string, any>} [featureStrokeOverrides]
- * @property {Record<string, any>} [featureOverrides]
- * @property {Record<string, any>[]} [legendEntries]
- * @property {Record<string, any>[]} [deletedLegendEntries]
+ * @property {Record<string, SavedFeatureColorEdit>} [featureColorOverrides]
+ * @property {Record<string, SavedStrokeEdit>} [featureStrokeOverrides]
+ * @property {Record<string, FeatureOverrideRow>} [featureOverrides]
+ * @property {readonly (LegendEntryInput | null | undefined)[]} [legendEntries]
+ * @property {readonly (LegendEntryInput | null | undefined)[]} [deletedLegendEntries]
  * @property {string[]} [originalLegendOrder]
  * @property {boolean} [sourceReplaced]
  * @property {Iterable<string>} [addedLegendCaptions] Captions the renderer drew without a manual rule.
  * @property {Iterable<string>} [unrequestedDepthCaptions] Captions of Depth series the request left out (Show Depth off); Python cannot name their rows (OV-81).
- * @property {Record<string, any>[]} [dormantLegendEntries] OV-120: renamed rows an earlier Generate did not draw. Their
+ * @property {readonly (LegendEntryInput | null | undefined)[]} [dormantLegendEntries] OV-120: renamed rows an earlier Generate did not draw. Their
  *   renames and styles apply where this Result draws the row again.
- * @property {Record<string, any>} [legendColorOverrides]
- * @property {Record<string, any>} [legendStrokeOverrides]
- * @property {Record<string, any>[]} [manualSpecificRules]
+ * @property {Record<string, unknown>} [legendColorOverrides]
+ * @property {Record<string, SavedStrokeEdit>} [legendStrokeOverrides]
+ * @property {readonly Partial<SpecificColorRule>[]} [manualSpecificRules]
  * @property {string[] | null} [replayDefaultLegendOrder]
  * @property {SvgResultTransform[]} [resultTransforms] One transform per Result, by index.
  * @property {SvgResultTransform | null} [transformSvg] A transform applied to every Result.
@@ -83,10 +95,19 @@ import {
  * @typedef {EditorPlanOptions & SvgAdmissionRuntime & { generationResponse: any, catalogAdmission: FeatureCatalogAdmission }} CandidateCommitOptions
  */
 
+/** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
+/**
+ * @param {unknown} object
+ * @param {string} key
+ */
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 
 // A committed paint is read with the Default colors domain (D-41).
+/**
+ * @param {unknown} value
+ * @param {string} label
+ */
 const normalizePaint = (value, label) => {
   const raw = text(value);
   if (!raw) return '';
@@ -95,6 +116,7 @@ const normalizePaint = (value, label) => {
   throw new Error(`Invalid ${label} override in the committed editor state.`);
 };
 
+/** @param {unknown} value */
 const normalizeStrokeWidth = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const width = Number(value);
@@ -105,13 +127,33 @@ const normalizeStrokeWidth = (value) => {
 };
 
 /**
+ * The rows of the planner's operations, one shape per domain. Every row names
+ * its feature by `renderedId`, or its Legend row by `caption` (Python's key
+ * or an editor row's own key). A live feature fill of `color: null` keeps the
+ * fill the Result shows.
+ * @typedef {{ renderedId: string, color: string | null }} FeatureFillOperation
+ * @typedef {{ renderedId: string, strokeColor: string, strokeWidth: number | null }} FeatureStrokeOperation
+ * @typedef {{ renderedId: string, mode: 'on' | 'off' }} FeatureVisibilityOperation
+ * @typedef {{ renderedId: string, value: string }} LabelTextOperation
+ * @typedef {{ renderedId: string, mode: 'on' | 'off' }} LabelVisibilityOperation
+ * @typedef {{ caption: PythonLegendKey, color: string, allowMissing: boolean }} LegendFillOperation
+ * @typedef {{ from: string, to: string, allowMissing: boolean }} LegendRenameOperation
+ * @typedef {{ caption: string, allowMissing: boolean, retire?: boolean }} LegendDeleteOperation
+ * @typedef {{ caption: string, color: string, xPos: number | null, yPos: number | null, ifAbsent?: boolean, before?: string }} LegendAddOperation
+ * @typedef {{ captions: readonly string[] }} LegendOrderOperation
+ */
+
+/**
  * The planner's mutable form of one Result's operations (the shape
  * services/svg-result-ingestion.js declares as `SvgMutationOperations`).
- * @typedef {Record<
- *   'featureFills' | 'featureStrokes' | 'featureVisibility' | 'labelText' | 'labelVisibility'
- *   | 'legendFills' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
- *   Record<string, any>[]
- * > & { legendStrokes: LegendStrokeOperation[], callerTransforms: SvgResultTransform[] }} MutableOperations
+ * @typedef {{
+ *   featureFills: FeatureFillOperation[], featureStrokes: FeatureStrokeOperation[],
+ *   featureVisibility: FeatureVisibilityOperation[], labelText: LabelTextOperation[],
+ *   labelVisibility: LabelVisibilityOperation[], legendFills: LegendFillOperation[],
+ *   legendRenames: LegendRenameOperation[], legendDeletes: LegendDeleteOperation[],
+ *   legendAdds: LegendAddOperation[], legendOrder: LegendOrderOperation[],
+ *   legendStrokes: LegendStrokeOperation[], callerTransforms: SvgResultTransform[]
+ * }} MutableOperations
  */
 
 /** @returns {MutableOperations} */
@@ -130,9 +172,11 @@ const emptyOperations = () => ({
   callerTransforms: []
 });
 
+/** @param {Readonly<MutableOperations>} operations */
 const operationCount = (operations) => Object.values(operations)
   .reduce((total, entries) => total + entries.length, 0);
 
+/** @param {MutableOperations} operations */
 const freezeOperations = (operations) => {
   Object.values(operations).forEach((entries) => {
     entries.forEach((entry) => {
@@ -143,19 +187,32 @@ const freezeOperations = (operations) => {
   return Object.freeze(operations);
 };
 
+/**
+ * @template {keyof MutableOperations} D
+ * @param {readonly MutableOperations[]} operationsByResult
+ * @param {readonly number[]} resultIndexes
+ * @param {D} domain
+ * @param {MutableOperations[D][number]} operation
+ */
 const addToResults = (operationsByResult, resultIndexes, domain, operation) => {
   resultIndexes.forEach((resultIndex) => {
     const target = operationsByResult[resultIndex];
-    if (target) target[domain].push(
+    // A domain's array holds the rows of that domain (MutableOperations).
+    if (target) /** @type {MutableOperations[D][number][]} */ (target[domain]).push(
       typeof operation === 'function' ? operation : { ...operation }
     );
   });
 };
 
+/**
+ * @param {unknown} override
+ * @param {readonly Partial<SpecificColorRule>[]} manualSpecificRules
+ */
 const matchingRuleDerivedFill = (override, manualSpecificRules) => {
   if (!override || typeof override !== 'object') return false;
-  const caption = text(override.caption);
-  const color = text(override.color).toLowerCase();
+  // A non-null object: a field it lacks reads as undefined.
+  const caption = text(/** @type {{ caption?: unknown }} */ (override).caption);
+  const color = text(/** @type {{ color?: unknown }} */ (override).color).toLowerCase();
   if (!caption || !color) return false;
   return (Array.isArray(manualSpecificRules) ? manualSpecificRules : []).some((rule) => (
     text(rule?.cap) === caption && text(rule?.color).toLowerCase() === color
@@ -404,10 +461,20 @@ export const editorPaintDomains = (changes) => [...new Set((Array.isArray(change
     : []
 )))];
 
+/**
+ * @param {EditorAddressing} catalogAdmission
+ * @param {string} key
+ * @returns {{ resultIndex: number, renderedId: string }[]}
+ */
 const resolvedStableTargets = (catalogAdmission, key) => (
   catalogAdmission.renderedTargetsByOverrideKey.get(key) || []
 );
 
+/**
+ * @param {EditorAddressing} catalogAdmission
+ * @param {string} renderedId
+ * @returns {ReadonlySet<number>}
+ */
 const renderedResultIndexes = (catalogAdmission, renderedId) => (
   catalogAdmission.resultIndexesByRenderedId.get(renderedId) || new Set()
 );
@@ -415,10 +482,18 @@ const renderedResultIndexes = (catalogAdmission, renderedId) => (
 // Per-feature edits name a source identity in the drawing of the catalog's
 // mode; each Result of that mode draws it with its own rendered ID (design Q4
 // 6.2, R2).
+/**
+ * @param {EditorAddressing} catalogAdmission
+ * @param {FeatureOverrideRow | null | undefined} row
+ */
 const identityTargets = (catalogAdmission, row) => (
   resolvedStableTargets(catalogAdmission, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId))
 );
 
+/**
+ * @param {readonly (LegendEntryInput | null | undefined)[] | null | undefined} entries
+ * @returns {NormalizedLegendEntry[]}
+ */
 const normalizedLegendEntries = (entries) => (
   Array.isArray(entries)
     ? entries.map((entry) => ({
@@ -459,6 +534,7 @@ const compilePlanBundle = ({
     throw new Error('Direct editor mutation planning requires an admitted feature catalog.');
   }
   const operationsByResult = catalogAdmission.resultNames.map(() => emptyOperations());
+  /** @type {Record<string, SavedFeatureColorEdit>} */
   const normalizedFeatureColorOverrides = {};
   const drawnFillById = 'fillByRenderedId' in catalogAdmission ? catalogAdmission.fillByRenderedId : null;
   // The fill Python drew a rendered feature with: its catalog row's, else the
@@ -681,7 +757,8 @@ const compilePlanBundle = ({
   /** @type {Set<RenderedFeatureId>} */
   const ruleDrawnIds = new Set();
   Object.entries(featureColorOverrides || {}).forEach(([key, override]) => {
-    const caption = text(override?.caption);
+    // A color string has no `caption`: the read is undefined.
+    const caption = text(/** @type {{ caption?: unknown } | null} */ (override)?.caption);
     if (!caption) return;
     const renderedIds = renderedIdsByDirectCaption.get(caption) || new Set();
     const named = namedLegendCaption(override, rules) === caption;

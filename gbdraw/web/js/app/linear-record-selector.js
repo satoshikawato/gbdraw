@@ -2,6 +2,10 @@
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { discoveryErrorIsFinal } from '../services/record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
+/** @import { LinearSeq, DiagramMode } from '../state.js' */
+/** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { SequenceRecord } from '../services/record-discovery.js' */
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
 
 export const AUTOMATIC_RECORD_OPTION_LABEL = 'Automatic (no explicit selector)';
 export const RECORDS_LOADING_LABEL = 'Loading records...';
@@ -11,10 +15,46 @@ export const RECORDS_NOT_INSPECTED_LABEL = 'Not inspected';
 export const RECORD_FILE_REQUIRED_LABEL = 'Upload a sequence file first';
 export const RECORD_READ_ERROR_LABEL = 'Records could not be loaded';
 
+/**
+ * One record-selector option. `synthetic` marks the entry for a selector the
+ * current file does not list.
+ * @typedef {{ value: string, label: string, synthetic: boolean }} RecordOption
+ */
+
+/** @typedef {'idle' | 'loading' | 'deferred' | 'ready' | 'error'} RecordSelectorStatus */
+
+/**
+ * What the selector remembers for one row: the files it read, and how reading went.
+ * @typedef {object} RecordSelectorState
+ * @property {RecordSelectorStatus} status
+ * @property {SequenceRecord[]} records
+ * @property {UserFacingError | ''} error The reader's error, or '' when there is none.
+ * @property {string} inputType
+ * @property {FileLike | null} primaryFile
+ * @property {FileLike | null} pairedFile
+ */
+
+/**
+ * What `replaceState` takes: it stores a missing field as the empty value, and
+ * a falsy error (a thrown null) as ''.
+ * @typedef {Omit<Partial<RecordSelectorState>, 'error'> & { status: RecordSelectorStatus, error?: UserFacingError | '' | null }} RecordSelectorStateInput
+ */
+
+/** @typedef {Partial<LinearSeq> | null | undefined} LinearSeqLike A row, or a partial one. */
+/** @typedef {{ status: string, reason: string }} SessionBusy What `sessionOperationAvailability` of `state.js` returns while a Session operation blocks edits. */
+/** @typedef {{ suppress?: boolean }} RefreshOptions */
+/** @typedef {SessionBusy | true | undefined} RefreshOutcome What a refresh settles to: a busy outcome, true when it expanded the rows and restarts, or nothing. */
+
+/** @param {LinearSeqLike} seq */
 const currentSelectorValue = (seq) => String(seq?.region_record_id ?? '').trim();
 
 export { formatRecordLength };
 
+/**
+ * @param {readonly SequenceRecord[] | null | undefined} records
+ * @param {unknown} [currentValue]
+ * @returns {RecordOption[]}
+ */
 export const buildRecordOptions = (records, currentValue = '') => {
   const normalizedRecords = Array.isArray(records) ? records : [];
   const options = buildDisambiguatedRecordEntries(normalizedRecords).map((record) => {
@@ -41,6 +81,7 @@ export const buildRecordOptions = (records, currentValue = '') => {
   ];
 };
 
+/** @returns {RecordSelectorState} */
 const emptySelectorState = () => ({
   status: 'idle',
   records: [],
@@ -50,25 +91,39 @@ const emptySelectorState = () => ({
   pairedFile: null
 });
 
+/** @param {unknown} value */
 const sanitizePathSegment = (value) =>
   String(value || 'sequence').replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 96) || 'sequence';
 
 /**
  * @typedef {Object} LinearRecordReadRequest
  * @property {string} inputType
- * @property {any} primaryFile
- * @property {any} pairedFile
+ * @property {FileLike | null} primaryFile
+ * @property {FileLike | null} pairedFile
  * @property {string} temporaryPathPrefix
  */
 
 /**
+ * The members of the `state.js` state that the selector reads; the root passes
+ * the whole state. The two suppression flags and `sessionOperationAvailability`
+ * are absent in a test state.
+ * @typedef {object} LinearRecordSelectorState
+ * @property {{ value: string }} lInputType
+ * @property {{ value: DiagramMode }} mode
+ * @property {LinearSeq[]} linearSeqs
+ * @property {{ value: boolean }} [semanticFileWatchersSuppressed]
+ * @property {{ value: boolean }} [sessionImportRollbackInProgress]
+ * @property {() => SessionBusy | null} [sessionOperationAvailability]
+ */
+
+/**
  * @typedef {Object} LinearRecordSelectorOptions
- * @property {Record<string, any>} state Shape owned by `state.js`.
- * @property {(initial: Record<string, any>) => Record<string, any>} reactive
- * @property {(request: LinearRecordReadRequest) => Promise<any[]>} recordReader
- * @property {((discovered: { uid: string, records: any[] }) => boolean | void) | null} [onRecordsDiscovered]
+ * @property {LinearRecordSelectorState} state
+ * @property {(initial: Record<string, RecordSelectorState>) => Record<string, RecordSelectorState>} reactive
+ * @property {(request: LinearRecordReadRequest) => Promise<SequenceRecord[]>} recordReader
+ * @property {((discovered: { uid: string, records: SequenceRecord[] }) => boolean | void) | null} [onRecordsDiscovered]
  *   Returns true when it expanded the rows, which restarts the refresh.
- * @property {{ warn?: (...args: any[]) => void }} [logger]
+ * @property {{ warn?: (...args: unknown[]) => void }} [logger]
  */
 
 /** @param {LinearRecordSelectorOptions} options */
@@ -81,20 +136,30 @@ export const createLinearRecordSelector = ({
 }) => {
   const selectorStateByUid = reactive({});
   let refreshGeneration = 0;
-  /** @type {{ fingerprint: any[], promise: Promise<any> | null } | null} */
+  /** @type {{ fingerprint: unknown[], promise: Promise<RefreshOutcome> | null } | null} */
   let activeRefresh = null;
   const recordDiscoverySuppressed = () => Boolean(
     state.semanticFileWatchersSuppressed?.value ||
     state.sessionImportRollbackInProgress?.value
   );
 
+  /** @param {LinearSeqLike} seq */
   const uidFor = (seq) => String(seq?.uid ?? '').trim();
+  /**
+   * @param {LinearSeqLike} seq
+   * @param {string} [inputType]
+   * @returns {{ primaryFile: FileLike | null, pairedFile: FileLike | null }}
+   */
   const sourceFilesFor = (seq, inputType = state.lInputType.value) => (
     inputType === 'gff'
       ? { primaryFile: seq?.gff || null, pairedFile: seq?.fasta || null }
       : { primaryFile: seq?.gb || null, pairedFile: null }
   );
 
+  /**
+   * @param {LinearSeqLike} seq
+   * @returns {RecordSelectorState}
+   */
   const stateFor = (seq) => {
     const uid = uidFor(seq);
     const stored = (uid && selectorStateByUid[uid]) || emptySelectorState();
@@ -116,6 +181,10 @@ export const createLinearRecordSelector = ({
     return stored;
   };
 
+  /**
+   * @param {string} uid
+   * @param {RecordSelectorStateInput} nextState
+   */
   const replaceState = (uid, nextState) => {
     selectorStateByUid[uid] = {
       status: nextState.status,
@@ -129,6 +198,11 @@ export const createLinearRecordSelector = ({
 
   // The settled read of these exact source files on any row: its records, or
   // an error the reader reported for those bytes. A refresh reuses it.
+  /**
+   * @param {string} inputType
+   * @param {FileLike | null} primaryFile
+   * @param {FileLike | null} pairedFile
+   */
   const settledStateFor = (inputType, primaryFile, pairedFile) => Object.values(selectorStateByUid)
     .find((stored) => (
       stored.inputType === inputType && stored.primaryFile === primaryFile && stored.pairedFile === pairedFile
@@ -142,6 +216,7 @@ export const createLinearRecordSelector = ({
     });
   };
 
+  /** @param {{ generation: number, uid: string, primaryFile: FileLike | null, pairedFile: FileLike | null, inputType: string }} request */
   const isCurrentRequest = ({ generation, uid, primaryFile, pairedFile, inputType }) => {
     if (generation !== refreshGeneration) return false;
     if (recordDiscoverySuppressed()) return false;
@@ -152,6 +227,7 @@ export const createLinearRecordSelector = ({
     return currentFiles.primaryFile === primaryFile && currentFiles.pairedFile === pairedFile;
   };
 
+  /** @param {RefreshOptions} [options] */
   const refreshFingerprint = ({ suppress = false } = {}) => [
     Boolean(suppress || recordDiscoverySuppressed()),
     state.mode.value,
@@ -161,10 +237,18 @@ export const createLinearRecordSelector = ({
       return [uidFor(seq), primaryFile, pairedFile];
     })
   ];
+  /**
+   * @param {readonly unknown[]} left
+   * @param {readonly unknown[]} right
+   */
   const sameFingerprint = (left, right) => (
     left.length === right.length && left.every((value, index) => Object.is(value, right[index]))
   );
 
+  /**
+   * @param {RefreshOptions} [options]
+   * @returns {Promise<RefreshOutcome>}
+   */
   const runRefresh = async ({ suppress = false } = {}) => {
     const generation = ++refreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
@@ -176,6 +260,7 @@ export const createLinearRecordSelector = ({
     }
 
     const inputType = state.lInputType.value;
+    /** @type {{ uid: string, primaryFile: FileLike, pairedFile: FileLike | null }[]} */
     const targets = [];
     for (const seq of state.linearSeqs) {
       const uid = uidFor(seq);
@@ -235,14 +320,19 @@ export const createLinearRecordSelector = ({
     }
   };
 
+  /**
+   * @param {RefreshOptions} [options]
+   * @returns {SessionBusy | Promise<RefreshOutcome>}
+   */
   const refresh = (options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const fingerprint = refreshFingerprint(options);
     if (activeRefresh && sameFingerprint(activeRefresh.fingerprint, fingerprint)) {
-      return activeRefresh.promise;
+      // An entry is stored only after its promise is assigned (below).
+      return /** @type {Promise<RefreshOutcome>} */ (activeRefresh.promise);
     }
-    /** @type {{ fingerprint: any[], promise: Promise<any> | null }} */
+    /** @type {{ fingerprint: unknown[], promise: Promise<RefreshOutcome> | null }} */
     const entry = { fingerprint, promise: null };
     entry.promise = runRefresh(options).then((expanded) => {
       if (expanded) return refresh(options);
@@ -250,9 +340,14 @@ export const createLinearRecordSelector = ({
       if (activeRefresh === entry) activeRefresh = null;
     });
     activeRefresh = entry;
-    return entry.promise;
+    // The promise was assigned above.
+    return /** @type {Promise<RefreshOutcome>} */ (entry.promise);
   };
 
+  /**
+   * @param {LinearSeqLike} seq
+   * @returns {RecordOption[]}
+   */
   const optionsFor = (seq) => {
     const selectorState = stateFor(seq);
     const currentValue = currentSelectorValue(seq);
@@ -274,11 +369,18 @@ export const createLinearRecordSelector = ({
     }];
   };
 
+  /** @param {LinearSeqLike} seq */
   const isDisabled = (seq) => stateFor(seq).status !== 'ready';
+  /** @param {LinearSeqLike} seq */
   const statusFor = (seq) => stateFor(seq).status;
+  /** @param {LinearSeqLike} seq */
   const recordsFor = (seq) => stateFor(seq).records.slice();
+  /** @param {LinearSeqLike} seq */
   const errorModelFor = (seq) => stateFor(seq).error;
-  const errorFor = (seq) => errorModelFor(seq)?.summary || errorModelFor(seq);
+  /** @param {LinearSeqLike} seq */
+  // A stored '' (no error) has no `summary`: the read is undefined and `||` returns ''.
+  const errorFor = (seq) => /** @type {UserFacingError} */ (errorModelFor(seq))?.summary || errorModelFor(seq);
+  /** @param {LinearSeqLike} seq */
   const warningFor = (seq) => {
     const selectorState = stateFor(seq);
     const currentValue = currentSelectorValue(seq);
