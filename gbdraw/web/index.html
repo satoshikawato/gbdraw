@@ -1848,6 +1848,11 @@
             .input-label { @apply flex items-center gap-1; margin-bottom: 3px; font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--ui-text-2); }
             .ui-hint { font-size: 11px; line-height: 1.45; color: var(--ui-muted); }
             .markup-preview { @apply mt-0.5 text-slate-600; font-size: 11px; overflow-wrap: anywhere; }
+            /* A File-level names block its card does not show stays while the focus is in it, so
+               clearing its last value does not remove the field being edited; the record's names
+               take its place when the focus leaves. A card shows one names block. */
+            .linear-file-names-unused:not(:focus-within),
+            .linear-file-names-unused:focus-within + [data-linear-record-names] { display: none; }
             /* One marker for settings that the next Generate applies. */
             .apply-note { @apply inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-px font-medium leading-4 text-slate-500; font-size: 11px; }
 
@@ -2338,7 +2343,7 @@
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                             </div>
-                            <div class="mt-2 p-2 bg-white/70 rounded border border-slate-200 space-y-1.5" :data-linear-source-defaults="source.uid">
+                            <div class="mt-2 p-2 bg-white/70 rounded border border-slate-200 space-y-1.5" :class="{ 'linear-file-names-unused': linearFileCardRecord(source) }" :data-linear-source-defaults="source.uid">
                                 <div class="text-[10px] font-bold text-slate-500">Names for all records in this file</div>
                                 <div>
                                     <label class="text-[9px] font-semibold text-slate-500 block mb-0.5">Organism / strain</label>
@@ -2366,6 +2371,7 @@
                                     >
                                 </div>
                             </div>
+                            <linear-record-names v-if="linearFileCardRecord(source)" class="mt-2 rounded border border-slate-200 bg-white/70 p-2" :seq="linearFileCardRecord(source).sequence" :idx="linearFileCardRecord(source).index" :source="source" :disabled="!semanticMutationAvailable" @reset-definition="resetLinearRecordDefinition" @reset-subtitle="resetLinearRecordSubtitle"></linear-record-names>
                             <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-source-depth="source.uid">
                                 <summary
                                     role="button"
@@ -2521,23 +2527,7 @@
                                     </div>
                                 </div>
                             </details>
-                            <div class="mt-2">
-                                <div class="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
-                                    <span>Organism / strain (optional)</span>
-                                    <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
-                                    <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="resetLinearRecordDefinition(seq)" class="text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="!semanticMutationAvailable">Reset to default</button>
-                                </div>
-                                <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || 'e.g., Escherichia coli O157:H7 Sakai'" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
-                                <markup-preview :text="seq.definition || resolveLinearRecordEffectiveDefinition(seq, source)"></markup-preview>
-                            </div>
-                            <div class="mt-2">
-                                <div class="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
-                                    <span>Subtitle / title (optional)</span>
-                                    <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
-                                    <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="resetLinearRecordSubtitle(seq)" class="text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="!semanticMutationAvailable">Reset to default</button>
-                                </div>
-                                <input type="text" v-model="seq.record_subtitle" :aria-label="`Subtitle / title for sequence ${idx + 1}`" :placeholder="getLinearSourceDefaultSubtitle(source) || 'e.g., Neomycin biosynthetic gene cluster'" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
-                            </div>
+                            <linear-record-names v-if="!linearFileCardRecord(source)" :seq="seq" :idx="idx" :source="source" :disabled="!semanticMutationAvailable" @reset-definition="resetLinearRecordDefinition" @reset-subtitle="resetLinearRecordSubtitle"></linear-record-names>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
                                     <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">Region (optional)</span> <span class="apply-note ml-auto">Applies on Generate</span>
@@ -8420,6 +8410,28 @@
     </div>
     <div v-if="rules.length === 0" class="ui-hint italic text-center py-2">No rules added</div>
 </div>
+</script>
+
+<script type="text/x-template" id="linear-record-names-template">
+  <div class="min-w-0 space-y-2" :data-linear-record-names="seq.uid">
+    <div>
+      <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
+        <span>Organism / strain (optional)</span>
+        <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
+        <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="$emit('reset-definition', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">Reset to default</button>
+      </div>
+      <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || 'e.g., Escherichia coli O157:H7 Sakai'" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
+      <markup-preview :text="seq.definition || resolveLinearRecordEffectiveDefinition(seq, source)"></markup-preview>
+    </div>
+    <div>
+      <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
+        <span>Subtitle / title (optional)</span>
+        <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
+        <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="$emit('reset-subtitle', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">Reset to default</button>
+      </div>
+      <input type="text" v-model="seq.record_subtitle" :aria-label="`Subtitle / title for sequence ${idx + 1}`" :placeholder="getLinearSourceDefaultSubtitle(source) || 'e.g., Neomycin biosynthetic gene cluster'" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
+    </div>
+  </div>
 </script>
 
 <script type="text/x-template" id="record-display-control-template">

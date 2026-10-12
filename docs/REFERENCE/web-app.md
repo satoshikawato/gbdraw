@@ -52,8 +52,16 @@ the rich feature popup are shared. A saved Session keeps each mode's settings
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
-uploaders, followed by **Names for all records in this file** and a closed
-**Record options** disclosure. Use the up and down buttons in a File header to
+uploaders, followed by its name fields and a closed **Record options**
+disclosure. The card shows one names block. A File with one record shows that
+record's own **Organism / strain** and **Subtitle / title** on the card. A File
+with two or more records, or a one-record File that holds a File-level name
+(for example from a loaded Session), shows **Names for all records in this
+file**, and each record keeps its own name fields in its **Record options**.
+Clearing the File-level name of a one-record File puts the record's fields on
+the card once the focus leaves the block. A record draws its own value, else
+the File value, else the inferred definition. Use the up and down buttons in a
+File header to
 move that source. Every record in a multi-record GenBank or GFF3 + FASTA source
 moves together, while the record order inside the source stays unchanged. When
 each File uses its own consecutive rows, the File moves as one block of rows and
@@ -62,9 +70,11 @@ File's row separates a File's rows, File movement is unavailable; use **Record
 Layout** to edit or normalize that custom placement first.
 Uploading a GenBank file gives each of its records a **Definition** inferred
 from that record's own `/organism` and `/strain` qualifiers, so a File of
-several organisms shows each organism's name. The file default **Organism /
-strain** and **Subtitle / title** stay yours to fill: a subtitle names one
-replicon rather than the whole file. The prominent
+several organisms shows each organism's name. The **Organism / strain** and
+**Subtitle / title** fields stay yours to fill: a subtitle names one replicon
+rather than the whole file. A name typed on an empty card is kept when its
+file is chosen: it stays the record's name for a one-record file and becomes
+the File-level name for a file with several records. The prominent
 **Add sequence** action appears below the Linear File list. A GenBank file may
 contain several biological records. GFF3 input requires the matching FASTA
 sequence and exact sequence-ID agreement. See [Input formats and TSV
@@ -1240,7 +1250,9 @@ first; its dialog lists what it resets and what stays, and **Reset all settings*
 to the caption Python draws. In Linear it also clears each record's **Definition**, **Subtitle**,
 crop, and reverse complement, and the comparison alignment plan, and turns the
 Linear comparisons off (their uploaded tables stay); the Files, each
-row's selected record, the file defaults, and Depth assignments stay. **Undo**
+row's selected record, the file defaults, and Depth assignments stay. The name
+fields on the card of a one-record File are that record's own, so they are
+cleared too; names under **Names for all records in this file** stay. **Undo**
 restores them. Generate when the exported figure should include draft settings.
 
 The export actions and session handoff rules are documented in [Output formats

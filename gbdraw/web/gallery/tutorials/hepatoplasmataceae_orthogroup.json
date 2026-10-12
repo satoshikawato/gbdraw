@@ -74,8 +74,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-02-01-upload-row-context.webp",
-            "alt": "AP027078.gb record card with Record options open to the organism, subtitle, and region controls.",
-            "caption": "Upload AP027078.gb, open Record options if metadata or region settings are needed, and repeat the remaining files in table order."
+            "alt": "AP027078.gb File card with its Organism / strain and Subtitle / title fields, and Record options open to the region controls.",
+            "caption": "Upload AP027078.gb, open Record options if region settings are needed, and repeat the remaining files in table order."
           },
           "capture": {
             "source": "webapp",

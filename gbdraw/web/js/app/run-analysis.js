@@ -143,9 +143,6 @@ import {
 } from '../services/record-discovery.js';
 import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
-  LOSAT_DERIVED_CACHE_SCHEMA,
-  NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
-  PROTEIN_LOSAT_CACHE_SCHEMA,
   buildValidatedProteinIdentityIndex,
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
@@ -161,6 +158,11 @@ import {
   validateDerivedProteinReferences,
   webLosatRuntimeRecord
 } from '../services/losat-cache.js';
+import {
+  LOSAT_DERIVED_CACHE_SCHEMA,
+  NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+  PROTEIN_LOSAT_CACHE_SCHEMA
+} from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {

@@ -141,8 +141,8 @@ test('Gallery session colors, record labels, and feature labels survive regenera
     const inspectSettings = (app) => ({
       cdsColor: app.currentColors.CDS,
       labels: app.form.show_labels_linear,
-      // The BGC Session names its records through File defaults.
-      recordLabels: app.linearSeqs.map((record) => record.definition || record.file_definition),
+      // The BGC Session names each record in the record's own Definition.
+      recordLabels: app.linearSeqs.map((record) => record.definition),
       rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
         feat, qual, val, color, cap
       }))
@@ -176,8 +176,8 @@ test('Gallery session colors, record labels, and feature labels survive regenera
     const inspectSettings = () => ({
       cdsColor: app.currentColors.CDS,
       labels: app.form.show_labels_linear,
-      // The BGC Session names its records through File defaults.
-      recordLabels: app.linearSeqs.map((record) => record.definition || record.file_definition),
+      // The BGC Session names each record in the record's own Definition.
+      recordLabels: app.linearSeqs.map((record) => record.definition),
       rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
         feat, qual, val, color, cap
       }))

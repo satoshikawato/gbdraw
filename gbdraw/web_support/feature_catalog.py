@@ -32,8 +32,8 @@ from gbdraw.render.interactive_svg import (
     _resolve_rendered_features,
     _validate_match_fragments,
 )
+from gbdraw.session_io import CURRENT_FEATURE_CATALOG_SCHEMA as FEATURE_CATALOG_SCHEMA
 
-FEATURE_CATALOG_SCHEMA = 5
 # Schema 4 added source-anchor profiles; schema 5 adds each rendered feature's
 # drawn selector values (``drawnSelector``) for live rule matching.
 ANCHOR_FEATURE_CATALOG_SCHEMA = 4

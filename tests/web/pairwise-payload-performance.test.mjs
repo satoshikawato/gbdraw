@@ -23,6 +23,7 @@ const modulePaths = [
   'gbdraw/web/js/services/losat-normalization.js',
   'gbdraw/web/js/services/file-content-cache.js',
   'gbdraw/web/js/services/feature-catalog.js',
+  'gbdraw/web/js/contracts/schema.generated.js',
   'gbdraw/web/js/services/feature-identity.js',
   'gbdraw/web/js/services/orthogroup-feature-metadata.js',
   'gbdraw/web/js/services/runtime-test-hooks.js'

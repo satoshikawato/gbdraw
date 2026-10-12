@@ -299,7 +299,8 @@ export const createPreviewItemPopup = ({
     subtitleLabel: 'Subtitle',
     sequenceUid: sequence.uid,
     fields: LINEAR_FIELDS,
-    settingsSelector: `[data-linear-record-card=${JSON.stringify(sequence.uid)}] [data-linear-record-options] input[type="text"]`
+    // The record's own name fields, on its File card or in its Record options.
+    settingsSelector: `[data-linear-record-names=${JSON.stringify(sequence.uid)}] input[type="text"]`
   };
 
   /** @param {boolean} ownRecord @returns {RecordDraft | null} */

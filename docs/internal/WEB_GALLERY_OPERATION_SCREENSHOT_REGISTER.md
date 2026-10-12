@@ -419,3 +419,24 @@ SVG byte for byte, so the finished-figure and popup captures keep their bytes.
 | `BGC0000708-BGC0000713` | `manual-10-01-arrow-shaft-width.webp` | Recapture; contract extended | Final Session; **Arrow Geometry** box with Head Length Ratio 0.64 and Shaft Width Ratio 0.6, both highlighted; `assertAppState` and `visibleControls` name both ratios | Recaptured at DSF 3, same 1422x315 crop |
 | `BGC0000708-BGC0000713` | `manual-09-02-preview-labels.webp` caption; step 10 text, replay, and both tables | Text | The caption no longer says that the shafts hide the heads of short genes; step 10 has the Head Length Ratio row and says what each group of rows does against the Auto values the reader sees | Tables checked against the Auto notes read after the step 9 replay |
 | `BGC0000708-BGC0000713` | `manual-10-04-preview-final.webp`, `manual-11-01-orthogroup-popup.webp`, `manual-12-01-feature-popup.webp` | Keep | The pinned Session and the step 10 replay draw the published figure | Not recaptured |
+
+## Record name fields on one-record File cards (Gallery revision 2026-10-12)
+
+A Linear File with one record and no File-level name shows that record's own
+**Organism / strain (optional)** and **Subtitle / title (optional)** on its
+card, in place of **Names for all records in this file**; **Record options** no
+longer repeat them. The BGC tutorial therefore types the names into the record
+fields, and its Gallery Session was saved again through the Web app with the
+five names on the records instead of the Files. The published figure is
+unchanged: the source SVG, the rendered example, the thumbnail and
+`examples.json` keep their bytes. This section replaces the capture state of
+the same media in the rows of the earlier sections; those rows stay as history.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-02-01-file1-defaults.webp`, `manual-03-01-file5-defaults.webp` | Recapture; recipe changed | Replay through the step (step 2 `replayThrough` 1 -> 2); clip `:scope > [data-linear-record-names]` of the File card; File card from its header to the record's **Organism / strain (optional)** and **Subtitle / title (optional)** with the markup preview line; no **Names for all records in this file**; File 5 with **Add sequence** | Recaptured at DSF 3, 1164x768 and 1203x1233; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-06-01-reverse-bgc0000713.webp` | Recapture | File 5 card with the name fields on the card; open **Record options** hold the record header, Region and **Reverse complement** on; no **Using file default** | Recaptured at DSF 3, 1704x1839; compared by eye |
+| `hepatoplasmataceae_collinear`, `hepatoplasmataceae_orthogroup` | `manual-02-01-upload-row-context.webp` (the two files are byte-identical) | Recapture; alt and caption changed | Exact Session; AP027078.gb File card with empty name fields on the card; open **Record options** with the region controls | Recaptured, 1422x1689; compared by eye |
+| `majanivirus_orthogroup` | `manual-02-01-upload-row-label-context.webp` | Recapture; recipe changed | The capture finds the field by `[data-linear-record-names="record-1"]`; MjeNMV.gb File card with its Organism / strain value on the card; **Record options** closed | Recaptured, 1782x1002; compared by eye |
+| `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Keep | The clip is the card header and the uploader; the names area is outside it | Recaptured and reverted |
+| `BGC0000708-BGC0000713` | `manual-04-01-preview-defaults.webp`, `manual-10-04-preview-final.webp` | Keep | The replay with the names in the record fields draws the same previews (step 4 SVG byte-identical, step 10 within raster noise) | Recaptured as proof and reverted |

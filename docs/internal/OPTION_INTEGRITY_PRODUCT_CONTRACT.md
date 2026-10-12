@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `40`
+- Contract revision: `41`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -581,6 +581,50 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that show the new labels are in the same pull request, and
     the Review is `REQUIRED`.
+- Revision 41 changes: `PD-OI-067` gains scenario revision `2`
+  (`B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card`)
+  from the Product Decision Owner `satoshikawato`'s replies of `2026-10-11`
+  and `2026-10-12` on the names area of a Linear File card of the Web app.
+  Each quotation below is the part of a reply that carries the answer; what
+  it leaves out is stated.
+  - Reply 1 (`2026-10-11`), to the review questions on the Before/After
+    images of the redesigned Input Genomes sidebar, one of which recommended
+    that a File with one record hide the File-level names block and show the
+    record's name fields on its card. The reply first says that the Owner had
+    looked at the images, then: 「推奨通りでいいです。」
+  - Reply 2 (`2026-10-11`), to the request to confirm the draft receipt for a
+    File with one record. The message before that request had named the
+    draft file that holds the nine fields recorded below and had summarized
+    what changes, what stays and the accepted risk; it did not show the nine
+    fields themselves. The reply answered two requests, each with
+    「承認します。」; the other one confirmed a correction of the `PD-OI-061`
+    receipt (Revision 40).
+  - Reply 3 (`2026-10-12`), to three questions asked with Before/After images
+    of a prototype of this outcome. The reply also covers other matters; its
+    line for these questions begins with the address of the page that asked
+    them and continues:
+    「A か B か:B.空のカードで先に入力した名前: 消さない; BGC の Gallery Session の保存し直し:保存し直す」
+    - Its first answer selects option B of the question 「A か B か」. The
+      question gave the rule of option B as:
+      「カードに出す名前のブロックは常に 1 つ。File の名前があるあいだは dev と同じカード（File のブロックがカード、レコードの欄は Record options の中）で、File の名前が空ならレコードの欄をカードに出す。」
+      In it `dev` is the Web app before this change. The option's text went
+      on with one sentence that compared card heights; that sentence is a
+      statement by the question's author, not part of the rule, and is not
+      reproduced.
+    - Its second answer keeps a name that was typed on a File card before
+      its file is chosen. It is implemented in the same pull request and adds
+      no term to this record.
+    - Its third answer is about a Gallery example Session and adds no term to
+      this record.
+  - The scenario-2 receipt holds the nine fields of the draft that Reply 2
+    approved, with no character changed. The first selection of Reply 3 is recorded in
+    `PD-OI-067` below its receipts, in the words of its question. It is not a
+    receipt field, and no rationale, preservation, retirement scope, or
+    residual risk is added for it.
+  - The scenario-1 receipt keeps its text and its SHA-256.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -3419,20 +3463,35 @@ Decision date: 2026-09-30
 ### PD-OI-067: Per-record inferred Linear definitions
 
 - Concern key: `web.linear.file-default-definition`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-067`, scenario revision `1`
+  (`B / PER-RECORD-INFERRED-DEFINITION`), only for the names area of the
+  card of a File with one record; every scenario-1 term stays in force.
 - Status: `ACCEPTED`
-- Selected outcome: `B / PER-RECORD-INFERRED-DEFINITION`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the complete `D-12` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+- Selected outcomes: `B / PER-RECORD-INFERRED-DEFINITION` (scenario revision
+  `1`) and
+  `B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card`
+  (scenario revision `2`)
+- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  their nine-field JSON representations below, read together, and the Owner
+  selection of `2026-10-12` recorded below them.
+- Decision source (scenario revision `1`): the complete `D-12` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
   `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
   Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
   JSON below reproduce all nine supplied fields without translation or
   additional terms. This record does not supersede another decision.
   Dependent runtime requires this authority merged into its base; this
   amendment supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `daf932cb4892019717ea3ae082d1c799b58a436f909738fbc6239df5d43d265b`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-11`
+  and `2026-10-12` quoted in the Revision 41 entry above, which states what
+  each quotation leaves out. The second
+  receipt and JSON below reproduce all nine fields of the approved draft
+  without translation or additional terms. The runtime that implements it merges with
+  it (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `93b14a1df028f81ff573dc9c1a60f312b8160e6a7416fe14d0bce8c85be67ee2`.
 - Acceptance contracts: `OIC-015`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -3463,6 +3522,44 @@ Decision date: 2026-09-30
   "decisionDate": "2026-09-30"
 }
 ```
+
+Scenario revision `2` receipt (the draft approved by `satoshikawato` on
+`2026-10-11`; Reply 2 of the Revision 41 entry above):
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.file-default-definition
+Scenario revision: 2
+Choice: B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card
+Rationale: record が 1 つの File では「この File の全 record の名前」と record の名前が同じものを指すので、2 か所に分けず File カードに record の名前を直接出す（UX 監査 UX-C06）。
+Must preserve: revision 1 の Must preserve すべて（record ごとの Definition の編集、File に入力した Definition を全 record に適用すること、全 record が同じ生物のときの表示、Reset で推定値に戻ること、Session の往復、Circular の挙動、優先順位 record → file → 推定値）。record が 2 つ以上の File では今の File 全体の名前欄をそのまま出す。
+May retire: record が 1 つの File で、値の入っていない File 全体の名前欄（Organism / strain, Subtitle）を表示すること。
+Accepted residual risk: record が 1 つの File で File 全体の名前を入力するには、File の値の入った Session を読み込む以外の入口がなくなる（record の欄で同じ結果になる）。古いドキュメントと動画は今の配置を示す。
+Owner: satoshikawato
+Decision date: 2026-10-11
+```
+
+```json
+{
+  "concern": "web.linear.file-default-definition",
+  "scenarioRevision": 2,
+  "choice": "B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card",
+  "rationale": "record が 1 つの File では「この File の全 record の名前」と record の名前が同じものを指すので、2 か所に分けず File カードに record の名前を直接出す（UX 監査 UX-C06）。",
+  "mustPreserve": "revision 1 の Must preserve すべて（record ごとの Definition の編集、File に入力した Definition を全 record に適用すること、全 record が同じ生物のときの表示、Reset で推定値に戻ること、Session の往復、Circular の挙動、優先順位 record → file → 推定値）。record が 2 つ以上の File では今の File 全体の名前欄をそのまま出す。",
+  "mayRetire": "record が 1 つの File で、値の入っていない File 全体の名前欄（Organism / strain, Subtitle）を表示すること。",
+  "acceptedResidualRisk": "record が 1 つの File で File 全体の名前を入力するには、File の値の入った Session を読み込む以外の入口がなくなる（record の欄で同じ結果になる）。古いドキュメントと動画は今の配置を示す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-11"
+}
+```
+
+Owner selection of `2026-10-12` within scenario revision `2` (Reply 3 of the
+Revision 41 entry above; not a receipt field):
+
+- A File with one record that holds a File-level name: option B of the
+  question 「A か B か」, whose rule the question gave as
+  「カードに出す名前のブロックは常に 1 つ。File の名前があるあいだは dev と同じカード（File のブロックがカード、レコードの欄は Record options の中）で、File の名前が空ならレコードの欄をカードに出す。」
+  In it `dev` is the Web app before this change.
 
 ### PD-OI-068: GFF3+FASTA record universe
 
