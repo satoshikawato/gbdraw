@@ -162,6 +162,7 @@ import {
   webLosatRuntimeRecord
 } from '../services/losat-cache.js';
 import {
+  LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -4434,7 +4435,7 @@ export const createRunAnalysis = ({
               });
               let nextLegacyEvidence = candidateOwnerSet.legacyProteinDerivedEvidence;
               if (!nextLegacyEnvelope.entries.some((candidate) => candidate.state === 'pending')) {
-                nextLegacyEvidence = { schema: 1, entries: [] };
+                nextLegacyEvidence = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
               }
               let nextOrthogroups = candidateOwnerSet.orthogroups;
               let nextExtractedFeatures = candidateOwnerSet.extractedFeatures;
@@ -5832,8 +5833,8 @@ export const createRunAnalysis = ({
     losatCache.value = new Map();
     losatDerivedCache.value = new Map();
     proteinIdentityManifest.value = emptyProteinIdentityManifest();
-    legacyProteinRawCandidates.value = { schema: 1, entries: [] };
-    legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
+    legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
+    legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
     losatCacheInfo.value = [];
   };
 

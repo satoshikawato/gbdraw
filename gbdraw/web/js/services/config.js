@@ -239,6 +239,8 @@ import {
   CURRENT_ARTIFACT_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
   DRAWN_HASH_RULE_SESSION_MAX_VERSION,
+  LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
+  LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
   MODE_SCOPED_SESSION_VERSION,
   SESSION_VERSION,
@@ -3230,7 +3232,7 @@ const applyLosatCache = (
   const restoredEnvelope = normalizeLegacyProteinCandidateEnvelope(legacyEnvelope);
   const importedEnvelope = createLegacyProteinCandidateEnvelope(legacyEntries);
   state.legacyProteinRawCandidates.value = {
-    schema: 1,
+    schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA,
     entries: [...restoredEnvelope.entries, ...importedEnvelope.entries]
   };
 };
@@ -3245,16 +3247,16 @@ const pruneLosatDerivedCache = (map) => {
 };
 
 const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
-  schema: 1,
+  schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   entries: [
     ...(
-      isPlainObject(value) && value.schema === 1 && Array.isArray(value.entries)
+      isPlainObject(value) && value.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA && Array.isArray(value.entries)
         ? value.entries
         : []
     ),
     ...fallbackEntries
   ]
-    .filter((entry) => isLosatDerivedCacheEntry(entry) && entry.schema === 1)
+    .filter((entry) => isLosatDerivedCacheEntry(entry) && entry.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA)
     .map((entry) => cloneJsonData(entry))
 });
 
@@ -3269,7 +3271,7 @@ const applyLosatDerivedCache = (
   if (Array.isArray(entries)) {
     entries.forEach((entry) => {
       if (!isLosatDerivedCacheEntry(entry)) return;
-      if (entry.schema === 1) {
+      if (entry.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA) {
         legacyEntries.push(entry);
         return;
       }
@@ -4294,8 +4296,8 @@ const resetSessionBaseline = () => {
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
   state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
-  state.legacyProteinRawCandidates.value = { schema: 1, entries: [] };
-  state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
+  state.legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
+  state.legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
   state.losatCacheInfo.value = [];
   state.orthogroups.value = [];
   state.collinearGroups.value = [];
@@ -5714,7 +5716,7 @@ const importSessionDocument = async (e, options = {}) => {
               {}
         },
       {
-        legacyRecords: sourceSessionVersion <= 39 ? data.renderRequest?.records : null,
+        legacyRecords: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION ? data.renderRequest?.records : null,
         catalogFeatureState: currentCatalogFeatureState
       }
     );

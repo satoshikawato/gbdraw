@@ -1,6 +1,6 @@
 // @ts-check
 import { featureIdentity } from './feature-identity.js';
-import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
+import { LEGACY_FEATURE_CATALOG_SCHEMA, SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
 
 // The released Sessions this module reads were not validated: every field is
 // `unknown`, and an entry of a list may be missing.
@@ -51,7 +51,7 @@ const requiredText = (value, path) => {
  * @returns {(LegacyCatalogItem | null | undefined)[]}
  */
 const catalogItems = (featureCatalog) => {
-  if (!featureCatalog || featureCatalog.schema !== 3 || !Array.isArray(featureCatalog.items)) {
+  if (!featureCatalog || featureCatalog.schema !== LEGACY_FEATURE_CATALOG_SCHEMA || !Array.isArray(featureCatalog.items)) {
     return [];
   }
   return featureCatalog.items;
