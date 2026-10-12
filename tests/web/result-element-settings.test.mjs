@@ -1,8 +1,11 @@
 // A click on a drawn element of the Result opens the settings section that
-// holds its settings: which element leads to which section, in every form its
-// group takes; the pane's way to open a section by key; and the export, which
-// keeps none of the preview's markers.
+// holds its settings in a popup beside the Result: which element leads to
+// which section, in every form its group takes; where the pane's owner shows
+// the section (the popup, or the dock that already shows it) and how the pane
+// takes it back; and the export, which keeps none of the preview's markers.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -237,7 +240,8 @@ test('an export keeps no marker of a drawn element that opens a section', () => 
 });
 
 // The pane's controller over a document that holds one closed section per key
-// of the shown mode, 40 px below the top edge of the settings.
+// of the shown mode, 40 px below the top edge of the settings. The popup host
+// finds the same sections: a section is one element, in the pane or the popup.
 class FakeDetails {
   open = false;
 
@@ -257,6 +261,8 @@ const createPane = async (mode, display = 'stacked') => {
     const section = {
       dataset: { settingsSection: key },
       details,
+      scrollHeight: 500,
+      clientHeight: 250,
       closest: (selector) => (selector === '[data-settings-section]' ? section : area),
       querySelector: () => heading,
       getBoundingClientRect: () => ({ top: 140, bottom: 400, height: 260 })
@@ -265,44 +271,50 @@ const createPane = async (mode, display = 'stacked') => {
     return section;
   };
   const shown = { circular: ['titles', 'circular-axis', 'dinucleotide'], linear: ['titles', 'linear-axis', 'dinucleotide'] };
+  const sectionOfSelector = (selector) => {
+    const key = selector.match(/^\[data-settings-section="([^"]+)"\]$/)?.[1];
+    return key && shown[mode].includes(key) ? sectionElement(key) : null;
+  };
   const area = {
     contains: (node) => node instanceof FakeDetails,
-    querySelector: (selector) => {
-      const key = selector.match(/^\[data-settings-section="([^"]+)"\]$/)?.[1];
-      return key && shown[mode].includes(key) ? sectionElement(key) : null;
-    },
+    querySelector: sectionOfSelector,
     getBoundingClientRect: () => ({ top: 100, bottom: 900 }),
     scrollBy: (options) => calls.push(['scroll', options.top])
   };
+  const popup = { offsetWidth: 320, offsetHeight: 300, contains: () => false, querySelector: sectionOfSelector };
   globalThis.HTMLDetailsElement = FakeDetails;
   globalThis.getComputedStyle = () => ({ overflowY: 'auto' });
-  globalThis.document = { querySelector: (selector) => (selector === '.settings-scroll' ? area : null), scrollingElement: null };
+  globalThis.document = {
+    querySelector: (selector) => (selector === '.settings-scroll' ? area : null),
+    getElementById: (id) => (id === 'settings-popup' ? popup : null),
+    scrollingElement: null, activeElement: null
+  };
   globalThis.window = {
     localStorage: null, addEventListener() {}, removeEventListener() {},
     Vue: {
-      computed: (read) => ({ get value() { return read(); } }), nextTick: async () => {},
-      onMounted() {}, onUnmounted() {}, reactive: (value) => value, ref: (value) => ({ value }), watch() {}
+      computed: (read) => ({ get value() { return read(); } }), nextTick: async (run) => run?.(),
+      onMounted() {}, onUnmounted() {}, ref: (value) => ({ value }), watch() {}
     }
   };
-  const state = { mode: { value: mode }, settingsPaneDisplay: { value: display }, settingsPaneDocked: { value: display === 'rail' ? 'layout' : null } };
+  const state = {
+    mode: { value: mode }, settingsPaneDisplay: { value: display }, settingsPaneDocked: { value: display === 'rail' ? 'layout' : null },
+    settingsPopup: { value: null }
+  };
   const { createSettingsPaneController } = await import('../../gbdraw/web/js/app/settings-pane.js');
   return { pane: createSettingsPaneController({ state }), state, calls, sections };
 };
+// The Result's viewport, and a click on an item 20 px wide at (700, 500).
+const RESULT = { top: 100, bottom: 900, left: 400, right: 1500 };
+const CLICK = { x: 700, y: 500, avoid: { left: 690, right: 710, top: 490, bottom: 510 } };
 
 test('the pane opens the section of a key in the shown mode, at the top, with the focus on its heading', async () => {
   const { pane, calls, sections } = await createPane('circular');
   await pane.revealSettingsSection('dinucleotide');
   assert.deepEqual(calls, [['scroll', 40], ['focus', 'dinucleotide', { preventScroll: true }]]);
   assert.equal(sections.get('dinucleotide').details.open, true);
-  assert.deepEqual(pane.settingsReveal.last, { key: 'dinucleotide', top: 140 });
-});
-
-test('a key of the other mode opens the section of the same title in the shown mode', async () => {
-  // The Linear scale's section, asked for while Circular shows, and the reverse.
-  const circular = await createPane('circular');
-  await circular.pane.revealSettingsSection('linear-axis');
-  assert.deepEqual(circular.calls.at(-1), ['focus', 'circular-axis', { preventScroll: true }]);
-  assert.equal(circular.pane.settingsReveal.last.key, 'circular-axis');
+  // A key of the other mode opens the section of the same title in the shown mode.
+  await pane.revealSettingsSection('linear-axis');
+  assert.deepEqual(calls.at(-1), ['focus', 'circular-axis', { preventScroll: true }]);
   const linear = await createPane('linear', 'rail');
   await linear.pane.revealSettingsSection('circular-axis');
   assert.deepEqual(linear.calls.at(-1), ['focus', 'linear-axis', { preventScroll: true }]);
@@ -311,7 +323,68 @@ test('a key of the other mode opens the section of the same title in the shown m
   const before = linear.calls.length;
   await linear.pane.revealSettingsSection('pairwise-comparisons');
   assert.equal(linear.calls.length, before);
-  assert.equal(linear.pane.settingsReveal.last.key, 'linear-axis');
+});
+
+test('a clicked element\'s section is shown in the popup beside the clicked point, inside the Result', async () => {
+  const { pane, state, calls } = await createPane('circular');
+  assert.equal(pane.settingsPane.value.floating, null);
+  assert.equal(pane.showSettingsBesideResult('dinucleotide', CLICK, RESULT), true);
+  // Right of the clicked item, as high as the section's content (300 + 500 - 250) allows.
+  assert.deepEqual(state.settingsPopup.value, { section: 'dinucleotide', x: 722, y: 225, maxHeight: 663 });
+  assert.equal(pane.settingsPane.value.floating, 'dinucleotide');
+  assert.deepEqual(calls, [['focus', 'dinucleotide', { preventScroll: true }]], 'the pane does not scroll');
+  // Another element: the popup shows its section, of the shown mode, in place of the first.
+  assert.equal(pane.showSettingsBesideResult('linear-axis', { ...CLICK, x: 1400, avoid: { left: 1390, right: 1410, top: 490, bottom: 510 } }, RESULT), true);
+  assert.deepEqual(state.settingsPopup.value, { section: 'circular-axis', x: 1058, y: 225, maxHeight: 663 }, 'left of an item near the right edge');
+  // An item as wide as the Result (a ring) leaves no room beside it: beside the point.
+  pane.showSettingsBesideResult('dinucleotide', { ...CLICK, avoid: { left: 420, right: 1480, top: 150, bottom: 850 } }, RESULT);
+  assert.equal(state.settingsPopup.value.x, 712);
+  // A key without a section in the shown mode shows nothing and leaves the popup as it is.
+  assert.equal(pane.showSettingsBesideResult('pairwise-comparisons', CLICK, RESULT), true);
+  assert.equal((await createPane('linear')).pane.showSettingsBesideResult('pairwise-comparisons', CLICK, RESULT), false);
+  assert.equal(pane.closeSettingsPopup(), true);
+  assert.equal(pane.closeSettingsPopup(), false, 'nothing was open');
+  assert.equal(state.settingsPopup.value, null);
+});
+
+test('the docked section takes the focus where it is, and a pane action takes a section back from the popup', async () => {
+  const rail = await createPane('linear', 'rail');
+  rail.pane.showSettingsPaneRail('linear-axis');
+  assert.equal(rail.pane.showSettingsBesideResult('circular-axis', CLICK, RESULT), true);
+  await new Promise((resolve) => { setImmediate(resolve); });
+  assert.equal(rail.state.settingsPopup.value, null, 'no popup for the section the dock shows');
+  assert.deepEqual(rail.calls.at(-1), ['focus', 'linear-axis', { preventScroll: true }]);
+  // Another section floats beside the rail; opening it from the index docks it and closes the popup.
+  rail.pane.showSettingsBesideResult('titles', CLICK, RESULT);
+  assert.equal(rail.state.settingsPopup.value.section, 'titles');
+  await rail.pane.revealSettingsSection('titles');
+  assert.deepEqual([rail.state.settingsPopup.value, rail.state.settingsPaneDocked.value], [null, 'titles']);
+
+  const stacked = await createPane('circular');
+  stacked.pane.showSettingsBesideResult('titles', CLICK, RESULT);
+  // A setting inside the floating section is brought into view in the pane.
+  const titles = stacked.sections.get('titles');
+  await stacked.pane.revealSetting(titles, { focus: titles.querySelector() });
+  assert.equal(stacked.state.settingsPopup.value, null);
+  assert.deepEqual(stacked.calls.at(-1), ['focus', 'titles', { preventScroll: true }]);
+  // Opening another section in the pane leaves the popup open.
+  stacked.pane.showSettingsBesideResult('titles', CLICK, RESULT);
+  await stacked.pane.revealSettingsSection('dinucleotide');
+  assert.equal(stacked.state.settingsPopup.value.section, 'titles');
+});
+
+// One section, one place: the popup shows the section's own element, moved
+// there. A copy would give two controls one id and one History target.
+test('each section a drawn element opens moves into the popup host of the app root', () => {
+  const html = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'utf8');
+  const moved = Array.from(html.matchAll(
+    /<teleport (?:v-if="[^"]*" )?to="#settings-popup" defer :disabled="settingsPane\.floating !== '([^']+)'">\s*<div v-settings-section="'([^']+)'"/g
+  ), ([, floating, section]) => [floating, section]);
+  assert.deepEqual(moved, [['titles', 'titles'], ['linear-axis', 'linear-axis'], ['circular-axis', 'circular-axis'], ['dinucleotide', 'dinucleotide']]);
+  assert.equal(html.match(/to="#settings-popup"/g).length, moved.length);
+  assert.equal(html.match(/id="settings-popup"/g).length, 1);
+  const app = html.slice(html.indexOf('<div id="app"'), html.indexOf('<footer data-app-footer'));
+  assert.match(app, /<\/main>\s*(?:<!--[\s\S]*?-->\s*)?<div id="settings-popup" v-show="settingsPane\.floating"/, 'History listens on the app root');
 });
 
 test('the catalog finds the element of a section in the settings', () => {

@@ -1118,16 +1118,26 @@ opens no popup. Both popups open beside the clicked item and stay below the
 app header, as the feature popup does.
 
 With **Layout edit** off, a click on the Circular coordinate ticks or the
-Linear scale opens **Axis & Scale** in the settings, a click on a dinucleotide
-content or skew track opens **Dinucleotide content/skew**, and a click on the
-plot title opens **Titles & Record Labels**, as the icon button of that section
-above the settings does. While the pointer is on one of them, the preview reads
-"Click to open its settings"; on the plot title and the Linear scale that line
-stands above "Turn on Layout edit to move this item". A click that closes an
-open popup or clears a feature selection does only that, and the next click
-opens the section. The click changes no setting and adds no **Undo** step, and
-a press that pans the figure opens nothing. While **Review alignment** is open,
-these elements open nothing and the preview does not read that line.
+Linear scale shows **Axis & Scale** in a popup beside the clicked point, a click
+on a dinucleotide content or skew track shows **Dinucleotide content/skew**, and
+a click on the plot title shows **Titles & Record Labels**. While the pointer is
+on one of them, the preview reads "Click to open its settings"; on the plot
+title and the Linear scale that line stands above "Turn on Layout edit to move
+this item". The popup holds the section itself, with the same controls and
+**Undo** steps: while it is open the settings pane does not list that section,
+and the section returns to the pane, open or closed as it was, when the popup
+closes. Drag the popup by its heading. It stays open through **Generate**, and
+a click on another of these elements shows that element's section in it.
+
+The popup closes with its **Close section** button, Escape, a click on the
+figure's background, another popup of the Result (a feature, a match, a Legend
+row, a record definition), **Layout edit**, **Review alignment**, a mode
+switch, a loaded Session, or **Reset Settings**, and when the section is opened
+in the pane with its icon button. In the icon rail, a click on the element of
+the section that is docked moves the focus to that section and opens no popup.
+The click changes no setting and adds no **Undo** step, and a press that pans
+the figure opens nothing. While **Review alignment** is open, these elements
+open nothing and the preview does not read that line.
 
 Ctrl-click selects features for bulk color, legend name, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the

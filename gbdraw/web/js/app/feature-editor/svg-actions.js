@@ -1,11 +1,11 @@
 // @ts-check
 /** @import { DrawingState, PopupPosition } from '../../state.js' */
-/** @import { PopupOrigin } from '../../utils/popup-bounds.js' */
+/** @import { PopupAnchor, PopupBounds, PopupOrigin } from '../../utils/popup-bounds.js' */
 /** @import { AliasSource, FeatureIdentity } from '../../services/feature-identity.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
-import { placePopupNearPoint, popupViewportBounds } from '../../utils/popup-bounds.js';
+import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
   formatFeatureLength,
@@ -62,9 +62,6 @@ export {
   normalizeFeatureIdentity
 };
 
-// A press that moved farther than this before its release is a drag, not a click on a drawn element.
-const CLICK_SLOP_PX = 4;
-
 /**
  * A pointer position, as an event or a plain point carries it.
  * @typedef {{ clientX?: number, clientY?: number }} HoverPoint
@@ -118,9 +115,10 @@ const CLICK_SLOP_PX = 4;
  */
 
 /**
- * The root's way to open the settings section of a drawn element (the pane
- * opens it, brings it to the top, and focuses its heading).
- * @typedef {(section: import('../../services/settings-sections.js').SettingsSectionKey) => unknown} RevealSettingsSection
+ * The pane's way to show the settings section of a drawn element beside the
+ * clicked point: in a popup placed inside `bounds`, beside `anchor` and clear
+ * of the clicked item when there is room. Returns whether the section is shown.
+ * @typedef {(section: import('../../services/settings-sections.js').SettingsSectionKey, anchor: PopupAnchor, bounds: PopupBounds) => boolean} ShowElementSettings
  */
 
 /**
@@ -137,7 +135,8 @@ const CLICK_SLOP_PX = 4;
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
  * @property {() => boolean} [previewPopupsHeld] While it holds (the Review alignment panel is open, the popups
  *   hidden), no gesture on the figure opens, retargets or closes a popup.
- * @property {RevealSettingsSection} [revealSettingsSection]
+ * @property {ShowElementSettings} [showElementSettings]
+ * @property {() => unknown} [closeElementSettings] The pane's closing of the popup that holds a settings section.
  */
 
 /**
@@ -267,7 +266,8 @@ export const createFeatureSvgActions = ({
   featureSelection = null,
   previewTransformInteraction = null,
   previewPopupsHeld = () => false,
-  revealSettingsSection = () => {}
+  showElementSettings = () => false,
+  closeElementSettings = () => {}
 }) => {
   const {
     orthogroups,
@@ -325,6 +325,17 @@ export const createFeatureSvgActions = ({
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized === 'suppress') return 'exclude_matching';
     return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
+  };
+
+  // The Result shows one popup: the feature popup, the match frame (a match, a
+  // Legend row, a record definition), or the settings section of a drawn
+  // element. Opening one closes the others.
+  /** @param {'feature' | 'match' | 'settings'} opening */
+  const closeOtherPopups = (opening) => {
+    hideHoverSummary();
+    if (opening !== 'feature') clickedFeature.value = null;
+    if (opening !== 'match' && clickedPairwiseMatch) clickedPairwiseMatch.value = null;
+    if (opening !== 'settings') closeElementSettings();
   };
 
   // OV-371: a popup opened at a clicked point is placed beside it with an
@@ -639,8 +650,7 @@ export const createFeatureSvgActions = ({
     const featureElements = renderedSvgId ? getFeatureElements(svg, renderedSvgId) : [];
     if (renderedSvgId && featureElements.length === 0) return null;
 
-    hideHoverSummary();
-    if (clickedPairwiseMatch) clickedPairwiseMatch.value = null;
+    closeOtherPopups('feature');
     const featureElement = renderedSvgId
       ? getFeatureFillElements(svg, renderedSvgId)[0] || featureElements[0] || null
       : null;
@@ -895,8 +905,7 @@ export const createFeatureSvgActions = ({
     if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos || previewPopupsHeld()) return null;
     const payload = buildMatchPayload(drawing, matchElement, featureLookup);
     if (!payload) return null;
-    hideHoverSummary();
-    clickedFeature.value = null;
+    closeOtherPopups('match');
     clickedPairwiseMatch.value = payload;
     placePopupAt(clickedPairwiseMatchPos, eventLike, 460);
     return payload;
@@ -921,8 +930,7 @@ export const createFeatureSvgActions = ({
     const anchor = Number.isFinite(eventLike?.clientX)
       ? eventLike
       : { clientX: rect.left + rect.width / 2, clientY: rect.bottom };
-    hideHoverSummary();
-    clickedFeature.value = null;
+    closeOtherPopups('match');
     // A Legend row's feature count reads the rule matches: the popup opens at
     // once and counts when they are prepared.
     const opened = { previewItem: item, matchesReady: item.kind !== 'legend-entry' };
@@ -1888,7 +1896,11 @@ export const createFeatureSvgActions = ({
           e.preventDefault();
           return;
         }
-        revealDrawnElementSettings(e);
+        if (openDrawnElementSettings(e)) {
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
         if (isBackgroundPreviewClick(/** @type {Element} */ (e.target), svg)) { // a click on the Result targets an element
           featureSelection?.clearFeatureSelection?.({ clearStatus: true });
           if (previewPopupsHeld()) return;
@@ -1898,20 +1910,24 @@ export const createFeatureSvgActions = ({
       };
 
       // A click on a drawn element whose settings have a section (the scale, a
-      // dinucleotide track, the plot title) opens that section. It opens
-      // nothing while Layout edit is on (a press drags there), while a review
-      // holds the popups, or when the press moved: a pan of the figure ends in
-      // a click on the element it began on. A click that dismisses something
-      // (an open popup, a feature selection) does only that, as a click on the
-      // background: the next click opens the section.
+      // dinucleotide track, the plot title) shows that section in a popup
+      // beside the click, inside the Result's canvas and clear of the clicked
+      // item, as a click on a Legend row shows its popup: it takes the place of
+      // an open popup, and a feature selection stays. Nothing opens while
+      // Layout edit is on (a press drags there), while a review holds the
+      // popups, or when the press moved: a pan of the figure ends in a click
+      // on the element it began on.
       /** @param {MouseEvent} e */
-      const revealDrawnElementSettings = (e) => {
-        if (state.layoutRepositionMode?.value || previewPopupsHeld()) return;
-        if (clickedFeature.value || clickedPairwiseMatch?.value || state.selectedFeatureIds?.value?.size) return;
-        const press = handlerState.pressPoint;
-        if (press && Math.hypot(e.clientX - press.clientX, e.clientY - press.clientY) > CLICK_SLOP_PX) return;
+      const openDrawnElementSettings = (e) => {
+        if (state.layoutRepositionMode?.value || previewPopupsHeld() || !isClickAtPress(handlerState.pressPoint, e)) return false;
         const section = drawnElementSection(e.target);
-        if (section) revealSettingsSection(section);
+        const canvas = /** @type {Element | null} */ (state.canvasContainerRef?.value);
+        if (!section || !canvas) return false;
+        const { left, top, right, bottom } = /** @type {Element} */ (e.target).getBoundingClientRect();
+        const anchor = { x: e.clientX, y: e.clientY, avoid: { left, top, right, bottom } };
+        if (!showElementSettings(section, anchor, popupBoundsWithin(canvas.getBoundingClientRect()))) return false;
+        closeOtherPopups('settings');
+        return true;
       };
 
       /** @param {KeyboardEvent} e */
