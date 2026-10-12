@@ -1,7 +1,7 @@
 // @ts-check
+/** @import { SessionBusy } from '../state.js' */
 
 /** @typedef {number | string | null} FontSizeInput A font size input: a number, the raw text when it is not numeric, or null when empty. */
-/** @typedef {{ status: string, reason: string }} SessionBusyOutcome */
 
 /** @param {unknown} value */
 const optionalNumberInputValue = (value) => {
@@ -15,7 +15,7 @@ const optionalNumberInputValue = (value) => {
  * @typedef {Object} LinearTypographyControllerOptions
  * @property {{ scale_font_size: FontSizeInput, ruler_label_font_size: FontSizeInput }} adv The two font sizes of the advanced-options state owned by `state.js`.
  * @property {{ value: boolean }} linked The ref that links the two font sizes.
- * @property {() => SessionBusyOutcome | null} [mutationAvailability] Returns a busy outcome while a Session operation blocks edits.
+ * @property {() => SessionBusy | null} [mutationAvailability] Returns a busy outcome while a Session operation blocks edits.
  */
 
 /** @param {LinearTypographyControllerOptions} options */

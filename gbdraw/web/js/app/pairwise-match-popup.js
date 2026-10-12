@@ -666,7 +666,6 @@ const identityIndexKeys = (identity) => {
 };
 
 /**
-/**
  * A rendered feature and its identity from its rendered ID.
  * @typedef {{ feature: PopupFeature, identity: FeatureIdentity }} RenderedRecord
  */

@@ -1,8 +1,4 @@
 // @ts-check
-/** @import { FeatureLike } from '../services/feature-utils.js' */
-/** @import { ColorRule, RuleFeature, VisibilityRule } from '../services/rule-matchers.js' */
-/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { SavedFeatureColorEdit } from '../services/svg-result-ingestion.js' */
 import { normalizeSpecificRule, ruleCaptionsAreNormalized } from '../services/specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
 import { getFeatureColorRuleHash, getRenderedFeatureHash } from '../services/feature-utils.js';
@@ -10,6 +6,10 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   recordRuleMatches, recordVisibilityMatch, ruleKey, ruleKeysPending, ruleMatcher, visibilityRuleKnown
 } from '../services/rule-matchers.js';
+/** @import { FeatureLike } from '../services/feature-utils.js' */
+/** @import { ColorRule, RuleFeature, VisibilityRule } from '../services/rule-matchers.js' */
+/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { SavedFeatureColorEdit } from '../services/svg-result-ingestion.js' */
 
 // A feature of a catalog before schema 5 has no drawn selector values. Where
 // its rendered ID carries its source hash, its record was drawn with the

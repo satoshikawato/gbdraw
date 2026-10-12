@@ -861,6 +861,8 @@ const filteredEditableLabels = computed(() => {
   });
 });
 
+/** @typedef {{ status: string, reason: string }} SessionBusy What `sessionOperationAvailability` returns while a Session operation blocks edits. */
+
 // Pending is owned by the existing Session lifecycle; availability stores no lock.
 // 'history' words why History rejects Undo/Redo; History decides when (D-28).
 // `preparationBusyReason` words an edit still applying, whose owners only the

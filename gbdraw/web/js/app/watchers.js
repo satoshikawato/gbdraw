@@ -1,6 +1,5 @@
 // @ts-check
 /** @import { DrawingState, LinearSeq } from '../state.js' */
-/** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -16,6 +15,7 @@ import {
 } from '../services/layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
+/** @import { FileLike } from '../services/session-resource-backing.js' */
 
 /**
  * @typedef {object} RecordDiscoveryWatcherOptions

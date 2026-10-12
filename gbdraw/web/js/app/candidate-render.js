@@ -1,6 +1,5 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
-/** @import { FeatureOverrideRow } from '../services/feature-placement.js' */
 /** @import { LegendStrokeOperation, SavedFeatureColorEdit, SavedStrokeEdit, SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 /** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
 /** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
@@ -20,6 +19,7 @@ import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feat
 import {
   admitCurrentGeneratedResults
 } from '../services/svg-result-ingestion.js';
+/** @import { FeatureOverrideRow } from '../services/feature-placement.js' */
 
 /**
  * A Legend entry as the compile reads it: a listed, deleted, or dormant row

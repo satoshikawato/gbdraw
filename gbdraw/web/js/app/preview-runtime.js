@@ -1048,7 +1048,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return expectation;
   };
 
-  /** @param {number} index */
+  /** @param {unknown} index */
   const selectResult = (index) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;

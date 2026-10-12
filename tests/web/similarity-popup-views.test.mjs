@@ -186,10 +186,10 @@ test('OV-322: a collinear block shows an orientation other than plus or minus as
   assert.deepEqual(factsFor('__proto__')[0], '__proto__');
 });
 
-// OV-322 (same pattern): the name and description overrides of a similarity group are
+// OV-526 (same pattern as OV-322): the name and description overrides of a similarity group are
 // read by its ID, which a hand-edited Session SVG can set to an inherited member of a
 // plain object (`constructor`). Only an own entry is an override.
-test('OV-322: a similarity group ID that names an inherited member has no override', () => {
+test('OV-526: a similarity group ID that names an inherited member has no override', () => {
   const payload = buildMatchPopupPayload(elementFrom({
     'data-gbdraw-match-id': 'og_match',
     'data-match-kind': 'orthogroup',

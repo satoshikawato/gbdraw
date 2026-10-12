@@ -1,6 +1,5 @@
 // @ts-check
 /** @import { LinearComparisonIssue, LinearComparisonPlan, LinearComparisonResolution, LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
-/** @import { ComparisonState } from '../mode-profiles.js' */
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -8,6 +7,7 @@ import {
   normalizeLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import { comparisonStateForMode } from '../mode-profiles.js';
+/** @import { ComparisonState } from '../mode-profiles.js' */
 
 const LINEAR_COMPARISON_INTENT_KEYS = Object.freeze({
   NONE: 'none',

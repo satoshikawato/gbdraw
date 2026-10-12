@@ -2,7 +2,7 @@
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { discoveryErrorIsFinal } from '../services/record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
-/** @import { LinearSeq, DiagramMode } from '../state.js' */
+/** @import { LinearSeq, DiagramMode, SessionBusy } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
@@ -41,7 +41,6 @@ export const RECORD_READ_ERROR_LABEL = 'Records could not be loaded';
  */
 
 /** @typedef {Partial<LinearSeq> | null | undefined} LinearSeqLike A row, or a partial one. */
-/** @typedef {{ status: string, reason: string }} SessionBusy What `sessionOperationAvailability` of `state.js` returns while a Session operation blocks edits. */
 /** @typedef {{ suppress?: boolean }} RefreshOptions */
 /** @typedef {SessionBusy | true | undefined} RefreshOutcome What a refresh settles to: a busy outcome, true when it expanded the rows and restarts, or nothing. */
 
