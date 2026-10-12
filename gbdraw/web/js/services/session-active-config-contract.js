@@ -333,7 +333,7 @@ const linearTypographyValuesMatch = (adv = {}) => (
  * @param {{
  *   adv: Record<string, any>,
  *   linked: any,
- *   ui?: { linearTypographyLinked?: boolean }
+ *   ui?: { readonly linearTypographyLinked?: unknown }
  * }} options
  */
 export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) => {

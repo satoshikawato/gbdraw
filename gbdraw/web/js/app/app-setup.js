@@ -285,7 +285,8 @@ import {
 /** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
-/** @import { LosatCacheInfoEntry, MultiRecordPosition } from './run-analysis.js' */
+/** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
+/** @import { UnvalidatedFields } from '../services/session-authority.js' */
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, shallowRef, reactive, isRef } = window.Vue;
 const toRaw = window.Vue.toRaw || ((/** @type {unknown} */ value) => value);
@@ -3813,7 +3814,8 @@ export const createAppSetup = () => {
         drawnTracks: readDrawnTracks(),
         ...legendRowsOf(displayedLegendRowContext(state, drawing)),
         drawnContext: domains.includes('featureVisibility')
-          ? featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })
+          // The committed request may be one a Session stored (unchecked): its options are read as unvalidated.
+          ? featureDrawnContext(drawing, { diagramOptions: /** @type {UnvalidatedFields<'selectedFeaturesSet'>} */ (getCommittedCanonicalRenderRequest()?.diagramOptions) })
           : null,
         ruleRows
       } : null

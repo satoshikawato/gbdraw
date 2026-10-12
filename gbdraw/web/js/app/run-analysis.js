@@ -398,20 +398,7 @@ export const buildLosatCachePayload = ({
   return payload;
 };
 
-/**
- * One row of `state.losatCacheInfo`, the pairs a Generate keeps cache entries for: a circular conservation
- * comparison carries `key`, `filename` and `display`, a linear comparison also its edge.
- * @typedef {object} LosatCacheInfoEntry
- * @property {unknown} key The raw cache key: a string from Generate; a Session load stores the saved key (truthy, unchecked).
- * @property {unknown} filename A string from Generate; a Session load stores the saved name (truthy, unchecked) or a default.
- * @property {boolean} display
- * @property {string} [edgeKey]
- * @property {number} [ordinal]
- * @property {string} [queryUid]
- * @property {string} [subjectUid]
- * @property {number} [queryIndex]
- * @property {number} [subjectIndex]
- */
+/** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
 
 /**
  * A LOSAT search Generate queues: the fields the pool reads (`LosatJob`) and what Generate keeps on it to
@@ -1231,7 +1218,6 @@ const normalizePositiveInteger = (value, fallback = 1) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 };
-/** @typedef {{ selector: string, row: number }} MultiRecordPosition */
 /**
  * @param {unknown} value
  * @param {{ maxRow?: number }} [options]
