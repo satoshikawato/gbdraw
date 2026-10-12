@@ -90,7 +90,9 @@ import { SESSION_TABLE_LABELS, diagnosticError, normalizeCaughtError } from '../
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
+  DISPLAY_PLACEMENT_SCHEMA,
   FEATURE_OVERRIDE_SCHEMA,
+  SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 } from '../contracts/schema.generated.js';
 import {
@@ -252,7 +254,7 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
   const plan = requireExactCanonicalKeys(value, [
     'schema', 'groupId', 'reference', 'records'
   ], path);
-  if (plan.schema !== 2) throw new Error(`${path}.schema must be 2.`);
+  if (plan.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA) throw new Error(`${path}.schema must be ${SIMILARITY_ALIGNMENT_PLAN_SCHEMA}.`);
   if (!Array.isArray(plan.records) || plan.records.length === 0) {
     throw new Error(`${path}.records must be a non-empty array.`);
   }
@@ -305,7 +307,7 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
     throw new Error(`${path}.records does not cover the displayed record keys.`);
   }
   return {
-    schema: 2,
+    schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
     groupId: requireCanonicalText(plan.groupId, `${path}.groupId`),
     reference,
     records
@@ -4106,7 +4108,7 @@ export const projectCanonicalSessionRequest = ({
     throw new Error('Unsupported canonical renderRequest mode.');
   }
   const sourceRecords = Array.isArray(renderRequest.records) ? renderRequest.records : [];
-  if (renderRequest.schema >= 7) {
+  if (renderRequest.schema >= DISPLAY_PLACEMENT_SCHEMA) {
     sourceRecords.forEach((record) => canonicalRecordDisplay(record.display));
     if (!Array.isArray(renderRequest.diagramOptions?.featurePlacements)) {
       throw new Error('Canonical featurePlacements must be an array.');
@@ -4114,7 +4116,7 @@ export const projectCanonicalSessionRequest = ({
     canonicalFeaturePlacements(renderRequest.diagramOptions.featurePlacements, renderRequest.mode);
   } else if (sourceRecords.some((record) => Object.hasOwn(record, 'display'))
     || Object.hasOwn(renderRequest.diagramOptions || {}, 'featurePlacements')) {
-    throw new Error('Record display and feature placements require canonical schema 7.');
+    throw new Error(`Record display and feature placements require canonical schema ${DISPLAY_PLACEMENT_SCHEMA}.`);
   }
   if ((renderRequest.schema >= FEATURE_OVERRIDE_SCHEMA)
     !== Array.isArray(renderRequest.diagramOptions?.featureOverrides)) {

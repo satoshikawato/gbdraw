@@ -1,4 +1,6 @@
 // @ts-check
+import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+
 /**
  * @param {unknown} value
  * @param {string} fallback
@@ -241,8 +243,8 @@ export const requireCurrentCollinearColorMode = (value) => {
 export const requireCurrentOrthogroupMembershipMode = (value) => (
   requireCurrentValue(
     value,
-    'anchor_core_v1',
-    ['anchor_core_v1'],
+    ORTHOGROUP_INFERENCE_VERSION,
+    [ORTHOGROUP_INFERENCE_VERSION],
     'Protein BLASTP orthogroup membership mode'
   )
 );

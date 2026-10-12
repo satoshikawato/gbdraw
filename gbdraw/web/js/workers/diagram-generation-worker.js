@@ -2,6 +2,7 @@ import { sendBoundedJson } from '../services/bounded-json-transport.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
 import { DIAGRAM_HELPER_OPERATIONS } from '../services/diagram-worker-protocol.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 
 let runtimePromise = null;
 let runtime = null;
@@ -736,7 +737,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.collinearMaxConflictsInMergeGap ?? 1,
         payload.collinearMaxParalogLinksPerOrthogroup ?? 2,
         payload.collinearSearchScope ?? 'adjacent',
-        payload.orthogroupMembershipMode ?? 'anchor_core_v1',
+        payload.orthogroupMembershipMode ?? ORTHOGROUP_INFERENCE_VERSION,
         payload.orthogroupMemberMaxHits ?? null,
         payload.collinearMergeOrientation ?? 'either',
         payload.collinearInferOrthogroups ?? true,

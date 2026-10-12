@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import importlib
 import importlib.util
 import re
 import subprocess
@@ -39,16 +40,27 @@ def test_generated_web_contracts_match_python_source() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+@pytest.mark.parametrize(
+    ("web_name", "module", "name"),
+    [
+        ("SESSION_VERSION", "gbdraw.session_io", "CURRENT_SESSION_VERSION"),
+        ("CANONICAL_SESSION_MIN_VERSION", "gbdraw.session_io", "CANONICAL_SESSION_MIN_VERSION"),
+        ("DISPLAY_PLACEMENT_SCHEMA", "gbdraw.session_request_codec", "DISPLAY_PLACEMENT_SCHEMA"),
+        ("SIMILARITY_ALIGNMENT_PLAN_SCHEMA", "gbdraw.layout.similarity_alignment", "SIMILARITY_ALIGNMENT_PLAN_SCHEMA"),
+        ("LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA", "gbdraw.analysis.protein_colinearity", "LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA"),
+        ("ORTHOGROUP_INFERENCE_VERSION", "gbdraw.analysis.protein_colinearity", "ORTHOGROUP_INFERENCE_VERSION"),
+    ],
+)
 def test_a_changed_python_constant_makes_the_generated_module_stale(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, web_name: str, module: str, name: str
 ) -> None:
-    import gbdraw.session_io as session_io
-
+    owner = importlib.import_module(module)
+    value = getattr(owner, name)
     generator = _generator()
     current = generator.render_web_contracts_module()
-    assert f"export const SESSION_VERSION = {session_io.CURRENT_SESSION_VERSION};\n" in current
+    assert f"export const {web_name} = {generator._scalar(value)};\n" in current
 
-    monkeypatch.setattr(session_io, "CURRENT_SESSION_VERSION", session_io.CURRENT_SESSION_VERSION + 1)
+    monkeypatch.setattr(owner, name, value + (1 if isinstance(value, int) else "-next"))
 
     assert generator.render_web_contracts_module() != current
 

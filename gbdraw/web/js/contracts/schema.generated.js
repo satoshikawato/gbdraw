@@ -21,11 +21,17 @@ export const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
 // gbdraw/session_io.py: CURRENT_ARTIFACT_SESSION_MIN_VERSION
 export const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
 
+// gbdraw/session_io.py: CANONICAL_SESSION_MIN_VERSION
+export const CANONICAL_SESSION_MIN_VERSION = 31;
+
 // gbdraw/session_io.py: DRAWN_HASH_RULE_SESSION_MAX_VERSION
 export const DRAWN_HASH_RULE_SESSION_MAX_VERSION = 44;
 
 // gbdraw/session_request_codec.py: CANONICAL_REQUEST_SCHEMA
 export const CANONICAL_REQUEST_SCHEMA = 9;
+
+// gbdraw/session_request_codec.py: DISPLAY_PLACEMENT_SCHEMA
+export const DISPLAY_PLACEMENT_SCHEMA = 7;
 
 // gbdraw/session_request_codec.py: FEATURE_OVERRIDE_SCHEMA
 export const FEATURE_OVERRIDE_SCHEMA = 9;
@@ -33,6 +39,9 @@ export const FEATURE_OVERRIDE_SCHEMA = 9;
 // gbdraw/session_request_codec.py: SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 /** @type {readonly number[]} */
 export const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = Object.freeze([1, 2, 5, 6, 7, 8, 9]);
+
+// gbdraw/layout/similarity_alignment.py: SIMILARITY_ALIGNMENT_PLAN_SCHEMA
+export const SIMILARITY_ALIGNMENT_PLAN_SCHEMA = 2;
 
 // gbdraw/session_io.py: CURRENT_FEATURE_CATALOG_SCHEMA
 export const FEATURE_CATALOG_SCHEMA = 5;
@@ -53,8 +62,14 @@ export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({
 // gbdraw/analysis/protein_colinearity.py: PROTEIN_LOSAT_CACHE_SCHEMA
 export const PROTEIN_LOSAT_CACHE_SCHEMA = 4;
 
+// gbdraw/analysis/protein_colinearity.py: LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA
+export const LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA = 2;
+
 // gbdraw/analysis/protein_colinearity.py: PROTEIN_IDENTITY_MANIFEST_SCHEMA
 export const PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2;
+
+// gbdraw/analysis/protein_colinearity.py: ORTHOGROUP_INFERENCE_VERSION
+export const ORTHOGROUP_INFERENCE_VERSION = 'anchor_core_v1';
 
 // gbdraw/comparisons/losat_jobs.py: NUCLEOTIDE_LOSAT_CACHE_SCHEMA
 export const NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2;

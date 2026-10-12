@@ -74,7 +74,13 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     )
     losat_normalization_path = tmp_path / "losat-normalization.mjs"
     losat_normalization_path.write_text(
-        (WEB_ROOT / "js" / "services" / "losat-normalization.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "services" / "losat-normalization.js")
+        .read_text(encoding="utf-8")
+        .replace("../contracts/schema.generated.js", "./schema.generated.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "schema.generated.mjs").write_text(
+        (WEB_ROOT / "js" / "contracts" / "schema.generated.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     feature_identity_path = tmp_path / "feature-identity.mjs"

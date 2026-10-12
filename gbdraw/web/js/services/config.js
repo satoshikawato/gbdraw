@@ -235,6 +235,7 @@ import {
 
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import {
+  CANONICAL_SESSION_MIN_VERSION,
   CURRENT_ARTIFACT_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
   DRAWN_HASH_RULE_SESSION_MAX_VERSION,
@@ -1498,7 +1499,7 @@ const normalizeSessionData = (data, droppedLegendColors) => {
       `Session version ${version} cannot contain legacy files; use resources and webFiles.`
     );
   }
-  if (version >= 31) {
+  if (version >= CANONICAL_SESSION_MIN_VERSION) {
     if (!isPlainObject(data.renderRequest)) {
       throw new Error(`Session version ${version} requires a canonical renderRequest object.`);
     }
@@ -1941,7 +1942,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   }
 
   const promotedData = !currentSession && (
-    sourceSessionVersion >= 31 &&
+    sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
     Number(normalizedData.renderRequest?.schema) === 2
   )
     ? promoteGallerySessionToCurrent(normalizedData)
@@ -2005,7 +2006,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   const settingsOnly = isSettingsOnlySessionDocument(data);
   const canonicalProjection = settingsOnly
     ? projectSettingsOnlySession(data, currentResourceTable)
-    : sourceSessionVersion >= 31
+    : sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
     ? projectCanonicalSessionRequest({
         renderRequest: projectionRenderRequest,
         resources: data.resources,

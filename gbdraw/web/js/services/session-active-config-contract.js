@@ -15,6 +15,7 @@ import { isRecordDrawKey } from './record-draw-selection.js';
 import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
+import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 /**
@@ -101,7 +102,7 @@ export const createDefaultLosatExecution = () => ({
 });
 export const createDefaultLosat = () => ({
   outfmt: '6',
-  blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: null, orthogroupMembershipMode: 'anchor_core_v1',
+  blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: null, orthogroupMembershipMode: ORTHOGROUP_INFERENCE_VERSION,
     orthogroupMemberMaxHits: null, collinearInferOrthogroups: false, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
     collinearUnitMode: 'auto', collinearAnchorMode: 'rbh', collinearMergeOrientation: 'either', collinearSearchScope: 'adjacent' }

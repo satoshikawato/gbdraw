@@ -1,5 +1,6 @@
 // @ts-check
 import { featureIdentity } from './feature-identity.js';
+import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
 
 // The released Sessions this module reads were not validated: every field is
 // `unknown`, and an entry of a list may be missing.
@@ -250,7 +251,7 @@ export const materializeLegacySimilarityAlignment = ({
     };
   });
   return {
-    schema: 2,
+    schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
     groupId: requiredText(group.id, 'legacy orthogroup id'),
     reference,
     records: decisions

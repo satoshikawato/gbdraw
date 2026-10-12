@@ -162,8 +162,10 @@ import {
   webLosatRuntimeRecord
 } from '../services/losat-cache.js';
 import {
+  LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+  ORTHOGROUP_INFERENCE_VERSION,
   PROTEIN_LOSAT_CACHE_SCHEMA
 } from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
@@ -500,7 +502,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   if (['orthogroup', 'collinear'].includes(normalizedMode)) {
     payload.pathRepresentation = 'lossless-graph-v1';
     payload.orthogroup = {
-      membershipMode: String(orthogroupMembershipMode || 'anchor_core_v1'),
+      membershipMode: String(orthogroupMembershipMode || ORTHOGROUP_INFERENCE_VERSION),
       memberMaxHits: requireCurrentOrthogroupMemberMaxHits(orthogroupMemberMaxHits)
     };
   }
@@ -642,7 +644,7 @@ const canReuseResolvedProteinArtifacts = ({
     return sameNumber(settings.proteinBlastpMaxHits ?? 5, active.maxHits);
   }
   if (
-    String(settings.orthogroupMembershipMode || 'anchor_core_v1')
+    String(settings.orthogroupMembershipMode || ORTHOGROUP_INFERENCE_VERSION)
       !== active.orthogroupMembershipMode
     || (settings.orthogroupMemberMaxHits ?? null) !== active.memberMaxHits
   ) {
@@ -3148,7 +3150,7 @@ export const createRunAnalysis = ({
           ? requireCurrentOrthogroupMembershipMode(
               drawing.losat.blastp?.orthogroupMembershipMode
             )
-          : 'anchor_core_v1';
+          : ORTHOGROUP_INFERENCE_VERSION;
         const orthogroupMemberMaxHits = useOrthogroupBlastp || useCollinearBlastp
           ? requireCurrentOrthogroupMemberMaxHits(
               drawing.losat.blastp?.orthogroupMemberMaxHits
@@ -3675,7 +3677,7 @@ export const createRunAnalysis = ({
           const promoted = {
             ...result.entry,
             text: result.text,
-            migratedFromSchema: 2
+            migratedFromSchema: LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA
           };
           delete promoted.key;
           delete promoted.filename;
