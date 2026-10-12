@@ -75,6 +75,7 @@ const LINEAR_TICK_THRESHOLDS = Object.freeze([
   [Infinity, 1_000_000]
 ]);
 
+/** @param {unknown} value */
 const parsePositiveNumber = (value) => {
   const text = normalizeOptionalText(value);
   if (text === null) return null;
@@ -82,6 +83,10 @@ const parsePositiveNumber = (value) => {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 };
 
+/**
+ * @param {unknown} value
+ * @param {number} [digits]
+ */
 const roundDisplayNumber = (value, digits = 1) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '';
@@ -89,6 +94,7 @@ const roundDisplayNumber = (value, digits = 1) => {
   return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 };
 
+/** @param {unknown} value */
 const formatBp = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '';
@@ -101,22 +107,39 @@ const formatBp = (value) => {
   return `${roundDisplayNumber(numeric, 0)} bp`;
 };
 
+/** @param {unknown} value */
 const formatPx = (value) => {
   const text = roundDisplayNumber(value, 1);
   return text ? `${text} px` : '';
 };
 
+/** @param {unknown} value */
 const formatFactor = (value) => {
   const text = roundDisplayNumber(value, 2);
   return text ? `${text} R` : '';
 };
 
+/** @param {unknown} text */
 const withAuto = (text) => (String(text || '').trim() ? `${text} (auto)` : '');
 
 // An Auto value that depends on genome size shows the value for the
 // current genome; before its length is known, it says so instead of listing
 // the short- and long-genome values side by side.
-/** @param {string | null} [activeLength] */
+/**
+ * @typedef {'short' | 'long'} SizeClass
+ */
+
+/**
+ * One value per genome size class.
+ * @template T
+ * @typedef {{ short: T, long: T }} ByLength
+ */
+
+/**
+ * @param {ByLength<number | null> | null | undefined} values
+ * @param {(value: number | null) => string} formatter
+ * @param {string | null} [activeLength]
+ */
 const formatShortLong = (values, formatter, activeLength = null) => {
   if (!values || typeof values !== 'object') return '';
   if (activeLength === 'short' || activeLength === 'long') {
@@ -129,6 +152,10 @@ const formatShortLong = (values, formatter, activeLength = null) => {
   return 'Auto (by genome size)';
 };
 
+/**
+ * @param {unknown} value
+ * @returns {SizeClass | null}
+ */
 const normalizeLengthParam = (value) => {
   const text = String(value || '').trim().toLowerCase();
   return text === 'short' || text === 'long' ? text : null;
@@ -140,6 +167,11 @@ const normalizeLengthParam = (value) => {
  * @typedef {object} RecordLengthState
  * @property {{ value?: string }} [mode]
  * @property {{ value?: { record_length?: number, length?: number }[] }} [circularRecordList]
+ */
+
+/**
+ * The track whose Auto text is asked for: only a Linear Depth track's height is read.
+ * @typedef {{ height?: unknown }} AutoValueContext
  */
 
 /** @param {RecordLengthState} state */
@@ -160,7 +192,7 @@ const activeCircularLengthParam = (state, drawing) => (
 
 // Linear record lengths come from the app's record reader, registered by
 // `createAutoValueDisplay`; an empty list means they are not known yet.
-/** @type {WeakMap<object, () => number[]>} */
+/** @type {WeakMap<RecordLengthState, () => number[]>} */
 const linearLengthSources = new WeakMap();
 
 /** @param {RecordLengthState} state */
@@ -185,17 +217,20 @@ const activeLengthParam = (state, drawing) => (
   sizeClassForRecordLengths(shownMode(state), knownRecordLengths(state), drawing)
 );
 
+/** @param {RecordLengthState} state */
 const maxKnownRecordLength = (state) => {
   const lengths = knownRecordLengths(state);
   return lengths.length ? Math.max(...lengths) : null;
 };
 
+/** @param {unknown} length */
 const slidingWindowForLength = (length) => {
   const numeric = Number(length);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
   return SLIDING_WINDOW_PRESETS.find((entry) => numeric < entry.maxExclusive) || SLIDING_WINDOW_PRESETS[2];
 };
 
+/** @param {unknown} length */
 const autoLinearTickInterval = (length) => {
   const numeric = Number(length);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
@@ -203,6 +238,7 @@ const autoLinearTickInterval = (length) => {
   return match ? match[1] : 1_000_000;
 };
 
+/** @param {unknown} length */
 const autoCircularTickInterval = (length) => {
   const numeric = Number(length);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
@@ -214,17 +250,27 @@ const autoCircularTickInterval = (length) => {
   return 1_000_000;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {'tuckin' | 'middle' | 'spreadout'}
+ */
 const normalizeTrackPreset = (value) => {
   const text = String(value || '').trim().toLowerCase();
-  return ['tuckin', 'middle', 'spreadout'].includes(text) ? text : 'tuckin';
+  // `includes` checks the three names, which `text` equals when it is true.
+  return ['tuckin', 'middle', 'spreadout'].includes(text) ? /** @type {'tuckin' | 'middle' | 'spreadout'} */ (text) : 'tuckin';
 };
 
+/** @param {SizeClass} lengthParam */
 const circularBaseTrackWidthPx = (lengthParam) => {
   const base = DEFAULTS.circular.radiusPx * DEFAULTS.circular.trackRatio;
   const factors = DEFAULTS.circular.trackRatioFactors[normalizeLengthParam(lengthParam) || 'long'];
   return { base, factors };
 };
 
+/**
+ * @param {string} renderer
+ * @param {SizeClass} lengthParam
+ */
 const circularWidthForRenderer = (renderer, lengthParam) => {
   const { base, factors } = circularBaseTrackWidthPx(lengthParam);
   if (renderer === 'features' || renderer === 'sequence_conservation') return base * Number(factors[0]);
@@ -234,7 +280,13 @@ const circularWidthForRenderer = (renderer, lengthParam) => {
 
 const previewSpacingPx = () => Math.max(1.0, 0.01 * DEFAULTS.circular.radiusPx);
 
-/** @param {DrawingState} drawing */
+/**
+ * @template T
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ * @param {(lengthParam: SizeClass) => T} resolver
+ * @returns {T | ByLength<T>}
+ */
 const circularLengthValues = (state, drawing, resolver) => {
   const active = activeCircularLengthParam(state, drawing);
   if (active) return resolver(active);
@@ -244,7 +296,11 @@ const circularLengthValues = (state, drawing, resolver) => {
   };
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ * @param {string} renderer
+ */
 const circularWidthText = (state, drawing, renderer) => {
   const value = circularLengthValues(state, drawing, (lengthParam) => circularWidthForRenderer(renderer, lengthParam));
   return typeof value === 'number'
@@ -252,7 +308,10 @@ const circularWidthText = (state, drawing, renderer) => {
     : formatShortLong(value, formatPx, null);
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {SizeClass} lengthParam
+ */
 const circularFeatureRadius = (drawing, lengthParam) => {
   const preset = normalizeTrackPreset(drawing?.form?.track_type);
   const laneWidth = circularWidthForRenderer('features', lengthParam);
@@ -268,7 +327,11 @@ const circularFeatureRadius = (drawing, lengthParam) => {
   return 1.0;
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {string} renderer
+ * @param {DrawingState} drawing
+ * @returns {2 | 3 | 4 | null}
+ */
 const circularBuiltinTrackId = (renderer, drawing) => {
   const showDepth = Boolean(drawing?.form?.show_depth);
   const showGc = !Boolean(drawing?.form?.suppress_gc);
@@ -281,7 +344,11 @@ const circularBuiltinTrackId = (renderer, drawing) => {
   return null;
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {string} renderer
+ * @param {SizeClass} lengthParam
+ */
 const circularRadiusForRenderer = (drawing, renderer, lengthParam) => {
   if (renderer === 'features') return circularFeatureRadius(drawing, lengthParam);
   const trackId = circularBuiltinTrackId(renderer, drawing);
@@ -290,7 +357,11 @@ const circularRadiusForRenderer = (drawing, renderer, lengthParam) => {
   return DEFAULTS.circular.trackDict[normalizeLengthParam(lengthParam) || 'long']?.[preset]?.[trackId] ?? null;
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ * @param {string} renderer
+ */
 const circularRadiusText = (state, drawing, renderer) => {
   const value = circularLengthValues(state, drawing, (lengthParam) => circularRadiusForRenderer(drawing, renderer, lengthParam));
   return typeof value === 'number'
@@ -299,8 +370,9 @@ const circularRadiusText = (state, drawing, renderer) => {
 };
 
 /**
+ * @param {RecordLengthState} state
  * @param {DrawingState} drawing
- * @param {{ height?: any } | null} [trackConfig]
+ * @param {AutoValueContext | null} [trackConfig]
  */
 const depthTickFontSize = (state, drawing, trackConfig = null) => {
   const mode = String(state?.mode?.value || state?.mode || 'circular');
@@ -315,7 +387,10 @@ const depthTickFontSize = (state, drawing, trackConfig = null) => {
   return Math.max(5, Math.min(8, trackWidth * 0.22));
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ */
 const gcTickFontSize = (state, drawing) => {
   const mode = String(state?.mode?.value || state?.mode || 'circular');
   if (mode === 'linear') {
@@ -327,10 +402,18 @@ const gcTickFontSize = (state, drawing) => {
   return Math.max(5, Math.min(8, trackWidth * 0.22));
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ * @param {ByLength<number>} values
+ */
 const lengthDependentPx = (state, drawing, values) => formatShortLong(values, formatPx, activeLengthParam(state, drawing));
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ * @param {'window' | 'step'} field
+ */
 const dinucleotideWindowText = (state, drawing, field) => {
   const manualWindow = parsePositiveNumber(drawing?.adv?.window_size);
   const manualStep = parsePositiveNumber(drawing?.adv?.step_size);
@@ -343,7 +426,11 @@ const dinucleotideWindowText = (state, drawing, field) => {
   return 'Auto (by genome size)';
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ * @param {'window' | 'step'} field
+ */
 const depthWindowText = (state, drawing, field) => {
   const sourceField = field === 'window' ? 'window_size' : 'step_size';
   const manualSource = parsePositiveNumber(drawing?.adv?.[sourceField]);
@@ -386,6 +473,7 @@ const linearLabelPlacementText = (drawing) => {
   return layout === 'below' ? 'below' : 'above';
 };
 
+/** @param {RecordLengthState} state */
 const scaleIntervalText = (state) => {
   const length = maxKnownRecordLength(state);
   const mode = String(state?.mode?.value || state?.mode || 'circular');
@@ -397,7 +485,10 @@ const scaleIntervalText = (state) => {
   return interval ? withAuto(formatBp(interval)) : 'by record length (auto)';
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ */
 const plotTitleText = (state, drawing) => {
   if (String(state?.mode?.value || state?.mode || 'circular') !== 'circular') return '';
   if (String(drawing?.adv?.plot_title_position || 'none') === 'none') return '';
@@ -407,7 +498,12 @@ const plotTitleText = (state, drawing) => {
   return pieces.length ? `${pieces.join(' ')} (auto)` : 'species + strain (auto)';
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ * @param {string} key
+ * @param {AutoValueContext | null} [context]
+ */
 const autoTextByKey = (state, drawing, key, context = null) => {
   switch (key) {
     case 'depthWindow': return depthWindowText(state, drawing, 'window');
@@ -466,16 +562,25 @@ const autoTextByKey = (state, drawing, key, context = null) => {
 };
 
 /**
- * @param {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @param {RecordLengthState & { activeDrawing: () => DrawingState }} state the Web state of `state.js`
  * @param {{ linearRecordLengths?: () => number[] }} [options] the lengths of the
  *   records the next Linear Generate draws, or [] while any is unknown
  */
 export const createAutoValueDisplay = (state, { linearRecordLengths = () => [] } = {}) => {
   linearLengthSources.set(state, linearRecordLengths);
+  /**
+   * @param {string} key
+   * @param {AutoValueContext | null} [context]
+   */
   const autoValueText = (key, context = null) => {
     const drawing = state.activeDrawing();
     return autoTextByKey(state, drawing, key, context);
   };
+  /**
+   * @param {unknown} value
+   * @param {string} key
+   * @param {AutoValueContext | null} [context]
+   */
   const autoValueVisible = (value, key, context = null) => (
     normalizeOptionalText(value) === null && autoValueText(key, context) !== ''
   );

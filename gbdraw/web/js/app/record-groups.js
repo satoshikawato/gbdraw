@@ -1,17 +1,26 @@
 // @ts-check
+/**
+ * @param {Element | null | undefined} element
+ * @returns {element is Element} True only for an element whose tag is `g`.
+ */
 const isGroup = (element) => String(element?.tagName || '').toLowerCase() === 'g';
+/** @param {Element | null | undefined} element */
 const isSvg = (element) => String(element?.tagName || '').toLowerCase() === 'svg';
+/** @param {Element | null | undefined} group */
 const hasSemanticRecordId = (group) =>
   isGroup(group) && group.hasAttribute?.('data-gbdraw-record-id');
+/** @param {Element | null | undefined} group */
 const hasLegacyRecordId = (group) =>
   isGroup(group) && String(group.id || '').startsWith('record_');
 const DEFINITION_ROLES = new Set(['record-definition', 'record-definition-row']);
+/** @param {Element | null | undefined} group */
 const isDefinitionGroup = (group) =>
   DEFINITION_ROLES.has(
     String(group?.getAttribute?.('data-gbdraw-role') || '').trim()
   ) ||
   /_definition(?:_record_\d+)?(?:_row)?$/.test(String(group?.id || ''));
 
+/** @param {Element | null | undefined} group */
 const semanticRecordIdentity = (group) => {
   const recordIndex = String(
     group?.getAttribute?.('data-gbdraw-record-index') || ''
@@ -26,9 +35,11 @@ const semanticRecordIdentity = (group) => {
   return `group:${String(group?.id || '')}`;
 };
 
+/** @param {Element | null | undefined} group */
 export const isRecordGroup = (group) =>
   hasSemanticRecordId(group) || hasLegacyRecordId(group);
 
+/** @param {Element | null | undefined} svg */
 export const directRecordGroups = (svg) => {
   const groups = Array.from(svg?.children || [])
     .filter(isGroup)
@@ -39,6 +50,7 @@ export const directRecordGroups = (svg) => {
     : groups.filter(hasLegacyRecordId);
 };
 
+/** @param {Element | null | undefined} svg */
 export const isMultiRecordCanvasSvg = (svg) => {
   const groups = directRecordGroups(svg);
   const semanticGroups = groups.filter(hasSemanticRecordId);
@@ -48,7 +60,12 @@ export const isMultiRecordCanvasSvg = (svg) => {
   return groups.length > 1;
 };
 
+/**
+ * @param {Element | null | undefined} element
+ * @returns {Element | null}
+ */
 export const closestRecordGroup = (element) => {
+  /** @type {Element[]} */
   const ancestors = [];
   for (let current = element; current; current = current.parentElement) {
     if (isRecordGroup(current) && !isDefinitionGroup(current)) {

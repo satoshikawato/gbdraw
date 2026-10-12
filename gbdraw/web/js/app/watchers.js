@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, LinearSeq } from '../state.js' */
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -15,7 +15,17 @@ import {
 } from '../services/layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
+/** @import { FileLike } from '../services/session-resource-backing.js' */
 
+/**
+ * @typedef {object} RecordDiscoveryWatcherOptions
+ * @property {{ readonly value: unknown } | null | undefined} [rollbackInProgress] A Session import is rolling back.
+ * @property {{ readonly value: unknown } | null | undefined} [semanticWatchersSuppressed]
+ * @property {{ readonly value: unknown } | null | undefined} [sessionResourceDiscoveryDeferred]
+ * @property {(options: { suppress: boolean }) => unknown} refresh The record discovery; `suppress` tells it to leave the derived state alone.
+ */
+
+/** @param {RecordDiscoveryWatcherOptions} options */
 export const runRecordDiscoveryWatcher = async ({
   rollbackInProgress,
   semanticWatchersSuppressed,
@@ -142,11 +152,16 @@ export const setupWatchers = ({
     syncPaletteDraftState
   } = resultsManager;
 
+  /**
+   * @param {unknown} value
+   * @param {string} [fallback]
+   */
   const normalizeLegendPosition = (value, fallback = 'left') => {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized || fallback;
   };
 
+  /** @param {unknown} value */
   const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
   /** @param {DrawingState} drawing */
@@ -343,10 +358,26 @@ export const setupWatchers = ({
     const busy = state.sessionOperationAvailability?.();
     return busy || (canRetryAuxiliaryImportFailure.value ? auxiliaryImportFailure.value.retry() : false);
   };
+  /** @type {Map<FileLike, Promise<boolean>>} */
   const pendingFileImports = window.Vue.reactive(new Map());
   /** @type {Promise<any>} */
   let fileImportApplications = Promise.resolve();
+  /** @type {Map<string, FileLike | null | undefined>} */
   const restoredFileSelections = new Map();
+  /**
+   * Applies the text of an auxiliary file to its drawing; false rejects the file.
+   * @callback FileImportApply
+   * @param {string} text
+   * @param {() => boolean} isCurrent
+   * @returns {unknown}
+   */
+  /**
+   * @param {string} key The `files` member the watcher follows.
+   * @param {FileImportApply} apply
+   * @param {FileLike | null | undefined} file
+   * @param {FileLike | null | undefined} previousFile
+   * @returns {Promise<boolean> | undefined}
+   */
   const applyFileImport = (key, apply, file, previousFile) => {
     const restored = restoredFileSelections.has(key) && restoredFileSelections.get(key) === file;
     restoredFileSelections.delete(key);
@@ -398,7 +429,12 @@ export const setupWatchers = ({
     });
     return pending;
   };
+  /**
+   * @param {string} key
+   * @param {FileImportApply} apply
+   */
   const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => applyFileImport(key, apply, file, previousFile));
+  /** @param {FileLike} file */
   const waitForAuxiliaryFileImport = (file) => pendingFileImports.get(file);
 
   watchFileImport('d_color', (text) => {
@@ -430,7 +466,7 @@ export const setupWatchers = ({
     try {
       const { rules, count } = parsePriorityRules(text);
       rules.forEach((rule) => {
-        const idx = drawing.manualPriorityRules.findIndex((r) => r.feat === rule.feat);
+        const idx = drawing.manualPriorityRules.findIndex((/** @type {{ feat: string }} */ r) => r.feat === rule.feat);
         if (idx >= 0) {
           drawing.manualPriorityRules[idx].order = rule.order;
         } else {
@@ -510,7 +546,7 @@ export const setupWatchers = ({
       state.sessionImportPending?.value,
       mode.value,
       lInputType.value,
-      ...linearSeqs.flatMap((seq) => [
+      ...linearSeqs.flatMap((/** @type {LinearSeq} */ seq) => [
         seq.uid,
         lInputType.value === 'gff' ? seq.gff : seq.gb,
         lInputType.value === 'gff' ? seq.fasta : null

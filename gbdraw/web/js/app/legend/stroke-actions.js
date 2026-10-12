@@ -31,6 +31,7 @@ export const createLegendStrokeActions = ({ state }) => {
   /** @param {string} caption */
   const drawnSwatchStroke = (caption) => drawnLegendRowStroke(svgContainer.value?.querySelector?.('svg'), caption);
 
+  /** @param {number} idx */
   const getLegendEntryStrokeColor = (idx) => {
     const drawing = state.activeDrawing();
     const entry = drawing.legendEntries.value[idx];
@@ -40,6 +41,7 @@ export const createLegendStrokeActions = ({ state }) => {
     return '';
   };
 
+  /** @param {number} idx */
   const getLegendEntryStrokeWidth = (idx) => {
     const drawing = state.activeDrawing();
     const entry = drawing.legendEntries.value[idx];
@@ -60,8 +62,12 @@ export const createLegendStrokeActions = ({ state }) => {
     if (String(drawing.legendStrokeOverrides[entry.caption]?.strokeColor || '').trim() === normalized) {
       return false;
     }
+    // A caption is free text: only an own entry is an override (OV-532).
+    const existing = Object.hasOwn(drawing.legendStrokeOverrides, entry.caption)
+      ? drawing.legendStrokeOverrides[entry.caption]
+      : undefined;
     drawing.legendStrokeOverrides[entry.caption] = {
-      ...(drawing.legendStrokeOverrides[entry.caption] || {
+      ...(existing || {
         ...drawnSwatchStroke(entry.caption),
         strokeWidth: getLegendEntryStrokeWidth(idx)
       }),
@@ -80,8 +86,12 @@ export const createLegendStrokeActions = ({ state }) => {
     const widthVal = parseFloat(String(width));
     if (isNaN(widthVal)) return false;
     if (Number(drawing.legendStrokeOverrides[entry.caption]?.strokeWidth) === widthVal) return false;
+    // A caption is free text: only an own entry is an override (OV-532).
+    const existing = Object.hasOwn(drawing.legendStrokeOverrides, entry.caption)
+      ? drawing.legendStrokeOverrides[entry.caption]
+      : undefined;
     drawing.legendStrokeOverrides[entry.caption] = {
-      ...(drawing.legendStrokeOverrides[entry.caption] || {
+      ...(existing || {
         ...drawnSwatchStroke(entry.caption),
         strokeColor: getLegendEntryStrokeColor(idx)
       }),

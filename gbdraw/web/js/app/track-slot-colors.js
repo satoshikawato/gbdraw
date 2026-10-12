@@ -7,13 +7,18 @@ import { normalizeOptionalText } from '../services/track-slot-display.js';
  * be Vue refs or plain values (`unwrapRef`).
  * @typedef {object} InheritedSkewSlotColorOptions
  * @property {string} [key] The slot param: `positive_color` or `negative_color`.
- * @property {any} [currentColors]
- * @property {any} [paletteDefinitions]
- * @property {any} [selectedPalette]
+ * @property {MaybeRef<Record<string, unknown> | null | undefined>} [currentColors]
+ * @property {MaybeRef<Record<string, Record<string, unknown> | undefined> | null | undefined>} [paletteDefinitions]
+ * @property {unknown} [selectedPalette]
  */
 
 /**
- * @typedef {InheritedSkewSlotColorOptions & { slot?: Record<string, any> }} TrackSlotSkewColorOptions
+ * @typedef {InheritedSkewSlotColorOptions & { slot?: { params?: Record<string, unknown> } }} TrackSlotSkewColorOptions
+ */
+
+/**
+ * @template T
+ * @typedef {T | { value: T }} MaybeRef A plain value or a Vue ref holding it.
  */
 
 const SKEW_COLOR_PARAM_TO_PALETTE_KEY = Object.freeze({
@@ -26,6 +31,11 @@ const FINAL_SKEW_COLOR_FALLBACKS = Object.freeze({
   skew_low: '#ad72e3'
 });
 
+/**
+ * @template T
+ * @param {MaybeRef<T>} value
+ * @returns {T}
+ */
 const unwrapRef = (value) => {
   if (value && typeof value === 'object' && 'value' in value) {
     return value.value;
@@ -33,6 +43,7 @@ const unwrapRef = (value) => {
   return value;
 };
 
+/** @param {unknown} value */
 export const normalizeColorInputValue = (value) => {
   const text = normalizeOptionalText(value);
   if (text === null) return null;
@@ -46,6 +57,7 @@ export const normalizeColorInputValue = (value) => {
   return null;
 };
 
+/** @param {unknown} selectedPalette */
 const resolvePaletteName = (selectedPalette) => {
   const text = String(unwrapRef(selectedPalette) || 'default').trim();
   return text || 'default';
@@ -59,7 +71,8 @@ export const resolveInheritedSkewSlotColor = ({
   selectedPalette = 'default'
 } = {}) => {
   if (!key) return '#777777';
-  const paletteKey = SKEW_COLOR_PARAM_TO_PALETTE_KEY[key];
+  // The callers pass the two slot params named in the table; an unnamed key reads undefined below.
+  const paletteKey = SKEW_COLOR_PARAM_TO_PALETTE_KEY[/** @type {keyof typeof SKEW_COLOR_PARAM_TO_PALETTE_KEY} */ (key)];
   if (!paletteKey) return '#777777';
 
   const colors = unwrapRef(currentColors) || {};

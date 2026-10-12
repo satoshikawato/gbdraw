@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState, LegendEntry } from '../../state.js' */
+/** @import { DrawingState, LegendCaption, LegendEntry } from '../../state.js' */
 // Sort and Move compute the requested caption order, write it into the
 // drawing's Legend intent, and show it through the root's port once (R1, R3,
 // R13): the executor orders the displayed Result's rows.
@@ -13,7 +13,7 @@
 export const createLegendSortActions = ({ state, showLegendStructure }) => {
   const { originalLegendOrder } = state;
 
-  /** @param {DrawingState} drawing @param {string[]} captionOrder */
+  /** @param {DrawingState} drawing @param {LegendCaption[]} captionOrder */
   const applyLegendEntryOrder = (drawing, captionOrder) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -30,7 +30,7 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
   };
 
   /** @param {DrawingState} drawing */
-  const getVisibleLegendOrder = (drawing) => drawing.legendEntries.value.map((entry) => entry.caption).filter(Boolean);
+  const getVisibleLegendOrder = (drawing) => /** @type {LegendEntry[]} */ (drawing.legendEntries.value).map((entry) => entry.caption).filter(Boolean);
 
   // Moves the row at `from` to `to` (the Legend panel's drag handle and the
   // handle's arrow keys).
@@ -75,7 +75,7 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
 
     const currentIndex = new Map(currentOrder.map((caption, idx) => [caption, idx]));
     // A renamed generated entry keeps its generated caption as its default slot.
-    const generatedCaption = new Map(drawing.legendEntries.value.map((entry) => [entry.caption, entry.originalCaption || entry.caption]));
+    const generatedCaption = new Map(/** @type {LegendEntry[]} */ (drawing.legendEntries.value).map((entry) => [entry.caption, entry.originalCaption || entry.caption]));
     const sortedOrder = [...currentOrder].sort((a, b) => {
       const aOrigIdx = originalLegendOrder.value.indexOf(generatedCaption.get(a) ?? a);
       const bOrigIdx = originalLegendOrder.value.indexOf(generatedCaption.get(b) ?? b);

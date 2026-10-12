@@ -866,3 +866,81 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(shownRows(), drawnRows, 'a rule commit leaves the Result to the executor');
   assert.equal(commits, 0);
 }
+
+// OV-531: Restore reads the color override by the row's caption, which is free
+// text. A caption that names an inherited member of a plain object
+// (`constructor`) has no override; an own entry still wins.
+{
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const state = {
+    results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([
+      { caption: 'constructor', originalCaption: 'constructor', color: '#112233', featureIds: [] },
+      { caption: 'Alpha', originalCaption: 'Alpha', color: '#445566', featureIds: [] },
+      { caption: 'Zed', originalCaption: 'Zed', color: '#778899', featureIds: [] }
+    ]),
+    dormantLegendEntries: ref([]),
+    originalLegendOrder: ref([]),
+    originalLegendColors: ref({}),
+    legendStrokeOverrides: {},
+    legendColorOverrides: { Alpha: '#aabbcc' },
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({
+    state: withDrawings(state),
+    commitActiveResultEdit: () => true,
+    readShownLegendColor: (entry) => entry?.color
+  });
+  await actions.restoreDeletedLegendEntries();
+  const colors = Object.fromEntries(state.legendEntries.value.map((entry) => [entry.caption, entry.color]));
+  assert.deepEqual(colors, { constructor: '#112233', Alpha: '#aabbcc', Zed: '#778899' },
+    'a caption named like an inherited member keeps its recorded color; an own override and an unknown caption read as before');
+}
+
+// OV-532: a first stroke edit reads the existing override by the row's caption.
+// An inherited member is no override, so the stored override gets the drawn
+// stroke like that of any other row.
+{
+  const ref = (value) => ({ value });
+  const strokeOverridesAfterFirstEdit = (caption, edit) => {
+    const svg = new MockElement('svg');
+    const featureLegend = new MockElement('g', { id: 'feature_legend' });
+    const row = mockLegendEntry(caption, '#112233', 0);
+    featureLegend.appendChild(row);
+    const legend = new MockElement('g', { id: 'legend' });
+    legend.appendChild(featureLegend);
+    svg.appendChild(legend);
+    const swatch = row.querySelector('path');
+    swatch.setAttribute('stroke', '#999999');
+    swatch.setAttribute('data-gbdraw-base-stroke', 'gray');
+    swatch.setAttribute('stroke-width', '2');
+    const state = {
+      svgContainer: ref({ querySelector: () => svg }),
+      legendEntries: ref([{ caption, color: '#112233' }]),
+      legendStrokeOverrides: {},
+      featureStrokeOverrides: {},
+      extractedFeatures: ref([])
+    };
+    const actions = createLegendStrokeActions({ state: withDrawings(state) });
+    assert.equal(edit(actions), true);
+    return state.legendStrokeOverrides[caption];
+  };
+  for (const [name, edit] of [
+    ['color', (actions) => actions.updateLegendEntryStrokeColor(0, '#222222')],
+    ['width', (actions) => actions.updateLegendEntryStrokeWidth(0, 3)]
+  ]) {
+    const ordinary = strokeOverridesAfterFirstEdit('Gamma', edit);
+    assert.equal(Object.keys(ordinary).length, 4);
+    assert.deepEqual([ordinary.originalStrokeColor, ordinary.originalStrokeWidth], ['gray', 2]);
+    for (const caption of ['constructor', 'toString']) {
+      assert.deepEqual(strokeOverridesAfterFirstEdit(caption, edit), ordinary,
+        `a first stroke ${name} edit of the row named ${caption} stores the drawn stroke like any other row`);
+    }
+  }
+}
