@@ -30,6 +30,11 @@ await cp(
   join(tempRoot, 'services', 'current-option-values.js')
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
+// track-slot-display.js reads the generated size-class boundaries.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'),
+  join(tempRoot, 'mode-profiles.generated.js')
+);
 // The track-slot leaves the slot editors import.
 for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js',
   'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
@@ -475,6 +480,40 @@ test('Circular notes mark estimates and show measured values after a render (TK-
   assert.equal(rendered(1, 'radius'), '0.76 R (auto)');
   assert.equal(rendered(2, 'width'), '54.1 px (auto)');
   assert.equal(rendered(2, 'inner_gap_px'), '3.9 px (auto)');
+});
+
+// A content or skew slot without its own dinucleotide draws with the
+// drawing's (OV-487, OV-490). Its empty field shows that one, from the function
+// that names it in the slot summary and the legend label placeholder.
+test('an empty slot dinucleotide field shows the dinucleotide of the drawing in both modes', () => {
+  const circular = createCircularTrackSlotEditor({ state: withDrawings({
+    mode: { value: 'circular' }, form: { track_type: 'tuckin' },
+    adv: { circular_track_slots: [], nt: ' at ', depth_tracks: [] },
+    files: {}, annotationSets: []
+  }) });
+  const linear = createLinearTrackSlotEditor({ state: withDrawings({
+    mode: { value: 'linear' }, form: { linear_track_layout: 'middle' },
+    adv: { linear_track_slots: [], nt: ' at ', depth_tracks: [] },
+    files: { linearSeqs: [] }, annotationSets: []
+  }) });
+  assert.equal(circular.circularDrawingDinucleotide(), 'AT');
+  assert.equal(linear.linearDrawingDinucleotide(), 'AT');
+  const skew = { id: 'skew', renderer: 'dinucleotide_skew', params: {} };
+  assert.equal(circular.circularTrackSlotOptionsSummary(skew), 'AT · legend label, gaps, colors');
+  assert.equal(circular.circularTrackSlotLegendLabelPlaceholder(skew), 'AT skew');
+  assert.equal(linear.linearTrackSlotLegendLabelPlaceholder(skew), 'AT skew');
+
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  for (const [label, binding] of [
+    ['`Circular track slot ${entry.slot.id} Track dinucleotide`', 'circularDrawingDinucleotide()'],
+    ['`Linear track slot ${entry.slot.id} Track dinucleotide`', 'linearDrawingDinucleotide()']
+  ]) {
+    const at = html.indexOf(label);
+    assert.ok(at > 0, label);
+    const input = html.slice(html.lastIndexOf('<input', at), html.indexOf('>', at));
+    assert.ok(input.includes(` :placeholder="${binding}"`), input);
+    assert.equal(/\splaceholder=/.test(input), false, input);
+  }
 });
 
 // TK-12: an invalid Width or Radius is reported once, by its own field; the

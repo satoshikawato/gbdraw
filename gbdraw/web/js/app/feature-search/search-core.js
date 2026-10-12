@@ -407,7 +407,7 @@ const compileFeatureSearchMatcher = (query, useRegex) => {
         })
       };
     } catch {
-      return { active: true, error: 'Invalid JavaScript regular expression. Turn off Regex to return to word search.', match: () => '', test: () => false };
+      return { active: true, error: 'Invalid JavaScript regular expression. Turn off Regular expression to return to word search.', match: () => '', test: () => false };
     }
   }
 

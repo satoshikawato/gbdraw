@@ -20,6 +20,26 @@ const SUPPORTED_RENDERERS = [
   'spacer'
 ];
 
+// The renderer names a slot may use beside the supported ones, as Python reads
+// them on a spec string and on a slot object (gbdraw/tracks/circular.py
+// `_RENDERER_ALIASES`, `_normalize_renderer`; OV-489).
+/** @type {Readonly<Record<string, string>>} */
+const RENDERER_ALIASES = Object.freeze({
+  gc_content: 'dinucleotide_content',
+  content: 'dinucleotide_content',
+  gc_skew: 'dinucleotide_skew',
+  skew: 'dinucleotide_skew',
+  conservation: 'sequence_conservation',
+  circular_comparison: 'sequence_conservation'
+});
+// The renderer a Circular slot names: the one change point of the alias lookup,
+// for the slot normalizer and for Load's projection of a request's slot objects.
+/** @param {unknown} name @returns {string} */
+export const circularRendererName = (name) => {
+  const named = String(name ?? '').trim().toLowerCase();
+  return RENDERER_ALIASES[named] || named;
+};
+
 export const DEFAULT_SLOT_IDS = {
   features: 'features',
   ticks: 'ticks',
@@ -630,7 +650,8 @@ export const applyCircularGeometryShortcuts = (slots, values = {}) => {
 export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', preset = 'tuckin') => {
   const source = slot && typeof slot === 'object' && !Array.isArray(slot) ? slot : {};
   assertCurrentCircularTrackSlotShape(source);
-  const renderer = SUPPORTED_RENDERERS.includes(source.renderer) ? source.renderer : 'dinucleotide_skew';
+  const resolved = circularRendererName(source.renderer);
+  const renderer = SUPPORTED_RENDERERS.includes(resolved) ? resolved : 'dinucleotide_skew';
   const fallbackId = DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`;
   const inheritsPresetDefaults = isLegacyDefaultWebSlotShape(source, renderer, defaultNt, preset);
   const params = inheritsPresetDefaults ? {} : cloneParams(source.params);

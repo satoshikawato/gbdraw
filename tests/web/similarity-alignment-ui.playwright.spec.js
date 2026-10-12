@@ -2364,3 +2364,38 @@ test('the drawer list scrolls to the group a new alignment plan selects', async 
   await expect(planRow).toHaveAttribute('aria-current', 'true');
   await expect.poll(() => rowInView(planRow)).toBe(true);
 });
+
+// OV-498: the panel was moved below the header while its height limit stayed
+// the whole window, so a review of five records ended under the window bottom.
+test('the Review alignment panel ends above the footer with Cancel and Apply in the window', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(
+    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
+  ), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await page.locator('[data-gbdraw-feature-id="f94b7f30b_record_2"]').click({ force: true });
+  await page.locator('.feature-popup [data-similarity-alignment-popup-review]').click();
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
+  await expect(dialog.locator('[data-alignment-record-key]')).toHaveCount(4, { timeout: 180000 });
+  const edges = () => page.evaluate(() => {
+    const edge = (selector, side) => document.querySelector(selector).getBoundingClientRect()[side];
+    return {
+      panelTop: edge('[data-similarity-alignment-dialog]', 'top'),
+      panelBottom: edge('[data-similarity-alignment-dialog]', 'bottom'),
+      applyBottom: edge('[data-similarity-alignment-dialog] button[aria-describedby="similarity-alignment-apply-reason"]', 'bottom'),
+      headerBottom: edge('header.app-header', 'bottom'),
+      footerTop: edge('[data-app-footer]', 'top')
+    };
+  });
+  for (const height of [1000, 640]) {
+    await page.setViewportSize({ width: 1600, height });
+    await expect.poll(async () => {
+      const { panelTop, panelBottom, applyBottom, headerBottom, footerTop } = await edges();
+      return panelTop >= headerBottom && applyBottom < panelBottom && panelBottom <= footerTop;
+    }, { message: `window height ${height}: ${JSON.stringify(await edges())}` }).toBe(true);
+  }
+  // The rows scroll inside the panel instead.
+  const rows = dialog.locator('.custom-scrollbar').first();
+  expect(await rows.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+});

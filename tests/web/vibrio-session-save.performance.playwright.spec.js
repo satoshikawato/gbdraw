@@ -344,14 +344,12 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   const appOrigin = new URL(baseURL).origin;
   const terminal = { pageErrors: [], crashes: 0 };
   const requests = [];
-  const dialogs = [];
   let downloadCount = 0;
   page.on('pageerror', (error) => terminal.pageErrors.push(String(error?.message || error)));
   page.on('crash', () => { terminal.crashes += 1; });
   page.on('request', (request) => requests.push(request.url()));
   page.on('download', () => { downloadCount += 1; });
   page.on('dialog', async (dialog) => {
-    dialogs.push({ type: dialog.type(), message: dialog.message() });
     await dialog.accept();
   });
 
@@ -435,8 +433,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   ].map((name) => lifecycleNames.indexOf(name));
   expect(orderedLifecycle).toEqual([...orderedLifecycle].sort((left, right) => left - right));
   expect(downloadCount).toBe(1);
-  expect(dialogs.filter(({ message }) => message.startsWith('Compressed session size is ')))
-    .toHaveLength(0);
+  await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
   expect(after.lifecycle.find(
     ({ name }) => name === 'session-save-catalog-preparation-end'
   )?.reusedCommittedSession).toBe(true);

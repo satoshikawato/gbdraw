@@ -238,7 +238,7 @@ test('a restyle paints an Auto key with the applied palette color', async () => 
   });
   const plan = compileDirectEditorMutationPlan({
     catalogAdmission: displayedFeatureAddressing([feature], ['diagram.svg'], 0), manualSpecificRules: [],
-    livePreview: { domains: ['featureFills'], paletteColors, drawnContext: null }
+    livePreview: { drawnTracks: [], domains: ['featureFills'], paletteColors, drawnContext: null }
   });
   assert.deepEqual(plan.operationsByResult[0].featureFills, [{ renderedId: 'f1', color: '#AABBCC' }]);
 });
@@ -277,9 +277,9 @@ const legendPanelSetup = async ({ rules = [], cdsDrawn = '#AABBCC' } = {}) => {
   ]);
   const paletteColors = { ...paletteOf('default'), CDS: '#123456', tRNA: '#333333', rRNA: '#444444' };
   const panel = draftLegendPanelColors({
-    legendEntries: entries, originalLegendOrder, legendColorOverrides: { rRNA: '#121212' }, rules, pythonRows, paletteColors
+    legendEntries: entries, originalLegendOrder, legendColorOverrides: { rRNA: '#121212' }, rules, pythonRows, paletteColors, drawnTracks: []
   });
-  const compiled = draftLegendRowColors({ rules, pythonRows, originalLegendOrder, paletteColors });
+  const compiled = draftLegendRowColors({ rules, pythonRows, originalLegendOrder, paletteColors, drawnTracks: [] });
   return { panel, compiled, entries };
 };
 
@@ -303,22 +303,30 @@ test('the Deleted items list shows the palette color of a deleted palette row', 
     ],
     originalLegendOrder: ['CDS', 'other tRNAs', 'rRNA'],
     legendColorOverrides: { rRNA: '#121212' }, rules: [], pythonRows: new Map(),
-    paletteColors: { ...paletteOf('default'), CDS: '#123456', tRNA: '#333333', rRNA: '#444444' }
+    paletteColors: { ...paletteOf('default'), CDS: '#123456', tRNA: '#333333', rRNA: '#444444' }, drawnTracks: []
   });
   assert.deepEqual([...panel.listed], [['CDS', '#123456']]);
   assert.deepEqual([...panel.deleted], [['other tRNAs', '#333333']]);
 });
 
-// OV-309: the track rows take the palette color Python draws them in, under
-// every dinucleotide and as one row or two (`_generated_legend_fills`);
-// Depth takes no palette color.
+// OV-309: the default track rows take the palette color Python draws them
+// in, under the request's dinucleotide and as one row or two
+// (`_generated_legend_fills`); Depth and a row of another dinucleotide, which
+// the request draws no track for, take no palette color (OV-484).
 test('the compile gives every track row Python draws its palette color', async () => {
   const { draftLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
+  const { drawnTracks } = await import('../../gbdraw/web/js/services/track-legend-rows.js');
   const paletteColors = { gc_content: '#a1a1a1', skew_high: '#b2b2b2', skew_low: '#c3c3c3' };
-  const keys = ['GC content', 'AT content', 'AT content (-)', 'GC skew', 'AT skew (+)', 'AT skew (-)', 'Depth'];
-  const { colorOf } = draftLegendRowColors({ rules: [], pythonRows: new Map(), originalLegendOrder: keys, paletteColors });
-  assert.deepEqual(keys.map((key) => colorOf(key)),
-    ['#a1a1a1', '#a1a1a1', '#a1a1a1', '#b2b2b2', '#b2b2b2', '#c3c3c3', null]);
+  const tracks = drawnTracks({ mode: 'circular', diagramOptions: { dinucleotide: 'AT', tracks: { circularTrackSlots: null } } });
+  // The rows of one Result: Python draws a track's row once, or as (+) and (-).
+  for (const [keys, colors] of [
+    [['AT content', 'AT skew (+)', 'AT skew (-)', 'GC skew (+)', 'Depth'], ['#a1a1a1', '#b2b2b2', '#c3c3c3', null, null]],
+    [['AT content (+)', 'AT content (-)', 'AT skew'], ['#a1a1a1', '#a1a1a1', '#b2b2b2']]
+  ]) {
+    const pythonRows = new Map(keys.map((key) => [key, { key, color: null }]));
+    const { colorOf } = draftLegendRowColors({ rules: [], pythonRows, originalLegendOrder: keys, paletteColors, drawnTracks: tracks });
+    assert.deepEqual(keys.map((key) => colorOf(key)), colors);
+  }
 });
 
 // OV-347: rules of one caption in two colors (a table Python's caption
@@ -337,7 +345,7 @@ test('a rule row shows the color of the first rule a drawn feature takes', async
     pythonRows: new Map([['photosystem I', { key: 'photosystem I', color: '#00662c' }]]),
     features,
     originalLegendOrder: ['photosystem I', 'other proteins'],
-    paletteColors: { CDS: '#54bcf8' }
+    paletteColors: { CDS: '#54bcf8' }, drawnTracks: []
   }).colorOf('photosystem I');
   const drawn = () => [{ type: 'CDS', gene: 'psaA', fill_color: '#54bcf8' }, { type: 'CDS', gene: 'psaB', fill_color: '#00662c' }];
   const seed = (rules, features) => {

@@ -158,13 +158,14 @@ export const createPreviewFeatureSearch = ({
   ));
   const previewFeatureSearchStatusText = computed(() => {
     if (previewFeatureSearchError.value) return previewFeatureSearchError.value;
-    if (!String(previewFeatureSearchQuery.value || '').trim()) {
-      return `0 / ${previewFeatureSearchRenderedCount.value} features`;
-    }
+    // No count before a search; after one, the active match of all.
+    if (!String(previewFeatureSearchQuery.value || '').trim()) return '';
+    const total = previewFeatureSearchMatches.value.length;
+    if (!total) return 'No matches';
     const current = previewFeatureSearchActiveIndex.value >= 0
       ? previewFeatureSearchActiveIndex.value + 1
       : 0;
-    return `${current} / ${previewFeatureSearchMatches.value.length} features`;
+    return `${current} of ${total} ${total === 1 ? 'match' : 'matches'}`;
   });
   const previewFeatureSearchActiveDetail = computed(() => {
     const activeId = getActiveMatchId();

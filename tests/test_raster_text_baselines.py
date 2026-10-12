@@ -13,6 +13,7 @@ from svgwrite import Drawing
 from svgwrite.container import Group
 
 from gbdraw.api import render as api_render
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.render import export as export_module
 from gbdraw.core.text import parse_mixed_content_text
 from gbdraw.render.export import has_cairosvg
@@ -27,6 +28,8 @@ FONT_FAMILY = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-se
 FONT_PATH = REPO_ROOT / "gbdraw" / "data" / "LiberationSans-Regular.ttf"
 SVG_NS = "http://www.w3.org/2000/svg"
 XLINK_NS = "http://www.w3.org/1999/xlink"
+# The packaged labels.length_threshold.circular.
+LENGTH_THRESHOLD = int(apply_config_overrides(None, None).labels.length_threshold.circular)
 
 requires_cairosvg = pytest.mark.skipif(not has_cairosvg(), reason="CairoSVG is not installed")
 
@@ -44,7 +47,7 @@ def _tick_kwargs(font_size: float) -> dict:
         "tick_side": "inside",
         "tick_length_px": 10.0,
         "tick_width": 2.0,
-        "length_threshold": 50_000,
+        "length_threshold": LENGTH_THRESHOLD,
     }
 
 
@@ -313,7 +316,7 @@ def test_every_cairosvg_export_path_converts_the_rewritten_svg(
         for element in generate_circular_tick_labels(
             80.0, 10_000, "large", [5_000], "none", "black", 14.0, "normal", FONT_FAMILY,
             "tuckin", True, 96, label_side="outside", tick_side="inside",
-            tick_length_px=10.0, tick_width=2.0, length_threshold=50_000,
+            tick_length_px=10.0, tick_width=2.0, length_threshold=LENGTH_THRESHOLD,
         ):
             group.add(element)
         canvas.add(group)

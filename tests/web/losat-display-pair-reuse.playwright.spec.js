@@ -214,7 +214,6 @@ const saveCliGridSession = (testInfo) => {
 const openCollinearGrid = async (page, sessionPath) => {
   await installProteinExecutor(page);
   await openApp(page);
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(
     ({ row, canonicalRow, canonicalColumn }) => [row, canonicalRow, canonicalColumn]
@@ -303,7 +302,6 @@ test('The Web reuses every raw LOSATP search of a CLI Session over a multi-recor
   const sessionPath = saveCliMultiRecordSession(testInfo);
   await installProteinExecutor(page);
   await openApp(page);
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 60000 })
     .toBe(3);

@@ -254,12 +254,12 @@ test('@pr-smoke live and downloaded standalone search retain JavaScript regex an
   const query=page.getByRole('searchbox',{name:'Search features',exact:true});
   await page.getByRole('combobox',{name:'Search field',exact:true}).selectOption('qualifier-value');
   await page.getByRole('textbox',{name:'Qualifier key',exact:true}).fill('product');
-  const regex=page.getByRole('checkbox',{name:'Regex (JavaScript, i)',exact:true});
+  const regex=page.getByRole('checkbox',{name:'Regular expression',exact:true});
   await regex.check(); await query.fill('(?<enzyme>nadh)'); await query.press('Enter');
   const targets=await page.evaluate(()=>[...window.__GBDRAW_APP__.previewFeatureSearchMatches].sort());
   expect(targets).toHaveLength(7);
   await query.fill('(?P<enzyme>NADH)'); await query.press('Enter');
-  await expect(page.getByRole('status',{name:'Feature search status'})).toContainText('Invalid JavaScript regular expression. Turn off Regex to return to word search.');
+  await expect(page.getByRole('status',{name:'Feature search status'})).toContainText('Invalid JavaScript regular expression. Turn off Regular expression to return to word search.');
   await regex.uncheck(); await query.fill('NADH'); await query.press('Enter');
   await expect.poll(()=>page.evaluate(()=>[...window.__GBDRAW_APP__.previewFeatureSearchMatches].sort())).toEqual(targets);
   await page.evaluate(()=>{window.__GBDRAW_APP__.richFeaturePopup=true;});
@@ -269,8 +269,8 @@ test('@pr-smoke live and downloaded standalone search retain JavaScript regex an
   const stream=await download.createReadStream();const chunks=[];
   for await(const chunk of stream)chunks.push(chunk);
   const source=Buffer.concat(chunks).toString('utf8');
-  expect(source).toContain('Regex (JavaScript, i)');
-  expect(source).toContain('Invalid JavaScript regular expression. Turn off Regex to return to word search.');
+  expect(source).toContain("document.createTextNode('Regular expression')");
+  expect(source).toContain('Invalid JavaScript regular expression. Turn off Regular expression to return to word search.');
   const svgPath=info.outputPath('downloaded.interactive.svg');
   await download.saveAs(svgPath);
   await page.goto(pathToFileURL(svgPath).href);
@@ -278,13 +278,13 @@ test('@pr-smoke live and downloaded standalone search retain JavaScript regex an
   const standaloneQuery=page.getByRole('searchbox',{name:'Search features',exact:true});
   await page.getByRole('combobox',{name:'Search field',exact:true}).selectOption('qualifier-value');
   await page.getByRole('textbox',{name:'Qualifier key for qualifier value search',exact:true}).fill('product');
-  const standaloneRegex=page.getByRole('checkbox',{name:'Regex (JavaScript, i)',exact:true});
+  const standaloneRegex=page.getByRole('checkbox',{name:'Regular expression',exact:true});
   await standaloneRegex.check();await standaloneQuery.fill('(?<enzyme>nadh)');await page.locator('[data-search-apply]').click();
   const selected=()=>page.locator('.gbdraw-interactive-feature--match[data-gbdraw-feature-id]').evaluateAll(elements=>[...new Set(elements.map(e=>e.getAttribute('data-gbdraw-feature-id')))].sort());
   await expect(page.locator('[data-search-count]')).toContainText('/ 7 features');
   await expect.poll(selected).toEqual(targets);
   await standaloneQuery.fill('(?P<enzyme>NADH)');await page.locator('[data-search-apply]').click();
-  await expect(page.locator('[data-search-count]')).toContainText('Invalid JavaScript regular expression');
+  await expect(page.locator('[data-search-count]')).toContainText('Invalid JavaScript regular expression. Turn off Regular expression to return to word search.');
   await standaloneRegex.uncheck();await standaloneQuery.fill('NADH');await page.locator('[data-search-apply]').click();
   await expect.poll(selected).toEqual(targets);
   await page.screenshot({path:info.outputPath('standalone-search.png')});
@@ -322,7 +322,8 @@ test('Label TSV retry retains its real reselect input and accepted History', asy
   await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   await page.evaluate(()=>window.__GBDRAW_APP__.openRightDrawerTab('features'));
   const before=await page.evaluate(()=>({svg:window.__GBDRAW_APP__.svgContent,history:window.__GBDRAW_HISTORY__.getUndoCount()}));
-  // The Features list has two TSV file inputs (Label TSV, feature edits TSV); its button opens this one.
+  // The Features list has two TSV file inputs (Label TSV, feature edits TSV); its menu item opens this one.
+  await page.locator('.right-drawer details.action-menu',{hasText:'Import / export'}).locator('summary').click();
   const picker=page.waitForEvent('filechooser');
   await page.getByRole('button',{name:'Load Label TSV',exact:true}).click();
   await (await picker).setFiles({name:'PRIVATE_LABEL_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('*\tCDS\tproduct\t(?<enzyme>NADH)\tPRIVATE_LABEL_SENTINEL\n')});

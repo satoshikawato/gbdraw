@@ -578,11 +578,11 @@ journey('J5', 'Feature editing and Reset', 20, async ({ page, steps }) => {
     return generate(page);
   }, { limitMs: 360_000 });
   const COLORS = ['#2a9d8f', '#e63946', '#7b2cbf', '#f4a261', '#264653'];
-  // The scope choice a Color Change Scope button names; "Apply to all "X" (n)"
-  // is the rule or the Legend row the dialog offers.
+  // The scope choice a Color Change Scope button names; `Color rule "X" (n)` and
+  // `Legend item "X" (n)` are the rule or the Legend row the dialog offers.
   const scopeKind = (text) => [
-    [/^This feature only/, 'single'], [/^Apply to all label /, 'displayLabel'],
-    [/^Apply to all source label /, 'annotationLabel'], [/^Use existing /, 'useExisting'], [/^Apply to all "/, 'group']
+    [/^This feature only/, 'single'], [/^Label "/, 'displayLabel'],
+    [/^Source label "/, 'annotationLabel'], [/^Use the ".*" Legend color/, 'useExisting'], [/^(?:Color rule|Legend item) "/, 'group']
   ].find(([pattern]) => pattern.test(text))?.[1] || text;
   // Each fill takes a scope choice no earlier fill took, until the dialog offers
   // no untaken choice. The choices a later dialog may stop offering go first.
@@ -634,8 +634,9 @@ journey('J5', 'Feature editing and Reset', 20, async ({ page, steps }) => {
   }, { limitMs: 300_000 });
   await steps.step('Reset Settings (confirm)', async () => {
     await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+    await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
     await settleLive(page);
-    return { dialogs: steps.record.dialogs.slice(-1) };
+    return { prompt: 'Reset all settings?' };
   });
   // PD-OI-066: right after Reset Settings, the shown Result and the Legend list
   // equal what the next Generate draws from the reset draft (OV-287, OV-289, OV-290).

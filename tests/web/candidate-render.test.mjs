@@ -534,7 +534,7 @@ test('a live Legend fill and stroke of a renamed row address Python\'s key only'
     originalLegendOrder: ['CDS', 'tRNA'],
     legendColorOverrides: { Proteins: '#ff0000' },
     legendStrokeOverrides: { Proteins: { strokeColor: '#00ff00' } },
-    livePreview: { domains: ['legendFills', 'featureStrokes', 'legendStrokes'], paletteColors: { tRNA: '#0000ff' } }
+    livePreview: { drawnTracks: [], domains: ['legendFills', 'featureStrokes', 'legendStrokes'], paletteColors: { tRNA: '#0000ff' } }
   }).operationsByResult[0];
   assert.deepEqual(operations.legendFills.map(({ caption, color }) => [caption, color]), [['CDS', '#ff0000'], ['tRNA', '#0000ff']]);
   assert.deepEqual(operations.legendStrokes.map(({ caption }) => caption), ['CDS']);
@@ -558,7 +558,7 @@ test('a rule commit\'s Legend rows show once on the displayed Result and never a
   const ruleRows = { add: [{ caption: 'Rule', color: '#123456', before: 'Old' }], retire: ['Old'] };
   const live = compileDirectEditorMutationPlan({
     ...intent,
-    livePreview: { domains: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'], ruleRows }
+    livePreview: { domains: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'], ruleRows, drawnTracks: [] }
   }).operationsByResult[0];
   assert.deepEqual(live.legendAdds, [{ caption: 'Rule', color: '#123456', xPos: null, yPos: null, ifAbsent: true, before: 'Old' }]);
   assert.deepEqual(live.legendDeletes, [{ caption: 'Old', allowMissing: true, retire: true }]);

@@ -5,7 +5,7 @@ const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerChoicePrompt, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 // Three single-record GenBank files: Circular binds them as one composite File.
 const seed = 'tests/fixtures/sessions/composite-circular-three-files.v44-schema8.gbdraw-session.json.gz';
@@ -99,7 +99,8 @@ const generate = async page => {
   }), { timeout: generateTimeout }).toEqual({ key: key + 1, processing: false, error: null });
 };
 
-const save = async (page, testInfo, label) => {
+// `again`: the page already downloaded this Session file name, so the Save asks first.
+const save = async (page, testInfo, label, { again = false } = {}) => {
   let download = null;
   const onDownload = value => { download = value; };
   page.on('download', onDownload);
@@ -107,6 +108,7 @@ const save = async (page, testInfo, label) => {
     await page.evaluate(() => { window.__COMPOSITE_METRICS__ = []; });
     const started = performance.now();
     await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+    if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
     await expect.poll(async () => download ? 'download' : await page.evaluate(() =>
       window.__GBDRAW_APP__.errorLog || 'pending'), { timeout: loadTimeout }).not.toBe('pending');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
@@ -167,7 +169,7 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       expect(generated.records).toHaveLength(recordCount);
       expect(generated.results).toHaveLength(1);
       expect(generated.components).toEqual(original.components);
-      const { saved, session, metrics } = await save(page, testInfo, 'generated');
+      const { saved, session, metrics } = await save(page, testInfo, 'generated', { again: journey === 'minimal' });
       expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([CURRENT_SESSION_VERSION, 2, CURRENT_REQUEST_SCHEMA]);
       const composite = session.webFiles.bindings.c_gb;
       expect(composite.kind).toBe('composite');
@@ -218,7 +220,7 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
           name: 'replacement.gb', mimeType: 'text/plain',
           buffer: Buffer.from(seedSession.resources[seedIds[0]].data, 'base64')
         });
-        const replaced = await save(restored.page, testInfo, 'replaced');
+        const replaced = await save(restored.page, testInfo, 'replaced', { again: true });
         expect(replaced.session.webFiles.bindings.c_gb.kind).toBeUndefined();
         expect(replaced.session.webFiles.bindings.c_gb.components).toBeUndefined();
         expect(resourceIdentity(replaced.session.resources[replaced.session.webFiles.bindings.c_gb.resourceId]))

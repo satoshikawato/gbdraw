@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
@@ -310,11 +310,8 @@ test('Arrow controls render in both modes and survive a session round trip', asy
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(
     () => (
       window.__GBDRAW_APP__?.mode === 'linear'
@@ -344,17 +341,11 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   expect(await arrowSettings()).toEqual({ shape: 'arrow', head: 1.25, shaft: 0.25 });
 
   expect(await page.evaluate(() => {
-    const originalConfirm = window.confirm;
-    window.confirm = () => true;
-    try {
-      window.__GBDRAW_APP__.resetSettings();
-      return {
-        shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,
-        head: window.__GBDRAW_APP__.adv.arrow_head_length_ratio,
-        shaft: window.__GBDRAW_APP__.adv.arrow_shaft_width_ratio
-      };
-    } finally {
-      window.confirm = originalConfirm;
-    }
+    window.__GBDRAW_APP__.resetSettings();
+    return {
+      shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,
+      head: window.__GBDRAW_APP__.adv.arrow_head_length_ratio,
+      shaft: window.__GBDRAW_APP__.adv.arrow_shaft_width_ratio
+    };
   })).toEqual({ shape: 'arrow', head: null, shaft: 1.0 });
 });

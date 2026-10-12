@@ -5,7 +5,7 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -82,11 +82,8 @@ const definitionLines = (page) => page.evaluate(() => {
 });
 
 const loadDefinitionSession = async (page, path) => {
-  const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  const dialog = await loaded;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
 };
 
 test('Linear automatic replicon names follow Generate and preserve saved subtitles', async ({ page }, testInfo) => {
@@ -374,8 +371,8 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await lock.focus();
   await expect(tooltip).toHaveCount(0);
   await lock.uncheck();
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await expect(lock).toBeChecked();
   await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
     name: 'definition-draft.gb', mimeType: 'text/plain',
@@ -438,8 +435,8 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   }
   const beforeReset = await measureDefinitionColumns(page);
   await lock.uncheck();
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await expect(lock).toBeChecked();
   expect(await measureDefinitionColumns(page)).toEqual(beforeReset);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1529,11 +1526,8 @@ test('Automatic Linear renders every record from one GenBank source and survives
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(0);
 
   await page.evaluate(() => {
@@ -1713,11 +1707,8 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
   const chooserPromise = restoredPage.waitForEvent('filechooser');
   await restoredPage.getByRole('button', { name: 'Load Session' }).click();
   const chooser = await chooserPromise;
-  const dialogPromise = restoredPage.waitForEvent('dialog', { timeout: 120000 });
   await chooser.setFiles(sessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(restoredPage);
 
   await expect(restoredPage.locator('[data-linear-record-card]')).toHaveCount(4);
   await restoredPage.getByRole('button', {
@@ -2061,11 +2052,8 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   const sessionPath = await (await sessionDownloadPromise).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.losatCacheInfo?.length === 1);
   const restored = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -3349,11 +3337,8 @@ test('@comparison-contract File source order moves multi-record blocks through p
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
-  const loadDialog = await loaded;
-  expect(loadDialog.message()).toBe('Session loaded successfully!');
-  await loadDialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
   await expect(page.locator('[data-linear-source-card]').nth(0)).toContainText('lower.gbff');
@@ -3620,7 +3605,6 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows
     .map((entry) => entry.row))).toEqual([1, 1, 2, 2, 3]);
@@ -3759,9 +3743,8 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
-  await (await loaded).accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
@@ -3769,7 +3752,6 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
       linear: state.drawings.linear.linearRecordLayoutEnabled.value
     };
   })).toEqual({ circular: false, linear: false });
-  page.once('dialog', (dialog) => dialog.accept());
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -3884,7 +3866,6 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
     const path = await (await saved).path();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppShell(page);
-    page.once('dialog', (dialog) => dialog.accept());
     await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
     await expect(settings).toHaveAttribute('open', '');
     for (const [index, name] of labels.entries()) {
@@ -3893,7 +3874,6 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
     await expect(member).toHaveValue('');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.blastp.orthogroupMemberMaxHits)).toBeNull();
   }
-  page.once('dialog', (dialog) => dialog.accept());
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
   expect(await page.evaluate(() => window.__GBDRAW_APP__.losatExecution.executionMode)).toBe('threaded');
 });
@@ -3950,7 +3930,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   const popupStart = await page.evaluate(() => (
     window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
   ));
-  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await actions.getByRole('button', { name: 'Apply now' }).click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, {
     timeout: 240000
   });
@@ -4007,9 +3987,8 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   const path = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  await (await loaded).accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   const restored = await run();
   expect(restored.result, JSON.stringify(restored.error)).toEqual({ status: 'ok' });
   expect(restored.jobCount).toBe(0);
@@ -4106,7 +4085,6 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   const savedPath = await saved.path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  page.once('dialog', dialog => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await expect(total).toHaveValue('4');
   await expect(runs).toHaveValue('2');
@@ -4318,4 +4296,28 @@ FEATURES             Location/Qualifiers
   // A blank record Definition previews what Generate draws: the inferred value.
   await expect(page.getByLabel('Definition for sequence 1'))
     .toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
+});
+
+// OV-499: the open disclosure stayed in the column beside Save Raw LOSAT TSV,
+// about 75 px of a 320 px sidebar, so its label wrapped one word per line.
+test('an open pair File name disclosure takes the whole row under Save Raw LOSAT TSV', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const bytes = [...readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json')];
+  await evaluateWithRetainedPromise(page, async (sessionBytes) => {
+    const file = new File([new Uint8Array(sessionBytes)], 'BGC0000708-BGC0000713.gbdraw-session.json');
+    await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
+  }, bytes);
+  const rawResult = page.locator('[data-linear-raw-result]').first();
+  await rawResult.evaluate((element) => {
+    for (let owner = element.closest('details'); owner; owner = owner.parentElement?.closest('details')) owner.open = true;
+  });
+  await expect(rawResult.getByRole('button', { name: /^Save Raw LOSAT TSV/ })).toBeVisible();
+  await openRawFilename(rawResult);
+  const widths = await rawResult.evaluate((element) => ({
+    row: element.clientWidth,
+    field: element.querySelector('details input[type="text"]').getBoundingClientRect().width
+  }));
+  expect(widths.field).toBeGreaterThan(widths.row - 8);
 });

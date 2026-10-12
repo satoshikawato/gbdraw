@@ -1,9 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-import { normalizeOptionalText } from '../services/track-slot-display.js';
+import { normalizeOptionalText, sizeClassForRecordLengths } from '../services/track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from '../services/current-option-values.js';
-
-const LENGTH_THRESHOLD_BP = 50000;
 
 const DEFAULTS = Object.freeze({
   circular: {
@@ -155,32 +153,37 @@ const circularRecordLengths = (state) => {
     .filter((value) => Number.isFinite(value) && value > 0);
 };
 
-/** @param {number[]} lengths */
-const lengthParamFor = (lengths) => {
-  if (lengths.length === 0) return null;
-  return Math.max(...lengths) < LENGTH_THRESHOLD_BP ? 'short' : 'long';
-};
-
-/** @param {RecordLengthState} state */
-const activeCircularLengthParam = (state) => lengthParamFor(circularRecordLengths(state));
+/** @param {RecordLengthState} state @param {DrawingState} drawing */
+const activeCircularLengthParam = (state, drawing) => (
+  sizeClassForRecordLengths('circular', circularRecordLengths(state), drawing)
+);
 
 // Linear record lengths come from the app's record reader, registered by
 // `createAutoValueDisplay`; an empty list means they are not known yet.
 /** @type {WeakMap<object, () => number[]>} */
 const linearLengthSources = new WeakMap();
 
+/** @param {RecordLengthState} state */
+const shownMode = (state) => (
+  String(state?.mode?.value || state?.mode || 'circular') === 'circular' ? 'circular' : 'linear'
+);
+
 /**
  * The record lengths of the shown mode's next Generate, or [] while unknown.
  * @param {RecordLengthState} state
  */
-const knownRecordLengths = (state) => {
-  const mode = String(state?.mode?.value || state?.mode || 'circular');
-  if (mode === 'circular') return circularRecordLengths(state);
-  return linearLengthSources.get(state)?.() || [];
-};
+const knownRecordLengths = (state) => (
+  shownMode(state) === 'circular' ? circularRecordLengths(state) : linearLengthSources.get(state)?.() || []
+);
 
-/** @param {RecordLengthState} state */
-const activeLengthParam = (state) => lengthParamFor(knownRecordLengths(state));
+/**
+ * The size class of the shown mode's next Generate, or null while unknown.
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing the drawing of the shown mode
+ */
+const activeLengthParam = (state, drawing) => (
+  sizeClassForRecordLengths(shownMode(state), knownRecordLengths(state), drawing)
+);
 
 const maxKnownRecordLength = (state) => {
   const lengths = knownRecordLengths(state);
@@ -231,8 +234,9 @@ const circularWidthForRenderer = (renderer, lengthParam) => {
 
 const previewSpacingPx = () => Math.max(1.0, 0.01 * DEFAULTS.circular.radiusPx);
 
-const circularLengthValues = (state, resolver) => {
-  const active = activeCircularLengthParam(state);
+/** @param {DrawingState} drawing */
+const circularLengthValues = (state, drawing, resolver) => {
+  const active = activeCircularLengthParam(state, drawing);
   if (active) return resolver(active);
   return {
     short: resolver('short'),
@@ -240,8 +244,9 @@ const circularLengthValues = (state, resolver) => {
   };
 };
 
-const circularWidthText = (state, renderer) => {
-  const value = circularLengthValues(state, (lengthParam) => circularWidthForRenderer(renderer, lengthParam));
+/** @param {DrawingState} drawing */
+const circularWidthText = (state, drawing, renderer) => {
+  const value = circularLengthValues(state, drawing, (lengthParam) => circularWidthForRenderer(renderer, lengthParam));
   return typeof value === 'number'
     ? withAuto(formatPx(value))
     : formatShortLong(value, formatPx, null);
@@ -287,7 +292,7 @@ const circularRadiusForRenderer = (drawing, renderer, lengthParam) => {
 
 /** @param {DrawingState} drawing */
 const circularRadiusText = (state, drawing, renderer) => {
-  const value = circularLengthValues(state, (lengthParam) => circularRadiusForRenderer(drawing, renderer, lengthParam));
+  const value = circularLengthValues(state, drawing, (lengthParam) => circularRadiusForRenderer(drawing, renderer, lengthParam));
   return typeof value === 'number'
     ? withAuto(formatFactor(value))
     : formatShortLong(value, formatFactor, null);
@@ -306,7 +311,7 @@ const depthTickFontSize = (state, drawing, trackConfig = null) => {
     return Math.max(5, Math.min(8, trackHeight * 0.7));
   }
   const trackWidth = parsePositiveNumber(drawing?.adv?.depth_width_circular)
-    ?? circularWidthForRenderer('depth', activeCircularLengthParam(state) || 'long');
+    ?? circularWidthForRenderer('depth', activeCircularLengthParam(state, drawing) || 'long');
   return Math.max(5, Math.min(8, trackWidth * 0.22));
 };
 
@@ -318,11 +323,12 @@ const gcTickFontSize = (state, drawing) => {
     return Math.max(5, Math.min(8, trackHeight * 0.7));
   }
   const trackWidth = parsePositiveNumber(drawing?.adv?.gc_content_width_circular)
-    ?? circularWidthForRenderer('dinucleotide_content', activeCircularLengthParam(state) || 'long');
+    ?? circularWidthForRenderer('dinucleotide_content', activeCircularLengthParam(state, drawing) || 'long');
   return Math.max(5, Math.min(8, trackWidth * 0.22));
 };
 
-const lengthDependentPx = (state, values) => formatShortLong(values, formatPx, activeLengthParam(state));
+/** @param {DrawingState} drawing */
+const lengthDependentPx = (state, drawing, values) => formatShortLong(values, formatPx, activeLengthParam(state, drawing));
 
 /** @param {DrawingState} drawing */
 const dinucleotideWindowText = (state, drawing, field) => {
@@ -370,7 +376,7 @@ const linearAxisGapText = (state, drawing) => {
       long: DEFAULTS.linear.defaultCdsHeightPx.long * multiplier
     },
     formatPx,
-    activeLengthParam(state)
+    activeLengthParam(state, drawing)
   );
 };
 
@@ -408,30 +414,30 @@ const autoTextByKey = (state, drawing, key, context = null) => {
     case 'depthStep': return depthWindowText(state, drawing, 'step');
     case 'depthMin': return '0 (auto)';
     case 'depthMax': return 'from depth data (auto)';
-    case 'circularDepthWidth': return circularWidthText(state, 'depth');
+    case 'circularDepthWidth': return circularWidthText(state, drawing, 'depth');
     case 'linearDepthHeight': return withAuto(formatPx(DEFAULTS.linear.depthHeightPx));
     case 'linearDepthTrackHeight': return withAuto(formatPx(parsePositiveNumber(drawing?.adv?.depth_height) ?? DEFAULTS.linear.depthHeightPx));
     case 'depthLargeTick': return 'endpoints only';
     case 'depthTickFont': return withAuto(formatPx(depthTickFontSize(state, drawing, context)));
     case 'conservationReference': return drawing?.circularConservation?.source === 'losat' ? 'subject (auto)' : 'detect side (auto)';
-    case 'conservationRingWidth': return circularWidthText(state, 'sequence_conservation');
+    case 'conservationRingWidth': return circularWidthText(state, drawing, 'sequence_conservation');
     case 'conservationRingGap': return withAuto(formatPx(previewSpacingPx()));
     case 'plotTitle': return plotTitleText(state, drawing);
     case 'definitionFontSize':
       return String(state?.mode?.value || state?.mode || 'circular') === 'circular'
         ? withAuto(formatPx(DEFAULTS.circular.definitionFontSizePx))
-        : lengthDependentPx(state, DEFAULTS.linear.definitionFontSizePx);
-    case 'legendBoxSize': return lengthDependentPx(state, DEFAULTS.legend.boxSizePx);
-    case 'legendFontSize': return lengthDependentPx(state, DEFAULTS.legend.fontSizePx);
-    case 'linearFeatureHeight': return lengthDependentPx(state, DEFAULTS.linear.defaultCdsHeightPx);
+        : lengthDependentPx(state, drawing, DEFAULTS.linear.definitionFontSizePx);
+    case 'legendBoxSize': return lengthDependentPx(state, drawing, DEFAULTS.legend.boxSizePx);
+    case 'legendFontSize': return lengthDependentPx(state, drawing, DEFAULTS.legend.fontSizePx);
+    case 'linearFeatureHeight': return lengthDependentPx(state, drawing, DEFAULTS.linear.defaultCdsHeightPx);
     case 'linearAxisGap': return linearAxisGapText(state, drawing);
-    case 'circularFeatureWidth': return circularWidthText(state, 'features');
-    case 'blockStrokeWidth': return lengthDependentPx(state, DEFAULTS.feature.blockStrokeWidthPx);
-    case 'lineStrokeWidth': return lengthDependentPx(state, DEFAULTS.feature.lineStrokeWidthPx);
+    case 'circularFeatureWidth': return circularWidthText(state, drawing, 'features');
+    case 'blockStrokeWidth': return lengthDependentPx(state, drawing, DEFAULTS.feature.blockStrokeWidthPx);
+    case 'lineStrokeWidth': return lengthDependentPx(state, drawing, DEFAULTS.feature.lineStrokeWidthPx);
     case 'labelFontSize':
       return String(state?.mode?.value || state?.mode || 'circular') === 'circular'
-        ? lengthDependentPx(state, DEFAULTS.circular.labelFontSizePx)
-        : lengthDependentPx(state, DEFAULTS.linear.labelFontSizePx);
+        ? lengthDependentPx(state, drawing, DEFAULTS.circular.labelFontSizePx)
+        : lengthDependentPx(state, drawing, DEFAULTS.linear.labelFontSizePx);
     case 'labelRendering': return 'per label';
     case 'linearLabelPlacement': return linearLabelPlacementText(drawing);
     case 'circularLabelSpacing': return withAuto(formatPx(DEFAULTS.labels.spacingPx));
@@ -439,20 +445,20 @@ const autoTextByKey = (state, drawing, key, context = null) => {
     case 'labelRadiusOffset': return withAuto(roundDisplayNumber(DEFAULTS.labels.radiusOffset, 1));
     case 'axisStrokeWidth':
       return String(state?.mode?.value || state?.mode || 'circular') === 'circular'
-        ? lengthDependentPx(state, DEFAULTS.circular.axisStrokeWidthPx)
-        : lengthDependentPx(state, DEFAULTS.linear.axisStrokeWidthPx);
+        ? lengthDependentPx(state, drawing, DEFAULTS.circular.axisStrokeWidthPx)
+        : lengthDependentPx(state, drawing, DEFAULTS.linear.axisStrokeWidthPx);
     case 'scaleStrokeWidth': return withAuto(formatPx(DEFAULTS.scale.strokeWidthPx));
-    case 'scaleFontSize': return lengthDependentPx(state, DEFAULTS.linear.scaleFontSizePx);
-    case 'rulerLabelFontSize': return lengthDependentPx(state, DEFAULTS.linear.rulerLabelFontSizePx);
+    case 'scaleFontSize': return lengthDependentPx(state, drawing, DEFAULTS.linear.scaleFontSizePx);
+    case 'rulerLabelFontSize': return lengthDependentPx(state, drawing, DEFAULTS.linear.rulerLabelFontSizePx);
     case 'scaleInterval': return scaleIntervalText(state);
     case 'tickLabelFontSize': return withAuto(formatPx(DEFAULTS.circular.tickLabelFontSizePx));
     case 'dinucleotideWindow': return dinucleotideWindowText(state, drawing, 'window');
     case 'dinucleotideStep': return dinucleotideWindowText(state, drawing, 'step');
     case 'gcTickFont': return withAuto(formatPx(gcTickFontSize(state, drawing)));
     case 'linearGcHeight': return withAuto(formatPx(DEFAULTS.linear.defaultGcHeightPx));
-    case 'circularGcWidth': return circularWidthText(state, 'dinucleotide_content');
+    case 'circularGcWidth': return circularWidthText(state, drawing, 'dinucleotide_content');
     case 'circularGcRadius': return circularRadiusText(state, drawing, 'dinucleotide_content');
-    case 'circularSkewWidth': return circularWidthText(state, 'dinucleotide_skew');
+    case 'circularSkewWidth': return circularWidthText(state, drawing, 'dinucleotide_skew');
     case 'circularSkewRadius': return circularRadiusText(state, drawing, 'dinucleotide_skew');
     case 'pairwiseMatchHeight': return withAuto(formatPx(DEFAULTS.linear.comparisonHeightPx));
     default: return '';

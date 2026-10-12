@@ -156,11 +156,11 @@ import {
 } from './gallery-session-migration.js';
 import {
   compressSessionData,
-  confirmLargeSessionBlob
+  largeSessionDownloadMegabytes
 } from './session-file.js';
 import { importSessionFile } from './session-import-client.js';
 import { convertMainSessionComparisonFrames } from './main-session-comparison-frame.js';
-import { downloadBlob } from './text-download.js';
+import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance } from './specific-color-rules.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
@@ -290,9 +290,11 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
+/** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
 /** @import { DrawingState } from '../state.js' */
+/** @import { DownloadChoicePort } from './text-download.js' */
 
 /**
  * The editor state of a Session's committed Result: the Legend's original
@@ -1015,6 +1017,13 @@ const setCommittedCanonicalSession = (next) => {
   committedCanonicalSession = next;
   committedCanonicalRevision.value += 1;
 };
+// OV-484: the track settings a Session without a request (a Session 27 to 30)
+// was saved with, which stand in for the request that drew its Result (they are
+// the saved draft). Load is the one writer, and only a Load replaces or
+// clears the record; it is read while the Result's mode has no committed
+// request, so Generate, a History step and a mode switch leave it as it is.
+/** @type {LoadedTrackSettings | null} */
+let loadedTrackSettings = null;
 /** @type {ReturnType<typeof adoptCurrentSessionResources> | null} */
 let activeSessionResourceTable = null;
 /** @type {Record<string, any> | null} */
@@ -3662,6 +3671,12 @@ export const getCommittedCanonicalRenderRequest = () => {
 
 export const getCommittedCanonicalSession = () => committedCanonicalSession;
 
+// The recorded track settings of the shown mode's loaded Result; the other mode has none.
+export const getLoadedTrackSettings = () => {
+  void committedCanonicalRevision.value;
+  return loadedTrackSettings?.mode === state.mode.value ? loadedTrackSettings : null;
+};
+
 // The Linear Accession and Length visibility the shown Result was drawn with.
 export const getCommittedLinearDefinitionVisibility = () => (
   linearDefinitionVisibilityOf(getCommittedCanonicalRenderRequest())
@@ -4164,6 +4179,7 @@ const captureSessionImportSnapshot = () => ({
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession),
   activeSessionResourceTable,
+  loadedTrackSettings,
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value,
   transients: captureSessionImportTransientState()
@@ -4196,6 +4212,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
     state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
     state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
+    loadedTrackSettings = snapshot.loadedTrackSettings;
     setCommittedCanonicalSession(isAdoptedCanonicalSession(snapshot.committedCanonicalSession)
       ? snapshot.committedCanonicalSession
       : cloneCanonicalSession(snapshot.committedCanonicalSession));
@@ -4240,6 +4257,7 @@ const resetSessionBaseline = () => {
   activePreviewRuntime?.clearActiveRuntime?.();
   preservedCliOptions = null;
   setCommittedCanonicalSession(null);
+  loadedTrackSettings = null;
   activeSessionResourceTable = null;
   adoptedProteinIdentityManifest = null;
   state.sessionResourceDiscoveryDeferred.value = false;
@@ -4776,8 +4794,10 @@ const buildOtherModeResult = (other, renderRequest) => {
   };
 };
 
+// `askChoice`: the root's choice dialog; Save asks with it before a repeated or a large download.
 /**
  * @typedef {{
+ *   askChoice?: DownloadChoicePort,
  *   drawing: DrawingState,
  *   linearRecordCatalog?: any,
  *   omittedAnnotationRecordKeys?: string[],
@@ -4797,6 +4817,7 @@ const buildOtherModeResult = (other, renderRequest) => {
 const exportSessionDocument = async (
   titleOverride = null,
   {
+    askChoice = async () => 'cancel',
     drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, modes, savedUi,
     isCurrent, artifact, otherArtifact
   }
@@ -4809,8 +4830,12 @@ const exportSessionDocument = async (
         : '';
   const sessionFilename = buildSessionFilename(resolvedTitle);
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {
-    const proceed = confirm(`Download "${sessionFilename}" again? Your browser may overwrite or rename the file.`);
-    if (!proceed) {
+    const choice = await askChoice({
+      title: 'Download the Session again?',
+      description: `"${sessionFilename}" was already downloaded. Your browser may replace that file or save this one under a new name.`,
+      actions: [{ id: 'download', label: 'Download again', tone: 'primary' }]
+    });
+    if (choice !== 'download' || !isCurrent()) {
       recordSessionLifecycleEvent('session-save-download-canceled', {
         reason: 'repeat-download'
       });
@@ -4969,7 +4994,11 @@ const exportSessionDocument = async (
     compressedSize: compressed.size
   });
   if (!isCurrent()) return { status: 'canceled' };
-  if (!confirmLargeSessionBlob(compressed)) {
+  const largeMegabytes = largeSessionDownloadMegabytes(compressed);
+  if (largeMegabytes !== null && !await askBeforeLargeDownload(askChoice, {
+    title: 'Download a large Session?',
+    description: `The Session file is ${largeMegabytes.toFixed(1)} MB.`
+  })) {
     recordSessionLifecycleEvent('session-save-download-canceled', {
       reason: 'large-download',
       compressedSize: compressed.size
@@ -5014,7 +5043,6 @@ const importSessionDocument = async (e, options = {}) => {
     if (isLegacyConfigPayload(data)) {
       // A legacy configuration names no mode: it is the shown mode's settings.
       applyLegacyConfigPayload(state.drawings[state.mode.value === 'linear' ? 'linear' : 'circular'], data);
-      alert('Legacy configuration loaded. Save as a session to use the current format.');
       return { status: 'legacy' };
     }
 
@@ -5758,7 +5786,16 @@ const importSessionDocument = async (e, options = {}) => {
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
     if (!currentSchemaSession) {
-      setCommittedCanonicalSession(cloneCanonicalSession(data));
+      const committed = cloneCanonicalSession(data);
+      if (!committed && logicalImportedResults.length > 0) {
+        const { adv } = shownDrawing;
+        loadedTrackSettings = Object.freeze({
+          mode: displayMode,
+          dinucleotide: adv.nt,
+          slots: adv[`${displayMode}_track_slots_enabled`] ? cloneJsonData(adv[`${displayMode}_track_slots`]) : null
+        });
+      }
+      setCommittedCanonicalSession(committed);
       activeSessionResourceTable = null;
     }
     recordSessionLifecycleEvent('interactiveReady', {
@@ -5772,16 +5809,17 @@ const importSessionDocument = async (e, options = {}) => {
       isCurrent: options.isCurrent
     });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
-    alert(['Session loaded successfully!',
-      droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
-      narrowedFeatureVisibilityCount > 0 ? FEATURE_VISIBILITY_NARROWED_NOTICE(narrowedFeatureVisibilityCount) : '',
-      migratedAnnotationTargetCount > 0 ? ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount) : '',
-      unmappedHashSelectorCount > 0 ? HASH_SELECTOR_UNMAPPED_NOTICE(unmappedHashSelectorCount) : '',
-      legacyTableRowsNotice(canonicalProjection?.legacyTableRepairs),
-      legendColorDropNotice(droppedLegendColors)
-    ].filter(Boolean).join(' '));
     return {
       status: 'ok',
+      // What the load changed, for the caller's notice; one line each.
+      warnings: [
+        droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
+        narrowedFeatureVisibilityCount > 0 ? FEATURE_VISIBILITY_NARROWED_NOTICE(narrowedFeatureVisibilityCount) : '',
+        migratedAnnotationTargetCount > 0 ? ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount) : '',
+        unmappedHashSelectorCount > 0 ? HASH_SELECTOR_UNMAPPED_NOTICE(unmappedHashSelectorCount) : '',
+        legacyTableRowsNotice(canonicalProjection?.legacyTableRepairs),
+        legendColorDropNotice(droppedLegendColors)
+      ].filter(Boolean),
       data,
       decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),
@@ -5931,7 +5969,7 @@ export const exportSession = (titleOverride = null, options = {}) => {
     const result = await exportSessionDocument(title, {
       ...options, ...prepared, drawing, modes, savedUi, isCurrent, artifact, otherArtifact
     });
-    if (result?.status === 'saved') options.onSaved?.();
+    if (result?.status === 'saved') options.onSaved?.(result);
     return result;
   }).catch((error) => {
     recordSessionLifecycleEvent('session-save-error');

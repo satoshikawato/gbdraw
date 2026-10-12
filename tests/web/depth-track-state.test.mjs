@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -7,10 +7,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const sourceUrl = new URL('../../gbdraw/web/js/services/depth-track-state.js', import.meta.url);
 const displaySourceUrl = new URL('../../gbdraw/web/js/services/track-slot-display.js', import.meta.url);
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-depth-track-state-'));
-const tempModulePath = join(tempDir, 'depth-track-state.mjs');
+const tempModulePath = join(tempDir, 'services', 'depth-track-state.mjs');
+await mkdir(join(tempDir, 'services'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n');
 await writeFile(tempModulePath, await readFile(sourceUrl, 'utf8'));
-await writeFile(join(tempDir, 'track-slot-display.js'), await readFile(displaySourceUrl, 'utf8'));
+await writeFile(join(tempDir, 'services', 'track-slot-display.js'), await readFile(displaySourceUrl, 'utf8'));
+// track-slot-display.js reads the generated size-class boundaries.
+await writeFile(
+  join(tempDir, 'mode-profiles.generated.js'),
+  await readFile(new URL('../../gbdraw/web/js/mode-profiles.generated.js', import.meta.url), 'utf8')
+);
 
 const {
   activeDepthTrackIndices,

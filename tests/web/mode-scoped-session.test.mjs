@@ -212,8 +212,9 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(shownRows(state.drawings.circular), kept);
   assert.deepEqual(state.drawings.circular.deletedLegendEntries.value, []);
-  assert.match(alerts.at(-1),
-    / Legend: entries "X", "W" \(deleted\) had a color the app does not accept and were dropped\.$/);
+  assert.deepEqual(loaded.warnings,
+    ['Legend: entries "X", "W" (deleted) had a color the app does not accept and were dropped.']);
+  assert.deepEqual(alerts, []);
 
   const older = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/settings-only.v42.json.gz', import.meta.url))));
   // A caption whose first row has a bad color but a later row a valid one is shown, not named.
@@ -223,8 +224,9 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   const loadedOlder = await load(older);
   assert.equal(loadedOlder.status, 'ok', JSON.stringify(loadedOlder.error));
   assert.deepEqual(shownRows(state.activeDrawing()), kept);
-  assert.match(alerts.at(-1), / Legend: entry "X" had a color the app does not accept and was dropped\.$/);
-  assert.equal(alerts.at(-1).match(/Legend:/g).length, 1);
+  assert.deepEqual(loadedOlder.warnings,
+    ['Legend: entry "X" had a color the app does not accept and was dropped.']);
+  assert.deepEqual(alerts, []);
 });
 
 // OV-337: Load leaves a Linear row without a Depth file as the Session binds it

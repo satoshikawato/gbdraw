@@ -389,7 +389,8 @@ test('OV-143 K6: a row moved up in Linear takes its place in the row', async ({ 
   await generate(page);
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.moveLegendEntryUp(app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region'));
+    const index = app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region');
+    app.moveLegendEntry(index, index - 1);
   });
   await expectShownEqualsGenerate(page, 'K6');
 });

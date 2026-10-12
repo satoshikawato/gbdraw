@@ -1555,7 +1555,6 @@ def _draw_resolved_circular_slot(
     feature_layers: FeatureBuildResult,
     render_context: CircularRecordRenderContext,
     precalculated_labels: list[dict] | None = None,
-    _tick_track_channel_override: str | None = None,
     use_slot_group_id: bool = True,
     use_slot_tick_options: bool = True,
     use_feature_anchor_override: bool = True,
@@ -1700,8 +1699,6 @@ def _draw_resolved_circular_slot(
                         str(resolved_slot.params.get("preset", resolved_slot.params.get("track_preset", "tuckin")))
                     )
                 )
-            if _tick_track_channel_override is not None:
-                tick_group_kwargs["tick_track_channel_override"] = _tick_track_channel_override
             tick_group_kwargs["slot_id"] = str(resolved_slot.id)
             if use_slot_group_id:
                 tick_group_kwargs["group_id"] = track_slot_svg_id(
@@ -1977,7 +1974,6 @@ def add_record_on_circular_canvas(
     definition_profile: str = "full",
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
-    _tick_track_channel_override: str | None = None,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
     annotation_record_index: int = 0,
     definition_record_count: int = 1,
@@ -2062,7 +2058,6 @@ def add_record_on_circular_canvas(
                 show_gc=show_gc_track,
                 show_skew=show_skew_track,
                 dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
-                tick_track_channel_override=_tick_track_channel_override,
             ),
             axis_index=circular_track_axis_index,
         )
@@ -2083,7 +2078,6 @@ def add_record_on_circular_canvas(
                 show_gc=show_gc_track,
                 show_skew=show_skew_track,
                 dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
-                tick_track_channel_override=_tick_track_channel_override,
             ),
         )
         layout_slots = list(radial_plan.slots)
@@ -2181,7 +2175,6 @@ def add_record_on_circular_canvas(
                 slots=layout_slots,
                 feature_dict=layout_feature_dict,
                 definition_reserved_radius_px=reserved_radius_px,
-                tick_track_channel_override=_tick_track_channel_override,
                 preferred_anchor_slot_ids=preferred_anchor_slot_ids,
                 depth_config=depth_config if show_depth_track else None,
                 center_reserved_radius_explicit=center_reserved_radius is not None,
@@ -2375,7 +2368,6 @@ def add_record_on_circular_canvas(
                     slots=layout_slots,
                     feature_dict=layout_feature_dict,
                     definition_reserved_radius_px=definition_reserved_radius_px,
-                    tick_track_channel_override=_tick_track_channel_override,
                     preferred_anchor_slot_ids=preferred_anchor_slot_ids,
                     depth_config=depth_config if show_depth_track else None,
                     center_reserved_radius_explicit=center_reserved_radius is not None,
@@ -2571,7 +2563,6 @@ def add_record_on_circular_canvas(
             feature_layers=feature_layers,
             render_context=render_context,
             precalculated_labels=precalculated_labels,
-            _tick_track_channel_override=_tick_track_channel_override,
             use_slot_group_id=user_slot_mode,
             use_slot_tick_options=user_slot_mode,
             use_feature_anchor_override=user_slot_mode,
@@ -2895,7 +2886,6 @@ def _assemble_circular_diagram_result(
     definition_profile: str = "full",
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
-    _tick_track_channel_override: str | None = None,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
     annotation_record_index: int = 0,
     definition_record_count: int = 1,
@@ -3005,7 +2995,6 @@ def _assemble_circular_diagram_result(
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,
         center_reserved_radius=center_reserved_radius,
-        _tick_track_channel_override=_tick_track_channel_override,
         annotations=resolved_annotations,
         annotation_record_index=annotation_record_index,
         definition_record_count=definition_record_count,
@@ -3045,7 +3034,6 @@ def assemble_circular_diagram(
     definition_profile: str = "full",
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
-    _tick_track_channel_override: str | None = None,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
     annotation_record_index: int = 0,
     definition_record_count: int = 1,
@@ -3082,7 +3070,6 @@ def assemble_circular_diagram(
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,
         center_reserved_radius=center_reserved_radius,
-        _tick_track_channel_override=_tick_track_channel_override,
         annotations=annotations,
         annotation_record_index=annotation_record_index,
         definition_record_count=definition_record_count,

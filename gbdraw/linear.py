@@ -606,7 +606,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         default=None)
     parser.add_argument(
         '--axis_stroke_width',
-        help='Axis stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 2 pt for genomes >= 50 kb)',
+        help='Axis stroke width (optional; float; default: 5 pt for genomes < 100 kb, 2 pt for genomes >= 100 kb)',
         type=float)
     parser.add_argument(
         '--line_stroke_color',
@@ -614,11 +614,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         '--line_stroke_width',
-        help='Line stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 1 pt for genomes >= 50 kb)',
+        help='Line stroke width (optional; float; default: 5 pt for genomes < 100 kb, 1 pt for genomes >= 100 kb)',
         type=float)
     parser.add_argument(
         '--definition_font_size',
-        help='Definition font size (optional; float; default: 24 pt for genomes <= 50 kb, 10 pt for genomes >= 50 kb)',
+        help='Definition font size (optional; float; default: 24 pt for genomes < 100 kb, 10 pt for genomes >= 100 kb)',
         type=float)
     parser.add_argument(
         '--definition_line_style',
@@ -679,7 +679,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--label_font_size',
-        help='Label font size (optional; default: 24 pt for genomes <= 50 kb, 5 pt for genomes >= 50 kb)',
+        help='Label font size (optional; default: 24 pt for genomes < 100 kb, 5 pt for genomes >= 100 kb)',
         type=float)
     parser.add_argument(
         '--label_placement',
@@ -771,7 +771,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     add_label_args(parser)
     parser.add_argument(
         '--feature_height',
-        help='Feature vertical width (optional; float; default: 80 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb)',
+        help='Feature vertical width (optional; float; default: 80 (pixels, 96 dpi) for genomes < 100 kb, 20 for genomes >= 100 kb)',
         type=float),
     parser.add_argument(
         '--gc_height',
@@ -801,7 +801,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--scale_font_size',
-        help='Scale bar/ruler font size (optional; float; default: 24 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
+        help='Scale bar/ruler font size (optional; float; default: 24 (pt) for genomes < 100 kb, 16 for genomes >= 100 kb).',
         type=float)
     parser.add_argument(
         '--ruler_label_font_size',

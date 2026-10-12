@@ -229,8 +229,7 @@ test('Legend editor rows name their controls by the row caption', async ({ brows
     expect(captions).toHaveLength(2);
     const controls = [
       ['textbox', (caption) => `Legend entry ${caption} name`],
-      ['button', (caption) => `Move ${caption} up`],
-      ['button', (caption) => `Move ${caption} down`],
+      ['button', (caption) => `Reorder ${caption}`],
       ['button', (caption) => `Stroke options for ${caption}`],
       ['button', (caption) => `Remove ${caption}`]
     ];
@@ -256,6 +255,16 @@ test('Legend editor rows name their controls by the row caption', async ({ brows
     for (const caption of captions) {
       await expect(drawer.getByLabel(`Legend stroke color for ${caption}`, { exact: true })).toHaveCount(1);
     }
+    // The grip reorders by keyboard: Down arrow moves the row one place in one
+    // History step and keeps focus on its grip.
+    const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    const before = await undoCount();
+    await drawer.getByRole('button', { name: `Reorder ${captions[0]}`, exact: true }).focus();
+    await page.keyboard.press('ArrowDown');
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.slice(0, 2).map((entry) => entry.caption)))
+      .toEqual([captions[1], captions[0]]);
+    expect(await undoCount()).toBe(before + 1);
+    await expect(drawer.getByRole('button', { name: `Reorder ${captions[0]}`, exact: true })).toBeFocused();
   } finally { await page.context().close(); }
 });
 
@@ -482,7 +491,12 @@ const CHOICE_DIALOGS = [
   ['labelOnDialog', { reason: 'hidden', featureType: 'CDS' }, 'Feature Is Hidden'],
   ['featureStyleScopeDialog', { kind: 'fill' }, 'Color Change Scope'],
   ['legendRenameDialog', { mode: 'scope', oldCaption: 'CDS', newCaption: 'Coding', siblingCount: 1 }, 'Legend Name Scope'],
-  ['resetColorDialog', { siblingCount: 1, caption: 'CDS' }, 'Reset Fill Color']
+  ['resetColorDialog', { siblingCount: 1, caption: 'CDS' }, 'Reset Fill Color'],
+  // The app's prompt that replaced the native confirm() boxes.
+  ['choicePrompt', {
+    title: 'Add this color rule?', description: 'The pattern may be slow.',
+    actions: [{ id: 'add', label: 'Add rule', tone: 'primary' }], cancelLabel: 'Edit pattern'
+  }, 'Add this color rule?']
 ];
 
 // UI-02, UI-03, UI-04: each choice dialog is a named modal that takes focus,

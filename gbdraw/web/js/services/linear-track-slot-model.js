@@ -618,16 +618,18 @@ const canonicalLinearTrackSlotSource = (spec) => validateCanonicalLinearTrackSlo
     : parseStringLinearTrackSlot(spec)
 );
 
-export const parseLinearTrackSlotSpec = (spec) => {
-  const normalized = normalizeLinearTrackSlots([canonicalLinearTrackSlotSource(spec)]);
+// `nt`: the dinucleotide of a content or skew slot that names none: the
+// request's, as Python reads it (`slot_dinucleotide`; OV-490).
+export const parseLinearTrackSlotSpec = (spec, nt = 'GC') => {
+  const normalized = normalizeLinearTrackSlots([canonicalLinearTrackSlotSource(spec)], nt);
   return normalized[0] || null;
 };
 
-export const parseLinearTrackSlotSpecs = (specs) => {
+export const parseLinearTrackSlotSpecs = (specs, nt = 'GC') => {
   if (specs === null || specs === undefined) return [];
   if (!Array.isArray(specs)) throw new Error('Canonical linear track slots must be an array.');
   if (specs.length === 0) throw new Error('Canonical linear track slot list cannot be empty.');
-  const parsed = specs.map((spec) => parseLinearTrackSlotSpec(spec)).filter(Boolean);
+  const parsed = specs.map((spec) => parseLinearTrackSlotSpec(spec, nt)).filter(Boolean);
   const ids = new Set();
   parsed.forEach((slot) => {
     if (ids.has(slot.id)) throw new Error(`Duplicate canonical linear track slot id: ${slot.id}.`);

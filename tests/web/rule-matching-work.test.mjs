@@ -78,7 +78,7 @@ test('a whole-feature pass over K features and K hash rules does O(K) work', asy
       assert.equal(preparation.isPrepared(rules), true);
       fills = compileDirectEditorMutationPlan({
         catalogAdmission, manualSpecificRules: rules,
-        livePreview: { domains: ['featureFills'], paletteColors: { CDS: '#cccccc' }, drawnContext: null }
+        livePreview: { drawnTracks: [], domains: ['featureFills'], paletteColors: { CDS: '#cccccc' }, drawnContext: null }
       }).operationsByResult[0].featureFills;
     }));
     assert.deepEqual(fills.at(-1), { renderedId: hashOf(count - 1), color: '#111111' });
@@ -105,7 +105,7 @@ test('"All features with legend item" over K features with K hash rules does O(K
       skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false), hasPendingPaletteDraft: ref(false)
     });
     const caption = () => 'CDS';
-    const actions = createFeatureColorActions({
+    const actions = createFeatureColorActions({ readDrawnTracks: () => [],
       state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
       getFeatureElements: () => [], getFeatureFillElements: () => [],
       readUserDefaultColor: () => null, setDefaultColor: () => assert.fail('the row is drawn by rules'),

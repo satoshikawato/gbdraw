@@ -9,7 +9,7 @@ const {
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const fixtureDir = join(repoRoot, 'tests', 'fixtures', 'sessions');
@@ -38,11 +38,8 @@ const expandedSessionBytes = (path) => {
 const readSession = (path) => JSON.parse(expandedSessionBytes(path).toString('utf8'));
 
 const importSession = async (page, path) => {
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return app?.mode === 'linear' && app?.linearSeqs?.length === 5;
@@ -148,34 +145,25 @@ const assertHydratedUtf8PromptBoundary = async (page) => {
   const probe = await page.evaluate(async () => {
     const {
       LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES,
-      confirmHydratedLosatExport,
+      losatExportBytesExceedLimit,
       totalHydratedLosatExportBytes
     } = await import('/gbdraw/web/js/app/run-analysis.js');
     const hydrated = { text: '界界' };
     const utf8Bytes = totalHydratedLosatExportBytes([hydrated]);
-    let prompts = 0;
-    const accepted = confirmHydratedLosatExport(
-      utf8Bytes,
-      () => {
-        prompts += 1;
-        return true;
-      },
-      5
-    );
     return {
       threshold: LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES,
       codeUnits: hydrated.text.length,
       utf8Bytes,
-      prompts,
-      accepted
+      exceedsFiveBytes: losatExportBytesExceedLimit(utf8Bytes, 5),
+      exceedsExactLimit: losatExportBytesExceedLimit(utf8Bytes, utf8Bytes)
     };
   });
   expect(probe).toEqual({
     threshold: expected.downloads.hydratedPromptThresholdBytes,
     codeUnits: 2,
     utf8Bytes: 6,
-    prompts: 1,
-    accepted: true
+    exceedsFiveBytes: true,
+    exceedsExactLimit: false
   });
 };
 

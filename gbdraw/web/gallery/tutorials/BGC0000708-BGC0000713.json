@@ -845,7 +845,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const rect = document.querySelector(\"[data-gbdraw-feature-id='f94b7f30b_record_2']\")?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'edit'; if (app?.featurePopupSize) app.featurePopupSize.width = 500; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 524, rect.right + 16); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
+                "script": "const app = window.__GBDRAW_APP__; const rect = document.querySelector(\"[data-gbdraw-feature-id='f94b7f30b_record_2']\")?.getBoundingClientRect(); const popup = document.querySelector('.feature-popup'); if (!app?.clickedFeature || !popup || !rect) throw new Error('neoU feature popup is unavailable.'); app.clickedFeature.activeTab = 'edit'; popup.style.width = '500px'; if (app.clickedFeaturePos) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 524, rect.right + 16); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
               },
               {
                 "type": "wait",
@@ -853,12 +853,12 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const similarity = popup?.querySelector('[data-feature-popup-group=\"similarity\"]'); const actions = similarity?.querySelector(':scope > .grid.grid-cols-2'); if (!popup || !similarity || !actions) throw new Error('Compact Align popup controls not found.'); popup.querySelectorAll('[data-feature-popup-group=\"appearance\"], [data-feature-popup-group=\"layout\"]').forEach((section) => section.style.setProperty('display', 'none', 'important')); similarity.style.setProperty('border-top', '0'); similarity.style.setProperty('padding-top', '0'); popup.children[0]?.querySelector('.min-w-0')?.setAttribute('data-capture', 'align-popup-identity'); similarity.firstElementChild?.setAttribute('data-capture', 'align-popup-group-heading'); actions.setAttribute('data-capture', 'align-popup-actions'); document.activeElement?.blur();"
+                "script": "const popup = document.querySelector('.feature-popup'); const similarity = popup?.querySelector('[data-feature-popup-group=\"similarity\"]'); const actions = similarity?.querySelector(':scope > .grid.grid-cols-2'); if (!popup || !similarity || !actions) throw new Error('Compact Align popup controls not found.'); popup.querySelectorAll('[data-feature-popup-group=\"appearance\"], [data-feature-popup-group=\"layout\"]').forEach((section) => section.style.setProperty('display', 'none', 'important')); similarity.style.setProperty('border-top', '0'); similarity.style.setProperty('padding-top', '0'); popup.children[0]?.setAttribute('data-capture', 'align-popup-header'); similarity.firstElementChild?.setAttribute('data-capture', 'align-popup-group-heading'); actions.setAttribute('data-capture', 'align-popup-actions'); document.activeElement?.blur(); if (popup.getBoundingClientRect().right > window.innerWidth) throw new Error('The Align popup does not fit the window.');"
               }
             ],
             "clipSelectors": [
               "[data-gbdraw-feature-id='f94b7f30b_record_2']",
-              "[data-capture='align-popup-identity']",
+              "[data-capture='align-popup-header']",
               "[data-capture='align-popup-group-heading']",
               "[data-capture='align-popup-actions']"
             ],
@@ -1510,7 +1510,7 @@
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-09-02-preview-labels.webp",
             "alt": "Colored, aligned preview with rotated gene labels (livE to livZ) above the BGC0000708 row.",
-            "caption": "Gene names label the first row. The wide arrow shafts hide the heads of short genes."
+            "caption": "Gene names label the first row. The arrows are still full-width blocks on two strand lanes."
           },
           "capture": {
             "source": "webapp",
@@ -1553,13 +1553,17 @@
     },
     {
       "title": "Finish the figure",
-      "body": "Narrow the arrow shafts to 60% of the feature height (Shaft Width Ratio 0.6), so arrowheads stay visible on short genes and at thumbnail size. Turn off Separate Strands so each cluster reads as one row of arrows, and enlarge the features, strokes, and text for a figure that is read at a reduced size. Add the ruler scale and the plot title, and click Generate Diagram. Generate keeps the og_6 alignment and reuses the LOSAT results.",
+      "body": "Shape the arrows first: Shaft Width Ratio 0.6 narrows the shafts to 60% of the feature height so that the arrowheads stand out, and Head Length Ratio 0.64 shortens the heads so that more of the short genes keep a shaft. Turn off Separate Strands so each cluster reads as one row of arrows. The size rows fix the sizes of the published figure, which Auto would otherwise choose from the length of the longest cluster: Feature Height, the legend swatch, and the definition lines become slightly smaller than their Auto values, Label Font Size goes from 24 to 18, Line Stroke Width becomes thinner, and Block Stroke Width, Axis Stroke Width, the ruler label size, and the legend font size repeat their current Auto values. The two stroke colors darken the feature outlines and the axis. Add the ruler scale and the plot title, and click Generate Diagram. Generate keeps the og_6 alignment and reuses the LOSAT results.",
       "table": {
         "columns": [
           "Setting",
           "Value"
         ],
         "rows": [
+          [
+            "Features › Arrow Geometry › Head Length Ratio",
+            "0.64"
+          ],
           [
             "Features › Arrow Geometry › Shaft Width Ratio",
             "0.6"
@@ -1638,6 +1642,11 @@
         {
           "type": "evaluate",
           "script": "document.querySelectorAll('summary[aria-label=\"Features\"], summary[aria-label=\"Layout\"], summary[aria-label=\"Axis & Scale\"], summary[aria-label=\"Labels\"], summary[aria-label=\"Legend settings\"], summary[aria-label=\"Titles and Record Labels\"]').forEach((summary) => { summary.closest('details').open = true; });"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label=\"Arrow head length ratio\"]",
+          "value": 0.64
         },
         {
           "type": "fill",
@@ -1763,11 +1772,11 @@
       "operations": [
         {
           "dataDependent": true,
-          "title": "Arrow shaft width",
+          "title": "Arrow geometry",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-10-01-arrow-shaft-width.webp",
-            "alt": "Features card Arrow Geometry controls with Head Length Ratio left at Auto and Shaft Width Ratio set to 0.6.",
-            "caption": "Enter 0.6 in Arrow Geometry › Shaft Width Ratio; leave Head Length Ratio at Auto."
+            "alt": "Features card Arrow Geometry controls with Head Length Ratio set to 0.64 and Shaft Width Ratio set to 0.6.",
+            "caption": "Enter 0.64 in Arrow Geometry › Head Length Ratio and 0.6 in Shaft Width Ratio."
           },
           "capture": {
             "source": "webapp",
@@ -1786,10 +1795,11 @@
               }
             ],
             "selector": "[data-capture='bgc-arrow-geometry']",
-            "highlightSelector": "input[aria-label='Arrow shaft width ratio']",
+            "highlightSelector": "input[aria-label='Arrow head length ratio'], input[aria-label='Arrow shaft width ratio']",
             "cropPadding": 14,
             "assertAppState": {
               "mode": "linear",
+              "adv.arrow_head_length_ratio": 0.64,
               "adv.arrow_shaft_width_ratio": 0.6
             },
             "visibleText": [
@@ -1798,6 +1808,10 @@
               "Shaft Width Ratio"
             ],
             "visibleControls": [
+              {
+                "selector": "input[aria-label='Arrow head length ratio']",
+                "value": "0.64"
+              },
               {
                 "selector": "input[aria-label='Arrow shaft width ratio']",
                 "value": "0.6"
@@ -1937,6 +1951,7 @@
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 5,
+              "adv.arrow_head_length_ratio": 0.64,
               "adv.arrow_shaft_width_ratio": 0.6,
               "form.separate_strands": false,
               "form.scale_style": "ruler"
@@ -1989,6 +2004,10 @@
               [
                 "Labels",
                 "First Record Only; CDS qualifier priority gene; Above Feature; rotation 45; font size 18"
+              ],
+              [
+                "Features › Arrow Geometry › Head Length Ratio",
+                "0.64"
               ],
               [
                 "Features › Arrow Geometry › Shaft Width Ratio",
@@ -2202,15 +2221,17 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const leaf = (key) => Array.from(popup?.querySelectorAll('*') || []).find((node) => node.children.length === 0 && node.textContent?.trim() === key); const geneRow = leaf('gene')?.closest('.border-b'); const geneKindRow = leaf('gene_kind')?.closest('.border-b'); if (!popup || !geneRow || !geneKindRow) throw new Error('Compact qualifier rows not found.'); popup.children[0]?.setAttribute('data-capture', 'qualifier-popup-header'); popup.children[1]?.setAttribute('data-capture', 'qualifier-popup-tabs'); geneRow.setAttribute('data-capture', 'qualifier-gene-row'); geneKindRow.setAttribute('data-capture', 'qualifier-gene-kind-row'); document.activeElement?.blur();"
+                "script": "const popup = document.querySelector('.feature-popup'); const leaf = (key) => Array.from(popup?.querySelectorAll('*') || []).find((node) => node.children.length === 0 && node.textContent?.trim() === key); const geneKey = leaf('gene'); const geneKindKey = leaf('gene_kind'); if (!popup || !geneKey?.nextElementSibling || !geneKindKey?.nextElementSibling) throw new Error('Qualifier rows not found.'); popup.children[0]?.setAttribute('data-capture', 'qualifier-popup-header'); popup.children[1]?.setAttribute('data-capture', 'qualifier-popup-tabs'); geneKey.setAttribute('data-capture', 'qualifier-gene-key'); geneKey.nextElementSibling.setAttribute('data-capture', 'qualifier-gene-value'); geneKindKey.setAttribute('data-capture', 'qualifier-gene-kind-key'); geneKindKey.nextElementSibling.setAttribute('data-capture', 'qualifier-gene-kind-value'); geneKey.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
               }
             ],
             "clipSelectors": [
               "[data-gbdraw-feature-id='fed46a3a6_record_1']",
               "[data-capture='qualifier-popup-header']",
               "[data-capture='qualifier-popup-tabs']",
-              "[data-capture='qualifier-gene-row']",
-              "[data-capture='qualifier-gene-kind-row']"
+              "[data-capture='qualifier-gene-key']",
+              "[data-capture='qualifier-gene-value']",
+              "[data-capture='qualifier-gene-kind-key']",
+              "[data-capture='qualifier-gene-kind-value']"
             ],
             "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6_record_1']",
             "cropPadding": {

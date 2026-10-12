@@ -32,6 +32,7 @@ import {
   serializeFeatureVisibilityRules
 } from './feature-visibility.js';
 import {
+  circularRendererName,
   applyCircularGeometryShortcuts,
   buildCircularTrackSlotPayload,
   CIRCULAR_TRACK_RENDERERS,
@@ -3907,7 +3908,7 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
   const projected = projectCanonicalCircularSlot(slot);
   return {
     id: String(projected.id || ''),
-    renderer: String(projected.renderer || ''),
+    renderer: circularRendererName(projected.renderer),
     enabled: projected.enabled !== false,
     width: projected.width ?? null, radius: projected.radius ?? null,
     inner_gap_px: slot.innerGapPx == null ? null : String(slot.innerGapPx),
@@ -4801,7 +4802,7 @@ export const projectCanonicalSessionRequest = ({
     : [];
   const projectedLinearTrackSlots = renderRequest.mode === 'linear'
     ? migrateLinearTrackSlotsToCurrentSchema(
-        parseLinearTrackSlotSpecs(tracks.linearTrackSlots),
+        parseLinearTrackSlotSpecs(tracks.linearTrackSlots, options.dinucleotide || 'GC'),
         linearTrackSlotSchemaVersion
       )
     : [];

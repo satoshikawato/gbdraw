@@ -106,6 +106,12 @@ export const estimateColorFactor = (currentColor, minColor, maxColor) => {
   return Math.max(0, Math.min(1, currentDist / totalDist));
 };
 
+// Two paints that resolve to one color (a name and its hex, any letter case).
+/** @param {unknown} left @param {unknown} right */
+export const samePaint = (left, right) => (
+  String(resolveColorToHex(String(left ?? '').trim())).trim().toLowerCase() === String(resolveColorToHex(String(right ?? '').trim())).trim().toLowerCase()
+);
+
 // A CSS color name resolves through the table Python shares (OV-160), so
 // Load, the Session split and Python agree with or without a browser; a name
 // outside that table, such as a system color, stays as written (OV-272).

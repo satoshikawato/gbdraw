@@ -96,7 +96,10 @@ When source sequence and endpoint metadata are available, feature and match
 popups can download nucleotide or amino-acid FASTA. Pairwise and Circular
 matches can export either side or both spans. Collinear block downloads use the
 query and subject envelopes represented by the block. Similarity-group actions
-operate on the documented member set, not on an inferred phylogeny.
+operate on the documented member set, not on an inferred phylogeny. In an
+Interactive SVG match popup, a similarity group shows its name and **N genes in
+M records**, then the member table, with the group ID and counts under
+**Technical details**, as in the web app.
 
 ## Publication and reproducible handoff
 

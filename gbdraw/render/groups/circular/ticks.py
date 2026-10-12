@@ -27,7 +27,6 @@ class TickGroup:
         *,
         profile: CircularRenderProfile,
         radius: float | None = None,
-        tick_track_channel_override: str | None = None,
         label_side: str = "legacy",
         tick_side: str = "legacy",
         tick_length_px: float | None = None,
@@ -57,10 +56,6 @@ class TickGroup:
         self.track_type = str(track_preset or cfg.canvas.circular.track_type)
         self.length_threshold = int(cfg.labels.length_threshold.circular)
         self.separate_strands = profile.strandedness
-        normalized_tick_channel = str(tick_track_channel_override or "").strip().lower()
-        self.tick_track_channel_override = (
-            normalized_tick_channel if normalized_tick_channel in {"short", "long"} else None
-        )
         self.label_side = str(label_side or "legacy").strip().lower()
         self.tick_side = str(tick_side or "legacy").strip().lower()
         self.tick_length_px = tick_length_px
@@ -87,7 +82,6 @@ class TickGroup:
             self.tick_width,
             self.track_type,
             self.separate_strands,
-            tick_track_channel_override=self.tick_track_channel_override,
             tick_side=self.tick_side,
             tick_length_px=self.tick_length_px,
             length_reference_radius_px=float(self.canvas_config.radius),
@@ -108,7 +102,6 @@ class TickGroup:
             self.track_type,
             self.separate_strands,
             self.dpi,
-            tick_track_channel_override=self.tick_track_channel_override,
             label_side=self.label_side,
             tick_side=self.tick_side,
             tick_length_px=self.tick_length_px,

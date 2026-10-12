@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
+import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
@@ -63,7 +65,8 @@ const buildHarness = ({
   visibilityOverrides = {},
   rulePreparation = {},
   evaluateLabelRules = async () => ({ winners: [] }),
-  diagramOptions = null
+  diagramOptions = null,
+  showNotice = () => {}
 } = {}) => {
   const mutations = { commit: 0 };
   const state = {
@@ -110,6 +113,7 @@ const buildHarness = ({
     },
     rulePreparation,
     evaluateLabelRules,
+    showNotice,
     getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null)
   });
   return { actions, mutations, state, svg };
@@ -287,9 +291,11 @@ for (const [reason, options, sentence] of absenceCases) {
   test(`the Label Not Shown dialog names the reason "${reason || 'unknown'}" as the popup note does`, async () => {
     const { actions, state } = absenceHarness(options);
     const none = 'This feature has no label in the current Result.';
-    // The popup note, before the edit is applied.
+    // The popup note, before the edit is applied, names the same reason in a few words.
     state.clickedFeature.value.labelText = '';
-    assert.equal(actions.clickedFeatureLabelHint.value.startsWith(`${none}${sentence}`), true);
+    const cause = LABEL_ABSENCE_REASONS[reason]?.cause;
+    assert.equal(actions.clickedFeatureLabelHint.value.startsWith(`No label shown${cause ? ` (${cause})` : ''}.`), true,
+      actions.clickedFeatureLabelHint.value);
     state.clickedFeature.value.labelText = 'Renamed';
     const applied = actions.updateClickedFeatureLabelText();
     assert.equal(state.hiddenLabelTextDialog.show, true);
@@ -313,7 +319,77 @@ test('every reason the resolver can return has a sentence, and every sentence a 
   }
   returned.delete('');
   assert.deepEqual([...returned].sort(), Object.keys(LABEL_ABSENCE_REASONS).sort());
-  Object.values(LABEL_ABSENCE_REASONS).forEach((sentence) => assert.equal(typeof sentence, 'string'));
+  Object.values(LABEL_ABSENCE_REASONS).forEach(({ sentence, cause }) => {
+    assert.equal(typeof sentence, 'string');
+    assert.equal(typeof cause, 'string');
+  });
+});
+
+// The popup's Apply as app-setup.js runs it, in a step of the real History
+// manager, up to the open Label Not Shown dialog.
+const applyInHistoryStep = async (options = {}) => {
+  const harness = buildHarness(options);
+  harness.state.editableLabels.value = [];
+  Object.assign(harness.state.clickedFeature.value, { labelText: 'Renamed', labelSourceText: 'Original' });
+  const history = createHistoryManager({
+    buildIntent: () => structuredClone(harness.state.featureOverrides),
+    applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {}
+  });
+  await history.initializeIntentBaseline();
+  const step = { ended: false };
+  // app-setup.js: `undoableAction('Change label text', updateClickedFeatureLabelText)`.
+  step.done = history.runUndoable('Change label text', () => harness.actions.updateClickedFeatureLabelText())
+    .then(() => { step.ended = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.state.hiddenLabelTextDialog.show, true);
+  assert.equal(history.mutationPending(), true, 'the step of the Apply is open while the dialog asks');
+  return { ...harness, history, step };
+};
+
+// OV-462: the dialog can be hidden without a choice. Hiding it answers it as
+// Cancel, so the History step of the Apply that opened it ends; before, the
+// step stayed open (no Undo, Redo, Save or Load) until the next undoable action.
+const loadedLabelSvg = () => new DOMParser().parseFromString([
+  '<svg><path data-gbdraw-feature-id="fa" d="M0 0" />',
+  '<text dominant-baseline="central" data-label-feature-id="fa" data-gbdraw-label-binding-schema="1" ',
+  'data-label-source-text="alpha">alpha</text></svg>'
+].join(''), 'image/svg+xml').documentElement;
+for (const [hidden, hide, options] of [
+  ['Reset label edits', (actions) => actions.resetAllLabelTextOverrides()],
+  ['a Load Label TSV that applies', async (actions, state) => {
+    await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => '*\tCDS\tlabel\t^alpha$\tLOADED\n' }], value: 'labels.tsv' } });
+    assert.equal(rowOf(state, 'fa').labelText, 'LOADED', 'the table was applied');
+  }, {
+    svg: loadedLabelSvg(), featureId: 'fa', rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+    evaluateLabelRules: async ({ features }) => ({ winners: features.map(() => 0) })
+  }],
+  // The port a mode switch calls (watchers.js `resetModeTransientUi`).
+  ['closing it from another owner', (actions) => actions.closeHiddenLabelTextDialog()]
+]) {
+  test(`${hidden} answers an open Label Not Shown dialog as Cancel, and its History step ends`, async () => {
+    const { actions, state, history, step } = await applyInHistoryStep(options);
+    await hide(actions, state);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(step.ended, true, 'the Apply that opened the dialog ends');
+    assert.deepEqual({ ...state.hiddenLabelTextDialog }, { show: false, featureId: '', reason: '' });
+    assert.equal(history.mutationPending(), false);
+    assert.notEqual(rowOf(state, state.clickedFeature.value.svg_id)?.labelText, 'Renamed', 'the text is not written');
+  });
+}
+
+// The choice is a second `runUndoable` call on the step of the Apply. It joins
+// that step (`joinsOpenStep` in app-setup.js): one step, under the Apply's name.
+test('the Label Not Shown choice and the Apply that opened the dialog are one History step under the Apply\'s name', async () => {
+  const wiring = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8')
+    .match(/const handleHiddenLabelTextChoiceWithHistory = undoableAction\('([^']+)', handleHiddenLabelTextChoice(, \{ joinsOpenStep: true \})?\);/);
+  assert.ok(wiring, 'app-setup.js wires the choice through undoableAction');
+  const [, label, joins] = wiring;
+  const { actions, state, history, step } = await applyInHistoryStep();
+  await history.runUndoable(label, () => actions.handleHiddenLabelTextChoice('text_only'), joins ? { joinsOpenStep: true } : {});
+  await step.done;
+  assert.equal(rowOf(state, 'feature:one/[a]').labelText, 'Renamed');
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(history.undoLabel(), 'Change label text');
 });
 
 // "Show this label" applies Label visibility On through the Q1 and Q2 dialogs.
@@ -336,7 +412,8 @@ for (const [reason, options] of [['underlay', { type: 'repeat_region' }], ['hidd
 }
 
 // Owner decisions Q1 and Q2 (2026-10-04): the popup note names why the
-// committed request draws no label, and On only where it can be drawn.
+// committed request draws no label, and On only where it can be drawn, in one
+// line.
 test('the popup note names why the diagram draws no label for the feature', () => {
   const featureId = 'feature:one/[a]';
   const diagramOptions = { featureShapes: { repeat_region: 'underlay' }, configOverrides: { 'labels.rendering': 'auto' } };
@@ -344,33 +421,32 @@ test('the popup note names why the diagram draws no label for the feature', () =
   const { state, actions } = harness;
   const clicked = state.clickedFeature.value;
   const hint = () => actions.clickedFeatureLabelHint.value;
-  const none = 'This feature has no label in the current Result.';
-  const onDrawable = ' Its Label visibility "On" applies when the label can be drawn.';
+  const onDrawable = ' On applies when the label can be drawn.';
 
   clicked.labelKey = 'label-1';
   assert.equal(hint(), '');
   clicked.labelKey = '';
-  assert.equal(hint(), `${none} Choose On to show it.`);
+  assert.equal(hint(), 'No label shown. Choose On to show it.');
   clicked.labelVisibility = 'off';
   assert.equal(hint(), '');
   clicked.labelVisibility = 'on';
   setRow(state, featureId, { labelVisibility: 'on' });
-  assert.equal(hint(), `${none}${onDrawable}`);
+  assert.equal(hint(), `No label shown.${onDrawable}`);
 
   clicked.feat = featureFor(featureId, 'repeat_region');
-  assert.equal(hint(), `${none} Labels are not drawn for features drawn as "Underlay".${onDrawable}`);
+  assert.equal(hint(), `No label shown (drawn as Underlay).${onDrawable}`);
   delete state.featureOverrides[keyFor(featureId)];
   clicked.labelVisibility = 'default';
-  assert.equal(hint(), `${none} Labels are not drawn for features drawn as "Underlay".`);
+  assert.equal(hint(), 'No label shown (drawn as Underlay).');
 
   clicked.feat = featureFor(featureId);
   diagramOptions.configOverrides['labels.rendering'] = 'embedded_only';
-  assert.equal(hint(), `${none} With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.`);
+  assert.equal(hint(), 'No label shown (does not fit; Label Rendering = Embedded Only).');
 
   // A hidden feature hides its label too, so the note shows with a label key.
   setRow(state, featureId, { featureVisibility: 'off', labelVisibility: 'on' });
   clicked.labelKey = 'label-1';
-  assert.equal(hint(), `${none} The feature is hidden. Its Label visibility "On" applies when the feature is shown.`);
+  assert.equal(hint(), 'No label shown (the feature is hidden). On applies when the feature is shown.');
 });
 
 test('Label visibility On for an underlay feature waits for Keep without label or Cancel', async () => {
@@ -558,9 +634,12 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   ).documentElement;
   displayed.querySelector('text').textContent = 'alpha';
   const evaluated = [];
+  // The outcome shows in the app's notice banner, not a native alert.
+  const messages = [];
   const harness = buildHarness({
     svg: displayed,
     featureId: 'fa',
+    showNotice: (notice) => messages.push(notice),
     rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
     async evaluateLabelRules({ features, rules }) {
       evaluated.push(features.map((feature) => feature.label));
@@ -590,14 +669,8 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
     comparisonMatches: []
   });
   state.featureCatalog = ref({ schema: 5, items: [item(0, 'fa'), item(1, 'fb')] });
-  const messages = [];
-  globalThis.window = { alert: (message) => messages.push(message) };
-  try {
-    const tsv = '*\tCDS\tlabel\t^beta$\tIMPORTED_B\n*\t*\tlabel\t^alpha$\tBULK_A\n';
-    await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
-  } finally {
-    delete globalThis.window;
-  }
+  const tsv = '*\tCDS\tlabel\t^beta$\tIMPORTED_B\n*\t*\tlabel\t^alpha$\tBULK_A\n';
+  await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
   assert.deepEqual(evaluated, [['alpha', 'beta']], 'one evaluation covers the labels of both Results');
   assert.deepEqual(state.featureOverrides, {
     [keyFor('fa')]: rowFor('fa', { labelSourceText: 'alpha' }),
@@ -606,29 +679,31 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   assert.deepEqual(state.labelTextBulkOverrides, { alpha: 'BULK_A' });
   assert.equal(displayed.querySelector('text').textContent, 'BULK_A');
   assert.deepEqual(harness.mutations, { commit: 1 });
-  assert.deepEqual(messages, ['Loaded 2 row(s). Applied to 2 label(s).']);
+  assert.deepEqual(messages, [{ text: 'Loaded 2 row(s). Applied to 2 label(s).', items: [] }]);
 });
 
 // OV-131: a Label TSV that applies to no label changes nothing. The import
 // replaces the label edits only when it applies, so the bulk and per-feature
 // label edits stay, no state change reaches History, and the message says why.
-const KEPT = 'The existing label edits were kept.';
+const KEPT = 'Loaded 1 row(s). Not applied; the existing label edits were kept.';
 for (const [name, body, tsv, message] of [
   ['no row matches a label', batchLabel('fa', 'alpha', 'dominant-baseline="central" '),
     '*\t*\tproduct\t^no such product$\tZZ\n',
-    `Loaded 1 row(s). Not applied: no row matched a label of the diagram. ${KEPT}`],
+    { text: KEPT, items: ['No row matched a label of the diagram.'] }],
   ['the displayed Result has no label', '', '*\t*\tproduct\t.*\tZZ\n',
-    `Loaded 1 row(s). Not applied: no row matched a label of the diagram. ${KEPT}`],
+    { text: KEPT, items: ['No row matched a label of the diagram.'] }],
   ['every match lacks a feature key',
     '<text dominant-baseline="central" data-label-source-text="alpha">alpha</text>',
     '*\tCDS\tlabel\t^alpha$\tZZ\n',
-    `Loaded 1 row(s). Not applied: the 1 matched label(s) lacked a feature key. ${KEPT}`]
+    { text: KEPT, items: ['The 1 matched label(s) lacked a feature key.'] }]
 ]) {
   test(`a Label TSV import keeps the label edits when ${name} (OV-131)`, async () => {
     const svg = new DOMParser().parseFromString(`<svg>${body}</svg>`, 'image/svg+xml').documentElement;
+    const messages = [];
     const harness = buildHarness({
       svg,
       featureId: 'fa',
+      showNotice: (notice) => messages.push(notice),
       rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
       async evaluateLabelRules({ features, rules }) {
         return { winners: features.map((feature) => rules.findIndex((rule) => (
@@ -641,13 +716,7 @@ for (const [name, body, tsv, message] of [
     state.labelTextBulkOverrides.ND1 = 'MyLabel';
     setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' });
     const before = structuredClone({ rows: state.featureOverrides, bulk: state.labelTextBulkOverrides });
-    const messages = [];
-    globalThis.window = { alert: (text) => messages.push(text) };
-    try {
-      await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
-    } finally {
-      delete globalThis.window;
-    }
+    await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
     assert.deepEqual({ rows: state.featureOverrides, bulk: state.labelTextBulkOverrides }, before);
     assert.deepEqual(harness.mutations, { commit: 0 });
     assert.deepEqual(messages, [message]);
@@ -666,18 +735,19 @@ const heldLabelImport = ({ preparationFollowsRows = false } = {}) => {
   ).documentElement;
   svg.querySelector('text').textContent = 'alpha';
   const evaluations = [];
+  const messages = [];
   const preparation = { inputs: 0 };
   const snapshot = () => `${preparation.inputs}:${preparationFollowsRows ? Object.keys(harness.state.featureOverrides).length : 0}`;
   const harness = buildHarness({
     svg,
     featureId: 'fa',
+    showNotice: (notice) => messages.push(notice),
     rulePreparation: { snapshot, isCurrent: (before) => before === snapshot() },
     evaluateLabelRules: ({ features }) => new Promise((resolve) => {
       evaluations.push(() => resolve({ winners: features.map(() => 0) }));
     })
   });
   harness.state.errorLog = ref(null);
-  const messages = [];
   const target = () => ({ files: [{ text: async () => '*\t*\tlabel\t^alpha$\tFROM_TABLE\n' }], value: 'labels.tsv' });
   const load = async (input, during) => {
     const pending = harness.actions.loadLabelOverrideTable({ target: input });
@@ -686,20 +756,16 @@ const heldLabelImport = ({ preparationFollowsRows = false } = {}) => {
     evaluations.splice(0).forEach((release) => release());
     await pending;
   };
-  const withAlerts = async (run) => {
-    globalThis.window = { alert: (text) => messages.push(text) };
-    try { await run(); } finally { delete globalThis.window; }
-  };
-  return { harness, messages, target, load, withAlerts, preparation };
+  return { harness, messages, target, load, preparation };
 };
 for (const preparationFollowsRows of [false, true]) {
   test(`a Label TSV load is declined with a notice when a label is edited while it is evaluated (OV-447, preparation ${preparationFollowsRows ? 'stale' : 'current'})`, async () => {
-    const { harness, messages, target, load, withAlerts } = heldLabelImport({ preparationFollowsRows });
+    const { harness, messages, target, load } = heldLabelImport({ preparationFollowsRows });
     const { state } = harness;
     const input = target();
-    await withAlerts(() => load(input, () => { setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' }); }));
-    assert.deepEqual(messages, ['Loaded 1 row(s). Not applied: a label or feature visibility edit was made while the table '
-      + 'loaded. The edit was kept. Load the table again.']);
+    await load(input, () => { setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' }); });
+    assert.deepEqual(messages, [{ text: 'Loaded 1 row(s). Not applied: a label or feature visibility edit was made while '
+      + 'the table loaded. The edit was kept. Load the table again.', tone: 'warning' }]);
     assert.deepEqual(state.featureOverrides, { [keyFor('fa')]: rowFor('fa', { labelText: 'EDITED', labelSourceText: 'alpha' }) });
     assert.deepEqual(state.labelTextBulkOverrides, {});
     assert.deepEqual(harness.mutations, { commit: 0 }, 'the declined load reaches no History step');
@@ -716,10 +782,10 @@ for (const [cause, change, notice] of [
 ]) {
   test(`a Label TSV load is declined with a notice when ${cause} while it is evaluated (OV-449)`, async () => {
     const held = heldLabelImport();
-    const { harness, messages, target, load, withAlerts } = held;
+    const { harness, messages, target, load } = held;
     const input = target();
-    await withAlerts(() => load(input, () => change(held)));
-    assert.deepEqual(messages, [`Loaded 1 row(s). Not applied: ${notice}. Load the table again.`]);
+    await load(input, () => change(held));
+    assert.deepEqual(messages, [{ text: `Loaded 1 row(s). Not applied: ${notice}. Load the table again.`, tone: 'warning' }]);
     assert.deepEqual([harness.state.featureOverrides, harness.state.labelTextBulkOverrides], [{}, {}]);
     assert.equal(harness.svg.querySelector('text').textContent, 'alpha');
     assert.deepEqual(harness.mutations, { commit: 0 }, 'the declined load reaches no History step');
@@ -727,12 +793,12 @@ for (const [cause, change, notice] of [
   });
 }
 test('a Label TSV load a newer load replaced ends without a notice, also after a label edit (OV-447)', async () => {
-  const { harness, messages, target, load, withAlerts } = heldLabelImport();
+  const { harness, messages, target, load } = heldLabelImport();
   const { state, actions } = harness;
-  await withAlerts(() => load(target(), () => {
+  await load(target(), () => {
     setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' });
     actions.loadLabelOverrideTable({ target: { files: [{ text: () => new Promise(() => {}) }], value: 'newer.tsv' } });
-  }));
+  });
   assert.deepEqual(messages, []);
   assert.deepEqual(harness.mutations, { commit: 0 });
 });

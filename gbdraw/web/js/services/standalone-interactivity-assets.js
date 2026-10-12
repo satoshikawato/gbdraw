@@ -377,6 +377,42 @@ export const STANDALONE_INTERACTIVE_STYLE = `
 .gfi-block--selected-og {
   margin: 8px;
 }
+.gfi-group-head {
+  padding: 8px 9px 4px;
+}
+.gfi-group-name {
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 700;
+}
+.gfi-group-name .gfi-badge {
+  margin-left: 6px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 600;
+}
+.gfi-group-description {
+  margin-top: 2px;
+  color: #475569;
+  font-size: 11px;
+}
+.gfi-group-count {
+  margin-top: 4px;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 600;
+}
+.gfi-disclosure {
+  border-top: 1px solid #f1f5f9;
+}
+.gfi-disclosure > summary {
+  padding: 6px 9px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
 .gfi-block-actions {
   display: flex;
   justify-content: flex-end;
@@ -2723,7 +2759,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
           }
         };
       } catch (error) {
-        return { active: true, error: 'Invalid JavaScript regular expression. Turn off Regex to return to word search.', test: function () { return false; } };
+        return { active: true, error: 'Invalid JavaScript regular expression. Turn off Regular expression to return to word search.', test: function () { return false; } };
       }
     }
     var needle = normalizeSearchText(trimmedQuery);
@@ -3373,13 +3409,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       'aria-label': 'Qualifier key for qualifier value search',
       'data-search-qualifier': 'true'
     });
-    var regexLabel = createXhtmlNode('label', { className: 'gfs-toggle', title: 'JavaScript regular expression, case-insensitive. Turn off Regex to return to word search.' });
+    var regexLabel = createXhtmlNode('label', { className: 'gfs-toggle', title: 'Search with a JavaScript regular expression; upper and lower case match alike.' });
     var regexInput = createXhtmlNode('input', {
       type: 'checkbox',
       'data-search-regex': 'true'
     });
     regexLabel.appendChild(regexInput);
-    regexLabel.appendChild(document.createTextNode('Regex (JavaScript, i)'));
+    regexLabel.appendChild(document.createTextNode('Regular expression'));
     var prevButton = createXhtmlNode('button', {
       type: 'button',
       className: 'gfs-button',
@@ -5386,7 +5422,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     addMaterializedMatchRow(orthogroupRows, 'Record coverage', group && (group.record_coverage_count || group.recordCoverage));
     var sections = [];
     if (kind === 'orthogroup') {
-      sections.push({ title: 'Summary', rows: orthogroupRows, member_rows: memberRows });
+      // The popup of a similarity-group ribbon is titled with the group already.
+      sections.push({ title: 'Summary', rows: orthogroupRows, member_rows: memberRows, group_titled: true });
     } else {
       sections.push({ title: 'Summary', rows: summaryRows });
       if (kind !== 'collinear') sections.push({ title: 'Alignment', rows: alignmentRows });
@@ -5689,6 +5726,44 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       '<div class="gfi-block-actions">' + copyButton(copyText) + sequenceActions + '</div>';
   }
 
+  // A similarity group as the app popup shows it: the name and member count,
+  // the member table, then the identifiers in a Technical details disclosure.
+  function groupCountText(memberCount, recordCoverage) {
+    function plural(value, noun) {
+      var count = Number(String(value == null ? '' : value).trim());
+      return Math.floor(count) === count && count > 0 ? count + ' ' + noun + (count === 1 ? '' : 's') : '';
+    }
+    var genes = plural(memberCount, 'gene');
+    var records = plural(recordCoverage, 'record');
+    return genes && records ? genes + ' in ' + records : genes || records;
+  }
+
+  function renderMatchGroupBody(rows, memberRows, feedbackContext, section) {
+    function value(label) {
+      var row = rows.filter(function (entry) { return entry[0] === label; })[0];
+      return row ? String(row[1]).trim() : '';
+    }
+    var id = value('Similarity group ID');
+    var name = value('Display name') || id;
+    var description = value('Description');
+    var technicalRows = rows.filter(function (row) {
+      return row[0] !== 'Display name' && row[0] !== 'Description';
+    });
+    var titled = Boolean(section && section.group_titled);
+    return '<div class="gfi-group-head" data-gfi-group="true">' +
+      (titled ? '' : '<div class="gfi-group-name">' + escapeHtml(name || 'Similarity group') +
+        (id && name !== id ? '<span class="gfi-badge">' + escapeHtml(id) + '</span>' : '') + '</div>') +
+      (description ? '<div class="gfi-group-description">' + escapeHtml(description) + '</div>' : '') +
+      '<div class="gfi-group-count" data-gfi-group-count="true">' +
+      escapeHtml(groupCountText(value('Members') || memberRows.length, value('Record coverage'))) + '</div>' +
+      '</div>' +
+      renderMatchMemberTable(section, memberRows, feedbackContext) +
+      (technicalRows.length
+        ? '<details class="gfi-disclosure" data-gfi-group-technical="true"><summary>Technical details</summary>' +
+          renderRows(technicalRows) + '</details>'
+        : '');
+  }
+
   function renderMatchSequenceBundle(match) {
     var bundle = match && (match.sequence_bundle || match.sequenceBundle);
     if (!bundle || !Array.isArray(bundle.entries)) return '';
@@ -5739,21 +5814,21 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
           ) +
           '</div>'
         : '';
+      var feedbackContext = 'match-section:' + firstDisplayText(
+        section && section.id,
+        section && section.title,
+        match && match.id,
+        selectedBlockOrthogroupId
+      );
+      var groupSection = memberRows.length && rows.some(function (row) { return row[0] === 'Similarity group ID'; });
       return '<div class="gfi-block">' +
         '<div class="gfi-block-title">' + escapeHtml(section && section.title || 'Details') + '</div>' +
-        (rows.length && !featureRows.length ? renderRows(rows) : '') +
-        renderMatchFeatureTable(featureRows) +
-        renderMatchBlockOrthogroupTable(blockOrthogroups, selectedBlockOrthogroupId) +
-        renderMatchMemberTable(
-          section,
-          memberRows,
-          'match-section:' + firstDisplayText(
-            section && section.id,
-            section && section.title,
-            match && match.id,
-            selectedBlockOrthogroupId
-          )
-        ) +
+        (groupSection
+          ? renderMatchGroupBody(rows, memberRows, feedbackContext, section)
+          : (rows.length && !featureRows.length ? renderRows(rows) : '') +
+            renderMatchFeatureTable(featureRows) +
+            renderMatchBlockOrthogroupTable(blockOrthogroups, selectedBlockOrthogroupId) +
+            renderMatchMemberTable(section, memberRows, feedbackContext)) +
         selectedHtml +
         '</div>';
     }).join('') || '<div class="gfi-empty">No match details available.</div>';

@@ -22,7 +22,7 @@ for (const [name, colors, rules, expected] of [
     const operations = compileDirectEditorMutationPlan({
       catalogAdmission: displayedFeatureAddressing(state.extractedFeatures.value, ['one.svg'], 0),
       manualSpecificRules: rules,
-      livePreview: { domains: ['featureFills'], paletteColors: colors, drawnContext: null }
+      livePreview: { drawnTracks: [], domains: ['featureFills'], paletteColors: colors, drawnContext: null }
     }).operationsByResult[0];
     assert.deepEqual(operations.featureFills, [{ renderedId: 'f1', color: expected }]);
   });

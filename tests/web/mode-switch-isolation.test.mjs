@@ -39,34 +39,38 @@ const snapshot = (value) => {
 };
 const sameSource = (before, after) => before.identity === after.identity && before.json === after.json;
 
+/** @type {{ source: Function, callback: Function, line: string }[]} */
+const watchers = [];
+/** @type {string[]} */
+const closedDialogs = [];
+const { resetModeTransientUi } = setupWatchers({
+  state,
+  rulePreparation: port(),
+  ref: (value) => ({ value }),
+  computed: (getter) => ({ get value() { return getter(); } }),
+  watch: (source, callback) => {
+    watchers.push({ source: typeof source === 'function' ? source : () => source, callback,
+      line: String(source).replace(/\s+/g, ' ').slice(0, 600) });
+    return () => {};
+  },
+  nextTick: async () => {},
+  onMounted: () => {},
+  legendActions: port(),
+  featureActions: port(),
+  legendLayout: port(),
+  resultsManager: port(),
+  runLabelReflow: () => {},
+  refreshCircularRecordOrder: () => {},
+  refreshLinearRecordSelectors: () => {},
+  resetPreviewViewport: () => {},
+  resetRightDrawer: () => {},
+  closeLabelTextScopeDialog: () => { closedDialogs.push('label text scope'); },
+  closeHiddenLabelTextDialog: () => { closedDialogs.push('Label Not Shown'); },
+  clearLabelBuildNotices: () => {},
+  previewRuntime: port()
+});
+
 test('a mode switch changes the source of no drawing watcher', () => {
-  /** @type {{ source: Function, callback: Function, line: string }[]} */
-  const watchers = [];
-  setupWatchers({
-    state,
-    rulePreparation: port(),
-    ref: (value) => ({ value }),
-    computed: (getter) => ({ get value() { return getter(); } }),
-    watch: (source, callback) => {
-      watchers.push({ source: typeof source === 'function' ? source : () => source, callback,
-        line: String(source).replace(/\s+/g, ' ').slice(0, 600) });
-      return () => {};
-    },
-    nextTick: async () => {},
-    onMounted: () => {},
-    legendActions: port(),
-    featureActions: port(),
-    legendLayout: port(),
-    resultsManager: port(),
-    runLabelReflow: () => {},
-    refreshCircularRecordOrder: () => {},
-    refreshLinearRecordSelectors: () => {},
-    resetPreviewViewport: () => {},
-    resetRightDrawer: () => {},
-    closeLabelTextScopeDialog: () => {},
-    clearLabelBuildNotices: () => {},
-    previewRuntime: port()
-  });
   assert.ok(watchers.length > 10, 'the watchers were registered');
   const drawingWatchers = watchers.filter(({ line }) => /drawing\./.test(line));
   assert.ok(drawingWatchers.length >= 6, 'each drawing has its own palette, padding, and label text watchers');
@@ -94,6 +98,15 @@ test('a mode switch changes the source of no drawing watcher', () => {
   // Linear drawing keeps its saved label table.
   assert.deepEqual(state.drawings.linear.canonicalLabelOverrideRows.value, [{ kept: true }]);
   state.mode.value = 'circular';
+});
+
+// OV-462: the label owner closes its dialogs, so a Label Not Shown dialog
+// that is still open is answered (as Cancel) and not only hidden.
+test('the mode switch closes the label dialogs through the label owner\'s ports', () => {
+  const dialog = { ...state.hiddenLabelTextDialog };
+  resetModeTransientUi();
+  assert.deepEqual(closedDialogs, ['label text scope', 'Label Not Shown']);
+  assert.deepEqual({ ...state.hiddenLabelTextDialog }, dialog, 'the watcher owner does not write the dialog');
 });
 
 // The body of a `const <name> = (...) => { ... };` in app-setup.js.

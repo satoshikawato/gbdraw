@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { ShowNotice } from '../app-messages.js' */
 /** @import { DrawingState } from '../../state.js' */
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
@@ -108,16 +109,32 @@ export const labelDrawingBlocker = (feature, diagramOptions) => {
   return labelsEmbeddedOnly(diagramOptions) ? 'embedded_only' : '';
 };
 // Why the diagram draws no label for a feature (`labelAbsenceReason`): the one
-// table of sentences the popup note and the Label Not Shown dialog both render.
+// table of reasons, as the sentence the Label Not Shown dialog renders and the
+// few words of the popup note.
 export const LABEL_ABSENCE_REASONS = Object.freeze({
-  hidden: ' The feature is hidden.',
-  underlay: ' Labels are not drawn for features drawn as "Underlay".',
-  scope_none: ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.',
-  scope_first: ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".',
-  scope_orthogroup_top: ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".',
-  whitelist: ' A label whitelist is set, and labels are drawn only for the features it lists.',
-  blacklist: ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.',
-  embedded_only: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.'
+  hidden: { sentence: ' The feature is hidden.', cause: 'the feature is hidden' },
+  underlay: { sentence: ' Labels are not drawn for features drawn as "Underlay".', cause: 'drawn as Underlay' },
+  scope_none: {
+    sentence: ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.',
+    cause: 'Show Labels = None'
+  },
+  scope_first: {
+    sentence: ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".',
+    cause: 'Show Labels = First Record Only'
+  },
+  scope_orthogroup_top: {
+    sentence: ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".',
+    cause: 'Show Labels = Top Similarity Group Record'
+  },
+  whitelist: { sentence: ' A label whitelist is set, and labels are drawn only for the features it lists.', cause: 'not in the label whitelist' },
+  blacklist: {
+    sentence: ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.',
+    cause: 'matches the label blacklist'
+  },
+  embedded_only: {
+    sentence: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.',
+    cause: 'does not fit; Label Rendering = Embedded Only'
+  }
 });
 const LABEL_ABSENT_PREFIX = 'This feature has no label in the current Result.';
 // No reason found: the Show Labels scope and the label filters decide the rest.
@@ -446,6 +463,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads (Label On asks the blocker of it).
  * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<Record<string, any>>} evaluateLabelRules
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
+ * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
  */
 
 /** @param {FeatureLabelActionsOptions} options */
@@ -460,7 +478,8 @@ export const createFeatureLabelActions = ({
   getCommittedRequest = () => null,
   setFeatureVisibility = null,
   prepareDrawnFeatureMatches = () => true,
-  evaluateLabelRules
+  evaluateLabelRules,
+  showNotice = () => {}
 }) => {
   const {
     mode,
@@ -987,6 +1006,17 @@ export const createFeatureLabelActions = ({
   // are one step each and Cancel writes nothing and records none.
   /** @type {((choice: string) => unknown) | null} */
   let answerHiddenLabelTextDialog = null;
+  // The one close of the dialog. A dialog hidden without a choice (Reset label
+  // edits, an applied Load Label TSV, a mode switch) is answered as Cancel:
+  // the text is not written and the History step of its Apply ends (OV-462).
+  const closeHiddenLabelTextDialog = (choice = 'cancel') => {
+    const answer = answerHiddenLabelTextDialog;
+    answerHiddenLabelTextDialog = null;
+    hiddenLabelTextDialog.show = false;
+    hiddenLabelTextDialog.featureId = '';
+    hiddenLabelTextDialog.reason = '';
+    return answer?.(choice);
+  };
 
   // One popup Label edit: the overrides, then the displayed Result.
   /** @param {DrawingState} drawing */
@@ -996,7 +1026,7 @@ export const createFeatureLabelActions = ({
       && normalizeVisibilityMode(row?.labelVisibility) === 'default'
       && normalizeFeatureOverrideLabelText(edit.text) !== normalizeFeatureOverrideLabelText(String(row?.labelText ?? edit.sourceText))
       && !getEditableLabelByFeatureId(featureId)) {
-      answerHiddenLabelTextDialog?.('cancel');
+      closeHiddenLabelTextDialog();
       hiddenLabelTextDialog.featureId = featureId;
       hiddenLabelTextDialog.reason = labelAbsenceReason(drawing, feature, getCommittedRequest()?.diagramOptions);
       hiddenLabelTextDialog.show = true;
@@ -1077,20 +1107,11 @@ export const createFeatureLabelActions = ({
     return apply();
   };
 
-  const closeHiddenLabelTextDialog = () => {
-    hiddenLabelTextDialog.show = false;
-    hiddenLabelTextDialog.featureId = '';
-    hiddenLabelTextDialog.reason = '';
-  };
-
   // The Label Not Shown dialog answers the Apply that opened it.
   const handleHiddenLabelTextChoice = (choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const answer = answerHiddenLabelTextDialog;
-    answerHiddenLabelTextDialog = null;
-    closeHiddenLabelTextDialog();
-    return answer?.(choice);
+    return closeHiddenLabelTextDialog(choice);
   };
 
   // Owner decisions Q1 and Q2 (2026-10-04): applying Label visibility On asks
@@ -1199,7 +1220,8 @@ export const createFeatureLabelActions = ({
   };
 
   // The popup note when the displayed Result draws no label for the clicked
-  // feature: why the diagram cannot draw it (Owner Q1, Q2), or that On shows it.
+  // feature: why the diagram cannot draw it (Owner Q1, Q2), or that On shows it,
+  // in one line.
   const clickedFeatureLabelHint = computed(() => {
     const drawing = state.activeDrawing();
     const clicked = clickedFeature.value;
@@ -1216,19 +1238,19 @@ export const createFeatureLabelActions = ({
     if (clicked.labelKey && blocker !== 'hidden') return '';
     let next = '';
     if (normalizeVisibilityMode(rowOf(drawing, clicked.feat)?.labelVisibility) === 'on') {
-      next = ` Its Label visibility "On" applies when ${blocker === 'hidden' ? 'the feature is shown' : 'the label can be drawn'}.`;
+      next = ` On applies when ${blocker === 'hidden' ? 'the feature is shown' : 'the label can be drawn'}.`;
     } else if (!blocker && draft === 'default') {
       next = ' Choose On to show it.';
     } else if (!blocker) {
       return '';
     }
-    const reason = labelAbsenceReason(drawing, feature, diagramOptions);
-    return `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[reason] || ''}${next}`;
+    const cause = LABEL_ABSENCE_REASONS[labelAbsenceReason(drawing, feature, diagramOptions)]?.cause;
+    return `No label shown${cause ? ` (${cause})` : ''}.${next}`;
   });
 
   // The Label Not Shown dialog: the same reason sentence as the popup note.
   const hiddenLabelTextMessage = computed(() => (
-    `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason] || LABEL_ABSENCE_UNKNOWN}`
+    `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason]?.sentence || LABEL_ABSENCE_UNKNOWN}`
     + ' The edited text will not appear unless you show this label.'
   ));
 
@@ -1417,11 +1439,11 @@ export const createFeatureLabelActions = ({
           : !rulePreparation.isCurrent(before)
             ? "colors, color rules, the Legend, or the diagram's inputs changed while the table loaded" : '';
       if (changed) {
-        window.alert(`Loaded ${rows.length} row(s). Not applied: ${changed}. Load the table again.`);
+        showNotice({ text: `Loaded ${rows.length} row(s). Not applied: ${changed}. Load the table again.`, tone: 'warning' });
         return;
       }
       if (!svg) {
-        window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
+        showNotice({ text: `Loaded ${rows.length} row(s). No diagram is shown, so nothing was applied.`, tone: 'warning' });
         return;
       }
       // A `location` or `record_location` row cannot be decided for a label
@@ -1434,9 +1456,11 @@ export const createFeatureLabelActions = ({
         && (row.featureType === '*' || row.featureType === String(feature.type ?? ''))
       ))).length;
       if (undecided > 0) {
-        window.alert(`Loaded ${rows.length} row(s). Not applied: location and record_location rows cannot be `
-          + `matched to ${undecided} label(s) on cropped, reverse-complemented, or rotated records until the `
-          + 'diagram records where it drew them. Generate the diagram again, then load the table.');
+        showNotice({ text: `Loaded ${rows.length} row(s). Not applied.`, items: [
+          `location and record_location rows cannot be matched to ${undecided} label(s) on cropped, `
+            + 'reverse-complemented, or rotated records until the diagram records where it drew them. '
+            + 'Generate the diagram again, then load the table.'
+        ] });
         return;
       }
 
@@ -1458,9 +1482,11 @@ export const createFeatureLabelActions = ({
         return [{ entry, matchedRow, tracked }];
       });
       if (applicable.length === 0) {
-        window.alert(`Loaded ${rows.length} row(s). Not applied: ${skippedNonTrackableCount > 0
-          ? `the ${skippedNonTrackableCount} matched label(s) lacked a feature key`
-          : 'no row matched a label of the diagram'}. The existing label edits were kept.`);
+        showNotice({ text: `Loaded ${rows.length} row(s). Not applied; the existing label edits were kept.`, items: [
+          skippedNonTrackableCount > 0
+            ? `The ${skippedNonTrackableCount} matched label(s) lacked a feature key.`
+            : 'No row matched a label of the diagram.'
+        ] });
         return;
       }
       clearOverrides(drawing);
@@ -1477,13 +1503,13 @@ export const createFeatureLabelActions = ({
       closeHiddenLabelTextDialog();
       queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
 
-      let message = `Loaded ${rows.length} row(s). Applied to ${applicable.length} label(s).`;
-      if (skippedNonTrackableCount > 0) {
-        message += ` ${skippedNonTrackableCount} match(es) lacked a feature key and were not applied.`;
-      }
+      const message = `Loaded ${rows.length} row(s). Applied to ${applicable.length} label(s).`;
+      const skipped = skippedNonTrackableCount > 0
+        ? [`${skippedNonTrackableCount} match(es) lacked a feature key and were not applied.`]
+        : [];
       if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;
-      window.alert(message);
+      showNotice({ text: message, items: skipped });
     } catch (error) {
       if (revision !== labelImportRevision || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
         || state.errorLog?.value !== previousError) return;
@@ -1509,7 +1535,7 @@ export const createFeatureLabelActions = ({
         .map((sourceText) => `*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${
           normalizeTsvCell(drawing.labelTextBulkOverrides[sourceText])}`);
     if (rows.length === 0) {
-      window.alert('No label rules to export. Export Feature Edits TSV writes per-feature label edits.');
+      showNotice({ text: 'There are no label rules to export. Export Feature Edits TSV writes per-feature label edits.' });
       return;
     }
     const selectedIdx = selectedResultIndex.value;
@@ -1525,6 +1551,7 @@ export const createFeatureLabelActions = ({
     applyFeatureVisibilityToLabels,
     clearLabelBuildNotices,
     clickedFeatureLabelHint,
+    closeHiddenLabelTextDialog,
     closeLabelTextScopeDialog,
     hiddenLabelTextMessage,
     downloadLabelOverrideTable,

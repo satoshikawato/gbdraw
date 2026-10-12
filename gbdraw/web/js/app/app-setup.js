@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
-/** @import { DrawingState, LegendEntry, LinearSeq } from '../state.js' */
+/** @import { DrawingState, LegendEntry, LinearSeq, PopupPosition } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
@@ -25,12 +25,15 @@ import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
+import { drawnBlockStroke, drawsPythonLegendRow, legendEntryKey, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
-import { createRecordDisplayControls } from './record-display-options.js';
+import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
+import { createPreviewItemPopup } from './preview-item-popup.js';
+import { legendRowRules } from '../services/specific-color-rules.js';
+import { drawnTracks, loadedTracks } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
   createFeatureRecordRotationAction,
@@ -57,6 +60,7 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  getLoadedTrackSettings,
   getCommittedLinearDefinitionVisibility,
   readCommittedResourceRecordCount,
   assertActiveModeInputs,
@@ -115,7 +119,7 @@ import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
-import { popupViewportBottom } from '../utils/popup-bounds.js';
+import { placePopupNearPoint, popupViewportBounds } from '../utils/popup-bounds.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
@@ -126,6 +130,7 @@ import {
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { createDialogChoice, setupHistoryInputs } from './history-inputs.js';
+import { createChoicePrompt, createNoticeBanner } from './app-messages.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
 import {
@@ -455,6 +460,7 @@ export const createAppSetup = () => {
     visibleFeatureRows,
     featureRecordPickerVisible,
     featureListTopSpacerPx,
+    featureListExpandedId,
     featureListBottomSpacerPx,
     labelSearch,
     editableLabels,
@@ -1484,6 +1490,12 @@ export const createAppSetup = () => {
   }));
   // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
+  // Confirmations ask with the app's choice dialog, and an
+  // operation's outcome shows in the notice banner (no native confirm or alert).
+  const choicePrompt = createChoicePrompt({ reactive });
+  const noticeBanner = createNoticeBanner({ reactive });
+  const askChoice = choicePrompt.ask;
+  const showNotice = noticeBanner.show;
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor,
@@ -1593,18 +1605,27 @@ export const createAppSetup = () => {
   /** @type {{ projectPaletteAndRules: FeatureEditorOptions['projectPaletteAndRules'] }} */
   // Null only until the root registers the port below; the palette watcher reads it after setup.
   const paletteRulePorts = { projectPaletteAndRules: /** @type {never} */ (null) };
+  // OV-484: the tracks of the request that drew the displayed Result, the one
+  // reader of a track's slot and colors for the Legend panel, the live compile,
+  // the feature popup and the palette's track painter. A Result loaded without
+  // a request (a Session 27 to 30) is described by the track settings Load recorded.
+  const readDrawnTracks = () => {
+    const request = getCommittedCanonicalRenderRequest();
+    return request ? drawnTracks(request) : loadedTracks(getLoadedTrackSettings());
+  };
   const svgActions = createSvgStyles({
     state,
     watch,
     nextTick,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
-    projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args)
+    projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args),
+    readDrawnTracks
   });
   // OV-276, OV-282 (D-26): a Legend panel row shows the color the palette
   // gives its swatch on the displayed Result (the live compile's, by Python's
   // rows), derived and never written into the rows. A new Result brings new
   // Python rows.
-  const legendRowColors = computed(() => displayedLegendRowColors(state, state.activeDrawing()));
+  const legendRowColors = computed(() => displayedLegendRowColors(state, state.activeDrawing(), readDrawnTracks()));
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
   const legendEntryColor = (entry) => legendRowColors.value.listed(entry);
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
@@ -1657,6 +1678,7 @@ export const createAppSetup = () => {
     runUndoableCheckpoint: history.runUndoableCheckpoint,
     closeAfterDialogChoice: dialogChoice.closeAfterChoice,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
+    readDrawnTracks,
     getCommittedSession: getCommittedCanonicalSession,
     readResourceRecordCount: readCommittedResourceRecordCount,
     readFeatureOverrideTable: (payload) => runDiagramHelperOperation(
@@ -1674,7 +1696,9 @@ export const createAppSetup = () => {
     projectPaletteAndRules,
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true }),
     readUserDefaultColor: resultsManager.readUserDefaultColor,
-    setDefaultColor: resultsManager.setDefaultColor
+    setDefaultColor: resultsManager.setDefaultColor,
+    askChoice,
+    showNotice
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
@@ -1823,11 +1847,11 @@ export const createAppSetup = () => {
       })
     })(change);
   };
-  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout });
+  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout, askChoice, runUndoable: history.runUndoable });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
-    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, reactive,
+    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, askChoice,
     onImportNotice: (notice) => { annotationImportNotice.value = notice; }
   });
   watch(
@@ -2884,6 +2908,7 @@ export const createAppSetup = () => {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
+      featureActions.preparePreviewItemAffordances({ root: context.root });
     },
     synchronizeLabelEditor(context) {
       const drawing = state.activeDrawing();
@@ -2960,6 +2985,8 @@ export const createAppSetup = () => {
     readDraftSignature: () => history.getCurrentIntentSignature(),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
+    askChoice,
+    showNotice,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
     getCommittedCanonicalSession,
@@ -3068,9 +3095,20 @@ export const createAppSetup = () => {
     recordActionsExpanded.value = !recordActionsExpanded.value;
     if (recordActionsExpanded.value) featureRecordRotation.readRecords();
   };
+  // A record that rotation cannot use (a linear or cropped record)
+  // shows the rotation row disabled with this reason; a record a Session Load
+  // left unread is read when the row opens.
+  const featureRecordRotationUnavailable = computed(() => {
+    const { targetFailure, disabledReason } = featureRecordRotation.draft;
+    return targetFailure && targetFailure !== RECORD_TARGET_NOT_DISCOVERED && !recordActionsExpanded.value
+      ? disabledReason : '';
+  });
+  // Cancel discards the draft and starts a fresh one for the open popup, as
+  // opening the popup does, so a record found unusable stays explained.
   const cancelRecordActions = () => {
     featureRecordRotation.cancel();
     recordActionsExpanded.value = false;
+    if (clickedFeature.value?.feat) featureRecordRotation.open({ feature: clickedFeature.value.feat });
   };
   historySnapshots.setGeneratedArtifactRuntimeOwner({
     capture: () => ({
@@ -3109,6 +3147,7 @@ export const createAppSetup = () => {
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
+    closeHiddenLabelTextDialog: featureActions.closeHiddenLabelTextDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     previewRuntime,
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
@@ -3137,26 +3176,17 @@ export const createAppSetup = () => {
   // UJ-09 (Owner 2026-10-05): loading a Session replaces the work and clears
   // History, so every route that loads one asks first when History changed
   // since the last Save or Load. Cancel loads nothing.
-  const sessionReplaceDialog = reactive({ show: false, actionLabel: '' });
-  /** @type {(() => void) | null} */
-  let pendingSessionReplacement = null;
   /** @param {string} actionLabel @param {() => void} proceed */
   const confirmSessionReplacement = async (actionLabel, proceed) => {
-    if (!await history.hasChangesSinceSavePoint()) {
-      proceed();
-      return;
-    }
-    pendingSessionReplacement = proceed;
-    sessionReplaceDialog.actionLabel = actionLabel;
-    sessionReplaceDialog.show = true;
-  };
-  /** @param {'load' | 'cancel'} choice */
-  const resolveSessionReplacement = (choice) => {
-    const proceed = pendingSessionReplacement;
-    pendingSessionReplacement = null;
-    sessionReplaceDialog.show = false;
-    // The file picker opens inside the click that confirmed.
-    if (choice === 'load') proceed?.();
+    if (await history.hasChangesSinceSavePoint() && await askChoice({
+      title: 'Replace the current work?',
+      description: 'Loading a Session replaces the current settings and Results and clears Undo history. '
+        + 'Changes since the last Save Session or Load Session are lost.',
+      actions: [{ id: 'load', label: actionLabel, tone: 'primary' }]
+    }) !== 'load') return;
+    // `proceed` may open the file picker: the user activation of the click that
+    // asked, or of the click that confirmed, still holds after these awaits.
+    proceed();
   };
   // The template's hidden file input (`ref="sessionInput"`).
   const sessionInput = ref(null);
@@ -3164,7 +3194,21 @@ export const createAppSetup = () => {
     'Load Session', () => sessionInput.value?.click()
   );
   let nextSessionPreviewToken = 1;
-  const importSession = (event) => importSessionFromFile(event, {
+  // A loaded Session says so in the notice banner, with what the load changed
+  // as a list.
+  const importSession = async (event) => {
+    const name = String(event?.target?.files?.[0]?.name || '');
+    // The notice of an earlier operation does not stand for this load.
+    if (name) noticeBanner.dismiss();
+    const result = await loadSessionFromFile(event);
+    if (result?.status === 'ok') {
+      showNotice({ text: name ? `Session loaded: ${name}` : 'Session loaded.', items: result.warnings || [] });
+    } else if (result?.status === 'legacy') {
+      showNotice({ text: 'Configuration loaded from an older gbdraw. Save Session to keep it in the current format.' });
+    }
+    return result;
+  };
+  const loadSessionFromFile = (event) => importSessionFromFile(event, {
     availability: sessionSaveLoadAvailability,
     transformLegacyResultSvg,
     beforeImport: async () => {
@@ -3272,8 +3316,7 @@ export const createAppSetup = () => {
     legendRowHasRules,
     updateLegendEntryColor,
     deleteLegendEntry,
-    moveLegendEntryUp,
-    moveLegendEntryDown,
+    moveLegendEntry,
     sortLegendEntries,
     sortLegendEntriesByDefault,
     resetLegendPosition,
@@ -3573,6 +3616,7 @@ export const createAppSetup = () => {
       livePreview: domains ? {
         domains,
         paletteColors: appliedFeatureColors(state),
+        drawnTracks: readDrawnTracks(),
         ...legendRowsOf(displayedLegendRowContext(state, drawing)),
         drawnContext: domains.includes('featureVisibility')
           ? featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })
@@ -3829,8 +3873,9 @@ export const createAppSetup = () => {
     // 3. Mode.
     mode.value = nextMode;
     // 4. Transient UI. "Showing the last successful result" named the
-    // departing mode's Result.
+    // departing mode's Result, and the notice the departing mode's work.
     resetModeTransientUi();
+    noticeBanner.dismiss();
     previewFeatureSearch.switchModeSearch(previousMode, nextMode);
     failedGeneratePreservedResult.value = false;
     // OV-372: an operation error belongs to the mode it was raised in, except
@@ -3882,7 +3927,8 @@ export const createAppSetup = () => {
   };
 
   const { requestPaletteChange, selectPalette, requestResetColors } = resultsManager;
-  const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
+  /** @param {{ joinsOpenStep?: boolean }} [options] History's options for the step. */
+  const undoableAction = (label, fn, options) => (...args) => history.runUndoable(label, () => fn(...args), options);
   // Python's report of the per-feature edits the Results do not draw (design
   // Q4 3.4): dormant edits outside the crop or display, edits whose feature
   // the source does not have, and the edits a source-replacing Generate removed.
@@ -3962,7 +4008,73 @@ export const createAppSetup = () => {
       ? handleFeatureStrokeScopeChoiceWithHistory(choice, ...rest)
       : handleFeatureColorScopeChoiceWithHistory(choice, ...rest)
   );
+  // The label scopes the Color/Stroke Change Scope dialog offers; a
+  // label that repeats the Legend name, or the other label, is not offered.
+  const featureStyleScopeLabelOptions = computed(() => {
+    const text = (/** @type {unknown} */ value) => String(value || '').trim().toLowerCase();
+    const dialog = featureStyleScopeDialog;
+    const legend = text(dialog.legendName);
+    const display = text(dialog.displayLabel);
+    const annotation = text(dialog.annotationLabel);
+    return {
+      displayLabel: dialog.displayLabelSiblingCount > 0 && display !== '' && display !== legend,
+      annotationLabel: dialog.annotationLabelSiblingCount > 0 && annotation !== '' && annotation !== legend && annotation !== display
+    };
+  });
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
+  // The Legend tab's grip reorders a row by drag or by the Up and Down arrow
+  // keys; neither is a click, so each move records its own History step.
+  const moveLegendEntryWithHistory = undoableAction('Move legend item', moveLegendEntry);
+  const legendReorder = reactive({ from: /** @type {number | null} */ (null), over: /** @type {number | null} */ (null) });
+  /** @param {number} from @param {number} to @param {boolean} [refocus] */
+  const reorderLegendEntry = (from, to, refocus = false) => {
+    const count = state.activeDrawing().legendEntries.value.length;
+    if (from === to || to < 0 || to >= count) return;
+    moveLegendEntryWithHistory(from, to);
+    if (refocus) {
+      nextTick(() => {
+        const handle = document.querySelector(`[data-legend-reorder-handle="${to}"]`);
+        if (handle instanceof HTMLElement) handle.focus();
+      });
+    }
+  };
+  /** @param {KeyboardEvent} event @param {number} index */
+  const handleLegendReorderKey = (event, index) => {
+    const step = event.key === 'ArrowUp' ? -1 : (event.key === 'ArrowDown' ? 1 : 0);
+    if (!step) return;
+    event.preventDefault();
+    reorderLegendEntry(index, index + step, true);
+  };
+  /** @param {DragEvent} event @param {number} index */
+  const startLegendReorder = (event, index) => {
+    legendReorder.from = index;
+    legendReorder.over = index;
+    const row = event.target instanceof Element ? event.target.closest('[data-legend-drawer-row]') : null;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', String(index));
+      if (row) event.dataTransfer.setDragImage(row, 12, 12);
+    }
+  };
+  /** @param {DragEvent} event @param {number} index */
+  const overLegendReorder = (event, index) => {
+    if (legendReorder.from === null) return;
+    event.preventDefault();
+    legendReorder.over = index;
+  };
+  /** @param {DragEvent} event @param {number} index */
+  const dropLegendReorder = (event, index) => {
+    const from = legendReorder.from;
+    if (from === null) return;
+    event.preventDefault();
+    legendReorder.from = null;
+    legendReorder.over = null;
+    reorderLegendEntry(from, index);
+  };
+  const endLegendReorder = () => {
+    legendReorder.from = null;
+    legendReorder.over = null;
+  };
   // R15-3 (OV-285): the Merge of a rename onto a deleted row's caption is the
   // Restore of that row (by its Python key), then the merge, in one History
   // checkpoint: the merge's rule commit joins it, so one Undo returns both.
@@ -4043,7 +4155,8 @@ export const createAppSetup = () => {
   };
   const updateClickedFeatureLabelTextWithHistory = undoableAction('Change label text', updateClickedFeatureLabelText);
   const handleLabelTextScopeChoiceWithHistory = undoableAction('Change label text', handleLabelTextScopeChoice);
-  const handleHiddenLabelTextChoiceWithHistory = undoableAction('Change label visibility', handleHiddenLabelTextChoice);
+  // The Label Not Shown choice answers the label edit whose step is open: one step, under that step's name.
+  const handleHiddenLabelTextChoiceWithHistory = undoableAction('Change label visibility', handleHiddenLabelTextChoice, { joinsOpenStep: true });
   const requestLabelTextChangeByFeatureIdWithHistory = undoableAction(
     'Change label text',
     requestLabelTextChangeByFeatureId
@@ -4365,8 +4478,9 @@ export const createAppSetup = () => {
   /** @type {HTMLElement | null} */
   let similarityAlignmentReturnFocus = null;
   const similarityAlignmentPaletteRef = ref(null);
-  /** @type {{ x: number | null, y: number | null }} */
-  const similarityAlignmentPalettePosition = reactive({ x: null, y: null });
+  // The floating panel's place and height limit; null until it is placed.
+  /** @type {{ x: number | null, y: number | null, maxHeight: number | null }} */
+  const similarityAlignmentPalettePosition = reactive({ x: null, y: null, maxHeight: null });
   const similarityAlignmentCompact = ref(false);
   const syncSimilarityAlignmentCompact = () => {
     const preview = document.querySelector('[aria-label="Result Preview"]');
@@ -4393,18 +4507,25 @@ export const createAppSetup = () => {
     if (!palette || similarityAlignmentCompact.value) return;
     const margin = 12;
     const maxX = Math.max(margin, window.innerWidth - palette.offsetWidth - margin);
-    const maxY = Math.max(margin, popupViewportBottom() - palette.offsetHeight - margin);
+    const { top, bottom } = popupViewportBounds();
+    const minY = top + margin;
+    // OV-498: the panel is at most as tall as the popup area, so its footer
+    // (Cancel, Apply) stays in the window and its rows scroll.
+    const maxHeight = Math.max(0, bottom - margin - minY);
+    similarityAlignmentPalettePosition.maxHeight = maxHeight;
+    const maxY = Math.max(minY, bottom - Math.min(palette.offsetHeight, maxHeight) - margin);
     similarityAlignmentPalettePosition.x = Math.min(
       Math.max(similarityAlignmentPalettePosition.x ?? maxX, margin), maxX
     );
     similarityAlignmentPalettePosition.y = Math.min(
-      Math.max(similarityAlignmentPalettePosition.y ?? margin, margin), maxY
+      Math.max(similarityAlignmentPalettePosition.y ?? minY, minY), maxY
     );
   };
   const similarityAlignmentPaletteStyle = computed(() => similarityAlignmentCompact.value ? {} : ({
     left: similarityAlignmentPalettePosition.x === null ? undefined : `${similarityAlignmentPalettePosition.x}px`,
     right: similarityAlignmentPalettePosition.x === null ? undefined : 'auto',
-    top: similarityAlignmentPalettePosition.y === null ? undefined : `${similarityAlignmentPalettePosition.y}px`
+    top: similarityAlignmentPalettePosition.y === null ? undefined : `${similarityAlignmentPalettePosition.y}px`,
+    maxHeight: similarityAlignmentPalettePosition.maxHeight === null ? undefined : `${similarityAlignmentPalettePosition.maxHeight}px`
   }));
   const moveSimilarityAlignmentPalette = (event) => {
     if (!similarityAlignmentPaletteDrag) return;
@@ -4470,8 +4591,7 @@ export const createAppSetup = () => {
     }
     if (open) return;
     stopSimilarityAlignmentPaletteDrag();
-    similarityAlignmentPalettePosition.x = null;
-    similarityAlignmentPalettePosition.y = null;
+    Object.assign(similarityAlignmentPalettePosition, { x: null, y: null, maxHeight: null });
     void restoreSimilarityAlignmentFocus();
   });
   onMounted(() => {
@@ -4606,15 +4726,35 @@ export const createAppSetup = () => {
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
   // Reset Settings resets both drawings (PD-OI-070); the Linear records and
-  // comparisons are the Linear drawing's.
+  // comparisons are the Linear drawing's. The button asks first and says what
+  // the reset keeps; `resetSettings` itself does not ask.
+  const requestResetSettings = async () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    const choice = await askChoice({
+      title: 'Reset all settings?',
+      description: 'Circular and Linear both return to their default settings. This also removes your edits:',
+      items: [
+        'Colors, color rules, and the palette',
+        'Labels, Feature visibility, and Feature placements',
+        'Legend names, deleted Legend rows, and Region Annotations',
+        'Linear record definitions, subtitles, regions, reverse complement, and alignment',
+        'Linear comparisons, which turn off; their uploaded tables stay'
+      ],
+      note: 'Uploaded files, the records you chose, File defaults, and Depth files stay. Undo brings the settings back.',
+      actions: [{ id: 'reset', label: 'Reset all settings', tone: 'danger' }],
+      cancelLabel: 'Keep settings'
+    });
+    if (choice !== 'reset') return false;
+    return resetSettings();
+  };
   const resetSettings = () => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    const proceed = window.confirm(
-      'Reset all settings to the webapp defaults?\n\nUploaded files and current results will be kept.'
-    );
-    if (!proceed) return false;
+    // A notice (a loaded Session's warnings, a table import) described the
+    // settings the reset replaces. Generate keeps it: it describes the Session.
+    noticeBanner.dismiss();
 
     // OV-287, OV-289, OV-290 (PD-OI-066): the displayed Result shows the
     // reset draft as the next Generate draws it. One projection of the editor
@@ -4679,6 +4819,16 @@ export const createAppSetup = () => {
     resetPreviewViewport({ resetZoom: true });
   };
 
+  // Reset Layout has something to reset once an element moved, the
+  // canvas padding changed, or the view was panned or zoomed.
+  const layoutResetAvailable = computed(() => {
+    const moved = (/** @type {{ x: number, y: number }} */ offset) => Boolean(Number(offset.x) || Number(offset.y));
+    const padding = state.activeDrawing().canvasPadding;
+    return [state.diagramOffset, state.legendCurrentOffset, state.plotTitleUserOffset, state.lengthBarUserOffset, canvasPan].some(moved)
+      || zoom.value !== 1
+      || ['top', 'right', 'bottom', 'left'].some((side) => Number(padding[side]));
+  });
+
   const isInteractiveTarget = (target) => {
     if (!target) return false;
     return Boolean(target.closest('input, textarea, select, button, label, a, [data-nodrag="true"]'));
@@ -4699,68 +4849,83 @@ export const createAppSetup = () => {
     return Math.min(Math.max(numeric, safeMin), safeMax);
   };
 
-  // The popup's size follows the app-level rich popup preference.
-  const getFeaturePopupConstraints = (left = clickedFeaturePos.x, top = clickedFeaturePos.y) => {
-    const viewportWidth = Math.max(1, window.innerWidth || 1);
-    const viewportHeight = popupViewportBottom();
-    const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
-    const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
-    const desiredMinWidth =
-      richFeaturePopup.value === false ? FEATURE_POPUP_SIMPLE_MIN_WIDTH : FEATURE_POPUP_RICH_MIN_WIDTH;
+  // A popup's size limits at its position, inside the popup bounds.
+  /**
+   * @param {number} left
+   * @param {number} top
+   * @param {number} desiredMinWidth
+   * @param {number} desiredMinHeight
+   */
+  const popupConstraints = (left, top, desiredMinWidth, desiredMinHeight) => {
+    const bounds = popupViewportBounds();
+    const availableWidth = Math.max(1, bounds.right - (FEATURE_POPUP_MARGIN * 2));
+    const availableHeight = Math.max(1, bounds.bottom - bounds.top - (FEATURE_POPUP_MARGIN * 2));
     const minWidth = Math.min(desiredMinWidth, availableWidth);
-    const minHeight = Math.min(FEATURE_POPUP_MIN_HEIGHT, availableHeight);
+    const minHeight = Math.min(desiredMinHeight, availableHeight);
     return {
       minWidth,
       minHeight,
-      maxWidth: Math.max(minWidth, viewportWidth - left - FEATURE_POPUP_MARGIN),
-      maxHeight: Math.max(minHeight, viewportHeight - top - FEATURE_POPUP_MARGIN)
+      maxWidth: Math.max(minWidth, bounds.right - left - FEATURE_POPUP_MARGIN),
+      maxHeight: Math.max(minHeight, bounds.bottom - top - FEATURE_POPUP_MARGIN)
     };
   };
+  // The popup's size follows the app-level rich popup preference.
+  const getFeaturePopupConstraints = (left = clickedFeaturePos.x, top = clickedFeaturePos.y) => popupConstraints(
+    left, top,
+    richFeaturePopup.value === false ? FEATURE_POPUP_SIMPLE_MIN_WIDTH : FEATURE_POPUP_RICH_MIN_WIDTH,
+    FEATURE_POPUP_MIN_HEIGHT
+  );
+  const getPairwiseMatchPopupConstraints = (left = clickedPairwiseMatchPos.x, top = clickedPairwiseMatchPos.y) => popupConstraints(
+    left, top, PAIRWISE_MATCH_POPUP_MIN_WIDTH, PAIRWISE_MATCH_POPUP_MIN_HEIGHT
+  );
 
-  const featurePopupStyle = computed(() => {
-    const style = {
-      top: `${clickedFeaturePos.y}px`,
-      left: `${clickedFeaturePos.x}px`,
-      maxHeight: `${getFeaturePopupConstraints().maxHeight}px`
-    };
-    if (featurePopupSize.width > 0) {
-      style.width = `${featurePopupSize.width}px`;
-    }
-    if (featurePopupSize.height > 0) {
-      style.height = `${featurePopupSize.height}px`;
-    }
-    return style;
+  /**
+   * @param {PopupPosition} pos
+   * @param {{ width: number, height: number }} size
+   * @param {{ maxHeight: number }} constraints
+   */
+  const popupStyle = (pos, size, constraints) => ({
+    top: `${pos.y}px`,
+    left: `${pos.x}px`,
+    maxHeight: `${pos.maxHeight > 0 ? Math.min(pos.maxHeight, constraints.maxHeight) : constraints.maxHeight}px`,
+    ...(size.width > 0 ? { width: `${size.width}px` } : {}),
+    ...(size.height > 0 ? { height: `${size.height}px` } : {})
   });
+  const featurePopupStyle = computed(() => popupStyle(clickedFeaturePos, featurePopupSize, getFeaturePopupConstraints()));
+  const pairwiseMatchPopupStyle = computed(() => popupStyle(clickedPairwiseMatchPos, pairwiseMatchPopupSize, getPairwiseMatchPopupConstraints()));
 
-  const getPairwiseMatchPopupConstraints = (left = clickedPairwiseMatchPos.x, top = clickedPairwiseMatchPos.y) => {
-    const viewportWidth = Math.max(1, window.innerWidth || 1);
-    const viewportHeight = popupViewportBottom();
-    const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
-    const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
-    const minWidth = Math.min(PAIRWISE_MATCH_POPUP_MIN_WIDTH, availableWidth);
-    const minHeight = Math.min(PAIRWISE_MATCH_POPUP_MIN_HEIGHT, availableHeight);
-    return {
-      minWidth,
-      minHeight,
-      maxWidth: Math.max(minWidth, viewportWidth - left - FEATURE_POPUP_MARGIN),
-      maxHeight: Math.max(minHeight, viewportHeight - top - FEATURE_POPUP_MARGIN)
-    };
+  // OV-371: a popup opened at a clicked point was placed with an expected
+  // size; once rendered it is placed again with its own size and content height.
+  /**
+   * @param {PopupPosition} pos
+   * @param {HTMLElement | null} element
+   * @param {string} bodySelector
+   */
+  const placeRenderedPopup = (pos, element, bodySelector) => {
+    const point = pos.anchor;
+    pos.anchor = null;
+    if (!point || !element) return;
+    const body = element.querySelector(bodySelector);
+    const height = element.offsetHeight + (body ? body.scrollHeight - body.clientHeight : 0);
+    Object.assign(pos, placePopupNearPoint({ point, width: element.offsetWidth, height, bounds: popupViewportBounds() }));
   };
+  watch(clickedFeature, () => placeRenderedPopup(clickedFeaturePos, featurePopupRef.value, '.feature-popup-body'), { flush: 'post' });
+  watch(clickedPairwiseMatch, () => placeRenderedPopup(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value, '.pairwise-match-popup-body'), { flush: 'post' });
 
-  const pairwiseMatchPopupStyle = computed(() => {
-    const style = {
-      top: `${clickedPairwiseMatchPos.y}px`,
-      left: `${clickedPairwiseMatchPos.x}px`,
-      maxHeight: `${getPairwiseMatchPopupConstraints().maxHeight}px`
-    };
-    if (pairwiseMatchPopupSize.width > 0) {
-      style.width = `${pairwiseMatchPopupSize.width}px`;
-    }
-    if (pairwiseMatchPopupSize.height > 0) {
-      style.height = `${pairwiseMatchPopupSize.height}px`;
-    }
-    return style;
-  });
+  // A drag keeps the popup inside the popup bounds (OV-384: below the header).
+  /**
+   * @param {PopupPosition} pos
+   * @param {HTMLElement | null} element
+   * @param {number} x
+   * @param {number} y
+   */
+  const dragPopupTo = (pos, element, x, y) => {
+    const bounds = popupViewportBounds();
+    const margin = FEATURE_POPUP_MARGIN;
+    pos.x = clampNumber(x, margin, bounds.right - (element?.offsetWidth || 0) - margin);
+    pos.y = clampNumber(y, bounds.top + margin, bounds.bottom - (element?.offsetHeight || 0) - margin);
+    pos.maxHeight = 0;
+  };
 
   const pairwiseBlockOrthogroups = computed(() => (
     Array.isArray(clickedPairwiseMatch.value?.blockOrthogroups)
@@ -4821,16 +4986,8 @@ export const createAppSetup = () => {
 
   const onPairwiseMatchPopupDrag = (event) => {
     if (!pairwiseMatchPopupDrag.active || pairwiseMatchPopupResize.active) return;
-    const popup = pairwiseMatchPopupRef.value;
-    const width = popup?.offsetWidth || 420;
-    const height = popup?.offsetHeight || 360;
-    const margin = FEATURE_POPUP_MARGIN;
-    const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, popupViewportBottom() - height - margin);
-    const nextX = event.clientX - pairwiseMatchPopupDrag.offsetX;
-    const nextY = event.clientY - pairwiseMatchPopupDrag.offsetY;
-    clickedPairwiseMatchPos.x = Math.min(Math.max(nextX, margin), maxX);
-    clickedPairwiseMatchPos.y = Math.min(Math.max(nextY, margin), maxY);
+    dragPopupTo(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value,
+      event.clientX - pairwiseMatchPopupDrag.offsetX, event.clientY - pairwiseMatchPopupDrag.offsetY);
   };
 
   const endPairwiseMatchPopupDrag = () => {
@@ -4885,6 +5042,7 @@ export const createAppSetup = () => {
     document.removeEventListener('mousemove', onPairwiseMatchPopupDrag);
     document.removeEventListener('mouseup', endPairwiseMatchPopupDrag);
 
+    clickedPairwiseMatchPos.maxHeight = 0;
     pairwiseMatchPopupResize.active = true;
     pairwiseMatchPopupResize.startX = event.clientX;
     pairwiseMatchPopupResize.startY = event.clientY;
@@ -4900,16 +5058,8 @@ export const createAppSetup = () => {
 
   const onFeaturePopupDrag = (event) => {
     if (!featurePopupDrag.active || featurePopupResize.active) return;
-    const popup = featurePopupRef.value;
-    const width = popup?.offsetWidth || 360;
-    const height = popup?.offsetHeight || 260;
-    const margin = 12;
-    const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, popupViewportBottom() - height - margin);
-    const nextX = event.clientX - featurePopupDrag.offsetX;
-    const nextY = event.clientY - featurePopupDrag.offsetY;
-    clickedFeaturePos.x = Math.min(Math.max(nextX, margin), maxX);
-    clickedFeaturePos.y = Math.min(Math.max(nextY, margin), maxY);
+    dragPopupTo(clickedFeaturePos, featurePopupRef.value,
+      event.clientX - featurePopupDrag.offsetX, event.clientY - featurePopupDrag.offsetY);
   };
 
   const onFeaturePopupResize = (event) => {
@@ -4964,6 +5114,7 @@ export const createAppSetup = () => {
     document.removeEventListener('mousemove', onFeaturePopupDrag);
     document.removeEventListener('mouseup', endFeaturePopupDrag);
 
+    clickedFeaturePos.maxHeight = 0;
     featurePopupResize.active = true;
     featurePopupResize.startX = event.clientX;
     featurePopupResize.startY = event.clientY;
@@ -5011,13 +5162,34 @@ export const createAppSetup = () => {
     }
   );
 
-  // Popup header line "<record ID>: <location> · <gene>", from payload fields
-  // only; the gene is shown when it differs from the label above it.
+  // The popup header names the gene (else the feature label), then
+  // its product, then "<record ID> · <location>" with grouped digits (parts
+  // joined by "; ", since a grouped number holds a comma), all from payload
+  // fields only.
+  const clickedFeatureHeading = computed(() => {
+    const cf = clickedFeature.value;
+    const title = String(cf?.gene || cf?.label || '');
+    return { title, product: cf?.product && cf.product !== title ? cf.product : '' };
+  });
   const clickedFeatureSummary = computed(() => {
     const cf = clickedFeature.value;
-    const located = [cf?.recordId, cf?.location || ''].filter(Boolean).join(': ');
-    return cf?.gene && cf.gene !== cf.label ? `${located} · ${cf.gene}` : located;
+    const location = String(cf?.location || '').replaceAll(', ', '; ')
+      .replace(/\d{4,}/g, (digits) => Number(digits).toLocaleString('en-US'));
+    return [cf?.recordId, location].filter(Boolean).join(' · ');
   });
+
+  // One Copy per tab: the header lines and the rows, or every qualifier.
+  const copyClickedFeatureDetails = () => {
+    const cf = clickedFeature.value;
+    if (!cf) return;
+    const { title, product } = clickedFeatureHeading.value;
+    copyTextToClipboard([title, product, clickedFeatureSummary.value, ...cf.detailRows.map((row) => `${row.label}: ${row.value}`)]
+      .filter(Boolean).join('\n'));
+  };
+  const copyClickedFeatureQualifiers = () => {
+    const rows = clickedFeature.value?.qualifierRows || [];
+    copyTextToClipboard(rows.flatMap((row) => row.values.map((value) => `/${row.key}="${value}"`)).join('\n'));
+  };
 
   const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
     const value = String(text ?? '');
@@ -5106,6 +5278,7 @@ export const createAppSetup = () => {
 
   const saveSessionWithTitle = () => exportSession(null, {
     availability: sessionSaveLoadAvailability,
+    askChoice,
     recordDisplayRows: recordDisplayControls.allRows,
     // Save writes every Result: the other mode's slot goes beside the shown one (E1).
     readOtherModeArtifact: () => artifactSlots[mode.value === 'linear' ? 'circular' : 'linear'],
@@ -5150,11 +5323,29 @@ export const createAppSetup = () => {
     },
     onError: (error) => { errorLog.value = normalizeUserFacingError(error); },
     // UJ-09: a saved download is the History position Load Session compares with.
-    onSaved: () => history.markSavePoint()
+    // The notice names the file the download started.
+    onSaved: (/** @type {{ filename: string }} */ { filename }) => {
+      history.markSavePoint();
+      showNotice({ text: `Session saved: ${filename}. Find it in your browser's downloads.` });
+    }
   });
 
-  const openFeatureEditorFromList = (feat, event) => {
-    return openFeatureEditorForFeature(feat, event);
+  // OV-503: Edit in the Editor drawer's list opens the popup beside the drawer
+  // and the toggle on the drawer's edge (OV-505). Without an event the popup
+  // is centred.
+  /** @param {{ clientX?: number, clientY?: number, currentTarget?: EventTarget | null } | null} [event] */
+  const openFeatureEditorFromList = (feat, event = null) => {
+    const drawer = event?.currentTarget instanceof Element ? event.currentTarget.closest('.right-drawer') : null;
+    const rects = [drawer, drawer?.parentElement?.querySelector(':scope > .drawer-toggle')]
+      .flatMap((element) => (element ? [element.getBoundingClientRect()] : []));
+    return openFeatureEditorForFeature(feat, event && {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      panel: rects.length ? {
+        left: Math.min(...rects.map((rect) => rect.left)), top: Math.min(...rects.map((rect) => rect.top)),
+        right: Math.max(...rects.map((rect) => rect.right)), bottom: Math.max(...rects.map((rect) => rect.bottom))
+      } : null
+    });
   };
 
   const getCircularRecordOrderLabel = (selector) => {
@@ -5236,15 +5427,41 @@ export const createAppSetup = () => {
     return '';
   });
 
-  const circularSingleRecordPresentationEnabled = computed(() => {
+  // Why a Circular record's own fields (crop, orientation, title lines) are
+  // unavailable, in the order the sidebar explains it; '' when they are not.
+  const circularOwnRecordBlock = computed(() => {
     const drawing = state.activeDrawing();
-    if (mode.value !== 'circular' || drawing.form.multi_record_canvas
-      || drawing.adv.circular_grouping_intent === 'batch'
-      || circularRecordDiscoveryState.value.status !== 'ready') return false;
+    if (drawing.form.multi_record_canvas) return 'multi-record-canvas';
+    if (circularRecordDiscoveryState.value.status !== 'ready') return 'not-inspected';
     const entries = circularRecordPresentationEntries();
     const selection = resolveDisambiguatedRecordSelection(entries, drawing.form.circular_record_selector);
-    return selection.status === 'resolved'
-      || (selection.status === 'unspecified' && entries.length === 1);
+    return drawing.adv.circular_grouping_intent !== 'batch'
+      && (selection.status === 'resolved' || (selection.status === 'unspecified' && entries.length === 1))
+      ? '' : 'no-single-record';
+  });
+  const circularSingleRecordPresentationEnabled = computed(() => mode.value === 'circular' && !circularOwnRecordBlock.value);
+
+  // The legend-entry and record-definition popups (match popup frame): views
+  // of the displayed Result and the settings; their edits are the Legend
+  // panel's and the sidebar's.
+  const previewItemPopup = createPreviewItemPopup({
+    state,
+    computed,
+    readLegendEntryColor: legendEntryColor,
+    readLegendRowRules: (entry) => legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, state.activeDrawing())),
+    countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
+    getCommittedRequest: getCommittedCanonicalRenderRequest,
+    readAlignmentInspector: () => similarityAlignmentActions.activePlanInspector.value,
+    readCommittedRecordRows: recordDisplayControls.committedRecordRows,
+    readCircularOwnRecordBlock: () => circularOwnRecordBlock.value,
+    runUndoable: history.runUndoable,
+    sessionBusy: sessionOperationAvailability,
+    // The popup sits outside the app root that records the Legend panel's text
+    // edits, so its rename records its own step.
+    renameLegendRow: undoableAction('Rename legend item', renameLegendEntry),
+    legendRenameSettled: () => (legendRenameDialog.show ? new Promise((resolve) => {
+      const stop = watch(() => legendRenameDialog.show, (shown) => { if (!shown) { stop(); resolve(undefined); } });
+    }) : Promise.resolve())
   });
 
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
@@ -5960,6 +6177,7 @@ export const createAppSetup = () => {
     featureRecordRotationDraft: featureRecordRotation.draft,
     recordActionsExpanded,
     toggleRecordActions,
+    featureRecordRotationUnavailable,
     cancelRecordActions,
     setFeatureRecordRotationPosition: featureRecordRotation.setPosition,
     setFeatureRecordRotationReference: featureRecordRotation.setReference,
@@ -6059,8 +6277,6 @@ export const createAppSetup = () => {
     annotationImportNotice,
     specificRuleNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
-    annotationReplaceAllDialog: annotationEditor.annotationReplaceAllDialog,
-    handleAnnotationReplaceAllChoice: annotationEditor.handleAnnotationReplaceAllChoice,
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
     canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,
@@ -6217,6 +6433,7 @@ export const createAppSetup = () => {
     circularTrackSlotOptionsOpen: circularTrackSlotEditor.circularTrackSlotOptionsOpen,
     setCircularTrackSlotOptionsOpen: circularTrackSlotEditor.setCircularTrackSlotOptionsOpen,
     circularTrackSlotOptionsSummary: circularTrackSlotEditor.circularTrackSlotOptionsSummary,
+    circularDrawingDinucleotide: circularTrackSlotEditor.circularDrawingDinucleotide,
     updateCircularTrackSlotMeasure: circularTrackSlotEditor.updateCircularTrackSlotMeasure,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
@@ -6326,6 +6543,7 @@ export const createAppSetup = () => {
     linearTrackSlotDisplayLabel: linearTrackSlotEditor.linearTrackSlotDisplayLabel,
     linearTrackSlotDisplayMeta: linearTrackSlotEditor.linearTrackSlotDisplayMeta,
     linearTrackSlotLegendLabelPlaceholder: linearTrackSlotEditor.linearTrackSlotLegendLabelPlaceholder,
+    linearDrawingDinucleotide: linearTrackSlotEditor.linearDrawingDinucleotide,
     linearTrackSlotPlacementLabel: linearTrackSlotEditor.linearTrackSlotPlacementLabel,
     linearTrackSlotUsesPresetGeometry: linearTrackSlotEditor.linearTrackSlotUsesPresetGeometry,
     losat: drawingMember('losat'),
@@ -6548,6 +6766,7 @@ export const createAppSetup = () => {
     visibleFeatureRows,
     featureRecordPickerVisible,
     featureListTopSpacerPx,
+    featureListExpandedId,
     featureListBottomSpacerPx,
     isFeatureDrawerMounted,
     featureListScrollRef,
@@ -6604,6 +6823,9 @@ export const createAppSetup = () => {
     selectPairwiseBlockOrthogroup,
     openPairwiseFeatureRow,
     clickedFeatureSummary,
+    clickedFeatureHeading,
+    copyClickedFeatureDetails,
+    copyClickedFeatureQualifiers,
       copyText: copyTextToClipboard,
     downloadText,
     canUseClickedOrthogroupActions,
@@ -6625,6 +6847,7 @@ export const createAppSetup = () => {
     setClickedFeatureStrokeWidthValue: setClickedFeatureStrokeWidthValueWithHistory,
     resetClickedFeatureStroke: resetClickedFeatureStrokeWithHistory,
     featureStyleScopeDialog,
+    featureStyleScopeLabelOptions,
     featureVisibilityScopeDialog,
     handleColorScopeChoice: handleColorScopeChoiceWithHistory,
     handleFeatureStyleScopeChoice: handleFeatureStyleScopeChoiceWithHistory,
@@ -6655,6 +6878,11 @@ export const createAppSetup = () => {
     openFeatureEditorFromList,
     legendEntries: drawingMember('legendEntries'),
     legendEntryColor,
+    previewItemView: previewItemPopup.view,
+    setPreviewRecordField: previewItemPopup.setRecordField,
+    showPreviewRecordSettings: previewItemPopup.showRecordSettings,
+    renameLegendEntryInPopup: previewItemPopup.renameLegendRow,
+    commitPreviewItemField: previewItemPopup.commitField,
     deletedLegendEntryColor,
     updateLegendEntryColor: updateLegendEntryColorShown,
     renameLegendEntry,
@@ -6669,8 +6897,13 @@ export const createAppSetup = () => {
       'Restore legend item', () => restoreDeletedLegendEntries([index])
     ),
     restoreAllDeletedLegendEntries: () => restoreLegendItems('Restore legend items', () => restoreDeletedLegendEntries(null)),
-    moveLegendEntryUp,
-    moveLegendEntryDown,
+    moveLegendEntry,
+    legendReorder,
+    handleLegendReorderKey,
+    startLegendReorder,
+    overLegendReorder,
+    dropLegendReorder,
+    endLegendReorder,
     sortLegendEntries,
     sortLegendEntriesByDefault,
     resetLegendPosition: undoableAction('Reset legend position', resetLegendPosition),
@@ -6685,6 +6918,7 @@ export const createAppSetup = () => {
     resetAllStrokes: editEditorIntent('Reset all strokes', resetAllStrokes),
     resetAllPositions: undoableAction('Reset positions', resetAllPositions),
     resetLayout: undoableAction('Reset layout', resetLayout),
+    layoutResetAvailable,
     canvasPadding: drawingMember('canvasPadding'),
     showCanvasControls,
     resetCanvasPadding,
@@ -6718,6 +6952,7 @@ export const createAppSetup = () => {
     runInfoReproducibilityText,
     runInfoHasCliHelperFiles,
     resetSettings,
+    requestResetSettings,
     saveSessionWithTitle,
     editSessionTitle,
     importSession,
@@ -6729,8 +6964,10 @@ export const createAppSetup = () => {
     closeExampleChooser,
     loadExampleSession,
     exampleSessionPending,
-    sessionReplaceDialog,
-    resolveSessionReplacement,
+    choicePrompt: choicePrompt.prompt,
+    resolveChoicePrompt: choicePrompt.resolve,
+    notice: noticeBanner.notice,
+    dismissNotice: noticeBanner.dismiss,
     circularRecordPresentationPanel,
     canUndoHistory,
     canRedoHistory,

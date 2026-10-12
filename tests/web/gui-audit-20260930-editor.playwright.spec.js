@@ -302,8 +302,8 @@ test('changing the Linear legend position after a legend-free Generate raises no
     await settle(page);
     expect(pageErrors).toEqual([]);
     // Reset Settings also restores a legend side on the legend-free Result.
-    await page.evaluate(() => { window.confirm = () => true; });
     await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+    await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
     await settle(page);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.form.legend)).not.toBe('left');
     expect(pageErrors).toEqual([]);
@@ -569,7 +569,7 @@ const applyPopupLabel = (page, featureId, text, visibility, choice = null) => ev
   await app.openFeatureEditorFromList(feature, null);
   await window.Vue.nextTick();
   const hint = document.querySelector('.feature-popup')?.textContent
-    .includes('This feature has no label in the current Result.');
+    .includes('No label shown');
   app.clickedFeature.labelVisibility = edit.visibility;
   if (edit.text !== null) app.clickedFeature.labelText = edit.text;
   // Label Not Shown keeps the Apply open until its choice; no choice cancels.
@@ -849,7 +849,7 @@ test('Label visibility On for a hidden feature shows the feature and label or ke
   expect(await labelState()).toMatchObject({ reflowError: null, labels: [[first, 'FL1_SHOWN']] });
 
   await hideFeature(page, second);
-  expect(await popupLabelHint(page, second)).toBe('This feature has no label in the current Result. The feature is hidden.');
+  expect(await popupLabelHint(page, second)).toBe('No label shown (the feature is hidden).');
   const shown = await labelOnFacts(page);
   await startLabelOn(page, second, 'FL2_KEPT');
   await answerLabelOn(page, 'Feature Is Hidden', 'Keep feature hidden');
@@ -932,7 +932,7 @@ test('Label visibility On for a feature that a visibility rule hides asks first,
   expect(await shown()).toEqual(live);
 
   await addVisibilityRule(page, { recordId: '*', featureType: '*', qualifier: 'hash', value: `^${fl2.toUpperCase()}$`, action: 'off' });
-  expect(await popupLabelHint(page, fl2)).toBe('This feature has no label in the current Result. The feature is hidden.');
+  expect(await popupLabelHint(page, fl2)).toBe('No label shown (the feature is hidden).');
   await startLabelOn(page, fl2, 'FL2_KEPT');
   await answerLabelOn(page, 'Feature Is Hidden', 'Keep feature hidden');
   expect(await identityEdits(page, fl2Identity)).toEqual({ featureVisibility: null, labelVisibility: 'on' });
@@ -1033,7 +1033,7 @@ test('the feature popup note follows a Feature Visibility rule edit', async ({ p
     await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
   }, fl2);
   const note = page.locator('[data-label-visibility-hint]');
-  const hidden = 'This feature has no label in the current Result. The feature is hidden.';
+  const hidden = 'No label shown (the feature is hidden).';
   await expect(note).toHaveText(hidden);
   // The first rule now hides FL2 too; Python has not matched its new regex yet.
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'value', '^fl[12]$'));
@@ -1227,7 +1227,7 @@ test('Label visibility On for an underlay feature is kept without a label until 
   expect(await labelOnFacts(page)).toEqual(before);
 
   await startLabelOn(page, repeat, 'RPT_FORCED');
-  await answerLabelOn(page, 'Label Cannot Be Drawn', 'Keep without label');
+  await answerLabelOn(page, 'Label Cannot Be Drawn', 'Keep Label On');
   expect(await labelOnFacts(page)).toEqual({
     ...before,
     undo: before.undo + 1,
@@ -1237,10 +1237,7 @@ test('Label visibility On for an underlay feature is kept without a label until 
   });
   await waitForLabelReflow(page);
   expect(await labelState()).toMatchObject({ reflowError: null, labels: [] });
-  expect(await popupLabelHint(page, repeat)).toBe(
-    'This feature has no label in the current Result. Labels are not drawn for features drawn as "Underlay". '
-    + 'Its Label visibility "On" applies when the label can be drawn.'
-  );
+  expect(await popupLabelHint(page, repeat)).toBe('No label shown (drawn as Underlay). On applies when the label can be drawn.');
 
   await generate(page);
   expect(await labelState()).toMatchObject({ error: null, labels: [] });
@@ -1276,7 +1273,7 @@ test('Label visibility On that does not fit with Embedded Only asks after the re
   expect(await labelState()).toMatchObject({ reflowError: null, labels: initialLabels });
 
   await startLabelOn(page, fl1, longText);
-  await answerLabelOn(page, 'Label Does Not Fit', 'Keep without label');
+  await answerLabelOn(page, 'Label Does Not Fit', 'Keep Label On');
   expect(await labelOnFacts(page)).toEqual({
     ...before,
     undo: before.undo + 1,
@@ -1288,9 +1285,7 @@ test('Label visibility On that does not fit with Embedded Only asks after the re
   const kept = initialLabels.filter(([featureId]) => featureId !== fl1);
   expect(await labelState()).toMatchObject({ reflowError: null, labels: kept });
   expect(await popupLabelHint(page, fl1)).toBe(
-    'This feature has no label in the current Result. With "Label Rendering" = "Embedded Only", '
-    + 'a label is drawn only when it fits inside its feature. '
-    + 'Its Label visibility "On" applies when the label can be drawn.'
+    'No label shown (does not fit; Label Rendering = Embedded Only). On applies when the label can be drawn.'
   );
 
   await generate(page);
@@ -1322,9 +1317,9 @@ const editTextOnly = (page, locator, text) => evaluateWithRetainedPromise(page, 
   return { note, dialog };
 }, { locator, text });
 
-for (const [name, mode, locator, sentence] of [
-  ['a feature drawn as Underlay', 'out', 'repeat_region', 'Labels are not drawn for features drawn as "Underlay".'],
-  ['Show Labels None', 'none', 'FL1', 'Labels are set to "None"']
+for (const [name, mode, locator, sentence, cause] of [
+  ['a feature drawn as Underlay', 'out', 'repeat_region', 'Labels are not drawn for features drawn as "Underlay".', 'drawn as Underlay'],
+  ['Show Labels None', 'none', 'FL1', 'Labels are set to "None"', 'Show Labels = None']
 ]) {
   test(`the Label Not Shown dialog names the reason: ${name}`, async ({ page }) => {
     test.setTimeout(300_000);
@@ -1332,7 +1327,7 @@ for (const [name, mode, locator, sentence] of [
     await page.evaluate((labelsMode) => { window.__GBDRAW_APP__.form.labels_mode = labelsMode; }, mode);
     await generate(page);
     const { note, dialog } = await editTextOnly(page, locator, 'EDITED_TEXT');
-    expect(note).toContain(sentence);
+    expect(note).toContain(`No label shown (${cause})`);
     expect(dialog).toContain(`This feature has no label in the current Result. ${sentence}`);
     expect(dialog).not.toContain('With the current Show Labels and label filter settings');
   });

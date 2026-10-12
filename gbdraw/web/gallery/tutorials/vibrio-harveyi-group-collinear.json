@@ -652,7 +652,7 @@
     },
     {
       "title": "Start chromosome I at dnaA",
-      "body": "Start each chromosome I at its replication initiator, dnaA. In the search bar above the preview, set the search field to Qualifier value, type gene as the Qualifier key and dnaA as the query, and click Search; it finds the dnaA CDS of both species. Click Open, then in the popup open Rotate record using this feature, choose Start of the record, and click Apply on Generate. Click > for the second match and do the same.",
+      "body": "Start each chromosome I at its replication initiator, dnaA. In the search bar above the preview, set the search field to Qualifier value, type gene as the Qualifier key and dnaA as the query, and click Search; it finds the dnaA CDS of both species. Click Open, then in the popup open Rotate record using this feature, choose Start of the record, and click Apply when I Generate. Click > for the second match and do the same.",
       "table": {
         "columns": [
           "Record",
@@ -705,7 +705,7 @@
         },
         {
           "type": "waitForFunction",
-          "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 / 2 features'"
+          "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 of 2 matches'"
         },
         {
           "type": "click",
@@ -733,7 +733,7 @@
         },
         {
           "type": "click",
-          "selector": "role=button[name='Apply on Generate's]"
+          "selector": "role=button[name='Apply when I Generate's]"
         },
         {
           "type": "wait",
@@ -745,7 +745,7 @@
         },
         {
           "type": "waitForFunction",
-          "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '2 / 2 features'"
+          "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '2 of 2 matches'"
         },
         {
           "type": "click",
@@ -773,7 +773,7 @@
         },
         {
           "type": "click",
-          "selector": "role=button[name='Apply on Generate's]"
+          "selector": "role=button[name='Apply when I Generate's]"
         },
         {
           "type": "wait",
@@ -786,7 +786,7 @@
           "title": "Search by qualifier value",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-06-01-search-dnaa.webp",
-            "alt": "Feature search bar with Search field set to Qualifier value, gene as the qualifier key, dnaA as the query, 1 / 2 features found, and the first match named as NC_004603.1.",
+            "alt": "Feature search bar with Search field set to Qualifier value, gene as the qualifier key, dnaA as the query, 1 of 2 matches, and the first match named as NC_004603.1.",
             "caption": "Set the search field to Qualifier value, enter gene and dnaA, and click Search."
           },
           "capture": {
@@ -822,7 +822,7 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 / 2 features'"
+                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 of 2 matches'"
               }
             ],
             "selector": ".preview-feature-search",
@@ -834,7 +834,7 @@
               "previewFeatureSearchInput": "dnaA"
             },
             "visibleText": [
-              "1 / 2 features",
+              "1 of 2 matches",
               "Record NC_004603.1 · Matched Qualifier gene: dnaA"
             ],
             "visibleControls": [
@@ -859,8 +859,8 @@
           "title": "Rotate the record",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-06-02-rotate-start.webp",
-            "alt": "Feature popup for the dnaA CDS of NC_004603.1 with Rotate record using this feature open, Start of the record selected, and the note NC_004603.1 will start at 7,680.",
-            "caption": "Click Open, then under Layout choose Rotate record using this feature, Start of the record, and Apply on Generate."
+            "alt": "Edit tab of the feature popup for the dnaA CDS of NC_004603.1 (header: dnaA, its product, then the record and location), with the Similarity group section above Layout, Rotate record using this feature open, Start of the record selected, the note NC_004603.1 will start at 7,680, and the buttons Apply when I Generate and Apply now.",
+            "caption": "Click Open, then under Layout choose Rotate record using this feature, Start of the record, and Apply when I Generate."
           },
           "capture": {
             "source": "webapp",
@@ -895,7 +895,7 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 / 2 features'"
+                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 of 2 matches'"
               },
               {
                 "type": "click",
@@ -952,7 +952,7 @@
               "Rotate record using this feature",
               "Start of the record",
               "NC_004603.1 will start at 7,680",
-              "Apply on Generate"
+              "Apply when I Generate"
             ],
             "visibleControls": [
               {
@@ -967,7 +967,7 @@
     },
     {
       "title": "Start chromosome II at rctB",
-      "body": "Search Qualifier key product for RctB. For each of the two matches, click Open and rotate the record to start at the feature with Apply on Generate. Then click Clear to end the search, so the preview stops dimming the other features.",
+      "body": "Search Qualifier key product for RctB. For each of the two matches, click Open and rotate the record to start at the feature with Apply when I Generate. Then click Clear to end the search, so the preview stops dimming the other features.",
       "table": {
         "columns": [
           "Record",
@@ -1020,7 +1020,7 @@
         },
         {
           "type": "waitForFunction",
-          "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 / 2 features'"
+          "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 of 2 matches'"
         },
         {
           "type": "click",
@@ -1048,7 +1048,7 @@
         },
         {
           "type": "click",
-          "selector": "role=button[name='Apply on Generate's]"
+          "selector": "role=button[name='Apply when I Generate's]"
         },
         {
           "type": "wait",
@@ -1060,7 +1060,7 @@
         },
         {
           "type": "waitForFunction",
-          "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '2 / 2 features'"
+          "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '2 of 2 matches'"
         },
         {
           "type": "click",
@@ -1088,7 +1088,7 @@
         },
         {
           "type": "click",
-          "selector": "role=button[name='Apply on Generate's]"
+          "selector": "role=button[name='Apply when I Generate's]"
         },
         {
           "type": "wait",
@@ -1105,7 +1105,7 @@
           "title": "Search the RctB product",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-07-01-search-rctb.webp",
-            "alt": "Feature search bar with Search field set to Qualifier value, product as the qualifier key, RctB as the query, 1 / 2 features found, and the first match named as NC_004605.1.",
+            "alt": "Feature search bar with Search field set to Qualifier value, product as the qualifier key, RctB as the query, 1 of 2 matches, and the first match named as NC_004605.1.",
             "caption": "Search Qualifier key product for RctB; it finds the RctB CDS of both species."
           },
           "capture": {
@@ -1118,7 +1118,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
+                "script": "document.querySelector(\"button[aria-label='Close feature popup']\")?.click(); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
               },
               {
                 "type": "select",
@@ -1141,7 +1141,7 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 / 2 features'"
+                "script": "() => document.querySelector(\"[aria-label='Feature search status']\")?.textContent?.trim() === '1 of 2 matches'"
               }
             ],
             "selector": ".preview-feature-search",
@@ -1153,7 +1153,7 @@
               "previewFeatureSearchInput": "RctB"
             },
             "visibleText": [
-              "1 / 2 features",
+              "1 of 2 matches",
               "Record NC_004605.1"
             ],
             "visibleControls": [
@@ -1558,7 +1558,7 @@
     },
     {
       "title": "A record does not start at its initiator",
-      "body": "Apply on Generate waits for the next Generate Diagram. Check Display start in each record's Record options in its File card."
+      "body": "Apply when I Generate waits for the next Generate Diagram. Check Display start in each record's Record options in its File card."
     },
     {
       "title": "Accession or length appears under a species",

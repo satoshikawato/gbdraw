@@ -132,23 +132,63 @@
       }
     },
     {
-      "name": "Linear labels take the largest size over the records; the class follows the longest",
+      "name": "Linear labels follow the class of the longest record, like the other sizes",
       "mode": "linear",
       "recordLengths": [200000, 20000],
       "expected": {
-        "labels.font_size.linear": 24,
+        "labels.font_size.linear": 5,
         "canvas.linear.default_cds_height": 20,
         "objects.scale.interval": 50000
       }
     },
     {
-      "name": "50 kb boundary: 50,000 bp is long",
+      "name": "Circular canvas with both size classes: every record takes the long sizes",
       "mode": "circular",
-      "recordLengths": [50000],
+      "recordLengths": [306008, 50466],
+      "expected": {
+        "labels.font_size": 8,
+        "labels.stroke_width": 0.5,
+        "objects.axis.circular.stroke_width": 1
+      }
+    },
+    {
+      "name": "Circular 75 kb boundary: 74,999 bp is short",
+      "mode": "circular",
+      "recordLengths": [74999],
+      "expected": {
+        "labels.font_size": 14,
+        "circularSlot.features.width": 37.05,
+        "objects.scale.interval": 10000
+      }
+    },
+    {
+      "name": "Circular 75 kb boundary: 75,000 bp is long",
+      "mode": "circular",
+      "recordLengths": [75000],
       "expected": {
         "labels.font_size": 8,
         "circularSlot.features.width": 18.525,
-        "objects.scale.interval": 5000
+        "objects.scale.interval": 10000
+      }
+    },
+    {
+      "name": "Linear 100 kb boundary: 99,999 bp is short",
+      "mode": "linear",
+      "recordLengths": [99999],
+      "expected": {
+        "labels.font_size.linear": 24,
+        "canvas.linear.default_cds_height": 80,
+        "objects.scale.interval": 10000
+      }
+    },
+    {
+      "name": "Linear 100 kb boundary: 100,000 bp is long",
+      "mode": "linear",
+      "recordLengths": [100000],
+      "expected": {
+        "labels.font_size.linear": 5,
+        "canvas.linear.default_cds_height": 20,
+        "objects.scale.interval": 10000
       }
     }
   ],

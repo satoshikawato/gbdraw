@@ -4,7 +4,8 @@ const { test, expect } = require('@playwright/test');
 const {
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
-  openApp
+  openApp,
+  expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -101,11 +102,8 @@ const saveSession = async (page, title) => {
   return (await download).path();
 };
 const loadSession = async (page, path) => {
-  const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  const dialog = await loaded;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
 };
 
 test('a Linear record turned OFF leaves the request, its pairs, and its row, and returns to its row when ON', async ({ page }) => {

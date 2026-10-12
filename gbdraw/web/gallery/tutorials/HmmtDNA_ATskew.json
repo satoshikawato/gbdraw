@@ -473,7 +473,7 @@
     },
     {
       "title": "Inspect a feature",
-      "body": "Click the RNR2 l-rRNA feature in the interactive SVG and open Details to inspect its label, record, feature type, and location.",
+      "body": "Click the RNR2 l-rRNA feature in the interactive SVG and open Details to inspect its feature type and length. The popup header gives the label, record, and location.",
       "operations": [
         {
           "media": {
@@ -491,7 +491,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.canvasPan) { app.canvasPan.x = -120; app.canvasPan.y = -40; } }"
+                "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.35; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector(\"[data-gbdraw-feature-id='fbdb78069']\")?.getBoundingClientRect(); if (!rect) throw new Error(\"Pan target [data-gbdraw-feature-id='fbdb78069'] was not found.\"); const dx = 820 - rect.left; const dy = 300 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
               },
               {
                 "type": "waitForFunction",
@@ -531,13 +531,81 @@
   "postGenerationEdits": [
     {
       "title": "Review the generated legend",
-      "body": "Generate Diagram adds AT skew (+) and AT skew (-) to the legend. Use the legend editor only if you want to change their captions or order; the two entries represent positive and negative skew.",
+      "body": "Generate Diagram adds AT skew (+) and AT skew (-) to the legend. To change them, click the Editor button on the right edge of the preview and open the Legend tab. Rename an entry in its text field, drag a row by its grip to reorder, or use the Sort buttons; Reset position and Reset strokes undo layout and stroke changes. The two entries represent positive and negative skew.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-02-01-legend-editor.webp",
-            "alt": "Legend editor drawer with AT skew legend entries visible.",
-            "caption": "The Legend drawer shows the AT skew entries generated with the diagram."
+            "alt": "Editor drawer on the Legend tab, scrolled to the AT skew (+) and AT skew (-) entries, each with a color swatch, a name field, and Stroke options and Remove buttons; Sort and Reset position and Reset strokes buttons sit above the list.",
+            "caption": "The Legend tab of the Editor drawer lists the generated entries, including AT skew (+) and AT skew (-)."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview';"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": "button.drawer-toggle"
+              },
+              {
+                "type": "click",
+                "selector": "button.drawer-toggle[aria-expanded='false']"
+              },
+              {
+                "type": "click",
+                "selector": "button[aria-controls='right-drawer-panel-legend']"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const row = Array.from(document.querySelectorAll('[data-legend-drawer-row] input')).find((input) => input.value === 'AT skew (-)'); return Boolean(row) && document.querySelector('#right-drawer-panel-legend')?.getBoundingClientRect().width > 0; }"
+              },
+              {
+                "type": "evaluate",
+                "script": "const list = document.querySelector('#right-drawer-panel-legend .custom-scrollbar'); if (!list) throw new Error('Legend list not found.'); list.scrollTop = list.scrollHeight; document.querySelector('.right-drawer')?.setAttribute('data-capture', 'legend-drawer'); const rows = document.querySelectorAll('[data-legend-drawer-row]'); rows[rows.length - 1]?.setAttribute('data-capture', 'legend-last-row'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.activeElement?.blur();"
+              },
+              {
+                "type": "wait",
+                "ms": 500
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='legend-drawer'] > div:first-child",
+              "[data-capture='legend-last-row']"
+            ],
+            "cropPadding": {
+              "top": 0,
+              "right": 0,
+              "bottom": 8,
+              "left": 0
+            },
+            "assertAppState": {
+              "mode": "circular",
+              "rightDrawerTab": "legend"
+            },
+            "visibleText": [
+              "Legend",
+              "Reset position",
+              "Reset strokes"
+            ],
+            "visibleControls": [
+              {
+                "selector": "[data-legend-drawer-row] input[aria-label='Legend entry AT skew (+) name']",
+                "value": "AT skew (+)"
+              },
+              {
+                "selector": "[data-legend-drawer-row] input[aria-label='Legend entry AT skew (-) name']",
+                "value": "AT skew (-)"
+              }
+            ]
           }
         }
       ]

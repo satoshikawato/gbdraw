@@ -12,7 +12,7 @@ import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resol
 
 const { ref, reactive, computed, nextTick, watch, useId, onMounted } = window.Vue;
 
-/** @typedef {{ element: HTMLElement, returnFocus: HTMLElement | null }} FocusScope */
+/** @typedef {{ element: HTMLElement, returnFocus: HTMLElement | SVGElement | null }} FocusScope */
 /** @type {FocusScope[]} */
 const focusScopes = [];
 
@@ -25,7 +25,9 @@ export const dialogFocus = {
   /** @param {HTMLElement} element */
   beforeMount(element) {
     const active = document.activeElement;
-    focusScopes.push({ element, returnFocus: active instanceof HTMLElement && active !== document.body ? active : null });
+    // An SVG opener (a preview Legend row or record definition) takes focus back too.
+    const opener = active instanceof HTMLElement || active instanceof SVGElement ? active : null;
+    focusScopes.push({ element, returnFocus: opener !== document.body ? opener : null });
   },
   /** @param {HTMLElement} element */
   mounted(element) {
@@ -199,18 +201,21 @@ export const AutoValueField = {
 /**
  * One item of an action menu. `live` announces a label that changes after the
  * action (Copied!, Copy failed).
- * @typedef {{ label: string, title?: string, icon?: string, disabled?: boolean, live?: boolean, run: () => unknown }} ActionMenuItem
+ * @typedef {{ label: string, title?: string, icon?: string, disabled?: boolean, live?: boolean, describedby?: string, run: () => unknown }} ActionMenuItem
+ * @typedef {{ section: string, help?: string, helpLabel?: string, helpId?: string }} ActionMenuSection
+ *   A heading that groups the items after it, with an optional help tip.
  */
 
 // A disclosure that holds a group of secondary actions, such as the copy and
 // FASTA actions of the similarity popups (UX-B01..B03). The items open in
 // place, inside the popup's scroll area, so no item is clipped.
 export const ActionMenu = {
+  components: { HelpTip },
   props: {
     label: { type: String, required: true },
     icon: { type: String, default: '' },
     title: { type: String, default: '' },
-    /** @type {{ type: ArrayConstructor, default: () => ActionMenuItem[] }} */
+    /** @type {{ type: ArrayConstructor, default: () => (ActionMenuItem | ActionMenuSection)[] }} */
     items: { type: Array, default: () => [] }
   },
   template: `
@@ -220,12 +225,18 @@ export const ActionMenu = {
         <i class="ph ph-caret-down action-menu-caret" aria-hidden="true"></i>
       </summary>
       <div class="action-menu-items">
-        <button v-for="(item, index) in items" :key="index + '-' + item.label" type="button" class="action-menu-item"
-                :disabled="item.disabled" :title="item.title || item.label"
-                :aria-live="item.live ? 'polite' : null" :aria-atomic="item.live ? 'true' : null"
-                @click="item.run()">
-          <i v-if="item.icon" :class="['ph', item.icon]" aria-hidden="true"></i><span>{{ item.label }}</span>
-        </button>
+        <template v-for="(item, index) in items" :key="index + '-' + (item.section || item.label)">
+          <div v-if="item.section" class="action-menu-section">
+            <span>{{ item.section }}</span>
+            <help-tip v-if="item.help" :id="item.helpId" :label="item.helpLabel" :text="item.help"></help-tip>
+          </div>
+          <button v-else type="button" class="action-menu-item"
+                  :disabled="item.disabled" :title="item.title || item.label" :aria-describedby="item.describedby || null"
+                  :aria-live="item.live ? 'polite' : null" :aria-atomic="item.live ? 'true' : null"
+                  @click="item.run()">
+            <i v-if="item.icon" :class="['ph', item.icon]" aria-hidden="true"></i><span>{{ item.label }}</span>
+          </button>
+        </template>
       </div>
     </details>
   `

@@ -1,7 +1,8 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingState, PopupPosition } from '../../state.js' */
+/** @import { PopupOrigin } from '../../utils/popup-bounds.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
-import { popupViewportBottom } from '../../utils/popup-bounds.js';
+import { placePopupNearPoint, popupViewportBounds } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
   formatFeatureLength,
@@ -19,7 +20,8 @@ import { buildFeatureSequenceFastas } from '../../services/feature-sequence-fast
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
-import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
+import { COMPARISON_LEGEND_SELECTOR, legendEntryKey } from '../../services/legend-svg.js';
+import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
   featureIdentity,
@@ -224,21 +226,25 @@ export const createFeatureSvgActions = ({
     return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
   };
 
-  const getPopupPosition = (eventLike, popupWidth = 720, popupHeight = 520) => {
-    const margin = 12;
-    const fallbackX = window.innerWidth / 2;
-    const bottom = popupViewportBottom();
-    const fallbackY = bottom / 2;
-    const resolvedPopupWidth = Math.min(popupWidth, Math.max(0, window.innerWidth - (2 * margin)));
-    const resolvedPopupHeight = Math.min(popupHeight, Math.max(0, bottom - (2 * margin)));
-    const rawX = Number.isFinite(eventLike?.clientX) ? eventLike.clientX + 10 : fallbackX;
-    const rawY = Number.isFinite(eventLike?.clientY) ? eventLike.clientY + 10 : fallbackY;
-    const maxX = Math.max(margin, window.innerWidth - resolvedPopupWidth - margin);
-    const maxY = Math.max(margin, bottom - resolvedPopupHeight - margin);
-    return {
-      x: Math.min(Math.max(rawX, margin), maxX),
-      y: Math.min(Math.max(rawY, margin), maxY)
-    };
+  // OV-371: a popup opened at a clicked point is placed beside it with an
+  // expected size; app-setup places it again with its rendered size. `avoid`
+  // is the clicked item's rectangle, which the popup leaves uncovered; the
+  // origin's `panel` is the panel it opens beside (OV-503).
+  /**
+   * @param {PopupPosition} pos
+   * @param {PopupOrigin | null | undefined} eventLike
+   * @param {number} width
+   * @param {DOMRect | null} [avoid]
+   */
+  const placePopupAt = (pos, eventLike, width, avoid = null) => {
+    const anchor = Number.isFinite(eventLike?.clientX) && Number.isFinite(eventLike?.clientY)
+      ? {
+          x: Number(eventLike?.clientX), y: Number(eventLike?.clientY),
+          avoid: avoid && { left: avoid.left, top: avoid.top, right: avoid.right, bottom: avoid.bottom },
+          panel: eventLike?.panel
+        }
+      : null;
+    Object.assign(pos, placePopupNearPoint({ point: anchor, width, height: 520, bounds: popupViewportBounds() }), { anchor });
   };
 
   const normalizeQualifierRows = (qualifiers) => {
@@ -246,12 +252,7 @@ export const createFeatureSvgActions = ({
     return Object.entries(qualifiers)
       .map(([key, value]) => {
         const values = normalizeStringArray(value);
-        return {
-          key: String(key || ''),
-          values,
-          copyText: values.join('\n'),
-          displayValue: values.join('\n')
-        };
+        return { key: String(key || ''), values };
       })
       .filter((row) => row.key && row.values.length > 0)
       .sort((left, right) => left.key.localeCompare(right.key));
@@ -319,30 +320,16 @@ export const createFeatureSvgActions = ({
     return rows;
   };
 
-  const buildOrthogroupDetailRows = (feat) => {
-    const member = feat?.orthogroupMember || feat?.orthogroup_member || null;
-    const proteinId = resolveFeatureProteinId(feat, member);
-    const rows = [
-      { key: 'orthogroup_id', label: 'Similarity group ID', value: feat?.orthogroupId || feat?.orthogroup_id },
-      { key: 'orthogroup_members', label: 'Group genes', value: feat?.orthogroupMemberCount || feat?.orthogroup_member_count },
-      { key: 'orthogroup_coverage', label: 'Record coverage', value: feat?.orthogroupRecordCoverage || feat?.orthogroup_record_coverage },
-      { key: 'protein_id', label: 'Protein ID', value: proteinId }
-    ];
-    return rows.filter((row) => String(row.value === null || row.value === undefined ? '' : row.value) !== '');
-  };
-
-  const buildDetailRows = ({ defaultLabel, feat, locationText }) => {
-    const rows = [
-      { key: 'label', label: 'Label', value: defaultLabel },
-      { key: 'record_id', label: 'Record ID', value: feat.record_id },
-      { key: 'type', label: 'Feature type', value: feat.type },
-      { key: 'location', label: 'Location', value: locationText }
-    ];
-    rows.push(...buildOrthogroupDetailRows(feat));
-    return rows
-      .map((row) => ({ ...row, value: row.value === null || row.value === undefined ? '' : String(row.value) }))
-      .filter((row) => row.value !== '');
-  };
+  // Details lists what the popup header and the Edit tab do not show:
+  // the header names the feature, its product, record, and location, and the
+  // Similarity group section its group.
+  const buildDetailRows = (feat) => [
+    { key: 'type', label: 'Feature type', value: feat.type },
+    { key: 'length', label: 'Length', value: formatFeatureLength(feat) },
+    { key: 'protein_id', label: 'Protein ID', value: resolveFeatureProteinId(feat, feat?.orthogroupMember || feat?.orthogroup_member || null) }
+  ]
+    .map((row) => ({ ...row, value: row.value === null || row.value === undefined ? '' : String(row.value) }))
+    .filter((row) => row.value !== '');
 
   /** @returns {Map<string, Record<string, any>>} */
   const buildFeatureLookup = () => {
@@ -472,6 +459,7 @@ export const createFeatureSvgActions = ({
       activeTab: 'edit',
       recordId: String(feat.record_id || ''),
       gene: getQualifierFirstValue(feat, 'gene'),
+      product: getQualifierFirstValue(feat, 'product'),
       recordIdx: Number.isInteger(Number(feat.record_idx)) ? Number(feat.record_idx) : null,
       featureType: String(feat.type || ''),
       start: Number.isFinite(Number(feat.start)) ? Number(feat.start) : null,
@@ -484,7 +472,7 @@ export const createFeatureSvgActions = ({
       aminoAcidSequence,
       nucleotideFasta,
       aminoAcidFasta,
-      detailRows: buildDetailRows({ defaultLabel, feat, locationText }),
+      detailRows: buildDetailRows(feat),
       legendName: effectiveCaption,
       appliedLegendName: effectiveCaption,
       strokeColor: currentStrokeColor,
@@ -511,7 +499,7 @@ export const createFeatureSvgActions = ({
   /**
    * @param {DrawingState} drawing
    * @param {Record<string, any>} feat
-   * @param {{ clientX: number, clientY: number } | null} [eventLike]
+   * @param {PopupOrigin | null} [eventLike]
    */
   const openPreparedFeatureEditor = (drawing, feat, eventLike = null) => {
     if (!feat) return null;
@@ -548,9 +536,7 @@ export const createFeatureSvgActions = ({
       featurePopupSize.height = 0;
     }
 
-    const popupPosition = getPopupPosition(eventLike, state.richFeaturePopup.value === false ? 440 : 720);
-    clickedFeaturePos.x = popupPosition.x;
-    clickedFeaturePos.y = popupPosition.y;
+    placePopupAt(clickedFeaturePos, eventLike, state.richFeaturePopup.value === false ? 440 : 720);
     if (typeof onFeaturePopupOpened === 'function') {
       onFeaturePopupOpened();
     }
@@ -560,7 +546,7 @@ export const createFeatureSvgActions = ({
   // The popup states whether the feature is drawn (resolveFeatureDrawn).
   /**
    * @param {Record<string, any>} feat
-   * @param {{ clientX: number, clientY: number } | null} [eventLike]
+   * @param {PopupOrigin | null} [eventLike]
    */
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
     const drawing = state.activeDrawing();
@@ -780,10 +766,47 @@ export const createFeatureSvgActions = ({
     hideHoverSummary();
     clickedFeature.value = null;
     clickedPairwiseMatch.value = payload;
-    const popupPosition = getPopupPosition(eventLike, 460, 520);
-    clickedPairwiseMatchPos.x = popupPosition.x;
-    clickedPairwiseMatchPos.y = popupPosition.y;
+    placePopupAt(clickedPairwiseMatchPos, eventLike, 460);
     return payload;
+  };
+
+  // A Legend row or a record definition opens its popup in the match popup
+  // frame while Layout edit is off; with it on, a press drags them. A Legend
+  // row opens only when the drawing lists it (not a track-data row).
+  /** @param {{ element: Element, item: import('../preview-item-popup.js').PreviewItem }} target @param {{ clientX?: number, clientY?: number }} eventLike */
+  const openPreviewItemPopup = ({ element, item }, eventLike) => {
+    if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value) return false;
+    if (item.kind === 'legend-entry') {
+      /** @type {import('../../state.js').LegendEntry[]} */
+      const entries = state.activeDrawing().legendEntries.value || [];
+      const { key } = item;
+      const entry = entries.find((row) => legendEntryKey(row) === key || String(row.caption) === key);
+      if (!entry) return false;
+      // The popup follows the row by its key, which a rename keeps.
+      item = { kind: 'legend-entry', key: legendEntryKey(entry) };
+    }
+    const rect = element.getBoundingClientRect();
+    const anchor = Number.isFinite(eventLike?.clientX)
+      ? eventLike
+      : { clientX: rect.left + rect.width / 2, clientY: rect.bottom };
+    hideHoverSummary();
+    clickedFeature.value = null;
+    // A Legend row's feature count reads the rule matches: the popup opens at
+    // once and counts when they are prepared.
+    const opened = { previewItem: item, matchesReady: item.kind !== 'legend-entry' };
+    clickedPairwiseMatch.value = opened;
+    // The preview-item popup is 400 px wide (`.preview-item-popup`).
+    placePopupAt(clickedPairwiseMatchPos, anchor, 400, rect);
+    if (item.kind === 'legend-entry') {
+      const openedKey = item.key;
+      reportRuleRunFailure(state, 'feature-extraction', () => runWhenPrepared(
+        state, () => [prepareDrawnFeatureMatches({ strict: true, view: true })], () => {
+          const current = clickedPairwiseMatch.value;
+          if (current?.previewItem?.kind === 'legend-entry' && current.previewItem.key === openedKey) current.matchesReady = true;
+        }
+      ));
+    }
+    return true;
   };
 
   /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */
@@ -1441,6 +1464,12 @@ export const createFeatureSvgActions = ({
           openPairwiseMatchPopup(matchEl, e, ensureFeatureLookup());
           return;
         }
+        const previewItem = previewItemTarget(e.target, svg);
+        if (previewItem && openPreviewItemPopup(previewItem, e)) {
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
         if (isBackgroundPreviewClick(e.target, svg)) {
           featureSelection?.clearFeatureSelection?.({ clearStatus: true });
           if (clickedFeature.value) clickedFeature.value = null;
@@ -1451,10 +1480,17 @@ export const createFeatureSvgActions = ({
       const handleKeyDown = (e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         const matchEl = getPairwiseMatchTarget(e.target, svg);
-        if (!matchEl) return;
-        e.stopPropagation();
-        e.preventDefault();
-        openPairwiseMatchPopup(matchEl, e, ensureFeatureLookup());
+        if (matchEl) {
+          e.stopPropagation();
+          e.preventDefault();
+          openPairwiseMatchPopup(matchEl, e, ensureFeatureLookup());
+          return;
+        }
+        const previewItem = previewItemTarget(e.target, svg);
+        if (previewItem && openPreviewItemPopup(previewItem, {})) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
       };
 
       const handlePointerDown = (e) => {
@@ -1605,6 +1641,22 @@ export const createFeatureSvgActions = ({
     return true;
   };
 
+  // Legend rows and record definitions are buttons that open their popup;
+  // an export strips these attributes (stripTransientPreviewState).
+  /** @param {{ root?: Element | null }} [options] */
+  const preparePreviewItemAffordances = ({ root = null } = {}) => {
+    const svg = root || delegatedFeatureHandlers?.svg || null;
+    if (!svg) return false;
+    svg.querySelectorAll(PREVIEW_ITEM_SELECTOR).forEach((element) => {
+      if (element.closest(COMPARISON_LEGEND_SELECTOR)) return;
+      element.setAttribute('data-gbdraw-preview-item', '');
+      element.setAttribute('role', 'button');
+      element.setAttribute('tabindex', '0');
+      element.setAttribute('aria-haspopup', 'dialog');
+    });
+    return true;
+  };
+
   return {
     attachSvgFeatureHandlers,
     getFeatureElements,
@@ -1615,6 +1667,7 @@ export const createFeatureSvgActions = ({
     showAlignmentOverlay,
     clearAlignmentOverlay,
     preparePairwiseInteractionAffordances,
+    preparePreviewItemAffordances,
     dispose
   };
 };

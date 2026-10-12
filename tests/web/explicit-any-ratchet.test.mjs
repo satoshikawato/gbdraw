@@ -81,7 +81,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/run-analysis.js': 139,
   'app/run-info.js': 13,
   'app/similarity-alignment.js': 40,
-  'app/svg-styles.js': 8,
+  'app/svg-styles.js': 6,
   'app/track-slot-colors.js': 4,
   'app/track-slot-edits.js': 4,
   'app/ui.js': 3,
