@@ -27,7 +27,7 @@ import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.
 
 const NO_IMPLICIT_ANY_BASELINE = {
   'app/app-setup.js': 1,
-  'app/run-analysis.js': 17,
+  'app/run-analysis.js': 9,
   'services/config.js': 205,
   'services/losat-cache.js': 2,
   'services/session-authority.js': 7,
