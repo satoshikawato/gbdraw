@@ -74,13 +74,13 @@ const readDecorations = (svg) => {
 
 /**
  * @typedef {object} DecorationContinuityOptions
- * @property {Record<string, any>} canonical The committed canonical session (Python owns its fields, R7).
+ * @property {Record<string, any> | null | undefined} canonical The committed canonical session (Python owns its fields, R7); null before one is committed.
  * @property {Array<{ content: string }>} [results] The displayed Results.
  * @property {{ items?: Array<{ recordKeys?: any }> } | null} [catalog] The feature catalog of the displayed Results.
  * @property {Element | null} [mountedSvg] The mounted root of the selected Result.
  * @property {number} [selectedResultIndex]
  * @property {typeof DOMParser} [parser]
- * @property {(source: Record<string, any>, recordKeys: any) => any} projectRecordIdentity
+ * @property {(source: Record<string, any> | null | undefined, recordKeys: any) => any} projectRecordIdentity
  *   The root's projection of a record's identity out of a canonical request or session.
  * @property {Record<string, any> | null} [canvasPadding]
  */

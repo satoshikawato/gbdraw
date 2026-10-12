@@ -159,9 +159,7 @@ export const createLegendLayout = ({
      * @param {Record<string, any>} drawing The drawing of the run that keeps the decorations.
      */
     captureDecorationContinuity: (canonical, projectRecordIdentity, drawing) => captureDecorationContinuity({
-      // `captureDecorationContinuity` declares a non-null Session, yet it reads the Session only through
-      // `projectRecordIdentity`, which takes null (`canonical?.renderRequest`); its declaration is too narrow.
-      canonical: /** @type {Record<string, unknown>} */ (canonical), projectRecordIdentity, results: state.results.value, catalog: state.featureCatalog.value,
+      canonical, projectRecordIdentity, results: state.results.value, catalog: state.featureCatalog.value,
       mountedSvg: state.svgContainer.value?.querySelector?.('svg') || null,
       selectedResultIndex: state.selectedResultIndex.value,
       canvasPadding: drawing.canvasPadding

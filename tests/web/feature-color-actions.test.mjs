@@ -855,6 +855,17 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const rrnaReset = committed.at(-1).find((rule) => rule.qual === 'hash' && rule.val === rrna.svg_id);
     assert.equal(rrnaReset?.color, '#71ee7d', `Reset after a ${choice} dialog uses the rRNA default`);
   }
+  // OV-548: a type is file text. `constructor` is no palette key, so the Reset
+  // button has no default to offer: no dialog, no rule write.
+  const ctorA = feature('ctor-a', 'constructor', 'x', 1000, 1100);
+  const ctorB = feature('ctor-b', 'constructor', 'x', 1200, 1300);
+  resetFeatures.value = [trnaA, trnaB, rrna, ctorA, ctorB];
+  resetDialog.show = false;
+  committed.length = 0;
+  resetClicked.value = { svg_id: ctorA.svg_id, feat: ctorA };
+  await resetActions.resetClickedFeatureFillColor();
+  assert.equal(resetDialog.show, false, 'a type that names an inherited member opens no Reset dialog');
+  assert.deepEqual(committed, [], 'and Reset writes no rule for it');
 }
 
 // PV-02 and PV-04 (D-06, PD-OI-061): Legend editor renames.
