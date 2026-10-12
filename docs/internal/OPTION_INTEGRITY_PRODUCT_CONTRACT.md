@@ -781,18 +781,7 @@ Status: active Product authority
     「全 feature type 向けのルール(`*`)の扱い」 asked with the recommended fix
     「一覧に出る項目は必ず入れる。`*` のルールはどの type の一覧にも出す」:
     「全 feature type 向けのルール(*)の扱い: 推奨通りなおしましょう」
-    The receipt names neither a color rule for every feature type (`*`) nor
-    a group whose color rules are for several feature types. Reply 5
-    confirms how the receipt is read for them. A `*` rule is a rule for each
-    feature type, so the list offers its group for a feature of any type. A
-    pick joins every group the list offers, with its name and its color, also
-    when the group has rules for several feature types or its Legend row
-    draws features of another type; the Legend Name Conflict dialog follows a
-    pick only where the feature's own row spans several feature types
-    (**All N**) or the group's row is deleted. A rename typed onto such a
-    name keeps the receipt's Merge rule
-    (「Merge は同じ track の同じ feature type の項目どうしだけ」). No field of the
-    receipt differs from the text Reply 4 confirmed.
+    No field of the receipt differs from the text Reply 4 confirmed.
   - Scope: scenario revision `4` keeps the outcome
     `B / MERGE-SAME-FEATURE-TYPE-ONLY` of scenario revision `2` and the
     choice names of scenario revision `3`. It retires one preservation term
