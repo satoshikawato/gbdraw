@@ -437,6 +437,21 @@ or Reset Settings).
   that work: a `file-uploader` `afterChange` import, and **Add Seq**
   (`addCircularConservationComparisonFile`), whose step holds the ring record
   label read by the Python reader.
+- An undoable action started while another action still runs on the open step
+  applies at once and names that step (`runUndoable`); nothing waits. What an
+  action writes after another caller committed its step is a step of its own
+  under the action's name (`commitIntent`). That step is not recorded when the
+  action ends while a checkpoint is open (it captures the write), while an
+  artifact replacement is open, or while an Undo or Redo is being applied, nor
+  when, since its step was committed, a baseline was set, an artifact
+  replacement committed or was declined (`shouldCommit`), or a checkpoint ended
+  without committing.
+- A call the running action makes itself keeps the step: one made
+  synchronously inside its `fn`, or one that passes `joinsOpenStep` (the Label
+  Not Shown choice, and the rule table commit of a popup, Features panel, or
+  dialog color action). A `joinsOpenStep` call commits under the step name of
+  the action that started on the step with its label, and under the step's
+  current name when no action has that label.
 - Undo, Redo, and the header buttons share one reactive availability
   (`historyAvailability`), busy while an artifact replacement or checkpoint is
   open or an action owns the open intent.
@@ -487,6 +502,13 @@ Guards:
   Redo, leave user-owned state unchanged.
 - `tests/web/session-operation-consistency.test.mjs`: Undo availability during
   Generate.
+- `tests/web/history.test.mjs` (the action cases) and the Label TSV case in
+  `tests/web/gui-audit-regressions.playwright.spec.js`: an edit made while an
+  action runs is its own step under its own name, and Undo then Redo keeps both
+  writes; the cases where the later write is in no step.
+- `tests/web/specific-color-actions.test.mjs` and
+  `tests/web/feature-label-visual-unit.test.mjs`: the step name of each
+  `joinsOpenStep` call site through the real History manager.
 
 ### R12: Source recipe and accessibility
 
