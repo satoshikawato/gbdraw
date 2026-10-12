@@ -215,6 +215,18 @@ test('Circular with custom track slots: a tick label opens Axis & Scale and a di
   await page.waitForTimeout(150);
   expect(await appState(page)).toBe(before);
   expect(await exported(page)).not.toContain('data-gbdraw-preview-item');
+
+  // Layout edit on: a click on a tick label or a track opens nothing and adds no History step, and the hint is gone.
+  const steps = await undoCount(page);
+  await layoutEdit(page).click();
+  await expect(layoutEdit(page)).toHaveAttribute('aria-pressed', 'true');
+  await closeSections(page);
+  await clickInk(page, TICKS);
+  await expectClosed(page, 'circular-axis', 'Layout edit on, a tick label');
+  await clickInk(page, GC_SKEW);
+  await expectClosed(page, 'dinucleotide', 'Layout edit on, a track');
+  await expect(hint(page)).toHaveCount(0);
+  expect(await undoCount(page)).toBe(steps);
 });
 
 test('Circular in the icon rail: the clicked section replaces the docked one, and docks beside the rail alone', async ({ page }) => {
