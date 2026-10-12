@@ -1,6 +1,7 @@
 // @ts-check
 import { resolveFeatureAnchor } from './feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
+/** @import { CommittedDisplayRow } from '../record-display-options.js' */
 
 const featureIdentity = (feature) => ({
   recordKey: String(feature?.record_key ?? feature?.recordKey ?? ''),
@@ -31,13 +32,13 @@ const sameFeatureIdentity = (feature, identity) => {
 
 /**
  * @typedef {object} FeatureRecordRotationActionOptions
- * @property {(feature: PopupFeature) => { row: Record<string, any>, target: Record<string, any> }} targetForFeature
+ * @property {(feature: PopupFeature) => { row: CommittedDisplayRow, target: Record<string, any> }} targetForFeature
  *   record display port: the row and target of the feature's record
- * @property {(row: Record<string, any>, transform: ResolvedRecordTransform) => any} setResolvedTransform
+ * @property {(row: CommittedDisplayRow, transform: ResolvedRecordTransform) => any} setResolvedTransform
  *   record display port: stages the transform in the record's draft (Apply on Generate)
  * @property {() => Record<string, any> | null} getCommittedSession
  * @property {(args: { committed: Record<string, any> | null, target: Record<string, any>, transform: Record<string, any> }) => { canonical: Record<string, any>, receipt: any }} projectCommittedRecordTransform
- * @property {(run: { canonical: Record<string, any>, row: Record<string, any>, transform: ResolvedRecordTransform }) => Promise<Record<string, any>>} runRecordRotation
+ * @property {(run: { canonical: Record<string, any>, row: CommittedDisplayRow, transform: ResolvedRecordTransform }) => Promise<Record<string, any>>} runRecordRotation
  *   composition root port: runs the candidate and commits the target draft
  * @property {((identity: { recordKey: string, biologicalFeatureId: string }) => PopupFeature | null) | null} [resolveCurrentFeature]
  * @property {((feature: PopupFeature) => boolean) | null} [isCurrentFeature]
