@@ -181,8 +181,14 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { OrderedConservationSource } from './conservation-series.js' */
-/** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
+/** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
+/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { CircularRequestRecordSetOptions } from './record-options.js' */
+/** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
+/** @import { RecordDisplayRowView } from './record-display-model.js' */
+/** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
+/** @import { DepthFileSlots } from './depth-track-state.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -190,10 +196,159 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 // generated artifacts still come from `state`.
 /** @typedef {Record<string, any>} RequestDrawing */
 
+/** @typedef {'circular' | 'linear'} RequestMode */
+/**
+ * A Vue ref, or the `{ value }` cell a Gallery Session's request state puts in
+ * its place.
+ * @template T
+ * @typedef {{ value: T }} RequestRef
+ */
+/**
+ * One resource the request carries: the descriptor of an encoded file, or only
+ * its `kind` while the builder defers the bytes (`encode: false`).
+ * @typedef {object} ResourceDescriptor
+ * @property {string | null} kind
+ * @property {string} [name]
+ * @property {string} [type]
+ * @property {number} [size]
+ * @property {number} [lastModified]
+ * @property {unknown} [encoding]
+ * @property {unknown} [data]
+ * @property {string} [checksum]
+ */
+/**
+ * A file slot's value as `addFile` reads it: a `File` or a Session resource
+ * view, or the descriptor of an encoded Session resource.
+ * @typedef {FileLike & RawSessionResourceDescriptor} ResourceEntry
+ */
+/**
+ * What the draft reads of a request record's selector, crop, and orientation
+ * (a record of a Session is unvalidated until the request is promoted).
+ * @typedef {object} RequestRecordView
+ * @property {{ kind?: unknown, value?: unknown, index?: unknown } | null} [selector]
+ * @property {{ selector?: { kind?: unknown, value?: unknown, index?: unknown } | null, start?: unknown, end?: unknown, reverseComplement?: unknown } | null} [region]
+ * @property {{ reverseComplement?: unknown } | null} [presentation]
+ */
+/**
+ * A record of the request before its display options are bound.
+ * @typedef {Omit<CanonicalRecord, 'display'> & { display?: CanonicalRecord['display'] }} RequestDraftRecord
+ */
+/**
+ * A discovered record row of a source input, as the request projection reads it.
+ * @typedef {RecordDisplayRowView & { key: string, scope: string, sourceUid: string, selector: string, recordId: string }} RequestRecordDisplayRow
+ */
+/**
+ * A comparison ring a Generate resolved (LOSAT), as the request reads it.
+ * @typedef {object} ResolvedConservationEntry
+ * @property {string} [name]
+ * @property {string} [text]
+ * @property {ResourceEntry | null} [fasta]
+ * @property {string} [label]
+ * @property {string} [color]
+ * @property {string} [sourceKey]
+ * @property {string} [seriesKey]
+ */
+/**
+ * A file slot of a Linear record, as the request reads it.
+ * @typedef {object} RequestLinearSeq
+ * @property {string} uid
+ * @property {ResourceEntry | null} [gb]
+ * @property {ResourceEntry | null} [gff]
+ * @property {ResourceEntry | null} [fasta]
+ * @property {DepthFileSlots} [depth]
+ * @property {number | ''} [losat_gencode]
+ * @property {string} [definition]
+ * @property {string} [record_subtitle]
+ * @property {string} [file_definition]
+ * @property {string} [file_subtitle]
+ * @property {string} [inferred_definition]
+ * @property {string} [region_record_id]
+ * @property {number | null} [region_start]
+ * @property {number | null} [region_end]
+ * @property {boolean} [region_reverse]
+ * @property {CanonicalRecord['cardinality']} [cardinality]
+ */
+/**
+ * The input files and records a request reads (the `filesData` of the draft).
+ * @typedef {object} RequestFilesData
+ * @property {RequestLinearSeq[]} [linearSeqs]
+ * @property {ResourceEntry | null} [c_gb]
+ * @property {ResourceEntry | null} [c_gff]
+ * @property {ResourceEntry | null} [c_fasta]
+ * @property {DepthFileSlots | DepthFileSlots[]} [c_depth]
+ * @property {FileLike[]} [c_conservation_blasts]
+ * @property {string | null} [c_conservation_blasts_source]
+ * @property {FileLike[]} [c_conservation_fastas]
+ * @property {(ResourceEntry | null)[]} [c_conservation_sequence_sources]
+ * @property {RequestCircularFileRecord[]} [circularRecords]
+ * @property {{ id?: unknown, file?: ResourceEntry | null }[]} [linearComparisons]
+ * @property {RequestCanonicalComparison[]} [linearCanonicalComparisons]
+ */
+/**
+ * A Circular record the draft keeps with its canonical request pieces.
+ * @typedef {object} RequestCircularFileRecord
+ * @property {string} [sourceKind]
+ * @property {ResourceEntry | null} [gb]
+ * @property {ResourceEntry | null} [gff]
+ * @property {ResourceEntry | null} [fasta]
+ * @property {string} [recordKey]
+ * @property {'exactly_one' | 'first' | 'all'} [cardinality]
+ * @property {CanonicalRecord['selector']} [selector]
+ * @property {CanonicalRecord['region']} [region]
+ * @property {CanonicalRecord['presentation']} [presentation]
+ * @property {CanonicalRecord['display']} [display]
+ */
+/**
+ * A comparison a Session committed with its resource, as the draft holds it.
+ * @typedef {ResourceBackedComparison & {
+ *   file?: ResourceEntry | null, edgeKey?: unknown, mode?: string, settings?: RequestDiagramOptions
+ * }} RequestCanonicalComparison
+ */
+/**
+ * A comparison entry of the request that names a resource.
+ * @typedef {object} RequestComparisonRef
+ * @property {string} kind
+ * @property {string} resourceId
+ * @property {string} [encoding]
+ * @property {string} [valueKind]
+ * @property {number} [queryRecordIndex]
+ * @property {number} [subjectRecordIndex]
+ */
+/**
+ * What the generated tables of a request read of `state` (state.js), or of
+ * the state a Gallery Session's request is rebuilt from.
+ * @typedef {object} RequestTableState
+ * @property {RequestRef<Record<string, Record<string, string>>>} paletteDefinitions
+ * @property {RequestRef<{ featureId?: unknown, sourceText?: unknown }[]>} [editableLabels]
+ * @property {Partial<Record<'d_color' | 't_color' | 'whitelist' | 'qualifier_priority', ResourceEntry | null>>} [canonicalPublicationFiles]
+ */
+/**
+ * What the request reads of `state` (state.js), or of the state a Gallery
+ * Session's request is rebuilt from (`buildCanonicalRequestState`).
+ * @typedef {RequestTableState & {
+ *   mode: RequestRef<RequestMode>, cInputType: RequestRef<string>, lInputType: RequestRef<string>,
+ *   circularRecordList: RequestRef<CircularRequestRecordSetOptions['records']>,
+ *   losatExecution?: { threadsPerJob?: unknown }
+ * }} RequestState
+ */
+/**
+ * The `diagramOptions` bag a request builds up before it is the typed options.
+ * @typedef {Record<string, any> & Pick<CanonicalRenderRequest['diagramOptions'], 'featurePlacements' | 'featureOverrides'>} RequestDiagramOptions
+ */
+/**
+ * @typedef {object} ResourceBuilder
+ * @property {Record<string, ResourceDescriptor>} resources
+ * @property {Record<string, string>} resourceOriginalNames
+ * @property {(resourceId: string, kind: string | null, entry: ResourceEntry | null | undefined) => string} addFile
+ * @property {(resourceId: string, kind: string, name: string, text: unknown) => string} addText
+ * @property {(resourceId: string, kind: string | null, name: string, value: WeakKey) => string} addJson
+ * @property {(resourceId: string, rows: unknown, columns?: unknown) => string} addCanonicalTable
+ */
+
 export { CANONICAL_REQUEST_SCHEMA };
 // The canonical render request of the current schema (the writer format only;
 // readers take unvalidated data, R14) is generated from the Python codec.
-/** @import { CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
+/** @import { CanonicalRecord, CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 /**
  * What the request writer returns and the session stores beside the request:
  * the encoded resources by id and the Web-only file metadata.
@@ -204,6 +359,10 @@ export { CANONICAL_REQUEST_SCHEMA };
  */
 const SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET = new Set(SUPPORTED_CANONICAL_REQUEST_SCHEMAS);
 
+/**
+ * @param {readonly string[]} keys
+ * @param {string} path
+ */
 const requireExactCanonicalKeys = (value, keys, path) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${path} must be an object.`);
@@ -216,6 +375,11 @@ const requireExactCanonicalKeys = (value, keys, path) => {
   return value;
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} path
+ * @returns {string}
+ */
 const requireCanonicalText = (value, path) => {
   if (typeof value !== 'string' || !value.trim() || value.includes('\0')) {
     throw new Error(`${path} must be non-empty text without NUL.`);
@@ -223,6 +387,10 @@ const requireCanonicalText = (value, path) => {
   return value.trim();
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} path
+ */
 const canonicalAlignmentAnchor = (value, path) => {
   const anchor = requireExactCanonicalKeys(value, [
     'recordKey',
@@ -249,7 +417,12 @@ const canonicalAlignmentAnchor = (value, path) => {
   };
 };
 
-/** @returns {CanonicalSimilarityAlignmentPlan | null} */
+/**
+ * @param {unknown} value
+ * @param {Iterable<string>} recordKeys
+ * @param {string} path
+ * @returns {CanonicalSimilarityAlignmentPlan | null}
+ */
 const canonicalSimilarityAlignment = (value, recordKeys, path) => {
   if (value === null) return null;
   const plan = requireExactCanonicalKeys(value, [
@@ -315,6 +488,12 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
   };
 };
 
+/**
+ * @param {unknown} value
+ * @param {Iterable<string>} recordKeys
+ * @param {string} path
+ * @param {{ requireCoverage?: boolean }} [options]
+ */
 const canonicalRecordTranslations = (value, recordKeys, path, { requireCoverage = false } = {}) => {
   if (!Array.isArray(value)) throw new Error(`${path} must be an array.`);
   const translations = value.map((raw, index) => {
@@ -513,8 +692,17 @@ const MODE_LABEL_SCOPE_PATHS = Object.freeze({
   linear: 'labels.linear.scope'
 });
 
+/** @type {Readonly<Record<string, string>>} */
+const CIRCULAR_LABEL_SCOPES = Object.freeze({ none: 'none', out: 'outer', both: 'both' });
+
+/**
+ * @param {{ labels_mode?: unknown, show_labels_linear?: string }} form
+ * @param {boolean} circular
+ */
 const labelScopeOverride = (form, circular) => (circular
-  ? ({ none: 'none', out: 'outer', both: 'both' }[form.labels_mode] || 'none')
+  ? (Object.hasOwn(CIRCULAR_LABEL_SCOPES, String(form.labels_mode))
+      ? CIRCULAR_LABEL_SCOPES[String(form.labels_mode)]
+      : 'none')
   : form.show_labels_linear);
 
 /** @param {RequestDrawing} drawing */
@@ -574,6 +762,7 @@ const LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
   CONFIG_OVERRIDE_PATHS.normalizeLength
 ]);
 
+/** @param {RequestMode} mode */
 export const managedConfigOverridePathsForMode = (mode) => {
   if (!['circular', 'linear'].includes(mode)) {
     throw new Error(`Unsupported config override mode: ${String(mode)}.`);
@@ -614,6 +803,7 @@ export const managedConfigOverridePathsForMode = (mode) => {
   return Object.freeze([...paths].sort());
 };
 
+/** @param {string} semanticName */
 const legacyFlatConfigKey = (semanticName) => (
   semanticName
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
@@ -625,20 +815,31 @@ const legacyFlatConfigKey = (semanticName) => (
 // this does); Python rejects a value that is not one portable file name
 // (INPUT_INVALID, field Output Prefix). A name derived from a record ID is
 // made safe here, by the browser's download-name rule (utils/download-names.js).
+/** @param {unknown} value */
 const explicitOutputPrefix = (value) => {
   const raw = String(value ?? '').trim();
   return raw || null;
 };
 
+/**
+ * @param {{ record_id?: unknown, recordId?: unknown } | null | undefined} record
+ * @param {number} index
+ */
 const circularRecordId = (record, index) => (
   String(record?.record_id ?? record?.recordId ?? '').trim() || `Record_${index + 1}`
 );
 
+/**
+ * @param {({ record_id?: unknown, recordId?: unknown } | null | undefined)[]} records
+ * @param {string | null} explicitPrefix
+ * @returns {string[]}
+ */
 const resolveCircularBatchPrefixes = (records, explicitPrefix) => {
   if (explicitPrefix !== null) {
     if (records.length === 1) return [explicitPrefix];
     return records.map((_, index) => `${explicitPrefix}_${index + 1}`);
   }
+  /** @type {string[]} */
   const prefixes = [];
   const used = new Set();
   records.forEach((record, index) => {
@@ -655,6 +856,7 @@ const resolveCircularBatchPrefixes = (records, explicitPrefix) => {
   return prefixes;
 };
 
+/** @param {string | null} prefix */
 const renderOutputPayload = (prefix) => ({
   prefix,
   formats: ['svg'],
@@ -669,6 +871,13 @@ const projectComparisonThresholds = ({ evalue, bitscore, identity, alignmentLeng
 // An integer setting that the current request does not use for rendering
 // (a mode-inactive protein parameter or a LOSAT execution choice) keeps its
 // documented fallback; projected render values use projectOptionalNumber.
+/**
+ * @template F
+ * @param {unknown} value
+ * @param {F} fallback
+ * @param {number} minimum
+ * @returns {number | F}
+ */
 const integerSettingOr = (value, fallback, minimum) => {
   const { value: numeric } = classifyOptionalNumber(value);
   return typeof numeric === 'number' && Number.isInteger(numeric) && numeric >= minimum ? numeric : fallback;
@@ -678,6 +887,7 @@ const integerSettingOr = (value, fallback, minimum) => {
 // defaults were introduced also record the per-record value, which says directly
 // whether the record inherited the file default or overrode it with the same
 // text. Older sessions carry no such value, so fall back to comparing them.
+/** @param {{ savedOverride?: unknown, fileDefault?: string | null, resolved: string }} input */
 const resolveSavedRecordOverride = ({ savedOverride, fileDefault, resolved }) => {
   if (savedOverride !== undefined && savedOverride !== null) return String(savedOverride);
   if (!fileDefault) return resolved;
@@ -691,6 +901,10 @@ const depthSeriesWithoutSource = (seriesIndex) => (
   diagnosticError('DEPTH_INVALID', { seriesIndex, reason: 'DEPTH_SERIES_SOURCE' })
 );
 
+/**
+ * @param {unknown[]} depthRows
+ * @param {number} logicalTrackCount
+ */
 const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
   for (let trackIndex = 0; trackIndex < logicalTrackCount; trackIndex += 1) {
     const hasSource = depthRows.some((row) => (
@@ -700,6 +914,10 @@ const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
   }
 };
 
+/**
+ * @param {string} resourceId
+ * @param {unknown} name
+ */
 const normalizeResourceName = (resourceId, name) => {
   // split() always returns at least one element, so pop() is a string.
   const basename = /** @type {string} */ (String(name || 'resource.dat').replace(/\\/g, '/').split('/').pop());
@@ -712,6 +930,7 @@ const normalizeResourceName = (resourceId, name) => {
   return `${prefix}${leaf || 'resource.dat'}`;
 };
 
+/** @param {unknown} name */
 const normalizeOriginalResourceName = (name) => {
   // split() always returns at least one element, so pop() is a string.
   const basename = /** @type {string} */ (String(name || '')
@@ -738,11 +957,16 @@ export const bindCanonicalTypedResource = (value, descriptor) => {
   }
   canonicalTypedResourceBackings.set(value, descriptor);
 };
+/**
+ * @param {{ encode?: boolean }} [options]
+ * @returns {ResourceBuilder}
+ */
 const createResourceBuilder = ({ encode = true } = {}) => {
   const resources = {};
   const resourceOriginalNames = {};
   const fileResourceIds = new Map();
 
+  /** @type {ResourceBuilder['addFile']} */
   const addFile = (resourceId, kind, entry) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       throw new Error(`Canonical resource ${resourceId} is missing.`);
@@ -755,11 +979,13 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     const effectiveKind = String(encodedEntry.kind || kind);
     const kindResourceIds = fileResourceIds.get(effectiveKind) || new WeakMap();
     const owner = getResourcePayloadOwner(entry);
+    // The lookup is by object identity, so any payload owner is a valid key.
     const identity = /** @type {SessionResourceSource | null} */ (
-      getSessionResourceSource(owner)
+      getSessionResourceSource(/** @type {FileLike | null} */ (owner))
     )?.descriptor || owner;
     const existingResourceId = kindResourceIds.get(identity);
     if (existingResourceId) return existingResourceId;
+    /** @type {ResourceDescriptor} */
     const descriptor = {
       kind: effectiveKind,
       name: normalizeResourceName(resourceId, entry.name),
@@ -783,6 +1009,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     return resourceId;
   };
 
+  /** @type {ResourceBuilder['addText']} */
   const addText = (resourceId, kind, name, text) => {
     if (resources[resourceId]) return resourceId;
     const normalized = String(text || '');
@@ -805,6 +1032,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     return resourceId;
   };
 
+  /** @type {ResourceBuilder['addJson']} */
   const addJson = (resourceId, kind, name, value) => {
     if (resources[resourceId]) return resourceId;
     if (!encode) {
@@ -834,7 +1062,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     return resourceId;
   };
 
-  /** @param {unknown} [columns] */
+  /** @type {ResourceBuilder['addCanonicalTable']} */
   const addCanonicalTable = (resourceId, rows, columns = null) => {
     if (resources[resourceId]) return resourceId;
     const normalizedRows = Array.isArray(rows)
@@ -871,6 +1099,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     if (uniqueColumns.length === 0) {
       uniqueColumns.push(...preferredColumns);
     }
+    /** @param {unknown} value */
     const escapeCell = (value) => {
       if (value === null || value === undefined) return '';
       const text = String(value);
@@ -900,9 +1129,16 @@ const createResourceBuilder = ({ encode = true } = {}) => {
   };
 };
 
+/** @param {string} resourceId */
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
 // The table inputs whose committed file a rebuilt request keeps (`publicationFileRef`).
 const REQUEST_TABLE_FILE_SLOTS = Object.freeze(['d_color', 't_color', 'whitelist', 'qualifier_priority']);
+/**
+ * @param {ResourceBuilder} resources
+ * @param {Record<string, ResourceEntry | null | undefined>} files
+ * @param {string} key
+ * @param {string} fallbackId
+ */
 const publicationFileRef = (resources, files, key, fallbackId) => {
   if (!files[key]) return null;
   const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(files[key]));
@@ -912,6 +1148,10 @@ const publicationFileRef = (resources, files, key, fallbackId) => {
   };
 };
 
+/**
+ * @param {unknown} rawValue
+ * @returns {CanonicalRecord['selector']}
+ */
 const selectorPayload = (rawValue) => {
   const raw = String(rawValue || '').trim();
   if (!raw) return null;
@@ -938,6 +1178,10 @@ const presentationPayload = ({
   gridColumn
 });
 
+/**
+ * @param {{ circular_record_label?: unknown, circular_record_subtitle?: unknown, circular_reverse?: unknown }} form
+ * @param {{ hasRegion?: boolean }} [options]
+ */
 const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
   presentationPayload({
     label: form.circular_record_label,
@@ -946,6 +1190,11 @@ const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
   })
 );
 
+/**
+ * @param {{ circular_region_start?: unknown, circular_region_end?: unknown, circular_reverse?: unknown }} form
+ * @param {{ recordLength?: unknown, record_length?: unknown, value?: unknown } | null} record
+ * @returns {CanonicalRecord['region']}
+ */
 const circularRegionPayload = (form, record) => {
   const rawStart = form.circular_region_start;
   const rawEnd = form.circular_region_end;
@@ -968,13 +1217,14 @@ const circularRegionPayload = (form, record) => {
     throw new Error(`Circular region End (${end}) exceeds the selected record length (${recordLength}).`);
   }
   return {
-    selector: selectorPayload(record.value),
+    selector: selectorPayload(record?.value),
     start,
     end,
     reverseComplement: Boolean(form.circular_reverse)
   };
 };
 
+/** @param {{ region_start?: unknown, region_end?: unknown, region_record_id?: unknown, region_reverse?: unknown } | null | undefined} seq */
 const linearRegionPayload = (seq) => {
   // projectOptionalNumber yields null or a finite number: the only arm without
   // a number-or-null value is 'invalid', which it throws on.
@@ -994,6 +1244,7 @@ const linearRegionPayload = (seq) => {
 
 // The Linear card fields that hold a request record's selection, crop, and
 // orientation.
+/** @param {RequestRecordView | null | undefined} record */
 const linearSeqRecordFields = (record) => ({
   region_record_id: canonicalRecordSelector(record) || '',
   region_start: record?.region?.start ?? null,
@@ -1002,7 +1253,7 @@ const linearSeqRecordFields = (record) => ({
 });
 
 /**
- * @param {{ state: any, drawing: RequestDrawing, filesData: any, resources: any }} input
+ * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData, resources: ResourceBuilder }} input
  */
 const buildRecords = ({ state, drawing, filesData, resources }) => {
   if (state.mode.value === 'linear') {
@@ -1012,9 +1263,13 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
       { enabled: Boolean(drawing.linearRecordLayoutEnabled?.value) }
     ));
     const canonicalCardinalityByUid = new Map(
-      (drawing.linearRecordRows || []).map((entry) => [entry.uid, entry.canonicalCardinality])
+      (drawing.linearRecordRows || []).map(
+        (/** @type {{ uid?: unknown, canonicalCardinality?: string }} */ entry) => [entry.uid, entry.canonicalCardinality]
+      )
     );
+    /** @type {RequestDraftRecord[]} */
     const records = (filesData.linearSeqs || []).map((seq, index) => {
+      /** @type {CanonicalRecord['source']} */
       const source = state.lInputType.value === 'gff'
         ? {
             kind: 'gffFasta',
@@ -1053,7 +1308,9 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
   }
 
   if (Array.isArray(filesData.circularRecords) && filesData.circularRecords.length > 0) {
+    /** @type {RequestDraftRecord[]} */
     const records = filesData.circularRecords.map((record, index) => {
+      /** @type {CanonicalRecord['source']} */
       const source = record.sourceKind === 'gffFasta'
         ? { kind: 'gffFasta',
             gffResourceId: resources.addFile(`record-${index + 1}-gff3`, 'gff3', record.gff),
@@ -1124,6 +1381,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
       circularPresentedCount: records.length
     };
   }
+  /** @type {CanonicalRecord['source']} */
   const source = state.cInputType.value === 'gff'
     ? {
         kind: 'gffFasta',
@@ -1150,6 +1408,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     recordSet.presentedCount <= 1 &&
     recordSet.singlePresentation
   );
+  /** @type {RequestDraftRecord[]} */
   const records = selectedRecords.map((record, index) => {
     const region = singleJourney
       ? circularRegionPayload(drawing.form, record)
@@ -1202,8 +1461,9 @@ const effectiveLabelRendering = (form, adv, circular, linearLabelPlacement) => {
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {RequestState} state
  * @param {RequestDrawing} drawing
+ * @param {{ depthRequested?: boolean, hasComparisonIntent?: boolean, linearHasSharedRow?: boolean }} [options]
  */
 const buildConfigOverrides = (
   state,
@@ -1217,7 +1477,9 @@ const buildConfigOverrides = (
   const { form, adv } = drawing;
   const circular = state.mode.value === 'circular';
   // R7: a config leaf is projected literally; Python validates its domain.
+  /** @param {string} configPath @param {unknown} value */
   const leaf = (configPath, value) => projectOptionalNumber(value, { configPath });
+  /** @param {string} path @param {unknown} value */
   const sharedLeaf = (path, value) => leaf(`${path}.short`, value);
   const linearLabelPlacement = circular
     ? null
@@ -1240,6 +1502,7 @@ const buildConfigOverrides = (
         rulerOnAxis: Boolean(form.linear_ruler_on_axis) && linearAxisRulerApplies(form),
         managed: linearAxisManaged
       });
+  /** @type {Record<string, unknown>} */
   const overrides = {
     [CONFIG_OVERRIDE_PATHS.arrowHeadLengthRatio]:
       normalizeArrowHeadLengthRatio(adv.arrow_head_length_ratio),
@@ -1430,7 +1693,7 @@ const ALL_GENERATED_TABLES = Object.freeze({
 // displayed Result's labels and the recorded label sources, as identity row
 // text, and the `* * label` rows of the rest (CW-02: built once per request).
 /**
- * @param {Record<string, any>} state
+ * @param {{ editableLabels?: RequestRef<{ featureId?: unknown, sourceText?: unknown }[]> }} state
  * @param {RequestDrawing} drawing
  */
 export const requestLabelProjection = (state, drawing) => {
@@ -1445,8 +1708,12 @@ export const requestLabelProjection = (state, drawing) => {
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
+ * @param {ResourceBuilder} resources
+ * @param {RequestDiagramOptions} diagramOptions
+ * @param {Readonly<Record<string, boolean>>} [tables]
+ * @param {ReturnType<typeof requestLabelProjection>} [labelProjection]
  */
 const addGeneratedTableResources = (
   state, drawing, resources, diagramOptions, tables = ALL_GENERATED_TABLES,
@@ -1468,8 +1735,10 @@ const addGeneratedTableResources = (
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
+ * @param {ResourceBuilder} resources
+ * @param {RequestDiagramOptions} diagramOptions
  */
 const addColorTableResources = (state, drawing, resources, diagramOptions) => {
   const paletteName = String(drawing.selectedPalette.value || 'default');
@@ -1505,8 +1774,10 @@ const addColorTableResources = (state, drawing, resources, diagramOptions) => {
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
+ * @param {ResourceBuilder} resources
+ * @param {RequestDiagramOptions} diagramOptions
  */
 const addLabelWhitelistResource = (state, drawing, resources, diagramOptions) => {
   const publicationFiles = state.canonicalPublicationFiles || {};
@@ -1529,8 +1800,10 @@ const addLabelWhitelistResource = (state, drawing, resources, diagramOptions) =>
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
+ * @param {ResourceBuilder} resources
+ * @param {RequestDiagramOptions} diagramOptions
  */
 const addQualifierPriorityResource = (state, drawing, resources, diagramOptions) => {
   const publicationFiles = state.canonicalPublicationFiles || {};
@@ -1553,7 +1826,7 @@ const addQualifierPriorityResource = (state, drawing, resources, diagramOptions)
 // The label table carries rules only: a saved table, else the bulk label edits
 // no displayed label resolves. Per-feature label edits are `featureOverrides`.
 /**
- * @param {Record<string, any>} state
+ * @param {{ editableLabels?: RequestRef<{ featureId?: unknown, sourceText?: unknown }[]> }} state
  * @param {RequestDrawing} drawing
  * @param {{ rows: string[] }} [labelProjection]
  */
@@ -1563,8 +1836,11 @@ export const requestLabelTableTsv = (state, drawing, labelProjection = requestLa
 );
 
 /**
- * @param {Record<string, any>} state
+ * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
+ * @param {ResourceBuilder} resources
+ * @param {RequestDiagramOptions} diagramOptions
+ * @param {{ rows: string[] }} labelProjection
  */
 const addLabelOverrideResource = (state, drawing, resources, diagramOptions, labelProjection) => {
   const labelOverrideTsv = requestLabelTableTsv(state, drawing, labelProjection);
@@ -1575,6 +1851,7 @@ const addLabelOverrideResource = (state, drawing, resources, diagramOptions, lab
   }
 };
 
+/** @param {{ state: RequestState, filesData: RequestFilesData, recordCount: number }} input */
 const depthSourceRowsForRequest = ({ state, filesData, recordCount }) => (
   state.mode.value === 'linear'
     ? (filesData.linearSeqs || []).map((seq) => (
@@ -1583,6 +1860,7 @@ const depthSourceRowsForRequest = ({ state, filesData, recordCount }) => (
     : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount)
 );
 
+/** @param {{ state: RequestState, filesData: RequestFilesData, recordCount: number }} input */
 const logicalDepthTrackCountForRequest = ({ state, filesData, recordCount }) => {
   const rows = depthSourceRowsForRequest({ state, filesData, recordCount });
   return rows.reduce((maximum, row) => (
@@ -1591,8 +1869,8 @@ const logicalDepthTrackCountForRequest = ({ state, filesData, recordCount }) => 
 };
 
 /**
- * @param {{ state: Record<string, any>, drawing: RequestDrawing, filesData: Record<string, any>,
- *   resources: any, diagramOptions: Record<string, any>, recordCount: number }} input
+ * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
+ *   resources: ResourceBuilder, diagramOptions: RequestDiagramOptions, recordCount: number }} input
  */
 const buildDepthResources = ({ state, drawing, filesData, resources, diagramOptions, recordCount }) => {
   if (
@@ -1666,6 +1944,7 @@ const annotationSetIdsForState = (drawing) => (
 
 /** @param {RequestDrawing} drawing */
 const automaticCircularAnnotationSlots = (drawing) => {
+  /** @type {CircularTrackSlot[]} */
   const slots = [];
   (Array.isArray(drawing.annotationSets) ? drawing.annotationSets : [])
     .forEach((set, index) => {
@@ -1673,7 +1952,7 @@ const automaticCircularAnnotationSlots = (drawing) => {
       if (!setId) return;
       const marks = Array.from(new Set(
         (Array.isArray(set.annotations) ? set.annotations : [])
-          .map((annotation) => String(annotation?.mark || '').trim().toLowerCase())
+          .map((/** @type {{ mark?: unknown } | null} */ annotation) => String(annotation?.mark || '').trim().toLowerCase())
           .filter(Boolean)
       ));
       const laneMarks = marks.filter((mark) => mark !== 'highlight');
@@ -1716,6 +1995,11 @@ const automaticCircularAnnotationSlots = (drawing) => {
   return slots;
 };
 
+/**
+ * @param {{ reference?: unknown, ring_width?: unknown, ring_gap?: unknown }} conservation
+ * @param {{ label: string, color: string }[]} entries
+ * @param {string} referenceDefault
+ */
 const conservationDiagramOptions = (conservation, entries, referenceDefault) => ({
   conservationReference: String(conservation.reference || referenceDefault),
   conservationLabels: entries.map((entry) => entry.label),
@@ -1725,8 +2009,8 @@ const conservationDiagramOptions = (conservation, entries, referenceDefault) => 
 });
 
 /**
- * @param {{ drawing: RequestDrawing, filesData: Record<string, any>,
- *   resolvedCircularConservation: Record<string, any>[] | undefined }} input
+ * @param {{ drawing: RequestDrawing, filesData: RequestFilesData,
+ *   resolvedCircularConservation: ResolvedConservationEntry[] | undefined }} input
  */
 const conservationSeriesForValidation = ({
   drawing,
@@ -1766,8 +2050,8 @@ const conservationSeriesForValidation = ({
 };
 
 /**
- * @param {{ state: Record<string, any>, drawing: RequestDrawing, filesData: Record<string, any>,
- *   recordCount: number, resolvedCircularConservation: Record<string, any>[] | undefined }} input
+ * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
+ *   recordCount: number, resolvedCircularConservation: ResolvedConservationEntry[] | undefined }} input
  */
 const buildTrackPlan = ({
   state,
@@ -1903,13 +2187,19 @@ const buildTrackPlan = ({
 // `losatExecution` is the app-level LOSAT execution setting (`state.losatExecution`).
 /**
  * @param {RequestDrawing} drawing
- * @param {Record<string, any>} losatExecution
+ * @param {{ threadsPerJob?: unknown } | undefined} losatExecution
+ * @param {{
+ *   alignOrthogroupFeature?: unknown, losatpBin?: string, ncbiBlastpBin?: string | null,
+ *   collinearityParams?: { kind?: string, parameters?: { mergeOrientation?: string } }
+ * } & Record<string, unknown>} [baseline]
  */
 const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
   const { alignOrthogroupFeature: _legacyAlignment, ...currentBaseline } = baseline;
   const blastp = drawing.losat.blastp || {};
   const blastpMode = requireCurrentProteinBlastpMode(blastp.mode);
+  /** @param {unknown} value @param {number} fallback */
   const positiveInteger = (value, fallback) => integerSettingOr(value, fallback, 1);
+  /** @param {unknown} value @param {number} fallback */
   const nonNegativeInteger = (value, fallback) => integerSettingOr(value, fallback, 0);
   const rawCollinearityUnitMode = String(blastp.collinearUnitMode || '').trim().toLowerCase();
   const collinearityUnitMode = blastpMode === 'collinear'
@@ -2000,6 +2290,7 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
 };
 
 // The correction of a resolver issue the comparison panel reports (CI-06).
+/** @type {Readonly<Record<string, string>>} */
 const PLAN_ISSUE_REASONS = Object.freeze({
   'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'SELECTED_PAIRS_NEED_PAIRWISE'
 });
@@ -2022,16 +2313,22 @@ export const requireLinearComparisonPlanSnapshot = (snapshot) => {
   return snapshot;
 };
 
+/** @param {LinearComparisonResolution | null | undefined} snapshot */
 const orderedComparisonPlanEdges = (snapshot) => (
   (Array.isArray(snapshot?.edges) ? snapshot.edges : [])
     .slice()
     .sort((left, right) => Number(left?.ordinal) - Number(right?.ordinal))
 );
 
+/**
+ * @param {unknown} queryRecordIndex
+ * @param {unknown} subjectRecordIndex
+ */
 const comparisonEndpointKey = (queryRecordIndex, subjectRecordIndex) => (
   `${Number(queryRecordIndex)}->${Number(subjectRecordIndex)}`
 );
 
+/** @param {{ comparison: Record<string, any>, edge: LinearComparisonResolvedEdge, resources: ResourceBuilder }} input */
 const addResolvedComparisonResource = ({
   comparison,
   edge,
@@ -2067,6 +2364,7 @@ const addResolvedComparisonResource = ({
   };
 };
 
+/** @param {{ comparison: RequestCanonicalComparison, edge: LinearComparisonResolvedEdge, resources: ResourceBuilder }} input */
 const addPersistedProteinComparisonResource = ({
   comparison,
   edge,
@@ -2083,6 +2381,7 @@ const addPersistedProteinComparisonResource = ({
   subjectRecordIndex: edge.subjectIndex
 });
 
+/** @param {{ comparison: RequestCanonicalComparison, index: number, resources: ResourceBuilder }} input */
 const addCanonicalInputProteinComparisonResource = ({
   comparison,
   index,
@@ -2100,8 +2399,8 @@ const addCanonicalInputProteinComparisonResource = ({
 });
 
 /**
- * @param {{ state: Record<string, any>, drawing: RequestDrawing, filesData: Record<string, any>,
- *   resources: any, comparisonPlanSnapshot: Record<string, any> | null, resolvedComparisons?: Record<string, any>[] }} input
+ * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
+ *   resources: ResourceBuilder, comparisonPlanSnapshot: LinearComparisonResolution | null, resolvedComparisons?: Record<string, any>[] }} input
  */
 const buildComparisons = ({
   state,
@@ -2119,6 +2418,7 @@ const buildComparisons = ({
   if (snapshot.mode === 'none' || edges.length === 0) return [];
 
   const comparisons = [];
+  /** @type {RequestComparisonRef[]} */
   const metadataComparisons = [];
   const uploadFilesByEdgeId = new Map(
     (Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
@@ -2376,10 +2676,9 @@ const buildComparisons = ({
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {RequestState & { similarityAlignmentPlan?: RequestRef<unknown>, linearRecordTranslations?: RequestRef<unknown> }} state
  * @param {RequestDrawing} drawing
- */
-/**
+ * @param {{ recordKey: string, presentation: { gridRow?: number | null } }[]} [records]
  * @param {number[] | null} [circularSourceIndexes] The file position of each drawn Circular record.
  * @returns {CanonicalRenderRequest['layout']}
  */
@@ -2423,7 +2722,7 @@ const buildLayout = (state, drawing, records = [], circularSourceIndexes = null)
   };
   const positions = Array.isArray(drawing.adv.multi_record_positions)
     ? drawing.adv.multi_record_positions
-        .map((entry) => {
+        .map((/** @type {{ selector?: unknown, row?: unknown } | null} */ entry) => {
           const selector = drawnPosition(String(entry?.selector || '').trim());
           const row = Number(entry?.row);
           return selector && Number.isInteger(row) && row > 0 ? `${selector}@${row}` : null;
@@ -2462,8 +2761,15 @@ export const featureEditsOverProjection = (draft, projection) => {
   };
 };
 
+/** @param {unknown} value */
 const publicationClone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+/**
+ * @template T
+ * @param {T} value
+ * @returns {RequestRef<T>}
+ */
 const publicationRef = (value) => ({ value });
+/** @param {RequestRecordView | null | undefined} record */
 const canonicalRecordSelector = (record) => {
   const selector = record?.region?.selector || record?.selector;
   if (selector?.kind === 'recordId') return String(selector.value || '');
@@ -2596,21 +2902,23 @@ const projectCanonicalRenderInput = ({
   const webFiles = {};
   const recordPlan = buildRecords({ state, drawing, filesData, resources });
   const drafts = bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows);
+  /** @type {number[]} */
   const sourceInputIndexes = [];
   const records = recordPlan.records.flatMap((record, index) => {
     const sourceUid = state.mode.value === 'linear'
       ? String(filesData.linearSeqs?.[index]?.uid || record.recordKey) : 'circular';
-    const sourceRows = recordDisplayRows.filter((row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
+    const sourceRows = recordDisplayRows.filter((/** @type {RequestRecordDisplayRow} */ row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
     const selector = record.region?.selector || record.selector;
-    const selectedRows = sourceRows.filter((row) => !selector
+    const selectedRows = sourceRows.filter((/** @type {RequestRecordDisplayRow} */ row) => !selector
       || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
+    /** @param {RequestRecordDisplayRow} row */
     const transformFor = (row) => requestedRecordTransform(row,
-      drafts.find((draft) => recordDisplayKey(draft) === row.key) || {}, { ...row, cropped: Boolean(record.region) });
+      drafts.find((/** @type {{ sourceUid: string, selector: string }} */ draft) => recordDisplayKey(draft) === row.key) || {}, { ...row, cropped: Boolean(record.region) });
     if (record.cardinality === 'all' && selectedRows.length > 1) {
       const transforms = selectedRows.map(transformFor);
-      if (new Set(transforms.map((transform) => JSON.stringify(transform))).size > 1) {
+      if (new Set(transforms.map((/** @type {unknown} */ transform) => JSON.stringify(transform))).size > 1) {
         sourceInputIndexes.push(...selectedRows.map(() => index));
-        return selectedRows.map((row, rowIndex) => ({ ...record,
+        return selectedRows.map((/** @type {RequestRecordDisplayRow} */ row, /** @type {number} */ rowIndex) => ({ ...record,
           recordKey: `${record.recordKey}:${Number(row.selector.slice(1))}`,
           cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
           presentation: { ...record.presentation,
@@ -2620,7 +2928,7 @@ const projectCanonicalRenderInput = ({
       }
     }
     const selected = selectedRows[0];
-    const savedDraft = drafts.find((draft) => draft.sourceUid === sourceUid
+    const savedDraft = drafts.find((/** @type {{ sourceUid: string, selector: string, recordId: string, topologyOverride?: boolean | null, startCoordinate?: number | null, reverseComplementOverride?: boolean | null }} */ draft) => draft.sourceUid === sourceUid
       && (selector?.kind === 'recordIndex' ? draft.selector === `#${selector.index + 1}`
         : selector?.kind === 'recordId' ? draft.recordId === selector.value : true));
     const transform = selected ? transformFor(selected) : {
@@ -2644,7 +2952,8 @@ const projectCanonicalRenderInput = ({
     state.mode.value === 'circular' &&
     isRecordMajorDepthFileMatrix(filesData.c_depth) &&
     Array.isArray(recordPlan.circularSourceIndexes) &&
-    recordPlan.circularSourceIndexes.length < recordPlan.circularSourceCount &&
+    // `circularSourceCount` is set with `circularSourceIndexes` (both are null for Linear).
+    recordPlan.circularSourceIndexes.length < /** @type {number} */ (recordPlan.circularSourceCount) &&
     filesData.c_depth.length === recordPlan.circularSourceCount
   )
     ? {
@@ -2690,7 +2999,7 @@ const projectCanonicalRenderInput = ({
     ? state.circularRecordList.value
     : [];
   const knownCircularEntries = buildDisambiguatedRecordEntries(
-    knownCircularRecords.map((record) => ({
+    knownCircularRecords.map((/** @type {{ record_id?: unknown, recordId?: unknown } | null} */ record) => ({
       ...record,
       recordId: record?.record_id ?? record?.recordId
     }))
@@ -2714,7 +3023,7 @@ const projectCanonicalRenderInput = ({
       );
   const labelProjection = generatedLabelProjection || requestLabelProjection(state, drawing);
   // The option keys are not checked yet; the two keys every request has are.
-  /** @type {Record<string, any> & Pick<CanonicalRenderRequest['diagramOptions'], 'featurePlacements' | 'featureOverrides'>} */
+  /** @type {RequestDiagramOptions} */
   const diagramOptions = {
     featurePlacements: requestFeaturePlacements(drawing.featurePlacementOverrides, state.mode.value, records),
     // Per-feature edits by source identity (design Q4); the rows of other
@@ -2894,6 +3203,7 @@ const projectCanonicalRenderInput = ({
   }
   if (state.mode.value === 'linear') {
     webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => {
+      /** @type {{ recordKey: string, losatGencode: number, fileDefinition?: string, fileSubtitle?: string, recordDefinition?: string, recordSubtitle?: string }} */
       const entry = {
         recordKey: String(records[index]?.recordKey || filesData.linearSeqs[sourceIndex]?.uid || `record-${index + 1}`),
         losatGencode: integerSettingOr(filesData.linearSeqs[sourceIndex]?.losat_gencode, 1, 1)
@@ -3012,6 +3322,10 @@ export const projectCompositionRecordIdentity = (canonical, keys) => {
 
 export const buildCanonicalRenderRequest = (args) => projectCanonicalRenderInput(args);
 
+/**
+ * @param {{ source?: { kind?: unknown, resourceId?: unknown, gffResourceId?: unknown, fastaResourceId?: unknown } | null } | null | undefined} record
+ * @param {string} field
+ */
 const recordSourceResourceId = (record, field) => {
   const source = record?.source || {};
   if (field === 'gb' && source.kind === 'genbank') return String(source.resourceId || '');
@@ -3020,8 +3334,14 @@ const recordSourceResourceId = (record, field) => {
   return '';
 };
 
+/** @param {{ resourceId?: unknown } | null | undefined} ref */
 const referencedResourceId = (ref) => String(ref?.resourceId || '').trim();
 
+/**
+ * @param {Record<string, string>} target
+ * @param {unknown} resourceId
+ * @param {unknown} name
+ */
 const addResourceOriginalNameHint = (target, resourceId, name) => {
   const id = String(resourceId || '').trim();
   const originalName = normalizeOriginalResourceName(name);
@@ -3030,6 +3350,7 @@ const addResourceOriginalNameHint = (target, resourceId, name) => {
 };
 
 const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings }) => {
+  /** @type {Record<string, string>} */
   const hints = {};
   const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
   const options = renderRequest?.diagramOptions || {};
@@ -3399,8 +3720,13 @@ const LEGACY_DEPTH_OPTION_FIELDS = Object.freeze([
   'depthTrackTickFontSizes'
 ]);
 
+/** @param {unknown} value */
 const hasOptionValue = (value) => value !== null && value !== undefined;
 
+/**
+ * @param {readonly string[]} required
+ * @param {string} fieldName
+ */
 const requireExactCanonicalFields = (value, required, fieldName) => {
   const keys = Object.keys(value);
   const missing = required.filter(
@@ -3415,7 +3741,10 @@ const requireExactCanonicalFields = (value, required, fieldName) => {
   }
 };
 
-/** @param {ResourceFileResolver | null} [resolveResourceFile] */
+/**
+ * @param {string} fieldName
+ * @param {ResourceFileResolver | null} [resolveResourceFile]
+ */
 const canonicalDepthResourceFile = (
   ref,
   resources,
@@ -3438,6 +3767,10 @@ const canonicalDepthResourceFile = (
     : resourceAsLegacyFile(resources, resourceId);
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} fieldName
+ */
 const canonicalDepthNumber = (value, fieldName) => {
   if (value === null) return null;
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
@@ -3446,6 +3779,10 @@ const canonicalDepthNumber = (value, fieldName) => {
   return value;
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} fieldName
+ */
 const canonicalDepthText = (value, fieldName) => {
   if (value === null) return null;
   if (typeof value !== 'string' || !value.trim()) {
@@ -3581,6 +3918,10 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
 
 const sourceRecordCounts = new WeakMap();
 
+/**
+ * @param {string} resourceId
+ * @param {'genbank' | 'fasta'} kind
+ */
 export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
   const descriptor = resources?.[resourceId];
   const owner = getResourcePayloadOwner(descriptor);
@@ -3601,12 +3942,19 @@ export const readCanonicalResourceRecordCount = async (resources, resourceId, ki
   return counts[kind];
 };
 
+/** @param {{ resourceId?: unknown } | null | undefined} ref */
 const resourceTextFromRef = (resources, ref) => (
   ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
 );
 
 // A table the Session stores is named in its failure: the user corrects the
 // Session file, not a table in this page.
+/**
+ * @template T
+ * @param {string} table
+ * @param {() => T} read
+ * @returns {T}
+ */
 const readSessionTable = (table, read) => {
   try {
     return read();
@@ -3617,10 +3965,17 @@ const readSessionTable = (table, read) => {
   }
 };
 
+/**
+ * @param {string} singular
+ * @param {string} plural
+ * @param {unknown[]} items
+ */
 const cappedList = (singular, plural, items) => (items.length === 1 ? `${singular} ${items[0]}`
   : `${plural} ${items.slice(0, 5).join(', ')}${items.length > 5 ? `, and ${items.length - 5} more` : ''}`);
+/** @param {unknown[]} rows */
 const lineList = (rows) => cappedList('line', 'lines', rows);
 // The Load notice for the rows `legacyTableRepairs` lists, by table.
+/** @param {{ table: string, repair: string, row: unknown }[] | null | undefined} repairs */
 export const legacyTableRowsNotice = (repairs) => {
   if (!repairs?.length) return '';
   const tables = [...new Set(repairs.map(({ table }) => table))];
@@ -3643,7 +3998,9 @@ export const legacyTableRowsNotice = (repairs) => {
 // the Default colors domain (D-43): `drops` lists `{ list, caption }` per
 // dropped entry, possibly more than once. Captions are free text, quoted with " as
 // other user text is.
+/** @type {Readonly<Record<string, string>>} */
 const LEGEND_LIST_MARKS = { entries: '', dormantEntries: ' (not drawn)', deletedEntries: ' (deleted)' };
+/** @param {{ list: string, caption: string }[] | null | undefined} drops */
 export const legendColorDropNotice = (drops) => {
   const named = [...new Set((drops || []).map(({ list, caption }) => `"${caption}"${LEGEND_LIST_MARKS[list] ?? ''}`))];
   if (!named.length) return '';
@@ -3655,10 +4012,16 @@ export const legendColorDropNotice = (drops) => {
 // valid only when it holds (CO-02); an unreadable committed table declines.
 // Feature visibility decides which proteins LOSATP compares: the rules and the
 // per-feature `featureVisibility` of the request's identity rows (design Q4 3.3).
+/** @param {unknown} rows */
 const featureVisibilityRowsKey = (rows) => JSON.stringify((Array.isArray(rows) ? rows : [])
   .filter((row) => row?.featureVisibility)
   .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]));
+/**
+ * @param {unknown} activeRulesTsv
+ * @param {unknown} [activeOverrideRows]
+ */
 export const committedFeatureVisibilityMatches = (committedSession, activeRulesTsv, activeOverrideRows = []) => {
+  /** @param {unknown} text */
   const normalize = (text) => serializeFeatureVisibilityRules(parseFeatureVisibilityRules(String(text ?? '')).rules);
   try {
     return normalize(resourceTextFromRef(
@@ -3672,6 +4035,7 @@ export const committedFeatureVisibilityMatches = (committedSession, activeRulesT
   }
 };
 
+/** @param {string} path */
 const nestedConfigValue = (config, path) => {
   let current = config;
   for (const key of path.split('.')) {
@@ -3681,6 +4045,10 @@ const nestedConfigValue = (config, path) => {
   return current;
 };
 
+/**
+ * @param {Record<string, unknown>} overrides
+ * @param {string} path
+ */
 const sharedLengthOverrideValue = (overrides, path) => {
   // The Web UI has one control for values that Python stores per genome length.
   // Project them only when both variants encode the same explicit setting.
@@ -3697,13 +4065,16 @@ const sharedLengthOverrideValue = (overrides, path) => {
   return Number.isFinite(shortNumber) && shortNumber === longNumber ? longValue : undefined;
 };
 
+/** @param {{ mode: RequestMode, showLabels?: unknown, allowInnerLabels?: unknown }} input */
 const legacyLabelScope = ({ mode, showLabels, allowInnerLabels }) => {
+  /** @type {string | undefined} */
   let scope;
   if (showLabels !== undefined) {
     if (typeof showLabels === 'boolean') {
       scope = showLabels ? (mode === 'circular' ? 'outer' : 'all') : 'none';
     } else {
       const normalized = String(showLabels).trim().toLowerCase();
+      /** @type {Readonly<Record<string, string | undefined>>} */
       const aliases = {
         true: 'all', yes: 'all', on: 'all',
         false: 'none', no: 'none', off: 'none'
@@ -3724,6 +4095,7 @@ const legacyLabelScope = ({ mode, showLabels, allowInnerLabels }) => {
   return scope;
 };
 
+/** @param {RequestMode} mode */
 const projectFullConfigOverrides = (config, mode) => {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
   /** @type {Set<string>} */
@@ -3740,6 +4112,7 @@ const projectFullConfigOverrides = (config, mode) => {
   Object.values(LINEAR_DEFINITION_STYLE_PATHS).forEach((prefix) => {
     LINEAR_DEFINITION_STYLE_FIELDS.forEach((field) => paths.add(`${prefix}.${field}`));
   });
+  /** @type {Record<string, unknown>} */
   const projected = {};
   paths.forEach((path) => {
     const value = nestedConfigValue(config, path);
@@ -3760,6 +4133,10 @@ const projectFullConfigOverrides = (config, mode) => {
   return projected;
 };
 
+/**
+ * @param {Record<string, unknown>} overrides
+ * @param {RequestMode} mode
+ */
 const projectCanonicalConfigOverrides = (overrides, mode) => {
   /** @type {Record<string, any>} */
   const projected = {};
@@ -3780,8 +4157,10 @@ const projectCanonicalConfigOverrides = (overrides, mode) => {
   const labelFontSize = sharedLengthOverrideValue(overrides, labelFontPath);
   if (labelFontSize !== undefined) projected.label_font_size = labelFontSize;
 
+  /** @type {Record<string, Record<string, unknown>>} */
   const lineStyles = {};
   for (const [kind, prefix] of Object.entries(LINEAR_DEFINITION_STYLE_PATHS)) {
+    /** @type {Record<string, unknown>} */
     const style = {};
     for (const field of LINEAR_DEFINITION_STYLE_FIELDS) {
       const path = `${prefix}.${field}`;
@@ -3797,12 +4176,17 @@ const projectCanonicalConfigOverrides = (overrides, mode) => {
   return projected;
 };
 
+/** @param {Record<string, unknown>} overrides */
 const projectLegacyFlatConfigOverrides = (overrides) => Object.fromEntries(
   Object.entries(overrides).filter(([key]) => (
     !key.includes('.') && !['show_labels', 'allow_inner_labels'].includes(key)
   ))
 );
 
+/**
+ * @param {Record<string, unknown>} overrides
+ * @param {RequestMode} mode
+ */
 const projectExplicitConfigOverrides = (overrides, mode) => {
   const legacyLabelPaths = new Set([
     'canvas.show_labels',
@@ -3834,6 +4218,7 @@ const projectExplicitConfigOverrides = (overrides, mode) => {
   return projected;
 };
 
+/** @param {{ c_conservation_blasts?: FileLike[] }} files */
 const projectCircularConservationConfig = (options, files) => {
   const sourceFiles = Array.isArray(files.c_conservation_blasts)
     ? files.c_conservation_blasts
@@ -3945,6 +4330,7 @@ const combineCircularGenbankResources = (
   originalName = '',
   { resolveResourceFile = null, sessionResourceTable = null } = {}
 ) => {
+  /** @type {string[]} */
   const resourceIds = [];
   const seen = new Set();
   records.forEach((record) => {
@@ -3971,6 +4357,7 @@ const combineCircularGenbankResources = (
   );
 };
 
+/** @param {number} schema */
 const validateCanonicalAssemblyOutput = (value, schema) => {
   if (value === undefined || value === null) return;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -4026,6 +4413,10 @@ const canonicalGrouping = (renderRequest, records) => {
   return renderRequest.grouping;
 };
 
+/**
+ * @param {string} grouping
+ * @param {number} recordCount
+ */
 const canonicalOutputPrefixes = (renderRequest, grouping, recordCount) => {
   const outputs = grouping === 'batch' ? renderRequest.output : [renderRequest.output];
   if (
@@ -4046,6 +4437,7 @@ const canonicalOutputPrefixes = (renderRequest, grouping, recordCount) => {
   return prefixes;
 };
 
+/** @param {({ selector?: { kind?: unknown, value?: unknown } | null } | null | undefined)[]} records */
 const inferredImplicitBatchPrefixes = (records) => {
   const recordIds = records.map((record) => (
     record?.selector?.kind === 'recordId'
@@ -4059,6 +4451,13 @@ const inferredImplicitBatchPrefixes = (records) => {
   );
 };
 
+/**
+ * @param {{ mode?: unknown }} renderRequest
+ * @param {string} grouping
+ * @param {({ selector?: { kind?: unknown, value?: unknown } | null } | null | undefined)[]} records
+ * @param {string[]} prefixes
+ * @param {boolean | null | undefined} circularPrefixExplicit
+ */
 const projectedOutputPrefix = (
   renderRequest,
   grouping,
@@ -5651,7 +6050,10 @@ export const projectCommittedEditorIntent = ({
     drawing.featureOverrides, candidate.renderRequest.records,
     { bulkLabelText: labelProjection.bulkLabelText }
   );
-  addGeneratedTableResources(state, drawing, resources, options, tables, labelProjection);
+  // `state` is the app state (state.js), which holds the refs the tables read.
+  addGeneratedTableResources(
+    /** @type {RequestTableState} */ (state), drawing, resources, options, tables, labelProjection
+  );
   Object.assign(candidate.resources, resources.resources);
   projectCanonicalSessionRequest({
     renderRequest: candidate.renderRequest,
