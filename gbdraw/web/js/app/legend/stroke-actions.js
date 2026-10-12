@@ -62,8 +62,12 @@ export const createLegendStrokeActions = ({ state }) => {
     if (String(drawing.legendStrokeOverrides[entry.caption]?.strokeColor || '').trim() === normalized) {
       return false;
     }
+    // A caption is free text: only an own entry is an override (OV-532).
+    const existing = Object.hasOwn(drawing.legendStrokeOverrides, entry.caption)
+      ? drawing.legendStrokeOverrides[entry.caption]
+      : undefined;
     drawing.legendStrokeOverrides[entry.caption] = {
-      ...(drawing.legendStrokeOverrides[entry.caption] || {
+      ...(existing || {
         ...drawnSwatchStroke(entry.caption),
         strokeWidth: getLegendEntryStrokeWidth(idx)
       }),
@@ -82,8 +86,12 @@ export const createLegendStrokeActions = ({ state }) => {
     const widthVal = parseFloat(String(width));
     if (isNaN(widthVal)) return false;
     if (Number(drawing.legendStrokeOverrides[entry.caption]?.strokeWidth) === widthVal) return false;
+    // A caption is free text: only an own entry is an override (OV-532).
+    const existing = Object.hasOwn(drawing.legendStrokeOverrides, entry.caption)
+      ? drawing.legendStrokeOverrides[entry.caption]
+      : undefined;
     drawing.legendStrokeOverrides[entry.caption] = {
-      ...(drawing.legendStrokeOverrides[entry.caption] || {
+      ...(existing || {
         ...drawnSwatchStroke(entry.caption),
         strokeColor: getLegendEntryStrokeColor(idx)
       }),

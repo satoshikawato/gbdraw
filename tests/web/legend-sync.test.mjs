@@ -902,3 +902,42 @@ const mockLegendEntry = (caption, color, x) => {
   assert.deepEqual(colors, { constructor: '#112233', Alpha: '#aabbcc', Zed: '#778899' },
     'a caption named like an inherited member keeps its recorded color; an own override and an unknown caption read as before');
 }
+
+// OV-532: a first stroke edit reads the existing override by the row's caption.
+// An inherited member is no override, so the stored override gets the drawn
+// stroke like that of any other row.
+{
+  const ref = (value) => ({ value });
+  const strokeOverridesAfterFirstEdit = (caption, edit) => {
+    const svg = new MockElement('svg');
+    const featureLegend = new MockElement('g', { id: 'feature_legend' });
+    const row = mockLegendEntry(caption, '#112233', 0);
+    featureLegend.appendChild(row);
+    svg.appendChild(featureLegend);
+    const swatch = row.querySelector('path');
+    swatch.setAttribute('stroke', '#999999');
+    swatch.setAttribute('data-gbdraw-base-stroke', 'gray');
+    swatch.setAttribute('stroke-width', '2');
+    const state = {
+      svgContainer: ref({ querySelector: () => svg }),
+      legendEntries: ref([{ caption, color: '#112233' }]),
+      legendStrokeOverrides: {},
+      featureStrokeOverrides: {},
+      extractedFeatures: ref([])
+    };
+    const actions = createLegendStrokeActions({ state: withDrawings(state) });
+    assert.equal(edit(actions), true);
+    return state.legendStrokeOverrides[caption];
+  };
+  for (const [name, edit] of [
+    ['color', (actions) => actions.updateLegendEntryStrokeColor(0, '#222222')],
+    ['width', (actions) => actions.updateLegendEntryStrokeWidth(0, 3)]
+  ]) {
+    const ordinary = strokeOverridesAfterFirstEdit('Gamma', edit);
+    assert.equal(Object.keys(ordinary).length, 4);
+    for (const caption of ['constructor', 'toString', '__proto__']) {
+      assert.deepEqual(strokeOverridesAfterFirstEdit(caption, edit), ordinary,
+        `a first stroke ${name} edit of the row named ${caption} stores the drawn stroke like any other row`);
+    }
+  }
+}
