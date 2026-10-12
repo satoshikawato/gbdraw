@@ -8,6 +8,7 @@ const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-session-feature-metadata-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'contracts'), { recursive: true });
 await mkdir(join(tempDir, 'utils'), { recursive: true });
 
 const copyModule = async (sourceRelative, targetRelative) => {
@@ -26,6 +27,7 @@ await copyModule('gbdraw/web/js/services/legend-svg.js', 'services/legend-svg.js
 await copyModule('gbdraw/web/js/services/result-paint-bases.js', 'services/result-paint-bases.js');
 await copyModule('gbdraw/web/js/services/svg-transform.js', 'services/svg-transform.js');
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
+await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schema.generated.js');
 await copyModule('gbdraw/web/js/services/bounded-json-transport.js', 'services/bounded-json-transport.js');
 await copyModule(
   'gbdraw/web/js/services/current-worker-result-source.js',

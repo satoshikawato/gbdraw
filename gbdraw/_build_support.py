@@ -38,6 +38,7 @@ _WEB_APP_PACKAGE_DATA = [
     "web/js/*.js",
     "web/js/app/*.js",
     "web/js/app/*/*.js",
+    "web/js/contracts/*.js",
     "web/js/workers/*.js",
     "web/js/services/*.js",
     "web/js/utils/*.js",

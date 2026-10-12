@@ -29,9 +29,8 @@ const { promoteGallerySessionToCurrent } = await import(
   '../../gbdraw/web/js/services/gallery-session-migration.js'
 );
 const { FEATURE_CATALOG_SCHEMA } = await import('../../gbdraw/web/js/services/feature-catalog.js');
-// Session 46 keeps each diagram mode's draft in `modes` (PD-OI-086).
-const { MODE_SCOPED_SESSION_VERSION: CURRENT_SESSION_VERSION } = await import(
-  '../../gbdraw/web/js/services/session-authority.js'
+const { SESSION_VERSION: CURRENT_SESSION_VERSION } = await import(
+  '../../gbdraw/web/js/contracts/schema.generated.js'
 );
 
 const {
