@@ -681,6 +681,28 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
   );
 };
 
+// The reply of the `buildProteinLosatCacheKeys` helper is unchecked data. Generate uses each key as a raw LOSAT
+// cache key, so the reply holds one SHA-256 hex digest per pair, as text (`RegExp.test` alone would coerce).
+/**
+ * @param {unknown} reply
+ * @param {number} pairCount
+ * @returns {string[]}
+ */
+export const requireProteinLosatCacheKeys = (reply, pairCount) => {
+  /** @type {{ error?: unknown, keys?: unknown }} */
+  const result = reply !== null && typeof reply === 'object' ? reply : {};
+  const keys = Array.isArray(result.keys) ? /** @type {unknown[]} */ (result.keys) : null;
+  if (
+    result.error || !keys
+    || keys.length !== pairCount
+    || keys.some((key) => typeof key !== 'string' || !/^[0-9a-f]{64}$/.test(key))
+  ) {
+    throw result.error || new Error('Protein cache key generation failed.');
+  }
+  // Every key passed the text and pattern check above.
+  return /** @type {string[]} */ (keys);
+};
+
 /** @param {unknown} candidateLimit */
 export const resolveProteinBlastpCandidateLimit = (candidateLimit) => (
   requireCurrentProteinBlastpCandidateLimit(candidateLimit)
@@ -4321,15 +4343,7 @@ export const createRunAnalysis = ({
               }
             );
             throwIfGenerationCanceled();
-            const result = response.result;
-            if (
-              result.error || !Array.isArray(result.keys)
-              || result.keys.length !== preparedJobs.length
-              || result.keys.some((key) => !/^[0-9a-f]{64}$/.test(key))
-            ) {
-              throw result.error || new Error('Protein cache key generation failed.');
-            }
-            proteinCacheKeys = result.keys;
+            proteinCacheKeys = requireProteinLosatCacheKeys(response.result, preparedJobs.length);
           }
 
           // mergeProteinIdentityManifests made a private deep copy for this run.
