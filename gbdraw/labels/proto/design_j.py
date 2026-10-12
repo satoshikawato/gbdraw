@@ -107,6 +107,7 @@ class _Par:
         self.sym = int(ctx.opt("sym", 1))                # 1: a lopsided cluster of labels is shifted until its fan is symmetric
         self.ray = int(ctx.opt("ray", 1))                # 1: candidates exactly on the feature's own ray (straight leaders)
         self.slide = int(ctx.opt("slide", 1))             # 1: a finished layout is slid toward the ring, leaders end where their line meets the box (LP-D14)
+        self.shift = int(ctx.opt("shift", 0))             # 1: the slide pass also moves a box straight toward the ring, its leader keeping its direction (LP-D14 probe)
         self.nostraight = 3.0                            # a run shorter than this does not turn (the metric drops pieces under 3 px)
         self.grid_out, self.grid_in = 80, 140
 
@@ -525,12 +526,15 @@ class _Eng:
         return L.memo[key]
 
     # ---- seat one label at y (or the first y further along its stack direction where it fits)
-    def try_at(self, L: _Lab, yy: float, pl: _Placed, pend: _Pending, want: float | None = None):
+    def try_at(self, L: _Lab, yy: float, pl: _Placed, pend: _Pending, want: float | None = None, extra=None, only: bool = False):
         """The shortest leader at height yy that fits: ((box, attach point, yy, run), shortest run before the other
-        labels are looked at). (None, None) when the label has no spot at this height at all."""
+        labels are looked at). (None, None) when the label has no spot at this height at all. `extra`: more spots
+        (q, cost, boxes, attach points) that have passed the static tests; `only`: these and no others."""
         geo, par = self.geo, self.par
         y0, y1 = yy - 0.5 * L.h, yy + 0.5 * L.h
-        memo = self.spots(L, yy, want)
+        memo = None if only else self.spots(L, yy, want)
+        if extra is not None and len(extra[0]):
+            memo = tuple(np.concatenate([a, b]) for a, b in zip(memo[:4], extra)) + (memo[4],) if memo is not None else (*extra, math.inf)
         if memo is None:
             return None, None
         q, ln, boxes, att, alone = memo
@@ -784,6 +788,45 @@ class _Eng:
             cosv = max(-1.0, min(1.0, (vx * L.nq * L.sx + vy * L.ny) / ln))
             return ln + par.tw * math.degrees(math.acos(cosv))
 
+        def shifted(L: _Lab, end, yy: float, x_box: float):
+            """Spots with the box moved 1..26 px toward the ring at height yy, the leader keeping its direction."""
+            dirs = []
+            for a, b in ((L.S, end),):                     # the leader keeps its direction (turn and lean)
+                n = math.dist(a, b)
+                if n >= 0.5:
+                    dirs.append((L.sx * (b[0] - a[0]) / n, (b[1] - a[1]) / n))
+            lg = par.lgap
+            q0s, yas, gas = [], [], []
+            for dq, dyv in dirs:
+                for dx in range(1, 27):
+                    q0 = x_box - dx
+                    t0, t1 = -math.inf, math.inf
+                    for p0, d, a, b in ((L.Sq, dq, q0 - lg, q0 + L.w + lg), (L.Sy, dyv, yy - 0.5 * L.h - lg, yy + 0.5 * L.h + lg)):
+                        if abs(d) < 1e-9:
+                            if not a <= p0 <= b:
+                                t0, t1 = 1.0, 0.0
+                            continue
+                        ta, tb = (a - p0) / d, (b - p0) / d
+                        t0, t1 = max(t0, min(ta, tb)), min(t1, max(ta, tb))
+                    if t0 > t1 or t1 < 0:
+                        continue
+                    t = max(t0, 0.0)
+                    q0s.append(q0)
+                    yas.append(L.Sy + t * dyv)
+                    gas.append(q0 - (L.Sq + t * dq))
+            if not q0s:
+                return None
+            q0a, ya, ga = (np.array(v, dtype=float)[None, :] for v in (q0s, yas, gas))
+            ok, cost, _run = L.static(np.array([[yy]]), q0a, ya, ga, self.geo, par, par.cone_cos)
+            idx = np.nonzero(ok[0])[0]
+            if not len(idx):
+                return None
+            q, c = q0a[0][idx], cost[0][idx]
+            x0 = q if L.sx > 0 else -(q + L.w)
+            boxes = np.stack([x0, np.full(len(q), yy - 0.5 * L.h), x0 + L.w, np.full(len(q), yy + 0.5 * L.h)], axis=1)
+            att = np.stack([L.sx * (q - ga[0][idx]), ya[0][idx]], axis=1)
+            return q, c, boxes, att
+
         for lb in self.cache.values():                     # in this pass a short run beside a box corner is a turn like any other
             lb.memo.clear()
         par.nostraight = 0.5
@@ -806,12 +849,13 @@ class _Eng:
                     best = None
                     for step in (0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 11.0, 15.0, 20.0, 26.0):
                         info["tried"] += 1
-                        res, _alone = self.try_at(L, yc - L.d * step, view, pend)
-                        if res is None or res[3] >= cur - 0.5 or (best is not None and res[3] >= best[0]):
-                            continue
-                        npts = [it.anchor, L.S, res[1]]
-                        if abs(_sturn(npts) - s_old) <= 1.0 and _plen(npts) <= _plen(pts) + 1.5:
-                            best = (res[3], res[0], npts)
+                        extra = shifted(L, pts[-1], yc - L.d * step, box[0] if L.sx > 0 else -box[2]) if par.shift and step <= 2.0 else None   # at most 2 px up: a gap of the stack stays under 6.1 px
+                        for res in (self.try_at(L, yc - L.d * step, view, pend)[0], self.try_at(L, yc - L.d * step, view, pend, extra=extra, only=True)[0] if extra else None):
+                            if res is None or res[3] >= cur - 0.5 or (best is not None and res[3] >= best[0]):
+                                continue
+                            npts = [it.anchor, L.S, res[1]]
+                            if abs(_sturn(npts) - s_old) <= 1.0 and _plen(npts) <= _plen(pts) + 1.5:
+                                best = (res[3], res[0], npts)
                     if best is not None:
                         info["saved_px"] += _plen(pts) - _plen(best[2])
                         recs[k] = (it, best[1], best[2], align, tag)
