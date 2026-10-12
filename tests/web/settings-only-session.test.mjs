@@ -56,6 +56,15 @@ test('inactive biological inputs cannot be classified or saved as settings-only'
   assert.ok(adoptCurrentSessionDocument(inactive, 41).canonical);
 });
 
+test('OV-566: a null Linear row of the Web input inventory is a row without inputs', () => {
+  // `validateWebFileBindings` lets a null row through; the inventory reads it the same way.
+  assert.equal(hasBiologicalSessionInputs({ linearSeqs: [null, undefined] }), false);
+  assert.equal(hasBiologicalSessionInputs({ linearSeqs: [null, { fasta: {} }] }), true);
+  const document = structuredClone(settings);
+  document.webFiles.bindings.linearSeqs = [null];
+  assert.equal(adoptCurrentSessionDocument(document, 42).canonical, null);
+});
+
 const invalid = [
   ['missing request', d => { delete d.renderRequest; }, /canonical render request/],
   ['biological binding', d => { d.resources = full.resources; d.webFiles = full.webFiles; }, /biological sources/],

@@ -338,7 +338,8 @@ const hasInput = value => Array.isArray(value) ? value.some(hasInput) : value !=
 export const hasBiologicalSessionInputs = (files = {}) => (
   ['c_gb', 'c_gff', 'c_fasta', 'c_conservation_fastas', 'c_conservation_sequence_sources']
     .some(key => hasInput(files[key]))
-  || (files.linearSeqs || []).some((/** @type {Record<string, unknown>} */ row) => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
+  // A Session's row can be null (`validateWebFileBindings` lets it through): a row without inputs (OV-566).
+  || (files.linearSeqs || []).some((/** @type {Record<string, unknown> | null | undefined} */ row) => ['gb', 'gff', 'fasta'].some(key => hasInput(row?.[key])))
 );
 
 /**
