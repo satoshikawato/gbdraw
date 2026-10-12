@@ -1,10 +1,12 @@
 // @ts-check
+/** @param {unknown} name */
 const interactivePairName = (name) => {
   const normalized = String(name || '').trim();
   const match = normalized.match(/^(.*)\.interactive\.svg$/i);
   return match ? `${match[1]}.svg` : null;
 };
 
+/** @param {unknown} results */
 export const normalizeLogicalResults = (results) => {
   if (!Array.isArray(results)) return [];
   const normalized = [];

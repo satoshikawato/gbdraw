@@ -1,6 +1,10 @@
 // @ts-check
 const AUTO_PARALLEL_RUN_LIMIT = 4;
 
+/**
+ * @param {unknown} value
+ * @returns {number | null}
+ */
 const positiveInteger = (value) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= 1 ? parsed : null;

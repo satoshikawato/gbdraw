@@ -1,4 +1,8 @@
 // @ts-check
+/**
+ * @param {Blob} blob
+ * @param {string} filename
+ */
 export const downloadBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -14,6 +18,11 @@ export const downloadBlob = (blob, filename) => {
   }
 };
 
+/**
+ * @param {string} filename
+ * @param {BlobPart} text
+ * @param {string} [type]
+ */
 export const downloadTextFile = (
   filename,
   text,

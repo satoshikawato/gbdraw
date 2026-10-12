@@ -3,6 +3,11 @@ const testHooks = () => globalThis.__GBDRAW_TEST_HOOKS__;
 
 export const runtimeTestHooksEnabled = () => Boolean(testHooks());
 
+/**
+ * @param {unknown} name
+ * @param {unknown} [value]
+ * @param {unknown} [detail]
+ */
 export const recordStructuralMetric = (name, value = 1, detail = {}) => {
   const callback = testHooks()?.onStructuralMetric;
   if (typeof callback !== 'function') return;
@@ -13,6 +18,10 @@ export const recordStructuralMetric = (name, value = 1, detail = {}) => {
   });
 };
 
+/**
+ * @param {unknown} name
+ * @param {unknown} [detail]
+ */
 export const recordSessionLifecycleEvent = (name, detail = {}) => {
   const callback = testHooks()?.onSessionLifecycleEvent;
   if (typeof callback !== 'function') return;

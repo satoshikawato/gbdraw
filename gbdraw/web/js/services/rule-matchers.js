@@ -16,12 +16,31 @@
  * @property {Set<string>} evaluated Color rule keys with a result (shared).
  * @property {Map<string, { matches: boolean | null, declined?: boolean }>} visibility
  */
-/** @type {WeakMap<object, FeatureRuleResults>} */
+/**
+ * What these helpers read of a catalog feature (a reactive copy is accepted).
+ * @typedef {{ type?: unknown }} RuleFeature
+ */
+/**
+ * What a color rule's key and its type test read.
+ * @typedef {{ feat?: string, qual?: unknown, val?: unknown }} ColorRule
+ */
+/**
+ * What a Feature Visibility rule's key reads.
+ * @typedef {{ recordId?: unknown, featureType?: unknown, qualifier?: unknown, value?: unknown }} VisibilityRule
+ */
+/** @type {WeakMap<WeakKey, FeatureRuleResults>} */
 const resultsByFeature = new WeakMap();
 /** @type {Set<string>} */
 const NOTHING_EVALUATED = new Set();
+/**
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
 const raw = (value) => globalThis.window?.Vue?.toRaw?.(value) ?? value;
+/** @param {RuleFeature} feature */
 const resultsOf = (feature) => resultsByFeature.get(raw(feature));
+/** @param {RuleFeature} feature */
 const resultsFor = (feature) => {
   const key = raw(feature);
   let results = resultsByFeature.get(key);
@@ -35,10 +54,11 @@ const resultsFor = (feature) => {
 // A rule's key is built once per content: a rule edited in place
 // (`Object.assign`) gets a new key on its next read.
 /**
- * @param {WeakMap<object, { fields: unknown[], key: string }>} memo
- * @param {(rule: Record<string, any>) => unknown[]} fieldsOf
+ * @template {WeakKey} Rule
+ * @param {WeakMap<WeakKey, { fields: unknown[], key: string }>} memo
+ * @param {(rule: Rule) => unknown[]} fieldsOf
  */
-const memoizedKey = (memo, fieldsOf) => (rule) => {
+const memoizedKey = (memo, fieldsOf) => (/** @type {Rule} */ rule) => {
   const fields = fieldsOf(rule);
   const source = raw(rule);
   const known = memo.get(source);
@@ -47,12 +67,24 @@ const memoizedKey = (memo, fieldsOf) => (rule) => {
   memo.set(source, { fields, key });
   return key;
 };
-export const ruleKey = memoizedKey(new WeakMap(), (rule) => [rule.feat, rule.qual, rule.val]);
-const applies = (rule, feature) => Boolean(rule) && (rule.feat === '*' || rule.feat === feature?.type);
+export const ruleKey = memoizedKey(new WeakMap(), (/** @type {ColorRule} */ rule) => [rule.feat, rule.qual, rule.val]);
+// `Boolean(rule)` guards the casts.
+/**
+ * @param {ColorRule | null | undefined} rule
+ * @param {RuleFeature} feature
+ */
+const applies = (rule, feature) => Boolean(rule)
+  && (/** @type {ColorRule} */ (rule).feat === '*' || /** @type {ColorRule} */ (rule).feat === feature?.type);
+/**
+ * @param {RuleFeature} feature
+ * @param {ColorRule | null | undefined} rule
+ * @returns {boolean | null} Null while no result is known.
+ */
 export const ruleMatchesFeature = (feature, rule) => {
   if (!applies(rule, feature)) return false;
   const results = resultsOf(feature);
-  const key = ruleKey(rule);
+  // `applies` returned true, so the rule is set.
+  const key = ruleKey(/** @type {ColorRule} */ (rule));
   if (!results || results.declined.has(key)) return null;
   if (results.matches.has(key)) return true;
   return results.evaluated.has(key) ? false : null;
@@ -114,9 +146,10 @@ export const ruleMatcher = (rules) => {
   });
   /** @type {Map<Set<string>, Map<string, boolean>>} */
   const readiness = new Map();
-  const ready = (feature) => {
+  const ready = (/** @type {RuleFeature} */ feature) => {
     const evaluated = resultsOf(feature)?.evaluated || NOTHING_EVALUATED;
-    const type = feature?.type;
+    // A catalog feature's type is a string; `keysByFeat` and `readiness` key on it.
+    const type = /** @type {string} */ (feature?.type);
     let byType = readiness.get(evaluated);
     if (!byType) readiness.set(evaluated, byType = new Map());
     if (!byType.has(type)) {
@@ -125,9 +158,9 @@ export const ruleMatcher = (rules) => {
     }
     return byType.get(type);
   };
-  const declinesApplying = (feature) => [...(resultsOf(feature)?.declined || [])]
+  const declinesApplying = (/** @type {RuleFeature} */ feature) => [...(resultsOf(feature)?.declined || [])]
     .some((key) => applies(firstByKey.get(key)?.rule, feature));
-  const first = (feature) => {
+  const first = (/** @type {RuleFeature} */ feature) => {
     /** @type {{ rule: Record<string, any>, index: number } | null} */
     let winner = null;
     let priority = Infinity;
@@ -142,14 +175,14 @@ export const ruleMatcher = (rules) => {
   };
   return {
     // Every rule of the feature's type has a result (a match, a non-match, or declined).
-    ready: (features) => features.every(ready),
+    ready: (/** @type {RuleFeature[]} */ features) => features.every(ready),
     // The rule that colors the feature, or null.
     first,
     // `first`, for a reader that must not take an unknown match for a miss:
     // undefined while a match of a rule of the feature's type is pending or declined.
-    firstIfKnown: (feature) => (ready(feature) && !declinesApplying(feature) ? first(feature) : undefined),
+    firstIfKnown: (/** @type {RuleFeature} */ feature) => (ready(feature) && !declinesApplying(feature) ? first(feature) : undefined),
     // Whether some rule matches the feature: true, false, or null while unknown.
-    matchesAny: (feature) => {
+    matchesAny: (/** @type {RuleFeature} */ feature) => {
       for (const key of resultsOf(feature)?.matches.keys() || []) {
         if (applies(firstByKey.get(key)?.rule, feature)) return true;
       }
@@ -162,11 +195,16 @@ export const ruleMatcher = (rules) => {
 // Feature visibility rules (gbdraw/features/visibility.py) are matched by the
 // same Python helper on the same feature payloads; `resolveFeatureDrawn` in
 // services/feature-visibility.js reads the results (R4).
-export const visibilityRuleKey = memoizedKey(new WeakMap(), (rule) => [
+export const visibilityRuleKey = memoizedKey(new WeakMap(), (/** @type {VisibilityRule} */ rule) => [
   'visibility', rule.recordId, rule.featureType, rule.qualifier, rule.value
 ]);
 /** @param {Record<string, any>} feature @param {Record<string, any>} rule */
 export const visibilityRuleKnown = (feature, rule) => Boolean(resultsOf(feature)?.visibility.has(visibilityRuleKey(rule)));
+/**
+ * @param {RuleFeature} feature
+ * @param {VisibilityRule} rule
+ * @returns {boolean | null}
+ */
 export const visibilityRuleMatchesFeature = (feature, rule) => (
   resultsOf(feature)?.visibility.get(visibilityRuleKey(rule))?.matches ?? null
 );

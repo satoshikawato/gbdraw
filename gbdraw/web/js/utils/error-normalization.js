@@ -25,6 +25,7 @@ gc_content_radius_circular gc_skew_width_circular gc_skew_radius_circular conser
 conservation_ring_gap center_reserved_radius multi_record_min_radius_ratio multi_record_column_gap_ratio
 multi_record_row_gap_ratio protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix
 placement strict compress reserve gapAfter gap_after innerRadius inner_radius outerRadius outer_radius`.split(/\s+/));
+/** @type {Readonly<Record<string, string>>} */
 const REASONS = Object.freeze({
   CROSS_ORIGIN_ISOLATION: 'This page is not cross-origin isolated.', SHARED_MEMORY: 'This browser does not provide SharedArrayBuffer.',
   WORKERS: 'This browser does not provide Web Workers.', THREADED_WASM: 'The threaded LOSAT runtime could not start.',
@@ -132,6 +133,10 @@ const REASONS = Object.freeze({
   FASTA_IN_GENBANK: 'This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.',
   FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.'
 });
+/**
+ * Per code: the message, the actions offered, and the correction guidance when the context gives no reason.
+ * @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>}
+ */
 const DEFINITIONS = Object.freeze({
   SESSION_SIZE_LIMIT: ['The Session exceeds the browser size limit. Use a smaller Session file.', ['select-input', 'retry']],
   SESSION_BROWSER_UNSUPPORTED: ['This browser cannot complete this Session operation. Use a browser with the required gzip and Worker support.', ['retry']],
@@ -190,6 +195,7 @@ const DEFINITIONS = Object.freeze({
   CLEANUP_FAILED: ['Temporary resource cleanup failed. Save a Session and reload before retrying.', ['save-session', 'reload', 'retry']]
 });
 
+/** @type {Readonly<Record<string, string>>} */
 const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
   losatp_max_hits: 'Protein BLASTP Pairwise max hits', losatp_max_target_seqs: 'Protein BLASTP Max target seqs',
   losatp_member_max_hits: 'Protein BLASTP member hits per protein',
@@ -211,8 +217,10 @@ const EXCEPTION_TYPES = new Set(`ValidationError ParseError ConfigError ExportEr
 FloatingPointError OverflowError ArithmeticError AssertionError AttributeError IndexError KeyError LookupError
 NotImplementedError RecursionError RuntimeError TypeError UnboundLocalError NameError ValueError Exception`.split(/\s+/));
 // Locators shown in the summary; indexes are zero-based, ordinals one-based.
+/** @type {Readonly<Record<string, string>>} */
 const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result', COMPARISON_INPUT: 'Comparison sequence' });
 // The tables a Session stores as text resources, as the documentation names them.
+/** @type {Readonly<Record<string, string>>} */
 export const SESSION_TABLE_LABELS = Object.freeze({ 'default-colors': 'Default colors', 'specific-colors': 'Specific colors',
   'label-whitelist': 'Label whitelist', 'qualifier-priority': 'Qualifier priority', 'feature-visibility': 'Feature visibility',
   'label-overrides': 'Label overrides' });
@@ -220,6 +228,52 @@ const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
 // A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
 const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
 const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
+
+/**
+ * The context the normalizer keeps: only these keys survive `contextFor`.
+ * @typedef {object} UserFacingContext
+ * @property {string} [field]
+ * @property {string} [reason]
+ * @property {'python-character'} [positionUnit]
+ * @property {string} [configPath]
+ * @property {string} [exceptionType]
+ * @property {string} [featureId]
+ * @property {string} [featureType]
+ * @property {string} [featureCaption]
+ * @property {string} [sessionTable]
+ * @property {'circular' | 'linear'} [diagramMode]
+ * @property {number} [featureStart]
+ * @property {number} [featureEnd]
+ * @property {number} [featureCount]
+ * @property {number} [position]
+ * @property {number} [row]
+ * @property {number} [column]
+ * @property {number} [inputOrdinal]
+ * @property {number} [recordIndex]
+ * @property {number} [seriesIndex]
+ * @property {number} [slotIndex]
+ * @property {number} [recordCount]
+ * @property {number} [columnCount]
+ * @property {number} [codepoint]
+ * @property {number} [innerPx]
+ * @property {number} [outerPx]
+ * @property {number} [placementIndex]
+ * @property {number} [queryRecordIndex]
+ * @property {number} [subjectRecordIndex]
+ */
+
+/**
+ * The public diagnostic model: the wording and the facts of one failure.
+ * @typedef {object} UserFacingError
+ * @property {string} code
+ * @property {string} operation
+ * @property {string} stage
+ * @property {UserFacingContext} context
+ * @property {{ code: string, stage: string }[]} secondary
+ * @property {string} summary
+ * @property {{ label: string, text: string }[]} details
+ * @property {string[]} actions
+ */
 
 /**
  * @typedef {Record<string, any>} DiagnosticContext Bounded facts about the failure; `contextFor` keeps only the known keys.
@@ -408,6 +462,7 @@ const nativeValidation = (message) => {
 };
 // The native track validator already identifies its failures. Project its
 // first issue; never copy its message, slot ID, or arbitrary field path.
+/** @type {Readonly<Record<string, readonly string[]>>} */
 const TRACK_ISSUES = Object.freeze({
   slots_not_array: ['ARRAY'], mode_unsupported: ['TRACK_RENDERER'], depth_count_invalid: ['NONNEGATIVE_INTEGER', 'depth'],
   slot_not_object: ['OBJECT'], enabled_not_boolean: ['BOOLEAN'], linear_slots_empty: ['REQUIRED'],
@@ -445,8 +500,20 @@ const typedTrackValidation = (error) => {
   return { code: correction ? 'TRACK_INVALID' : 'VALIDATION_UNCLASSIFIED', stage: 'request-validation',
     context: correction ? { reason: correction[0], field: correction[1], slotIndex: issue.rowIndex } : {} };
 };
+/**
+ * @template Fallback
+ * @param {unknown} value
+ * @param {ReadonlySet<string>} domain
+ * @param {Fallback} fallback
+ * @returns {string | Fallback}
+ */
 const identifier = (value, domain, fallback) => typeof value === 'string' && value.length <= 80 && domain.has(value) ? value : fallback;
+/**
+ * @param {DiagnosticContext | null | undefined} value The producer's context, unvalidated.
+ * @returns {UserFacingContext}
+ */
 const contextFor = (value) => {
+  /** @type {UserFacingContext} */
   const context = {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) return context;
   if (FIELDS.has(value.field)) context.field = value.field;
@@ -457,7 +524,7 @@ const contextFor = (value) => {
   if (typeof value.featureId === 'string' && FEATURE_ID.test(value.featureId)) context.featureId = value.featureId;
   if (typeof value.featureType === 'string' && FEATURE_TYPE.test(value.featureType)) context.featureType = value.featureType;
   // One-based feature span; genomes may exceed the other numeric bounds.
-  for (const key of ['featureStart', 'featureEnd', 'featureCount']) {
+  for (const key of /** @type {Array<'featureStart' | 'featureEnd' | 'featureCount'>} */ (['featureStart', 'featureEnd', 'featureCount'])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 1 && value[key] <= 1e12) context[key] = value[key];
   }
   // The Web names the feature of a reported placement row (nameFeaturePlacementFailure).
@@ -466,7 +533,9 @@ const contextFor = (value) => {
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
-  for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex']) {
+  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex'>} */ ([
+    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex'
+  ])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
     }
@@ -474,10 +543,13 @@ const contextFor = (value) => {
   return context;
 };
 
+/** @typedef {{ operation?: string, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions */
+
 /**
  * The sole public diagnostic model. Raw messages, causes, logs and stacks are never copied.
  * @param {string | Record<string, any> | null | undefined} value
- * @param {{ operation?: string, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} [options]
+ * @param {UserFacingOptions} [options]
+ * @returns {UserFacingError | null} Null only for a falsy value.
  */
 export const normalizeUserFacingError = (value, {
   operation = 'unknown', stage = 'unknown', code = 'UNKNOWN', summaryLimit = 1000, detailLimit = 4000
@@ -485,13 +557,14 @@ export const normalizeUserFacingError = (value, {
   if (!value) return null;
   const object = value && typeof value === 'object' ? value : {};
   const source = /** @type {Record<string, any>} */ (object.code === 'CUSTOM_TRACK_PLAN_INVALID' ? typedTrackValidation(object) : CODES.has(object.code) ? object : nativeValidation(typeof value === 'string' ? value : object.message) || object);
-  const result = {
+  // `summary`, `details`, and `actions` are assigned below, before the model is returned.
+  const result = /** @type {UserFacingError} */ ({
     code: identifier(source.code, CODES, identifier(code, CODES, 'UNKNOWN')),
     operation: identifier(operation === 'unknown' ? source.operation : operation, OPERATIONS, 'unknown'),
     stage: identifier(source.stage === 'unknown' ? stage : source.stage, STAGES, identifier(stage, STAGES, 'unknown')),
     context: contextFor(source.context),
     secondary: /** @type {{ code: string, stage: string }[]} */ ([])
-  };
+  });
   for (const item of Array.isArray(source.secondary) ? source.secondary.slice(0, 2) : []) {
     if (item?.code !== 'CLEANUP_FAILED' || item?.stage !== 'cleanup') continue;
     result.secondary.push({ code: 'CLEANUP_FAILED', stage: 'cleanup' });
@@ -516,10 +589,11 @@ export const normalizeUserFacingError = (value, {
     seriesIndex !== undefined ? `Depth series ${seriesIndex + 1}.` : '',
     configPath !== undefined ? `Setting: ${configPath}.` : '',
     featureName ? `Feature: ${featureName}.` : '',
-    featureCount > 1 ? `Features affected: ${featureCount}.` : ''
+    // `undefined > 1` is false: with no count there is no line.
+    /** @type {number} */ (featureCount) > 1 ? `Features affected: ${featureCount}.` : ''
   ].filter(Boolean).map((text) => ` ${text}`).join('');
   const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
-  const guidance = REASONS[result.context.reason] || DEFINITIONS[result.code][2] || '';
+  const guidance = REASONS[/** @type {string} */ (result.context.reason)] || DEFINITIONS[result.code][2] || '';
   const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';
   // The context keeps Python's zero-based index; people count from one.
   const position = result.context.position !== undefined ? ` At character ${result.context.position + 1}.` : '';
@@ -547,7 +621,6 @@ export const normalizeUserFacingError = (value, {
   return result;
 };
 
-/** @typedef {NonNullable<ReturnType<typeof normalizeUserFacingError>>} UserFacingError */
 
 // A value that a `catch` block receives is a failure even when it is falsy
 // (`throw undefined`), so it normalizes to the unknown failure instead of to
@@ -565,13 +638,19 @@ export const normalizeCaughtError = (value, options) => (
 // A failure whose own recovery changes no input (B11, R6): the runtime failed,
 // not the request, so the same request can succeed on Retry.
 const PLAIN_RETRY_ACTIONS = new Set(['retry', 'reload', 'save-session']);
+/**
+ * @param {UserFacingError | null} error The model. A null one (a falsy caught value that skipped
+ *   `normalizeCaughtError`, as in `extractSessionSourceFeatures`) throws here.
+ */
 export const retryCanSucceed = (error) =>
-  error.actions.includes('retry') && error.actions.every((action) => PLAIN_RETRY_ACTIONS.has(action));
+  /** @type {UserFacingError} */ (error).actions.includes('retry')
+  && /** @type {UserFacingError} */ (error).actions.every((action) => PLAIN_RETRY_ACTIONS.has(action));
 
 // A live edit rerenders the committed Session with the current editor tables, so
 // repeating the edit sends the same request. Retry is offered only when it can
 // succeed; otherwise the edit or the settings must change, and settings apply
 // on Generate.
+/** @param {UserFacingError | null | undefined} error */
 export const liveEditFailure = (error) => {
   if (!error) return null;
   const retry = retryCanSucceed(error);
@@ -582,17 +661,19 @@ export const liveEditFailure = (error) => {
 };
 
 // Presentation of finite operation and transaction facts stays with public wording.
-export const operationErrorTitle = (operation) => ({
+/** @param {string | null | undefined} operation */
+export const operationErrorTitle = (operation) => (/** @type {Readonly<Record<string, string>>} */ ({
   generate: 'Generation Error', align: 'Alignment error', evaluateRules: 'Rule error', 'session-load': 'Session not loaded',
   'export-svg': 'SVG export error', 'export-png': 'PNG export error', 'export-pdf': 'PDF export error',
   listSequenceRecords: 'Input error', listGffFastaRecords: 'Input error', readComparisonSequence: 'Input error',
   readFeatureOverrideTable: 'Feature edits TSV error',
   'feature-extraction': 'Feature preparation error'
-}[operation] || 'Operation error');
-export const generationRecoveryGuidance = (recovery) => ({
+})[/** @type {string} */ (operation)] || 'Operation error');
+/** @param {string | null | undefined} recovery */
+export const generationRecoveryGuidance = (recovery) => (/** @type {Readonly<Record<string, string>>} */ ({
   'no-result': 'No successful Result is available yet. Correct the cause and retry.',
   // The one notice that the shown Result is the last successful one (PD-OI-016).
   preserved: 'Showing the last successful Result; your changes were not applied.',
   restored: 'Showing the last successful Result again; your changes were not applied. Correct the cause and retry.',
   'restore-failed': 'Restoration could not complete. Save a Session if available, then reload before retrying.'
-}[recovery] || '');
+})[/** @type {string} */ (recovery)] || '');

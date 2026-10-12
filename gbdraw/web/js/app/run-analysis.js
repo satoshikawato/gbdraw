@@ -1558,6 +1558,7 @@ export const createRunAnalysis = ({
   // UJ-08: the shown Generate failure about the source inputs, and its mode.
   /** @type {{ error: any, mode: string } | null} */
   let sourceInputFailure = null;
+  /** @type {ReadonlySet<string | undefined>} The failure code is undefined when no failure is shown. */
   const SOURCE_INPUT_FAILURES = new Set(['INPUT_REQUIRED', 'FASTA_REQUIRED', 'INPUT_UNREADABLE', 'NO_RECORDS']);
   /**
    * Record discovery read every source input of `drawingMode`: a shown
