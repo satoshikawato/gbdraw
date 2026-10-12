@@ -279,8 +279,11 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   await page.setViewportSize({ width: 1024, height: 740 });
   const beforeResize = await page.locator('[aria-label="Result Preview"]').evaluate((element) => element.clientWidth);
   const handle = await page.locator('.resize-handle').boundingBox();
+  await page.locator('#output-prefix').focus();
   await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
   await page.mouse.down();
+  // The press is default-prevented, so it must still take focus off the field (a pending edit commits on blur).
+  expect(await page.evaluate(() => document.activeElement?.id)).not.toBe('output-prefix');
   await page.mouse.move(handle.x + handle.width / 2 + 45, handle.y + handle.height / 2, { steps: 5 });
   // OV-534: the drag resizes the pane and selects no page text on its way.
   expect(await page.evaluate(() => String(getSelection()))).toBe('');

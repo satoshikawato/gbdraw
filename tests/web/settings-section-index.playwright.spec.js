@@ -238,6 +238,7 @@ test('an entry opens its section, brings it to the top, focuses its heading, and
 
   // A mode without the marked section marks the section at its own top edge:
   // the one the geometry gives after the switch, which is not the first here.
+  await entry(page, 'Features').click();
   await entry(page, 'Comparison').click();
   await expectMarked(page, 'Comparison');
   await setMode(page, 'circular');

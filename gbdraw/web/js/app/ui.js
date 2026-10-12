@@ -384,6 +384,8 @@ export const createSidebarResize = (state) => {
   };
 
   const startResizing = () => {
+    // The press is default-prevented, so the field is blurred here.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     isResizing.value = true;
     document.addEventListener('mousemove', doResize);
     document.addEventListener('mouseup', stopResizing);
