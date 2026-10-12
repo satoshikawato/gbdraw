@@ -2,7 +2,7 @@
 /** @import { AskChoice } from './app-messages.js' */
 /**
  * @import { AnnotationRecordCatalog } from './annotations/record-catalog.js'
- * @import { AnnotationSet } from '../services/annotation-state.js'
+ * @import { AnnotationItem, AnnotationSet, AnnotationStyle, AnnotationTarget } from '../services/annotation-state.js'
  */
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from '../services/annotation-state.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
@@ -26,6 +26,10 @@ const idEditNotice = (field, requested, stored, owner) => {
     : `${field} cannot be empty, so it was saved as "${stored}".`;
 };
 
+/**
+ * @param {readonly AnnotationItem[]} annotations
+ * @param {string} prefix
+ */
 const nextAnnotationId = (annotations, prefix) => {
   const ids = new Set(annotations.map((item) => item.id));
   let index = annotations.length + 1;
@@ -65,7 +69,12 @@ export const createAnnotationEditor = ({
   // a drawn feature, or (unless `drawnOnly`) a listed feature they hide. The
   // shown Results are of the drawing's mode (R2). The lists are replaced on
   // each Generate, so scanning their raw rows tracks only the lists.
+  /**
+   * @param {Pick<AnnotationTarget, 'recordKey' | 'biologicalFeatureId'> | null | undefined} target
+   * @param {{ drawnOnly?: boolean }} [options]
+   */
   const catalogFeature = (target, { drawnOnly = false } = {}) => {
+    /** @param {unknown} value */
     const raw = (value) => (globalThis.window?.Vue?.toRaw ? window.Vue.toRaw(value) : value);
     const lists = [state.extractedFeatures?.value, drawnOnly ? null : state.biologicalFeatures?.value];
     for (const list of lists.map(raw)) {
@@ -74,12 +83,14 @@ export const createAnnotationEditor = ({
     }
     return null;
   };
+  /** @param {AnnotationItem | null | undefined} item */
   const featureTargetCaption = (item) => {
     const feature = catalogFeature(item?.target);
     return feature ? getFeatureCaption(feature) : `${item?.target?.biologicalFeatureId} (not in the current diagram)`;
   };
   // Design Q4 6.4: the drawn record position and the feature hash of a
   // selected feature, which a `hash` selector matches (OV-401).
+  /** @param {AnnotationTarget} target */
   const drawnPlacement = (target) => {
     const feature = catalogFeature(target, { drawnOnly: true });
     const hash = feature ? getFeatureColorRuleHash(feature) : '';
@@ -90,6 +101,7 @@ export const createAnnotationEditor = ({
     reconcileAnnotationRecordBindings(sets, getRecordCatalog?.());
     return sets;
   };
+  /** @param {Partial<AnnotationSet>[] | null | undefined} sets */
   const replaceSets = (sets) => {
     const drawing = state.activeDrawing();
     const candidate = reconcileRecords(normalizeAnnotationSets(sets));
@@ -105,6 +117,10 @@ export const createAnnotationEditor = ({
     drawing.annotationSets.push(set);
     return set;
   };
+  /**
+   * @param {AnnotationSet} set
+   * @param {string} id
+   */
   const renameAnnotationSet = (set, id) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -122,12 +138,17 @@ export const createAnnotationEditor = ({
   };
   // The legend label of a set names its rows: a new text retires the Legend
   // styles of the old caption in the same step (OV-67).
+  /**
+   * @param {AnnotationSet | null | undefined} set
+   * @param {unknown} value
+   */
   const setAnnotationSetLegendLabel = (set, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!set) return;
     retireLegendStylesOfUnnamedCaptions(() => { set.legendLabel = String(value ?? '').trim(); });
   };
+  /** @param {AnnotationSet} set */
   const duplicateAnnotationSet = (set) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -137,6 +158,7 @@ export const createAnnotationEditor = ({
     drawing.annotationSets.push(copy);
     return copy;
   };
+  /** @param {AnnotationSet} set */
   const removeAnnotationSet = (set) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -144,6 +166,10 @@ export const createAnnotationEditor = ({
     const index = drawing.annotationSets.indexOf(set);
     if (index >= 0) retireLegendStylesOfUnnamedCaptions(() => drawing.annotationSets.splice(index, 1));
   };
+  /**
+   * @param {AnnotationSet | null | undefined} set
+   * @param {{ start?: unknown, end?: unknown, recordId?: string | null, recordIndex?: number | null, coordinateSpace?: string }} [options]
+   */
   const addCoordinateAnnotation = (set, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -153,6 +179,7 @@ export const createAnnotationEditor = ({
     set.annotations.push(item);
     return item;
   };
+  /** @param {AnnotationSet | null | undefined} set */
   const addSelectedFeatures = (set) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -168,12 +195,21 @@ export const createAnnotationEditor = ({
       return item;
     });
   };
+  /**
+   * @param {AnnotationSet} set
+   * @param {AnnotationItem} item
+   */
   const removeAnnotation = (set, item) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const index = set?.annotations?.indexOf(item) ?? -1;
     if (index >= 0) retireLegendStylesOfUnnamedCaptions(() => set.annotations.splice(index, 1));
   };
+  /**
+   * @param {AnnotationSet} set
+   * @param {AnnotationItem} item
+   * @param {unknown} value
+   */
   const renameAnnotation = (set, item, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -184,12 +220,23 @@ export const createAnnotationEditor = ({
     item.id = id;
     onImportNotice?.(idEditNotice('Annotation id', value, id, 'another annotation of this set'));
   };
+  /**
+   * @template {keyof AnnotationStyle} K
+   * @param {AnnotationSet} set
+   * @param {AnnotationItem} item
+   * @param {K} field
+   * @param {AnnotationStyle[K]} value
+   */
   const setAnnotationStyle = (set, item, field, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     item.style ??= createDefaultAnnotationStyle(set.defaultStyle);
     item.style[field] = value;
   };
+  /**
+   * @param {AnnotationItem | null | undefined} item
+   * @param {string} kind
+   */
   const setAnnotationTargetKind = (item, kind) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -209,6 +256,7 @@ export const createAnnotationEditor = ({
     description: `The imported table has no annotation rows. Importing it removes all ${setCount} annotation ${setCount === 1 ? 'set' : 'sets'}.`,
     actions: [{ id: 'remove', label: 'Remove all sets', tone: 'danger' }]
   });
+  /** @param {string} text */
   const importAnnotationTable = async (text) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -234,6 +282,7 @@ export const createAnnotationEditor = ({
     ].filter(Boolean).join(' ');
     onImportNotice?.(notice);
   };
+  /** @param {{ target?: HTMLInputElement | null } | null | undefined} event The change event of the file input. */
   const importAnnotationTableFile = async (event) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -272,6 +321,10 @@ export const createAnnotationEditor = ({
     canDownloadAnnotationTable, downloadAnnotationTable, featureTargetCaption,
     recordOptionsFor: recordSelector.optionsFor,
     recordValueFor: recordSelector.valueFor,
+    /**
+     * @param {AnnotationItem | null | undefined} annotation
+     * @param {unknown} value
+     */
     setRecordValue: (annotation, value) => state.sessionOperationAvailability?.()
       || recordSelector.setValue(annotation, value),
     recordIsRequired: recordSelector.isRequired,
