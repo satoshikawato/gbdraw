@@ -5,6 +5,7 @@
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
 /** @import { AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
+/** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { keepResultNames } from '../services/result-normalization.js';
@@ -3888,7 +3889,8 @@ export const createRunAnalysis = ({
             const cacheMetadata = await buildCacheMetadata(
               losatArgs, spec.queryIndex, spec.subjectIndex
             );
-            const batch = sourcePlan.bySpec.get(spec);
+            // `prepareLosatSourceBatches` maps every spec of `jobSpecs` to its batch.
+            const batch = /** @type {LosatSourceBatch<typeof spec>} */ (sourcePlan.bySpec.get(spec));
             if (batch.searchContext) cacheMetadata.searchContext = batch.searchContext;
             preparedJobs.push({ spec, losatArgs, cacheMetadata, batch });
           }

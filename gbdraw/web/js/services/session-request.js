@@ -931,6 +931,7 @@ const selectorPayload = (rawValue) => {
   return { kind: 'recordId', value: raw };
 };
 
+/** @param {{ label?: unknown, subtitle?: unknown, reverseComplement?: unknown, gridRow?: number | null, gridColumn?: number | null }} [options] */
 const presentationPayload = ({
   label = null,
   subtitle = null,

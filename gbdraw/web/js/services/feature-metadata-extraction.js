@@ -5,6 +5,7 @@ import { cloneJsonValue } from './json-clone.js';
 import { cloneFileBytesForTransfer } from './file-content-cache.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
+/** @import { LinearSeq } from '../state.js' */
 
 /**
  * A feature as the Python extraction returns it: JSON keyed by field name.
@@ -22,10 +23,8 @@ import { cloneFileBytesForTransfer } from './file-content-cache.js';
 
 /**
  * The fields of a Linear record slot (`LinearSeq` in `state.js`) that the
- * region context reads; a slot or unvalidated Session data.
- * @typedef {{
- *   region_record_id?: unknown, region_reverse?: unknown, region_start?: unknown, region_end?: unknown
- * }} LinearRegionSeq
+ * region context reads.
+ * @typedef {Partial<Pick<LinearSeq, 'region_record_id' | 'region_reverse' | 'region_start' | 'region_end'>>} LinearRegionSeq
  */
 
 /** @typedef {{ cli: string, file: string, displayFile: string }} LinearRegionSpec */

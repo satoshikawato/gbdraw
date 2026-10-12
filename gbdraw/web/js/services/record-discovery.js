@@ -15,6 +15,7 @@ import {
 /** @import { FileLike } from './session-resource-backing.js' */
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
+/** @import { CircularRecordDiscovery } from '../state.js' */
 
 /**
  * One record as a reader or the Worker reports it: Python names (`record_id`,
@@ -65,10 +66,7 @@ export const discoveryErrorIsFinal = (error) => typeof error === 'object' && err
  * @typedef {{
  *   cInputType: { value: string },
  *   files: { c_gb: FileLike | null, c_gff: FileLike | null, c_fasta: FileLike | null },
- *   circularRecordDiscovery: {
- *     inputType: string, primaryFile: FileLike | null, pairedFile: FileLike | null,
- *     status: string, error: UserFacingError | string
- *   },
+ *   circularRecordDiscovery: CircularRecordDiscovery,
  *   circularRecordList: { value: Entry[] }
  * }} CircularDiscoveryState
  */
