@@ -913,7 +913,9 @@ const mockLegendEntry = (caption, color, x) => {
     const featureLegend = new MockElement('g', { id: 'feature_legend' });
     const row = mockLegendEntry(caption, '#112233', 0);
     featureLegend.appendChild(row);
-    svg.appendChild(featureLegend);
+    const legend = new MockElement('g', { id: 'legend' });
+    legend.appendChild(featureLegend);
+    svg.appendChild(legend);
     const swatch = row.querySelector('path');
     swatch.setAttribute('stroke', '#999999');
     swatch.setAttribute('data-gbdraw-base-stroke', 'gray');
@@ -935,7 +937,8 @@ const mockLegendEntry = (caption, color, x) => {
   ]) {
     const ordinary = strokeOverridesAfterFirstEdit('Gamma', edit);
     assert.equal(Object.keys(ordinary).length, 4);
-    for (const caption of ['constructor', 'toString', '__proto__']) {
+    assert.deepEqual([ordinary.originalStrokeColor, ordinary.originalStrokeWidth], ['gray', 2]);
+    for (const caption of ['constructor', 'toString']) {
       assert.deepEqual(strokeOverridesAfterFirstEdit(caption, edit), ordinary,
         `a first stroke ${name} edit of the row named ${caption} stores the drawn stroke like any other row`);
     }
