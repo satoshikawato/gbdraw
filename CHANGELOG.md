@@ -164,7 +164,11 @@ write-up of a release.
 - Web app (Linear): a File with one record shows that record's **Organism /
   strain** and **Subtitle / title** on the File card instead of **Names for all
   records in this file**. A File with two or more records, or a one-record File
-  that holds a File-level name, is unchanged.
+  that holds a File-level name, is unchanged. The name on such a card is the
+  record's own: **Reset Settings** clears it and **Undo** restores it, and
+  another one-record file chosen for the card keeps it.
+- Web app (Linear): in **Record options**, the **Using file default** badge and
+  the label of its field each stay on one line (OV-485).
 - Web app: before the records are inspected, Region Annotations rows name their
   record instead of calling it unavailable (OV-373), and Linear record selects
   say **Not inspected** instead of **Loading records...** (OV-379). After

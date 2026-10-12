@@ -416,6 +416,8 @@ test('Reset Settings clears Linear per-record display text and the alignment pla
     const { state } = await import('/gbdraw/web/js/state.js');
     return state.linearSeqs.map((sequence) => sequence.record_subtitle || '');
   });
+  const definitionsBefore = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.definition || ''));
+  expect(definitionsBefore[0]).toBe('<i>Streptomyces lividus</i>');
   const planBefore = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     return Boolean(state.similarityAlignmentPlan?.value);
@@ -441,11 +443,15 @@ test('Reset Settings clears Linear per-record display text and the alignment pla
   const restored = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     return {
+      definitions: state.linearSeqs.map((sequence) => sequence.definition || ''),
       subtitles: state.linearSeqs.map((sequence) => sequence.record_subtitle || ''),
       alignmentPlan: Boolean(state.similarityAlignmentPlan?.value)
     };
   });
+  expect(restored.definitions).toEqual(definitionsBefore);
   expect(restored.subtitles).toEqual(before);
+  // The card of the one-record File shows the restored name again.
+  await expect(page.getByLabel('Definition for sequence 1', { exact: true })).toHaveValue('<i>Streptomyces lividus</i>');
   expect(restored.alignmentPlan).toBe(planBefore);
 });
 

@@ -1229,7 +1229,9 @@ first; its dialog lists what it resets and what stays, and **Reset all settings*
 to the caption Python draws. In Linear it also clears each record's **Definition**, **Subtitle**,
 crop, and reverse complement, and the comparison alignment plan, and turns the
 Linear comparisons off (their uploaded tables stay); the Files, each
-row's selected record, the file defaults, and Depth assignments stay. **Undo**
+row's selected record, the file defaults, and Depth assignments stay. The name
+fields on the card of a one-record File are that record's own, so they are
+cleared too; names under **Names for all records in this file** stay. **Undo**
 restores them. Generate when the exported figure should include draft settings.
 
 The export actions and session handoff rules are documented in [Output formats

@@ -216,7 +216,7 @@ test('a one-record File shows its record names on the File card', async ({ page 
   await generateAndWaitForResult(page);
   expect(await drawnDefinitionLines(page)).toEqual(expect.arrayContaining(['Card organism', 'Card subtitle']));
 
-  // A cleared record name draws the inferred one again.
+  // A cleared record name shows the inferred one as its placeholder again.
   await definition.fill('');
   await expect(definition).toHaveAttribute('placeholder', inferred);
   await definition.fill('Card organism');
@@ -305,11 +305,17 @@ test('a one-record File that holds a File names value keeps the File names block
 // OV-486: an empty card shows the record's own name fields. A name typed there
 // stays the record's when the file has one record, and becomes the File's name
 // when the upload expands the card to several records.
-const twoRecordGff = ['recA', 'recB'].map((id) => [
+const gffText = (ids) => `##gff-version 3\n${ids.map((id) => [
   `${id}\ttest\tregion\t1\t300\t.\t+\t.\tID=${id}`,
   `${id}\ttest\tgene\t1\t90\t.\t+\t.\tID=gene_${id}`,
   `${id}\ttest\tCDS\t1\t90\t.\t+\t0\tID=cds_${id};Parent=gene_${id};product=test protein`
-].join('\n')).join('\n');
+].join('\n')).join('\n')}\n`;
+const fastaText = (ids) => ids.map((id) => `>${id}\n${'atg'.repeat(100)}\n`).join('');
+const chooseFiles = async (card, files) => {
+  for (const [index, [name, content]] of files.entries()) {
+    await card.locator('input[type="file"]').nth(index).setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(content) });
+  }
+};
 const typedFirstUploads = [
   { kind: 'a one-record GenBank file', files: [['one.gb', namedGenbank('ONE_REC', 'Aeromonas hydrophila')]],
     names: [['Typed first', 'Typed subtitle', '', '']] },
@@ -317,7 +323,7 @@ const typedFirstUploads = [
     files: [['two.gb', namedGenbank('TWO_A', 'Aeromonas hydrophila') + namedGenbank('TWO_B', 'Aeromonas caviae')]],
     names: [['', '', 'Typed first', 'Typed subtitle'], ['', '', 'Typed first', 'Typed subtitle']] },
   { kind: 'two-record GFF3 + FASTA files', gff: true,
-    files: [['two.gff3', `##gff-version 3\n${twoRecordGff}\n`], ['two.fasta', `>recA\n${'atg'.repeat(100)}\n>recB\n${'atg'.repeat(100)}\n`]],
+    files: [['two.gff3', gffText(['recA', 'recB'])], ['two.fasta', fastaText(['recA', 'recB'])]],
     names: [['', '', 'Typed first', 'Typed subtitle'], ['', '', 'Typed first', 'Typed subtitle']] }
 ];
 for (const { kind, files, gff = false, names } of typedFirstUploads) {
@@ -330,9 +336,7 @@ for (const { kind, files, gff = false, names } of typedFirstUploads) {
     await page.getByLabel('Definition for sequence 1', { exact: true }).fill('Typed first');
     await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).fill('Typed subtitle');
     await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).press('Tab');
-    for (const [index, [name, content]] of files.entries()) {
-      await card.locator('input[type="file"]').nth(index).setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(content) });
-    }
+    await chooseFiles(card, files);
     // A GenBank upload is read when every record has its inferred name; GFF3 + FASTA infer none.
     await expect.poll(() => page.evaluate((isGff) => {
       const seqs = window.__GBDRAW_APP__.linearSeqs;
@@ -350,6 +354,39 @@ for (const { kind, files, gff = false, names } of typedFirstUploads) {
     const drawn = await drawnDefinitionLines(page);
     expect(drawn).toEqual(expect.arrayContaining(['Typed first', 'Typed subtitle']));
     expect(drawn.filter((text) => text.includes('Aeromonas'))).toEqual([]);
+  });
+}
+
+// A one-record file that replaces a one-record file keeps the record's own
+// name: the card still shows it, and Generate draws it on the new record.
+const oneRecordReplacements = [
+  { kind: 'GenBank file', drawnId: 'OTHER_REC',
+    first: [['one.gb', namedGenbank('ONE_REC', 'Aeromonas hydrophila')]],
+    second: [['other.gb', namedGenbank('OTHER_REC', 'Aeromonas caviae')]] },
+  { kind: 'GFF3 + FASTA pair', gff: true, drawnId: 'recZ',
+    first: [['one.gff3', gffText(['recA'])], ['one.fasta', fastaText(['recA'])]],
+    second: [['other.gff3', gffText(['recZ'])], ['other.fasta', fastaText(['recZ'])]] }
+];
+for (const { kind, first, second, drawnId, gff = false } of oneRecordReplacements) {
+  test(`a name typed on a one-record File card stays the record's name when another one-record ${kind} replaces it`, async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (gff) await page.locator('input[type="radio"][value="gff"]:visible').check();
+    const card = page.locator('[data-linear-source-card]').first();
+    const definition = page.getByLabel('Definition for sequence 1', { exact: true });
+    await chooseFiles(card, first);
+    await definition.fill('Typed first');
+    await definition.press('Tab');
+    await chooseFiles(card, second);
+    await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
+      legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none'
+    }));
+    await generateAndWaitForResult(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => [seq.definition, seq.file_definition])))
+      .toEqual([['Typed first', '']]);
+    await expect(definition).toHaveValue('Typed first');
+    expect(await drawnDefinitionLines(page)).toEqual(expect.arrayContaining(['Typed first', drawnId]));
   });
 }
 
