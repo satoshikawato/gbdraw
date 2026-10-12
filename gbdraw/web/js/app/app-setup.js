@@ -34,6 +34,7 @@
 /** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
+/** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 /** @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput The Session file input's change event, or an object with its `target`; the type `importSession` of services/config.js declares inline. */
 import { createRulePreparation } from './rule-matching.js';
@@ -1595,11 +1596,7 @@ export const createAppSetup = () => {
       return restoreRuleEdits(drawing, historySnapshots.applyArtifactCheckpoint, ...args);
     },
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
-    // History holds the handle `captureGeneratedArtifactHandle` of this service returned; its own type names only the fields History reads.
-    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(
-      historySnapshots.restoreGeneratedArtifactHandle,
-      .../** @type {Parameters<typeof historySnapshots.restoreGeneratedArtifactHandle>} */ (args)
-    ),
+    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
     signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
@@ -3232,7 +3229,7 @@ export const createAppSetup = () => {
     runRecordRotation: ({ canonical, row, transform }) => runCommittedCanonicalCandidate({
       canonical,
       captureIntentCheckpoint: () => recordDisplayControls.captureTargetDraft(row),
-      restoreIntentCheckpoint: (checkpoint) => recordDisplayControls.restoreTargetDraft(checkpoint),
+      restoreIntentCheckpoint: (/** @type {TargetDraftCheckpoint} */ checkpoint) => recordDisplayControls.restoreTargetDraft(checkpoint),
       commitIntent: () => recordDisplayControls.commitResolvedTransform(row, transform)
     }),
     resolveCurrentFeature: resolvePopupRotationFeature,
@@ -4608,7 +4605,7 @@ export const createAppSetup = () => {
     // checkpoint; the alignment owner holds neither owner.
     runRecordAlignment: ({ orientations, ...run }) => runCommittedCanonicalCandidate({ ...run,
       captureIntentCheckpoint: () => recordDisplayControls.captureAlignmentOrientationIntent(orientations),
-      restoreIntentCheckpoint: (checkpoint) => recordDisplayControls.restoreAlignmentOrientationIntent(checkpoint),
+      restoreIntentCheckpoint: (/** @type {AlignmentOrientationCheckpoint[]} */ checkpoint) => recordDisplayControls.restoreAlignmentOrientationIntent(checkpoint),
       commitIntent: () => recordDisplayControls.commitAlignmentOrientations(orientations) }),
     cancelRunAnalysis,
     runHelperOperation: runDiagramHelperOperation,

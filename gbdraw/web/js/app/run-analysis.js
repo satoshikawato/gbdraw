@@ -18,7 +18,8 @@
 /** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
-/** @import { HistoryArtifactHandle } from '../services/history.js' */
+/** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
+/** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
 /** @import { CircularConservationLike } from '../services/conservation-series.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
@@ -1485,7 +1486,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
- * @property {((label: string, execute: (handle?: HistoryArtifactHandle | null) => any, options: Record<string, any>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
+ * @property {((label: string, execute: (before: HistoryArtifactHandle | null) => any, options?: HistoryStepOptions<Record<string, any>>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
  *   History's undoable replacement of the generated artifact.
  * @property {RunAnalysisPreviewRuntime | null} [previewRuntime]
  * @property {() => Promise<void>} [nextTick] Vue `nextTick`.
@@ -5566,6 +5567,7 @@ export const createRunAnalysis = ({
         comparisonPlanSnapshot = prepared.comparisonPlanSnapshot;
         comparisonExecution = prepared.comparisonExecution;
       }
+      /** @param {HistoryArtifactHandle | null} handle */
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
         // History has settled the draft this run reads.
@@ -5580,7 +5582,7 @@ export const createRunAnalysis = ({
             'Generate diagram',
             execute,
             {
-              shouldCommit: (/** @type {Record<string, any>} */ result) => result?.status === 'ok',
+              shouldCommit: (result) => result?.status === 'ok',
               // A Generate that replaced a source removes the feature placements
               // it no longer resolves (Q3 = A). Placements are draft intent, not
               // part of the Result, so Undo and Redo restore them, and the
@@ -5589,7 +5591,8 @@ export const createRunAnalysis = ({
                 placements: cloneJsonData(drawing.featurePlacementOverrides) || {},
                 removed: Number(featureEditRemovalCount.value) || 0
               }),
-              restoreIntentCheckpoint: ({ placements, removed }) => {
+              // The checkpoint is what `captureIntentCheckpoint` above returned.
+              restoreIntentCheckpoint: (/** @type {{ placements: FeaturePlacementDraft, removed: number }} */ { placements, removed }) => {
                 restorePlacements(drawing.featurePlacementOverrides, placements);
                 featureEditRemovalCount.value = removed;
               },
@@ -5901,7 +5904,7 @@ export const createRunAnalysis = ({
 
   /**
    * @param {{ canonical: Record<string, any>, label?: string,
-   *   captureIntentCheckpoint?: ((...args: any[]) => any) | null, restoreIntentCheckpoint?: ((...args: any[]) => any) | null,
+   *   captureIntentCheckpoint?: HistoryStepOptions['captureIntentCheckpoint'], restoreIntentCheckpoint?: HistoryStepOptions['restoreIntentCheckpoint'],
    *   commitIntent?: (() => any) | null, alignmentResetBefore?: any, alignmentResetReceipt?: any, operation?: string }} options
    */
   const runCommittedCanonicalCandidate = async ({
@@ -5942,6 +5945,7 @@ export const createRunAnalysis = ({
         initialResults = results.value;
       }
       if (!isCurrentOperation()) return { status: 'stale' };
+      /** @param {HistoryArtifactHandle | null} handle */
       const execute = (handle) => {
         beforeHandle = handle;
         return runCommittedCanonicalCandidateInternal(drawing, {
@@ -5951,7 +5955,7 @@ export const createRunAnalysis = ({
       };
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(label, execute, {
-            shouldCommit: (/** @type {Record<string, any>} */ result) => result?.status === 'ok',
+            shouldCommit: (result) => result?.status === 'ok',
             captureIntentCheckpoint,
             restoreIntentCheckpoint,
             onCheckpointCapture: onGeneratedArtifactCheckpointCapture,

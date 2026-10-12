@@ -205,18 +205,24 @@ const checkpointSvgBytes = (checkpoint) => (
  * @typedef {{ noop?: boolean, label?: string, apply: () => unknown, revert: () => unknown, estimateBytes?: () => number, metadata?: unknown }} UndoableCommand
  *   A reversible command; `apply` or `revert` returning `false` means it did not run.
  * @typedef {{
- *   onCheckpointCapture?: (event: { phase: string, diagnostics: Record<string, number> }) => void,
+ *   capture(context: { phase: 'before' | 'after' }): unknown,
+ *   restore(checkpoint: unknown): unknown
+ * }} IntentCheckpointHooks
+ *   The two intent checkpoint hooks a caller may also pass as `null`.
+ * @typedef {{
+ *   onCheckpointCapture?: ((event: { phase: string, diagnostics: Record<string, number> }) => void) | null,
  *   label?: string,
  *   source?: string,
  *   owner?: unknown,
  *   joinsOpenStep?: boolean,
- *   captureIntentCheckpoint?(context: { phase: 'before' | 'after' }): unknown,
- *   restoreIntentCheckpoint?(checkpoint: unknown): unknown,
+ *   captureIntentCheckpoint?: IntentCheckpointHooks['capture'] | null,
+ *   restoreIntentCheckpoint?: IntentCheckpointHooks['restore'] | null,
  *   compareIntentCheckpoints?(before: unknown, after: unknown): boolean,
  *   restoreAppliedArtifact?: (before: HistoryArtifactHandle) => unknown
  * }} HistoryStepBase
- *   What a step reads from its caller. The intent checkpoint is the caller's own value, so
- *   the three hooks take and return it opaque; a caller names its type on its own parameter.
+ *   What a step reads from its caller; a hook that is not a function is not called. The intent
+ *   checkpoint is the caller's own value, so the three hooks take and return it opaque (they are
+ *   declared as methods); a caller names its type on its own parameter.
  */
 /**
  * @template [R=unknown]

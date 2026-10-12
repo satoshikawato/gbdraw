@@ -2,6 +2,7 @@
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+/** @import { HistoryArtifactHandle } from './history.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
@@ -1533,17 +1534,19 @@ export const createHistorySnapshotService = ({
   };
 
   /**
-   * What a restore reads of a generated artifact handle (History passes the handle it stored).
-   * @typedef {object} GeneratedArtifactHandleData
-   * @property {unknown} [kind]
-   * @property {GeneratedArtifactOwnerSet | null} [ownerSet]
-   * @property {Partial<GeneratedArtifactIntent>} [mutableIntent]
-   * @property {{ canonical?: { committedCanonicalSession?: AlignmentResetCanonical | null } | null } | null} [runtimeState]
-   * @property {HistorySnapshotTransportIdentity | null} [transportIdentity]
-   * @property {unknown} [baseRetainedBytes]
+   * The handle History stored and passes back: History's own type names the fields History reads; these are
+   * the fields `captureGeneratedArtifactHandle` wrote beside them, as a restore reads them.
+   * @typedef {HistoryArtifactHandle & {
+   *   kind?: unknown,
+   *   ownerSet?: GeneratedArtifactOwnerSet | null,
+   *   mutableIntent?: Partial<GeneratedArtifactIntent>,
+   *   runtimeState?: { canonical?: { committedCanonicalSession?: AlignmentResetCanonical | null } | null } | null,
+   *   transportIdentity?: HistorySnapshotTransportIdentity | null,
+   *   baseRetainedBytes?: unknown
+   * }} StoredGeneratedArtifactHandle
    */
   const restoreGeneratedArtifactHandle = async (
-    /** @type {GeneratedArtifactHandleData | null | undefined} */
+    /** @type {StoredGeneratedArtifactHandle | null | undefined} */
     handle,
     { clearFailedGeneratePresentation = false } = {}
   ) => {
