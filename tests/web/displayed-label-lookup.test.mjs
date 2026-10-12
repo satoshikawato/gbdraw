@@ -50,3 +50,10 @@ test('the displayed label follows in-place edits and uses the first entry of a d
   entries[0].featureId = 'other';
   assert.equal(actions.getDisplayedFeatureLabel(features[0]), 'second');
 });
+
+test('label text and feature types that name Object.prototype members are not overrides or palette keys', () => {
+  const features = [{ id: 'a', svg_id: 'svg-a', type: 'constructor', gene: 'geneA', start: 1, end: 2 }];
+  const actions = setup(features, [{ featureId: 'svg-a', text: '', sourceText: 'constructor' }]);
+  assert.equal(actions.getDisplayedFeatureLabel(features[0]), 'geneA');
+  assert.equal(actions.getFeatureColor(features[0]), '#cccccc');
+});

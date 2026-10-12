@@ -47,6 +47,10 @@ export const createLegendDragActions = ({
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
 
+  /**
+   * @param {{ style?: CSSStyleDeclaration } | null | undefined} element
+   * @param {string | null | undefined} cursor
+   */
   const setElementCursor = (element, cursor) => {
     if (!element?.style) return;
     if (cursor) {
@@ -63,6 +67,10 @@ export const createLegendDragActions = ({
     }
   };
 
+  /**
+   * @param {number} clientX
+   * @param {number} clientY
+   */
   const applyLegendDragPosition = (clientX, clientY) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -84,6 +92,7 @@ export const createLegendDragActions = ({
     legendCurrentOffset.y = newY - legendInitialTransform.value.y;
   };
 
+  /** @param {MouseEvent} e */
   const startLegendDrag = (e) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -116,6 +125,7 @@ export const createLegendDragActions = ({
     setElementCursor(legendGroup, 'grabbing');
   };
 
+  /** @param {MouseEvent} e */
   const onLegendDrag = (e) => {
     if (!legendDragging.value) return;
     pendingLegendPointer = { x: e.clientX, y: e.clientY };
@@ -127,6 +137,7 @@ export const createLegendDragActions = ({
     });
   };
 
+  /** @param {MouseEvent} [e] */
   const endLegendDrag = async (e) => {
     if (!legendDragging.value) return;
     const finalPointer =

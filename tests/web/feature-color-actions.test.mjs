@@ -1232,3 +1232,14 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     'the width edit saves the stroke Python drew, not the deleted row\'s'
   );
 }
+
+// A feature type is file text: a type named like an Object.prototype member
+// (`constructor`) is not a palette key, so Reset has no palette color to write.
+{
+  const ctorFeature = { id: 'feature-ctor', svg_id: 'hash-ctor', type: 'constructor', qualifiers: {}, start: 1, end: 2 };
+  manualSpecificRules.splice(0);
+  clickedFeature.value = { feat: ctorFeature, svg_id: ctorFeature.svg_id };
+  await actions.handleResetColorChoice('this_with_legend');
+  assert.deepEqual(manualSpecificRules, [], 'a type that is not a palette key writes no rule');
+  clickedFeature.value = null;
+}

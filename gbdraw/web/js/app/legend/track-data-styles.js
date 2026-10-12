@@ -1,6 +1,7 @@
 // @ts-check
 import { getDepthTrackFallbackLabel } from '../depth-tracks.js';
 
+/** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
 
 /**
@@ -24,13 +25,14 @@ export const trackDataLegendCaptions = ({
   sourcedDepthTrackIndexes = []
 } = {}) => {
   const captions = new Set();
+  /** @param {unknown} value */
   const add = (value) => {
     const caption = text(value);
     if (caption) captions.add(caption);
   };
   (Array.isArray(annotationSets) ? annotationSets : []).forEach((set) => {
     add(set?.legendLabel);
-    (Array.isArray(set?.annotations) ? set.annotations : []).forEach((annotation) => add(annotation?.legendLabel));
+    (Array.isArray(set?.annotations) ? set.annotations : []).forEach((/** @type {{ legendLabel?: unknown } | null | undefined} */ annotation) => add(annotation?.legendLabel));
   });
   const sourced = new Set(sourcedDepthTrackIndexes);
   sourced.forEach((index) => add(depthTracks?.[index]?.label || getDepthTrackFallbackLabel(index)));

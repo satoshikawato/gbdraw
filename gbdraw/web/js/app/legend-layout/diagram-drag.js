@@ -66,6 +66,7 @@ export const createDiagramDragActions = ({
     'horizontal_legend',
     'vertical_legend'
   ]);
+  /** @param {Element | null | undefined} group */
   const isLegendOwnedGroup = (group) =>
     Boolean(
       group &&
@@ -76,8 +77,10 @@ export const createDiagramDragActions = ({
       )
     );
 
+  /** @type {SVGGraphicsElement[]} */
   let activeDragElements = [];
   let activeDragMode = 'group'; // 'group' | 'record' | 'length_bar' | 'plot_title'
+  /** @type {Map<SVGGraphicsElement, { x: number, y: number }>} */
   let activeDragOriginalTransforms = new Map();
   let activeLengthBarOffsetStart = { x: 0, y: 0 };
   let activePlotTitleOffsetStart = { x: 0, y: 0 };
@@ -90,6 +93,10 @@ export const createDiagramDragActions = ({
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
 
+  /**
+   * @param {{ style?: CSSStyleDeclaration } | null | undefined} element
+   * @param {string | null | undefined} cursor
+   */
   const setElementCursor = (element, cursor) => {
     if (!element?.style) return;
     if (cursor) {
@@ -106,6 +113,7 @@ export const createDiagramDragActions = ({
     }
   };
 
+  /** @param {string} label */
   const beginDragTransaction = (label) => {
     // Each drag gesture owns its transaction and settles a focused control's (N-18).
     diagramDragTxPromise = beginHistoryTransaction
@@ -113,9 +121,16 @@ export const createDiagramDragActions = ({
       : null;
   };
 
+  /** @param {{ id?: string } | null | undefined} group */
   const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';
+  /** @param {{ id?: string } | null | undefined} group */
   const isPlotTitleGroup = (group) => (group?.id || '') === 'plot_title';
 
+  /**
+   * @param {Element | null | undefined} el
+   * @param {number} x
+   * @param {number} y
+   */
   const setTranslate = (el, x, y) => {
     if (!el) return;
     el.setAttribute(
@@ -124,6 +139,7 @@ export const createDiagramDragActions = ({
     );
   };
 
+  /** @param {{ x?: unknown, y?: unknown } | null | undefined} transform */
   const normalizeTransform = (transform) => {
     const x = Number(transform?.x);
     const y = Number(transform?.y);
@@ -133,6 +149,7 @@ export const createDiagramDragActions = ({
     };
   };
 
+  /** @param {SVGGraphicsElement | null | undefined} group */
   const assignPlotTitleElement = (group) => {
     if (plotTitleElement.value && plotTitleElement.value !== group) {
       plotTitleElement.value.style.opacity = '1';
@@ -194,8 +211,13 @@ export const createDiagramDragActions = ({
     activeLengthBarOffsetStart = { x: 0, y: 0 };
   };
 
+  /**
+   * @param {SVGSVGElement | null | undefined} svg
+   * @param {boolean} [preserveOffset]
+   */
   const syncLengthBarElement = (svg, preserveOffset = false) => {
-    const nextLengthBar = svg?.getElementById('length_bar') || null;
+    // The Python-drawn scale bar is a `g` group.
+    const nextLengthBar = /** @type {SVGGraphicsElement | null} */ (svg?.getElementById('length_bar') || null);
     if (!nextLengthBar) {
       clearLengthBarState();
       return;
@@ -222,6 +244,7 @@ export const createDiagramDragActions = ({
     applyLengthBarTransform();
   };
 
+  /** @param {Element | null | undefined} svg */
   const syncPlotTitleElement = (svg) => {
     if (svg?.getAttribute?.(COMPOSITION_SCHEMA_ATTRIBUTE) !== '1') {
       clearPlotTitleState();
@@ -249,6 +272,7 @@ export const createDiagramDragActions = ({
 
   const refreshDiagramDragAffordances = () => {
     const enabled = isLayoutRepositionModeEnabled();
+    /** @type {SVGGraphicsElement[]} */
     const elements = Array.isArray(diagramElements.value) ? diagramElements.value : [];
     const hasRecordGroups = elements.some((el) => isRecordGroup(el));
 
@@ -271,6 +295,10 @@ export const createDiagramDragActions = ({
     });
   };
 
+  /**
+   * @param {MouseEvent} e
+   * @param {SVGGraphicsElement | null | undefined} group
+   */
   const startLengthBarDrag = (e, group) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -298,6 +326,10 @@ export const createDiagramDragActions = ({
     document.addEventListener('mouseup', endDiagramDrag);
   };
 
+  /**
+   * @param {MouseEvent} e
+   * @param {SVGGraphicsElement | null | undefined} group
+   */
   const startPlotTitleDrag = (e, group) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -325,6 +357,7 @@ export const createDiagramDragActions = ({
     document.addEventListener('mouseup', endDiagramDrag);
   };
 
+  /** @param {MouseEvent & { target: Element }} e A mouse event on the mounted SVG, whose targets are elements. */
   const startDiagramDrag = (e) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -343,24 +376,25 @@ export const createDiagramDragActions = ({
 
     const clickedLengthBar = e.target.closest('#length_bar');
     if (clickedLengthBar) {
-      startLengthBarDrag(e, clickedLengthBar);
+      startLengthBarDrag(e, /** @type {SVGGraphicsElement} */ (clickedLengthBar)); // the `g#length_bar` group
       return;
     }
 
     const clickedPlotTitle = e.target.closest('#plot_title');
     if (clickedPlotTitle) {
-      startPlotTitleDrag(e, clickedPlotTitle);
+      startPlotTitleDrag(e, /** @type {SVGGraphicsElement} */ (clickedPlotTitle)); // the `g#plot_title` group
       return;
     }
 
     const isMultiRecordCanvas = isMultiRecordCanvasSvg(svg);
+    /** @type {SVGGraphicsElement[]} */
     let dragTargets = [];
 
     if (isMultiRecordCanvas) {
       // Multi-record mode: allow dragging only the clicked record group.
       const clickedRecordGroup = closestRecordGroup(e.target);
       if (!clickedRecordGroup) return;
-      dragTargets = [clickedRecordGroup];
+      dragTargets = [/** @type {SVGGraphicsElement} */ (clickedRecordGroup)]; // record groups are `g` elements (isRecordGroup)
       activeDragMode = 'record';
     } else {
       const clickedGroup = e.target.closest('g[id]');
@@ -370,7 +404,8 @@ export const createDiagramDragActions = ({
       if (isLengthBarGroup(clickedGroup)) return;
       if (isPlotTitleGroup(clickedGroup)) return;
 
-      dragTargets = diagramElements.value;
+      // setupDiagramDrag stores the bound primary groups (or []) in `diagramElements`.
+      dragTargets = /** @type {SVGGraphicsElement[]} */ (diagramElements.value);
       if (dragTargets.length === 0) return;
       activeDragMode = 'group';
     }
@@ -405,6 +440,10 @@ export const createDiagramDragActions = ({
     return activeDragMode === 'plot_title' ? plotTitleDragStart : diagramDragStart;
   };
 
+  /**
+   * @param {number} clientX
+   * @param {number} clientY
+   */
   const applyDiagramDragPosition = (clientX, clientY) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -436,6 +475,7 @@ export const createDiagramDragActions = ({
     });
   };
 
+  /** @param {MouseEvent} e */
   const onDiagramDrag = (e) => {
     if (!diagramDragging.value || activeDragElements.length === 0) return;
     pendingDiagramPointer = { x: e.clientX, y: e.clientY };
@@ -447,6 +487,7 @@ export const createDiagramDragActions = ({
     });
   };
 
+  /** @param {MouseEvent} [e] */
   const endDiagramDrag = async (e) => {
     if (!diagramDragging.value) return;
 
