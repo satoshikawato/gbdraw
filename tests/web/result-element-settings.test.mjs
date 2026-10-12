@@ -15,17 +15,18 @@ import {
 import { stripTransientPreviewState } from '../../gbdraw/web/js/services/svg-serialization.js';
 
 // One compound selector: an optional tag, an optional #id, an optional .class,
-// and attribute tests (`[name]`, `[name="value"]`, `[name^="value"]`).
+// and attribute tests (`[name]`, `[name="value"]`, `[name^="value"]`, `[name*="value"]`).
 const matchesCompound = (element, compound) => {
   const [, tag, id, className, tests] = compound.match(/^([a-z]+)?(?:#([\w-]+))?(?:\.([\w-]+))?((?:\[[^\]]+\])*)$/) ?? [];
   if (!tag && !id && !className && !tests) throw new Error(`unsupported selector: ${compound}`);
   if (tag && element.tag !== tag) return false;
   if (id && element.getAttribute('id') !== id) return false;
   if (className && !String(element.getAttribute('class') ?? '').split(/\s+/).includes(className)) return false;
-  return Array.from((tests || '').matchAll(/\[([\w-]+)(?:(\^)?="([^"]*)")?\]/g)).every(([, name, prefix, value]) => {
+  return Array.from((tests || '').matchAll(/\[([\w-]+)(?:([\^*])?="([^"]*)")?\]/g)).every(([, name, operator, value]) => {
     const actual = element.getAttribute(name);
     if (actual === null) return false;
-    return value === undefined || (prefix ? actual.startsWith(value) : actual === value);
+    if (value === undefined) return true;
+    return operator === '^' ? actual.startsWith(value) : operator === '*' ? actual.includes(value) : actual === value;
   });
 };
 
@@ -65,6 +66,8 @@ class FakeElement {
     visit(this);
     return found;
   }
+
+  querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
 }
 
 const g = (attributes, ...children) => new FakeElement('g', attributes, children);
@@ -169,6 +172,27 @@ test('a record definition has no section, whatever its record is called', () => 
     assert.equal(sectionOf(definition), null, record);
     assert.equal(withElement(() => definition.matches(DRAWN_ELEMENT_SELECTOR)), true, 'the id alone reads like a track');
   }
+});
+
+test('a Result drawn by 0.13.0: the groups of a record have no section, whatever the record is called', () => {
+  // That release named the group of a record's features `<record id>` and its definition
+  // `<record id>_definition` (each with `_record_<n>` among several records), without a role.
+  for (const record of ['tick_chr1', 'skew_control', 'gc_content_x', 'gc_skew_1']) {
+    for (const suffix of ['', '_record_2']) {
+      const axis = ink('line');
+      const text = ink('text');
+      const features = g({ id: `${record}${suffix}` }, axis, new FakeElement('path', { 'data-gbdraw-feature-id': 'f7cb30df9' }));
+      const definition = g({ id: `${record}_definition${suffix}` }, text);
+      svgOf(features, definition);
+      for (const target of [axis, features, text, definition]) assert.equal(sectionOf(target), null, `${target.getAttribute('id') ?? target.tag} of ${record}${suffix}`);
+      assert.equal(withElement(() => features.matches(DRAWN_ELEMENT_SELECTOR) && definition.matches(DRAWN_ELEMENT_SELECTOR)), true,
+        'the ids alone read like a track');
+    }
+  }
+  // Its tracks have the ids alone too, and open their section.
+  const skew = ink();
+  svgOf(g({ id: 'gc_skew' }, skew));
+  assert.equal(sectionOf(skew), 'dinucleotide');
 });
 
 test('Linear: the scale opens Axis & Scale, the tracks of every record their section, the title Titles', () => {

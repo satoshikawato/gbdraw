@@ -1126,7 +1126,8 @@ above the settings does. While the pointer is on one of them, the preview reads
 stands above "Turn on Layout edit to move this item". A click that closes an
 open popup or clears a feature selection does only that, and the next click
 opens the section. The click changes no setting and adds no **Undo** step, and
-a press that pans the figure opens nothing.
+a press that pans the figure opens nothing. While **Review alignment** is open,
+these elements open nothing and the preview does not read that line.
 
 Ctrl-click selects features for bulk color, legend name, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the

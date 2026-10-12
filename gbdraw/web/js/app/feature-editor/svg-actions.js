@@ -64,7 +64,6 @@ export {
 
 // A press that moved farther than this before its release is a drag, not a click on a drawn element.
 const CLICK_SLOP_PX = 4;
-// Marks an item of the preview that a click acts on, for the pointer cursor.
 
 /**
  * A pointer position, as an event or a plain point carries it.
