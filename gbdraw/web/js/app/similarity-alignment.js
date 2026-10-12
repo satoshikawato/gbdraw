@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
@@ -1494,7 +1495,8 @@ export const createSimilarityAlignmentActions = ({
         reference.x -= delta.deltaX;
       }
       const restore = new Map(scope === 'positions-and-directions'
-        ? receipt.directions.map(delta => [delta.recordKey, delta.before]) : []);
+        // `resetPreview` rejects this scope above unless the receipt is set.
+        ? /** @type {AlignmentResetReceipt} */ (receipt).directions.map(delta => [delta.recordKey, delta.before]) : []);
       const orientations = current.request.records.map(record => ({recordKey: record.recordKey,
         reverseComplement: restore.has(record.recordKey) ? restore.get(record.recordKey) : baseReverseComplement(record)}));
       if (orientations.some((direction, index) => direction.reverseComplement
