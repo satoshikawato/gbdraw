@@ -7,7 +7,12 @@ import { splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migr
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
-import { CANONICAL_REQUEST_SCHEMA as CURRENT_REQUEST_SCHEMA, SESSION_VERSION as CURRENT_VERSION } from '../contracts/schema.generated.js';
+import {
+  CANONICAL_REQUEST_SCHEMA as CURRENT_REQUEST_SCHEMA,
+  PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+  PROTEIN_LOSAT_CACHE_SCHEMA,
+  SESSION_VERSION as CURRENT_VERSION
+} from '../contracts/schema.generated.js';
 import { migrateSessionFeatureEdits, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
 import {
@@ -28,8 +33,8 @@ const currentOrthogroupState = (value) => {
   return current;
 };
 const regenerableProteinCache = (session) => session.renderRequest?.comparisons?.some(
-  ({ kind }) => kind === 'generatedProteinComparison') && session.proteinIdentityManifest?.schema === 2
-  && session.losatCache?.entries?.some((entry) => entry?.schema === 4 && entry?.kind === 'raw-losat' && entry?.program === 'blastp'
+  ({ kind }) => kind === 'generatedProteinComparison') && session.proteinIdentityManifest?.schema === PROTEIN_IDENTITY_MANIFEST_SCHEMA
+  && session.losatCache?.entries?.some((entry) => entry?.schema === PROTEIN_LOSAT_CACHE_SCHEMA && entry?.kind === 'raw-losat' && entry?.program === 'blastp'
     && entry?.idEncoding === 'runtime-handle-v1'
     && typeof entry?.queryProteinSetHash === 'string' && typeof entry?.subjectProteinSetHash === 'string');
 /**
