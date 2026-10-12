@@ -150,8 +150,9 @@ const normalizeLinearSeqNumber = (value) => {
  * @property {string} file_subtitle
  * @property {string} inferred_definition
  * @property {string} region_record_id
- * @property {number | null} region_start
- * @property {number | null} region_end
+ * @property {unknown} region_start a draft: `createLinearSeq` and the crop control write a number or null,
+ *   a Session load stores the saved value as it is; the request projection validates it (R7)
+ * @property {unknown} region_end a draft, as `region_start`
  * @property {boolean} region_reverse
  */
 
@@ -217,7 +218,7 @@ export const collapseEmptyLinearSeqList = (items) => {
   return normalizeLinearSeqList(collapsed);
 };
 
-const linearSeqs = reactive(normalizeLinearSeqList([]));
+const linearSeqs = /** @type {LinearSeq[]} */ (reactive(normalizeLinearSeqList([])));
 const selectedAnnotation = ref(null);
 
 export const createDefaultFeatureShapes = () => createDefaultFeatureRenderings();
@@ -337,7 +338,10 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
 const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
-const featureCatalog = ref(null); // Validated schema-4 metadata for committed Results
+/** @import { FeatureCatalog } from './services/feature-catalog.js' */
+// Null, or the admitted catalog of the committed Results (`admittedFeatureCatalog`
+// in services/config.js; R11), held by reference.
+const featureCatalog = /** @type {{ value: FeatureCatalog | null }} */ (ref(null));
 // Whether the rule preparation (app/rule-matching.js) is matching rules; it
 // records the matches, which live on the feature objects, before this falls back.
 const ruleMatchingPending = ref(false);
@@ -1261,3 +1265,10 @@ export const state = {
   filteredFeatures,
   filteredEditableLabels
 };
+
+/**
+ * The Web state, for a module that receives it as a parameter. A member whose
+ * declaration above has no type is `any` (Vue's `ref`, `reactive` and
+ * `computed` are untyped globals).
+ * @typedef {typeof state} WebState
+ */

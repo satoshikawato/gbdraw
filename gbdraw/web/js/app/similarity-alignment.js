@@ -17,7 +17,7 @@ import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.
 
 /**
  * @import { FeatureCatalog, FeatureCatalogRow } from '../services/feature-catalog.js'
- * @import { AnnotationCatalogSource } from './annotations/record-catalog.js'
+ * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './annotations/record-catalog.js'
  * @import { AliasSource, CommittedRecord } from '../services/feature-identity.js'
  */
 
@@ -46,8 +46,6 @@ const { computed, ref, watch } = window.Vue;
  * @typedef {AliasSource & {
  *   start?: unknown, end?: unknown, strand?: unknown, hidden?: unknown, representative?: unknown, role?: unknown
  * }} OrthogroupMemberFacts A Similarity Group member.
- * @typedef {{ status?: unknown, records?: AnnotationCatalogSource['records'] } | null | undefined} DiscoveredRecordCatalog
- *   The record catalog, as the record lengths read it (the owner is `AnnotationRecordCatalog`).
  * @typedef {{
  *   recordKey: string, anchor: AnchorIdentity | null, status: string,
  *   beforeReverseComplement: boolean, afterReverseComplement: boolean,
@@ -988,7 +986,7 @@ const strandValue = (value, path) => {
 // `drawnSeqs`: the drawn Linear cards, which the record catalog's `sourceIndex` counts.
 /**
  * @param {Partial<FeatureCatalog> | null | undefined} catalog
- * @param {DiscoveredRecordCatalog} recordCatalog
+ * @param {AnnotationRecordCatalog | null | undefined} recordCatalog
  * @param {readonly { uid?: unknown }[] | null | undefined} drawnSeqs
  */
 const recordLengths = (catalog, recordCatalog, drawnSeqs) => {
@@ -1006,18 +1004,19 @@ const recordLengths = (catalog, recordCatalog, drawnSeqs) => {
     });
   });
   if (recordCatalog?.status === 'ready') {
-    /** @type {Map<number, NonNullable<AnnotationCatalogSource['records']>[number] | null>} */
+    /** @type {Map<number, AnnotationCatalogRecord | null>} */
     const discovered = new Map();
+    // Number.isSafeInteger holds only for a number: each cast below follows that check.
     (recordCatalog.records || []).forEach((record) => {
       const index = record?.sourceIndex;
-      if (!Number.isSafeInteger(index) || index < 0) return;
-      discovered.set(index, discovered.has(index) ? null : record);
+      if (!Number.isSafeInteger(index) || /** @type {number} */ (index) < 0) return;
+      discovered.set(/** @type {number} */ (index), discovered.has(/** @type {number} */ (index)) ? null : record);
     });
     discovered.forEach((record, index) => {
       const key = String(drawnSeqs?.[index]?.uid || '');
       if (key && record && Number.isSafeInteger(record.recordLength)
-          && record.recordLength > 0 && !lengths.has(key)) {
-        lengths.set(key, record.recordLength);
+          && /** @type {number} */ (record.recordLength) > 0 && !lengths.has(key)) {
+        lengths.set(key, /** @type {number} */ (record.recordLength));
       }
     });
   }
@@ -1028,7 +1027,7 @@ const recordLengths = (catalog, recordCatalog, drawnSeqs) => {
  * @param {{
  *   group: AliasSource | null | undefined, members: OrthogroupMemberFacts[],
  *   reference: AliasSource | null | undefined, request: CommittedAlignmentRequest,
- *   catalog: Partial<FeatureCatalog> | null | undefined, recordCatalog: DiscoveredRecordCatalog,
+ *   catalog: Partial<FeatureCatalog> | null | undefined, recordCatalog: AnnotationRecordCatalog | null | undefined,
  *   drawnSeqs: readonly { uid?: unknown }[] | null | undefined, choices: AlignmentChoice[]
  * }} options
  * @returns {AlignmentHelperRequest}
@@ -1204,7 +1203,7 @@ const anchorsAgree = (left, right) => {
  * @property {(groupId: string) => Record<string, any> | null} getOrthogroupById
  * @property {(group: Record<string, any> | string | null) => Record<string, any>[]} getEnrichedOrthogroupMembers
  * @property {() => Record<string, any> | null} getCommittedRequest
- * @property {(() => Record<string, any>) | null} [getRecordCatalog]
+ * @property {(() => AnnotationRecordCatalog) | null} [getRecordCatalog]
  * @property {() => Record<string, any> | null} getCommittedSession
  * @property {(args: Record<string, any>) => Record<string, any>} projectCommittedAlignment
  * @property {(run: AlignmentCandidateRun) => Promise<Record<string, any>>} runRecordAlignment
