@@ -719,6 +719,7 @@ export const createHistoryManager = ({
     if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
   };
 
+  /** @param {string} [_label] @param {{ isCurrent?: () => boolean }} [options] */
   const initializeIntentBaseline = async (_label = 'Intent baseline', { isCurrent = () => true } = {}) => {
     if (restoring.value) return false;
     cancel(openTransaction());
