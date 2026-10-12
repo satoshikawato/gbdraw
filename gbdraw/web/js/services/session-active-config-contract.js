@@ -402,7 +402,7 @@ const sortedValue = (value) => Array.isArray(value)
  */
 
 /**
- * @param {AlignmentResetReceipt | null | undefined} receipt The stored receipt, checked here.
+ * @param {unknown} receipt The stored receipt, unvalidated: this function checks it.
  * @param {AlignmentResetRequest | null | undefined} request
  * @returns {AlignmentResetReceipt | null}
  */
@@ -413,7 +413,7 @@ export const validateAlignmentResetReceiptShape = (receipt, request) => {
   const invalid = () => { throw diagnosticError('ALIGNMENT_RESET_EVIDENCE'); };
   if (!isObject(receipt)
     || Object.keys(receipt).sort().join(',') !== 'binding,directions,referenceDeltaX'
-    || !/^[0-9a-f]{64}$/.test(receipt.binding)
+    || typeof receipt.binding !== 'string' || !/^[0-9a-f]{64}$/.test(receipt.binding)
     || !Array.isArray(receipt.directions)
     || request?.mode !== 'linear' || !request.layout?.similarityAlignment) invalid();
   const plan = request.layout.similarityAlignment;
@@ -434,7 +434,8 @@ export const validateAlignmentResetReceiptShape = (receipt, request) => {
     || delta.recordKey !== plan.reference.recordKey
     || typeof delta.deltaX !== 'number' || !Number.isFinite(delta.deltaX)
     || delta.deltaX === 0)) invalid();
-  return receipt;
+  // Every field was checked above.
+  return /** @type {AlignmentResetReceipt} */ (receipt);
 };
 
 /** @param {AlignmentResetCanonical} canonical */
@@ -476,7 +477,7 @@ const resetBinding = async (canonical) => {
 };
 
 /**
- * @param {AlignmentResetReceipt | null | undefined} receipt
+ * @param {unknown} receipt The stored receipt, unvalidated.
  * @param {AlignmentResetCanonical | null | undefined} canonical
  */
 export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical) => {

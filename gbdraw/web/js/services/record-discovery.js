@@ -15,7 +15,18 @@ import {
 /** @import { FileLike } from './session-resource-backing.js' */
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
-/** @import { CircularRecordDiscovery } from '../state.js' */
+
+/**
+ * The record catalog of the Circular source files: whose files it was read
+ * from (`inputType`, `primaryFile`, `pairedFile`), and how reading went.
+ * @typedef {object} CircularRecordDiscovery
+ * @property {'idle' | 'loading' | 'deferred' | 'ready' | 'error'} status
+ * @property {UserFacingError | ''} error The reader's error, or '' when there is none.
+ * @property {'' | 'gb' | 'gff'} inputType
+ * @property {FileLike | null} primaryFile
+ * @property {FileLike | null} pairedFile
+ * @property {{ selector: string, record_id: string, recordKey: string }[]} canonicalRecordIdentities
+ */
 
 /**
  * One record as a reader or the Worker reports it: Python names (`record_id`,

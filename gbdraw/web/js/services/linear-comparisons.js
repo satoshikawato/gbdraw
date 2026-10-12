@@ -44,8 +44,8 @@ import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection
  * @property {string} id
  * @property {string} queryUid
  * @property {string} subjectUid
- * @property {number} queryIndex
- * @property {number} subjectIndex
+ * @property {number | undefined} queryIndex `undefined` when no record card has the uid (an issue).
+ * @property {number | undefined} subjectIndex `undefined` when no record card has the uid (an issue).
  * @property {string} edgeKey
  * @property {number} ordinal
  * @property {LinearComparisonSource} source
@@ -437,7 +437,7 @@ export const validateLinearComparisonEdges = ({
 /**
  * @param {{
  *   edge: LinearComparisonEdgeInit | null | undefined, queryUid: string, subjectUid: string,
- *   queryIndex: number, subjectIndex: number, source: LinearComparisonSource, ordinal: number
+ *   queryIndex: number | undefined, subjectIndex: number | undefined, source: LinearComparisonSource, ordinal: number
  * }} input
  */
 const resolvedEdge = ({ edge, queryUid, subjectUid, queryIndex, subjectIndex, source, ordinal }) => Object.freeze({
@@ -559,9 +559,9 @@ export const resolveLinearComparisonPlan = ({
     edge,
     queryUid: cleanUid(edge.queryUid),
     subjectUid: cleanUid(edge.subjectUid),
-    // A uid without a card is an issue, and no consumer reads the indexes of an invalid resolution.
-    queryIndex: /** @type {number} */ (indexByUid.get(cleanUid(edge.queryUid))),
-    subjectIndex: /** @type {number} */ (indexByUid.get(cleanUid(edge.subjectUid))),
+    // `undefined` for a uid without a card (an issue); consumers of an invalid resolution guard it.
+    queryIndex: indexByUid.get(cleanUid(edge.queryUid)),
+    subjectIndex: indexByUid.get(cleanUid(edge.subjectUid)),
     source: normalizeSource(edge.source),
     ordinal
   }));
@@ -608,9 +608,10 @@ export const missingUploadPairsToResolve = (resolution) => {
   const missing = new Set(issues.map((issue) => issue.edgeKey));
   return (resolution?.edges || []).filter((edge) => missing.has(edge.edgeKey)).map((edge) => ({
     edgeKey: edge.edgeKey,
-    queryIndex: edge.queryIndex,
-    subjectIndex: edge.subjectIndex,
-    label: `#${edge.queryIndex + 1} → #${edge.subjectIndex + 1}`
+    // Every issue is `missing-upload` here, so both uids have a card and both indexes are numbers.
+    queryIndex: /** @type {number} */ (edge.queryIndex),
+    subjectIndex: /** @type {number} */ (edge.subjectIndex),
+    label: `#${/** @type {number} */ (edge.queryIndex) + 1} → #${/** @type {number} */ (edge.subjectIndex) + 1}`
   }));
 };
 
@@ -1058,8 +1059,9 @@ export const buildLosatJobSpecs = ({
     pushPairs(false);
   } else {
     edges.forEach((edge) => {
-      push(edge.queryIndex, edge.subjectIndex, edge.ordinal);
-      push(edge.subjectIndex, edge.queryIndex, edge.ordinal);
+      // Both callers pass a valid resolution (Generate requires one, the job estimate returns early on an invalid one), so every uid has a card.
+      push(/** @type {number} */ (edge.queryIndex), /** @type {number} */ (edge.subjectIndex), edge.ordinal);
+      push(/** @type {number} */ (edge.subjectIndex), /** @type {number} */ (edge.queryIndex), edge.ordinal);
     });
   }
   return Object.freeze(specs);

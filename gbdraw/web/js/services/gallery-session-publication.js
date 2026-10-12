@@ -372,19 +372,18 @@ export const createGallerySessionPublication = (owners) => {
       : session?.config,
     // The `includes` test is false for an absent catalog, so the catalog exists in the branch.
     editorState: /** @type {(number | undefined)[]} */ ([3, 4]).includes(session?.editorState?.featureCatalog?.schema)
-      && /** @type {FeatureCatalog} */ (session.editorState?.featureCatalog).schema !== FEATURE_CATALOG_SCHEMA
+      && /** @type {{ featureCatalog: FeatureCatalog }} */ (session.editorState).featureCatalog.schema !== FEATURE_CATALOG_SCHEMA
       ? {
           ...session.editorState,
           featureCatalog: migrateLegacyFeatureCatalog(
-            /** @type {FeatureCatalog} */ (session.editorState?.featureCatalog)
+            /** @type {{ featureCatalog: FeatureCatalog }} */ (session.editorState).featureCatalog
           )
         }
       : session?.editorState,
     // The current writer keys per-feature edits by source identity (design Q4 4.3).
-    // An older Session without `features` is read as empty: `migrateSessionFeatureEdits` tests `isObject(features)`
-    // before it reads the map, although its typedef declares the property required (NIA-F: the typedef is too narrow).
+    // An older Session without `features` is read as empty: `migrateSessionFeatureEdits` tests `isObject(features)`.
     features: migrateSessionFeatureEdits({
-      features: /** @type {Record<string, unknown>} */ (session?.features),
+      features: session?.features,
       mode: session?.renderRequest?.mode,
       catalog: session?.editorState?.featureCatalog || null
     }).features
