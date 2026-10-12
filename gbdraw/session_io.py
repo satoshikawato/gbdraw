@@ -41,10 +41,10 @@ from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
 from .session_contract import (
+    FeatureOverrideDraftRow,
     FlatDraftFields,
     GbdrawSession,
     LegacySessionFields,
-    SessionFeatureOverrideDraftRow,
     SessionOtherModeEditorState,
     SessionOtherModeLegend,
     SessionOtherModeResult,
@@ -129,7 +129,7 @@ RETIRED_RENDERED_ID_FEATURE_FIELDS = frozenset(
 # row has no ``scope`` (Session 46).
 DRAFT_SCOPES = ("circular", "linear")
 # The fields of a per-feature edit draft row in a Session 46 mode slice.
-FEATURE_OVERRIDE_DRAFT_FIELDS = keys_of(SessionFeatureOverrideDraftRow)
+FEATURE_OVERRIDE_DRAFT_FIELDS = keys_of(FeatureOverrideDraftRow)
 # A Session 46 field that names an invalid shape is a Session field error.
 _SESSION_FIELDS_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"

@@ -184,7 +184,7 @@ def test_a_mode_slice_is_described_from_the_registry() -> None:
     assert described == {f"{row.domain}.{row.path}" for row in MODE_SCOPED_SETTINGS}
     assert set(TYPES["SessionModes"]["fields"]) == set(DIAGRAM_MODES)
     assert TYPES["SessionModeSliceFeatures"]["fields"]["featureOverrides"] == {
-        "kind": "record", "values": {"kind": "ref", "name": "SessionFeatureOverrideDraftRow"}
+        "kind": "record", "values": {"kind": "ref", "name": "FeatureOverrideDraftRow"}
     }
 
 

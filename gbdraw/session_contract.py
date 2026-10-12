@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, NewType, TypedDict, get_type_hints
 
+from .features.overrides import FeatureVisibilityMode, LabelVisibilityMode
 from .web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     LOSAT_EXECUTION_FIELDS,
@@ -83,7 +84,7 @@ class SessionResultSet(_ResultSetRequired, total=False):
     level and in ``otherModeResult``; each adds its own ``renderRequest``."""
 
     runMetadata: SessionRunMetadata
-    cliInvocation: SessionCliInvocation | None
+    cliInvocation: SessionCliInvocation
 
 
 class SessionOtherModeLegend(TypedDict, total=False):
@@ -180,15 +181,15 @@ class SessionLegacyArtifacts(TypedDict, total=False):
     proteinDerivedEvidence: dict[str, object]
 
 
-class SessionFeatureOverrideDraftRow(TypedDict):
+class FeatureOverrideDraftRow(TypedDict):
     """A per-feature edit draft row of a mode slice (``features.featureOverrides``):
-    a request ``featureOverrides`` row (``FeatureOverride``, which names the
-    values of the two visibilities) plus the Web-only ``labelSourceText``."""
+    a request ``featureOverrides`` row (``FeatureOverride``) plus the Web-only
+    ``labelSourceText``, the label's text before any edit."""
 
     recordKey: str
     biologicalFeatureId: str
-    featureVisibility: str | None
-    labelVisibility: str | None
+    featureVisibility: FeatureVisibilityMode | None
+    labelVisibility: LabelVisibilityMode | None
     labelText: str | None
     labelSourceText: str | None
 
@@ -290,7 +291,7 @@ def describe_session_document() -> dict[str, Any]:
         if hint is ModeSlicesJson:
             if "SessionModes" not in types_:
                 # _validate_feature_override_drafts
-                slice_leaves["features.featureOverrides"] = record(special(SessionFeatureOverrideDraftRow) or UNKNOWN)
+                slice_leaves["features.featureOverrides"] = record(special(FeatureOverrideDraftRow) or UNKNOWN)
                 mode_slice = slice_container("")
                 named("SessionModes", obj({mode: mode_slice for mode in DIAGRAM_MODES}, optional=DIAGRAM_MODES))
             return ref("SessionModes")
@@ -313,10 +314,10 @@ def describe_session_document() -> dict[str, Any]:
 
 
 __all__ = [
+    "FeatureOverrideDraftRow",
     "FlatDraftFields",
     "GbdrawSession",
     "LegacySessionFields",
-    "SessionFeatureOverrideDraftRow",
     "SessionOtherModeEditorState",
     "SessionOtherModeLegend",
     "SessionOtherModeResult",

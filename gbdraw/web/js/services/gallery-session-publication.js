@@ -9,6 +9,7 @@ import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
 import {
   CANONICAL_REQUEST_SCHEMA as CURRENT_REQUEST_SCHEMA,
+  FLAT_DRAFT_TOP_LEVEL_FIELDS,
   PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   PROTEIN_LOSAT_CACHE_SCHEMA,
   SESSION_VERSION as CURRENT_VERSION
@@ -20,8 +21,6 @@ import {
 } from './imported-comparison-intent.js';
 const ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
-// The top-level homes of the flat draft that Session 46 moved into `modes`.
-const RETIRED_DRAFT_FIELDS = ['config', 'features'];
 const noComparisonPlan = () => ({ mode: 'none', defaultSource: 'losat', edges: [] });
 /**
  * @param {unknown} value
@@ -150,7 +149,8 @@ const validateEnvelope = (session) => {
 // A Session 46 keeps the Web draft in `modes` only (plan 4.1).
 /** @param {PublicationSession} session */
 const validateCurrentFields = (session) => {
-  if (RETIRED_DRAFT_FIELDS.some((field) => has(session, field))) throw new Error('Gallery publication requires the Web draft in modes (Session 46).');
+  // The top-level homes of the flat draft that Session 46 moved into `modes`.
+  if (FLAT_DRAFT_TOP_LEVEL_FIELDS.some((field) => has(session, field))) throw new Error('Gallery publication requires the Web draft in modes (Session 46).');
   if (has(session, 'modes')) {
     const modes = session.modes;
     if (!isObject(modes) || Object.keys(modes).some((mode) => mode !== 'circular' && mode !== 'linear'))

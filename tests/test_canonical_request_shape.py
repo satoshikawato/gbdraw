@@ -272,21 +272,35 @@ _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]
         ("linear:records.[].presentation",),
     ),
 }
+# The decoder refuses another string, at every position: Python names the
+# values the field takes and the description types it ``string``. The type is
+# wider than Python there, as the Linear slot scalar was (OV-530, OV-597); a
+# field joins this list only with a reason it cannot be a literal union.
+_NAMES_TYPED_STRING: tuple[str, ...] = (
+    "CanonicalCircularOutputOptions.legend",
+    "CanonicalCircularTrackSlot.renderer",
+    "CanonicalCircularTrackSlot.side",
+    "CanonicalLinearOutputOptions.legend",
+    "CanonicalLinearTrackSlot.renderer",
+    "CanonicalLinearTrackSlot.side",
+    "CanonicalProteinComparisonSettings.collinearityAnchorMode",
+    "CanonicalProteinComparisonSettings.collinearityColorMode",
+    "CanonicalProteinComparisonSettings.collinearitySearchScope",
+    "CanonicalProteinComparisonSettings.collinearityUnitMode",
+    "CanonicalProteinComparisonSettings.orthogroupMembershipMode",
+)
 # The decoder refuses a value of a kind the description allows, at every
 # position: Python checks the value itself (a resource, record or feature that
-# must exist, a range, a set of names that no type lists, an array that must
-# hold an item). The type is wider than Python there.
+# must exist, a range, a colour, an array that must hold an item), which no
+# type can say.
 _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalAlignmentAnchorIdentity.recordKey": ("another string",),
     "CanonicalAlignmentRecordDecision.recordKey": ("another string",),
     "CanonicalCircularDiagramOptions.depthTracks": ("an array",),
     "CanonicalCircularDiagramOptions.dinucleotide": ("another string",),
     "CanonicalCircularLayout.multiRecordMinRadiusRatio": ("another integer",),
-    "CanonicalCircularOutputOptions.legend": ("another string",),
     "CanonicalCircularRenderRequest.output": ("an array",),
     "CanonicalCircularRenderRequest.records": ("an array",),
-    "CanonicalCircularTrackSlot.renderer": ("another string",),
-    "CanonicalCircularTrackSlot.side": ("another string",),
     "CanonicalCollinearityResultComparison.resourceId": ("another string",),
     "CanonicalDepthTrack.source": ("an array",),
     "CanonicalFeaturePlacement.placement[lane].level": ("another integer",),
@@ -298,23 +312,15 @@ _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalHatchStyle.color": ("another string",),
     "CanonicalLinearDiagramOptions.depthTracks": ("an array",),
     "CanonicalLinearDiagramOptions.dinucleotide": ("another string",),
-    "CanonicalLinearOutputOptions.legend": ("another string",),
     "CanonicalLinearRecordTranslation.recordKey": ("another string",),
     "CanonicalLinearRenderRequest.records": ("an array",),
     "CanonicalLinearTrackOptions.linearTrackAxisIndex": ("another integer",),
     "CanonicalLinearTrackOptions.linearTrackSlots": ("an array",),
-    "CanonicalLinearTrackSlot.renderer": ("another string",),
-    "CanonicalLinearTrackSlot.side": ("another string",),
     "CanonicalNucleotideBlastComparison.queryRecordIndex": ("another integer",),
     "CanonicalNucleotideBlastComparison.resourceId": ("another string",),
     "CanonicalOrthogroupResultComparison.resourceId": ("another string",),
     "CanonicalPrecomputedProteinComparison.queryRecordIndex": ("another integer",),
     "CanonicalPrecomputedProteinComparison.resourceId": ("another string",),
-    "CanonicalProteinComparisonSettings.collinearityAnchorMode": ("another string",),
-    "CanonicalProteinComparisonSettings.collinearityColorMode": ("another string",),
-    "CanonicalProteinComparisonSettings.collinearitySearchScope": ("another string",),
-    "CanonicalProteinComparisonSettings.collinearityUnitMode": ("another string",),
-    "CanonicalProteinComparisonSettings.orthogroupMembershipMode": ("another string",),
     "CanonicalRegionAnnotationStyle.fill": ("another string",),
     "CanonicalRegionAnnotationStyle.fillOpacity": ("another integer",),
     "CanonicalRegionAnnotationStyle.labelColor": ("another string",),
@@ -349,7 +355,11 @@ _EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
     },
     **{
         f"{field} = {value}": (verdict, None)
-        for verdict, table in (("refused", _VALUE_CHECKED), ("accepted", _CONVERTED))
+        for verdict, table in (
+            ("refused", {field: ("another string",) for field in _NAMES_TYPED_STRING}),
+            ("refused", _VALUE_CHECKED),
+            ("accepted", _CONVERTED),
+        )
         for field, values in table.items()
         for value in values
     },
@@ -415,7 +425,7 @@ def _differences(
             for step in path:
                 holder = holder[step]
             changes: list[tuple[str, bool, tuple[object, ...]]] = [
-                (f"{label}: an unknown field", False, ("fieldTheDescriptionDoesNotName", None)),
+                (f"{label}: an unknown field", shape["open"], ("fieldTheDescriptionDoesNotName", None)),
             ]
             for key, field in shape["fields"].items():
                 if key in holder:

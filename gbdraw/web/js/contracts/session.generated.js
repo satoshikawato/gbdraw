@@ -11,7 +11,7 @@
  * @typedef {object} GbdrawSession
  * @property {SessionResult[]} results
  * @property {SessionRunMetadata} [runMetadata]
- * @property {SessionCliInvocation | null} [cliInvocation]
+ * @property {SessionCliInvocation} [cliInvocation]
  * @property {'gbdraw-session'} format
  * @property {number} version
  * @property {string} createdAt
@@ -109,11 +109,11 @@
  * }} SessionOrthogroupState
  */
 /**
- * @typedef {object} SessionFeatureOverrideDraftRow
+ * @typedef {object} FeatureOverrideDraftRow
  * @property {string} recordKey
  * @property {string} biologicalFeatureId
- * @property {string | null} featureVisibility
- * @property {string | null} labelVisibility
+ * @property {'on' | 'off' | 'exclude_matching' | null} featureVisibility
+ * @property {'on' | 'off' | null} labelVisibility
  * @property {string | null} labelText
  * @property {string | null} labelSourceText
  */
@@ -295,7 +295,7 @@
 /**
  * @typedef {object} SessionModeSliceFeatures
  * @property {unknown} [featureColorOverrides]
- * @property {Record<string, SessionFeatureOverrideDraftRow>} [featureOverrides]
+ * @property {Record<string, FeatureOverrideDraftRow>} [featureOverrides]
  * @property {unknown} [featureVisibilityManualRules]
  * @property {unknown} [labelOverrideRows]
  * @property {unknown} [labelTextBulkOverrides]
@@ -330,7 +330,7 @@
  * @typedef {object} SessionOtherModeResult
  * @property {SessionResult[]} results
  * @property {SessionRunMetadata} [runMetadata]
- * @property {SessionCliInvocation | null} [cliInvocation]
+ * @property {SessionCliInvocation} [cliInvocation]
  * @property {CanonicalRenderRequest} renderRequest
  * @property {SessionOtherModeEditorState} editorState
  * @property {SessionOtherModeUi} [ui]
