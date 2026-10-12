@@ -121,9 +121,13 @@ const settingsOnlySession = (split) => {
   if (linear && Object.hasOwn(linear, 'linearRecordLayout') && !Object.hasOwn(linear, 'linearComparisonPlan')) {
     linear.linearComparisonPlan = { mode: 'none', defaultSource: 'losat', edges: [] };
   }
+  // A settings-only Session holds the `form` and `adv` of its shown mode, as
+  // Save writes them (OV-591); a synthetic case may hold neither.
+  const shownMode = split.ui?.mode || 'circular';
+  modes[shownMode] = { ...modes[shownMode], config: { form: {}, adv: {}, ...modes[shownMode]?.config } };
   return {
     ...session, version: 46, editorState,
-    ui: { ...ui, ...split.ui, mode: split.ui?.mode || 'circular' },
+    ui: { ...ui, ...split.ui, mode: shownMode },
     modes
   };
 };

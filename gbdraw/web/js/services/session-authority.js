@@ -373,9 +373,11 @@ const validateSettingsOnlyDocument = data => {
     || bindings.c_conservation_blasts_source === 'losat-cache') {
     throw new Error('Settings-only Session cannot contain committed render artifacts.');
   }
-  // Session 46: each mode's slice holds that mode's settings draft.
+  // Session 46: each mode's slice holds that mode's settings draft, with its
+  // `form` and `adv` (`_validate_settings_only_session`, OV-591).
   if (data.version >= MODE_SCOPED_SESSION_VERSION) {
-    if (!isPlainObject(data.modes?.[data.ui?.mode]?.config)) {
+    const config = data.modes?.[data.ui?.mode]?.config;
+    if (!isPlainObject(config) || !isPlainObject(config.form) || !isPlainObject(config.adv)) {
       throw new Error('Settings-only Session requires the settings of its mode.');
     }
   } else {
