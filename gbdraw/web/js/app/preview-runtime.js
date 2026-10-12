@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
+/** @import { SvgMutationOperations, SvgResultEntry } from '../services/svg-result-ingestion.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   reconcileMountedResult,
@@ -173,6 +173,10 @@ const REQUIRED_BINDING_FLAGS = Object.freeze([
   'selectionReady'
 ]);
 
+/**
+ * @param {string} message
+ * @param {string} [code]
+ */
 const readinessError = (message, code = 'PREVIEW_READINESS_REJECTED') => {
   const error = /** @type {Error & { code?: string }} */ (new Error(message));
   error.code = code;
@@ -243,12 +247,17 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   const selectedResultIdentity = () => resultRuntimeIdentity(
     state.results.value[Number(state.selectedResultIndex?.value || 0)]
   );
+  /** @type {WeakMap<object, string>} */
   const fallbackResultIdentities = new WeakMap();
   const invalidatedReceipts = new WeakSet();
 
   /** @returns {SVGSVGElement | null} */
   const getMountedSvg = () => state.svgContainer?.value?.querySelector?.('svg') || null;
 
+  /**
+   * @param {SvgResultEntry | null | undefined} result
+   * @returns {string}
+   */
   const resultRuntimeIdentity = (result) => {
     const committedIdentity = getCommittedSvgResultRuntimeIdentity(result);
     if (committedIdentity !== null) return `result:${committedIdentity}`;
@@ -256,16 +265,25 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     if (!fallbackResultIdentities.has(result)) {
       fallbackResultIdentities.set(result, `runtime-result:${nextFallbackResultIdentity++}`);
     }
-    return fallbackResultIdentities.get(result);
+    return /** @type {string} */ (fallbackResultIdentities.get(result)); // Set above when absent.
   };
 
+  /**
+   * @param {string | { fingerprint?: unknown } | null | undefined} value
+   * @param {string} [resultIdentity]
+   */
   const normalizeArtifactIdentity = (value, resultIdentity = '') => {
-    const fingerprint = String(value?.fingerprint || '').trim().toLowerCase();
+    // A string has no `fingerprint`: it reads undefined, and `String(value)` below names it.
+    const fingerprint = String(/** @type {{ fingerprint?: unknown } | null | undefined} */ (value)?.fingerprint || '').trim().toLowerCase();
     if (fingerprint) return fingerprint;
     const normalized = String(value || '').trim();
     return normalized || `preview-artifact:${resultIdentity || 'unknown'}`;
   };
 
+  /**
+   * @param {ReadinessExpectation | null} expectation
+   * @param {unknown} reason
+   */
   const rejectExpectation = (expectation, reason) => {
     if (!expectation || expectation.settled) return false;
     expectation.settled = true;
@@ -337,8 +355,11 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     const resultIdentity = resultRuntimeIdentity(result);
     const normalizedGenerationToken = String(generationToken || '').trim()
       || `preview:${nextExpectationIdentity}`;
+    /** @type {ReadinessExpectation['resolve'] | undefined} */
     let resolvePromise;
+    /** @type {ReadinessExpectation['reject'] | undefined} */
     let rejectPromise;
+    /** @type {Promise<ReadyReceipt>} */
     const promise = new Promise((resolve, reject) => {
       resolvePromise = resolve;
       rejectPromise = reject;
@@ -361,8 +382,9 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       isCurrent,
       settled: false,
       promise,
-      resolve: resolvePromise,
-      reject: rejectPromise
+      // A Promise executor runs synchronously, so both are assigned by here.
+      resolve: /** @type {ReadinessExpectation['resolve']} */ (resolvePromise),
+      reject: /** @type {ReadinessExpectation['reject']} */ (rejectPromise)
     };
     activeExpectation = expectation;
     recordStructuralMetric('generatedArtifactReadinessExpectationCount', 1, {
@@ -565,6 +587,11 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return context;
   };
 
+  /**
+   * @param {ReadyReceipt | null | undefined} receipt
+   * @param {string} message
+   * @returns {{ accepted: false, error: Error }}
+   */
   const rejectReadyReceipt = (receipt, message) => {
     recordStructuralMetric('previewReadyReceiptRejectedCount', 1, {
       phase: receipt?.phase || activeExpectation?.phase || 'preview',
@@ -577,6 +604,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return { accepted: false, error: readinessError(message) };
   };
 
+  /**
+   * @param {ReadyReceipt | null | undefined} receipt
+   * @returns {{ accepted: false, error: Error } | { accepted: true, receipt: ReadyReceipt }}
+   */
   const acceptReadyReceipt = (receipt) => {
     const expectation = activeExpectation;
     if (!expectation || !receipt || invalidatedReceipts.has(receipt)) {
@@ -624,6 +655,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return { accepted: true, receipt };
   };
 
+  /** @param {MountedResultContext} context */
   const assertBindContextCurrent = (context) => {
     const expectation = activeExpectation;
     if (
@@ -720,7 +752,12 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
         bindSequence: context.bindSequence
       });
 
+      /** @type {Record<string, boolean>} */
       const flags = {};
+      /**
+       * @param {string} flag
+       * @param {Exclude<keyof MountedResultBinderSteps, 'disposeMountedResult'>} stepName
+       */
       const completeStep = async (flag, stepName) => {
         assertBindContextCurrent(context);
         if (typeof bindingSteps[stepName] === 'function') {
@@ -934,7 +971,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       : Object.keys(runtime.indexes);
     targetKeys.forEach((key) => {
       if (Object.prototype.hasOwnProperty.call(runtime.indexes, key)) {
-        runtime.indexes[key] = null;
+        // An own key of `indexes`, by the test above.
+        runtime.indexes[/** @type {keyof PreviewResultRuntime['indexes']} */ (key)] = null;
       }
     });
     runtime.lastInvalidationReason = String(reason || 'unknown');
@@ -942,6 +980,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
 
   // The one write of a Result's committed content; the Result keeps its
   // committed identity.
+  /**
+   * @param {number} resultIndex
+   * @param {string} content
+   */
   const writeResultContent = (resultIndex, content) => {
     const nextResults = [...state.results.value];
     nextResults[resultIndex] = {
@@ -1006,6 +1048,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return expectation;
   };
 
+  /** @param {number} index */
   const selectResult = (index) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
@@ -1035,6 +1078,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   // R1: the one commit for an editor's edit of the displayed Result's SVG.
   // Serializes the mounted root into its Result at once, so no edit waits for
   // a Result switch; unchanged content is not written.
+  /** @param {string} reason */
   const commitActiveResultEdit = (reason) => {
     const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
     if (!runtime?.svg) return false;
@@ -1047,6 +1091,11 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   // edited in place and committed like an editor edit. Another Result's
   // committed content is parsed, edited, and written once, so History restores
   // the Result a step was made on while a different Result is displayed.
+  /**
+   * @param {number} resultIndex
+   * @param {(svg: SVGSVGElement, context: { mounted: boolean }) => boolean} edit
+   * @param {string} [reason]
+   */
   const commitResultEdit = (resultIndex, edit, reason = 'result-edit') => {
     const index = Number(resultIndex);
     const result = state.results.value[index];
@@ -1057,7 +1106,9 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     }
     const Parser = globalThis.DOMParser;
     if (typeof Parser !== 'function' || typeof result.content !== 'string') return false;
-    const svg = new Parser().parseFromString(result.content, 'image/svg+xml').documentElement;
+    // A Result's content is serialized SVG with the SVG namespace (Python, `serializeSvg`), so its root parses
+    // to an SVGSVGElement; the next line rejects a root that is not `svg`.
+    const svg = /** @type {SVGSVGElement} */ (/** @type {Element} */ (new Parser().parseFromString(result.content, 'image/svg+xml').documentElement));
     if (String(svg?.localName || '').toLowerCase() !== 'svg' || !edit(svg, { mounted: false })) return false;
     const content = serializeSvg(svg);
     if (content === result.content) return false;

@@ -14,8 +14,14 @@ import { skewTrackColor } from '../services/track-legend-rows.js';
 
 export { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 
+/** @param {unknown} value */
 const normalizeComparableColor = (value) => String(value || '').trim().toLowerCase();
 
+/**
+ * @param {Element} element
+ * @param {string} attribute
+ * @param {string} value
+ */
 const setColorAttributeIfChanged = (element, attribute, value) => {
   if (normalizeComparableColor(element.getAttribute(attribute)) === normalizeComparableColor(value)) {
     return false;
@@ -25,6 +31,10 @@ const setColorAttributeIfChanged = (element, attribute, value) => {
 };
 
 // Whether two palettes give every key the same color (the palette watcher's test).
+/**
+ * @param {Record<string, unknown> | null | undefined} left
+ * @param {Record<string, unknown> | null | undefined} right
+ */
 export const paletteColorsEqual = (left, right) => {
   const keys = new Set([...Object.keys(left || {}), ...Object.keys(right || {})]);
   return Array.from(keys).every(
@@ -32,6 +42,11 @@ export const paletteColorsEqual = (left, right) => {
   );
 };
 
+/**
+ * @param {Record<string, unknown> | null | undefined} left
+ * @param {Record<string, unknown> | null | undefined} right
+ * @param {string[]} keys
+ */
 const paletteColorKeysEqual = (left, right, keys) => keys.every(
   (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
 );
@@ -70,6 +85,10 @@ export const createSvgStyles = ({
     mode
   } = state;
 
+  /**
+   * @param {Element} pairwiseLegend
+   * @param {Record<string, string>} colors
+   */
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
     let updated = false;
     pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
@@ -103,6 +122,7 @@ export const createSvgStyles = ({
     if (!svgContent.value) return;
     if (!svgContainer.value) return;
 
+    /** @type {SVGSVGElement | null} */
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
@@ -156,6 +176,10 @@ export const createSvgStyles = ({
     ) {
       const committedPairwiseFactors = pairwiseMatchFactors.value || {};
       let nextPairwiseFactors = committedPairwiseFactors;
+      /**
+       * @param {string} pathKey
+       * @param {number} factor
+       */
       const retainPairwiseFactor = (pathKey, factor) => {
         if (committedPairwiseFactors[pathKey] === factor) return;
         if (nextPairwiseFactors === committedPairwiseFactors) {

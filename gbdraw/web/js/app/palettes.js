@@ -9,7 +9,7 @@ import {
  * The palette fields of the Web state (`state.js`) the loader reads and writes.
  * Each `{ value }` is a Vue ref.
  * @typedef {object} PaletteLoaderState
- * @property {{ value: any }} paletteDefinitions
+ * @property {{ value: Record<string, Record<string, string>> | null }} paletteDefinitions
  * @property {{ value: string[] }} paletteNames
  * @property {{ value: string }} appliedPaletteName
  * @property {{ value: Record<string, string> }} appliedPaletteColors
@@ -40,13 +40,18 @@ export const createPaletteLoader = ({ state }) => {
     appliedPaletteColors
   } = state;
 
+  /**
+   * @param {Record<string, string> | null | undefined} colors
+   * @returns {colors is Record<string, string>} True for a non-empty plain object.
+   */
   const hasColorEntries = (colors) => (
-    Boolean(colors) &&
+    colors != null &&
     typeof colors === 'object' &&
     !Array.isArray(colors) &&
     Object.keys(colors).length > 0
   );
   const comparisonColorKeys = new Set(COMPARISON_COLOR_KEYS);
+  /** @param {Record<string, string> | null | undefined} colors */
   const hasPaletteColorEntries = (colors) => (
     hasColorEntries(colors) &&
     Object.keys(colors).some((key) => !comparisonColorKeys.has(key))
@@ -55,7 +60,7 @@ export const createPaletteLoader = ({ state }) => {
   /**
    * Gives one drawing its palette's colors where it has none yet.
    * @param {PaletteLoaderDrawing} drawing
-   * @param {Record<string, any>} normalizedPalettes
+   * @param {Record<string, Record<string, string>>} normalizedPalettes
    */
   const initializeDrawingPalette = (drawing, normalizedPalettes) => {
     const requestedPalette = String(drawing.selectedPalette.value || 'default').trim() || 'default';
@@ -74,6 +79,7 @@ export const createPaletteLoader = ({ state }) => {
   // Every drawing gets its palette (PR-1: each mode keeps its own colors); the
   // applied palette, which the committed Result's Legend shows, starts from the
   // shown drawing's.
+  /** @param {Record<string, Record<string, string> | string> | null | undefined} allPalettes The palette file: palette tables and a `title`. */
   const applyPalettes = (allPalettes) => {
     if (!allPalettes || typeof allPalettes !== 'object') return false;
     const normalizedPalettes = normalizePaletteDefinitions(allPalettes);

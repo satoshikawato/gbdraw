@@ -20,6 +20,32 @@ import {
   textAliasStatus
 } from '../services/feature-identity.js';
 
+/** @import { AliasSource, FeatureIdentity } from '../services/feature-identity.js' */
+/** @import { FeatureLike } from '../services/feature-utils.js' */
+/** @import { SequenceSource, SequenceSourceResolution, SequenceSourceResolver } from '../services/match-sequences.js' */
+
+/**
+ * A rendered or source feature row of the catalogs, or a saved group member:
+ * its fields are read by name, with snake_case aliases.
+ * @typedef {FeatureLike & { orthogroupMember?: PopupMember | null, orthogroup_member?: PopupMember | null }} PopupFeature
+ */
+
+/**
+ * A member record of a saved similarity group.
+ * @typedef {FeatureLike} PopupMember
+ */
+
+/**
+ * A saved similarity group: its fields are read by name, with snake_case aliases.
+ * @typedef {AliasSource} PopupGroup
+ */
+
+/** @typedef {'pairwise' | 'orthogroup' | 'collinear' | 'homology'} MatchKind */
+/** @typedef {'nt' | 'aa'} SequenceKind */
+/** @typedef {ReturnType<typeof buildOrthogroupMemberRows>[number]} MemberRow One row of a group's member table. */
+/** @typedef {ReturnType<typeof buildFeatureListRows>[number]} FeatureListRow One row of a feature list. */
+/** @typedef {ReturnType<typeof buildGroupView>} GroupView The view of one similarity group. */
+
 /**
  * One popup table row.
  * @typedef {{ label: string, value: string }} PopupRow
@@ -32,8 +58,8 @@ import {
  * @typedef {object} PopupSection
  * @property {string} title
  * @property {PopupRow[]} rows
- * @property {Record<string, any>[]} [featureRows]
- * @property {Record<string, any>[]} [memberRows]
+ * @property {FeatureListRow[]} [featureRows]
+ * @property {MemberRow[]} [memberRows]
  * @property {string} [memberCopyText]
  * @property {string} [memberNtFasta]
  * @property {string} [memberAaFasta]
@@ -41,13 +67,13 @@ import {
  * @property {number} [memberAaCount]
  * @property {string} [memberNtFilename]
  * @property {string} [memberAaFilename]
- * @property {Record<string, any>[]} [blockOrthogroups]
+ * @property {GroupView[]} [blockOrthogroups]
  */
 
 /**
  * What the popup and the hover summary read from one match element.
  * @typedef {object} PairwiseMatchDescriptor
- * @property {string} matchKind
+ * @property {MatchKind} matchKind
  * @property {string} matchId
  * @property {string} orthogroupId
  * @property {string[]} orthogroupIds
@@ -73,7 +99,7 @@ import {
 /**
  * The values of one hover summary, taken from a descriptor or from a payload.
  * @typedef {object} PairwiseHoverRowValues
- * @property {string} [matchKind]
+ * @property {MatchKind} [matchKind]
  * @property {string} [identity]
  * @property {string} [queryInterval]
  * @property {string} [subjectInterval]
@@ -92,14 +118,38 @@ import {
 
 /**
  * Rendered features by SVG ID, as the SVG owner holds them.
- * @typedef {Map<string, any> | Record<string, any> | any[] | null} FeatureLookup
+ * @typedef {Map<string, PopupFeature> | Record<string, PopupFeature> | PopupFeature[] | null} FeatureLookup
+ */
+
+/**
+ * What the match popup shows (`buildMatchPopupPayload`). A similarity-group
+ * match has a `group`, a collinearity block a `block` and its groups, and the
+ * other kinds the `sections` and the matched sequences.
+ * @typedef {object} MatchPopupPayload
+ * @property {string} id
+ * @property {string} title
+ * @property {string} subtitle
+ * @property {MatchKind} matchKind
+ * @property {string} orthogroupId
+ * @property {string} collinearityBlockId
+ * @property {string} queryFeatureSvgId
+ * @property {string} subjectFeatureSvgId
+ * @property {string} fill
+ * @property {GroupView | null} [group]
+ * @property {PopupSection[]} sections
+ * @property {string} [groupScope]
+ * @property {number} [blockOrthogroupCount]
+ * @property {GroupView[]} [blockOrthogroups]
+ * @property {ReturnType<typeof buildCollinearBlockView>} [block]
+ * @property {ReturnType<typeof buildSequenceBundleForMatch>} [sequenceBundle]
+ * @property {string} [sequenceTitle]
  */
 
 /**
  * @typedef {object} MatchPopupPayloadOptions
  * @property {FeatureLookup} [featureLookup]
- * @property {Record<string, any>[]} [sourceFeatures]
- * @property {Record<string, any>[]} [orthogroups]
+ * @property {PopupFeature[]} [sourceFeatures]
+ * @property {PopupGroup[]} [orthogroups]
  * @property {OrthogroupTextOverrides} [orthogroupNameOverrides]
  * @property {OrthogroupTextOverrides} [orthogroupDescriptionOverrides]
  * @property {import('../services/match-sequences.js').SequenceSourceResolver | null} [resolveSequenceSource]
@@ -107,7 +157,7 @@ import {
 
 /**
  * @typedef {object} MatchHoverSummaryOptions
- * @property {Record<string, any>[] | (() => Record<string, any>[])} [orthogroups]
+ * @property {PopupGroup[] | (() => PopupGroup[])} [orthogroups]
  * @property {OrthogroupTextOverrides} [orthogroupNameOverrides]
  */
 
@@ -126,10 +176,20 @@ const MATCH_KIND_TITLES = {
 };
 
 const MATCH_KIND_ALIASES = new Set(['pairwise', 'orthogroup', 'collinear', 'homology']);
+/** @param {unknown} value */
 const normalizeText = (value) => String(value === null || value === undefined ? '' : value).trim();
+/** @param {unknown} value */
 const normalizeSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
 
+/**
+ * @param {Element | null | undefined} element
+ * @param {string} name
+ */
 const attr = (element, name) => normalizeText(element?.getAttribute?.(name));
+/**
+ * @param {Element | null | undefined} element
+ * @param {string} name
+ */
 const integerAttrStatus = (element, name) => {
   const value = attr(element, name);
   if (!value) return { valid: true, supplied: false, value: null };
@@ -140,8 +200,13 @@ const integerAttrStatus = (element, name) => {
   const valid = Number.isSafeInteger(numeric) && numeric >= 0;
   return { valid, supplied: true, value: valid ? numeric : null };
 };
+/**
+ * @param {Element | null | undefined} element
+ * @param {string} name
+ */
 const integerAttr = (element, name) => integerAttrStatus(element, name).value;
 
+/** @param {...unknown} values */
 const firstText = (...values) => {
   for (const value of values) {
     const text = normalizeText(value);
@@ -150,13 +215,17 @@ const firstText = (...values) => {
   return '';
 };
 
+/** @param {unknown} value */
 const splitMetadataValues = (value) => normalizeText(value)
   .split(';')
   .map((entry) => normalizeText(entry))
   .filter(Boolean);
 
+/** @param {unknown} value */
 const uniqueMetadataValues = (value) => {
+  /** @type {Set<string>} */
   const seen = new Set();
+  /** @type {string[]} */
   const values = [];
   splitMetadataValues(value).forEach((entry) => {
     if (seen.has(entry)) return;
@@ -169,6 +238,7 @@ const uniqueMetadataValues = (value) => {
 const generatedProteinIdPattern = /^(?:gbd_r\d+_cds\d+|p_.+_\d+_\d+_-?\d+_[0-9a-f]{12}(?:_\d+)?)$/i;
 const generatedUnitIdPattern = /^gbd_r\d+_unit\d+$/i;
 
+/** @param {unknown} value */
 const isInternalDisplayId = (value) => {
   const text = normalizeText(value);
   return Boolean(text && (
@@ -178,12 +248,17 @@ const isInternalDisplayId = (value) => {
   ));
 };
 
+/**
+ * @param {string[]} values
+ * @param {unknown} value
+ */
 const addUniqueDisplayText = (values, value) => {
   const text = normalizeText(value);
   if (!text || isInternalDisplayId(text) || values.includes(text)) return;
   values.push(text);
 };
 
+/** @param {...unknown} values */
 const firstSequenceText = (...values) => {
   for (const value of values) {
     const sequence = normalizeSequence(value);
@@ -192,29 +267,49 @@ const firstSequenceText = (...values) => {
   return '';
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ */
 const makeSafeFilename = (value, fallback = 'orthogroup') => {
   const cleaned = normalizeText(value).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || fallback;
 };
 
+/** @param {SequenceKind} sequenceKind */
 const sequenceKindLabel = (sequenceKind) => (sequenceKind === 'aa' ? 'aa' : 'nt');
+/** @param {SequenceKind} sequenceKind */
 const sequenceExtension = (sequenceKind) => (sequenceKindLabel(sequenceKind) === 'aa' ? 'faa' : 'fna');
 
-/** @param {SVGElement | null} [element] */
+/**
+ * @param {unknown} value
+ * @param {SVGElement | null} [element]
+ * @returns {MatchKind}
+ */
 const normalizeMatchKind = (value, element = null) => {
   const normalized = normalizeText(value).toLowerCase();
-  if (MATCH_KIND_ALIASES.has(normalized)) return normalized;
+  // A member of `MATCH_KIND_ALIASES`, by the test.
+  if (MATCH_KIND_ALIASES.has(normalized)) return /** @type {MatchKind} */ (normalized);
   if (attr(element, 'data-collinearity-block-id')) return 'collinear';
   if (attr(element, 'data-orthogroup-id')) return 'orthogroup';
   return 'pairwise';
 };
 
+/**
+ * @param {PopupRow[]} rows
+ * @param {string} label
+ * @param {unknown} value
+ */
 const addRow = (rows, label, value) => {
   const text = normalizeText(value);
   if (!text) return;
   rows.push({ label, value: text });
 };
 
+/**
+ * @param {unknown} start
+ * @param {unknown} end
+ */
 const intervalText = (start, end) => {
   const startText = normalizeText(start);
   const endText = normalizeText(end);
@@ -223,14 +318,21 @@ const intervalText = (start, end) => {
   return startText || endText;
 };
 
+/**
+ * @param {PopupFeature | null | undefined} feature
+ * @param {string} key
+ */
 const qualifierFirstValue = (feature, key) => {
   const normalizedKey = normalizeText(key).toLowerCase();
   if (!feature || !normalizedKey) return '';
   const direct = feature[normalizedKey];
   if (direct !== null && direct !== undefined && direct !== '') return firstArrayValue(direct);
-  const qualifiers = feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
-    ? feature.qualifiers
-    : {};
+  // A plain object, by the test.
+  const qualifiers = /** @type {Record<string, unknown>} */ (
+    feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
+      ? feature.qualifiers
+      : {}
+  );
   if (qualifiers[normalizedKey] !== null && qualifiers[normalizedKey] !== undefined) {
     return firstArrayValue(qualifiers[normalizedKey]);
   }
@@ -238,6 +340,7 @@ const qualifierFirstValue = (feature, key) => {
   return matchingKey ? firstArrayValue(qualifiers[matchingKey]) : '';
 };
 
+/** @param {unknown} value */
 const firstArrayValue = (value) => {
   if (Array.isArray(value)) {
     for (const entry of value) {
@@ -250,8 +353,10 @@ const firstArrayValue = (value) => {
 };
 
 const ORTHOGROUP_ID_KEYS = Object.freeze(['id', 'orthogroupId', 'orthogroup_id']);
+/** @param {AliasSource | null | undefined} source */
 const orthogroupIdStatus = (source) => textAliasStatus(source, ORTHOGROUP_ID_KEYS);
 
+/** @param {PopupGroup | null | undefined} group */
 const groupScopeStatus = (group) => {
   const presentationValues = [
     group?.presentationScope,
@@ -282,17 +387,24 @@ const groupScopeStatus = (group) => {
   };
 };
 
+/** @param {PopupGroup | null | undefined} group */
 const groupScopeValue = (group) => {
   const status = groupScopeStatus(group);
   return status.valid ? status.value : '';
 };
 
+/**
+ * @param {PopupGroup[] | null | undefined} orthogroups
+ * @param {unknown} orthogroupId
+ * @param {unknown} [groupScope]
+ */
 const getOrthogroupById = (orthogroups, orthogroupId, groupScope = '') => {
   const id = normalizeText(orthogroupId);
   if (!id) return null;
   const requestedScope = normalizeText(groupScope)
     ? normalizeGroupMetadataScope(groupScope)
     : '';
+  /** @type {PopupGroup[]} */
   const matches = [];
   for (const entry of Array.isArray(orthogroups) ? orthogroups : []) {
     const status = orthogroupIdStatus(entry);
@@ -307,11 +419,13 @@ const getOrthogroupById = (orthogroups, orthogroupId, groupScope = '') => {
   return matches.length === 1 ? matches[0] : null;
 };
 
+/** @param {AliasSource | null | undefined} member */
 const memberFeatureSvgId = (member) => {
   const status = textAliasStatus(member, STABLE_FEATURE_ID_KEYS);
   return status.valid ? status.value : '';
 };
 
+/** @param {AliasSource | null | undefined} feature */
 const featureRenderedSvgId = (feature) => {
   const status = textAliasStatus(feature, [
     ...RENDERED_FEATURE_ID_KEYS,
@@ -321,6 +435,10 @@ const featureRenderedSvgId = (feature) => {
   return status.valid ? status.value : '';
 };
 
+/**
+ * @param {FeatureLookup} featureLookup
+ * @returns {PopupFeature[]}
+ */
 const getFeatureLookupValues = (featureLookup) => {
   if (!featureLookup) return [];
   if (typeof featureLookup.values === 'function') return Array.from(featureLookup.values());
@@ -329,6 +447,10 @@ const getFeatureLookupValues = (featureLookup) => {
   return [];
 };
 
+/**
+ * @param {Element} element
+ * @param {'query' | 'subject'} role
+ */
 const matchEndpointReferences = (element, role) => {
   const renderedIds = splitMetadataValues(attr(element, `data-${role}-feature-svg-id`));
   const stableText = attr(element, `data-${role}-stable-feature-svg-id`);
@@ -365,6 +487,13 @@ const matchEndpointReferences = (element, role) => {
 
 // Source coordinates first; the table (search-frame) interval only when it
 // differs (PD-OI-076). Circular homology matches have no Linear record span.
+/**
+ * @param {Element} element
+ * @param {MatchKind} matchKind
+ * @param {'query' | 'subject'} role
+ * @param {string} start
+ * @param {string} end
+ */
 const matchIntervals = (element, matchKind, role, start, end) => {
   const source = matchKind === 'homology'
     ? null
@@ -435,6 +564,7 @@ const readPairwiseMatchDescriptor = (element) => {
   };
 };
 
+/** @param {PopupFeature | null | undefined} feature */
 const featureOrthogroupIdStatus = (feature) => {
   const statuses = [
     orthogroupIdStatus(feature),
@@ -452,6 +582,7 @@ const featureOrthogroupIdStatus = (feature) => {
   };
 };
 
+/** @param {PopupFeature | null | undefined} feature */
 const featureProduct = (feature) => firstText(
   feature?.product,
   qualifierFirstValue(feature, 'product'),
@@ -461,6 +592,10 @@ const featureProduct = (feature) => firstText(
   qualifierFirstValue(feature, 'note')
 );
 
+/**
+ * @param {PopupFeature | null | undefined} feature
+ * @param {FeatureIdentity | null} [resolvedIdentity]
+ */
 const featureToOrthogroupMember = (feature, resolvedIdentity = null) => {
   if (!feature) return null;
   const member = feature?.orthogroupMember || feature?.orthogroup_member || {};
@@ -500,15 +635,23 @@ const featureToOrthogroupMember = (feature, resolvedIdentity = null) => {
   };
 };
 
+/**
+ * @template V
+ * @param {Map<string, V[]>} buckets
+ * @param {string} key
+ * @param {V} value
+ */
 const addBucketValue = (buckets, key, value) => {
   if (!key) return;
   if (!buckets.has(key)) buckets.set(key, []);
-  buckets.get(key).push(value);
+  /** @type {V[]} */ (buckets.get(key)).push(value); // Set above when absent.
 };
 
+/** @param {FeatureIdentity | null | undefined} identity */
 const identityIndexKeys = (identity) => {
   if (!identity?.usable) return [];
   const recordIndex = identity.recordIndex.supplied ? identity.recordIndex.value : null;
+  /** @type {string[]} */
   const keys = [];
   if (identity.recordKey.supplied && identity.biologicalId.supplied) {
     keys.push(`canonical:${identity.recordKey.value}\u001f${identity.biologicalId.value}`);
@@ -523,12 +666,51 @@ const identityIndexKeys = (identity) => {
 };
 
 /**
+/**
+ * A rendered feature and its identity from its rendered ID.
+ * @typedef {{ feature: PopupFeature, identity: FeatureIdentity }} RenderedRecord
+ */
+
+/**
+ * A source feature, how a member reaches it, and the rendered ID it names.
+ * @typedef {object} SourceRecord
+ * @property {PopupFeature} feature
+ * @property {FeatureIdentity | null | undefined} candidateIdentity
+ * @property {FeatureIdentity | null} sourceIdentity
+ * @property {ReturnType<typeof textAliasStatus>} sourceRendered
+ * @property {ReturnType<typeof textAliasStatus>} legacyRendered
+ */
+
+/**
+ * A group member and its identity.
+ * @typedef {{ member: PopupMember, identity: FeatureIdentity }} MemberRecord
+ */
+
+/**
+ * The lookups of one payload (`createPairwisePayloadContext`): the features,
+ * groups, and members that the match's IDs name, each answered only when one
+ * candidate matches.
+ * @typedef {object} PairwisePayloadContext
+ * @property {(orthogroupId: unknown, queryFeature: PopupFeature | null, subjectFeature: PopupFeature | null) => PopupFeature[]} fallbackFeaturesForOrthogroup
+ * @property {(renderedSvgId: unknown) => PopupFeature | null} featureForLookupId
+ * @property {(member: PopupMember) => PopupFeature | null} featureForMember
+ * @property {(group: PopupGroup | null | undefined, featureSvgIds: unknown) => boolean} groupHasFeatureIds
+ * @property {(group: PopupGroup | null | undefined, featureSvgId: unknown) => PopupMember | null} groupMemberForFeatureId
+ * @property {(group: PopupGroup | null | undefined) => MemberRecord[]} groupMemberRecords
+ * @property {(feature: PopupFeature) => FeatureIdentity} identityForFeature
+ * @property {(orthogroupId: unknown, groupScope?: unknown) => PopupGroup | null} orthogroupById
+ * @property {() => PopupGroup | null} orthogroupForMatch
+ * @property {(member: PopupMember, feature: PopupFeature | null) => PopupFeature | null} renderedFeatureForMember
+ */
+
+/**
  * @param {{
  *   featureLookup?: FeatureLookup,
- *   sourceFeatures?: Record<string, any>[],
- *   orthogroups?: Record<string, any>[],
+ *   sourceFeatures?: PopupFeature[],
+ *   orthogroups?: PopupGroup[],
  *   descriptor?: PairwiseMatchDescriptor | null
  * }} [options]
+ * @returns {PairwisePayloadContext}
  */
 const createPairwisePayloadContext = ({
   featureLookup = new Map(),
@@ -536,7 +718,13 @@ const createPairwisePayloadContext = ({
   orthogroups = [],
   descriptor = null
 } = {}) => {
+  /** @type {WeakMap<object, Map<string, FeatureIdentity>>} */
   const identityCache = new WeakMap();
+  /**
+   * @param {PopupFeature | PopupMember | null | undefined} source
+   * @param {'rendered' | 'standard' | 'legacy'} mode
+   * @returns {FeatureIdentity}
+   */
   const cachedIdentity = (source, mode) => {
     if (!source || (typeof source !== 'object' && typeof source !== 'function')) {
       if (mode === 'rendered') return renderedFeatureIdentity(source);
@@ -555,14 +743,20 @@ const createPairwisePayloadContext = ({
           : featureIdentity(source, { allowLegacySvgStable: mode === 'legacy' })
       );
     }
-    return modes.get(mode);
+    return /** @type {FeatureIdentity} */ (modes.get(mode)); // Set above when absent.
   };
 
+  /** @type {RenderedRecord[]} */
   const renderedRecords = [];
+  /** @type {WeakMap<object, RenderedRecord>} */
   const renderedByObject = new WeakMap();
+  /** @type {Map<string, RenderedRecord[]>} */
   const renderedById = new Map();
+  /** @type {Map<string, PopupFeature[]>} */
   const featuresByOrthogroupId = new Map();
+  /** @type {WeakMap<object, ReturnType<typeof featureOrthogroupIdStatus>>} */
   const featureOrthogroupStatuses = new WeakMap();
+  /** @type {Set<PopupFeature>} */
   const seenRenderedFeatures = new Set();
   for (const feature of getFeatureLookupValues(featureLookup)) {
     if (!feature) continue;
@@ -583,7 +777,9 @@ const createPairwisePayloadContext = ({
   }
 
   const sourceIsBiological = Array.isArray(sourceFeatures) && sourceFeatures.length > 0;
+  /** @type {WeakMap<object, SourceRecord>} */
   const sourceByObject = new WeakMap();
+  /** @type {Map<string, SourceRecord[]>} */
   const sourceByIdentity = new Map();
   const sourceValues = sourceIsBiological
     ? sourceFeatures
@@ -597,6 +793,7 @@ const createPairwisePayloadContext = ({
     const candidateIdentity = sourceIsBiological
       ? legacyIdentity
       : renderedByObject.get(feature)?.identity;
+    /** @type {SourceRecord} */
     const record = {
       feature,
       candidateIdentity,
@@ -610,12 +807,14 @@ const createPairwisePayloadContext = ({
     });
   }
 
+  /** @type {Set<string>} */
   const rejectedRenderedIds = new Set();
+  /** @param {unknown} renderedSvgId */
   const rawRenderedRecordForId = (renderedSvgId) => {
     const candidates = renderedById.get(normalizeText(renderedSvgId)) || [];
     return candidates.length === 1 ? candidates[0] : null;
   };
-  for (const role of ['query', 'subject']) {
+  for (const role of /** @type {const} */ (['query', 'subject'])) {
     const endpoint = descriptor?.endpoints?.[role];
     if (!endpoint?.constrained) continue;
     const renderedIds = splitMetadataValues(descriptor?.[`${role}FeatureSvgId`]);
@@ -633,29 +832,38 @@ const createPairwisePayloadContext = ({
     });
   }
 
+  /** @param {unknown} renderedSvgId */
   const renderedRecordForId = (renderedSvgId) => {
     const id = normalizeText(renderedSvgId);
     if (!id || rejectedRenderedIds.has(id)) return null;
     return rawRenderedRecordForId(id);
   };
+  /**
+   * @param {unknown} renderedSvgId
+   * @returns {PopupFeature | null}
+   */
   const featureForLookupId = (renderedSvgId) => {
     const id = normalizeText(renderedSvgId);
     if (!id || rejectedRenderedIds.has(id)) return null;
     // Only a Map answers `get`; an array or plain object lookup yields no feature.
-    const feature = /** @type {Partial<Map<string, any>> | null} */ (featureLookup)?.get?.(id) || null;
+    const feature = /** @type {Partial<Map<string, PopupFeature>> | null} */ (featureLookup)?.get?.(id) || null;
     const record = feature ? renderedByObject.get(feature) : null;
     return record && rejectedRenderedIds.has(record.identity.renderedId.value)
       ? null
       : feature;
   };
 
+  /** @type {WeakMap<object, { records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }>} */
   const groupMemberIndexes = new WeakMap();
-  /** @returns {{ records: { member: any, identity: any }[], byIdentity: Map<any, any> }} */
+  /**
+   * @param {PopupGroup | null | undefined} group
+   * @returns {{ records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }}
+   */
   const memberIndexForGroup = (group) => {
     if (!group || typeof group !== 'object') return { records: [], byIdentity: new Map() };
     const cached = groupMemberIndexes.get(group);
     if (cached) return cached;
-    /** @type {{ records: { member: any, identity: any }[], byIdentity: Map<any, any> }} */
+    /** @type {{ records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }} */
     const index = { records: [], byIdentity: new Map() };
     for (const member of Array.isArray(group.members) ? group.members : []) {
       const record = { member, identity: cachedIdentity(member, 'standard') };
@@ -667,11 +875,18 @@ const createPairwisePayloadContext = ({
     groupMemberIndexes.set(group, index);
     return index;
   };
+  /**
+   * @param {PopupGroup | null | undefined} group
+   * @param {unknown} featureSvgId
+   * @returns {PopupMember | null}
+   */
   const groupMemberForFeatureId = (group, featureSvgId) => {
     const endpoint = renderedRecordForId(featureSvgId);
     if (!endpoint) return null;
     const memberIndex = memberIndexForGroup(group);
+    /** @type {Set<MemberRecord>} */
     const seen = new Set();
+    /** @type {MemberRecord[]} */
     const candidates = [];
     identityIndexKeys(endpoint.identity).forEach((key) => {
       for (const record of memberIndex.byIdentity.get(key) || []) {
@@ -685,13 +900,20 @@ const createPairwisePayloadContext = ({
     ));
     return matches.length === 1 ? matches[0].member : null;
   };
+  /**
+   * @param {PopupGroup | null | undefined} group
+   * @param {unknown} featureSvgIds
+   */
   const groupHasFeatureIds = (group, featureSvgIds) => (
     splitMetadataValues(featureSvgIds)
       .some((featureSvgId) => Boolean(groupMemberForFeatureId(group, featureSvgId)))
   );
 
+  /** @type {Map<string, PopupGroup[]>} */
   const groupsById = new Map();
+  /** @type {Map<string, PopupGroup[]>} */
   const groupsByScopedId = new Map();
+  /** @type {PopupGroup[]} */
   const implicitGroupMatches = [];
   for (const group of Array.isArray(orthogroups) ? orthogroups : []) {
     const idStatus = orthogroupIdStatus(group);
@@ -716,6 +938,11 @@ const createPairwisePayloadContext = ({
     ) implicitGroupMatches.push(group);
   }
 
+  /**
+   * @param {unknown} orthogroupId
+   * @param {unknown} [groupScope]
+   * @returns {PopupGroup | null}
+   */
   const orthogroupById = (orthogroupId, groupScope = '') => {
     const id = normalizeText(orthogroupId);
     if (!id) return null;
@@ -734,6 +961,11 @@ const createPairwisePayloadContext = ({
     return implicitGroupMatches.length === 1 ? implicitGroupMatches[0] : null;
   };
 
+  /**
+   * @param {PopupMember} member
+   * @param {PopupFeature | null} feature
+   * @returns {PopupFeature | null}
+   */
   const renderedFeatureForMember = (member, feature) => {
     if (!feature) return null;
     const memberIdentity = cachedIdentity(member, 'standard');
@@ -744,8 +976,9 @@ const createPairwisePayloadContext = ({
       || !sourceIdentity?.usable
       || !identityMatches(memberIdentity, sourceIdentity)
     ) return null;
+    // `sourceIdentity?.usable` held above, so the source record exists.
     const memberRendered = memberIdentity.renderedId;
-    const sourceRendered = sourceRecord.sourceRendered;
+    const sourceRendered = /** @type {SourceRecord} */ (sourceRecord).sourceRendered;
     if (!memberRendered.valid || !sourceRendered.valid) return null;
     if (
       memberRendered.supplied
@@ -754,8 +987,8 @@ const createPairwisePayloadContext = ({
     ) return null;
     let renderedSvgId = memberRendered.value || sourceRendered.value;
     if (!renderedSvgId) {
-      if (!sourceRecord.legacyRendered.valid) return null;
-      renderedSvgId = sourceRecord.legacyRendered.value;
+      if (!/** @type {SourceRecord} */ (sourceRecord).legacyRendered.valid) return null;
+      renderedSvgId = /** @type {SourceRecord} */ (sourceRecord).legacyRendered.value;
     }
     const endpoint = renderedRecordForId(renderedSvgId);
     if (
@@ -765,13 +998,18 @@ const createPairwisePayloadContext = ({
     ) return null;
     return endpoint.feature;
   };
+  /**
+   * @param {PopupMember} member
+   * @returns {PopupFeature | null}
+   */
   const featureForMember = (member) => {
     const memberIdentity = cachedIdentity(member, 'standard');
     const candidateKey = identityIndexKeys(memberIdentity)[0];
     if (!candidateKey) return null;
     const matches = (sourceByIdentity.get(candidateKey) || []).filter((record) => {
       if (!identityMatches(memberIdentity, record.candidateIdentity)) return false;
-      if (!memberIdentity.renderedId.supplied && !record.candidateIdentity.renderedId.supplied) {
+      // `identityMatches` is false for a missing or unusable candidate identity.
+      if (!memberIdentity.renderedId.supplied && !(/** @type {FeatureIdentity} */ (record.candidateIdentity)).renderedId.supplied) {
         return true;
       }
       return Boolean(renderedFeatureForMember(member, record.feature));
@@ -779,18 +1017,26 @@ const createPairwisePayloadContext = ({
     return matches.length === 1 ? matches[0].feature : null;
   };
 
+  /** @param {PopupFeature} feature */
   const identityForFeature = (feature) => {
     const standard = cachedIdentity(feature, 'standard');
     return standard.usable ? standard : cachedIdentity(feature, 'legacy');
   };
+  /** @param {PopupFeature} feature */
   const orthogroupStatusForFeature = (feature) => (
     featureOrthogroupStatuses.get(feature) || featureOrthogroupIdStatus(feature)
   );
+  /**
+   * @param {unknown} orthogroupId
+   * @param {PopupFeature | null} queryFeature
+   * @param {PopupFeature | null} subjectFeature
+   * @returns {PopupFeature[]}
+   */
   const fallbackFeaturesForOrthogroup = (orthogroupId, queryFeature, subjectFeature) => {
     const id = normalizeText(orthogroupId);
     const matching = featuresByOrthogroupId.get(id) || [];
     if (matching.length) return matching;
-    return [queryFeature, subjectFeature].filter((feature) => {
+    return [queryFeature, subjectFeature].filter(/** @param {PopupFeature | null} feature @returns {feature is PopupFeature} */ (feature) => {
       if (!feature) return false;
       const status = orthogroupStatusForFeature(feature);
       return status.valid && (!status.supplied || status.value === id);
@@ -803,6 +1049,7 @@ const createPairwisePayloadContext = ({
     featureForMember,
     groupHasFeatureIds,
     groupMemberForFeatureId,
+    /** @param {PopupGroup | null | undefined} group */
     groupMemberRecords: (group) => memberIndexForGroup(group).records,
     identityForFeature,
     orthogroupById,
@@ -811,6 +1058,15 @@ const createPairwisePayloadContext = ({
   };
 };
 
+/**
+ * @param {{
+ *   orthogroupId: unknown,
+ *   queryFeature: PopupFeature | null,
+ *   subjectFeature: PopupFeature | null,
+ *   context: PairwisePayloadContext
+ * }} input
+ * @returns {PopupGroup | null}
+ */
 const buildFallbackOrthogroupWithContext = ({
   orthogroupId,
   queryFeature,
@@ -846,11 +1102,16 @@ const buildFallbackOrthogroupWithContext = ({
   };
 };
 
+/**
+ * @param {OrthogroupTextOverrides | undefined} overrides
+ * @param {unknown} key
+ */
 const overrideValue = (overrides, key) => {
   const normalizedKey = normalizeText(key);
   if (!normalizedKey || !overrides) return '';
   if (overrides instanceof Map) return normalizeText(overrides.get(normalizedKey));
-  return normalizeText(overrides[normalizedKey]);
+  // Own entries only: `constructor` names an inherited member of a plain object, not an override.
+  return Object.hasOwn(overrides, normalizedKey) ? normalizeText(overrides[normalizedKey]) : '';
 };
 
 /**
@@ -865,6 +1126,10 @@ const section = (title, rows, extras = {}) => ({
   ...extras
 });
 
+/**
+ * @param {unknown} orthogroupId
+ * @param {unknown} displayName
+ */
 const orthogroupTitle = (orthogroupId, displayName) => {
   const id = normalizeText(orthogroupId);
   const name = normalizeText(displayName);
@@ -872,6 +1137,7 @@ const orthogroupTitle = (orthogroupId, displayName) => {
   return id || name || MATCH_KIND_TITLES.orthogroup;
 };
 
+/** @param {PopupMember | null | undefined} member */
 const memberLocationText = (member) => {
   if (!member || typeof member !== 'object') return '';
   const start = Number(member.start);
@@ -883,6 +1149,11 @@ const memberLocationText = (member) => {
   return range && strand ? `${range} (${strand})` : range;
 };
 
+/**
+ * @param {PopupMember | null | undefined} member
+ * @param {PopupFeature | null | undefined} feature
+ * @param {SequenceKind} sequenceKind
+ */
 const memberSequence = (member, feature, sequenceKind) => {
   if (sequenceKindLabel(sequenceKind) === 'aa') {
     return firstSequenceText(
@@ -902,12 +1173,19 @@ const memberSequence = (member, feature, sequenceKind) => {
   );
 };
 
+/** @param {unknown} strand */
 const normalizeMemberStrand = (strand) => {
   if (strand === -1 || String(strand).trim() === '-1') return '-';
   if (strand === 1 || String(strand).trim() === '1') return '+';
   return normalizeText(strand);
 };
 
+/**
+ * @param {PopupMember | null | undefined} member
+ * @param {PopupFeature | null | undefined} feature
+ * @param {string} nucleotideSequence
+ * @param {string} aminoAcidSequence
+ */
 const buildMemberFeaturePayload = (member, feature, nucleotideSequence, aminoAcidSequence) => {
   const sourceFeature = feature && typeof feature === 'object' ? feature : {};
   const displayProteinId = resolveDisplayProteinId(
@@ -932,6 +1210,12 @@ const buildMemberFeaturePayload = (member, feature, nucleotideSequence, aminoAci
   };
 };
 
+/**
+ * @param {PopupMember | null | undefined} member
+ * @param {PopupFeature | null | undefined} feature
+ * @param {string} nucleotideSequence
+ * @param {string} aminoAcidSequence
+ */
 const buildMemberFastas = (member, feature, nucleotideSequence, aminoAcidSequence) => {
   const fastaFeature = buildMemberFeaturePayload(member, feature, nucleotideSequence, aminoAcidSequence);
   const fastas = buildFeatureSequenceFastas(fastaFeature, {
@@ -944,12 +1228,22 @@ const buildMemberFastas = (member, feature, nucleotideSequence, aminoAcidSequenc
   };
 };
 
+/**
+ * @param {unknown} orthogroupId
+ * @param {unknown} displayName
+ * @param {SequenceKind} sequenceKind
+ */
 const orthogroupSequenceFilename = (orthogroupId, displayName, sequenceKind) => {
   const id = normalizeText(orthogroupId) || 'orthogroup';
   const name = makeSafeFilename(displayName || id, id);
   return `${makeSafeFilename(`${id}_${name}_${sequenceKindLabel(sequenceKind)}`)}.${sequenceExtension(sequenceKind)}`;
 };
 
+/**
+ * @param {PopupMember} member
+ * @param {unknown} orthogroupId
+ * @param {SequenceKind} sequenceKind
+ */
 const orthogroupMemberSequenceFilename = (member, orthogroupId, sequenceKind) => {
   const id = normalizeText(orthogroupId) || 'orthogroup';
   const memberId = firstText(
@@ -974,6 +1268,11 @@ const memberRoleNote = (role, confidence) => [
   confidence && confidence !== DEFAULT_MEMBER_CONFIDENCE ? `${confidence} confidence` : ''
 ].filter(Boolean).join(' · ');
 
+/**
+ * @param {PopupGroup | null | undefined} group
+ * @param {PairwisePayloadContext} context
+ * @param {unknown} orthogroupId
+ */
 const buildOrthogroupMemberRows = (group, context, orthogroupId) => (
   context.groupMemberRecords(group)
     .map(({ member }) => {
@@ -1009,6 +1308,17 @@ const buildOrthogroupMemberRows = (group, context, orthogroupId) => (
     .filter((row) => row.record || row.coordinates || row.proteinId || row.role || row.confidence || row.assignmentReason || row.productOrNote || row.ntFasta || row.aaFasta)
 );
 
+/**
+ * @param {{
+ *   feature: PopupFeature | null,
+ *   featureSvgIds: unknown,
+ *   context: PairwisePayloadContext,
+ *   group: PopupGroup | null,
+ *   fallbackProteinIds: unknown,
+ *   locusId: unknown,
+ *   displayName: unknown
+ * }} input
+ */
 const resolveFeatureSectionProteinIds = ({
   feature,
   featureSvgIds,
@@ -1018,7 +1328,12 @@ const resolveFeatureSectionProteinIds = ({
   locusId,
   displayName
 }) => {
+  /** @type {string[]} */
   const values = [];
+  /**
+   * @param {PopupFeature | null} candidateFeature
+   * @param {PopupMember | null} [member]
+   */
   const addFeatureProteinId = (candidateFeature, member = null) => {
     const text = resolveDisplayProteinId(candidateFeature, member, '');
     addUniqueDisplayText(values, text);
@@ -1048,6 +1363,7 @@ const resolveFeatureSectionProteinIds = ({
   return values.join('; ');
 };
 
+/** @param {...unknown} values */
 const firstNonInternalDisplayText = (...values) => {
   for (const value of values) {
     const text = normalizeText(value);
@@ -1056,6 +1372,10 @@ const firstNonInternalDisplayText = (...values) => {
   return '';
 };
 
+/**
+ * @param {PopupFeature | null | undefined} feature
+ * @param {unknown} fallbackDisplayName
+ */
 const featureRowDisplayName = (feature, fallbackDisplayName) => firstText(
   fallbackDisplayName,
   feature?.displayLabel,
@@ -1069,6 +1389,10 @@ const featureRowDisplayName = (feature, fallbackDisplayName) => firstText(
   featureProduct(feature)
 );
 
+/**
+ * @param {PopupFeature | null | undefined} feature
+ * @param {unknown} fallbackLocusId
+ */
 const featureRowLocusId = (feature, fallbackLocusId) => firstText(
   feature?.locus_tag,
   feature?.locusTag,
@@ -1079,8 +1403,13 @@ const featureRowLocusId = (feature, fallbackLocusId) => firstText(
   fallbackLocusId
 );
 
+/**
+ * @param {unknown} primaryLabel
+ * @param {...unknown} values
+ */
 const featureRowSubLabel = (primaryLabel, ...values) => {
   const seen = new Set(splitMetadataValues(primaryLabel));
+  /** @type {string[]} */
   const labels = [];
   values.forEach((value) => {
     splitMetadataValues(value).forEach((entry) => {
@@ -1092,6 +1421,18 @@ const featureRowSubLabel = (primaryLabel, ...values) => {
   return labels.join(' / ');
 };
 
+/**
+ * @param {{
+ *   featureSvgIds: unknown,
+ *   context: PairwisePayloadContext,
+ *   group: PopupGroup | null,
+ *   recordId: unknown,
+ *   interval: unknown,
+ *   proteinId: unknown,
+ *   locusId: unknown,
+ *   displayName: unknown
+ * }} input
+ */
 const buildFeatureListRows = ({
   featureSvgIds,
   context,
@@ -1172,6 +1513,7 @@ const buildFeatureListRows = ({
   ));
 };
 
+/** @param {MemberRow[]} memberRows */
 const orthogroupMemberCopyText = (memberRows) => {
   if (!Array.isArray(memberRows) || memberRows.length === 0) return '';
   return [
@@ -1188,6 +1530,10 @@ const orthogroupMemberCopyText = (memberRows) => {
   ].join('\n');
 };
 
+/**
+ * @param {MemberRow[]} memberRows
+ * @param {SequenceKind} sequenceKind
+ */
 const orthogroupMemberSequenceText = (memberRows, sequenceKind) => {
   const key = sequenceKindLabel(sequenceKind) === 'aa' ? 'aaFasta' : 'ntFasta';
   return (Array.isArray(memberRows) ? memberRows : [])
@@ -1196,6 +1542,11 @@ const orthogroupMemberSequenceText = (memberRows, sequenceKind) => {
     .join('');
 };
 
+/**
+ * @param {MemberRow[]} memberRows
+ * @param {unknown} orthogroupId
+ * @param {unknown} displayName
+ */
 const orthogroupMemberSectionExtras = (memberRows, orthogroupId, displayName) => {
   const ntFasta = orthogroupMemberSequenceText(memberRows, 'nt');
   const aaFasta = orthogroupMemberSequenceText(memberRows, 'aa');
@@ -1229,8 +1580,8 @@ export const groupCountText = (memberCount, recordCoverage) => {
 /**
  * The lookups of the payload context that the group and gene-pair views use.
  * @typedef {{
- *   orthogroupById: (orthogroupId: string, groupScope?: string) => Record<string, unknown> | null,
- *   groupMemberForFeatureId: (group: Record<string, unknown> | null, featureSvgId: string) => unknown
+ *   orthogroupById: (orthogroupId: string, groupScope?: string) => PopupGroup | null,
+ *   groupMemberForFeatureId: (group: PopupGroup | null, featureSvgId: string) => PopupMember | null
  * }} GroupLookupPort
  */
 
@@ -1241,8 +1592,8 @@ export const groupCountText = (memberCount, recordCoverage) => {
  * is shown under the name; a computed description is a technical detail.
  * @param {{
  *   orthogroupId: string,
- *   group: Record<string, unknown> | null,
- *   context: GroupLookupPort,
+ *   group: PopupGroup | null,
+ *   context: PairwisePayloadContext,
  *   displayName: string,
  *   userDescription: string,
  *   groupScope: string,
@@ -1265,6 +1616,7 @@ const buildGroupView = ({
     Array.isArray(group?.members) ? group.members.length : ''
   );
   const recordCoverage = firstText(group?.record_coverage_count, group?.recordCoverage);
+  /** @type {PopupRow[]} */
   const technicalRows = [];
   addRow(technicalRows, localGroups ? 'Collinear group ID' : 'Similarity group ID', orthogroupId);
   addRow(technicalRows, 'Description', userDescription ? '' : group?.description);
@@ -1294,6 +1646,15 @@ const buildGroupView = ({
   };
 };
 
+/**
+ * @param {{
+ *   orthogroupIds: string[],
+ *   context: PairwisePayloadContext,
+ *   orthogroupNameOverrides: OrthogroupTextOverrides | undefined,
+ *   orthogroupDescriptionOverrides: OrthogroupTextOverrides | undefined,
+ *   groupScope: string
+ * }} input
+ */
 const buildBlockOrthogroups = ({
   orthogroupIds,
   context,
@@ -1361,6 +1722,7 @@ const blockSpanView = (recordId, interval, tableInterval) => {
  * @param {PairwiseMatchDescriptor} descriptor
  */
 const collinearDetailRows = (element, descriptor) => {
+  /** @type {PopupRow[]} */
   const rows = [];
   const identity = finiteNumber(descriptor.identity);
   const alignedLength = finiteNumber(attr(element, 'data-alignment-length'));
@@ -1386,22 +1748,24 @@ const collinearDetailRows = (element, descriptor) => {
  * One row per gene pair (query gene | subject gene | group), in the order of
  * the block's groups; a gene in no group of the block gets a row of its own.
  * @param {{
- *   queryRows: Record<string, unknown>[],
- *   subjectRows: Record<string, unknown>[],
- *   blockOrthogroups: ReturnType<typeof buildGroupView>[],
+ *   queryRows: FeatureListRow[],
+ *   subjectRows: FeatureListRow[],
+ *   blockOrthogroups: GroupView[],
  *   context: GroupLookupPort,
  *   groupScope: string
  * }} input
  */
 const buildGenePairs = ({ queryRows, subjectRows, blockOrthogroups, context, groupScope }) => {
+  /** @type {Set<FeatureListRow>} */
   const used = new Set();
   /**
-   * @param {Record<string, unknown>[]} rows
-   * @param {Record<string, unknown>} group
+   * @param {FeatureListRow[]} rows
+   * @param {PopupGroup} group
    */
   const membersOf = (rows, group) => rows.filter((row) => (
     !used.has(row) && row.svgId && context.groupMemberForFeatureId(group, String(row.svgId))
   ));
+  /** @type {{ key: string, query: FeatureListRow | null, subject: FeatureListRow | null, group: { id: string, displayName: string } | null }[]} */
   const pairs = [];
   blockOrthogroups.forEach((view) => {
     const group = context.orthogroupById(view.id, groupScope);
@@ -1430,7 +1794,7 @@ const buildGenePairs = ({ queryRows, subjectRows, blockOrthogroups, context, gro
   return pairs;
 };
 
-/** @param {Record<string, unknown> | null} row */
+/** @param {FeatureListRow | null} row */
 const genePairCells = (row) => (row
   ? [row.record, row.location, row.proteinId, row.product]
   : ['', '', '', '']
@@ -1448,7 +1812,10 @@ const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }
   const query = blockSpanView(descriptor.queryRecordId, descriptor.queryInterval, descriptor.queryTableInterval);
   const subject = blockSpanView(descriptor.subjectRecordId, descriptor.subjectInterval, descriptor.subjectTableInterval);
   const orientation = normalizeText(descriptor.orientation).toLowerCase();
-  const orientationText = COLLINEAR_ORIENTATION_TEXT[/** @type {'plus' | 'minus'} */ (orientation)] || orientation;
+  // Own keys only: `constructor` and `__proto__` name inherited members, not orientations (OV-322).
+  const orientationText = Object.hasOwn(COLLINEAR_ORIENTATION_TEXT, orientation)
+    ? COLLINEAR_ORIENTATION_TEXT[/** @type {keyof typeof COLLINEAR_ORIENTATION_TEXT} */ (orientation)]
+    : orientation;
   const identity = finiteNumber(descriptor.identity);
   const identityText = identity === null ? '' : `${Math.round(identity)}% identity`;
   const pairCount = genePairs.filter((pair) => pair.query && pair.subject).length;
@@ -1481,6 +1848,20 @@ const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }
   };
 };
 
+/**
+ * @param {{
+ *   title: string,
+ *   feature: PopupFeature | null,
+ *   recordId: unknown,
+ *   interval: unknown,
+ *   proteinId: unknown,
+ *   locusId: unknown,
+ *   displayName: unknown,
+ *   featureSvgIds: unknown,
+ *   context: PairwisePayloadContext,
+ *   group: PopupGroup | null
+ * }} input
+ */
 const buildFeatureRows = ({
   title,
   feature,
@@ -1493,6 +1874,7 @@ const buildFeatureRows = ({
   context,
   group
 }) => {
+  /** @type {PopupRow[]} */
   const rows = [];
   const featureRows = buildFeatureListRows({
     featureSvgIds,
@@ -1524,12 +1906,17 @@ const buildFeatureRows = ({
   return section(title, rows, { featureRows });
 };
 
+/**
+ * @param {Element} element
+ * @param {MatchKind} matchKind
+ */
 const buildMatchSpans = (element, matchKind) => {
   if (matchKind === 'orthogroup') return [];
   const queryRecordIndex = integerAttrStatus(element, 'data-query-record-index');
   const subjectRecordIndex = integerAttrStatus(element, 'data-subject-record-index');
   const sourceIndex = integerAttrStatus(element, 'data-source-index');
   const referenceSide = attr(element, 'data-reference-side').toLowerCase();
+  /** @param {'query' | 'subject'} role */
   const homologyDisplayRole = (role) => role === referenceSide ? 'Reference' : 'Comparison';
   return [
     {
@@ -1565,12 +1952,19 @@ const buildMatchSpans = (element, matchKind) => {
   ];
 };
 
+/**
+ * @param {Element} element
+ * @param {MatchKind} matchKind
+ * @param {string} matchId
+ * @param {SequenceSourceResolver | null} resolveSequenceSource
+ */
 const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenceSource) => {
   const spans = buildMatchSpans(element, matchKind);
   if (!spans.length) return null;
   const bundle = buildMatchSequenceBundle(spans, {
     matchId,
     resolveSequenceSource: (sourceKey, recordId, context) => {
+      /** @type {SequenceSourceResolution | (SequenceSource & { source?: undefined }) | null} */
       const resolved = typeof resolveSequenceSource === 'function'
         ? resolveSequenceSource(sourceKey, recordId, context)
         : null;
@@ -1608,6 +2002,7 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenc
 /**
  * @param {SVGElement} element
  * @param {MatchPopupPayloadOptions} [options]
+ * @returns {MatchPopupPayload | null}
  */
 export const buildMatchPopupPayload = (
   element,
@@ -1698,6 +2093,7 @@ export const buildMatchPopupPayload = (
     resolveSequenceSource
   );
 
+  /** @param {'query' | 'subject'} role */
   const featureListRows = (role) => buildFeatureListRows({
     featureSvgIds: role === 'query' ? queryFeatureSvgId : subjectFeatureSvgId,
     context,
@@ -1742,6 +2138,7 @@ export const buildMatchPopupPayload = (
     };
   }
 
+  /** @type {PopupRow[]} */
   const summaryRows = [];
   addRow(summaryRows, 'Query record', descriptor.queryRecordId);
   addRow(summaryRows, 'Subject record', descriptor.subjectRecordId);
@@ -1758,6 +2155,7 @@ export const buildMatchPopupPayload = (
     addRow(summaryRows, 'Reference record', attr(element, 'data-reference-record-id'));
   }
 
+  /** @type {PopupRow[]} */
   const alignmentRows = [];
   addRow(alignmentRows, 'Identity', descriptor.identity);
   addRow(alignmentRows, 'Alignment length', attr(element, 'data-alignment-length'));
@@ -1839,7 +2237,12 @@ const formatPairwiseMatchHoverRows = ({
   blockOrthogroupCount,
   collinearityBlockId
 } = {}) => {
+  /** @type {PopupRow[]} */
   const rows = [];
+  /**
+   * @param {string} label
+   * @param {unknown} value
+   */
   const addFirst = (label, value) => addRow(rows, label, value);
   if (!matchKind) return rows;
   if (matchKind === 'orthogroup') {
@@ -1923,10 +2326,15 @@ export const buildPairwiseMatchHoverSummary = (
   };
 };
 
+/** @param {MatchPopupPayload | null | undefined} payload */
 export const buildPairwiseMatchHoverRows = (payload) => {
   if (!payload) return [];
   const summary = payload.sections.find((entry) => entry.title === 'Summary');
   const alignment = payload.sections.find((entry) => entry.title === 'Alignment');
+  /**
+   * @param {PopupSection | undefined} sectionEntry
+   * @param {string} label
+   */
   const findValue = (sectionEntry, label) => (
     sectionEntry?.rows.find((row) => row.label === label)?.value || ''
   );

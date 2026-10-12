@@ -1,4 +1,8 @@
 // @ts-check
+/** @import { FeatureLike } from '../services/feature-utils.js' */
+/** @import { ColorRule, RuleFeature, VisibilityRule } from '../services/rule-matchers.js' */
+/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { SavedFeatureColorEdit } from '../services/svg-result-ingestion.js' */
 import { normalizeSpecificRule, ruleCaptionsAreNormalized } from '../services/specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
 import { getFeatureColorRuleHash, getRenderedFeatureHash } from '../services/feature-utils.js';
@@ -14,19 +18,35 @@ import {
 // `record_location` rule is not matched live (R4: the fast path declines what
 // it cannot read exactly).
 export const DRAWN_SELECTOR_QUALIFIERS = new Set(['location', 'record_location']);
+/**
+ * The values a feature of feature catalog 5 was drawn with (`null` once unknown).
+ * @typedef {{ hash: string | null, location: string | null, recordLocation: string | null }} DrawnSelector
+ */
+/**
+ * A feature the rule helpers read: its catalog row, with the drawn selector
+ * when it has one (owned by `services/feature-catalog.js`).
+ * @typedef {FeatureLike & { drawnSelector?: DrawnSelector | null }} RuleMatchedFeature
+ */
+/** @param {RuleMatchedFeature | null | undefined} feature */
 export const drawnSelectorUnknown = (feature) => !feature?.drawnSelector
   && Object.prototype.hasOwnProperty.call(feature || {}, 'drawnSelector')
   && getRenderedFeatureHash(feature) !== String(feature?.selector?.hash || '');
 // The indexes of the `rules` a feature declines (`drawnSelectorUnknown`).
+/** @param {readonly ColorRule[]} rules */
 const liveMatchDeclines = (rules) => {
   const drawnRules = rules.flatMap((rule, index) => (
     DRAWN_SELECTOR_QUALIFIERS.has(String(rule?.qual || '').toLowerCase()) ? [index] : []
   ));
+  /** @param {RuleMatchedFeature} feature */
   return (feature) => (drawnSelectorUnknown(feature) ? drawnRules : []);
 };
 // A catalog feature that Python did not render carries no drawn values (feature
 // catalog 5 has them on rendered features only), so a `location` or
 // `record_location` rule is not matched live for it.
+/**
+ * @param {RuleMatchedFeature} feature
+ * @param {VisibilityRule} rule
+ */
 const declinesVisibilityMatch = (feature, rule) => {
   const qualifier = String(rule?.qualifier || '').toLowerCase();
   return Object.prototype.hasOwnProperty.call(feature || {}, 'drawnSelector')
@@ -40,8 +60,22 @@ const declinesVisibilityMatch = (feature, rule) => {
 // sends its source values only where they are the drawn ones. A `hash` rule
 // matches the feature's source-record hash on every record (OV-401).
 // The payload of a feature without a label is built once per feature object.
-/** @type {WeakMap<object, Record<string, any>>} */
+/**
+ * A feature as Python's rule evaluation reads it (R7).
+ * @typedef {object} RuleFeaturePayload
+ * @property {string} type
+ * @property {string} record
+ * @property {Record<string, string[]>} qualifiers
+ * @property {{ hash: string | null, location: string | null, record_location: string | null }} selector
+ * @property {string} label
+ */
+/** @type {WeakMap<object, RuleFeaturePayload>} */
 const payloads = new WeakMap();
+/**
+ * @param {RuleMatchedFeature} feature
+ * @param {string} [label]
+ * @returns {RuleFeaturePayload}
+ */
 export const ruleFeaturePayload = (feature, label = '') => {
   const source = globalThis.window?.Vue?.toRaw?.(feature) ?? feature;
   const known = label === '' ? payloads.get(source) : undefined;
@@ -50,6 +84,11 @@ export const ruleFeaturePayload = (feature, label = '') => {
   if (label === '') payloads.set(source, payload);
   return payload;
 };
+/**
+ * @param {RuleMatchedFeature} feature
+ * @param {string} label
+ * @returns {RuleFeaturePayload}
+ */
 const buildRuleFeaturePayload = (feature, label) => {
   const metadata = normalizeFeatureSelectorMetadata(feature);
   const qualifiers = Object.fromEntries(Object.entries(feature.selector?.qualifiers || feature.qualifiers || metadata.qualifiers)
@@ -70,12 +109,20 @@ const buildRuleFeaturePayload = (feature, label) => {
 // The feature color overrides a rule drew follow the rule's normalized caption
 // (`prepareCandidate`): rebound by their source row, never by suffix parsing.
 // A direct override keeps its caption.
+/**
+ * @param {Readonly<Record<string, SavedFeatureColorEdit>> | null | undefined} overrides
+ * @param {readonly Partial<SpecificColorRule>[]} rules
+ * @param {readonly Partial<SpecificColorRule>[]} normalized The rules, with Python's captions.
+ */
 export const rebindRuleColorOverrides = (overrides, rules, normalized) => {
   const source = rules.map((rule) => normalizeSpecificRule(rule));
   return Object.fromEntries(Object.entries(overrides || {}).map(([key, override]) => {
-    const index = source.findIndex((rule) => rule.cap === override?.caption
-      && rule.color === String(override?.color || '').toLowerCase());
-    return [key, index < 0 ? override : { ...override, caption: normalized[index].cap }];
+    // A string or null edit has no `caption` (read as undefined, which no rule's `cap` equals),
+    // so `index` is not negative only for an object edit.
+    const edit = /** @type {{ color?: unknown, caption?: unknown } | null | undefined} */ (override);
+    const index = source.findIndex((rule) => rule.cap === edit?.caption
+      && rule.color === String(edit?.color || '').toLowerCase());
+    return [key, index < 0 ? override : { ...edit, caption: normalized[index].cap }];
   }));
 };
 
@@ -83,9 +130,16 @@ export const rebindRuleColorOverrides = (overrides, rules, normalized) => {
 // shows its error as the caller's `operation`, unless another error replaced
 // the one shown when it started. Every owner that runs through the rule
 // preparation reports a failure this way.
+/**
+ * @param {{ errorLog?: { value: unknown } }} state The error log ref (state.js).
+ * @param {string} operation
+ * @param {() => unknown} run
+ * @returns {unknown} What `run` returned; a promise it returned, with the failure reported.
+ */
 export const reportRuleRunFailure = (state, operation, run) => {
   const previousAlert = state.errorLog?.value;
-  const result = run();
+  // Every value but null and undefined reads `catch` (a promise's method, or undefined), and `?.` covers those two.
+  const result = /** @type {{ catch?: Promise<unknown>['catch'] } | null | undefined} */ (run());
   return result?.catch ? result.catch((error) => {
     if (state.errorLog && state.errorLog.value === previousAlert) {
       state.errorLog.value = normalizeUserFacingError(error, { operation, stage: 'helper' });
@@ -131,33 +185,39 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  */
 
 /**
+ * The inputs the matches depend on (`snapshot`): the file lists keep their identity;
+ * the other members compare with `===`.
+ * @typedef {{ linearFiles: unknown[], inputFiles: unknown[] } & Record<string, unknown>} RuleInputsSnapshot
+ */
+
+/**
  * The candidate rules a commit or a run admits (`prepareCandidate`).
  * @typedef {object} RuleCandidate
- * @property {Record<string, any>[]} rules Python's normalized rule rows.
+ * @property {Partial<SpecificColorRule>[]} rules Python's normalized rule rows.
  * @property {{ index: number, before: string, after: string }[]} changes The captions it changed.
- * @property {Record<string, any>} snapshot The inputs the candidate was prepared from.
+ * @property {RuleInputsSnapshot} snapshot The inputs the candidate was prepared from.
  */
 
 /**
  * The rule preparation: every owner that reads rule matches runs through it
  * (R13), as the whole-object `rulePreparation` or as one function of it.
  * @typedef {object} RulePreparation
- * @property {(rules?: Record<string, any>[], options?: Record<string, any>) => boolean | Promise<boolean>} prepare
+ * @property {(rules?: Partial<SpecificColorRule>[], options?: Record<string, any>) => boolean | Promise<boolean>} prepare
  *   True at once when the matches of `rules` are prepared, else a promise of whether they are now.
  *   `options.blocked` says whether a Session operation discards the matches (default: any Session operation);
  *   the other options are the evaluation's.
- * @property {(rules?: Record<string, any>[]) => void} retain
+ * @property {(rules?: Partial<SpecificColorRule>[]) => void} retain
  *   Keeps the rules a History restore replaces, so the next preparation matches them with the restored ones.
  * @property {(options?: { strict?: boolean, view?: boolean }) => boolean | Promise<boolean | { error: any }>} prepareDrawn
  *   Prepares what `resolveFeatureDrawn` reads; resolves to `{ error }` when Generate rejects the visibility rule table.
  *   `strict` rejects when the color preparation fails and resolves to false when it is stale, as a run does.
  *   `view` marks a preparation that only reads the matches (a popup opening): it does not raise `blocking`.
- * @property {(rules?: Record<string, any>[]) => boolean} isPrepared
- * @property {(rules?: Record<string, any>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
+ * @property {(rules?: Partial<SpecificColorRule>[]) => boolean} isPrepared
+ * @property {(rules?: Partial<SpecificColorRule>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
  *   `options.captions` false prepares the rules as given, without Python's caption normalization.
  * @property {(candidate: RuleCandidate | null) => void} notifyChanges
- * @property {() => Record<string, any>} snapshot The inputs the matches depend on.
- * @property {(before: Record<string, any>) => boolean} isCurrent Whether `before` is still the current inputs.
+ * @property {() => RuleInputsSnapshot} snapshot The inputs the matches depend on.
+ * @property {(before: RuleInputsSnapshot) => boolean} isCurrent Whether `before` is still the current inputs.
  * @property {{ value: boolean }} pending
  */
 
@@ -191,7 +251,7 @@ export const createRulePreparation = ({
   // values it read changed, not on each currency check (a rule commit runs
   // about ten), so the N-sized feature color overrides are stringified at most
   // once per change.
-  const computed = globalThis.window?.Vue?.computed ?? ((getter) => ({ get value() { return getter(); } }));
+  const computed = globalThis.window?.Vue?.computed ?? ((/** @type {() => string} */ getter) => ({ get value() { return getter(); } }));
   /** @type {Record<string, (drawing: Record<string, any>) => any>} */
   const drawingInputReaders = {
     rules: (drawing) => drawing.manualSpecificRules,
@@ -205,6 +265,7 @@ export const createRulePreparation = ({
   const drawingInputs = Object.entries(drawingInputReaders).map(([key, read]) => (
     /** @type {[string, { value: string }]} */ ([key, computed(() => JSON.stringify(read(state.activeDrawing())))])
   ));
+  /** @returns {RuleInputsSnapshot} */
   const snapshot = () => ({
     catalog: state.extractedFeatures.value,
     biology: state.biologicalFeatures?.value,
@@ -213,7 +274,7 @@ export const createRulePreparation = ({
     inputKinds: JSON.stringify([state.cInputType?.value, state.lInputType?.value]),
     file: state.files?.t_color,
     linearFiles: [...(state.linearSeqs || [])].flatMap(sequence => [sequence.gb, sequence.gff, sequence.fasta]),
-    resultNames: JSON.stringify((state.results?.value || []).map(result => result.name)),
+    resultNames: JSON.stringify((state.results?.value || []).map((/** @type {{ name?: unknown }} */ result) => result.name)),
     selectedResult: state.selectedResultIndex?.value,
     ...Object.fromEntries(drawingInputs.map(([key, input]) => [key, input.value])),
     // Physical source, palette, and selector inputs retain their identity while
@@ -225,15 +286,21 @@ export const createRulePreparation = ({
       state.files?.c_conservation_fastas, state.files?.c_conservation_sequence_sources
     ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
   });
+  /** @type {RulePreparation['isCurrent']} */
   const isCurrent = (before) => {
     const after = snapshot();
     return Object.keys(before).every((key) => key === 'linearFiles' || key === 'inputFiles'
       ? before[key].length === after[key].length && before[key].every((file, index) => file === after[key][index])
       : before[key] === after[key]);
   };
+  /**
+   * @param {RuleFeature[]} targets
+   * @param {ColorRule[]} draft
+   */
   const matchesPrepared = (targets, draft) => !draft.length || (
     draft.every((rule) => validated.has(ruleKey(rule))) && ruleMatcher(draft).ready(targets)
   );
+  /** @type {RulePreparation['isPrepared']} */
   const isPrepared = (rules = state.activeDrawing().manualSpecificRules) => {
     const draft = [...new Map(rules.map((rule) => [ruleKey(rule), rule])).values()];
     return matchesPrepared(features(), draft);
@@ -241,8 +308,11 @@ export const createRulePreparation = ({
   // Rules a restore replaces: the next preparation matches them with the
   // restored ones, in one evaluation, so the Legend change of the restore is
   // read from known matches (`retain`).
+  /** @type {Partial<SpecificColorRule>[]} */
   let retained = [];
+  /** @type {RulePreparation['retain']} */
   const retain = (rules = []) => { retained = rules; };
+  /** @type {RulePreparation['prepare']} */
   const prepare = (rules = state.activeDrawing().manualSpecificRules, {
     blocked = () => Boolean(state.sessionOperationAvailability?.()), view = false, ...options
   } = /** @type {{ blocked?: () => boolean, view?: boolean } & Record<string, unknown>} */ ({})) => {
@@ -303,6 +373,7 @@ export const createRulePreparation = ({
   // to `{ error }` when Generate would reject the visibility rule table. A
   // `strict` preparation is a run's: a failed color preparation rejects and a
   // stale one resolves to false (`runWhenPrepared`).
+  /** @type {RulePreparation['prepareDrawn']} */
   const prepareDrawn = ({ strict = false, view = false } = {}) => {
     const drawing = state.activeDrawing();
     const colors = prepare(drawing.manualSpecificRules || [], { view });
@@ -316,6 +387,7 @@ export const createRulePreparation = ({
   // are the caller's evaluation options (a run's progress observer). A run
   // that only reads the matches of rules it keeps as they are asks for
   // `captions: false`: the rules are prepared as given and no caption changes.
+  /** @type {RulePreparation['prepareCandidate']} */
   const prepareCandidate = async (rules = state.activeDrawing().manualSpecificRules, { captions = true, ...options } = {}) => {
     const before = snapshot();
     if (!captions) {
@@ -325,6 +397,7 @@ export const createRulePreparation = ({
     const source = rules.map(rule => normalizeSpecificRule(rule));
     // Rules whose every caption has one color are Python's normalization
     // already (`ruleCaptionsAreNormalized`), so they send no request (OV-238).
+    /** @type {SpecificColorRule[]} */
     const normalized = ruleCaptionsAreNormalized(source)
       ? source
       : (await evaluate({ features: [], rules: source, kind: 'color-captions' }, options)).rules;
@@ -334,6 +407,7 @@ export const createRulePreparation = ({
       ? [{ index, before: source[index].cap, after: rule.cap }] : []);
     return { rules: normalized, changes, snapshot: before };
   };
+  /** @type {RulePreparation['notifyChanges']} */
   const notifyChanges = (candidate) => {
     if (candidate?.changes.length) notify(`Updated ${candidate.changes.length} specific-color caption(s) to distinguish their colors.`);
   };

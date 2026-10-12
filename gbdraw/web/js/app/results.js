@@ -47,6 +47,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     appliedPaletteColors,
     paletteColorsDialog
   } = state;
+  /** @param {Record<string, string> | null | undefined} colors */
   const cloneColors = (colors) => ({ ...(colors || {}) });
   const getPaletteMap = () => {
     if (paletteDefinitions.value && Object.keys(paletteDefinitions.value).length > 0) {
@@ -54,6 +55,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     }
     return {};
   };
+  /** @param {string} paletteName */
   const getPaletteBaseColors = (paletteName) => {
     const allPalettes = getPaletteMap();
     return normalizePaletteColors(cloneColors(allPalettes[paletteName] || {}));
@@ -79,12 +81,20 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
   const readUserDefaultColor = (drawing, key) => (
     userDefaultColorRows(drawing, { [key]: drawing.currentColors.value?.[key] })[0]?.[1] ?? null
   );
-  /** @param {ResultsManagerDrawing} drawing */
+  /**
+   * @param {ResultsManagerDrawing} drawing
+   * @param {string | null | undefined} paletteName
+   * @param {Record<string, string>} [colors]
+   */
   const setAppliedPaletteState = (drawing, paletteName, colors = drawing.currentColors.value) => {
     appliedPaletteName.value = String(paletteName || drawing.selectedPalette.value || 'default');
     appliedPaletteColors.value = cloneColors(colors);
   };
-  /** @param {ResultsManagerDrawing} drawing */
+  /**
+   * @param {ResultsManagerDrawing} drawing
+   * @param {string | null | undefined} paletteName
+   * @param {Record<string, string>} [colors]
+   */
   const setPendingPaletteState = (drawing, paletteName, colors = drawing.currentColors.value) => {
     drawing.pendingPaletteName.value = String(paletteName || drawing.selectedPalette.value || '');
     drawing.pendingPaletteColors.value = cloneColors(colors);

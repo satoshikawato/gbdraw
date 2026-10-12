@@ -161,3 +161,47 @@ test('UX-B01: a collinear block leads with one summary and lists gene pairs by g
   assert.equal(block.pairsCopyText.split('\n').length, 2);
   assert.equal(payload.blockOrthogroups[0].title, 'rsmA');
 });
+
+// OV-322: the orientation of a collinear block is shown as its own text unless it is
+// `plus` or `minus`. A hand-edited Session SVG can name an inherited member of the
+// text table (`constructor`, `__proto__`), which is not an orientation.
+test('OV-322: a collinear block shows an orientation other than plus or minus as its own text', () => {
+  const factsFor = (orientation) => buildMatchPopupPayload(elementFrom({
+    'data-gbdraw-pairwise-match-id': 'comparison1_match3',
+    'data-match-kind': 'collinear',
+    'data-collinearity-block-id': 'block_0386',
+    'data-collinearity-orientation': orientation,
+    'data-identity': '76.0591457726',
+    'data-query-record-id': 'AP027133.1',
+    'data-subject-record-id': 'AP027132.1',
+    'data-qstart': '10124',
+    'data-qend': '28017',
+    'data-sstart': '16057',
+    'data-send': '34176'
+  })).block.facts;
+  assert.deepEqual(factsFor('plus')[0], 'Same orientation');
+  assert.deepEqual(factsFor('minus')[0], 'Inverted');
+  assert.deepEqual(factsFor('unknown')[0], 'unknown');
+  assert.deepEqual(factsFor('constructor')[0], 'constructor');
+  assert.deepEqual(factsFor('__proto__')[0], '__proto__');
+});
+
+// OV-322 (same pattern): the name and description overrides of a similarity group are
+// read by its ID, which a hand-edited Session SVG can set to an inherited member of a
+// plain object (`constructor`). Only an own entry is an override.
+test('OV-322: a similarity group ID that names an inherited member has no override', () => {
+  const payload = buildMatchPopupPayload(elementFrom({
+    'data-gbdraw-match-id': 'og_match',
+    'data-match-kind': 'orthogroup',
+    'data-orthogroup-id': 'constructor'
+  }), { orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} });
+  assert.equal(payload.group.displayName, '');
+  assert.equal(payload.group.description, '');
+  const named = buildMatchPopupPayload(elementFrom({
+    'data-gbdraw-match-id': 'og_match',
+    'data-match-kind': 'orthogroup',
+    'data-orthogroup-id': 'og_1'
+  }), { orthogroupNameOverrides: { og_1: 'rsmA' }, orthogroupDescriptionOverrides: new Map([['og_1', 'A note']]) });
+  assert.equal(named.group.displayName, 'rsmA');
+  assert.equal(named.group.description, 'A note');
+});
