@@ -572,8 +572,7 @@ const coverTrackSlots = (coverage, tracks, mode) => {
       'z', 'params'
     ]);
     // The slot is read by field name; each value is checked as it is covered.
-    const slotFields = /** @type {Record<string, unknown>} */ (slot);
-    scalarFields.forEach((field) => coverTrackScalar(coverage, slotFields[field], `${path}.${field}`));
+    scalarFields.forEach((field) => coverTrackScalar(coverage, /** @type {Record<string, unknown>} */ (slot)[field], `${path}.${field}`));
     const params = slot.params;
     if (!isPlainObject(params)) return;
     coverObject(coverage, params, `${path}.params`, [
