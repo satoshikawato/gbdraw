@@ -28,16 +28,6 @@ print(json.dumps({
 }))
 `], { cwd: root, encoding: 'utf8' }));
 
-test('Web and Python current Session, request and protein-cache schemas agree', () => {
-  const cache = source('gbdraw/web/js/services/losat-cache.js');
-  assert.deepEqual({
-    session: numericConstant(source('gbdraw/web/js/services/config.js'), 'SESSION_VERSION'),
-    request: numericConstant(source('gbdraw/web/js/services/session-request.js'), 'CANONICAL_REQUEST_SCHEMA'),
-    proteinRaw: numericConstant(cache, 'PROTEIN_LOSAT_CACHE_SCHEMA'),
-    proteinDerived: numericConstant(cache, 'LOSAT_DERIVED_CACHE_SCHEMA')
-  }, python.writer);
-});
-
 test('Node LOSAT acceptance expects the current writer for every output schema', () => {
   const adapter = source('tests/web/losat-cache-migration.playwright.spec.js');
   assert.deepEqual({

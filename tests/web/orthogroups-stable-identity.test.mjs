@@ -11,6 +11,7 @@ await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
 await mkdir(join(tempDir, 'app', 'feature-search'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'contracts'), { recursive: true });
 await mkdir(join(tempDir, 'utils'), { recursive: true });
 
 const copyModule = async (sourceRelative, targetRelative) => {
@@ -40,6 +41,7 @@ await copyModule(
 );
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
+await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schema.generated.js');
 await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
 await copyModule('gbdraw/web/js/services/record-draw-selection.js', 'services/record-draw-selection.js');

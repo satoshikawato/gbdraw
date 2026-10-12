@@ -2,17 +2,15 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { expect } = require('@playwright/test');
 
-// The Web writer's current canonical request schema, read from its owner.
-const CURRENT_REQUEST_SCHEMA = Number(readFileSync(
-  join(__dirname, '..', '..', '..', 'gbdraw', 'web', 'js', 'services', 'session-request.js'), 'utf8'
-).match(/^export const CANONICAL_REQUEST_SCHEMA = (\d+);$/m)[1]);
-// The current Session writer version and feature catalog schema, from their owners.
-const CURRENT_SESSION_VERSION = Number(readFileSync(
-  join(__dirname, '..', '..', '..', 'gbdraw', 'session_io.py'), 'utf8'
-).match(/^CURRENT_SESSION_VERSION = (\d+)$/m)[1]);
-const CURRENT_FEATURE_CATALOG_SCHEMA = Number(readFileSync(
-  join(__dirname, '..', '..', '..', 'gbdraw', 'web', 'js', 'services', 'feature-catalog.js'), 'utf8'
-).match(/^export const FEATURE_CATALOG_SCHEMA = (\d+);$/m)[1]);
+// The current canonical request schema, Session version and feature catalog
+// schema, from the constants generated from their Python owners.
+const generatedSchema = readFileSync(
+  join(__dirname, '..', '..', '..', 'gbdraw', 'web', 'js', 'contracts', 'schema.generated.js'), 'utf8'
+);
+const generatedConstant = name => Number(generatedSchema.match(new RegExp(`^export const ${name} = (\\d+);$`, 'm'))[1]);
+const CURRENT_REQUEST_SCHEMA = generatedConstant('CANONICAL_REQUEST_SCHEMA');
+const CURRENT_SESSION_VERSION = generatedConstant('SESSION_VERSION');
+const CURRENT_FEATURE_CATALOG_SCHEMA = generatedConstant('FEATURE_CATALOG_SCHEMA');
 
 const DEFAULT_APP_TIMEOUT_MS = 180_000;
 const pageDiagnostics = new WeakMap();

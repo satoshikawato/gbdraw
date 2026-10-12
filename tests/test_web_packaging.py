@@ -251,6 +251,20 @@ def test_browser_wheel_excludes_hosted_web_assets() -> None:
     )
 
 
+def test_local_web_package_data_includes_every_web_module() -> None:
+    patterns = _load_verify_module().BUILD_SUPPORT.get_package_data_patterns(
+        include_browser_wheel=True
+    )
+    package_root = WEB_ROOT.parent
+    packaged = {path for pattern in patterns for path in package_root.glob(pattern)}
+
+    assert sorted(
+        path.relative_to(package_root).as_posix()
+        for path in (WEB_ROOT / "js").rglob("*.js")
+        if path not in packaged
+    ) == []
+
+
 def test_local_web_package_data_excludes_gallery_assets() -> None:
     build_support = _load_verify_module().BUILD_SUPPORT
     package_data_patterns = build_support.get_package_data_patterns(
