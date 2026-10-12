@@ -192,6 +192,7 @@ import {
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
+  readSessionInput,
   validateSessionAuthorityInventory
 } from './session-authority.js';
 import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
@@ -244,7 +245,6 @@ import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   MODE_SCOPED_SESSION_VERSION,
   SESSION_VERSION,
-  SUPPORTED_SESSION_VERSIONS,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
 import {
@@ -332,7 +332,6 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  */
 export { SESSION_VERSION };
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
-const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 // D-25 (PD-OI-079): a Result without current feature metadata (a legacy
 // Session) is saved only after one Generate; the error offers that Generate.
@@ -1494,20 +1493,11 @@ const applyModeSliceData = (drawing, mode, slice, {
   reconcileImportedLinearTypographyLink({ adv: drawing.adv, linked: drawing.linearTypographyLinked, ui });
 };
 
-const SESSION_FORMAT_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
 const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
-const validateSessionVersion = version => {
-  if (!Number.isInteger(version)) throw SESSION_FORMAT_ERROR();
-  if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSION_SET.has(version)) {
-    throw SESSION_FIELDS_ERROR();
-  }
-};
 
 /** @param {{ list: string, caption: string }[] | null} droppedLegendColors */
 const normalizeSessionData = (data, droppedLegendColors) => {
-  if (!isPlainObject(data) || data.format !== 'gbdraw-session') throw SESSION_FORMAT_ERROR();
   const version = data.version;
-  validateSessionVersion(version);
   if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION && Object.prototype.hasOwnProperty.call(data, 'files')) {
     throw new Error(
       `Session version ${version} cannot contain legacy files; use resources and webFiles.`
@@ -1919,8 +1909,7 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
 
 /** @param {{ list: string, caption: string }[]} droppedLegendColors Collects the Legend entries dropped for their color. */
 const preflightSessionImport = async (sessionData, droppedLegendColors) => {
-  const sourceSessionVersion = sessionData?.version;
-  validateSessionVersion(sourceSessionVersion);
+  const sourceSessionVersion = readSessionInput(sessionData).version;
   const rawData = await convertMainSessionComparisonFrames(sessionData);
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
@@ -1936,7 +1925,6 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   let normalizedData;
 
   if (currentSession) {
-    if (!isPlainObject(rawData) || rawData.format !== 'gbdraw-session') throw SESSION_FORMAT_ERROR();
     recordSessionLifecycleEvent('session-authority-validation-start');
     adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion);
     recordSessionLifecycleEvent('session-authority-validation-end');

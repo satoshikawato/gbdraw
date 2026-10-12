@@ -129,6 +129,24 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   assert.equal(state.drawings.linear.form.plot_title, '');
 });
 
+test('a file that is not a gbdraw Session is refused as such before its contents are read', async () => {
+  resetDrawings();
+  const reason = async (value) => {
+    const outcome = await load(value);
+    assert.equal(outcome.status, 'error', JSON.stringify(value));
+    return outcome.error.context?.reason;
+  };
+  for (const value of [null, [], 'x', 5, {}, { format: 'gbdraw-session' }, { format: 'other', version: 46 }]) {
+    assert.equal(await reason(value), 'SESSION_FORMAT', JSON.stringify(value));
+  }
+  // The version is read first: a version this app does not read names the fields.
+  assert.equal(await reason({ format: 'other', version: 45 }), 'FIELDS');
+  assert.equal(await reason({ format: 'gbdraw-session', version: 47 }), 'FIELDS');
+  // A second fault does not hide the format (Python's reader checks the format first too).
+  assert.equal(await reason({ format: 'other', version: 39, bogus: 1 }), 'SESSION_FORMAT');
+  assert.equal(await reason({ format: 'other', version: 46, bogus: 1 }), 'SESSION_FORMAT');
+});
+
 test('Session 45 and a Session 46 with a retired field or a non-registry slice field are rejected (S3, S4)', async () => {
   resetDrawings();
   const saved = await save('current');

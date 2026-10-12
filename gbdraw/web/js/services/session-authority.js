@@ -23,9 +23,11 @@ import {
   OTHER_MODE_RESULT_LEGEND_FIELDS,
   OTHER_MODE_RESULT_RUN_METADATA_FIELDS,
   OTHER_MODE_RESULT_UI_FIELDS,
+  SESSION_VERSION,
+  SUPPORTED_SESSION_VERSIONS,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
-/** @import { SessionInput } from '../contracts/session.generated.js' */
+/** @import { SessionEnvelope, SessionInput } from '../contracts/session.generated.js' */
 
 // `TYPED_DRAFT_SESSION_VERSION` (44) introduced the current active-config and
 // record-display draft shapes; `MODE_SCOPED_SESSION_VERSION` (46) keeps the
@@ -126,6 +128,28 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
 const isPlainObject = (value) => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
 );
+
+const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
+
+/**
+ * The one reader of a parsed Session file. What it returns is a
+ * `gbdraw-session` object of a version this app reads; every other value is
+ * unvalidated until the validator of its part has checked it.
+ * @param {unknown} value
+ * @returns {SessionEnvelope}
+ */
+export const readSessionInput = (value) => {
+  const formatInvalid = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
+  if (!isPlainObject(value)) throw formatInvalid();
+  const session = /** @type {Record<string, unknown>} */ (value); // a plain object, checked above
+  const { version } = session;
+  if (typeof version !== 'number' || !Number.isInteger(version)) throw formatInvalid();
+  if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSION_SET.has(version)) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+  }
+  if (session.format !== 'gbdraw-session') throw formatInvalid();
+  return /** @type {SessionEnvelope} */ (session); // `format` and `version` were checked above
+};
 
 const adoptedCurrentDocuments = new WeakSet();
 const adoptedCanonicalOwners = new WeakSet();
