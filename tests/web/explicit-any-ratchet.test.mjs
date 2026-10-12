@@ -1,10 +1,10 @@
 // R14 "Typed boundaries" (gbdraw/web/CLAUDE.md): the explicit-any ratchet.
 // Explicit `any` in JSDoc is type debt. EXPLICIT_ANY_BASELINE records it per
 // module under gbdraw/web/js/ (paths relative to it); a module without an
-// entry, including a new module, has none. The guard asserts that each module
-// holds exactly its entry: a module above its entry fails (type the value, use
-// `unknown`, or narrow), and a module below it fails until the entry is
-// lowered, so the map only shrinks.
+// entry, including a new module, has none. The guard asserts that no module
+// holds more than its entry: a module above its entry fails (type the value,
+// use `unknown`, or narrow). Lowering or removing an entry is optional; the
+// test names the entries that may be lowered.
 //
 // What counts: each JSDoc type node whose type, as the TypeScript checker of
 // the R14 guard config (tests/web/types/tsconfig.json) resolves it, is
@@ -18,16 +18,17 @@
 // `noImplicitAny` is off as well.
 //
 // EXPLICIT_ANY_BASELINE is a registered design-rule allowlist
-// (tools/web-design-rule-guards.json, R14, kind `count-map`): a pull request
-// lowers or removes the entries of the modules it types, and adding an entry
-// or raising one is an authority-only change. Owner decision R15-5
-// (2026-10-09); values at dev ffa5a3ba.
+// (tools/web-design-rule-guards.json, R14, kind `count-map`): adding an entry
+// or raising one is an authority-only change. Owner decisions R15-5
+// (2026-10-09) and BA-D04 (2026-10-10).
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+
+import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
 
 const EXPLICIT_ANY_BASELINE = {
   'app/annotations.js': 8,
@@ -206,34 +207,30 @@ const explicitAnyByModule = async () => {
   }
 };
 
-test('R14: each module holds exactly its EXPLICIT_ANY_BASELINE count of explicit any in JSDoc', async (t) => {
+test('R14: no module holds more explicit any in JSDoc than its EXPLICIT_ANY_BASELINE entry', async (t) => {
   Object.entries(EXPLICIT_ANY_BASELINE).forEach(([path, count]) => {
     assert.ok(Number.isInteger(count) && count > 0, `EXPLICIT_ANY_BASELINE['${path}'] must be a positive integer`);
   });
   const observed = await explicitAnyByModule();
-  const failures = [];
-  [...new Set([...observed.keys(), ...Object.keys(EXPLICIT_ANY_BASELINE)])].sort().forEach((path) => {
-    const lines = observed.get(path) || [];
-    const recorded = EXPLICIT_ANY_BASELINE[path] || 0;
-    if (lines.length > recorded) {
-      // Every line once: `39 ×4` for four on one line, `54 Alias` for a type
-      // other than a bare `any`.
-      const byLine = new Map();
-      lines.forEach(({ line, type }) => byLine.set(line, [...(byLine.get(line) || []), type]));
-      const listed = [...byLine].map(([line, types]) => {
-        const named = [...new Set(types.filter((type) => type !== 'any'))];
-        return `${line}${types.length > 1 ? ` ×${types.length}` : ''}${named.length ? ` ${named.join(' ')}` : ''}`;
-      });
-      failures.push(`${path}: ${lines.length} explicit any, above its entry ${recorded}. `
-        + 'Type the value, use `unknown`, or narrow it; raising an entry is an authority-only change.\n'
-        + `      gbdraw/web/js/${path} lines ${listed.join(', ')}`);
-    } else if (lines.length < recorded) {
-      failures.push(lines.length
-        ? `${path}: ${lines.length} explicit any, below its entry ${recorded}: lower its entry to ${lines.length}`
-        : `${path}: no explicit any left: remove its entry (${recorded})`);
-    }
+  const { above, lowerable } = compareCountBaseline(
+    Object.fromEntries([...observed].map(([path, lines]) => [path, lines.length])),
+    EXPLICIT_ANY_BASELINE
+  );
+  const failures = above.map(({ key: path, observed: count, recorded }) => {
+    // Every line once: `39 ×4` for four on one line, `54 Alias` for a type
+    // other than a bare `any`.
+    const byLine = new Map();
+    observed.get(path).forEach(({ line, type }) => byLine.set(line, [...(byLine.get(line) || []), type]));
+    const listed = [...byLine].map(([line, types]) => {
+      const named = [...new Set(types.filter((type) => type !== 'any'))];
+      return `${line}${types.length > 1 ? ` ×${types.length}` : ''}${named.length ? ` ${named.join(' ')}` : ''}`;
+    });
+    return `${path}: ${count} explicit any, above its entry ${recorded}. `
+      + 'Type the value, use `unknown`, or narrow it; raising an entry is an authority-only change.\n'
+      + `      gbdraw/web/js/${path} lines ${listed.join(', ')}`;
   });
   const total = [...observed.values()].reduce((sum, lines) => sum + lines.length, 0);
   t.diagnostic(`explicit any: ${total} in ${observed.size} modules`);
-  assert.deepEqual(failures, [], `EXPLICIT_ANY_BASELINE does not match gbdraw/web/js/:\n  ${failures.join('\n  ')}`);
+  reportLowerable(t, 'EXPLICIT_ANY_BASELINE', lowerable);
+  assert.deepEqual(failures, [], `gbdraw/web/js/ holds more explicit any than EXPLICIT_ANY_BASELINE:\n  ${failures.join('\n  ')}`);
 });
