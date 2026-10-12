@@ -330,7 +330,7 @@ def test_the_decoder_agrees_with_the_description_on_every_object(
                     if value is not None
                 ]
             for change, allowed, arguments in changes:
-                unchanged = len(arguments) == 2 and holder.get(arguments[0], 0) == arguments[1]
+                unchanged = len(arguments) == 2 and arguments[0] in holder and holder[arguments[0]] == arguments[1]
                 accepted.setdefault((change, allowed), set()).add(
                     unchanged or _decodes(_with(payload, path, *arguments), resources, tmp_path)
                 )
