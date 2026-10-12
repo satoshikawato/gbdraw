@@ -296,7 +296,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { CanonicalLinearLayout, CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { FeatureCatalog } from './feature-catalog.js' */
+/** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
@@ -4775,22 +4775,20 @@ const buildArtifactEditorState = (view) => {
 // (a legacy Session) is saved after a Generate in its mode. The error names that
 // mode when it is not the one shown, and its Generate action runs there.
 /**
- * @param {Record<string, any>} editorState
- * @param {Record<string, any>[]} logicalResults
+ * @param {FeatureCatalog | null} featureCatalog The artifact's admitted catalog.
+ * @param {FeatureCatalogResult[]} logicalResults
  * @param {'circular' | 'linear'} mode
+ * @returns {FeatureCatalog | null} The catalog checked against the Results; null without Results.
  */
-const admitSavedFeatureCatalog = (editorState, logicalResults, mode) => {
-  if (logicalResults.length === 0) {
-    editorState.featureCatalog = null;
-    return;
-  }
+const admitSavedFeatureCatalog = (featureCatalog, logicalResults, mode) => {
+  if (logicalResults.length === 0) return null;
   const requiresGenerate = () => sessionSaveRequiresGenerate(
     mode === state.mode.value ? {} : { diagramMode: mode }
   );
-  if (!editorState.featureCatalog) throw requiresGenerate();
+  if (!featureCatalog) throw requiresGenerate();
   try {
-    editorState.featureCatalog = validateFeatureCatalog(
-      editorState.featureCatalog,
+    return validateFeatureCatalog(
+      featureCatalog,
       logicalResults,
       { adopt: true, mode }
     );
@@ -4848,7 +4846,7 @@ const artifactUiState = (view) => ({
 const prepareOtherModeArtifact = (view) => {
   const results = serializeArtifactResults(view);
   const editorState = buildArtifactEditorState(view);
-  admitSavedFeatureCatalog(editorState, results, view.mode);
+  editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, results, view.mode);
   if (!view.committedCanonicalSession) throw sessionSaveRequiresGenerate({ diagramMode: view.mode });
   const committed = promoteSavedCanonicalSession(
     isAdoptedCanonicalSession(view.committedCanonicalSession)
@@ -4944,7 +4942,7 @@ const exportSessionDocument = async (
   recordSessionLifecycleEvent('session-save-projection-start');
   const logicalResults = serializeArtifactResults(artifact);
   const editorState = buildArtifactEditorState(artifact);
-  admitSavedFeatureCatalog(editorState, logicalResults, artifact.mode);
+  editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, logicalResults, artifact.mode);
   const other = otherArtifact ? prepareOtherModeArtifact(otherArtifact) : null;
 
   const {
