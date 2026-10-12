@@ -23,6 +23,18 @@ write-up of a release.
   compatibility, and installation availability. Publication dates are recorded
   in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
 
+- Region annotations (CLI, Python, Session): an overlay annotation slot can
+  span several tracks. With `to_slot=<slot id>` next to `anchor_slot`, the
+  overlay runs from one slot's band to the other's in Circular and Linear, for
+  example one tint per region from the GC track to the feature track
+  (`regions:annotations@set_id=regions,side=overlay,anchor_slot=features,to_slot=gc_content,layer=underlay,z=-1`).
+  `to_slot` follows the anchor rules, and the span adds no space between the
+  slots; in Linear, a span that shows labels keeps room for them at its edge.
+  The web app draws and saves a loaded `to_slot`; its slot editor has no
+  control for it yet. The CLI reference now documents the overlay slot
+  parameters (`anchor_slot`, `layer`, `cover_anchor`, `to_slot`). Fixed: a
+  Python slot mapping that spelled the key with capitals (`Anchor_Slot`) was
+  accepted but drawn on the axis instead of on its anchor slot (OV-475).
 - Web app feature popup: the header shows the gene name, the product on up to
   two lines, and the record and location with thousands separators. **Edit**
   groups **Appearance** (fill, stroke, the label text with its visibility and

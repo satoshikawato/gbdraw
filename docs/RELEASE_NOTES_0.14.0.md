@@ -300,6 +300,14 @@ a records table. The [command-line reference](./REFERENCE/command-line.md)
 has a rotation and placement example you can run, and links to the full
 option list.
 
+A region annotation drawn as an overlay can span several tracks: add
+`to_slot=<slot id>` next to `anchor_slot` on the annotation slot, and the
+overlay runs from one slot's band to the other's, for example one tint per
+region from the GC track to the feature track. It works in Circular and Linear,
+from the command line, Python, and a Session; the web app draws and saves it
+but cannot edit it yet. See
+[Region annotations](./CLI_Reference.md#region-annotations).
+
 `gbdraw render --session FILE` draws the diagrams saved in a Session;
 `--list_drawings` lists them and `--drawing ID` picks one. In Python,
 `SessionDocument.drawings` lists them and `render_session_drawings()` draws

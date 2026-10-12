@@ -79,6 +79,51 @@ def test_highlight_track_flattens_overlaps_and_ignores_explicit_lanes() -> None:
     assert track.required_extent_px == 18.0
 
 
+def test_annotation_track_params_normalize_both_slot_references() -> None:
+    params = annotation_track_params_from_mapping(
+        {"set_id": "s", "anchor_slot": " features ", "to_slot": " gc "}
+    )
+
+    assert (params.anchor_slot, params.to_slot) == ("features", "gc")
+    assert annotation_track_params_from_mapping({"set_id": "s"}).to_slot is None
+
+
+@pytest.mark.parametrize("name", ["anchor_slot", "to_slot"])
+def test_annotation_track_params_reject_an_empty_slot_reference(name: str) -> None:
+    with pytest.raises(ValidationError, match=f"^{name} cannot be empty"):
+        annotation_track_params_from_mapping({"set_id": "s", name: " "})
+
+
+def test_spanning_annotation_track_does_not_fit_lanes_to_its_own_extent() -> None:
+    annotations = (
+        RegionAnnotation("first", CoordinateSpan(None, 2, 10), mark="band"),
+        RegionAnnotation("second", CoordinateSpan(None, 5, 15), mark="band"),
+    )
+    bundle = resolve_annotations(
+        (AnnotationSet("s", annotations),),
+        [_record()],
+        mode="linear",
+    )
+
+    def layout(**extra: str):
+        return layout_annotation_track(
+            "regions",
+            "s",
+            bundle.annotations,
+            record_lengths={0: 100},
+            params=annotation_track_params_from_mapping(
+                {"set_id": "s", "show_labels": False, "anchor_slot": "features", **extra}
+            ),
+            available_extent_px=14.0,
+        )
+
+    with pytest.raises(ValidationError, match="only 14.00px is available"):
+        layout()
+    spanning = layout(to_slot="gc")
+    assert {placement.lane for placement in spanning.placements} == {0, 1}
+    assert spanning.clipped is False
+
+
 def test_annotation_marks_and_spacing_options_change_selected_layout_geometry() -> None:
     annotations = (
         RegionAnnotation("line", CoordinateSpan(None, 1, 20), mark="line"),

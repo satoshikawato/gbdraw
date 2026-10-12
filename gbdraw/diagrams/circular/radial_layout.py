@@ -2342,28 +2342,40 @@ def _resolve_circular_radial_layout(
         if intent.renderer != "annotations" or intent.side != "overlay":
             continue
         overlay_resolved = resolved_by_index.get(intent.slot_index)
-        anchor_id = str(intent.params.get("anchor_slot", "")).strip()
-        anchor = by_id.get(anchor_id)
-        if overlay_resolved is None or anchor is None:
+        annotation = intent.slot.annotation
+        if overlay_resolved is None or annotation is None:
             continue
+        referenced = [
+            by_id[slot_id]
+            for slot_id in (annotation.anchor_slot, annotation.to_slot)
+            if slot_id in by_id
+        ]
+        if not referenced:
+            continue
+        anchor = referenced[0]
         anchor_band = anchor.draw_band_px or anchor.packing_band_px
-        anchor_radius = (
-            float(anchor_band.center_px)
-            if anchor_band is not None
-            else float(anchor.anchor_radius_px or axis_radius_px)
+        # to_slot: the hull of the two slots' whole bands, every feature lane included.
+        # cover_anchor alone keeps the draw band (the first feature lane of each strand).
+        whole_bands = [slot.packing_band_px or slot.draw_band_px for slot in referenced]
+        span_band = (
+            band_union([item for item in whole_bands if item is not None])
+            if annotation.to_slot is not None
+            else None
         )
-        cover_anchor = str(intent.params.get("cover_anchor", "false")).strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
-        width = (
-            float(anchor_band.width_px)
-            if cover_anchor and anchor_band is not None
-            else max(0.0, float(overlay_resolved.resolved_width_px or intent.width_px))
-        )
-        draw_band = _band_from_center_width(anchor_radius, width)
+        if span_band is not None:
+            anchor_radius, width, draw_band = span_band.center_px, span_band.width_px, span_band
+        else:
+            anchor_radius = (
+                float(anchor_band.center_px)
+                if anchor_band is not None
+                else float(anchor.anchor_radius_px or axis_radius_px)
+            )
+            width = (
+                float(anchor_band.width_px)
+                if annotation.cover_anchor and anchor_band is not None
+                else max(0.0, float(overlay_resolved.resolved_width_px or intent.width_px))
+            )
+            draw_band = _band_from_center_width(anchor_radius, width)
         anchored = replace(
             overlay_resolved,
             anchor_radius_px=anchor_radius,

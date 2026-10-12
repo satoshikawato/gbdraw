@@ -784,6 +784,7 @@ def _linear_slot_footprints_for_record(
                 paint_band=paint_band if feature_dict or labels else None,
                 reserve_band=reserve_band,
                 data_available=bool(feature_dict or labels),
+                body_band=feature_geometry.occupied_band,
             )
             continue
 
@@ -2764,8 +2765,8 @@ def assemble_linear_diagram(
                     if annotation_layout is None:
                         continue
                     params = annotation_track_params_from_mapping(slot.params)
-                    annotation_height = float(slot.height)
-                    if params.cover_anchor and any(
+                    annotation_height = float(resolved_slot.height)
+                    if params.to_slot is None and params.cover_anchor and any(
                         anchor.renderer == "features"
                         and anchor.id == params.anchor_slot
                         for anchor in linear_track_layout.slots

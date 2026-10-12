@@ -307,6 +307,8 @@ class AnnotationTrackParams:
     anchor_slot: str | None = None
     layer: Literal["underlay", "foreground"] = "foreground"
     cover_anchor: bool = False
+    # With to_slot, an overlay spans from its anchor slot's band to this slot's band.
+    to_slot: str | None = None
 
     def __post_init__(self) -> None:
         set_id = str(self.set_id).strip()
@@ -336,11 +338,14 @@ class AnnotationTrackParams:
             raise ValidationError("layer must be 'underlay' or 'foreground'.")
         if self.style_override is not None and not isinstance(self.style_override, RegionAnnotationStyle):
             raise ValidationError("style_override must be RegionAnnotationStyle or None.")
-        if self.anchor_slot is not None:
-            anchor = str(self.anchor_slot).strip()
-            if not anchor:
-                raise ValidationError("anchor_slot cannot be empty.")
-            object.__setattr__(self, "anchor_slot", anchor)
+        for name in ("anchor_slot", "to_slot"):
+            reference = getattr(self, name)
+            if reference is None:
+                continue
+            slot_id = str(reference).strip()
+            if not slot_id:
+                raise ValidationError(f"{name} cannot be empty.")
+            object.__setattr__(self, name, slot_id)
 
 
 def annotation_track_params_from_mapping(params: Mapping[str, object]) -> AnnotationTrackParams:
@@ -358,6 +363,7 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
         "anchor_slot",
         "layer",
         "cover_anchor",
+        "to_slot",
     }
     unknown = set(raw) - allowed
     if unknown:
@@ -399,6 +405,7 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
             str(raw.get("layer", "foreground")).strip().lower(),
         ),
         cover_anchor=cover_anchor,
+        to_slot=(None if raw.get("to_slot") is None else str(raw["to_slot"])),
     )
 
 
