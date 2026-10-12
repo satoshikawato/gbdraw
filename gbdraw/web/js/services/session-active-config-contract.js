@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
@@ -382,12 +383,12 @@ const sortedValue = (value) => Array.isArray(value)
  * }} AlignmentResetCanonical
  */
 /**
- * A canonical session of a Linear Alignment: it holds the plan and the
- * translations that the receipt compares.
+ * A canonical session of a Linear Alignment as the request writer returns it (`before` and `after` of a
+ * reset): the generated request types, with the plan present. Not for a Session's request, which the
+ * `AlignmentResetCanonical` view above reads.
  * @typedef {{
- *   renderRequest: {
- *     mode: string, records: AlignmentResetRecord[],
- *     layout: { similarityAlignment: AlignmentPlanView, recordTranslations: { recordKey: string, x?: number }[] }
+ *   renderRequest: Omit<CanonicalLinearRenderRequest, 'layout'> & {
+ *     layout: CanonicalLinearLayout & { similarityAlignment: CanonicalSimilarityAlignmentPlan }
  *   },
  *   resources?: Record<string, RawSessionResourceDescriptor> | null
  * }} AlignmentResetPlannedCanonical

@@ -23,6 +23,34 @@ const MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = [
   'renderedsvgid'
 ];
 
+/**
+ * The runtime identity stored beside a raw entry (`losat_runtime_record` in Python). The Web's own writer gives
+ * `kind: 'losat'`, `source: 'wasm'`, `version: null` and the program; a Session load stores the saved record
+ * without checking its fields, so an entry's `runtime` is `unknown` until a reader has tested that it is an
+ * object, and then each field of this record is `unknown`.
+ * @typedef {{ kind?: unknown, source?: unknown, version?: unknown, path?: unknown, program?: unknown }} LosatCacheRuntime
+ */
+
+/**
+ * A raw LOSAT cache entry that `classifyRawLosatCacheEntry` accepted as current. Its classification proves
+ * `kind` and `text` (and the protein hashes of a protein entry). Generate writes the other fields with their
+ * usual types (`program`, `outfmt`, `flow` strings, `args` a list); a Session load stores them unchecked, so
+ * they are `unknown` here.
+ * @typedef {{
+ *   kind: 'raw-losat', text: string, schema?: unknown, identityKind?: unknown, idEncoding?: unknown,
+ *   program?: unknown, outfmt?: unknown, args?: unknown, flow?: unknown, searchContext?: unknown,
+ *   queryCanonicalHash?: unknown, subjectCanonicalHash?: unknown, queryProteinSetHash?: unknown,
+ *   subjectProteinSetHash?: unknown, queryRuntimeBindingHash?: unknown, subjectRuntimeBindingHash?: unknown,
+ *   queryRecordInstanceKey?: unknown, subjectRecordInstanceKey?: unknown, runtime?: unknown,
+ *   [field: string]: unknown
+ * }} RawLosatCacheEntry
+ */
+
+/**
+ * A raw cache entry under the key it was found at. `key` is the `cacheKey` given: the caller's `Map` may use any key.
+ * @typedef {{ key: unknown, entry: RawLosatCacheEntry }} RawLosatCacheMatch
+ */
+
 // The runtime identity the Web stores beside each raw entry it searches
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw
 // key. The shipped WASM has no build manifest, so its version is not recorded
@@ -550,11 +578,20 @@ const LONG_TRANSPORT_ID_RE = /(?:^|[^A-Za-z0-9._%-])(?:[A-Za-z0-9._-]|%[0-9A-F]{
 const COMPOUND_SUPPORTING_EDGE_RE = /^(h_[a-z2-7]{26})->(h_[a-z2-7]{26}):[A-Za-z][A-Za-z0-9._-]*$/;
 const COMPOUND_PATH_EDGE_RE = /^[^:\s]+:\d+:(h_[a-z2-7]{26})->\d+:(h_[a-z2-7]{26}):[A-Za-z][A-Za-z0-9._-]*$/;
 
-const isNonnegativeInteger = (value) => Number.isInteger(value) && value >= 0;
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+// `Number.isInteger` is true only for a number, which is what the cast to `number` states.
+const isNonnegativeInteger = (value) => Number.isInteger(value) && /** @type {number} */ (value) >= 0;
 
+/**
+ * @param {LosatDerivedCacheEntry} entry A derived entry that `isLosatDerivedCacheEntry` accepted.
+ * @returns {boolean}
+ */
 const isStrictEmptyDerivedResult = (entry) => {
   const mode = entry?.mode;
-  if (!['orthogroup', 'collinear'].includes(mode) || !isPlainObject(entry?.payload)) {
+  if (!(/** @type {readonly unknown[]} */ (['orthogroup', 'collinear'])).includes(mode) || !isPlainObject(entry?.payload)) {
     return false;
   }
   const payload = entry.payload;
@@ -632,7 +669,7 @@ const isStrictEmptyDerivedResult = (entry) => {
     }
     if (
       Object.prototype.hasOwnProperty.call(payload, 'collinearGroupScope') &&
-      !['adjacent_local', 'global_collinear'].includes(payload.collinearGroupScope)
+      !(/** @type {readonly unknown[]} */ (['adjacent_local', 'global_collinear'])).includes(payload.collinearGroupScope)
     ) return false;
   }
   return true;
@@ -753,6 +790,7 @@ export const validateDerivedProteinReferences = (
  * @param {Record<string, any>} [metadata]
  * @param {Record<string, any> | null} [manifest]
  * @param {{ identityIndex?: object | null }} [options]
+ * @returns {RawLosatCacheMatch | null}
  */
 export const getCurrentRawLosatCacheEntry = (
   cacheMap, cacheKey, metadata = {}, manifest = null, { identityIndex = null } = {}
