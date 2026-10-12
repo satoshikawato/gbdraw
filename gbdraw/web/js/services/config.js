@@ -6105,7 +6105,11 @@ export const exportSession = (titleOverride = null, options = {}) => {
   return operation.promise;
 };
 
-/** @param {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} event */
+/**
+ * The Session file input's change event, or an object with its `target`.
+ * @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput
+ */
+/** @param {SessionFileInput} event */
 export const importSession = async (event, options = {}) => {
   const input = event?.target;
   const file = input?.files?.[0];
