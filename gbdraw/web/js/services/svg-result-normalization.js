@@ -1,9 +1,5 @@
 // @ts-check
-/**
- * The root of a Result's SVG as these repairs read it. An SVG root names its
- * elements by `getElementById`; a root parsed as a generic element may not.
- * @typedef {ParentNode & { getElementById?: (elementId: string) => Element | null }} SvgResultRoot
- */
+/** @import { SvgResultRoot } from './svg-result-ingestion.js' */
 
 const PAIRWISE_LEGEND_SELECTOR =
   '[data-gbdraw-role="comparison-legend"][data-gbdraw-orientation="h"], '
