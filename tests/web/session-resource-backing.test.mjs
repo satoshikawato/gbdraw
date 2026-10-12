@@ -462,3 +462,26 @@ test('composite descriptor matching preserves order, LF boundaries and immutable
     alpha: encodedDescriptor('alpha.gb', 'c') }), components);
   assert.equal(matchesSessionResourceDescriptor(replaced, combined), false);
 });
+
+// OV-574: a combined view has no descriptor of its own until one is verified;
+// a saved entry that names neither an encoding nor data is none of its parts.
+test('a combined view matches no saved entry without an encoding and data', () => {
+  const resources = { alpha: encodedDescriptor('alpha.gb', 'a\n'), beta: encodedDescriptor('beta.gb', 'b\n') };
+  const table = adoptCurrentSessionResources(resources);
+  const view = createCombinedSessionResourceFileView(table, [{ resourceId: 'alpha' }, { resourceId: 'beta' }]);
+  const leaf = createSessionResourceFileView(table, 'alpha');
+  for (const entry of [{}, { kind: 'genbank' }, { name: 'alpha.gb', size: 2 }]) {
+    assert.equal(matchesSessionResourceDescriptor(view, entry), false);
+    assert.equal(matchesSessionResourceDescriptor(leaf, entry), false);
+  }
+  // Every valid descriptor answers as before, before and after the combined form is verified.
+  const combined = encodedDescriptor('combined.gb', 'a\nb\n');
+  const other = encodedDescriptor('other.gb', 'c\n');
+  for (const pass of [1, 2]) {
+    assert.deepEqual([resources.alpha, resources.beta, other, combined].map((entry) => matchesSessionResourceDescriptor(view, entry)),
+      [true, true, false, true], `pass ${pass}`);
+    assert.equal(matchesSessionResourceDescriptor(view, {}), false);
+  }
+  assert.deepEqual([resources.alpha, resources.beta, other, combined].map((entry) => matchesSessionResourceDescriptor(leaf, entry)),
+    [true, false, false, false]);
+});

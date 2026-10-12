@@ -19,10 +19,11 @@ import { featureIdentityKey, requestFeaturePlacements } from '../services/featur
 import { committedRecordForKey, committedRecordUsesSource } from '../services/feature-identity.js';
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
+import { ownEntry } from '../utils/own-entry.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
-/** @import { AnchorIntent, RecordDisplayDraft, RecordDisplayRow } from '../services/record-display-model.js' */
+/** @import { AnchorIntent, RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from '../services/record-display-model.js' */
 
 // Session Load reads no record bytes (776a2f93), so a loaded Result can have a
 // current source whose records are not read yet. That popup target failure is
@@ -63,8 +64,17 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  */
 
 /**
- * A resolved record transform to write on a row.
- * @typedef {{ startCoordinate: unknown, reverseComplement: unknown, anchorIntent: Partial<Record<keyof AnchorIntent, unknown>> | null | undefined }} ResolvedRecordTransform
+ * A resolved record transform to write on a row: the start, the orientation and
+ * the provenance of an eligible anchor resolution (`resolvedTransform`,
+ * record-display/feature-record-rotation.js, its one writer).
+ * `writeResolvedTransform` checks each field again before a draft takes it.
+ * @typedef {{ startCoordinate: number, reverseComplement: boolean, anchorIntent: AnchorIntent }} ResolvedRecordTransform
+ */
+
+/**
+ * The draft `captureTargetDraft` keeps: a record's identity and the mode whose drawing holds its draft.
+ * A row is one; a draft names no mode, so its caller adds it.
+ * @typedef {RecordDisplayDraftIdentity & { scope: string }} RecordDraftTarget
  */
 
 /**
@@ -134,7 +144,7 @@ export const createRecordDisplayControls = ({
       } catch { return []; } // Existing selector control owns its visible validation error.
     }));
   // A row's drafts are those of its mode's drawing.
-  /** @param {Record<string, any>} row @returns {DrawingState} */
+  /** @param {{ scope: string }} row @returns {DrawingState} */
   const drawingOfRow = (row) => (row?.scope === 'linear' ? state.drawings.linear : state.drawings.circular);
   // A drawing's drafts on the rows of their sources (OV-278). An edit of a
   // draft first writes them there, within its own step.
@@ -151,7 +161,7 @@ export const createRecordDisplayControls = ({
   // N-09). A row that is the only record its card draws writes it there; the
   // row override remains only for Circular and for a Linear card that draws
   // several records.
-  /** @param {RecordDisplayRow | null | undefined} row */
+  /** @param {{ scope: string, sourceUid: string } | null | undefined} row */
   const linearOrientationOwner = (row) => {
     if (row?.scope !== 'linear') return null;
     const sequence = state.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === row.sourceUid);
@@ -255,9 +265,12 @@ export const createRecordDisplayControls = ({
   /** @param {AlignmentOrientation[]} orientations @returns {AlignmentOrientationCheckpoint[]} */
   const captureAlignmentOrientationIntent = (orientations) => {
     const drawing = state.drawings.linear;
+    // A draft names no mode (PD-OI-086): these are the Linear drawing's (OV-579).
+    // On their rows first (OV-278): a draft that the capture's own settle moved would not be found.
+    settleDrafts(drawing);
     return alignmentRows(drawing, orientations)
-      .map(({recordKey, sequence, drafts}) => ({ recordKey,
-        reverseComplement: Boolean(sequence.region_reverse), drafts: drafts.map(captureTargetDraft) }));
+      .map(({recordKey, sequence, drafts}) => ({ recordKey, reverseComplement: Boolean(sequence.region_reverse),
+        drafts: drafts.map((/** @type {RecordDisplayDraft} */ draft) => captureTargetDraft({ ...draft, scope: 'linear' })) }));
   };
   /** @param {AlignmentOrientationCheckpoint[]} checkpoints */
   const restoreAlignmentOrientationIntent = (checkpoints) => {
@@ -277,7 +290,8 @@ export const createRecordDisplayControls = ({
   };
   /** @param {unknown} file the source file of a File card (`isCurrentFeature` passes it on untyped) @param {string | undefined} resourceId */
   const matchesSavedSource = (file, resourceId) => {
-    const expected = getCommittedSession()?.resources?.[String(resourceId)];
+    // A resource id is Session data: only an own key of the table names a saved resource.
+    const expected = ownEntry(getCommittedSession()?.resources, String(resourceId));
     return matchesSessionResourceDescriptor(/** @type {FileLike | null | undefined} */ (file), expected); // a File card's source is a File or null
   };
   const refreshCommittedRows = () => {
@@ -444,7 +458,7 @@ export const createRecordDisplayControls = ({
       }
     };
   };
-  /** @param {RecordDisplayRow} row @returns {TargetDraftCheckpoint} */
+  /** @param {RecordDraftTarget} row @returns {TargetDraftCheckpoint} */
   const captureTargetDraft = (row) => {
     const drawing = drawingOfRow(row);
     settleDrafts(drawing);

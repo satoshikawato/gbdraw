@@ -91,7 +91,7 @@ export const orderedOptionalConservationFiles = (files, circularConservation) =>
 };
 
 /**
- * @param {FileLike | null | undefined} file
+ * @param {{ name?: unknown } | null | undefined} file A File, or a series entry's file name; only `name` is read.
  * @param {unknown} index
  */
 export const defaultConservationSeriesLabel = (file, index) => {

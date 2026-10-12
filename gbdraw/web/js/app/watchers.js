@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState, LinearSeq } from '../state.js' */
+/** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -70,7 +70,7 @@ export const runRecordDiscoveryWatcher = async ({
  * @property {{ applyPaletteDraftToPreview: () => void, syncPaletteDraftState: () => void }} resultsManager
  *   The Results owner's palette draft projections.
  * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
- * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any>) | null} [refreshCircularRecordOrder]
+ * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any> | SessionBusy) | null} [refreshCircularRecordOrder]
  * @property {((options?: { suppress?: boolean }) => Promise<any>) | null} [refreshLinearRecordSelectors]
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} [resetPreviewViewport] The preview owner's viewport reset.
  * @property {() => void} resetRightDrawer The right drawer owner's reset.

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 
 const ref = (value) => ({ value });
 // The fixture refs are plain objects, so a watcher runs only on `flushWatchers()`.
@@ -1137,4 +1138,48 @@ test('drawer reference options and the active-plan line use record and gene name
   await startReview(fixture);
   await fixture.actions.applyDraft();
   assert.equal(fixture.actions.activePlanInspector.value.summary, 'Aligned to gene-clicked in ACC-A');
+});
+
+// Last in this file: without the own-key read, `__proto__` handed `Object.prototype` to the draft's deep freeze.
+test('an evidence kind outside the label table shows as written, also an Object.prototype name (OV-573)', async () => {
+  const fixture = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => {
+      const response = responseFor(request, { ambiguous: true });
+      response.records[1].candidates[0].directEvidence = ['constructor', 'rbh', 'related_homolog', '__proto__', ''];
+      return { result: response };
+    } });
+  await startReview(fixture);
+  assert.deepEqual(fixture.actions.draft.value.rows[0].candidates[0].evidence,
+    ['constructor', 'reciprocal best hit', 'related_homolog', '__proto__', '']);
+  assert.equal(Object.isFrozen(Object.prototype), false);
+});
+
+// OV-572: a record key is data (a Session's uid), so the Custom select reads the direction
+// table by own key, through the alignment owner. The expression is the one index.html binds.
+test('the Custom direction select reads its record by own key (OV-572)', async () => {
+  const f = create({ members: [reference, targetA, targetB, targetC] });
+  await startReview(f);
+  f.actions.setDirectionMode('custom');
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const binding = html.match(/:value="([^"]+)"\s+:aria-label="'Direction for ' \+ card\.direction\.label"/)?.[1];
+  assert.ok(binding, 'the Custom direction select is found');
+  const selectValue = new Function(
+    'similarityAlignmentDraft', 'similarityAlignmentCustomDirection', 'card', `return (${binding});`
+  );
+  // What the composition root hands the template (app/app-setup.js).
+  const value = (recordKey) => selectValue(f.actions.draft.value, f.actions.customDirection, { recordKey });
+  assert.equal(value('b'), 'keep', 'no choice yet: Keep');
+  assert.equal(value('constructor'), 'keep', 'an inherited member names no choice');
+  assert.equal(value('__proto__'), 'keep');
+  assert.equal(value('toString'), 'keep');
+  f.actions.setCustomDirection('b', 'left');
+  assert.equal(value('b'), 'left');
+  assert.equal(value('a'), 'keep');
+  // Outside Custom the draft has no table; the reader still answers.
+  f.actions.setDirectionMode('keep');
+  assert.equal(f.actions.customDirection('b'), 'keep');
+  // The template reads the table through the owner, and the root binds the reader.
+  assert.doesNotMatch(html, /byRecordKey\s*\[/);
+  const appSetup = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
+  assert.match(appSetup, /similarityAlignmentCustomDirection: similarityAlignmentActions\.customDirection,/);
 });

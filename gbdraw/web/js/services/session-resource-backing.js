@@ -496,9 +496,10 @@ export const matchesSessionResourceDescriptor = (file, descriptor) => {
   // Native Files remain bound by the successful run's object identity.
   if (!backing || backing.dirty) return true;
   if (!descriptor) return false;
+  // A combined view has no descriptor of its own until one is verified below: it equals none (OV-574).
   /** @param {SessionResourceDescriptor | null} entry */
-  const matches = (entry) => entry?.encoding === descriptor.encoding
-    && entry?.data === descriptor.data;
+  const matches = (entry) => entry !== null && entry.encoding === descriptor.encoding
+    && entry.data === descriptor.data;
   if (matches(backing.descriptor)) return true;
   if (!backing.sourceBackings) return false;
   if (backing.sourceBackings.some((part) => matches(part.descriptor))) return true;

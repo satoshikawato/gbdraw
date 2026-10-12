@@ -327,7 +327,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  * Returns whether the SVG changed. `appliesToContent` tells from a Result's
  * text whether it lacks composition metadata, so a Session 40+ Result is
  * parsed only when it does (OV-273).
- * @typedef {((svg: Element, data: LegacyResultSvgData) => boolean)
+ * @typedef {((svg: SVGSVGElement, data: LegacyResultSvgData) => boolean)
  *   & { appliesToContent: (content: unknown) => boolean }} LegacyResultSvgTransform
  */
 export { SESSION_VERSION };

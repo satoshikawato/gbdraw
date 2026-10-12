@@ -1,8 +1,9 @@
 // @ts-check
 import { resolveFeatureAnchor } from './feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
-/** @import { CommittedDisplayRow } from '../record-display-options.js' */
+/** @import { CommittedDisplayRow, ResolvedRecordTransform } from '../record-display-options.js' */
 /** @import { AnchorIntent } from './feature-anchor.js' */
+/** @import { SessionBusy } from '../../state.js' */
 
 /**
  * One capability verdict as the popup shows it.
@@ -31,14 +32,6 @@ const sameFeatureIdentity = (feature, identity) => {
  */
 
 /**
- * A resolved record transform that Generate or a candidate applies.
- * @typedef {object} ResolvedRecordTransform
- * @property {number} startCoordinate
- * @property {boolean} reverseComplement
- * @property {Record<string, any> | null} anchorIntent
- */
-
-/**
  * @typedef {object} FeatureRecordRotationActionOptions
  * @property {(feature: PopupFeature) => { row: CommittedDisplayRow, target: Record<string, any> }} targetForFeature
  *   record display port: the row and target of the feature's record
@@ -50,7 +43,7 @@ const sameFeatureIdentity = (feature, identity) => {
  *   composition root port: runs the candidate and commits the target draft
  * @property {((identity: { recordKey: string, biologicalFeatureId: string }) => PopupFeature | null) | null} [resolveCurrentFeature]
  * @property {((feature: PopupFeature) => boolean) | null} [isCurrentFeature]
- * @property {(() => Promise<Record<string, any>>) | null} [readRecords]
+ * @property {(() => Promise<Record<string, any>> | SessionBusy) | null} [readRecords]
  */
 
 /**
@@ -140,7 +133,8 @@ export const createFeatureRecordRotationAction = ({
   };
 
   // `resolveEligible` throws unless the resolution is eligible, and an
-  // eligible resolution sets the start coordinate and the orientation.
+  // eligible resolution sets the start coordinate, the orientation and the
+  // provenance (`resolveFeatureAnchor`, feature-anchor.js).
   /** @param {{ startCoordinate: number | null, reverseComplement: boolean | null, provenance: Record<string, unknown> | null }} resolved */
   const resolvedTransform = (resolved) => /** @type {ResolvedRecordTransform} */ ({
     startCoordinate: resolved.startCoordinate,

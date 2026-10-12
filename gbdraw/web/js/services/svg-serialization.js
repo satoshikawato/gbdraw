@@ -210,7 +210,8 @@ export const captureSvgExport = (state, { interactive = false } = {}) => {
   const resultIndex = Number(state.selectedResultIndex.value);
   const name = state.results.value?.[resultIndex]?.name || 'gbdraw.svg';
   return {
-    svg: state.svgContainer.value?.querySelector('svg')?.cloneNode(true) || null,
+    // A deep clone of the preview's <svg> element is an <svg> element.
+    svg: /** @type {SVGSVGElement | null} */ (state.svgContainer.value?.querySelector('svg')?.cloneNode(true) || null),
     svgContent: state.svgContent.value,
     name,
     dpi: state.downloadDpi.value,

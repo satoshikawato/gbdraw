@@ -68,7 +68,7 @@ const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
  * @property {string | number | null} [totalThreadBudget]
  * @property {string | number | null} [threadsPerJob]
  * @property {LosatSequences} [sequences]
- * @property {AbortSignal} [signal]
+ * @property {AbortSignal | null} [signal]
  * @property {string} [workerUrl]
  * @property {string} [wasmPath]
  * @property {string} [threadedWorkerUrl]
@@ -117,7 +117,7 @@ const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
  * @property {string} [outfmt]
  * @property {string[]} [extraArgs]
  * @property {string} [wasmPath]
- * @property {AbortSignal} [signal]
+ * @property {AbortSignal | null} [signal]
  */
 
 /** @type {Promise<any> | null} */
@@ -143,7 +143,7 @@ const createAbortError = () => {
   return error;
 };
 
-/** @param {AbortSignal | undefined} signal */
+/** @param {AbortSignal | null | undefined} signal */
 const getAbortReason = (signal) => {
   const reason = signal?.reason;
   if (reason instanceof Error) return reason;
@@ -156,14 +156,14 @@ const getAbortReason = (signal) => {
   return createAbortError();
 };
 
-/** @param {AbortSignal | undefined} signal */
+/** @param {AbortSignal | null | undefined} signal */
 const throwIfAborted = (signal) => {
   if (signal?.aborted) throw getAbortReason(signal);
 };
 
 /**
  * @param {{ canceled?: unknown, name?: unknown } | null | undefined} error A caught value.
- * @param {AbortSignal | undefined} signal
+ * @param {AbortSignal | null | undefined} signal
  */
 const isAbortError = (error, signal) =>
   Boolean(signal?.aborted && (error === signal.reason || error?.canceled || error?.name === 'AbortError'));
@@ -515,7 +515,7 @@ const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal, wa
 /**
  * @param {Worker} worker
  * @param {LosatWorkerInit} payload
- * @param {AbortSignal} [signal]
+ * @param {AbortSignal | null} [signal]
  * @returns {Promise<Worker>}
  */
 const initializeLosatWorker = (worker, payload, signal) =>
