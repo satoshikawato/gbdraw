@@ -33,6 +33,7 @@ import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { settingsScrollOwner } from '../services/settings-sections.js';
+import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup } from './preview-item-popup.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
@@ -785,6 +786,10 @@ export const createAppSetup = () => {
     const entry = linearRecordNameMap.value.get(uid);
     return { name: entry?.name || 'Record', detail: entry?.accession || '' };
   };
+  // The settings pane's display, and the one way to bring a setting into
+  // view: every "show this setting" path below ends in `revealSetting`, so a
+  // setting of a section the icon rail does not show is docked first.
+  const settingsPaneActions = createSettingsPaneController({ state });
   const openLinearComparisonDisclosure = async (disclosureKey) => {
     if (!disclosureKey) return null;
     const details = /** @type {HTMLDetailsElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-disclosure]')])
@@ -802,7 +807,8 @@ export const createAppSetup = () => {
     await openLinearComparisonDisclosure('selected-pairs');
     const container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-edge-key]')])
       .find((element) => element.dataset.edgeKey === edgeKey);
-    /** @type {HTMLElement | null | undefined} */ (container?.querySelector('input, select, button'))?.focus();
+    const control = /** @type {HTMLElement | null | undefined} */ (container?.querySelector('input, select, button'));
+    if (control) await settingsPaneActions.revealSetting(control);
   };
 
   /** @param {{ disclosureKey: string, focusTargetKey: string, edgeKey?: string, edgeId?: string } | null | undefined} target */
@@ -825,7 +831,8 @@ export const createAppSetup = () => {
     const focusable = marked?.matches?.('input, select, button, [tabindex]')
       ? marked
       : marked?.querySelector?.('input, select, button, [tabindex]');
-    /** @type {HTMLElement | null | undefined} */ (focusable || container?.querySelector?.('input, select, button, [tabindex]'))?.focus();
+    const control = /** @type {HTMLElement | null | undefined} */ (focusable || container?.querySelector?.('input, select, button, [tabindex]'));
+    if (control) await settingsPaneActions.revealSetting(control);
     return true;
   };
 
@@ -837,7 +844,8 @@ export const createAppSetup = () => {
     void openLinearComparisonDisclosure('selected-pairs');
     const uploader = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-pair-upload]')])
       .find((element) => element.dataset.linearComparisonPairUpload === edgeKey);
-    if (focus) /** @type {HTMLElement | null | undefined} */ (uploader?.querySelector('[role="button"]'))?.focus();
+    const button = /** @type {HTMLElement | null | undefined} */ (uploader?.querySelector('[role="button"]'));
+    if (focus && button) void settingsPaneActions.revealSetting(button);
     /** @type {HTMLInputElement | null | undefined} */ (uploader?.querySelector('input[type="file"]'))?.click();
     return Boolean(uploader);
   };
@@ -863,8 +871,10 @@ export const createAppSetup = () => {
       ? { disclosureKey: 'settings', focusTargetKey: 'losat-execution' } : null;
     if (await focusLinearComparisonIssue(linearComparisonUi.value.issues[0] || runtimeCause)) return;
     const card = /** @type {HTMLElement | null} */ (document.querySelector('[data-linear-comparison-card]'));
-    card?.scrollIntoView({ block: 'nearest' });
-    /** @type {HTMLElement | null | undefined} */ (card?.querySelector('button:not([disabled])'))?.focus();
+    if (!card) return;
+    await settingsPaneActions.revealSetting(card, {
+      align: 'start', focus: /** @type {HTMLElement | null} */ (card.querySelector('button:not([disabled])')) ?? undefined
+    });
   };
 
   const setLinearComparisonGlobalAction = async (action) => {
@@ -1722,7 +1732,8 @@ export const createAppSetup = () => {
     readUserDefaultColor: resultsManager.readUserDefaultColor,
     setDefaultColor: resultsManager.setDefaultColor,
     askChoice,
-    showNotice
+    showNotice,
+    revealSetting: settingsPaneActions.revealSetting
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
@@ -2111,12 +2122,7 @@ export const createAppSetup = () => {
   const focusLinearLabelVisibility = async (key) => {
     if (mode.value !== 'linear') return;
     const select = document.getElementById(`linear-label-visibility-${key}`);
-    if (!select) return;
-    // The select is rendered inside the Record Labels <details> of index.html.
-    /** @type {HTMLDetailsElement} */ (select.closest('details')).open = true;
-    await nextTick();
-    select.scrollIntoView({ block: 'center' });
-    select.focus({ preventScroll: true });
+    if (select) await settingsPaneActions.revealSetting(select);
   };
   const legendPositionLabel = (position) => ({
     right: 'Right',
@@ -5478,6 +5484,7 @@ export const createAppSetup = () => {
   const previewItemPopup = createPreviewItemPopup({
     state,
     computed,
+    revealSetting: settingsPaneActions.revealSetting,
     readLegendEntryColor: legendEntryColor,
     readLegendRowRules: (entry) => legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, state.activeDrawing())),
     countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
@@ -5568,12 +5575,7 @@ export const createAppSetup = () => {
     if (!control || mode.value !== 'circular' || !drawing.form.multi_record_canvas) {
       return { status: 'unavailable' };
     }
-    for (let section = control.closest('details'); section; section = section.parentElement?.closest('details') ?? null) {
-      section.open = true;
-    }
-    await nextTick();
-    control.focus();
-    control.scrollIntoView({ block: 'nearest' });
+    await settingsPaneActions.revealSetting(control);
     return { status: 'ok' };
   };
   watch(() => [mode.value, circularSingleRecordPresentationEnabled.value,
@@ -6286,6 +6288,11 @@ export const createAppSetup = () => {
     endPan,
     sidebarWidth,
     startResizing,
+    settingsPane: settingsPaneActions.settingsPane,
+    revealSetting: settingsPaneActions.revealSetting,
+    showSettingsPaneRail: settingsPaneActions.showSettingsPaneRail,
+    showSettingsPaneStacked: settingsPaneActions.showSettingsPaneStacked,
+    closeDockedSettings: settingsPaneActions.closeDockedSettings,
     mode,
     setCircularInputType,
     cInputType,

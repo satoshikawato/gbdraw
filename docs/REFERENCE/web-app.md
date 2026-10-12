@@ -14,6 +14,13 @@ operations do not require an application-server upload. The hosted site uses
 Google Analytics 4 for aggregate page-usage metrics, but uploaded genome files
 and generated diagrams are not analytics payloads.
 
+The application keeps one choice in the browser's local storage: whether the
+settings show in full or as the column of icons. The browser keeps it per
+site address, so another browser, a private window, or another address starts
+with the full settings. Files, settings, and Results are not stored there.
+`gbdraw gui` serves the application on a new port each time it starts, which
+is a new address to the browser, so the choice lasts until that server stops.
+
 `gbdraw gui` serves the application and runtimes from the installed Python
 package. Its normal drawing workflow works without an internet connection once
 gbdraw is installed. Browser security policy still applies. Threaded LOSAT
@@ -172,6 +179,21 @@ reader announces the button as "Go to" followed by that title. The button of
 the section at the top of the settings is marked. The row stays in place while
 the settings scroll; a narrow panel wraps it onto a second line, and at phone
 width it is the first row of the settings and scrolls with the page.
+
+**Collapse settings to icons**, the button at the right end of the row, turns
+the settings into a narrow column of the same buttons, each an icon over a
+short name, with **About & Citation** at its end. A button of the column shows
+its section beside it, one at a time: **Input** shows **Input Genomes** and
+**Basic**, and in Linear mode **Compare** shows **Comparison** alone. **Close
+section** leaves the column alone, which gives the Result the most room, and
+**Expand settings**, the first button of the column, brings the full settings
+back at the same place. Every setting keeps its value through these switches;
+they are not Undo steps and are not saved in a Session. A link that leads to a
+setting, such as **Show in Comparison** or **Show in settings**, shows the
+section of that setting first. Beside the column alone the Generate button
+reads **Generate**, and a layout warning becomes a mark above it that opens
+the warning text. A column taller than the window scrolls. At phone width the
+settings always show in full.
 
 ### Save and Load Sessions
 

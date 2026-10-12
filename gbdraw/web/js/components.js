@@ -9,10 +9,11 @@ import {
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
-import { SETTINGS_SECTIONS, settingsScrollOwner, settingsSectionsOf } from './services/settings-sections.js';
+import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsView } from './services/settings-sections.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 
-/** @import { SettingsSection, SettingsSectionKey } from './services/settings-sections.js' */
+/** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
+/** @import { SettingsPaneView } from './app/settings-pane.js' */
 
 const { ref, reactive, computed, nextTick, watch, useId, onMounted, onBeforeUnmount } = window.Vue;
 
@@ -99,7 +100,8 @@ const visibleText = (node) => {
 
 // R12 (UI-04): a tip is named after what it explains, "Help: <label>": the
 // author name or visible text of the element that holds it, after the name of
-// the row group it is in. `label` names a tip whose holder has no such text.
+// the row group it is in. `label` names a tip whose holder has no such text;
+// the layout warning beside Generate is named "Layout warning" (not help).
 /** @param {Element | null} tip */
 const helpTipName = (tip) => {
   const holder = tip?.parentElement;
@@ -129,7 +131,8 @@ export const GbdrawLoader = {
 // not read the tip text twice. Mouse hover and keyboard focus show the
 // tooltip, a click or tap toggles it, and Escape or blur closes it. Place
 // tips outside <label> so they never change the accessible name of a label or
-// its control.
+// its control. The default slot replaces the question mark (the layout warning
+// beside the compact Generate button shows a warning mark).
 export const HelpTip = {
   template: '#help-tip-template',
   props: ['text', 'id', 'label'],
@@ -202,34 +205,81 @@ export const SettingsSectionTitle = {
   template: '<i class="ph" :class="entry.icon" aria-hidden="true"></i> {{ entry.title }}'
 };
 
+// `v-settings-section="'<key>'"` on the element of a settings section: it
+// names the section (`data-settings-section`) and tells the stylesheet whether
+// the docked rail entry shows it (`data-settings-in-dock`). The pane says which
+// display shows, so the stacked display ignores the second attribute.
+/** @param {HTMLElement} element @param {{ value: SettingsSectionKey }} binding */
+export const settingsSection = (element, { value }) => {
+  element.dataset.settingsSection = value;
+  element.dataset.settingsInDock = String(settingsEntryOf(value) === state.settingsPaneDocked.value);
+};
+
 // The section index of the settings: one button per section of the shown
-// mode, in card order. `controls` is the id of the element that holds the
-// sections (`data-settings-section`). An entry opens its section, brings it to
-// the top of the visible settings at once, and moves the focus to its heading;
-// it never closes a section, and it writes no setting. The marked entry
-// (`aria-current`) and the hover text are the index's own state:
-// - the marked entry is the last section whose top has reached the top edge
-//   of the visible settings; an activated entry stays marked while its section
-//   stays where the activation left it, so a short last section keeps its mark;
-// - the hover text is the section title, for a hovering pointer and for
-//   keyboard focus. The button is named "Go to <title>" by its aria-label (the
-//   section's own disclosure keeps the bare title), so the text is hidden from
-//   assistive technology and no `title` attribute repeats it.
+// mode, in card order, in the form of the pane's display (`view`, from
+// app/settings-pane.js). `controls` is the id of the element that holds the
+// sections (`data-settings-section`).
+// - Stacked: a row of icons. An entry opens its section, brings it to the top
+//   of the visible settings at once, and moves the focus to its heading; the
+//   marked entry (`aria-current`) is the last section whose top has reached
+//   the top edge of the visible settings, and an activated entry stays marked
+//   while its section stays where the activation left it, so a short last
+//   section keeps its mark. The switch to the rail ends the row.
+// - Rail: a column of icons over short names, the switch back first. An entry
+//   docks its section beside the rail, opened and focused in the same way; the
+//   marked entry is the docked one, and the close button leaves the rail alone.
+//   A column too low for its entries scrolls: the docked entry and the focused
+//   one are brought into view.
+// An entry never closes a section and writes no setting. Both forms bring a
+// section into view through `reveal`, the pane's one way to show a setting.
+// The text shown for a hovered or keyboard-focused button (the section title,
+// or the words of a switch or of the close button) is the index's own: each
+// button is named by its aria-label ("Go to <title>" for an entry; the
+// section's own disclosure keeps the bare title), so the text is hidden from
+// assistive technology and no `title` attribute repeats it. When the rail
+// column scrolls, the text of a hovered entry goes and the text of the focused
+// entry follows it.
+/**
+ * The pane's way to bring a section into view: its top at the top edge of the
+ * settings, the focus on `focus`.
+ * @typedef {(section: HTMLElement, options: { align: 'start', focus: HTMLElement }) => unknown} RevealSection
+ */
 export const SettingsSectionIndex = {
   template: '#settings-section-index-template',
-  props: { mode: { type: String, required: true }, controls: { type: String, required: true } },
-  /** @param {{ mode: 'circular' | 'linear', controls: string }} props */
-  setup(props) {
-    /** @type {{ value: readonly SettingsSection[] }} */
-    const sections = computed(() => settingsSectionsOf(props.mode));
+  props: {
+    mode: { type: String, required: true },
+    controls: { type: String, required: true },
+    view: { type: Object, required: true },
+    reveal: { type: Function, required: true }
+  },
+  emits: ['rail', 'stacked', 'close'],
+  /**
+   * @param {{ mode: 'circular' | 'linear', controls: string, view: SettingsPaneView, reveal: RevealSection }} props
+   * @param {{ emit: (event: 'rail' | 'stacked' | 'close', section?: SettingsSectionKey) => void }} context
+   */
+  setup(props, { emit }) {
+    /** @type {{ value: boolean }} */
+    const rail = computed(() => props.view.display === 'rail');
+    /** @type {{ value: readonly SettingsEntry[] }} */
+    const entries = computed(() => settingsEntriesOf(props.mode, props.view.display));
+    // The section at the top of the stacked settings.
     /** @type {{ value: SettingsSectionKey }} */
     const current = ref(SETTINGS_SECTIONS[0].key);
-    /** @type {{ value: { title: string, left: number, top: number } | null }} */
+    /** @type {{ value: SettingsSectionKey | null }} */
+    const marked = computed(() => (rail.value ? props.view.docked : current.value));
+    /** @type {{ value: { text: string, side: 'below' | 'right', left: number, top: number } | null }} */
     const tip = ref(null);
     /** @type {{ value: HTMLElement | null }} */
     const tipElement = ref(null);
+    // The button whose text is shown.
+    /** @type {HTMLElement | null} */
+    let tipButton = null;
+    /** @type {{ value: HTMLElement | null }} */
+    const root = ref(null);
     /** @type {{ key: SettingsSectionKey, top: number } | null} */
     let held = null;
+    // Where the stacked settings were scrolled when the rail took their place.
+    let stackedTop = 0;
     // The space right of the cards inside the scroll area (its padding and a
     // classic scrollbar, when it shows one): the row ends where the cards end.
     /** @type {{ value: number }} */
@@ -241,47 +291,83 @@ export const SettingsSectionIndex = {
     const area = () => /** @type {HTMLElement} */ (document.getElementById(props.controls));
     /** @param {SettingsSectionKey} key */
     const sectionOf = (key) => /** @type {HTMLElement | null} */ (area().querySelector(`[data-settings-section="${key}"]`));
-    // What scrolls the settings and the top edge of what it shows: the scroll
-    // area and its top, or the page and the bottom of the sticky header.
-    const view = () => {
-      const owner = settingsScrollOwner(area());
-      const edge = owner === area() ? area().getBoundingClientRect().top
-        : document.querySelector('.app-header')?.getBoundingClientRect().bottom ?? 0;
-      return { owner, edge };
-    };
+    /** @param {string} selector A button of the index. */
+    const focusButton = (selector) => /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(selector))
+      ?.focus({ preventScroll: true });
     const mark = () => {
-      if (held && sectionOf(held.key)?.getBoundingClientRect().top === held.top) return;
+      if (rail.value || (held && sectionOf(held.key)?.getBoundingClientRect().top === held.top)) return;
       held = null;
-      const { edge } = view();
-      const reached = sections.value.filter((section) => (sectionOf(section.key)?.getBoundingClientRect().top ?? Infinity) <= edge + 1);
-      current.value = (reached.at(-1) ?? sections.value[0]).key;
+      const edge = settingsView(area()).top;
+      const reached = entries.value.filter((section) => (sectionOf(section.key)?.getBoundingClientRect().top ?? Infinity) <= edge + 1);
+      current.value = (reached.at(-1) ?? entries.value[0]).key;
+    };
+    // Opens a section and brings it to the top. The focus goes to its heading
+    // (the summary of a card that is one disclosure, or the heading element
+    // that takes the focus: Input Genomes, Comparison) unless `focus` names a
+    // button of the index.
+    /** @param {SettingsSectionKey} key @param {string} [focus] */
+    const bringToTop = async (key, focus) => {
+      const section = /** @type {HTMLElement} */ (sectionOf(key));
+      const heading = /** @type {HTMLElement} */ (section.querySelector(':scope > details:first-child > summary, :scope > [tabindex="-1"]'));
+      if (heading.parentElement instanceof HTMLDetailsElement) heading.parentElement.open = true;
+      await props.reveal(section, { align: 'start', focus: /** @type {HTMLElement} */ (focus ? root.value?.querySelector(focus) : heading) });
+      // A section without an entry in this form (About & Citation in the row) leaves the mark to the geometry.
+      held = entries.value.some((entry) => entry.key === key) ? { key, top: section.getBoundingClientRect().top } : null;
+      if (held) current.value = key; else mark();
     };
     /** @param {SettingsSectionKey} key */
     const activate = (key) => {
-      const section = /** @type {HTMLElement} */ (sectionOf(key));
-      // The heading: the summary of a card that is one disclosure, or the
-      // heading element that takes the focus (Input Genomes, Comparison).
-      const heading = /** @type {HTMLElement} */ (section.querySelector(':scope > details:first-child > summary, :scope > [tabindex="-1"]'));
-      if (heading.parentElement instanceof HTMLDetailsElement) heading.parentElement.open = true;
-      const { owner, edge } = view();
-      owner?.scrollBy({ top: section.getBoundingClientRect().top - edge, behavior: 'instant' });
-      heading.focus({ preventScroll: true });
-      tip.value = null;
-      current.value = key;
-      held = { key, top: section.getBoundingClientRect().top };
+      hideTip();
+      return bringToTop(key);
+    };
+    // Switching keeps the place: the rail docks the marked section, and the
+    // stacked settings show the docked section at the top or, after the rail
+    // alone, return to where they were. The focus goes to the switch of the
+    // new display.
+    const showRail = async () => {
+      hideTip();
+      stackedTop = area().scrollTop;
+      emit('rail', current.value);
+      await nextTick();
+      if (props.view.docked) await bringToTop(props.view.docked, '.settings-index-switch');
+    };
+    const showStacked = async () => {
+      hideTip();
+      const docked = props.view.docked;
+      emit('stacked');
+      await nextTick();
+      if (docked) return bringToTop(docked, '.settings-index-switch');
+      held = null;
+      area().scrollTop = stackedTop;
+      mark();
+      return focusButton('.settings-index-switch');
+    };
+    const closeDocked = async () => {
+      hideTip();
+      const docked = props.view.docked;
+      emit('close');
+      await nextTick();
+      // Without `preventScroll`: a rail that scrolls brings the entry into view.
+      /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(`[data-settings-entry="${docked}"]`))?.focus();
     };
 
-    // Below the entry and centred on it, then kept 8 px inside the viewport
-    // from the rendered width.
-    /** @param {SettingsSection} section @param {Event} event */
-    const showTip = async (section, event) => {
-      const entry = /** @type {HTMLElement} */ (event.currentTarget).getBoundingClientRect();
-      tip.value = { title: section.title, left: entry.left + entry.width / 2, top: entry.bottom + 6 };
+    // Beside a button of the rail; else below the button and centred on it,
+    // then kept 8 px inside the viewport from the rendered width.
+    /** @param {string} text @param {HTMLElement} button */
+    const showTip = async (text, button) => {
+      tipButton = button;
+      const box = button.getBoundingClientRect();
+      tip.value = rail.value && root.value?.contains(button)
+        ? { text, side: 'right', left: box.right + 6, top: box.top + box.height / 2 }
+        : { text, side: 'below', left: box.left + box.width / 2, top: box.bottom + 6 };
       await nextTick();
       const half = (tipElement.value?.offsetWidth ?? 0) / 2;
-      if (tip.value) tip.value.left = Math.max(8 + half, Math.min(tip.value.left, window.innerWidth - 8 - half));
+      if (tip.value?.side === 'below') tip.value.left = Math.max(8 + half, Math.min(tip.value.left, window.innerWidth - 8 - half));
     };
-    const hideTip = () => { tip.value = null; };
+    const hideTip = () => {
+      tipButton = null;
+      tip.value = null;
+    };
     // Escape hides a shown text and stops there; with none shown it goes on to the page's own handler.
     /** @param {KeyboardEvent} event */
     const onEscape = (event) => {
@@ -289,17 +375,30 @@ export const SettingsSectionIndex = {
       event.stopPropagation();
       hideTip();
     };
-    // A touch tap also reports pointerenter; only a hovering pointer shows the text.
-    /** @param {SettingsSection} section @param {PointerEvent} event */
-    const onEnter = (section, event) => { if (event.pointerType !== 'touch') showTip(section, event); };
-    /** @param {SettingsSection} section @param {FocusEvent} event */
-    const onFocus = (section, event) => {
-      if (/** @type {HTMLElement} */ (event.currentTarget).matches(':focus-visible')) showTip(section, event);
-    };
+    // The listeners of a button that shows `text`. A touch tap also reports
+    // pointerenter, so only a hovering pointer shows it, and focus shows it
+    // only for the keyboard.
+    /** @param {string} text */
+    const tipOn = (text) => ({
+      pointerenter: (/** @type {PointerEvent} */ event) => {
+        if (event.pointerType !== 'touch') showTip(text, /** @type {HTMLElement} */ (event.currentTarget));
+      },
+      pointerleave: hideTip,
+      focus: (/** @type {FocusEvent} */ event) => {
+        const button = /** @type {HTMLElement} */ (event.currentTarget);
+        if (button.matches(':focus-visible')) showTip(text, button);
+      },
+      blur: hideTip
+    });
 
-    // Scroll events do not bubble: one capturing listener hears the scroll area and the page.
+    // Scroll events do not bubble: one capturing listener hears the scroll area, the page, and the rail column.
     /** @param {Event} event */
-    const onScroll = (event) => { if (event.target === area() || event.target === document) mark(); };
+    const onScroll = (event) => {
+      if (event.target === area() || event.target === document) return mark();
+      if (!tip.value || !tipButton || event.target !== tipButton.parentElement) return;
+      // The column moved under the pointer; the focused entry it brought into view keeps its text.
+      if (tipButton === document.activeElement) showTip(tip.value.text, tipButton); else hideTip();
+    };
     onMounted(() => {
       cardEdge.observe(area());
       window.addEventListener('scroll', onScroll, { capture: true, passive: true });
@@ -308,13 +407,19 @@ export const SettingsSectionIndex = {
       cardEdge.disconnect();
       window.removeEventListener('scroll', onScroll, { capture: true });
     });
-    // A mode change may remove the entry whose text is shown, and the marked section.
-    watch(() => props.mode, () => {
+    // The docked entry stays in view in a column that scrolls.
+    watch(marked, () => nextTick(() => {
+      if (rail.value) root.value?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
+    }));
+    // A mode change may remove the entry whose text is shown, and the marked
+    // section; so may a display that changes with the layout (the phone width).
+    watch(() => [props.mode, props.view.display], () => {
       hideTip();
+      held = null;
       nextTick(mark);
     });
 
-    return { sections, current, tip, tipElement, inset, activate, hideTip, onEscape, onEnter, onFocus };
+    return { rail, entries, marked, tip, tipElement, root, inset, activate, showRail, showStacked, closeDocked, onEscape, tipOn };
   }
 };
 

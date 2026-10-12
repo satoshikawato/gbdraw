@@ -1,5 +1,6 @@
 // The section index of the settings pane: one pinned row of icon buttons above
-// the settings, one per section of the shown mode, in card order. An entry
+// the settings, one per section of the shown mode, in card order, with the
+// switch to the icon rail at its right end. An entry
 // opens its section, brings it to the top of the settings, and moves the
 // keyboard focus to its heading; the entry of the section at the top is
 // marked; the section title shows on hover and on keyboard focus. The index
@@ -44,7 +45,7 @@ const SECTIONS = {
 const entryName = (title) => `Go to ${title}`;
 const index = (page) => page.getByRole('navigation', { name: 'Settings sections' });
 const entry = (page, title) => index(page).getByRole('button', { name: entryName(title), exact: true });
-const tip = (page) => index(page).locator('.settings-index-tip');
+const tip = (page) => page.locator('.settings-index-tip');
 const setMode = (page, mode) => page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
 
 const loadSession = async (page, name) => {
@@ -98,8 +99,9 @@ test('the index lists the sections of each mode in card order, before the settin
         .filter((element) => visible(element) && !element.disabled && element.tabIndex >= 0);
       const buttons = Array.from(nav?.querySelectorAll('button') || []);
       return {
-        first: pane.firstElementChild === nav && nav.nextElementSibling === area,
-        historyIgnore: nav.hasAttribute('data-history-ignore'),
+        // The row holds the list of entries and, after it, the switch to the rail.
+        first: pane.firstElementChild === nav.parentElement && nav.parentElement.nextElementSibling === area,
+        historyIgnore: Boolean(nav.closest('[data-history-ignore]')),
         controls: buttons.every((button) => button.getAttribute('aria-controls') === area.id && area.id),
         firstStops: stops.slice(0, buttons.length).every((stop, order) => stop === buttons[order]),
         entries: buttons.map((button) => ({
@@ -129,10 +131,13 @@ test('the index lists the sections of each mode in card order, before the settin
     expect(found.controls, `${mode}: each entry names the scroll area it moves`).toBeTruthy();
     expect(found.firstStops, `${mode}: the entries are the first Tab stops of the pane`).toBe(true);
     expect(found.entries.map((item) => item.title), mode).toEqual(expected.map(([, title]) => entryName(title)));
-    expect(found.sections.map((section) => section.key), `${mode}: one section per entry, same order`)
+    // Two cards have no row entry: Basic and About & Citation (the rail reaches them).
+    const sections = found.sections.filter((section) => !['basic', 'about'].includes(section.key));
+    expect(found.sections.length - sections.length, `${mode}: the cards without a row entry`).toBe(2);
+    expect(sections.map((section) => section.key), `${mode}: one section per entry, same order`)
       .toEqual(expected.map(([key]) => key));
     for (const [order, item] of found.entries.entries()) {
-      const section = found.sections[order];
+      const section = sections[order];
       // The name is the aria-label alone: no title attribute, no text, a decorative icon.
       expect(item, `${mode} ${item.title}`).toMatchObject({ type: 'button', nativeTitle: null, text: '', iconHidden: 'true' });
       expect(item.icon, `${mode} ${item.title}: an icon`).toMatch(/^ph-[a-z-]+$/);
@@ -320,32 +325,41 @@ test('the section title shows below an entry on hover and on keyboard focus, ins
   await expect(index(page).getByRole('button')).toHaveCount(SECTIONS.linear.length);
 
   // At every pane width the text of the first and of the last entry stays 8 px inside the viewport,
-  // and the row neither overflows nor scrolls sideways; a narrow pane wraps it onto a second row.
+  // and the row neither overflows nor scrolls sideways. The switch takes the right end of the first row, so
+  // the twelve Linear entries share what is left: 22 px each when there is room, down to 18 px before the
+  // list wraps onto a second row.
   for (const width of [240, 320, 500]) {
     await page.evaluate((width) => { window.__GBDRAW_APP__.sidebarWidth = width; }, width);
     const layout = await page.evaluate(() => {
       const pane = document.querySelector('.settings-pane');
       const nav = pane.querySelector('nav[aria-label="Settings sections"]');
-      const box = nav.getBoundingClientRect();
+      const box = nav.parentElement.getBoundingClientRect();
       const buttons = Array.from(nav.querySelectorAll('button'), (button) => button.getBoundingClientRect());
       const card = getComputedStyle(pane.querySelector('.settings-scroll > .card'));
-      const row = getComputedStyle(nav);
+      const row = getComputedStyle(nav.parentElement);
+      const firstRow = buttons.filter((rect) => Math.round(rect.top) === Math.round(buttons[0].top));
       return {
         surface: ['backgroundColor', 'borderTopColor', 'borderTopWidth', 'borderTopLeftRadius', 'boxShadow']
           .filter((property) => row[property] !== card[property]),
         paneWidth: Math.round(pane.getBoundingClientRect().width),
-        overflow: Math.max(nav.scrollWidth - nav.clientWidth, pane.scrollWidth - pane.clientWidth),
+        overflow: Math.max(nav.parentElement.scrollWidth - nav.parentElement.clientWidth, pane.scrollWidth - pane.clientWidth),
         outside: buttons.filter((rect) => rect.left < box.left || rect.right > box.right || rect.top < box.top || rect.bottom > box.bottom).length,
         rows: new Set(buttons.map((rect) => Math.round(rect.top))).size,
-        size: [...new Set(buttons.map((rect) => `${Math.round(rect.width)}x${Math.round(rect.height)}`))],
+        widths: [Math.min(...firstRow.map((rect) => rect.width)), Math.max(...firstRow.map((rect) => rect.width))],
+        heights: [...new Set(buttons.map((rect) => Math.round(rect.height)))],
         height: Math.round(box.height),
         gapBelow: Math.round(pane.querySelector('.settings-scroll').getBoundingClientRect().top - box.bottom),
         rightEdge: Math.round(box.right - pane.querySelector('.settings-scroll > .card').getBoundingClientRect().right)
       };
     });
     expect(layout, `pane ${width} px`).toMatchObject({
-      surface: [], paneWidth: width, overflow: 0, outside: 0, rows: width === 240 ? 2 : 1, size: ['22x26'], gapBelow: 8, rightEdge: 0
+      surface: [], paneWidth: width, overflow: 0, outside: 0, rows: width === 240 ? 2 : 1, heights: [26], gapBelow: 8, rightEdge: 0
     });
+    // The entries of a row are equally wide.
+    expect(layout.widths[1] - layout.widths[0], `entry widths at ${width} px`).toBeLessThanOrEqual(0.5);
+    expect(layout.widths[0], `entry width at ${width} px`).toBeGreaterThanOrEqual(18);
+    expect(layout.widths[1], `entry width at ${width} px`).toBeLessThanOrEqual(22);
+    if (width === 500) expect(layout.widths[0]).toBe(22);
     if (width !== 240) expect(layout.height, `row height at ${width} px`).toBe(36);
     for (const title of ['Input Genomes', 'Dinucleotide content/skew']) {
       await entry(page, title).hover();
@@ -409,7 +423,7 @@ test('with classic scrollbars the row ends on the right edge of the cards', asyn
       const area = document.querySelector('.settings-scroll');
       return {
         scrollbar: area.offsetWidth - area.clientWidth,
-        rightEdge: Math.round(document.querySelector('nav[aria-label="Settings sections"]').getBoundingClientRect().right
+        rightEdge: Math.round(document.querySelector('.settings-index').getBoundingClientRect().right
           - area.querySelector(':scope > .card').getBoundingClientRect().right)
       };
     });

@@ -87,6 +87,7 @@
     "tests/web/session-operation-consistency.playwright.spec.js": 8,
     "tests/web/session-save-lifecycle.playwright.spec.js": 1,
     "tests/web/settings-only-session.playwright.spec.js": 4,
+    "tests/web/settings-pane-rail.playwright.spec.js": 1,
     "tests/web/settings-section-index.playwright.spec.js": 0.5,
     "tests/web/sidebar-inputs.playwright.spec.js": 1.5,
     "tests/web/similarity-alignment-ui.playwright.spec.js": 15,
@@ -200,6 +201,7 @@
       "tests/web/mode-transition-result.playwright.spec.js",
       "tests/web/scale-visibility.playwright.spec.js",
       "tests/web/session-cli-compatibility.playwright.spec.js",
+      "tests/web/settings-pane-rail.playwright.spec.js",
       "tests/web/small-ui-placement.playwright.spec.js"
     ],
     [
