@@ -65,7 +65,6 @@ export {
 // A press that moved farther than this before its release is a drag, not a click on a drawn element.
 const CLICK_SLOP_PX = 4;
 // Marks an item of the preview that a click acts on, for the pointer cursor.
-const PREVIEW_ITEM_ATTRIBUTE = 'data-gbdraw-preview-item';
 
 /**
  * A pointer position, as an event or a plain point carries it.
@@ -1903,14 +1902,16 @@ export const createFeatureSvgActions = ({
       // dinucleotide track, the plot title) opens that section. It opens
       // nothing while Layout edit is on (a press drags there), while a review
       // holds the popups, or when the press moved: a pan of the figure ends in
-      // a click on the element it began on. To the popups the click stays a
-      // click on the background.
+      // a click on the element it began on. A click that dismisses something
+      // (an open popup, a feature selection) does only that, as a click on the
+      // background: the next click opens the section.
       /** @param {MouseEvent} e */
       const revealDrawnElementSettings = (e) => {
         if (state.layoutRepositionMode?.value || previewPopupsHeld()) return;
+        if (clickedFeature.value || clickedPairwiseMatch?.value || state.selectedFeatureIds?.value?.size) return;
         const press = handlerState.pressPoint;
         if (press && Math.hypot(e.clientX - press.clientX, e.clientY - press.clientY) > CLICK_SLOP_PX) return;
-        const section = drawnElementSection(e.target, svg);
+        const section = drawnElementSection(e.target);
         if (section) revealSettingsSection(section);
       };
 
@@ -2101,12 +2102,14 @@ export const createFeatureSvgActions = ({
     if (!svg) return false;
     svg.querySelectorAll(PREVIEW_ITEM_SELECTOR).forEach((element) => {
       if (element.closest(COMPARISON_LEGEND_SELECTOR)) return;
-      element.setAttribute(PREVIEW_ITEM_ATTRIBUTE, '');
+      element.setAttribute('data-gbdraw-preview-item', '');
       element.setAttribute('role', 'button');
       element.setAttribute('tabindex', '0');
       element.setAttribute('aria-haspopup', 'dialog');
     });
-    svg.querySelectorAll(DRAWN_ELEMENT_SELECTOR).forEach((element) => element.setAttribute(PREVIEW_ITEM_ATTRIBUTE, 'settings'));
+    svg.querySelectorAll(DRAWN_ELEMENT_SELECTOR).forEach((element) => {
+      if (drawnElementSection(element)) element.setAttribute('data-gbdraw-preview-item', 'settings');
+    });
     return true;
   };
 

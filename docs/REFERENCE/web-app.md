@@ -1122,8 +1122,11 @@ Linear scale opens **Axis & Scale** in the settings, a click on a dinucleotide
 content or skew track opens **Dinucleotide content/skew**, and a click on the
 plot title opens **Titles & Record Labels**, as the icon button of that section
 above the settings does. While the pointer is on one of them, the preview reads
-"Click to open its settings". The click changes no setting and adds no **Undo**
-step, and a press that pans the figure opens nothing.
+"Click to open its settings"; on the plot title and the Linear scale that line
+stands above "Turn on Layout edit to move this item". A click that closes an
+open popup or clears a feature selection does only that, and the next click
+opens the section. The click changes no setting and adds no **Undo** step, and
+a press that pans the figure opens nothing.
 
 Ctrl-click selects features for bulk color, legend name, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the

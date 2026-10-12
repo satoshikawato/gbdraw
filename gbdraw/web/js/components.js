@@ -16,7 +16,7 @@ import { settingApplicationNote } from './services/setting-application.js';
 /** @import { SettingApplicationId } from './services/setting-application.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
-/** @import { SettingsPaneView } from './app/settings-pane.js' */
+/** @import { SettingsPaneView, SettingsReveal } from './app/settings-pane.js' */
 
 const { ref, reactive, computed, nextTick, watch, useId, onMounted, onBeforeUnmount } = window.Vue;
 
@@ -319,11 +319,12 @@ export const SettingsSectionIndex = {
     mode: { type: String, required: true },
     controls: { type: String, required: true },
     view: { type: Object, required: true },
-    reveal: { type: Function, required: true }
+    reveal: { type: Function, required: true },
+    revealed: { type: Object, required: true }
   },
   emits: ['rail', 'stacked', 'close'],
   /**
-   * @param {{ mode: 'circular' | 'linear', controls: string, view: SettingsPaneView, reveal: RevealSection }} props
+   * @param {{ mode: 'circular' | 'linear', controls: string, view: SettingsPaneView, reveal: RevealSection, revealed: SettingsReveal }} props
    * @param {{ emit: (event: 'rail' | 'stacked' | 'close', section?: SettingsSectionKey) => void }} context
    */
   setup(props, { emit }) {
@@ -377,7 +378,7 @@ export const SettingsSectionIndex = {
       props.reveal(key, focus ? /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(focus)) : null);
     // A section the pane opened holds the mark. A section without an entry in
     // this form (About & Citation in the row) leaves the mark to the geometry.
-    watch(() => props.view.revealed, (/** @type {SettingsPaneView['revealed']} */ revealed) => {
+    watch(() => props.revealed.last, (/** @type {SettingsReveal['last']} */ revealed) => {
       held = revealed && entries.value.some((entry) => entry.key === revealed.key) ? revealed : null;
       if (held) current.value = held.key; else mark();
     }, { flush: 'sync' });
@@ -478,9 +479,10 @@ export const SettingsSectionIndex = {
       if (rail.value) root.value?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
     }));
     // A mode change may remove the entry whose text is shown, and the marked
-    // section; so may a display that changes with the layout (the phone width).
-    // Two sources: one getter that returns both would run on every change of the view.
-    watch([() => props.mode, () => props.view.display], () => {
+    // section; so may the phone width, which changes the display of a rail and
+    // the layout of the stacked settings. One source each: one getter that
+    // returns them all would also run when only the docked section changes.
+    watch([() => props.mode, () => props.view.display, () => props.view.switchable], () => {
       hideTip();
       held = null;
       nextTick(mark);

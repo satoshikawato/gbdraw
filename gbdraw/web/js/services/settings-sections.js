@@ -118,15 +118,20 @@ const DRAWN_ELEMENT_SECTIONS = Object.freeze([
 
 export const DRAWN_ELEMENT_SELECTOR = DRAWN_ELEMENT_SECTIONS.map(({ selector }) => selector).join(', ');
 
+// A record definition is named after its record (`<record id>_definition`),
+// so the id of a record called `tick_1` or `skew_a` reads like a track's.
+const RECORD_DEFINITION_SELECTOR = '[data-gbdraw-role^="record-definition"]';
+
 /**
  * The section that holds the settings of the drawn element an event in the
- * Result reached: the element itself, or the group it is drawn in.
- * @param {EventTarget | null} target @param {Element} svg
+ * Result reached: the element itself, or the group it is drawn in. A record
+ * definition has none, whatever its id.
+ * @param {EventTarget | null} target
  * @returns {SettingsSectionKey | null}
  */
-export const drawnElementSection = (target, svg) => {
+export const drawnElementSection = (target) => {
   const element = target instanceof Element ? target.closest(DRAWN_ELEMENT_SELECTOR) : null;
-  if (!element || !svg.contains(element)) return null;
+  if (!element || element.matches(RECORD_DEFINITION_SELECTOR)) return null;
   return DRAWN_ELEMENT_SECTIONS.find(({ selector }) => element.matches(selector))?.section ?? null;
 };
 
