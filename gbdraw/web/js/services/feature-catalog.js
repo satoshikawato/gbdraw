@@ -565,7 +565,10 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
       feature.recordKey,
       feature.biologicalFeatureId
     );
-    if (!svgId || svgIds.has(svgId) || !knownFeatures.has(key)
+    // The key joins the record key and the feature ID by NUL, so a known key
+    // does not prove the record key: it must be one of the item's (OV-567).
+    const recordIndex = itemRecordIndexByKey.get(text(feature.recordKey));
+    if (!svgId || svgIds.has(svgId) || !knownFeatures.has(key) || recordIndex === undefined
       || !validDrawnSelector(feature.drawnSelector)) {
       throw catalogError();
     }
@@ -595,8 +598,7 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     addCatalogRenderedIdentity(renderedIdentities, {
       renderedId: svgId,
       stableId: biological.stable_feature_id || feature.biologicalFeatureId || svgId,
-      // `knownFeatures.has(key)` above proved `feature.recordKey` is one of the item's record keys.
-      recordIndex: /** @type {number} */ (itemRecordIndexByKey.get(text(feature.recordKey))),
+      recordIndex,
       recordId: biological.record_id || feature.recordKey,
       elementId: svgId
     });
