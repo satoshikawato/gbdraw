@@ -10,6 +10,11 @@ import {
 } from './legend-layout/composition-actions.js';
 
 /**
+ * One Result's composition offsets: the primary groups', the Legend's, and the title's.
+ * @typedef {{ primary: number[][], legend: number[] | null, title: number[] | null }} CompositionRecordDeltas
+ */
+
+/**
  * The preview owner's ports that this root reads (R13); only this root holds
  * the preview owner.
  * @typedef {object} LegendLayoutPreviewPort
@@ -80,8 +85,11 @@ export const createLegendLayout = ({
   // a Result records nothing, and Undo and Redo restore the Result a step was
   // made on. Only the displayed Result is read, and only when the mounted root
   // is bound to it; another Result keeps the offsets last seen or restored.
+  /** @type {Map<string, CompositionRecordDeltas>} */
   const firstSeenDeltas = new Map();
+  /** @type {Map<string, CompositionRecordDeltas>} */
   const movedDeltas = new Map();
+  /** @param {string} identity @param {CompositionRecordDeltas} deltas */
   const recordSeenDeltas = (identity, deltas) => {
     if (!firstSeenDeltas.has(identity)) firstSeenDeltas.set(identity, deltas);
     if (JSON.stringify(deltas) === JSON.stringify(firstSeenDeltas.get(identity))) {
@@ -90,13 +98,14 @@ export const createLegendLayout = ({
       movedDeltas.set(identity, deltas);
     }
   };
+  /** @param {unknown} result */
   const resultIdentity = (result) => previewRuntime?.getResultIdentity?.(result) || '';
   const captureCompositionIntent = () => {
     const runtime = previewRuntime?.getActiveRuntime?.() || null;
     // state is untyped; the container holds our own Result, so this is an SVG or null.
     const svg = /** @type {SVGSVGElement | null} */ (state.svgContainer.value?.querySelector?.('svg') || null);
     if (svg && runtime?.svg === svg && runtime.resultIdentity) {
-      /** @type {Record<string, any> | null} */
+      /** @type {CompositionRecordDeltas | null} */
       let deltas = null;
       try {
         deltas = compositionUserDeltas(svg);
@@ -105,24 +114,32 @@ export const createLegendLayout = ({
       }
       if (deltas) recordSeenDeltas(runtime.resultIdentity, deltas);
     }
+    // Result identities are `result:<id>` or `runtime-result:<n>` (or ''), so
+    // none names an Object.prototype member.
+    /** @type {Record<string, CompositionRecordDeltas>} */
     const record = {};
     if (movedDeltas.size === 0) return record;
-    state.results.value.forEach((result) => {
+    state.results.value.forEach((/** @type {unknown} */ result) => {
       const identity = resultIdentity(result);
-      if (movedDeltas.has(identity)) record[identity] = movedDeltas.get(identity);
+      // `has` was just checked.
+      if (movedDeltas.has(identity)) record[identity] = /** @type {CompositionRecordDeltas} */ (movedDeltas.get(identity));
     });
     return record;
   };
 
   // Restores the recorded offsets of the named Results; a Result absent from
   // the record returns to the offsets History first saw it with.
+  /**
+   * @param {Record<string, CompositionRecordDeltas> | null | undefined} record
+   * @param {ReadonlySet<string>} identities
+   */
   const reconcileCompositionUserDeltas = (record, identities) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     let reconciled = false;
     identities.forEach((identity) => {
       const deltas = record?.[identity] || firstSeenDeltas.get(identity);
-      const index = state.results.value.findIndex((result) => resultIdentity(result) === identity);
+      const index = state.results.value.findIndex((/** @type {unknown} */ result) => resultIdentity(result) === identity);
       if (!deltas || index < 0) return;
       const changed = previewRuntime?.commitResultEdit(index, (svg, { mounted }) => {
         const applied = applyCompositionUserDeltas(svg, deltas);
@@ -136,9 +153,15 @@ export const createLegendLayout = ({
   };
 
   return {
-    /** @param {Record<string, any>} drawing The drawing of the run that keeps the decorations. */
+    /**
+     * @param {Record<string, unknown> | null | undefined} canonical The committed canonical Session; null before one is committed.
+     * @param {(source: Record<string, unknown> | null | undefined, recordKeys: unknown) => unknown} projectRecordIdentity
+     * @param {Record<string, any>} drawing The drawing of the run that keeps the decorations.
+     */
     captureDecorationContinuity: (canonical, projectRecordIdentity, drawing) => captureDecorationContinuity({
-      canonical, projectRecordIdentity, results: state.results.value, catalog: state.featureCatalog.value,
+      // `captureDecorationContinuity` declares a non-null Session, yet it reads the Session only through
+      // `projectRecordIdentity`, which takes null (`canonical?.renderRequest`); its declaration is too narrow.
+      canonical: /** @type {Record<string, unknown>} */ (canonical), projectRecordIdentity, results: state.results.value, catalog: state.featureCatalog.value,
       mountedSvg: state.svgContainer.value?.querySelector?.('svg') || null,
       selectedResultIndex: state.selectedResultIndex.value,
       canvasPadding: drawing.canvasPadding

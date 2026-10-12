@@ -72,6 +72,7 @@ export const createLegendManager = ({
     // legend-only edit, which the root shows on the Result.
     /** @param {number} index */
     legendRowHasRules: (index) => rowRulesAt(state.activeDrawing(), index).length > 0,
+    /** @param {number} index @param {string} color */
     updateLegendEntryColor: (index, color) => {
       const drawing = state.activeDrawing();
       const rowRules = rowRulesAt(drawing, index);

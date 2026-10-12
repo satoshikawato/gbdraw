@@ -815,3 +815,15 @@ test('displaying a Result shows the current label intent when none remains (B6, 
   assert.equal(svg.querySelector('text').textContent, 'beta');
   assert.deepEqual(harness.mutations, { commit: 1 });
 });
+
+// A label's source text is free text, so the bulk text table is read by own
+// key: a label that reads `constructor` is not replaced by Object.prototype.
+test('a label whose text names an Object.prototype member keeps its text', () => {
+  const svg = labelSvg();
+  const text = svg.querySelector('text');
+  text.textContent = 'constructor';
+  const harness = buildHarness({ svg });
+  harness.actions.reconcileLabelOverrides();
+  assert.equal(text.textContent, 'constructor');
+  assert.deepEqual(harness.mutations, { commit: 0 });
+});

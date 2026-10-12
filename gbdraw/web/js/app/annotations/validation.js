@@ -5,10 +5,16 @@ import {
   resolveAnnotationRecord
 } from './record-selector.js';
 
+/**
+ * @import { AnnotationCatalogIssue, AnnotationCatalogRecord, AnnotationRecordCatalog } from './record-catalog.js'
+ * @import { AnnotationRecordSelector, AnnotationSet } from '../../services/annotation-state.js'
+ */
+
+/** @param {unknown} value */
 const cleanText = (value) => String(value ?? '').trim();
 
 /**
- * @param {{ start?: any, end?: any }} span A coordinate target or a table row.
+ * @param {{ start?: unknown, end?: unknown }} span A coordinate target or a table row.
  * @returns {string} The message of a failed span, or ''.
  */
 export const validateAnnotationCoordinates = ({ start, end }) => (
@@ -16,14 +22,17 @@ export const validateAnnotationCoordinates = ({ start, end }) => (
     ? '' : 'start and end must be positive integers (1-based coordinates).'
 );
 // A failed target is a producer diagnostic; the annotation ID stays private.
+/** @param {string} reason @returns {AnnotationCatalogIssue} */
 const targetIssue = (reason) => ({ code: 'ANNOTATION_TARGET', context: { reason } });
 
+/** @param {AnnotationSet[] | null | undefined} sets */
 const allAnnotations = (sets) => (
   (Array.isArray(sets) ? sets : []).flatMap((set) => (
     (Array.isArray(set?.annotations) ? set.annotations : []).map((annotation) => ({ set, annotation }))
   ))
 );
 
+/** @param {AnnotationRecordSelector} selector @param {AnnotationCatalogRecord[]} records */
 const selectorReason = (selector, records) => {
   if (selector.kind === 'recordIndex') return selector.index < records.length ? '' : 'OUT_OF_RANGE';
   const matches = records.filter((record) => record.recordId === selector.value);
@@ -31,7 +40,12 @@ const selectorReason = (selector, records) => {
   return matches.length > 1 ? 'AMBIGUOUS' : '';
 };
 
-/** Returns null or the first failure as a { code, context } diagnostic. */
+/**
+ * Returns null or the first failure as a { code, context } diagnostic.
+ * @param {AnnotationSet[] | null | undefined} sets
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ * @returns {AnnotationCatalogIssue | null}
+ */
 export const validateAnnotationRecordTargets = (sets, catalog) => {
   const annotations = allAnnotations(sets);
   if (annotations.length === 0) return null;

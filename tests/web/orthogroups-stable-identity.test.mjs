@@ -1944,3 +1944,13 @@ console.log('orthogroup stable identity tests passed');
   const grouped = offEditor.groupOrthogroupMembersByRecord([{ fileIdx: 1 }, { fileIdx: 0 }]);
   assert.deepEqual(grouped.map((entry) => entry.recordLabel), ['record-a', 'record-c']);
 }
+
+// A Similarity group id is data, so the rename tables are read by own key: a
+// group named `constructor` shows its own name, not Object.prototype.
+{
+  const protoState = { ...state, orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} };
+  const protoEditor = createOrthogroupEditor({ state: withDrawings(protoState), runAnalysis: null });
+  const protoGroup = { id: 'constructor', name: 'Own name', description: 'Own description', members: [] };
+  assert.equal(protoEditor.resolveOrthogroupName(protoGroup), 'Own name');
+  assert.equal(protoEditor.resolveOrthogroupDescription(protoGroup), 'Own description');
+}

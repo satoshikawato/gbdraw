@@ -11,6 +11,12 @@ import {
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
 
+/** @typedef {NonNullable<AnnotationTarget['selectors']>} FeatureSelectors */
+/**
+ * One table row by column name; a column the header lacks is absent.
+ * @typedef {Record<string, string | undefined>} AnnotationTableRow
+ */
+
 const REQUIRED = ['set_id', 'id', 'mark'];
 const COLUMNS = [
   'set_id', 'id', 'mark', 'record', 'start', 'end', 'coordinate_space', 'wraps_origin', 'out_of_bounds',
@@ -45,7 +51,9 @@ const SVG_COLOR_NAMES = new Set(`
   slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato
   turquoise violet wheat white whitesmoke yellow yellowgreen
 `.trim().split(/\s+/));
+/** @param {AnnotationTableRow} row @param {number} rowNumber */
 const validateStyle = (row, rowNumber) => {
+  /** @param {string} column @param {string} message @returns {never} */
   const fail = (column, message) => { throw new Error(`Annotation table row ${rowNumber}, column '${column}': ${message}`); };
   for (const column of ['stroke', 'fill', 'hatch_color', 'label_color']) {
     if (row[column] && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(row[column]) && !SVG_COLOR_NAMES.has(row[column].toLowerCase())) {
@@ -64,7 +72,9 @@ const validateStyle = (row, rowNumber) => {
     }
   }
 };
+/** @param {string} line */
 const splitTsv = (line) => line.split('\t').map((value) => value.trim());
+/** @param {unknown} value @param {boolean} [fallback] */
 const boolValue = (value, fallback = false) => {
   if (value == null || value === '') return fallback;
   const text = String(value).toLowerCase();
@@ -72,6 +82,7 @@ const boolValue = (value, fallback = false) => {
   if (['false', '0', 'no', 'off'].includes(text)) return false;
   throw new Error(`Invalid boolean value: ${value}`);
 };
+/** @param {AnnotationTableRow} row */
 const styleFromRow = (row) => {
   const hasStyle = COLUMNS.slice(15).some((name) => row[name] !== '');
   if (!hasStyle) return null;
@@ -97,6 +108,7 @@ const styleFromRow = (row) => {
   return style;
 };
 
+/** @param {unknown} text */
 export const parseAnnotationTableWithNotice = (text) => {
   const lines = String(text || '').split(/\r?\n/).filter((line) => line.trim() && !line.trimStart().startsWith('#'));
   if (lines.length === 0) return { sets: [], notice: '' };
@@ -105,11 +117,13 @@ export const parseAnnotationTableWithNotice = (text) => {
   if (new Set(header).size !== header.length) throw new Error('Annotation table has duplicate columns.');
   const unknown = header.filter((name) => !COLUMNS.includes(name));
   const known = header.map((name, index) => ({ name, index })).filter(({ name }) => COLUMNS.includes(name));
+  /** @type {Map<string, AnnotationSet>} */
   const sets = new Map();
   lines.slice(1).forEach((line, index) => {
     const values = splitTsv(line);
     const rowNumber = index + 2;
     if (values.length !== header.length) throw new Error(`Annotation table row ${rowNumber}: expected ${header.length} columns, got ${values.length}.`);
+    /** @type {AnnotationTableRow} */
     const row = Object.fromEntries(known.map(({ name, index }) => [name, values[index]]));
     if (!row.set_id || !row.id || !row.mark) throw new Error(`Annotation table row ${rowNumber}: set_id, id, and mark are required.`);
     for (const [column, choices] of Object.entries(ENUM_COLUMNS)) {
@@ -137,10 +151,13 @@ export const parseAnnotationTableWithNotice = (text) => {
     if (row.lane && (!Number.isSafeInteger(Number(row.lane)) || Number(row.lane) < 0)) {
       throw new Error(`Annotation table row ${rowNumber}: lane must be a non-negative integer.`);
     }
+    /** @type {AnnotationTarget} */
     const target = hasCoordinates
       ? coordinateTarget({ ...record, start: row.start, end: row.end, coordinateSpace: row.coordinate_space })
       : featureTarget({ ...record, selector: row.feature_selector, extent: row.envelope, circularPath: row.circular_path });
-    if (hasFeature && (!target.selectors.length || target.selectors.some((selector) => !selector.value))) {
+    // `featureTarget` always sets `selectors`, and `hasFeature` selected it.
+    if (hasFeature && (!/** @type {FeatureSelectors} */ (target.selectors).length
+      || /** @type {FeatureSelectors} */ (target.selectors).some((selector) => !selector.value))) {
       throw new Error(`Annotation table row ${rowNumber}: feature_selector requires a nonempty feature value.`);
     }
     if (hasCoordinates) {
@@ -148,8 +165,9 @@ export const parseAnnotationTableWithNotice = (text) => {
       target.outOfBounds = row.out_of_bounds || 'clip';
     }
     if (!sets.has(row.set_id)) sets.set(row.set_id, createAnnotationSet({ id: row.set_id }));
-    if (sets.get(row.set_id).annotations.some((item) => item.id === row.id)) throw new Error(`Annotation table row ${rowNumber}: duplicate annotation id in set '${row.set_id}'.`);
-    sets.get(row.set_id).annotations.push({
+    // Set just above when absent.
+    if (/** @type {AnnotationSet} */ (sets.get(row.set_id)).annotations.some((item) => item.id === row.id)) throw new Error(`Annotation table row ${rowNumber}: duplicate annotation id in set '${row.set_id}'.`);
+    /** @type {AnnotationSet} */ (sets.get(row.set_id)).annotations.push({
       id: row.id, target, label: row.label || '', mark: row.mark || 'bracket',
       lane: row.lane === '' || row.lane == null ? null : Number(row.lane), style: styleFromRow(row),
       legendLabel: row.legend_label || null, metadata: {}
@@ -161,6 +179,7 @@ export const parseAnnotationTableWithNotice = (text) => {
   };
 };
 
+/** @param {unknown} text */
 export const parseAnnotationTable = (text) => parseAnnotationTableWithNotice(text).sets;
 
 /**
@@ -201,6 +220,7 @@ export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => n
     const selectors = Array.isArray(target.selectors) ? target.selectors.map((item) => item.key ? `${item.key}=${item.value}` : item.value).join(';') : '';
     const style = /** @type {Partial<AnnotationStyle>} */ (annotation.style || set.defaultStyle || {});
     const hatch = style.hatch || /** @type {Partial<AnnotationHatch>} */ ({});
+    /** @type {Record<string, unknown>} */
     const row = {
       set_id: set.id, id: annotation.id, mark: annotation.mark, record: annotationRecordSelectorValue(target.record),
       start: coordinate ? target.start : '', end: coordinate ? target.end : '', coordinate_space: coordinate ? target.coordinateSpace : '',
@@ -217,4 +237,5 @@ export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => n
   return { text: `${rows.join('\n')}\n`, placedFeatureIdentityCount, skippedFeatureIdentityCount };
 };
 
+/** @param {AnnotationSet[]} sets */
 export const encodeAnnotationTable = (sets) => encodeAnnotationTableWithNotice(sets).text;
