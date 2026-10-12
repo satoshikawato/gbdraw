@@ -401,6 +401,7 @@ def test_linear_annotation_to_slot_padding_shrinks_both_edges() -> None:
         ("anchor_slot=low,to_slot=features,layer=underlay,z=-1", "must have z less than anchor 'low'"),
         ("anchor_slot=features,to_slot=high,layer=foreground,z=1", "must have z greater than to_slot 'high'"),
         ("anchor_slot=features,to_slot=,layer=underlay,z=-1", "to_slot cannot be empty"),
+        ("anchor_slot=features,to_slot=features,layer=underlay,z=-1", "to_slot must name a slot other than its anchor_slot 'features'"),
     ],
 )
 def test_linear_annotation_to_slot_reference_errors(spec: str, message: str) -> None:

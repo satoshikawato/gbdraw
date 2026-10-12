@@ -111,6 +111,11 @@ def validate_overlay_annotation_anchors(
         annotation = getattr(slot, "annotation", None)
         if slot.renderer != "annotations" or slot.side != "overlay" or annotation is None:
             continue
+        if annotation.to_slot is not None and annotation.to_slot == annotation.anchor_slot:
+            raise ValueError(
+                f"annotation slot '{slot.id}' to_slot must name a slot other than "
+                f"its anchor_slot '{annotation.anchor_slot}'"
+            )
         for name, role in _OVERLAY_SLOT_REFERENCES:
             reference = getattr(annotation, name)
             if reference is None:

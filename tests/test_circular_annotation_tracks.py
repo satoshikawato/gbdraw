@@ -247,10 +247,17 @@ def _circular_bands(drawing, record_index: int = 0) -> dict[str, tuple[float, fl
     return bands
 
 
-def _build_circular_span(*slots: str | CircularTrackSlot, features: tuple[tuple[int, int], ...] = (), **overrides: bool):
+def _build_circular_span(
+    *slots: str | CircularTrackSlot,
+    features: tuple[tuple[int, int], ...] = (),
+    strands: tuple[int, ...] = (1,),
+    **overrides: bool,
+):
     record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
     record.features = [
-        SeqFeature(FeatureLocation(start, end, strand=1), type="CDS") for start, end in features
+        SeqFeature(FeatureLocation(start, end, strand=strand), type="CDS")
+        for strand in strands
+        for start, end in features
     ]
     return build_circular_diagram(
         record,
@@ -326,6 +333,7 @@ def test_circular_annotation_to_slot_padding_shrinks_both_edges() -> None:
         ("anchor_slot=low,to_slot=features,layer=underlay,z=-1", "must have z less than anchor 'low'"),
         ("anchor_slot=features,to_slot=high,layer=foreground,z=1", "must have z greater than to_slot 'high'"),
         ("anchor_slot=features,to_slot=,layer=underlay,z=-1", "to_slot cannot be empty"),
+        ("anchor_slot=features,to_slot=features,layer=underlay,z=-1", "to_slot must name a slot other than its anchor_slot 'features'"),
     ],
 )
 def test_circular_annotation_to_slot_reference_errors(spec: str, message: str) -> None:
@@ -375,23 +383,54 @@ def test_circular_overlay_annotation_reads_slot_references_in_any_key_case(spann
     assert bands("Anchor_Slot", "To_Slot") == bands("anchor_slot", "to_slot")
 
 
-def test_circular_annotation_to_slot_covers_inward_feature_overflow_lanes() -> None:
-    overlapping = ((100, 900), (500, 1500), (700, 1700))
-    slots = (*_SPAN_STACK, _span_slot())
-    flat = _circular_bands(_build_circular_span(*slots, features=overlapping))
-    stacked = _circular_bands(
-        _build_circular_span(
-            *slots,
-            features=overlapping,
-            **{"canvas.resolve_overlaps": True, "canvas.strandedness": False},
+@pytest.mark.parametrize(
+    ("features_slot", "gc_slot", "stranded"),
+    [
+        pytest.param("features:features@side=overlay,lane_direction=split", "gc:dinucleotide_content", True, id="split"),
+        pytest.param("features:features@lane_direction=outside", "gc:dinucleotide_content", False, id="outside"),
+        pytest.param("features:features", "gc:dinucleotide_content", False, id="inside"),
+        pytest.param(
+            "features:features@side=overlay,lane_direction=split",
+            "gc:dinucleotide_content@side=outside",
+            True,
+            id="split-to-an-outer-slot",
+        ),
+    ],
+)
+def test_circular_annotation_to_slot_covers_every_feature_lane(
+    features_slot: str, gc_slot: str, stranded: bool
+) -> None:
+    def build(overlay: str):
+        return _build_circular_span(
+            features_slot,
+            gc_slot,
+            overlay,
+            features=((100, 900), (500, 1500), (700, 1700)),
+            strands=(1, -1) if stranded else (1,),
+            **{"canvas.resolve_overlaps": True, "canvas.strandedness": stranded},
         )
-    )
 
-    # The hull uses the primary feature lane, as cover_anchor does. Overflow lanes
-    # grow toward the GC slot, which moves inward, so the span still contains them.
-    assert stacked["features"] == pytest.approx(flat["features"])
-    assert stacked["gc"][1] < flat["gc"][1]
-    assert stacked["drawn"] == pytest.approx((stacked["gc"][0], stacked["features"][1]), abs=1e-3)
+    drawing = build(_span_slot())
+    bands = _circular_bands(drawing)
+    lane_radii = [
+        float(value)
+        for element in ElementTree.fromstring(drawing.tostring()).iter()
+        if "data-gbdraw-feature-id" in element.attrib
+        for value in re.findall(r"A ?([0-9.]+),", element.attrib.get("d", ""))
+    ]
+    lanes = (min(lane_radii), max(lane_radii))
+
+    # Overlap resolution gave the slot more lanes than its first one.
+    assert lanes[1] - lanes[0] > bands["features"][1] - bands["features"][0] + 1
+    assert bands["drawn"] == pytest.approx(
+        (min(lanes[0], bands["gc"][0]), max(lanes[1], bands["gc"][1])), abs=1e-3
+    )
+    # cover_anchor alone keeps the first lane of each strand, not every lane.
+    covered = _circular_bands(
+        build(_span_slot("anchor_slot=features,cover_anchor=true,layer=underlay,z=-1"))
+    )["drawn"]
+    assert lanes[0] <= covered[0] + 1e-3 and covered[1] <= lanes[1] + 1e-3
+    assert covered[1] - covered[0] < lanes[1] - lanes[0] - 1
 
 
 def test_circular_annotation_to_slot_spans_a_depth_slot_without_data_for_a_record() -> None:

@@ -2353,11 +2353,12 @@ def _resolve_circular_radial_layout(
         if not referenced:
             continue
         anchor = referenced[0]
-        referenced_bands = [slot.draw_band_px or slot.packing_band_px for slot in referenced]
-        anchor_band = referenced_bands[0]
-        # to_slot: the hull of the bands that the two slots have.
+        anchor_band = anchor.draw_band_px or anchor.packing_band_px
+        # to_slot: the hull of the two slots' whole bands, every feature lane included.
+        # cover_anchor alone keeps the draw band (the first feature lane of each strand).
+        whole_bands = [slot.packing_band_px or slot.draw_band_px for slot in referenced]
         span_band = (
-            band_union([item for item in referenced_bands if item is not None])
+            band_union([item for item in whole_bands if item is not None])
             if annotation.to_slot is not None
             else None
         )
