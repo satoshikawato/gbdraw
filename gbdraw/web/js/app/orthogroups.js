@@ -16,6 +16,7 @@ import {
 import { downloadTextFile } from '../services/text-download.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
+import { ownEntry } from '../utils/own-entry.js';
 import {
   ORTHOGROUP_ID_KEYS,
   RECORD_INDEX_KEYS,
@@ -29,21 +30,50 @@ import {
   uniqueOrthogroupEntries
 } from '../services/feature-identity.js';
 
+/** @import { FeatureIdentity } from '../services/feature-identity.js' */
+/** @import { FeatureSvgRoot } from '../services/feature-dom.js' */
+
+/**
+ * One member of a Similarity group as the analysis rows hold it; Python owns the
+ * fields (R7), so they are read as `unknown`.
+ * @typedef {Record<string, unknown>} OrthogroupMember
+ */
+/**
+ * One Similarity group row. Its id is any of the alias keys `orthogroupIdStatus` reads.
+ * @typedef {Record<string, unknown> & {
+ *   members?: OrthogroupMember[],
+ *   nameCandidates?: { text?: unknown, source?: unknown }[]
+ * }} OrthogroupGroup
+ */
+/** @typedef {OrthogroupGroup | string | null | undefined} GroupOrId A group row, or the id of one. */
+
 export { resolveUniqueOrthogroupMemberForFeature } from '../services/feature-identity.js';
 
 const { computed, nextTick, reactive, watch, toDisplayString } = window.Vue;
 
 const COPY_FEEDBACK_DURATION_MS = 1500;
+// Keyed by `success` and `failure`, which are the only statuses this module
+// stores; a missing status reads undefined.
+/** @type {Readonly<Record<string, string | undefined>>} */
 const COPY_FEEDBACK_LABELS = Object.freeze({
   success: 'Copied!',
   failure: 'Copy failed'
 });
 
+/** @param {unknown} value */
 const normalizeText = (value) => String(value ?? '').trim();
+/** @param {unknown} value */
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
 
 // Narrow the search by supplied fields; identityMatches still owns all matching semantics.
+/**
+ * @template T
+ * @param {readonly T[]} entries
+ * @param {(entry: T) => FeatureIdentity} identityOf
+ * @returns {(reference: FeatureIdentity) => T[]}
+ */
 const indexFeatureIdentities = (entries, identityOf) => {
+  /** @type {readonly ('recordIndex' | 'sourceIndex' | 'recordKey' | 'biologicalId' | 'stableId' | 'renderedId')[]} */
   const fields = ['recordIndex', 'sourceIndex', 'recordKey', 'biologicalId', 'stableId', 'renderedId'];
   const indexes = new Map(fields.map((field) => [field, new Map()]));
   for (const entry of entries) {
@@ -74,11 +104,13 @@ const indexFeatureIdentities = (entries, identityOf) => {
 };
 
 
+/** @param {OrthogroupMember | null | undefined} member */
 const memberStableFeatureId = (member) => {
   const status = textAliasStatus(member, STABLE_FEATURE_ID_KEYS);
   return status.valid ? status.value : '';
 };
 
+/** @param {OrthogroupMember | null | undefined} member */
 const memberCopyFeedbackIdentity = (member) => {
   const identity = featureIdentity(member);
   if (identity.usable) {
@@ -96,12 +128,14 @@ const memberCopyFeedbackIdentity = (member) => {
     normalizeText(member?.start),
     normalizeText(member?.end),
     normalizeText(member?.strand),
-    normalizeText(resolveDisplayProteinId(member?.sequenceFeature, member, ''))
+    normalizeText(resolveDisplayProteinId(/** @type {Record<string, unknown> | null | undefined} */ (member?.sequenceFeature), member, ''))
   ]);
 };
 
+/** @param {unknown} value */
 const normalizeSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
 
+/** @param {unknown[]} values */
 const firstSequenceText = (...values) => {
   for (const value of values) {
     const normalized = normalizeSequence(value);
@@ -110,24 +144,30 @@ const firstSequenceText = (...values) => {
   return '';
 };
 
+/** @param {unknown} value @param {string} [fallback] */
 const makeSafeFilename = (value, fallback = 'orthogroup') => {
   const cleaned = normalizeText(value).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || fallback;
 };
 
+/** @param {unknown} sequenceKind */
 const sequenceKindLabel = (sequenceKind) => (sequenceKind === 'aa' ? 'aa' : 'nt');
+/** @param {unknown} sequenceKind */
 const sequenceExtension = (sequenceKind) => (sequenceKindLabel(sequenceKind) === 'aa' ? 'faa' : 'fna');
 
+/** @param {unknown} id */
 const numericOrthogroupId = (id) => {
   const match = String(id || '').match(/^og_(\d+)$/i);
   return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
 };
 
+/** @param {OrthogroupGroup | null | undefined} group */
 const orthogroupIdValue = (group) => {
   const status = orthogroupIdStatus(group);
   return status.valid && status.supplied ? status.value : '';
 };
 
+/** @param {OrthogroupGroup} left @param {OrthogroupGroup} right */
 const compareOrthogroupId = (left, right) => {
   const leftId = orthogroupIdValue(left);
   const rightId = orthogroupIdValue(right);
@@ -137,14 +177,17 @@ const compareOrthogroupId = (left, right) => {
   return leftId.localeCompare(rightId);
 };
 
+/** @param {OrthogroupGroup | null | undefined} group @returns {OrthogroupMember[]} */
 const getGroupMembers = (group) => (Array.isArray(group?.members) ? group.members : []);
 
+/** @param {OrthogroupMember | null | undefined} member @param {unknown} sequenceKind */
 const getMemberSequence = (member, sequenceKind) => (
   sequenceKindLabel(sequenceKind) === 'aa'
     ? firstSequenceText(member?.aminoAcidSequence, member?.amino_acid_sequence, member?.proteinSequence, member?.sequence)
     : firstSequenceText(member?.nucleotideSequence, member?.nucleotide_sequence)
 );
 
+/** @param {OrthogroupMember | null | undefined} member */
 const memberLocationText = (member) => {
   const start = Number(member?.start);
   const end = Number(member?.end);
@@ -154,16 +197,19 @@ const memberLocationText = (member) => {
   return `${start + 1}-${end}${strand}`;
 };
 
+/** @param {unknown} strand */
 const normalizeMemberStrand = (strand) => {
   if (strand === -1 || String(strand).trim() === '-1') return '-';
   if (strand === 1 || String(strand).trim() === '1') return '+';
   return normalizeText(strand);
 };
 
+/** @param {OrthogroupMember | null | undefined} member */
 const buildMemberFeaturePayload = (member) => {
-  const sourceFeature = member?.sequenceFeature && typeof member.sequenceFeature === 'object'
+  // A non-null object here; its fields are read as `unknown`.
+  const sourceFeature = /** @type {Record<string, unknown>} */ (member?.sequenceFeature && typeof member.sequenceFeature === 'object'
     ? member.sequenceFeature
-    : {};
+    : {});
   const displayProteinId = resolveDisplayProteinId(
     sourceFeature,
     member,
@@ -186,6 +232,7 @@ const buildMemberFeaturePayload = (member) => {
   };
 };
 
+/** @param {OrthogroupMember | null | undefined} member @param {unknown} sequenceKind */
 const memberFastaText = (member, sequenceKind) => {
   const feature = buildMemberFeaturePayload(member);
   const fastas = buildFeatureSequenceFastas(feature, {
@@ -196,6 +243,7 @@ const memberFastaText = (member, sequenceKind) => {
   return text ? `${text}\n` : '';
 };
 
+/** @param {OrthogroupMember | null | undefined} member */
 const getMemberSearchText = (member) => [
   member?.displayProteinId,
   member?.proteinId,
@@ -211,11 +259,13 @@ const getMemberSearchText = (member) => [
   .map(normalizeLower)
   .join(' ');
 
+/** @param {{ text?: unknown, source?: unknown } | null | undefined} candidate */
 const getCandidateSearchText = (candidate) => [
   candidate?.text,
   candidate?.source
 ].map(normalizeLower).join(' ');
 
+/** @param {Element} el */
 const setOriginalStroke = (el) => {
   if (!el.hasAttribute('data-og-original-stroke')) {
     el.setAttribute('data-og-original-stroke', el.getAttribute('stroke') || '');
@@ -223,6 +273,7 @@ const setOriginalStroke = (el) => {
   }
 };
 
+/** @param {Element | null | undefined} element @param {FeatureIdentity} candidate */
 const domIdentityAgrees = (element, candidate) => {
   const stableId = textAliasStatus({
     stableId: element?.getAttribute?.('data-gbdraw-stable-feature-id')
@@ -242,7 +293,9 @@ const domIdentityAgrees = (element, candidate) => {
   return true;
 };
 
+/** @param {FeatureSvgRoot | null | undefined} svg @param {(Record<string, unknown> | null | undefined)[] | null} [features] */
 const buildRenderedFeatureIndex = (svg, features = []) => {
+  /** @type {Map<string, FeatureIdentity[]>} */
   const metadataByRenderedId = new Map();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     const candidate = renderedFeatureIdentity(feature);
@@ -252,6 +305,7 @@ const buildRenderedFeatureIndex = (svg, features = []) => {
     metadataByRenderedId.set(candidate.renderedId.value, values);
   });
 
+  /** @type {FeatureIdentity[]} */
   const candidates = [];
   metadataByRenderedId.forEach((values, renderedId) => {
     if (values.length !== 1) return;
@@ -261,6 +315,7 @@ const buildRenderedFeatureIndex = (svg, features = []) => {
     }
   });
 
+  /** @type {Map<string, FeatureIdentity | null>} */
   const domByRenderedId = new Map();
   Array.from(svg?.querySelectorAll?.(FEATURE_SELECTOR) || []).forEach((element) => {
     const renderedId = normalizeText(getFeatureIdentity(element));
@@ -290,6 +345,7 @@ const buildRenderedFeatureIndex = (svg, features = []) => {
   return candidates;
 };
 
+/** @param {OrthogroupMember} member @param {FeatureIdentity[] | null | undefined} renderedIndex */
 const renderedFeatureIdForMember = (member, renderedIndex) => {
   const identity = featureIdentity(member);
   if (!identity.usable) return '';
@@ -303,7 +359,7 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * A `{ value }` field is a Vue ref; the override maps and `linearSeqs` are
  * reactive objects.
  * @typedef {object} OrthogroupEditorState
- * @property {{ value: Record<string, any>[] }} orthogroups
+ * @property {{ value: OrthogroupGroup[] }} orthogroups
  * @property {{ linear: OrthogroupEditorDrawing }} drawings Similarity groups are the Linear drawing's (registry: `config.webEdits`, linear only).
  * @property {{ value: string }} selectedOrthogroupId
  * @property {{ value: string }} orthogroupSearch
@@ -350,10 +406,18 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   } = state;
 
   const copyFeedbackByKey = reactive({});
+  /** @type {Map<string, number>} */
   const copyFeedbackTimers = new Map();
+  /** @type {Map<string, number>} */
   const copyOperationIds = new Map();
   let nextCopyOperationId = 0;
 
+  /**
+   * @param {GroupOrId} groupOrId
+   * @param {unknown} sequenceKind
+   * @param {OrthogroupMember | null} [member]
+   * @param {string} [context]
+   */
   const orthogroupCopyFeedbackKey = (
     groupOrId,
     sequenceKind,
@@ -371,6 +435,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     ]);
   };
 
+  /** @param {string} key @param {number} operationId @param {string} status */
   const updateCopyFeedback = (key, operationId, status) => {
     if (copyOperationIds.get(key) !== operationId) return;
     const previousTimer = copyFeedbackTimers.get(key);
@@ -388,6 +453,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     copyFeedbackTimers.set(key, timer);
   };
 
+  /** @param {string} key */
   const beginCopyFeedback = (key) => {
     const previousTimer = copyFeedbackTimers.get(key);
     if (previousTimer !== undefined) window.clearTimeout(previousTimer);
@@ -405,6 +471,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     Object.keys(copyFeedbackByKey).forEach((key) => delete copyFeedbackByKey[key]);
   };
 
+  /** @param {string} text @param {string} key */
   const copyWithFeedback = async (text, key) => {
     if (!text) return false;
     const operationId = beginCopyFeedback(key);
@@ -418,6 +485,13 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     }
   };
 
+  /**
+   * @param {GroupOrId} groupOrId
+   * @param {unknown} sequenceKind
+   * @param {unknown} originalLabel
+   * @param {OrthogroupMember | null} [member]
+   * @param {string} [context]
+   */
   const orthogroupCopyFeedbackLabel = (
     groupOrId,
     sequenceKind,
@@ -427,7 +501,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   ) => {
     const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context);
     const status = copyFeedbackByKey[key]?.status;
-    return COPY_FEEDBACK_LABELS[status] || String(originalLabel || 'Copy');
+    return (status && COPY_FEEDBACK_LABELS[status]) || String(originalLabel || 'Copy');
   };
 
   if (typeof watch === 'function') {
@@ -441,7 +515,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     // The tab panel's v-show applies after post watchers, hence nextTick.
     watch(
       () => [selectedOrthogroupId.value, showRightDrawer?.value && rightDrawerTab?.value === 'orthogroups'],
-      async ([id, listShown]) => {
+      async (/** @type {[unknown, unknown]} */ [id, listShown]) => {
         if (!id || !listShown || typeof document === 'undefined') return;
         await nextTick();
         document.querySelector(`[data-similarity-group-row="${CSS.escape(String(id))}"]`)
@@ -450,6 +524,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     );
   }
 
+  /** @type {{ readonly value: { id: string, group: OrthogroupGroup }[] }} */
   const resolvableOrthogroupEntries = computed(() => {
     const groups = Array.isArray(orthogroups.value) ? orthogroups.value : [];
     // Track absent aliases too; adding a conflicting ID must invalidate the list.
@@ -461,36 +536,43 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return uniqueOrthogroupEntries(groups);
   });
 
+  /** @param {unknown} orthogroupId @returns {OrthogroupGroup | null} */
   const getOrthogroupById = (orthogroupId) => {
     const id = normalizeText(orthogroupId);
     if (!id) return null;
     return resolvableOrthogroupEntries.value
-      .find((entry) => entry.id === id)?.group || null;
+      .find((/** @type {{ id: string, group: OrthogroupGroup }} */ entry) => entry.id === id)?.group || null;
   };
 
+  /** @param {GroupOrId} groupOrId */
   const resolveOrthogroupName = (groupOrId) => {
     const drawing = state.drawings.linear;
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
-    return normalizeText(drawing.orthogroupNameOverrides[id]) || normalizeText(group?.name) || id;
+    // A Similarity group id is data, so the rename tables are read by own key.
+    return normalizeText(ownEntry(drawing.orthogroupNameOverrides, id)) || normalizeText(group?.name) || id;
   };
 
+  /** @param {GroupOrId} groupOrId */
   const resolveOrthogroupDescription = (groupOrId) => {
     const drawing = state.drawings.linear;
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
-    return normalizeText(drawing.orthogroupDescriptionOverrides[id]) || normalizeText(group?.description);
+    return normalizeText(ownEntry(drawing.orthogroupDescriptionOverrides, id)) || normalizeText(group?.description);
   };
 
+  /** @param {GroupOrId} groupOrId */
   const orthogroupScope = (groupOrId) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     return normalizeGroupMetadataScope(group?.scope);
   };
 
+  /** @param {GroupOrId} groupOrId */
   const orthogroupScopeLabel = (groupOrId) => groupMetadataScopeLabel(orthogroupScope(groupOrId));
 
+  /** @param {GroupOrId} groupOrId */
   const isOrthogroupRenamed = (groupOrId) => {
     const drawing = state.drawings.linear;
     const id = typeof groupOrId === 'string'
@@ -505,8 +587,10 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     );
   };
 
+  /** @type {{ readonly value: number }} */
   const orthogroupCount = computed(() => resolvableOrthogroupEntries.value.length);
 
+  /** @type {{ readonly value: OrthogroupGroup[] }} */
   const filteredOrthogroups = computed(() => {
     const query = normalizeLower(orthogroupSearch.value);
     const groups = resolvableOrthogroupEntries.value.map(({ group }) => group);
@@ -548,6 +632,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return filtered;
   });
 
+  /** @type {{ readonly value: OrthogroupGroup | null }} */
   const selectedOrthogroup = computed(() => {
     const selected = getOrthogroupById(selectedOrthogroupId.value);
     if (selected) return selected;
@@ -614,6 +699,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return indexFeatureIdentities(entries, (entry) => entry.identity);
   });
 
+  /** @param {OrthogroupMember} member */
   const enrichOrthogroupMember = (member) => {
     const memberSequenceFeature = member?.sequenceFeature || null;
     const memberIdentity = featureIdentity(member);
@@ -638,6 +724,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     };
   };
 
+  /** @param {GroupOrId} groupOrId */
   const getEnrichedOrthogroupMembers = (groupOrId) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     return getGroupMembers(group).map(enrichOrthogroupMember);
@@ -646,6 +733,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   // A member's record index is a position in the records of the Result's
   // request, which names each record's card (record selection: a card turned
   // OFF after Generate does not shift the labels).
+  /** @param {unknown} members */
   const groupOrthogroupMembersByRecord = (members) => {
     const requestRecords = getCommittedRequest()?.records || [];
     /** @param {number} recordIndex */
@@ -654,12 +742,15 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       return uid ? linearSeqs.find((sequence) => sequence.uid === uid) : undefined;
     };
     const names = linearRecordNames(linearSeqs);
+    /** @type {Map<number, OrthogroupMember[]>} */
     const byRecord = new Map();
     (Array.isArray(members) ? members : []).forEach((member) => {
       const recordIndex = nonnegativeIntegerAliasStatus(member, RECORD_INDEX_KEYS);
-      const key = recordIndex.valid && recordIndex.supplied ? recordIndex.value : -1;
+      // `value` is a number when the alias is valid and supplied.
+      const key = recordIndex.valid && recordIndex.supplied ? /** @type {number} */ (recordIndex.value) : -1;
       if (!byRecord.has(key)) byRecord.set(key, []);
-      byRecord.get(key).push(member);
+      // Set on the line above when absent.
+      /** @type {OrthogroupMember[]} */ (byRecord.get(key)).push(member);
     });
     return Array.from(byRecord.entries())
       .sort((left, right) => left[0] - right[0])
@@ -678,14 +769,18 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return groupOrthogroupMembersByRecord(getEnrichedOrthogroupMembers(group));
   });
 
+  /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
   const getOrthogroupSequenceCount = (groupOrId, sequenceKind) =>
     getEnrichedOrthogroupMembers(groupOrId).filter((member) => getMemberSequence(member, sequenceKind)).length;
 
+  /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
   const hasOrthogroupSequence = (groupOrId, sequenceKind) => getOrthogroupSequenceCount(groupOrId, sequenceKind) > 0;
 
+  /** @param {OrthogroupMember} member @param {unknown} sequenceKind */
   const hasOrthogroupMemberSequence = (member, sequenceKind) =>
     Boolean(getMemberSequence(enrichOrthogroupMember(member), sequenceKind));
 
+  /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
   const buildOrthogroupFasta = (groupOrId, sequenceKind) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     return getEnrichedOrthogroupMembers(group)
@@ -694,9 +789,11 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       .join('');
   };
 
+  /** @param {OrthogroupMember} member @param {unknown} sequenceKind */
   const buildOrthogroupMemberFasta = (member, sequenceKind) =>
     memberFastaText(enrichOrthogroupMember(member), sequenceKind);
 
+  /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
   const orthogroupSequenceFilename = (groupOrId, sequenceKind) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
@@ -705,13 +802,15 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return `${stem}.${sequenceExtension(sequenceKind)}`;
   };
 
+  /** @param {OrthogroupMember} member @param {unknown} sequenceKind @param {GroupOrId} [groupOrId] */
   const orthogroupMemberSequenceFilename = (member, sequenceKind, groupOrId = selectedOrthogroup.value) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = (group ? orthogroupIdValue(group) : normalizeText(groupOrId)) || 'orthogroup';
     const stableId = memberStableFeatureId(member);
     const memberId = normalizeText(
       resolveDisplayProteinId(
-        member?.sequenceFeature,
+        // A feature row object when present; the resolver reads it by key.
+        /** @type {Record<string, unknown> | null | undefined} */ (member?.sequenceFeature),
         member,
         memberLocationText(member)
       ) ||
@@ -722,6 +821,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return `${stem}.${sequenceExtension(sequenceKind)}`;
   };
 
+  /** @param {GroupOrId} [groupOrId] @param {unknown} [sequenceKind] @param {string} [context] */
   const copyOrthogroupSequences = async (
     groupOrId = selectedOrthogroup.value,
     sequenceKind = 'nt',
@@ -732,6 +832,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return copyWithFeedback(text, key);
   };
 
+  /** @param {GroupOrId} [groupOrId] @param {unknown} [sequenceKind] */
   const downloadOrthogroupSequences = (groupOrId = selectedOrthogroup.value, sequenceKind = 'nt') => {
     const text = buildOrthogroupFasta(groupOrId, sequenceKind);
     if (!text) return;
@@ -742,6 +843,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     );
   };
 
+  /** @param {OrthogroupMember} member @param {unknown} [sequenceKind] @param {GroupOrId} [groupOrId] @param {string} [context] */
   const copyOrthogroupMemberSequence = async (
     member,
     sequenceKind = 'nt',
@@ -753,6 +855,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return copyWithFeedback(text, key);
   };
 
+  /** @param {OrthogroupMember} member @param {unknown} [sequenceKind] @param {GroupOrId} [groupOrId] */
   const downloadOrthogroupMemberSequence = (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value) => {
     const text = buildOrthogroupMemberFasta(member, sequenceKind);
     if (!text) return;
@@ -763,6 +866,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     );
   };
 
+  /** @param {unknown} orthogroupId */
   const selectOrthogroup = (orthogroupId) => {
     const id = normalizeText(orthogroupId);
     if (!id || !getOrthogroupById(id)) return false;
@@ -770,6 +874,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return true;
   };
 
+  /** @param {unknown} orthogroupId @param {unknown} value */
   const setOrthogroupNameOverride = (orthogroupId, value) => {
     const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -787,6 +892,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     drawing.orthogroupNameOverrides[id] = normalized;
   };
 
+  /** @param {unknown} orthogroupId @param {unknown} value */
   const setOrthogroupDescriptionOverride = (orthogroupId, value) => {
     const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -804,6 +910,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     drawing.orthogroupDescriptionOverrides[id] = normalized;
   };
 
+  /** @param {unknown} [orthogroupId] */
   const resetOrthogroupRename = (orthogroupId = selectedOrthogroupId.value) => {
     const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();

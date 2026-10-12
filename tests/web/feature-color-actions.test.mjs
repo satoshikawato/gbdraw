@@ -855,6 +855,17 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const rrnaReset = committed.at(-1).find((rule) => rule.qual === 'hash' && rule.val === rrna.svg_id);
     assert.equal(rrnaReset?.color, '#71ee7d', `Reset after a ${choice} dialog uses the rRNA default`);
   }
+  // OV-548: a type is file text. `constructor` is no palette key, so the Reset
+  // button has no default to offer: no dialog, no rule write.
+  const ctorA = feature('ctor-a', 'constructor', 'x', 1000, 1100);
+  const ctorB = feature('ctor-b', 'constructor', 'x', 1200, 1300);
+  resetFeatures.value = [trnaA, trnaB, rrna, ctorA, ctorB];
+  resetDialog.show = false;
+  committed.length = 0;
+  resetClicked.value = { svg_id: ctorA.svg_id, feat: ctorA };
+  await resetActions.resetClickedFeatureFillColor();
+  assert.equal(resetDialog.show, false, 'a type that names an inherited member opens no Reset dialog');
+  assert.deepEqual(committed, [], 'and Reset writes no rule for it');
 }
 
 // PV-02 and PV-04 (D-06, PD-OI-061): Legend editor renames.
@@ -1231,4 +1242,15 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     [fl1StrokeOverrides[fl1Key]?.strokeColor, fl1StrokeOverrides[fl1Key]?.strokeWidth], ['#000000', 4],
     'the width edit saves the stroke Python drew, not the deleted row\'s'
   );
+}
+
+// A feature type is file text: a type named like an Object.prototype member
+// (`constructor`) is not a palette key, so Reset has no palette color to write.
+{
+  const ctorFeature = { id: 'feature-ctor', svg_id: 'hash-ctor', type: 'constructor', qualifiers: {}, start: 1, end: 2 };
+  manualSpecificRules.splice(0);
+  clickedFeature.value = { feat: ctorFeature, svg_id: ctorFeature.svg_id };
+  await actions.handleResetColorChoice('this_with_legend');
+  assert.deepEqual(manualSpecificRules, [], 'a type that is not a palette key writes no rule');
+  clickedFeature.value = null;
 }

@@ -3,6 +3,7 @@
 /** @import { AliasSource } from './feature-identity.js' */
 /** @import { OrthogroupFeatureIndex, OrthogroupMetadataEntry } from './orthogroup-feature-metadata.js' */
 import { normalizeStringArray } from './feature-utils.js';
+import { ownEntry } from '../utils/own-entry.js';
 import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
@@ -543,7 +544,7 @@ const getStandaloneDisplayLabel = (feature, fallbackLabel, context) => {
     feature?.locus_tag
   ].map((value) => String(value || '').trim()).filter(Boolean);
   for (const sourceText of sourceCandidates) {
-    const bulkText = String(context?.labelTextBulkOverrides?.[sourceText] ?? '').trim();
+    const bulkText = String(ownEntry(context?.labelTextBulkOverrides, sourceText) ?? '').trim();
     if (bulkText) return bulkText;
   }
 
@@ -839,7 +840,7 @@ const normalizeStandaloneOrthogroupCandidate = (candidate) => {
  */
 const getStandaloneOrthogroupDisplayName = (group, context) => {
   const id = String(group?.id || '').trim();
-  const override = id ? String(context?.orthogroupNameOverrides?.[id] || '').trim() : '';
+  const override = id ? String(ownEntry(context?.orthogroupNameOverrides, id) || '').trim() : '';
   return override || String(group?.display_name || group?.displayName || group?.name || id).trim();
 };
 
@@ -850,7 +851,7 @@ const getStandaloneOrthogroupDisplayName = (group, context) => {
  */
 const getStandaloneOrthogroupDescription = (group, context) => {
   const id = String(group?.id || '').trim();
-  const override = id ? String(context?.orthogroupDescriptionOverrides?.[id] || '').trim() : '';
+  const override = id ? String(ownEntry(context?.orthogroupDescriptionOverrides, id) || '').trim() : '';
   return override || String(group?.description || '').trim();
 };
 
@@ -908,10 +909,10 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
       if (!id || groupIds.has(id)) return null;
       groupIds.add(id);
       const displayName = id
-        ? String(context?.orthogroupNameOverrides?.[id] || '').trim()
+        ? String(ownEntry(context?.orthogroupNameOverrides, id) || '').trim()
         : '';
       const description = id
-        ? String(context?.orthogroupDescriptionOverrides?.[id] || '').trim()
+        ? String(ownEntry(context?.orthogroupDescriptionOverrides, id) || '').trim()
         : '';
       return {
         ...group,

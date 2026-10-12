@@ -1,7 +1,15 @@
 // @ts-check
 import { resolveFeatureAnchor } from './feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
+/** @import { CommittedDisplayRow } from '../record-display-options.js' */
+/** @import { AnchorIntent } from './feature-anchor.js' */
 
+/**
+ * One capability verdict as the popup shows it.
+ * @typedef {{ enabled: boolean, code: string | null, message: string }} CapabilityView
+ */
+
+/** @param {Record<string, any> | null | undefined} feature */
 const featureIdentity = (feature) => ({
   recordKey: String(feature?.record_key ?? feature?.recordKey ?? ''),
   biologicalFeatureId: String(
@@ -9,6 +17,7 @@ const featureIdentity = (feature) => ({
   )
 });
 
+/** @param {Record<string, any> | null | undefined} feature @param {{ recordKey: string, biologicalFeatureId: string }} identity */
 const sameFeatureIdentity = (feature, identity) => {
   const candidate = featureIdentity(feature);
   return candidate.recordKey === identity.recordKey
@@ -31,13 +40,13 @@ const sameFeatureIdentity = (feature, identity) => {
 
 /**
  * @typedef {object} FeatureRecordRotationActionOptions
- * @property {(feature: PopupFeature) => { row: Record<string, any>, target: Record<string, any> }} targetForFeature
+ * @property {(feature: PopupFeature) => { row: CommittedDisplayRow, target: Record<string, any> }} targetForFeature
  *   record display port: the row and target of the feature's record
- * @property {(row: Record<string, any>, transform: ResolvedRecordTransform) => any} setResolvedTransform
+ * @property {(row: CommittedDisplayRow, transform: ResolvedRecordTransform) => any} setResolvedTransform
  *   record display port: stages the transform in the record's draft (Apply on Generate)
  * @property {() => Record<string, any> | null} getCommittedSession
  * @property {(args: { committed: Record<string, any> | null, target: Record<string, any>, transform: Record<string, any> }) => { canonical: Record<string, any>, receipt: any }} projectCommittedRecordTransform
- * @property {(run: { canonical: Record<string, any>, row: Record<string, any>, transform: ResolvedRecordTransform }) => Promise<Record<string, any>>} runRecordRotation
+ * @property {(run: { canonical: Record<string, any>, row: CommittedDisplayRow, transform: ResolvedRecordTransform }) => Promise<Record<string, any>>} runRecordRotation
  *   composition root port: runs the candidate and commits the target draft
  * @property {((identity: { recordKey: string, biologicalFeatureId: string }) => PopupFeature | null) | null} [resolveCurrentFeature]
  * @property {((feature: PopupFeature) => boolean) | null} [isCurrentFeature]
@@ -48,9 +57,9 @@ const sameFeatureIdentity = (feature, identity) => {
  * The action that the workflow drives; `createFeatureRecordRotationAction` returns it.
  * @typedef {object} FeatureRecordRotationActionPort
  * @property {(feature: PopupFeature) => PopupFeature} currentFeature
- * @property {(args: { feature: PopupFeature, intent: Record<string, any> }) => Record<string, any>} resolve
- * @property {(args: { feature: PopupFeature, intent: Record<string, any> }) => Promise<Record<string, any>>} apply
- * @property {(args: { feature: PopupFeature, intent: Record<string, any> }) => Promise<Record<string, any>>} stage
+ * @property {(args: { feature: PopupFeature, intent: AnchorIntent }) => Record<string, any>} resolve
+ * @property {(args: { feature: PopupFeature, intent: AnchorIntent }) => Promise<Record<string, any>>} apply
+ * @property {(args: { feature: PopupFeature, intent: AnchorIntent }) => Promise<Record<string, any>>} stage
  * @property {() => Promise<Record<string, any>>} readRecords
  */
 
@@ -80,6 +89,7 @@ export const createFeatureRecordRotationAction = ({
     throw new Error('Feature record rotation owners are unavailable.');
   }
 
+  /** @param {PopupFeature} feature @returns {PopupFeature} */
   const currentFeature = (feature) => {
     const identity = featureIdentity(feature);
     if (!identity.recordKey || !identity.biologicalFeatureId) {
@@ -100,6 +110,7 @@ export const createFeatureRecordRotationAction = ({
     return resolved;
   };
 
+  /** @param {{ feature: PopupFeature, intent: AnchorIntent }} args */
   const resolve = ({ feature, intent }) => {
     const resolvedFeature = currentFeature(feature);
     const { row, target } = targetForFeature(resolvedFeature);
@@ -119,6 +130,7 @@ export const createFeatureRecordRotationAction = ({
     return { feature: resolvedFeature, row, target, resolved };
   };
 
+  /** @param {{ feature: PopupFeature, intent: AnchorIntent }} args */
   const resolveEligible = ({ feature, intent }) => {
     const snapshot = resolve({ feature, intent });
     if (!snapshot.resolved.eligibility.enabled) {
@@ -127,12 +139,16 @@ export const createFeatureRecordRotationAction = ({
     return snapshot;
   };
 
-  const resolvedTransform = (resolved) => ({
+  // `resolveEligible` throws unless the resolution is eligible, and an
+  // eligible resolution sets the start coordinate and the orientation.
+  /** @param {{ startCoordinate: number | null, reverseComplement: boolean | null, provenance: Record<string, unknown> | null }} resolved */
+  const resolvedTransform = (resolved) => /** @type {ResolvedRecordTransform} */ ({
     startCoordinate: resolved.startCoordinate,
     reverseComplement: resolved.reverseComplement,
     anchorIntent: resolved.provenance
   });
 
+  /** @param {{ feature: PopupFeature, intent: AnchorIntent }} args */
   const apply = async ({ feature, intent }) => {
     const { row, target, resolved } = resolveEligible({ feature, intent });
     const projection = projectCommittedRecordTransform({
@@ -155,6 +171,7 @@ export const createFeatureRecordRotationAction = ({
   // Apply on Generate (PD-OI-085): the same resolved transform goes into the
   // record display draft that the sidebar edits and Generate applies, as one
   // undoable step. No candidate runs and the Result is untouched.
+  /** @param {{ feature: PopupFeature, intent: AnchorIntent }} args */
   const stage = async ({ feature, intent }) => {
     const { row, resolved } = resolveEligible({ feature, intent });
     const busy = await setResolvedTransform(row, resolvedTransform(resolved));
@@ -169,6 +186,7 @@ export const createFeatureRecordRotationAction = ({
   return Object.freeze({ currentFeature, resolve, apply, stage, readRecords: readTargetRecords });
 };
 
+/** @param {unknown} value */
 const parseSignedOffset = (value) => {
   const text = String(value ?? '').trim();
   if (!text) {
@@ -192,8 +210,13 @@ const parseSignedOffset = (value) => {
   return { valid: true, value: number, message: '' };
 };
 
+/** @returns {CapabilityView} */
 const emptyCapability = () => ({ enabled: false, code: null, message: '' });
 
+/**
+ * @param {{ enabled?: unknown, code?: string | null, message?: unknown } | null | undefined} capability
+ * @returns {CapabilityView}
+ */
 const copyCapability = (capability) => ({
   enabled: Boolean(capability?.enabled),
   code: capability?.code || null,
@@ -217,15 +240,23 @@ const REFERENCE_CHOICES = Object.freeze([
 
 /**
  * @param {readonly string[][]} entries `[value, label]` pairs
- * @param {(value: string) => Record<string, any> | undefined} [capabilityFor]
+ * @param {(value: string) => CapabilityView | undefined} [capabilityFor]
  */
 const choicesFrom = (entries, capabilityFor = () => emptyCapability()) => entries
   .map(([value, label]) => ({ value, label, ...copyCapability(capabilityFor(value)) }));
 
+/**
+ * @param {{ featureEnd: CapabilityView, anchors?: Readonly<Record<string, CapabilityView | undefined>> }} capabilities
+ * @param {string} reference One of REFERENCE_CHOICES.
+ */
 const referenceCapability = (capabilities, reference) => (reference === 'feature-end'
   ? capabilities.featureEnd
   : capabilities.anchors?.[reference]);
 
+/**
+ * @param {{ featureStart: CapabilityView, featureEnd: CapabilityView, anchors?: Readonly<Record<string, CapabilityView | undefined>> }} capabilities
+ * @param {string} position One of POSITION_CHOICES.
+ */
 const positionCapability = (capabilities, position) => {
   if (position === 'start') return capabilities.featureStart;
   if (position === 'end') return capabilities.featureEnd;
@@ -237,6 +268,7 @@ const positionCapability = (capabilities, position) => {
 
 // A selection stays valid: an unavailable or unknown choice falls back to the
 // first available choice in display order.
+/** @param {{ value: string, enabled: boolean }[]} choices @param {string} selected */
 const validChoice = (choices, selected) => (
   choices.find(({ value }) => value === selected)?.enabled
     ? selected
@@ -245,6 +277,10 @@ const validChoice = (choices, selected) => (
 
 // The radio choice maps to one resolver intent; the domain math stays in
 // resolveFeatureAnchor.
+/**
+ * @param {{ position: string, reference: string, offsetText: string, orientForward: boolean }} draft
+ * @returns {AnchorIntent}
+ */
 const intentFor = ({ position, reference, offsetText, orientForward }) => {
   const oriented = Boolean(orientForward);
   if (position !== 'custom') {
@@ -261,9 +297,13 @@ const intentFor = ({ position, reference, offsetText, orientForward }) => {
     : { placement: 'anchor', anchor: reference, offsetBp, orientForward: oriented };
 };
 
+// The strand is '+', '-', or another value of the resolver's validated strand
+// domain ('unstranded', 'mixed'), or null; none names an Object.prototype member.
+/** @type {Readonly<Record<string, string | undefined>>} */
 const STRAND_SYMBOLS = Object.freeze({ '+': '+', '-': '−' });
 
 // "<record> will start at <n> · <orientation>", relative to the Result.
+/** @param {{ recordLabel: string, startCoordinate: number, reverseComplement: boolean | null, committedReverseComplement: boolean }} sentence */
 const startSentence = ({ recordLabel, startCoordinate, reverseComplement, committedReverseComplement }) => {
   const orientation = reverseComplement === committedReverseComplement
     ? 'orientation unchanged'
@@ -273,16 +313,24 @@ const startSentence = ({ recordLabel, startCoordinate, reverseComplement, commit
   return `${recordLabel} will start at ${startCoordinate.toLocaleString('en-US')} · ${orientation}`;
 };
 
+/**
+ * @param {{
+ *   recordLabel: string, committedReverseComplement: boolean,
+ *   resolved: { startCoordinate: number | null, reverseComplement: boolean | null, displayedStrand?: { before: string | null, after: string | null } }
+ * }} preview
+ */
 const previewFor = ({ recordLabel, resolved, committedReverseComplement }) => {
   if (!Number.isSafeInteger(resolved.startCoordinate)) return '';
-  const before = STRAND_SYMBOLS[resolved.displayedStrand?.before];
-  const after = STRAND_SYMBOLS[resolved.displayedStrand?.after];
+  // A safe-integer start means an eligible resolution, which sets both strands.
+  const before = STRAND_SYMBOLS[/** @type {string} */ (resolved.displayedStrand?.before)];
+  const after = STRAND_SYMBOLS[/** @type {string} */ (resolved.displayedStrand?.after)];
   const strandChange = before && after && before !== after
     ? ` · feature strand ${before} → ${after}`
     : '';
   return startSentence({
     recordLabel,
-    startCoordinate: resolved.startCoordinate,
+    // `isSafeInteger` above is true only for a number.
+    startCoordinate: /** @type {number} */ (resolved.startCoordinate),
     reverseComplement: resolved.reverseComplement,
     committedReverseComplement
   }) + strandChange;
@@ -291,13 +339,15 @@ const previewFor = ({ recordLabel, resolved, committedReverseComplement }) => {
 // The start and orientation staged in the record's draft for Generate, when
 // they differ from the Result. A draft without a start keeps the default start:
 // the record's first base, or its last base when reverse-complemented.
+/** @param {{ recordLength: number | null | undefined, pendingTransform?: { startCoordinate: number | null, reverseComplement: boolean } | null }} target */
 const pendingStartFor = (target) => {
   const pending = target.pendingTransform;
   if (!pending) return null;
   const startCoordinate = pending.startCoordinate
     ?? (pending.reverseComplement ? target.recordLength : 1);
   return Number.isSafeInteger(startCoordinate)
-    ? { startCoordinate, reverseComplement: pending.reverseComplement }
+    // `isSafeInteger` is true only for a number.
+    ? { startCoordinate: /** @type {number} */ (startCoordinate), reverseComplement: pending.reverseComplement }
     : null;
 };
 
@@ -373,10 +423,11 @@ export const createFeatureRecordRotationWorkflow = ({
       ];
       // A limit that disables every placement (for example, a linear record)
       // is a whole-target limit: the reason line states it once (F4).
-      const targetLimit = placements.every((capability) => !capability?.enabled)
-        ? placements.find((capability) => capability?.message) || placements[0] || emptyCapability()
+      const targetLimit = placements.every((/** @type {CapabilityView | undefined} */ capability) => !capability?.enabled)
+        ? placements.find((/** @type {CapabilityView | undefined} */ capability) => capability?.message) || placements[0] || emptyCapability()
         : null;
       draft.targetFailure = targetLimit ? String(targetLimit.code || 'unavailable') : '';
+      /** @param {{ enabled?: unknown, code?: string | null, message?: unknown } | null | undefined} capability */
       const controlCapability = (capability) => ({
         ...copyCapability(capability),
         ...(targetLimit ? { message: '' } : {})
@@ -442,6 +493,7 @@ export const createFeatureRecordRotationWorkflow = ({
     }
   };
 
+  /** @param {{ feature: PopupFeature }} args */
   const open = ({ feature }) => {
     draftGeneration += 1;
     Object.assign(draft, initialDraft(), {
@@ -484,21 +536,25 @@ export const createFeatureRecordRotationWorkflow = ({
     return outcome;
   };
 
+  /** @param {unknown} position */
   const setPosition = (position) => {
     draft.position = String(position || '');
     recompute();
   };
 
+  /** @param {unknown} reference */
   const setReference = (reference) => {
     draft.reference = String(reference || '');
     recompute();
   };
 
+  /** @param {unknown} value */
   const setOffset = (value) => {
     draft.offsetText = String(value ?? '');
     recompute();
   };
 
+  /** @param {unknown} value */
   const setOrientForward = (value) => {
     draft.orientForward = Boolean(value);
     recompute();
@@ -517,6 +573,7 @@ export const createFeatureRecordRotationWorkflow = ({
 
   // A failure message for the status line, unless the reason line, recomputed
   // after the action, already states it.
+  /** @param {string | undefined} message @param {string} fallback */
   const unlessShown = (message, fallback) => (
     message && message !== draft.disabledReason ? message : fallback
   );

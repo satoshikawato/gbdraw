@@ -12,12 +12,20 @@ import {
   stripPreviewFeatureSearchClasses
 } from '../../services/svg-serialization.js';
 
+/** @import { FeatureSvgRoot } from '../../services/feature-dom.js' */
+
+/**
+ * @param {Element | null | undefined} root
+ * @returns {SVGSVGElement | null}
+ */
 export const resolvePreviewSvg = (root) => {
   if (!root) return null;
-  if (root.matches?.('svg')) return root;
+  // `matches('svg')` holds only for an `svg` element.
+  if (root.matches?.('svg')) return /** @type {SVGSVGElement} */ (root);
   return root.querySelector?.('svg') || null;
 };
 
+/** @param {FeatureSvgRoot | null | undefined} svg */
 export const getPreviewFeatureElementIndex = (svg) => getFeatureElementIndex(svg);
 
 /**
@@ -51,13 +59,14 @@ export const createPreviewFeatureSearchDomState = () => ({
 const frameApi = () => {
   const request = typeof requestAnimationFrame === 'function'
     ? requestAnimationFrame
-    : (callback) => setTimeout(callback, 0);
+    : (/** @type {() => void} */ callback) => setTimeout(callback, 0);
   const cancel = typeof cancelAnimationFrame === 'function'
     ? cancelAnimationFrame
     : clearTimeout;
   return { request, cancel };
 };
 
+/** @param {PreviewFeatureSearchDomState} appliedState */
 const cancelPreviewFeatureSearchFrames = (appliedState) => {
   const { cancel } = frameApi();
   if (appliedState.firstFrame != null) cancel(appliedState.firstFrame);
@@ -66,6 +75,7 @@ const cancelPreviewFeatureSearchFrames = (appliedState) => {
   appliedState.secondFrame = null;
 };
 
+/** @param {FeatureElementIndex} featureIndex @param {unknown} svgId @param {string} className @param {boolean} enabled */
 const setFeatureClass = (featureIndex, svgId, className, enabled) => {
   (featureIndex.get(String(svgId || '')) || []).forEach((element) => {
     setClassToken(element, className, enabled);
@@ -172,6 +182,7 @@ export const schedulePreviewFeatureSearchClasses = (options = {}) => {
   return appliedState;
 };
 
+/** @param {PreviewFeatureSearchDomState | null | undefined} appliedState */
 export const disposePreviewFeatureSearchDomState = (appliedState) => {
   if (!appliedState) return;
   cancelPreviewFeatureSearchFrames(appliedState);
@@ -183,7 +194,11 @@ export const disposePreviewFeatureSearchDomState = (appliedState) => {
   appliedState.activeId = '';
 };
 
-/** @param {FeatureElementIndex | null} [featureIndex] */
+/**
+ * @param {FeatureSvgRoot | null | undefined} svg
+ * @param {unknown} featureId
+ * @param {FeatureElementIndex | null} [featureIndex]
+ */
 const getFeatureRect = (svg, featureId, featureIndex = null) => {
   const elements = getFeatureElements(svg, featureId, featureIndex);
   let left = Infinity;
@@ -204,7 +219,11 @@ const getFeatureRect = (svg, featureId, featureIndex = null) => {
   return { left, top, right, bottom, width: right - left, height: bottom - top };
 };
 
-/** @param {FeatureElementIndex | null} [featureIndex] */
+/**
+ * @param {FeatureSvgRoot | null | undefined} svg
+ * @param {unknown} featureId
+ * @param {FeatureElementIndex | null} [featureIndex]
+ */
 export const getFeatureScreenCenter = (svg, featureId, featureIndex = null) => {
   const rect = getFeatureRect(svg, featureId, featureIndex);
   if (!rect) return null;
@@ -246,6 +265,7 @@ export const centerPreviewFeature = ({
   const featureCenterY = featureRect.top + (featureRect.height / 2);
   const containerCenterX = containerRect.left + (containerRect.width / 2);
   const containerCenterY = containerRect.top + (containerRect.height / 2);
+  /** @param {number} value */
   const clampDelta = (value) => Math.max(-maxDelta, Math.min(maxDelta, value));
 
   canvasPan.x += clampDelta(containerCenterX - featureCenterX);

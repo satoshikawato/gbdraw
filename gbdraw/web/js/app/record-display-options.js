@@ -19,12 +19,104 @@ import { featureIdentityKey, requestFeaturePlacements } from '../services/featur
 import { committedRecordForKey, committedRecordUsesSource } from '../services/feature-identity.js';
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
+/** @import { RecordDisplaySource } from '../services/feature-identity.js' */
+/** @import { LinearSeq } from '../state.js' */
+/** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { AnchorIntent } from '../services/record-display-model.js' */
 
 // Session Load reads no record bytes (776a2f93), so a loaded Result can have a
 // current source whose records are not read yet. That popup target failure is
 // not stale: its kind lets an explicit record action read them.
 export const RECORD_TARGET_NOT_DISCOVERED = 'not-discovered';
+/** @param {string} kind @param {string} message */
 const recordTargetError = (kind, message) => Object.assign(new Error(message), { kind });
+
+/**
+ * An entry of the Circular record list, as the record discovery stores it (`run-analysis.js`).
+ * @typedef {object} CircularListRecord
+ * @property {string} [selector]
+ * @property {string} [record_id]
+ * @property {string} [recordId]
+ * @property {number | null} [record_length]
+ * @property {number | null} [recordLength]
+ * @property {unknown} [detectedTopology]
+ * @property {string} [recordKey]
+ */
+
+/**
+ * The identity of a record row or draft: its source input and record selector.
+ * @typedef {object} RecordDisplayDraftIdentity
+ * @property {string} sourceUid `circular`, or a Linear File card's UID
+ * @property {string} selector
+ */
+
+/**
+ * A draft of the display of one record (a drawing holds those of its own mode).
+ * @typedef {RecordDisplayDraftIdentity & {
+ *   recordId?: unknown, topologyOverride: boolean | null, startCoordinate: number | null,
+ *   reverseComplementOverride: boolean | null, anchorIntent: unknown
+ * }} RecordDisplayDraft
+ */
+
+/**
+ * A record row of one source input, as `buildRecordDisplayRows` builds it with the input's crop and orientation.
+ * @typedef {RecordDisplayDraftIdentity & {
+ *   key: string, scope: string, source: unknown, paired?: unknown, recordId?: unknown,
+ *   recordLength?: number | null, detectedTopology?: unknown, cropped?: unknown, reverse?: unknown
+ * }} RecordDisplayRow
+ */
+
+/**
+ * A row of the committed request: the draft row with what the request carries for the record.
+ * @typedef {RecordDisplayRow & {
+ *   committedDisplay: { isCircular: boolean | null, startCoordinate: number | null },
+ *   committedReverseComplement: boolean, committedCropped: boolean,
+ *   canonicalRecordKey: string, canonicalSource: Record<string, unknown>, recordKey: string
+ * }} CommittedDisplayRow
+ */
+
+/**
+ * A selector of a record in the committed request: by index or by record ID.
+ * @typedef {{ kind?: string, index: number, value?: string }} CommittedRecordSelector
+ */
+
+/**
+ * A record of the committed request, as the record display reads it.
+ * @typedef {object} CommittedRequestRecord
+ * @property {string} recordKey
+ * @property {string} [cardinality]
+ * @property {CommittedRecordSelector | null} [selector]
+ * @property {{ selector?: CommittedRecordSelector | null, reverseComplement?: boolean } | null} [region]
+ * @property {{ reverseComplement?: boolean } | null} [presentation]
+ * @property {{ isCircular: boolean | null, startCoordinate: number | null }} [display]
+ * @property {{ resourceId?: string, gffResourceId?: string, fastaResourceId?: string }} source
+ */
+
+/**
+ * A record's orientation in an alignment.
+ * @typedef {{ recordKey: string, reverseComplement: boolean }} AlignmentOrientation
+ */
+
+/**
+ * What `captureAlignmentOrientationIntent` keeps of an orientation: the File card's reverse and the record's drafts.
+ * @typedef {AlignmentOrientation & { drafts: TargetDraftCheckpoint[] }} AlignmentOrientationCheckpoint
+ */
+
+/**
+ * A resolved record transform to write on a row.
+ * @typedef {{ startCoordinate: unknown, reverseComplement: unknown, anchorIntent: Partial<Record<keyof AnchorIntent, unknown>> | null | undefined }} ResolvedRecordTransform
+ */
+
+/**
+ * What `captureTargetDraft` keeps of a row's draft: restoring puts it back.
+ * @typedef {object} TargetDraftCheckpoint
+ * @property {string} scope
+ * @property {string} key
+ * @property {number} index
+ * @property {RecordDisplayDraft | null} draft
+ * @property {string} [ownerUid]
+ * @property {boolean} [ownerReverse]
+ */
 
 /**
  * @typedef {object} RecordDisplayControlsOptions
@@ -48,9 +140,11 @@ export const createRecordDisplayControls = ({
   state, computed, watch, linearRecordsFor, linearRecordStatusFor, linearRecordErrorFor, runUndoable,
   getCommittedRequest, getCommittedSession
 }) => {
+  /** @type {CommittedDisplayRow[]} */
   let committedRows = [];
   /** @type {Record<string, any> | null} */
   let boundRequest = null;
+  /** @type {RecordDisplaySource[]} */
   let boundSources = [];
   const sources = computed(() => {
     const drawing = state.activeDrawing();
@@ -58,11 +152,11 @@ export const createRecordDisplayControls = ({
       { scope: 'circular', sourceUid: 'circular',
         source: state.cInputType.value === 'gff' ? state.files.c_gff : state.files.c_gb,
         paired: state.cInputType.value === 'gff' ? state.files.c_fasta : null,
-        records: state.circularRecordList.value.map((record) => ({ ...record,
+        records: state.circularRecordList.value.map((/** @type {CircularListRecord} */ record) => ({ ...record,
           recordId: record.record_id ?? record.recordId, recordLength: record.record_length ?? record.recordLength })), selector: drawing.form.circular_record_selector,
         cropped: drawing.form.circular_region_start != null || drawing.form.circular_region_end != null,
         reverse: drawing.form.circular_reverse },
-      ...state.linearSeqs.map((seq) => ({ scope: 'linear', sourceUid: seq.uid,
+      ...state.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', sourceUid: seq.uid,
         source: state.lInputType.value === 'gff' ? seq.gff : seq.gb,
         paired: state.lInputType.value === 'gff' ? seq.fasta : null,
         records: linearRecordsFor(seq), selector: seq.region_record_id,
@@ -91,31 +185,35 @@ export const createRecordDisplayControls = ({
     const bound = boundDrafts(drawing);
     if (bound !== drawing.recordDisplayDrafts) drawing.recordDisplayDrafts.splice(0, bound.length, ...bound);
   };
-  const draftFor = (row) => boundDrafts(drawingOfRow(row)).find((draft) => recordDisplayKey(draft) === row.key) || {};
+  /** @param {RecordDisplayRow} row */
+  const draftFor = (row) => boundDrafts(drawingOfRow(row)).find((/** @type {RecordDisplayDraft} */ draft) => recordDisplayKey(draft) === row.key) || {};
   // Linear orientation has one owner, the File card's region_reverse (CO-03,
   // N-09). A row that is the only record its card draws writes it there; the
   // row override remains only for Circular and for a Linear card that draws
   // several records.
+  /** @param {RecordDisplayRow | null | undefined} row */
   const linearOrientationOwner = (row) => {
     if (row?.scope !== 'linear') return null;
-    const sequence = state.linearSeqs.find((seq) => seq.uid === row.sourceUid);
+    const sequence = state.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === row.sourceUid);
     return sequence && rows.value.filter((entry) => entry.scope === 'linear'
       && entry.sourceUid === row.sourceUid).length === 1 ? sequence : null;
   };
+  /** @param {RecordDisplayRow} row @param {RecordDisplayDraft} draft @param {boolean | null} reverseComplement */
   const writeReverseComplement = (row, draft, reverseComplement) => {
     const owner = reverseComplement === null ? null : linearOrientationOwner(row);
     if (owner) owner.region_reverse = reverseComplement;
     draft.reverseComplementOverride = owner ? null : reverseComplement;
   };
+  /** @param {RecordDisplayRow} row */
   const surfaceFor = (row) => {
     const surface = recordDisplaySurface(row, draftFor(row), row);
     const busy = state.sessionOperationAvailability?.();
     return busy ? { ...surface, startEnabled: false, disabledReason: busy.reason } : surface;
   };
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {RecordDisplayRow} row @param {Partial<RecordDisplayDraft>} patch @param {string} label */
   const edit = (drawing, row, patch, label) => runUndoable(label, () => {
     settleDrafts(drawing);
-    let draft = drawing.recordDisplayDrafts.find((entry) => recordDisplayKey(entry) === row.key);
+    let draft = drawing.recordDisplayDrafts.find((/** @type {RecordDisplayDraft} */ entry) => recordDisplayKey(entry) === row.key);
     if (!draft) {
       draft = { sourceUid: row.sourceUid, selector: row.selector,
         recordId: row.recordId, topologyOverride: null, startCoordinate: null,
@@ -126,9 +224,11 @@ export const createRecordDisplayControls = ({
     const { reverseComplementOverride, ...rest } = patch;
     Object.assign(draft, rest);
     if (Object.hasOwn(patch, 'reverseComplementOverride')) {
-      writeReverseComplement(row, draft, reverseComplementOverride);
+      // Every patch that names the key carries a boolean or null.
+      writeReverseComplement(row, draft, /** @type {boolean | null} */ (reverseComplementOverride));
     }
   });
+  /** @param {RecordDisplayRow} row @param {ResolvedRecordTransform} transform */
   const writeResolvedTransform = (row, { startCoordinate, reverseComplement, anchorIntent }) => {
     const drawing = drawingOfRow(row);
     const busy = state.sessionOperationAvailability?.();
@@ -140,7 +240,7 @@ export const createRecordDisplayControls = ({
     const resolvedIntent = validateAnchorIntent(anchorIntent);
     settleDrafts(drawing);
     let draft = drawing.recordDisplayDrafts.find(
-      (entry) => recordDisplayKey(entry) === row.key
+      (/** @type {RecordDisplayDraft} */ entry) => recordDisplayKey(entry) === row.key
     );
     if (!draft) {
       draft = {
@@ -158,13 +258,17 @@ export const createRecordDisplayControls = ({
     Object.assign(draft, { startCoordinate: resolvedStart, anchorIntent: resolvedIntent });
     writeReverseComplement(row, draft, reverseComplement);
   };
-  /** @param {DrawingState} drawing */
+  /**
+   * @template {{ recordKey: string }} O
+   * @param {DrawingState} drawing
+   * @param {O[]} orientations
+   */
   const alignmentRows = (drawing, orientations) => {
     refreshCommittedRows();
     const request = getCommittedRequest();
-    return orientations.map(orientation => {
+    return orientations.map((orientation) => {
       const records = request?.mode === 'linear'
-        ? request.records.filter(record => record.recordKey === orientation.recordKey) : [];
+        ? request.records.filter((/** @type {CommittedRequestRecord} */ record) => record.recordKey === orientation.recordKey) : [];
       const inputs = sources.value.filter(source => source.scope === 'linear'
         && source.sourceUid === orientation.recordKey);
       if (records.length !== 1 || inputs.length !== 1) {
@@ -180,20 +284,22 @@ export const createRecordDisplayControls = ({
         throw new Error('Alignment record source binding changed.');
       }
       const selector = record.region?.selector || record.selector;
-      const drafts = drawing.recordDisplayDrafts.filter(draft => draft.sourceUid === input.sourceUid
+      const drafts = drawing.recordDisplayDrafts.filter((/** @type {RecordDisplayDraft} */ draft) => draft.sourceUid === input.sourceUid
         && (selector?.kind === 'recordIndex'
           ? draft.selector === `#${selector.index + 1}`
           : selector?.kind === 'recordId' ? draft.recordId === selector.value : draft.selector === '#1'));
       return { recordKey: orientation.recordKey, orientation, drafts,
-        sequence: state.linearSeqs.find(sequence => sequence.uid === input.sourceUid) };
+        sequence: state.linearSeqs.find((/** @type {LinearSeq} */ sequence) => sequence.uid === input.sourceUid) };
     });
   };
+  /** @param {AlignmentOrientation[]} orientations @returns {AlignmentOrientationCheckpoint[]} */
   const captureAlignmentOrientationIntent = (orientations) => {
     const drawing = state.drawings.linear;
     return alignmentRows(drawing, orientations)
       .map(({recordKey, sequence, drafts}) => ({ recordKey,
         reverseComplement: Boolean(sequence.region_reverse), drafts: drafts.map(captureTargetDraft) }));
   };
+  /** @param {AlignmentOrientationCheckpoint[]} checkpoints */
   const restoreAlignmentOrientationIntent = (checkpoints) => {
     const drawing = state.drawings.linear;
     alignmentRows(drawing, checkpoints).forEach(({sequence}, index) => {
@@ -201,16 +307,18 @@ export const createRecordDisplayControls = ({
       checkpoints[index].drafts.forEach(restoreTargetDraft);
     });
   };
+  /** @param {AlignmentOrientation[]} orientations */
   const commitAlignmentOrientations = (orientations) => {
     const drawing = state.drawings.linear;
     alignmentRows(drawing, orientations).forEach(({sequence, orientation, drafts}) => {
       sequence.region_reverse = orientation.reverseComplement;
-      drafts.forEach(draft => { draft.reverseComplementOverride = null; });
+      drafts.forEach((/** @type {RecordDisplayDraft} */ draft) => { draft.reverseComplementOverride = null; });
     });
   };
+  /** @param {unknown} file the source file of a File card (`isCurrentFeature` passes it on untyped) @param {string | undefined} resourceId */
   const matchesSavedSource = (file, resourceId) => {
-    const expected = getCommittedSession()?.resources?.[resourceId];
-    return matchesSessionResourceDescriptor(file, expected);
+    const expected = getCommittedSession()?.resources?.[String(resourceId)];
+    return matchesSessionResourceDescriptor(/** @type {FileLike | null | undefined} */ (file), expected); // a File card's source is a File or null
   };
   const refreshCommittedRows = () => {
     if (state.semanticFileWatchersSuppressed?.value || state.sessionImportPending?.value) return;
@@ -223,7 +331,7 @@ export const createRecordDisplayControls = ({
     committedRows = allRows.value.filter((row) => row.scope === request.mode
       && boundSources.some((source) => source.scope === row.scope && source.sourceUid === row.sourceUid
         && source.source === row.source && source.paired === row.paired)).flatMap((row) => {
-      const selected = request.records.find((record, index) => {
+      const selected = request.records.find((/** @type {CommittedRequestRecord} */ record, /** @type {number} */ index) => {
         const selector = record.region?.selector || record.selector;
         const matchesSelector = !selector || (selector.kind === 'recordIndex'
           ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value);
@@ -250,7 +358,7 @@ export const createRecordDisplayControls = ({
   };
   watch([() => state.featureCatalog.value, () => state.processing?.value, allRows], refreshCommittedRows, { flush: 'post' });
   watch(() => sources.value.map(({ scope, sourceUid, source, paired }) => ({ scope, sourceUid, source, paired })),
-    (current, previous = []) => {
+    (/** @type {RecordDisplaySource[]} */ current, /** @type {RecordDisplaySource[]} */ previous = []) => {
       if (state.semanticFileWatchersSuppressed?.value || state.sessionImportRollbackInProgress?.value) return;
       const replaced = previous.filter((old) => {
         const next = current.find((entry) => entry.scope === old.scope && entry.sourceUid === old.sourceUid);
@@ -281,7 +389,7 @@ export const createRecordDisplayControls = ({
     };
     if (request.mode !== state.mode.value || tolerance !== drawing.adv.feature_overlap_tolerance_bp
       || placements.length !== draftPlacementCount()
-      || placements.some((row) => {
+      || placements.some((/** @type {{ recordKey: string, biologicalFeatureId: string, placement: Record<string, unknown> }} */ row) => {
         const target = drawing.featurePlacementOverrides[
           featureIdentityKey(row.recordKey, row.biologicalFeatureId)]?.placement;
         return !target || ['kind', 'side', 'level'].some((field) => target[field] !== row.placement[field]);
@@ -297,14 +405,16 @@ export const createRecordDisplayControls = ({
       catch { return true; }
     });
   });
+  /** @param {RecordDisplaySource} source */
   const discoveryFor = (source) => {
     // `state` is the state.js object, which holds the members the discovery reads.
     if (source.scope === 'circular') return circularDiscoveryForInput(/** @type {CircularDiscoveryState<unknown>} */ (state));
-    const sequence = state.linearSeqs.find((seq) => seq.uid === source.sourceUid);
+    const sequence = state.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === source.sourceUid);
     return { status: linearRecordStatusFor(sequence), error: linearRecordErrorFor(sequence) };
   };
   // The committed record's current sources have no read records: say whether
   // the read failed or has not happened, instead of calling the target stale.
+  /** @param {string} recordKey */
   const unreadRecordsError = (recordKey) => {
     // The committed request is the adopted canonical request: its `records` is always set.
     const request = /** @type {CommittedRecordRequest | null} */ (getCommittedRequest());
@@ -320,6 +430,7 @@ export const createRecordDisplayControls = ({
   };
   // The display start and orientation that Generate would apply from this
   // committed row's draft, when either differs from the committed request.
+  /** @param {CommittedDisplayRow} row */
   const pendingTransformFor = (row) => {
     let requested;
     try { requested = requestedRecordTransform(row, draftFor(row), row); } catch { return null; }
@@ -329,6 +440,7 @@ export const createRecordDisplayControls = ({
       ? null
       : { startCoordinate, reverseComplement: requested.reverseComplement };
   };
+  /** @param {Record<string, unknown> | null | undefined} feature */
   const targetForFeature = (feature) => {
     refreshCommittedRows();
     const recordKey = String(feature?.record_key || '');
@@ -372,12 +484,13 @@ export const createRecordDisplayControls = ({
       }
     };
   };
+  /** @param {RecordDisplayRow} row @returns {TargetDraftCheckpoint} */
   const captureTargetDraft = (row) => {
     const drawing = drawingOfRow(row);
     settleDrafts(drawing);
     const key = recordDisplayKey(row);
     const index = drawing.recordDisplayDrafts.findIndex(
-      (draft) => recordDisplayKey(draft) === key
+      (/** @type {RecordDisplayDraft} */ draft) => recordDisplayKey(draft) === key
     );
     const owner = linearOrientationOwner(row);
     return {
@@ -388,14 +501,15 @@ export const createRecordDisplayControls = ({
       ...(owner ? { ownerUid: owner.uid, ownerReverse: Boolean(owner.region_reverse) } : {})
     };
   };
+  /** @param {TargetDraftCheckpoint} checkpoint */
   const restoreTargetDraft = (checkpoint) => {
     const drawing = drawingOfRow(checkpoint);
     if (checkpoint.ownerUid) {
-      const owner = state.linearSeqs.find((seq) => seq.uid === checkpoint.ownerUid);
+      const owner = state.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === checkpoint.ownerUid);
       if (owner) owner.region_reverse = checkpoint.ownerReverse;
     }
     const index = drawing.recordDisplayDrafts.findIndex(
-      (draft) => recordDisplayKey(draft) === checkpoint.key
+      (/** @type {RecordDisplayDraft} */ draft) => recordDisplayKey(draft) === checkpoint.key
     );
     if (index >= 0) drawing.recordDisplayDrafts.splice(index, 1);
     if (checkpoint.draft) {
@@ -421,29 +535,29 @@ export const createRecordDisplayControls = ({
       refreshCommittedRows();
       return committedRows;
     },
-    rowsFor: (uid) => rows.value.filter((row) => row.sourceUid === uid),
-    setTopology: (row, value) => {
+    rowsFor: (/** @type {string} */ uid) => rows.value.filter((row) => row.sourceUid === uid),
+    setTopology: (/** @type {RecordDisplayRow} */ row, /** @type {boolean | null} */ value) => {
       const drawing = state.activeDrawing();
       return edit(drawing, row, { topologyOverride: value }, 'Change record topology');
     },
-    setStart: (row, value) => {
+    setStart: (/** @type {RecordDisplayRow} */ row, /** @type {unknown} */ value) => {
       const drawing = state.activeDrawing();
       return state.sessionOperationAvailability?.() || edit(drawing, row, {
         startCoordinate: parseRecordDisplayStart(value), anchorIntent: null
       }, 'Change record display start');
     },
-    resetStart: (row) => {
+    resetStart: (/** @type {RecordDisplayRow} */ row) => {
       const drawing = state.activeDrawing();
       return edit(drawing, row, { startCoordinate: null, anchorIntent: null }, 'Reset record display start');
     },
-    setReverseComplement: (row, value) => {
+    setReverseComplement: (/** @type {RecordDisplayRow} */ row, /** @type {unknown} */ value) => {
       const drawing = state.activeDrawing();
       return state.sessionOperationAvailability?.() || edit(drawing, row, {
         reverseComplementOverride: requireReverseComplementOverride(value), anchorIntent: null
       }, 'Change record orientation');
     },
     // Apply on Generate: one undoable draft step, like the sidebar's edits.
-    setResolvedTransform: (row, transform) => runUndoable(
+    setResolvedTransform: (/** @type {RecordDisplayRow} */ row, /** @type {ResolvedRecordTransform} */ transform) => runUndoable(
       'Rotate record to feature on Generate',
       () => writeResolvedTransform(row, transform)
     ),

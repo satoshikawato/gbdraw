@@ -21,10 +21,13 @@ export const DEFAULT_FEATURE_RENDERINGS = Object.freeze({
 const FEATURE_RENDERING_VALUE_SET = new Set(FEATURE_RENDERING_VALUES);
 
 /** @param {unknown} featureType */
-export const defaultFeatureRendering = (featureType) => (
-  // The key is any feature type, not only the defaulted ones.
-  /** @type {Readonly<Record<string, string>>} */ (DEFAULT_FEATURE_RENDERINGS)[String(featureType || '').trim()] || 'rectangle'
-);
+export const defaultFeatureRendering = (featureType) => {
+  // The key is any feature type, not only the defaulted ones: read own keys only.
+  const key = String(featureType || '').trim();
+  return Object.hasOwn(DEFAULT_FEATURE_RENDERINGS, key)
+    ? /** @type {Readonly<Record<string, string>>} */ (DEFAULT_FEATURE_RENDERINGS)[key]
+    : 'rectangle';
+};
 
 /** @param {unknown} value */
 export const normalizeFeatureRendering = (value) => {

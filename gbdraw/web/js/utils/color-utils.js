@@ -314,6 +314,19 @@ export const appliedFeatureColors = ({ paletteDefinitions, appliedPaletteName, a
   return colors;
 };
 
+// The palette color of a feature type, else undefined. A type is file text
+// (GFF3), so only an own key of the palette names a color: `constructor` or
+// `toString` is none.
+/**
+ * @param {Parameters<typeof appliedFeatureColors>[0]} state
+ * @param {string | undefined} type
+ * @returns {string | undefined}
+ */
+export const appliedFeatureColorOf = (state, type) => {
+  const colors = appliedFeatureColors(state);
+  return type !== undefined && Object.hasOwn(colors, type) ? colors[type] : undefined;
+};
+
 // One color, compared: case, a color name, and `#rgb` against `#rrggbb` (D-15).
 /** @param {unknown} colorValue */
 const normalizeComparableColor = (colorValue) => {

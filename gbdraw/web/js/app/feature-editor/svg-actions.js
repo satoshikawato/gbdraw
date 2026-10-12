@@ -2,6 +2,7 @@
 /** @import { DrawingState, PopupPosition } from '../../state.js' */
 /** @import { PopupOrigin } from '../../utils/popup-bounds.js' */
 /** @import { AliasSource } from '../../services/feature-identity.js' */
+/** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { placePopupNearPoint, popupViewportBounds } from '../../utils/popup-bounds.js';
@@ -53,6 +54,24 @@ export {
   getFeatureIdentity,
   normalizeFeatureIdentity
 };
+
+/**
+ * A pointer position, as an event or a plain point carries it.
+ * @typedef {{ clientX?: number, clientY?: number }} HoverPoint
+ */
+/**
+ * A position that names the element under it, which a mouse or pointer event does.
+ * @typedef {{ clientX: number, clientY: number, target?: EventTarget | null }} PointerPosition
+ */
+/**
+ * An event target that may be an Element (the window and a document are not).
+ * @typedef {EventTarget & { closest?: Element['closest'] }} MaybeElementTarget
+ */
+
+/**
+ * The hover summary of a pairwise match, as the match popup builds it.
+ * @typedef {{ id: string, title: string, subtitle: string, fill: string, rows: Array<{ label: string, value: string }> }} MatchHoverSummary
+ */
 
 /**
  * The feature selection owner's reactions to a click or a drag on the preview.
@@ -215,6 +234,7 @@ export const createFeatureSvgActions = ({
     lastEvent: null
   };
 
+  /** @param {unknown} value */
   const getOrthogroupIds = (value) =>
     Array.from(new Set(
       String(value || '')
@@ -223,6 +243,7 @@ export const createFeatureSvgActions = ({
         .filter(Boolean)
     ));
 
+  /** @param {FeatureLike | null | undefined} feature */
   const renderedFeatureSvgId = (feature) => String(
     feature?.rendered_svg_id ||
     feature?.renderedSvgId ||
@@ -232,6 +253,7 @@ export const createFeatureSvgActions = ({
     ''
   ).trim();
 
+  /** @param {unknown} value */
   const normalizeVisibilityMode = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized === 'suppress') return 'exclude_matching';
@@ -259,6 +281,7 @@ export const createFeatureSvgActions = ({
     Object.assign(pos, placePopupNearPoint({ point: anchor, width, height: 520, bounds: popupViewportBounds() }), { anchor });
   };
 
+  /** @param {unknown} qualifiers */
   const normalizeQualifierRows = (qualifiers) => {
     if (!qualifiers || typeof qualifiers !== 'object' || Array.isArray(qualifiers)) return [];
     return Object.entries(qualifiers)
@@ -270,12 +293,14 @@ export const createFeatureSvgActions = ({
       .sort((left, right) => left.key.localeCompare(right.key));
   };
 
+  /** @param {FeatureLike | null | undefined} feat @param {unknown} key */
   const getQualifierFirstValue = (feat, key) => {
     const normalizedKey = String(key || '').trim().toLowerCase();
     if (!normalizedKey) return '';
     const directValue = feat?.[normalizedKey];
+    // A non-null object (checked): the qualifier table is read by a fixed key.
     const qualifierValue = feat?.qualifiers && typeof feat.qualifiers === 'object'
-      ? feat.qualifiers[normalizedKey]
+      ? /** @type {Record<string, unknown>} */ (feat.qualifiers)[normalizedKey]
       : null;
     const values = normalizeStringArray(directValue || qualifierValue)
       .map((value) => String(value || '').trim())
@@ -283,6 +308,7 @@ export const createFeatureSvgActions = ({
     return values[0] || '';
   };
 
+  /** @param {FeatureLike | null | undefined} feat */
   const getHoverSummaryPrimaryLabel = (feat) => (
     getQualifierFirstValue(feat, 'gene') ||
     getQualifierFirstValue(feat, 'locus_tag') ||
@@ -291,6 +317,7 @@ export const createFeatureSvgActions = ({
     ''
   );
 
+  /** @param {string} tagName @param {string} [className] @param {string} [text] */
   const createHoverSummaryElement = (tagName, className = '', text = '') => {
     const element = document.createElement(tagName);
     if (className) element.className = className;
@@ -298,6 +325,7 @@ export const createFeatureSvgActions = ({
     return element;
   };
 
+  /** @param {Element} container @param {string} label @param {unknown} value @param {{ clamp?: boolean }} [options] */
   const addHoverSummaryRow = (container, label, value, { clamp = false } = {}) => {
     const normalizedValue = String(value === null || value === undefined ? '' : value).trim();
     if (!normalizedValue) return;
@@ -311,6 +339,7 @@ export const createFeatureSvgActions = ({
     container.appendChild(row);
   };
 
+  /** @param {FeatureLike} feat @param {string} primaryLabel */
   const buildHoverSummaryRows = (feat, primaryLabel) => {
     const product = getQualifierFirstValue(feat, 'product');
     const gene = getQualifierFirstValue(feat, 'gene');
@@ -318,6 +347,7 @@ export const createFeatureSvgActions = ({
     const note = getQualifierFirstValue(feat, 'note');
     const locationText = formatFeatureLocation(feat);
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || '').trim();
+    /** @type {Array<[string, unknown, boolean?]>} */
     const rows = [];
 
     if (gene && gene !== primaryLabel) rows.push(['Gene', gene]);
@@ -335,6 +365,7 @@ export const createFeatureSvgActions = ({
   // Details lists what the popup header and the Edit tab do not show:
   // the header names the feature, its product, record, and location, and the
   // Similarity group section its group.
+  /** @param {FeatureLike} feat */
   const buildDetailRows = (feat) => [
     { key: 'type', label: 'Feature type', value: feat.type },
     { key: 'length', label: 'Length', value: formatFeatureLength(feat) },
@@ -356,6 +387,7 @@ export const createFeatureSvgActions = ({
     return indexed;
   };
 
+  /** @param {MaybeElementTarget | null | undefined} target @param {Element} svg */
   const getFeatureTarget = (target, svg) => {
     if (!target || typeof target.closest !== 'function') return null;
     const matchEl = target.closest(PAIRWISE_MATCH_SELECTOR);
@@ -365,6 +397,7 @@ export const createFeatureSvgActions = ({
     return featureEl;
   };
 
+  /** @param {MaybeElementTarget | null | undefined} target @param {Element} svg */
   const getPairwiseMatchTarget = (target, svg) => {
     if (!target || typeof target.closest !== 'function') return null;
     const matchEl = target.closest(PAIRWISE_MATCH_SELECTOR);
@@ -372,12 +405,14 @@ export const createFeatureSvgActions = ({
     return matchEl;
   };
 
+  /** @param {PointerPosition | null | undefined} eventLike @param {Element | null | undefined} svg @param {string} selector */
   const getTopmostSvgTarget = (eventLike, svg, selector) => {
     if (!svg || !selector || !Number.isFinite(eventLike?.clientX) || !Number.isFinite(eventLike?.clientY)) {
       return null;
     }
     const stack = typeof document.elementsFromPoint === 'function'
-      ? document.elementsFromPoint(eventLike.clientX, eventLike.clientY)
+      // `Number.isFinite(eventLike?.clientX)` holds only for a present eventLike.
+      ? document.elementsFromPoint(/** @type {PointerPosition} */ (eventLike).clientX, /** @type {PointerPosition} */ (eventLike).clientY)
       : [];
     for (const element of stack) {
       if (!element || !svg.contains(element)) continue;
@@ -389,12 +424,15 @@ export const createFeatureSvgActions = ({
     return null;
   };
 
+  /** @param {PointerPosition} eventLike @param {Element} svg */
   const getFeatureClickTarget = (eventLike, svg) =>
     getTopmostSvgTarget(eventLike, svg, FEATURE_SELECTOR) || getFeatureTarget(eventLike?.target, svg);
 
+  /** @param {PointerPosition} eventLike @param {Element} svg */
   const getPairwiseMatchClickTarget = (eventLike, svg) =>
     getTopmostSvgTarget(eventLike, svg, PAIRWISE_MATCH_SELECTOR) || getPairwiseMatchTarget(eventLike?.target, svg);
 
+  /** @param {Element | null | undefined} target @param {Element | null | undefined} svg */
   const isBackgroundPreviewClick = (target, svg) => {
     if (!target || !svg?.contains?.(target)) return false;
     if (target === svg) return true;
@@ -528,7 +566,7 @@ export const createFeatureSvgActions = ({
     const key = stableFeatureOverrideKey(feat);
     if (catalogFeatures && key) {
       target = catalogFeatures.renderedByIdentity.get(key)
-        || catalogFeatures.biological.find((candidate) => stableFeatureOverrideKey(candidate) === key);
+        || catalogFeatures.biological.find((/** @type {FeatureLike} */ candidate) => stableFeatureOverrideKey(candidate) === key);
       if (!target) return null;
       renderedSvgId = catalogFeatures.renderedByIdentity.has(key) ? renderedFeatureSvgId(target) : '';
     } else if (!renderedSvgId) {
@@ -627,10 +665,12 @@ export const createFeatureSvgActions = ({
     element.style.top = `${Math.round(y)}px`;
   };
 
+  /** @param {HoverPoint | null | undefined} eventLike */
   const scheduleHoverSummaryPosition = (eventLike) => {
+    // `Number.isFinite(eventLike?.clientX)` holds only for a present eventLike.
     hoverSummaryState.lastEvent = {
-      clientX: Number.isFinite(eventLike?.clientX) ? eventLike.clientX : hoverSummaryState.lastEvent?.clientX,
-      clientY: Number.isFinite(eventLike?.clientY) ? eventLike.clientY : hoverSummaryState.lastEvent?.clientY
+      clientX: Number.isFinite(eventLike?.clientX) ? /** @type {HoverPoint} */ (eventLike).clientX : hoverSummaryState.lastEvent?.clientX,
+      clientY: Number.isFinite(eventLike?.clientY) ? /** @type {HoverPoint} */ (eventLike).clientY : hoverSummaryState.lastEvent?.clientY
     };
     if (!hoverSummaryState.visible || hoverSummaryState.frame) return;
     hoverSummaryState.frame = window.requestAnimationFrame(() => {
@@ -639,6 +679,7 @@ export const createFeatureSvgActions = ({
     });
   };
 
+  /** @param {FeatureLike | null | undefined} feat @param {Element | null | undefined} featureElement @param {HoverPoint | null | undefined} eventLike */
   const renderHoverSummary = (feat, featureElement, eventLike) => {
     if (!feat || !hoverSummaryIsAllowed()) {
       hideHoverSummary();
@@ -675,6 +716,7 @@ export const createFeatureSvgActions = ({
     positionHoverSummary(eventLike);
   };
 
+  /** @param {FeatureLike | null | undefined} feat @param {Element | null | undefined} featureElement @param {HoverPoint | null | undefined} eventLike */
   const scheduleHoverSummary = (feat, featureElement, eventLike) => {
     if (hoverSummaryState.timer) {
       window.clearTimeout(hoverSummaryState.timer);
@@ -696,6 +738,7 @@ export const createFeatureSvgActions = ({
     hoverSummaryState.timer = window.setTimeout(show, 180);
   };
 
+  /** @param {MatchHoverSummary | null} summary @param {HoverPoint | null | undefined} eventLike */
   const renderMatchHoverSummary = (summary, eventLike) => {
     if (!summary || !hoverSummaryIsAllowed()) {
       hideHoverSummary();
@@ -726,6 +769,7 @@ export const createFeatureSvgActions = ({
     positionHoverSummary(eventLike);
   };
 
+  /** @param {MatchHoverSummary | null} summary @param {HoverPoint | null | undefined} eventLike */
   const scheduleMatchHoverSummary = (summary, eventLike) => {
     if (hoverSummaryState.timer) {
       window.clearTimeout(hoverSummaryState.timer);
@@ -770,8 +814,8 @@ export const createFeatureSvgActions = ({
   // groups, which the presentation subset lacks (OV-370).
   const groupsForMatch = () => orthogroups?.value || [];
 
-  /** @param {DrawingState} drawing */
-  const buildMatchPayload = (drawing, matchElement, featureLookup) => buildMatchPopupPayload(matchElement, {
+  /** @param {DrawingState} drawing @param {Element} matchElement @param {Map<string, FeatureLike>} featureLookup */
+  const buildMatchPayload = (drawing, matchElement, featureLookup) => buildMatchPopupPayload(/** @type {SVGElement} */ (matchElement), {
     featureLookup,
     sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
       ? biologicalFeatures.value
@@ -783,11 +827,13 @@ export const createFeatureSvgActions = ({
   });
 
   // The summary builder reads a function as well as a list.
-  const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, /** @type {any} */ ({
+  /** @param {Element} matchElement */
+  const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(/** @type {SVGElement} */ (matchElement), /** @type {any} */ ({
     orthogroups: groupsForMatch,
     orthogroupNameOverrides: state.activeDrawing().orthogroupNameOverrides
   }));
 
+  /** @param {Element | null} matchElement @param {PopupOrigin | null} eventLike @param {Map<string, FeatureLike>} featureLookup */
   const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {
     const drawing = state.activeDrawing();
     if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos || previewPopupsHeld()) return null;
@@ -839,12 +885,13 @@ export const createFeatureSvgActions = ({
     return true;
   };
 
-  /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */
+  /** @param {{ root?: SVGSVGElement | null, phase?: string, rootGeneration?: number }} [options] */
   const attachSvgFeatureHandlers = ({
     root = null,
     phase = 'preview-bind',
     rootGeneration = 0
   } = {}) => {
+    /** @type {SVGSVGElement | null} */
     const svg = root || svgContainer.value?.querySelector?.('svg') || null;
     if (!svg) return false;
 
@@ -852,6 +899,7 @@ export const createFeatureSvgActions = ({
       cleanupDelegatedFeatureHandlers();
     }
 
+    /** @param {Map<string, FeatureLike>} featureLookup */
     const buildFeatureIdsByOrthogroupId = (featureLookup) => {
       const featureIdsByOrthogroupId = new Map();
       featureLookup.forEach((feat, svgId) => {
@@ -958,6 +1006,7 @@ export const createFeatureSvgActions = ({
       handlerState.comparisonElementsByMatchId = byMatch;
     };
 
+      /** @param {(Element & { style?: CSSStyleDeclaration }) | null | undefined} element @param {boolean} highlight */
       const setHoverStyle = (element, highlight) => {
         if (!element?.style) return;
         if (highlight) {
@@ -979,18 +1028,21 @@ export const createFeatureSvgActions = ({
         handlerState.activeHoverElements.delete(element);
       };
 
+      /** @param {string} svgId */
       const setFeatureHover = (svgId) => {
         (ensureFeaturePaths().get(svgId) || []).forEach((element) => {
           setHoverStyle(element, true);
         });
       };
 
+      /** @param {string} svgId */
       const getFeatureHoverKey = (svgId) => {
         const feat = ensureFeatureLookup().get(svgId);
         const orthogroupId = String(feat?.orthogroupId || '').trim();
         return orthogroupId ? `orthogroup:${orthogroupId}` : `feature:${svgId}`;
       };
 
+      /** @param {unknown} orthogroupId */
       const setOrthogroupHover = (orthogroupId) => {
         const id = String(orthogroupId || '').trim();
         if (!id) return;
@@ -1004,6 +1056,7 @@ export const createFeatureSvgActions = ({
         });
       };
 
+      /** @param {unknown} blockId */
       const setCollinearityBlockHover = (blockId) => {
         const id = String(blockId || '').trim();
         if (!id) return;
@@ -1014,6 +1067,7 @@ export const createFeatureSvgActions = ({
         });
       };
 
+      /** @param {string} svgId */
       const setHoverHighlight = (svgId) => {
         const feat = ensureFeatureLookup().get(svgId);
         const orthogroupId = String(feat?.orthogroupId || '').trim();
@@ -1024,8 +1078,10 @@ export const createFeatureSvgActions = ({
         setFeatureHover(svgId);
       };
 
+      /** @param {Element | null | undefined} element @param {string} name */
       const matchAttr = (element, name) => String(element?.getAttribute?.(name) || '').trim();
 
+      /** @param {Element | null | undefined} matchElement */
       const getMatchHoverKey = (matchElement) => {
         const blockId = matchAttr(matchElement, 'data-collinearity-block-id');
         if (blockId) return `collinearity:${blockId}`;
@@ -1034,6 +1090,7 @@ export const createFeatureSvgActions = ({
         return `match:${matchAttr(matchElement, 'data-gbdraw-match-id') || matchAttr(matchElement, 'data-gbdraw-pairwise-match-id') || matchAttr(matchElement, 'd')}`;
       };
 
+      /** @param {Element} element */
       const matchFragments = (element) => {
         ensureComparisonIndexes();
         const id = matchAttr(element, 'data-gbdraw-match-id') || matchAttr(element, 'data-gbdraw-pairwise-match-id');
@@ -1041,6 +1098,7 @@ export const createFeatureSvgActions = ({
         return /** @type {Map<string, Element[]>} */ (handlerState.comparisonElementsByMatchId).get(id) || [element];
       };
 
+      /** @param {Element | null | undefined} matchElement */
       const setMatchHover = (matchElement) => {
         if (!matchElement) return;
         const blockId = matchAttr(matchElement, 'data-collinearity-block-id');
@@ -1430,6 +1488,7 @@ export const createFeatureSvgActions = ({
         handlerState.pendingMatchElement = null;
       };
 
+      /** @param {Element} matchElement */
       const setPendingMatch = (matchElement) => {
         if (handlerState.pendingMatchElement === matchElement) return;
         clearPendingMatch();
@@ -1437,15 +1496,18 @@ export const createFeatureSvgActions = ({
         matchFragments(matchElement).forEach((element) => element.classList.add('gbdraw-match-pending'));
       };
 
+      /** @param {PointerPosition | null | undefined} eventLike */
       const rememberTransformPointer = (eventLike) => {
         if (!Number.isFinite(eventLike?.clientX) || !Number.isFinite(eventLike?.clientY)) return;
+        // `Number.isFinite(eventLike?.clientX)` holds only for a present eventLike.
         handlerState.transformPointer = {
-          clientX: eventLike.clientX,
-          clientY: eventLike.clientY
+          clientX: /** @type {PointerPosition} */ (eventLike).clientX,
+          clientY: /** @type {PointerPosition} */ (eventLike).clientY
         };
         handlerState.reconcileHoverAfterTransform = true;
       };
 
+      /** @param {Element} featureEl @param {HoverPoint | null | undefined} eventLike */
       const activateFeatureHover = (featureEl, eventLike) => {
         clearActiveMatchHover();
         const svgId = getFeatureIdentity(featureEl);
@@ -1464,6 +1526,7 @@ export const createFeatureSvgActions = ({
         return true;
       };
 
+      /** @param {Element} matchEl @param {HoverPoint | null | undefined} eventLike */
       const activateMatchHover = (matchEl, eventLike) => {
         handlerState.alignmentOverlay?.setHover(null);
         clearActiveFeatureHover();
@@ -1532,6 +1595,7 @@ export const createFeatureSvgActions = ({
         });
       };
 
+      /** @param {MouseEvent} e */
       const handleMouseOver = (e) => {
         if (isPreviewTransformInteractionActive()) {
           rememberTransformPointer(e);
@@ -1547,6 +1611,7 @@ export const createFeatureSvgActions = ({
         activateMatchHover(matchEl, e);
       };
 
+      /** @param {MouseEvent} e */
       const handleMouseMove = (e) => {
         if (isPreviewTransformInteractionActive()) {
           rememberTransformPointer(e);
@@ -1565,6 +1630,7 @@ export const createFeatureSvgActions = ({
         }
       };
 
+      /** @param {MouseEvent} e */
       const handleMouseOut = (e) => {
         if (isPreviewTransformInteractionActive()) {
           rememberTransformPointer(e);
@@ -1589,6 +1655,7 @@ export const createFeatureSvgActions = ({
         hideHoverSummary();
       };
 
+      /** @param {MouseEvent} e */
       const handleClick = (e) => {
         clearPendingMatch();
         if (featureSelection?.consumeSuppressNextClick?.()) {
@@ -1609,12 +1676,12 @@ export const createFeatureSvgActions = ({
             } else {
               featureSelection?.selectFeatureRange?.(selectionId, { additive: modifierSelection });
             }
-          } else if (isBackgroundPreviewClick(e.target, svg)) {
+          } else if (isBackgroundPreviewClick(/** @type {Element} */ (e.target), svg)) { // a click on the Result targets an element
             featureSelection?.clearFeatureSelection?.({ clearStatus: true });
           }
           return;
         }
-        const annotationEl = e.target?.closest?.('[data-gbdraw-annotation-id]');
+        const annotationEl = /** @type {MaybeElementTarget | null} */ (e.target)?.closest?.('[data-gbdraw-annotation-id]');
         if (annotationEl && svg.contains(annotationEl)) {
           e.preventDefault();
           e.stopPropagation();
@@ -1666,7 +1733,7 @@ export const createFeatureSvgActions = ({
           e.preventDefault();
           return;
         }
-        if (isBackgroundPreviewClick(e.target, svg)) {
+        if (isBackgroundPreviewClick(/** @type {Element} */ (e.target), svg)) { // a click on the Result targets an element
           featureSelection?.clearFeatureSelection?.({ clearStatus: true });
           if (previewPopupsHeld()) return;
           if (clickedFeature.value) clickedFeature.value = null;
@@ -1674,13 +1741,14 @@ export const createFeatureSvgActions = ({
         }
       };
 
+      /** @param {KeyboardEvent} e */
       const handleKeyDown = (e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         const matchEl = getPairwiseMatchTarget(e.target, svg);
         if (matchEl) {
           e.stopPropagation();
           e.preventDefault();
-          openPairwiseMatchPopup(matchEl, e, ensureFeatureLookup());
+          openPairwiseMatchPopup(matchEl, {}, ensureFeatureLookup());
           return;
         }
         const previewItem = previewItemTarget(e.target, svg);
@@ -1690,6 +1758,7 @@ export const createFeatureSvgActions = ({
         }
       };
 
+      /** @param {PointerEvent} e */
       const handlePointerDown = (e) => {
         if (e.button === 0 && e.isPrimary !== false) {
           const matchEl = getPairwiseMatchClickTarget(e, svg);
@@ -1703,6 +1772,7 @@ export const createFeatureSvgActions = ({
         e.stopPropagation();
       };
 
+      /** @param {PointerEvent} e */
       const handlePointerOut = (e) => {
         if (!handlerState.pendingMatchElement) return;
         const matchEl = getPairwiseMatchTarget(e.target, svg);
@@ -1711,6 +1781,7 @@ export const createFeatureSvgActions = ({
         clearPendingMatch();
       };
 
+      /** @param {PointerEvent} e */
       const handlePointerMove = (e) => {
         if (!featureSelection?.moveMarqueePointer?.(e)) return;
         e.preventDefault();
@@ -1718,6 +1789,7 @@ export const createFeatureSvgActions = ({
         hideHoverSummary();
       };
 
+      /** @param {PointerEvent} e */
       const handlePointerUp = (e) => {
         clearPendingMatch();
         if (!featureSelection?.commitMarqueePointer?.(e)) return;

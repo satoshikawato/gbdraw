@@ -1,6 +1,7 @@
 // @ts-check
 import { stableFeatureOverrideKey } from './feature-catalog.js';
 import { pythonDrawnAttribute } from './result-paint-bases.js';
+import { ownEntry } from '../utils/own-entry.js';
 
 /**
  * A feature as the override identity reads it: a catalog row, a feature read from
@@ -95,8 +96,7 @@ export const featureOverrideKey = (feature) => (
  */
 export const getFeatureOverride = (overrides, feature) => {
   const key = featureOverrideKey(feature);
-  // `hasOwn` holds only for an object, so `overrides` is one when it indexes.
-  return key && hasOwn(overrides, key) ? /** @type {Readonly<Record<string, T>>} */ (overrides)[key] : undefined;
+  return key ? ownEntry(overrides, key) : undefined;
 };
 
 /**

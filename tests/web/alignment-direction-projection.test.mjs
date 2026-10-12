@@ -152,3 +152,10 @@ test('a changed logical reference destination requires refreshed preview even wh
   assert.equal(final.reference.deltaX, preview.reference.deltaX);
   assert.notEqual(final.signature, preview.signature);
 });
+
+test('Custom reads a record only by an own key: a record named constructor keeps its direction', () => {
+  const { response, request } = fixture();
+  const rename = (value) => JSON.parse(JSON.stringify(value).replaceAll('target', 'constructor'));
+  const result = project(rename(response), rename(request), { mode: 'custom', byRecordKey: { ref: 'right' } });
+  assert.deepEqual(result.records.map(({ afterReverseComplement }) => afterReverseComplement), [true, false]);
+});

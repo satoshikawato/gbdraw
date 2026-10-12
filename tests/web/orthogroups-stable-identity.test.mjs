@@ -39,6 +39,8 @@ await copyModule(
   'gbdraw/web/js/services/orthogroup-feature-metadata.js',
   'services/orthogroup-feature-metadata.js'
 );
+// standalone-interactivity.js reads the bulk label table by own key.
+await copyModule('gbdraw/web/js/utils/own-entry.js', 'utils/own-entry.js');
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
 await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schema.generated.js');
@@ -60,7 +62,7 @@ const standaloneSource = await readFile(
 );
 await writeFile(
   join(tempDir, 'services', 'standalone-interactivity.js'),
-  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, createStandaloneBiologicalFeatureResolver, getStandaloneFeatureOrthogroupEntry, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
+  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, catalogItemWithStandaloneOverrides, createStandaloneBiologicalFeatureResolver, getStandaloneDisplayLabel, getStandaloneFeatureOrthogroupEntry, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
   'utf8'
 );
 await writeFile(join(tempDir, 'app', 'feature-editor-svg-actions.js'), `
@@ -156,7 +158,9 @@ const {
 const {
   buildStandaloneBiologicalFeaturePayloads,
   buildStandaloneOrthogroupPayloads,
+  catalogItemWithStandaloneOverrides,
   createStandaloneBiologicalFeatureResolver,
+  getStandaloneDisplayLabel,
   getStandaloneFeatureOrthogroupEntry,
   selectStandaloneCatalogItem,
   selectStandaloneSequenceSources
@@ -1943,4 +1947,44 @@ console.log('orthogroup stable identity tests passed');
   });
   const grouped = offEditor.groupOrthogroupMembersByRecord([{ fileIdx: 1 }, { fileIdx: 0 }]);
   assert.deepEqual(grouped.map((entry) => entry.recordLabel), ['record-a', 'record-c']);
+}
+
+// A Similarity group id is data, so the rename tables are read by own key: a
+// group named `constructor` shows its own name, not Object.prototype.
+{
+  const protoState = { ...state, orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} };
+  const protoEditor = createOrthogroupEditor({ state: withDrawings(protoState), runAnalysis: null });
+  const protoGroup = { id: 'constructor', name: 'Own name', description: 'Own description', members: [] };
+  assert.equal(protoEditor.resolveOrthogroupName(protoGroup), 'Own name');
+  assert.equal(protoEditor.resolveOrthogroupDescription(protoGroup), 'Own description');
+}
+
+// OV-554: the source text is label text; only an own key of the bulk table is an edit.
+{
+  const inheritedFeature = { svg_id: 'f1', product: 'constructor' };
+  assert.equal(
+    getStandaloneDisplayLabel(inheritedFeature, 'constructor', { labelTextBulkOverrides: {} }),
+    'constructor'
+  );
+  assert.equal(
+    getStandaloneDisplayLabel(inheritedFeature, 'constructor', { labelTextBulkOverrides: { constructor: 'ctor' } }),
+    'ctor'
+  );
+}
+
+// The same for a Similarity group id in the standalone HTML: only an own key of a rename table is a rename.
+{
+  const inheritedGroup = { id: 'constructor', name: 'Own name', description: 'Own description', members: [] };
+  const shown = (context) => [
+    ...buildStandaloneOrthogroupPayloads([], { orthogroups: [inheritedGroup], ...context }),
+    ...catalogItemWithStandaloneOverrides({ features: [], biologicalFeatures: [], orthogroups: [inheritedGroup] }, context).orthogroups
+  ].map((group) => [group.display_name ?? group.name, group.description]);
+  assert.deepEqual(
+    shown({ orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} }),
+    [['Own name', 'Own description'], ['Own name', 'Own description']]
+  );
+  assert.deepEqual(
+    shown({ orthogroupNameOverrides: { constructor: 'Renamed' }, orthogroupDescriptionOverrides: { constructor: 'Edited' } }),
+    [['Renamed', 'Edited'], ['Renamed', 'Edited']]
+  );
 }

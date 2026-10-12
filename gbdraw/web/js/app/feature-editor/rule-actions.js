@@ -7,7 +7,7 @@ import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
-import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
+import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
@@ -26,11 +26,13 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
+import { ownEntry } from '../../utils/own-entry.js';
 import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
 } from '../../services/feature-visibility.js';
 import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
 /** @import { PatternDraft } from './pattern-drafts.js' */
+/** @import { ColorFeature } from './color-actions.js' */
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the
 // palette and the specific-color rules (R3); this owner calls it after a rule
@@ -96,9 +98,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     editableLabels
   } = state;
 
+  /** @param {unknown} value */
   const normalizeCaption = (value) => String(value || '').trim();
+  /** @param {unknown} value */
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
+  /** @param {unknown} value */
   const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
+  /** @param {unknown} value @param {unknown} target */
   const captionMatches = (value, target) => normalizeCaptionKey(value) === normalizeCaptionKey(target);
   const specificRuleFields = new Set(['feat', 'qual', 'val', 'color', 'cap']);
 
@@ -128,7 +134,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // `retiredLegendIntents`, rows this commit replaces, which are no
   // renderer rows for the N-06 caption allocation. `removedRuleRows` are
   // the rows of current rules that no candidate rule names, drawn or not.
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {Partial<SpecificColorRule>[]} candidateRules
+   * @param {Array<{ caption?: string, color?: string }>} retiredLegendIntents
+   */
   const candidateLegendIntents = (drawing, candidateRules, retiredLegendIntents) => {
     const displayed = displayedLegendRowContext(state, drawing);
     const candidateMatches = ruleMatcher(candidateRules);
@@ -139,8 +149,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
     });
     const currentCaption = createRuleLegendCaptions(drawing.manualSpecificRules, rendererRows);
-    const ruleRows = drawing.manualSpecificRules.filter(rule => rule.cap)
-      .map(rule => ({ caption: currentCaption(rule), color: rule.color }));
+    /** @type {Array<{ caption: PythonLegendKey, color: string }>} */
+    const ruleRows = drawing.manualSpecificRules.filter((/** @type {SpecificColorRule} */ rule) => rule.cap)
+      .map((/** @type {SpecificColorRule} */ rule) => ({ caption: currentCaption(rule), color: rule.color }));
     /** @type {LegendEntry[]} */
     const listed = drawing.legendEntries.value || [];
     const takenRows = listed.filter(entry => takenKeys.has(legendEntryKey(entry)))
@@ -159,7 +170,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // merge into a new row, an unknown match, or a row of another batch Result.
   // Python then redraws the rows, their order, and the "other <type>s" rows.
   // The rows are read with the current Feature visibility before and after.
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {Partial<SpecificColorRule>[]} rules */
   const legendSourceContext = (drawing, rules) => ({
     ...featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions }),
     colorRules: rules
@@ -221,6 +232,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // rerender, as the edit did. A removed whole-type rule asks for it only
   // when the restored Legend lacks the type's default row (OV-169): Undo of
   // an Apply to all returns the row it recolored, so it needs no Python run.
+  /** @param {Partial<SpecificColorRule>[]} previousRules */
   const followRestoredRules = (previousRules) => {
     const drawing = state.activeDrawing();
     return (
@@ -360,6 +372,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // R13: this owner builds the candidate rules, so it is the one place that asks
   // the rule preparation for their matches: a commit prepares the candidate
   // with its captions, a color action prepares the rules it reads as they are.
+  /**
+   * @param {Partial<SpecificColorRule>[]} rules
+   * @param {Parameters<import('../rule-matching.js').RulePreparation['prepareCandidate']>[1]} [options]
+   */
   const prepareRules = (rules, options) => rulePreparation.prepareCandidate(rules, options);
   // Runs `commit` once the color rule matches of `rules` are prepared; a
   // prepared table answers at once, so the commit runs in the caller's tick.
@@ -397,7 +413,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const { intents, previousIntents, removedRuleRows } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
-      .some(entry => (entry.originalCaption || entry.caption) === intent.caption)), {
+      .some((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,
       previousFileIntents: previousIntents,
       isCurrent: current,
@@ -470,11 +486,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   /** @type {(row: SpecificColorRule, patch: Partial<SpecificColorRule>) => SpecificRuleBuild} The table with `row` revised, or null when it is gone. */
   const reviseRow = (row, patch) => (current, revise) => (current.includes(row)
     ? current.map(rule => (rule === row ? revise(rule, patch) : rule)) : null);
+  /** @param {SpecificColorRule} row @param {string} value */
   const editSpecificRulePattern = (row, value) => {
     const busy = state.sessionOperationAvailability?.();
     return busy || patternDrafts.edit(row, value);
   };
-  /** @param {HTMLInputElement | null} [input] */
+  /** @param {SpecificColorRule} row @param {HTMLInputElement | null} [input] */
   const revertSpecificRulePattern = (row, input = null) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
@@ -484,7 +501,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       input.focus();
     }
   };
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {SpecificColorRule} row @param {string} value */
   const applySpecificRulePattern = async (drawing, row, value) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
@@ -511,12 +528,18 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       }
     }, () => !patternDrafts.isCurrent(row, token));
   };
+  /** @param {SpecificColorRule} row */
   const retrySpecificRulePattern = (row) => {
     const drawing = state.activeDrawing();
     const draft = patternDrafts.get(row);
     return draft && !draft.pending ? applySpecificRulePattern(drawing, row, draft.text) : false;
   };
-  /** @param {HTMLInputElement | null} [input] */
+  /**
+   * @param {number} index
+   * @param {'feat' | 'qual' | 'val' | 'color' | 'cap'} field
+   * @param {string} value
+   * @param {HTMLInputElement | HTMLSelectElement | null} [input]
+   */
   const setSpecificRuleField = (index, field, value, input = null) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -531,7 +554,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     });
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {number} index @param {number} offset */
   const moveSpecificRule = (drawing, index, offset) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -557,6 +580,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     downloadTextFile('gbdraw_specific_rules.tsv', text);
   };
 
+  /** @param {ColorFeature} feat */
   const getIndividualFeatureLabel = (feat) => {
     return feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${formatFeatureRange(feat)}`;
   };
@@ -573,7 +597,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return index;
   };
 
-  /** @param {Map<string, any>} [entryIndex] */
+  /** @param {ColorFeature | null | undefined} feat @param {Map<string, any>} [entryIndex] */
   const getDisplayedFeatureLabel = (feat, entryIndex = indexEditableLabels()) => {
     const drawing = state.activeDrawing();
     if (!feat) return '';
@@ -588,7 +612,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
 
     const sourceText = normalizeCaption(editableEntry?.sourceText);
     if (sourceText) {
-      const normalizedBulk = normalizeCaption(drawing.labelTextBulkOverrides[sourceText]);
+      // The source text is label text: only an own key of the table is an override.
+      const normalizedBulk = normalizeCaption(ownEntry(drawing.labelTextBulkOverrides, sourceText));
       if (normalizedBulk) return normalizedBulk;
     }
 
@@ -621,6 +646,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       return normalizeCaption(feat.type) || normalizeCaption(getIndividualFeatureLabel(feat));
     };
   };
+  /** @param {ColorFeature | null | undefined} feat */
   const getEffectiveLegendCaption = (feat) => effectiveLegendCaptions()(feat);
 
   const addCustomColor = () => {
@@ -634,6 +660,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     };
   };
 
+  /** @param {string} value */
   const setLabelFilterMode = (value) => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
@@ -646,12 +673,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (busy) return busy;
     drawing.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: '' });
   };
+  /** @param {number} index */
   const removeWhitelistRule = (index) => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     drawing.manualWhitelist.splice(index, 1);
   };
+  /** @param {number} index */
   const removePriorityRule = (index) => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
@@ -664,7 +693,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!newPriorityRule.order) return;
-    const idx = drawing.manualPriorityRules.findIndex((r) => r.feat === newPriorityRule.feat);
+    const idx = drawing.manualPriorityRules.findIndex((/** @type {{ feat?: string, order?: string }} */ r) => r.feat === newPriorityRule.feat);
     if (idx >= 0) {
       drawing.manualPriorityRules[idx].order = newPriorityRule.order;
     } else {
@@ -732,7 +761,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (specificRulePresetLoading.value) return;
     const presetId = selectedSpecificPreset.value;
     if (!presetId) return;
-    const preset = specificRulePresets.find((entry) => entry.id === presetId);
+    const preset = specificRulePresets.find((/** @type {{ id: string, path: string }} */ entry) => entry.id === presetId);
     if (!preset) {
       showNotice({ text: 'That rule preset is not available.', tone: 'warning' });
       return;
@@ -788,6 +817,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     }
   };
 
+  /** @param {string} featureType */
   const removeFeature = (featureType) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -798,6 +828,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     }
   };
 
+  /** @param {string} featureType */
   const getFeatureShape = (featureType) => {
     const drawing = state.activeDrawing();
     if (!drawing.adv.feature_shapes || typeof drawing.adv.feature_shapes !== 'object') {
@@ -808,6 +839,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       : defaultFeatureRendering(featureType);
   };
 
+  /** @param {string} featureType @param {string} shape */
   const setFeatureShape = (featureType, shape) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -818,15 +850,17 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     drawing.adv.feature_shapes[featureType] = normalizeFeatureRendering(shape);
   };
 
+  /** @param {ColorFeature} feat */
   const getFeatureColor = (feat) => {
     const drawing = state.activeDrawing();
     const override = getFeatureOverride(drawing.featureColorOverrides, feat);
     if (override) {
       return resolveColorToHex(override.color || override);
     }
-    return resolveColorToHex(appliedFeatureColors(state)[feat.type]) || '#cccccc';
+    return resolveColorToHex(appliedFeatureColorOf(state, feat.type)) || '#cccccc';
   };
 
+  /** @param {ColorFeature} feat */
   const getFeatureColorValue = (feat) => {
     const drawing = state.activeDrawing();
     const override = getFeatureOverride(drawing.featureColorOverrides, feat);
@@ -840,15 +874,17 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
 
   // Python matches a single-feature color rule only by the stable generation
   // hash, so duplicate record instances that share one hash share the rule.
+  /** @param {ColorFeature} feat */
   const getFeatureQualifier = (feat) => {
     const colorRuleHash = getFeatureColorRuleHash(feat);
     return colorRuleHash ? { qual: 'hash', val: colorRuleHash } : null;
   };
 
+  /** @param {ColorFeature | null | undefined} feat @param {string} label */
   const getLabelSpecificRule = (feat, label) => {
     const drawing = state.activeDrawing();
     if (!feat) return null;
-    const priorityRule = drawing.manualPriorityRules.find((rule) => rule.feat === feat.type);
+    const priorityRule = drawing.manualPriorityRules.find((/** @type {{ feat?: string, order?: string }} */ rule) => rule.feat === feat.type);
     const priority = String(priorityRule?.order || '')
       .split(',')
       .map((qualifier) => qualifier.trim())
@@ -862,6 +898,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     };
   };
 
+  /** @param {ColorFeature[] | null | undefined} features */
   const refreshFeatureOverrides = (features) => {
     const drawing = state.activeDrawing();
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
@@ -878,11 +915,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     }
   };
 
+  /** @param {ColorFeature} feat */
   const findMatchingRegexRule = (feat) => {
     const drawing = state.activeDrawing();
-    return ruleMatcher(drawing.manualSpecificRules.filter((rule) => rule.qual !== 'hash')).first(feat);
+    return ruleMatcher(drawing.manualSpecificRules.filter((/** @type {SpecificColorRule} */ rule) => rule.qual !== 'hash')).first(feat);
   };
 
+  /** @param {Partial<SpecificColorRule> | null | undefined} rule */
   const countFeaturesMatchingRule = (rule) => {
     if (!rule || String(rule.qual || '').toLowerCase() === 'hash') return 0;
 
@@ -895,40 +934,41 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return count;
   };
 
-  /** @param {string | null} [caption] */
+  /** @param {ColorFeature} currentFeat @param {string | null} [caption] */
   const findFeaturesWithSameLegendItem = (currentFeat, caption = null) => {
     const captionOf = effectiveLegendCaptions();
     const targetCaption = normalizeCaption(caption || captionOf(currentFeat));
     if (!targetCaption) return [];
-    return extractedFeatures.value.filter((f) => {
+    return /** @type {ColorFeature[]} */ (extractedFeatures.value).filter((f) => {
       if (f.svg_id === currentFeat.svg_id) return false;
       return captionMatches(captionOf(f), targetCaption);
     });
   };
 
-  /** @param {string | null} [label] */
+  /** @param {ColorFeature} currentFeat @param {string | null} [label] */
   const findFeaturesWithSameIndividualLabel = (currentFeat, label = null) => {
     const targetLabel = normalizeCaption(label || getIndividualFeatureLabel(currentFeat));
     if (!targetLabel) return [];
 
-    return extractedFeatures.value.filter((f) => {
+    return /** @type {ColorFeature[]} */ (extractedFeatures.value).filter((f) => {
       if (f.svg_id === currentFeat.svg_id) return false;
       return captionMatches(getIndividualFeatureLabel(f), targetLabel);
     });
   };
 
-  /** @param {string | null} [label] */
+  /** @param {ColorFeature} currentFeat @param {string | null} [label] */
   const findFeaturesWithSameDisplayedLabel = (currentFeat, label = null) => {
     const entryIndex = indexEditableLabels();
     const targetLabel = normalizeCaption(label || getDisplayedFeatureLabel(currentFeat, entryIndex));
     if (!targetLabel) return [];
 
-    return extractedFeatures.value.filter((f) => {
+    return /** @type {ColorFeature[]} */ (extractedFeatures.value).filter((f) => {
       if (f.svg_id === currentFeat.svg_id) return false;
       return captionMatches(getDisplayedFeatureLabel(f, entryIndex), targetLabel);
     });
   };
 
+  /** @param {ColorFeature} _currentFeat @param {string} caption */
   const findExistingColorForCaption = (_currentFeat, caption) => {
     const drawing = state.activeDrawing();
     const targetCaption = normalizeCaption(caption);
@@ -996,15 +1036,18 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     getFeatureQualifier,
     getLabelSpecificRule,
     getLegendRowRules,
+    /** @param {number} index */
     moveSpecificRuleDown: (index) => {
       const drawing = state.activeDrawing();
       return moveSpecificRule(drawing, index, 1);
     },
+    /** @param {number} index */
     moveSpecificRuleUp: (index) => {
       const drawing = state.activeDrawing();
       return moveSpecificRule(drawing, index, -1);
     },
     runWithRuleMatches,
+    /** @param {number} index */
     removeSpecificRule: (index) => {
       const drawing = state.activeDrawing();
       const row = drawing.manualSpecificRules[index];

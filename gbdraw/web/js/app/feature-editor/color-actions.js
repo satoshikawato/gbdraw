@@ -6,7 +6,7 @@
 import { displayedLegendRowColors, draftLegendRowColors, draftLegendRows, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { matchedRuleKeys, ruleKey, ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
-import { appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
+import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue } from '../../services/feature-selector.js';
 import {
@@ -39,7 +39,7 @@ import {
  *   The Legend item of a feature, read for a pass over many features.
  * @property {(feature: Record<string, any>) => string} getIndividualFeatureLabel
  * @property {(feature: Record<string, any>) => { qual: string, val: string } | null} getFeatureQualifier
- * @property {(feature: Record<string, any>, label: string) => { feat: string, qual: string, val: string } | null} getLabelSpecificRule
+ * @property {(feature: Record<string, any>, label: string) => { feat: string | undefined, qual: string, val: string } | null} getLabelSpecificRule
  * @property {(key: PythonLegendKey) => Record<string, any>[]} getLegendRowRules
  * @property {(rules: Record<string, any>[], commit: () => any) => any} runWithRuleMatches
  *   Runs an action once the color rule matches of `rules` are prepared: the rule owner prepares the rules it builds.
@@ -57,12 +57,40 @@ import {
  */
 
 /**
+ * A feature row of the Features list, as this owner reads it: its type and its
+ * rendered id (null for the row-less placeholder of the Legend popup's count),
+ * and the label fields Python writes as text, beside the Python fields that rule
+ * matching reads by name.
+ * @typedef {Readonly<Record<string, unknown>> & { type?: string, svg_id?: string | null, product?: string, gene?: string, locus_tag?: string }} ColorFeature
+ */
+/**
+ * A feature, or the feature popup's state that holds it as `feat`.
+ * @typedef {ColorFeature & { feat?: ColorFeature | null }} ColorFeatureOrPopup
+ */
+/**
+ * A color rule as the editor reads it (a draft rule may lack fields).
+ * @typedef {Partial<SpecificColorRule>} ColorRule
+ */
+
+/**
  * A rename of a Legend row from the Legend editor or the feature popup.
  * `oldCaption` is the caption the source shows; `sourceKey` is its row's
  * Python key (the Legend editor's `legendEntryKey`, the popup's effective
  * caption), by which the rules the row draws are read. A renamed row's shown
  * caption is not its key (OV-294 residual, review M1 of 2b96350f).
- * @typedef {{ oldCaption: string, sourceKey: PythonLegendKey, newCaption: string, currentColor?: string, siblingCount?: number, [field: string]: unknown }} LegendRenameRequest
+ * @typedef {object} LegendRenameRequest
+ * @property {'popup' | 'legend'} source Where the rename was typed.
+ * @property {ColorFeature} [feat] The popup's feature.
+ * @property {string} oldCaption
+ * @property {PythonLegendKey} sourceKey
+ * @property {string} newCaption
+ * @property {string} [currentColor]
+ * @property {number} [siblingCount]
+ * @property {ColorFeature[]} [features]
+ * @property {'single' | 'group' | 'manual' | null} [sourceScope]
+ * @property {'merge' | 'suffix' | null} [targetResolution]
+ * @property {string} [finalCaption]
+ * @property {string} [finalColor]
  */
 
 /**
@@ -132,13 +160,21 @@ export const createFeatureColorActions = ({
   // Features panel, or dialog action): they join it and keep its name.
   /** @type {ColorActionsRuleActions['commitSpecificRules']} */
   const commitRuleWrite = (build, label, options) => ruleActions.commitSpecificRules(build, label, { ...options, joinsOpenStep: true });
+  /** @param {ColorFeature} feature */
   const getEffectiveLegendCaption = (feature) => effectiveLegendCaptions()(feature);
+  /** @param {unknown} value */
   const normalizeCaption = (value) => String(value || '').trim();
+  /** @param {unknown} value */
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
+  /** @param {unknown} value */
   const normalizeColor = (value) => String(value || '').trim().toLowerCase();
+  /** @param {unknown} left @param {unknown} right */
   const captionsMatch = (left, right) => normalizeCaptionKey(left) === normalizeCaptionKey(right);
+  /** @param {unknown} left @param {unknown} right */
   const colorsMatch = (left, right) => normalizeColor(left) === normalizeColor(right);
+  /** @param {ColorRule | null | undefined} rule */
   const isHashSpecificRule = (rule) => String(rule?.qual || '').toLowerCase() === 'hash';
+  /** @param {Readonly<Record<string, unknown>> | null | undefined} object @param {string} key */
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
   // The domains a Legend row rename shows: the row's structure, and the fill
   // and stroke an editor row takes under its new caption.
@@ -149,13 +185,16 @@ export const createFeatureColorActions = ({
   // rules) are prepared with the saved ones.
   /**
    * @param {DrawingState} drawing
-   * @param {any[]} args
+   * @param {readonly unknown[]} args
    * @param {() => any} run
    */
   const withTargetRules = (drawing, args, run) => {
+    /** @type {Set<ColorFeature>} */
     const targets = new Set();
+    // An argument that is not a feature (a color, a caption) has no `type`: it reads as undefined and adds nothing.
+    /** @param {ColorFeature | null | undefined} feature */
     const add = (feature) => { if (feature?.type && feature?.svg_id) targets.add(feature); };
-    args.forEach((arg) => Array.isArray(arg) ? arg.forEach(add) : add(arg));
+    args.forEach((arg) => Array.isArray(arg) ? arg.forEach(add) : add(/** @type {ColorFeature | null | undefined} */ (arg)));
     add(clickedFeature.value?.feat);
     add(featureStyleScopeDialog.feat);
     const candidates = [...drawing.manualSpecificRules];
@@ -174,15 +213,26 @@ export const createFeatureColorActions = ({
   // stroke action reads only the saved rules (OV-198). A color request, a
   // popup Legend rename, and a fill reset prepare them only when they commit,
   // not to open their dialog, which reads the saved rules only (OV-225).
+  /**
+   * @template {unknown[]} Args
+   * @param {(drawing: DrawingState, ...args: Args) => unknown} action
+   * @param {{ targetRules?: boolean }} [options]
+   * @returns {(...args: Args) => unknown}
+   */
   const colorAction = (action, { targetRules = true } = {}) => (...args) => {
     const drawing = state.activeDrawing();
     const run = async () => action(drawing, ...args);
     const prepareTargets = () => (targetRules ? withTargetRules(drawing, args, run) : run());
     return reportRuleRunFailure(state, 'evaluateRules', () => runWithRuleMatches(drawing.manualSpecificRules, prepareTargets));
   };
+  /**
+   * @template {unknown[]} Args
+   * @param {(drawing: DrawingState, ...args: Args) => unknown} action
+   */
   const strokeAction = (action) => colorAction(action, { targetRules: false });
 
   // The `hash` rule values that target a feature exactly.
+  /** @param {ColorFeature} feature */
   const exactHashValues = (feature) => {
     const candidates = getFeatureHashCandidates(feature);
     const generationHash = getFeatureColorRuleHash(feature);
@@ -191,28 +241,38 @@ export const createFeatureColorActions = ({
     return [generationHash, ...(renderedId !== generationHash ? [renderedId] : [])]
       .filter(Boolean).flatMap((candidate) => [candidate, exactRegexValue(candidate)]);
   };
+  /** @param {unknown} type @param {unknown} value */
   const exactHashKey = (type, value) => JSON.stringify([type, value]);
+  /** @param {ColorRule} rule */
   const ruleHashKey = (rule) => exactHashKey(rule.feat, String(rule?.val || '').trim());
+  /** @param {ColorRule} rule @param {ColorFeature} feature */
   const hashRuleTargetsFeatureExactly = (rule, feature) => isHashSpecificRule(rule) && rule?.feat === feature?.type
     && exactHashValues(feature).includes(String(rule?.val || '').trim());
   // Whether a rule targets one of `features` exactly, read once per feature.
+  /**
+   * @param {readonly ColorFeature[]} features
+   * @returns {(rule: ColorRule) => boolean}
+   */
   const targetsSomeFeatureExactly = (features) => {
     const keys = new Set(features.flatMap((feature) => exactHashValues(feature)
       .map((value) => exactHashKey(feature.type, value))));
     return (rule) => isHashSpecificRule(rule) && keys.has(ruleHashKey(rule));
   };
 
+  /** @param {unknown} value */
   const normalizeStrokeWidthValue = (value) => {
     if (value === null || value === undefined || value === '') return null;
     const numeric = Number(value);
     return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
   };
 
+  /** @param {Element | null | undefined} element @param {string | null} color */
   const strokeColorAttributeMatches = (element, color) => {
     const current = element?.getAttribute?.('stroke');
     return color === null ? current === null : colorsMatch(current, color);
   };
 
+  /** @param {Element | null | undefined} element @param {number | null} width */
   const strokeWidthAttributeMatches = (element, width) => {
     const current = element?.getAttribute?.('stroke-width');
     if (width === null) return current === null;
@@ -220,6 +280,10 @@ export const createFeatureColorActions = ({
     return Number.isFinite(currentNumeric) && currentNumeric === Number(width);
   };
 
+  /**
+   * @param {ColorFeatureOrPopup | null | undefined} featureLike
+   * @param {unknown} [fallbackSvgId]
+   */
   const featureStrokeKey = (featureLike, fallbackSvgId = '') => {
     const feature = featureLike?.feat || featureLike;
     return featureOverrideKey(feature) || String(fallbackSvgId || '').trim();
@@ -257,7 +321,11 @@ export const createFeatureColorActions = ({
     }
   };
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {ColorFeatureOrPopup | null | undefined} featureLike
+   * @param {unknown} [fallbackSvgId]
+   */
   const clearFeatureStrokeOverride = (drawing, featureLike, fallbackSvgId = '') => {
     const key = featureStrokeKey(featureLike, fallbackSvgId);
     if (key) delete drawing.featureStrokeOverrides[key];
@@ -330,7 +398,7 @@ export const createFeatureColorActions = ({
   /** @param {DrawingState} drawing @param {string} caption */
   const findDeletedLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.deletedLegendEntries.value, caption);
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {ColorFeature} feat @param {string} caption */
   const findExistingCaptionColor = (drawing, feat, caption) => {
     const existingCaption = findExistingColorForCaption(feat, caption);
     if (existingCaption?.color) {
@@ -466,11 +534,12 @@ export const createFeatureColorActions = ({
 
   const getCurrentSvg = () => svgContainer.value?.querySelector('svg') || null;
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {ColorFeature} feature @returns {ColorRule[]} */
   const exactHashRulesForFeature = (drawing, feature) => drawing.manualSpecificRules.filter(
-    (rule) => hashRuleTargetsFeatureExactly(rule, feature)
+    (/** @type {ColorRule} */ rule) => hashRuleTargetsFeatureExactly(rule, feature)
   );
 
+  /** @param {ColorFeature} feature @param {unknown} color */
   const liveFeatureColorMatches = (feature, color) => {
     const svg = getCurrentSvg();
     if (!svg) return true;
@@ -489,7 +558,7 @@ export const createFeatureColorActions = ({
     );
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {ColorFeature} feature @param {string} color @param {string} caption */
   const featureColorAssignmentMatches = (
     drawing, feature,
     color,
@@ -512,11 +581,13 @@ export const createFeatureColorActions = ({
     return Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), color));
   };
 
+  /** @param {Readonly<Record<string, unknown>> | null | undefined} store @param {unknown} caption */
   const findCaptionKey = (store, caption) => {
     if (!store) return null;
     return Object.keys(store).find((key) => captionsMatch(key, caption)) || null;
   };
 
+  /** @param {Record<string, unknown> | null | undefined} store @param {string} oldCaption @param {string} newCaption */
   const moveCaptionStateKey = (store, oldCaption, newCaption) => {
     if (!store || !oldCaption || !newCaption || oldCaption === newCaption) return;
     const oldKey = findCaptionKey(store, oldCaption);
@@ -531,7 +602,7 @@ export const createFeatureColorActions = ({
   };
 
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} oldCaption @param {string} newCaption */
   const moveAddedLegendCaption = (drawing, oldCaption, newCaption) => {
     if (!oldCaption || !newCaption || oldCaption === newCaption) return;
     let matchedCaption = null;
@@ -547,10 +618,11 @@ export const createFeatureColorActions = ({
   };
 
 
+  /** @param {string} oldCaption @param {string} newCaption @param {string | null} [color] */
   const syncOriginalLegendMetadataRename = (oldCaption, newCaption, color = null) => {
     if (!oldCaption || !newCaption || oldCaption === newCaption) return;
 
-    const orderIdx = originalLegendOrder.value.findIndex((caption) => captionsMatch(caption, oldCaption));
+    const orderIdx = originalLegendOrder.value.findIndex((/** @type {string} */ caption) => captionsMatch(caption, oldCaption));
     if (orderIdx >= 0) {
       originalLegendOrder.value.splice(orderIdx, 1, newCaption);
     }
@@ -568,6 +640,7 @@ export const createFeatureColorActions = ({
   };
 
 
+  /** @param {ColorFeature | null | undefined} feat @param {string} caption @param {string | null} [color] */
   const updateClickedFeatureLegendState = (feat, caption, color = null) => {
     if (!clickedFeature.value || !feat || clickedFeature.value.svg_id !== feat.svg_id) return;
     if (color) {
@@ -612,7 +685,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.pendingRequest = null;
   });
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {ColorFeature | null | undefined} feat */
   const getCurrentFeatureFillColor = (drawing, feat) => {
     if (!feat) return '#cccccc';
 
@@ -634,18 +707,19 @@ export const createFeatureColorActions = ({
       return resolveColorToHex(overrideColor) || overrideColor;
     }
 
-    const fallbackColor = appliedFeatureColors(state)[feat.type] || '#cccccc';
+    const fallbackColor = appliedFeatureColorOf(state, feat.type) || '#cccccc';
     return resolveColorToHex(fallbackColor) || fallbackColor;
   };
 
+  /** @param {unknown} caption */
   const getFeaturesForLegendCaption = (caption) => {
     const normalizedCaption = normalizeCaption(caption);
     if (!normalizedCaption) return [];
     const captionOf = effectiveLegendCaptions();
-    return extractedFeatures.value.filter((feat) => captionsMatch(captionOf(feat), normalizedCaption));
+    return /** @type {ColorFeature[]} */ (extractedFeatures.value).filter((feat) => captionsMatch(captionOf(feat), normalizedCaption));
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} caption @param {{ ignoreCaptions?: unknown }} [options] */
   const getUniqueLegendCaption = (drawing, caption, options = {}) => {
     const normalizedCaption = normalizeCaption(caption);
     if (!normalizedCaption) return '';
@@ -662,7 +736,7 @@ export const createFeatureColorActions = ({
       const key = normalizeCaptionKey(entry?.caption);
       if (key) existingKeys.add(key);
     });
-    drawing.manualSpecificRules.forEach((rule) => {
+    drawing.manualSpecificRules.forEach((/** @type {ColorRule} */ rule) => {
       const key = normalizeCaptionKey(rule?.cap);
       if (key) existingKeys.add(key);
     });
@@ -686,7 +760,13 @@ export const createFeatureColorActions = ({
   // Each feature's `hash` rule replaces the first rule that targets it
   // exactly, else goes before the first `hash` rule of its type that matches
   // it, else last. The rules are found by index, read once per feature (OV-193).
-  /** @param {readonly SpecificColorRule[]} current The rule table at the write's turn. */
+  /**
+   * @param {readonly SpecificColorRule[]} current The rule table at the write's turn.
+   * @param {readonly ColorFeature[]} features
+   * @param {string} color
+   * @param {string} caption
+   * @param {{ preferLabelRules?: boolean }} [options]
+   */
   const featureRuleCandidate = (current, features, color, caption, { preferLabelRules = false } = {}) => {
     /** @type {Partial<SpecificColorRule>[]} */
     let rules = [...current];
@@ -722,6 +802,7 @@ export const createFeatureColorActions = ({
     // Rule positions, rebuilt after an insertion moved the rules after it.
     /** @type {{ at: Map<Record<string, any>, number> | null }} */
     const order = { at: null };
+    /** @param {ColorRule} rule */
     const positionOf = (rule) => (order.at ||= new Map(rules.map((other, at) => [other, at]))).get(rule) ?? -1;
     /** @param {Record<string, any>[]} candidates @returns {Record<string, any> | null} */
     const firstOf = (candidates) => candidates.reduce((best, rule) => (
@@ -753,18 +834,21 @@ export const createFeatureColorActions = ({
     return rules;
   };
 
+  /** @param {ColorFeature | null | undefined} feature */
   const featureIdentityKey = (feature) => String(
     feature?.id || `${feature?.type || ''}:${feature?.svg_id || ''}`
   );
 
-  /** @param {readonly SpecificColorRule[]} current */
+  /** @param {readonly SpecificColorRule[]} current @param {readonly ColorFeature[]} features @param {string} label */
   const getSafeLabelSpecificRule = (current, features, label) => {
     if (typeof getLabelSpecificRule !== 'function') return null;
     const candidates = features.map((feature) => getLabelSpecificRule(feature, label));
     if (candidates.some((rule) => !rule)) return null;
 
-    const first = candidates[0];
-    const sameSelector = candidates.every(
+    // The check above returned for a Result without a rule, so every candidate is one.
+    const labelRules = /** @type {Array<NonNullable<typeof candidates[number]>>} */ (candidates);
+    const first = labelRules[0];
+    const sameSelector = labelRules.every(
       (rule) =>
         rule.feat === first.feat &&
         String(rule.qual || '').toLowerCase() === String(first.qual || '').toLowerCase() &&
@@ -773,7 +857,7 @@ export const createFeatureColorActions = ({
     if (!sameSelector) return null;
 
     const selectedKeys = new Set(features.map(featureIdentityKey));
-    const matchedFeatures = extractedFeatures.value.filter((feature) => ruleMatchesFeature(feature, first));
+    const matchedFeatures = /** @type {ColorFeature[]} */ (extractedFeatures.value).filter((feature) => ruleMatchesFeature(feature, first));
     if (
       matchedFeatures.length !== selectedKeys.size ||
       matchedFeatures.some((feature) => !selectedKeys.has(featureIdentityKey(feature)))
@@ -781,6 +865,7 @@ export const createFeatureColorActions = ({
       return null;
     }
 
+    /** @type {ColorFeature[]} */
     const safetyFeatures = Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
       ? biologicalFeatures.value
       : extractedFeatures.value;
@@ -821,7 +906,7 @@ export const createFeatureColorActions = ({
   // its place in the order. The text control's open step holds the edit.
   /** @param {DrawingState} drawing @param {string} oldCaption @param {string} newCaption */
   const renameLegendRow = (drawing, oldCaption, newCaption) => {
-    const legendEntry = drawing.legendEntries.value.find((entry) => captionsMatch(entry?.caption, oldCaption));
+    const legendEntry = drawing.legendEntries.value.find((/** @type {LegendEntry} */ entry) => captionsMatch(entry?.caption, oldCaption));
     if (!legendEntry) return false;
     // The renamed row takes the caption: a style that an earlier row left under
     // that caption does not follow it, as Generate would otherwise apply it (OV-60).
@@ -835,7 +920,7 @@ export const createFeatureColorActions = ({
     moveCaptionStateKey(drawing.legendStrokeOverrides, oldCaption, newCaption);
     moveAddedLegendCaption(drawing, oldCaption, newCaption);
     const generatedRow = originalLegendOrder.value.some(
-      (caption) => captionsMatch(caption, legendEntry.originalCaption || legendEntry.caption)
+      (/** @type {string} */ caption) => captionsMatch(caption, legendEntry.originalCaption || legendEntry.caption)
     );
     if (!generatedRow) {
       syncOriginalLegendMetadataRename(oldCaption, newCaption);
@@ -848,9 +933,9 @@ export const createFeatureColorActions = ({
 
   // A rename commits once the rules it may add are prepared; its dialogs read
   // only the saved rules (OV-225).
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {LegendRenameRequest} request */
   const applyLegendRenameRequest = (drawing, request) => withTargetRules(drawing, [], () => applyPreparedLegendRename(drawing, request));
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {LegendRenameRequest} request */
   const applyPreparedLegendRename = async (drawing, request) => {
     const oldCaption = normalizeCaption(request.oldCaption);
     const caption = normalizeCaption(request.finalCaption || request.newCaption);
@@ -890,6 +975,7 @@ export const createFeatureColorActions = ({
     return renameLegendRow(drawing, oldCaption, caption);
   };
 
+  /** @param {LegendRenameRequest} request @param {number} siblingCount */
   const openLegendRenameScopeDialog = (request, siblingCount) => {
     legendRenameDialog.show = true;
     legendRenameDialog.mode = 'scope';
@@ -926,7 +1012,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.pendingRequest = request;
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {LegendRenameRequest} request */
   const continueLegendRenameRequest = async (drawing, request) => {
     if (!request) return;
 
@@ -991,6 +1077,7 @@ export const createFeatureColorActions = ({
     // are those of the features that take each row's caption, as the live editor
     // knows them: a generated row such as `other proteins` has none live, so it
     // is not merged into.
+    /** @param {readonly ColorFeature[]} rowFeatures */
     const featureTypes = (rowFeatures) => new Set(rowFeatures.map((feature) => feature?.type));
     const sourceTypes = featureTypes(features);
     const targetTypes = isDistinctTargetEntry ? featureTypes(getFeaturesForLegendCaption(targetEntry.caption)) : new Set();
@@ -1070,7 +1157,13 @@ export const createFeatureColorActions = ({
     clearLegendRenameDialog(drawing);
   };
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {readonly ColorFeature[]} features
+   * @param {string} caption
+   * @param {string} color
+   * @param {{ preferLabelRules?: boolean }} [options]
+   */
   const applyColorToFeatureGroup = async (drawing, features, caption, color, options = {}) => {
     if (!features?.length || !normalizeCaption(caption)) return false;
     const existingEntry = findLegendEntryByCaption(drawing, caption);
@@ -1084,7 +1177,7 @@ export const createFeatureColorActions = ({
       drawing,
       previousLegendIntents: replacesExistingGroup
         ? [{ caption: existingEntry.caption, color: existingEntry.color }] : [],
-      afterCommit: intents => {
+      afterCommit: (/** @type {Array<{ caption: string, color: string }>} */ intents) => {
         if (replacesExistingGroup) {
           const intent = intents.find(entry => captionsMatch(entry.caption, caption)
             && colorsMatch(entry.color, color));
@@ -1113,14 +1206,14 @@ export const createFeatureColorActions = ({
       && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {PythonLegendKey} caption @param {string} color */
   const applyColorToLegendSpecificRules = async (drawing, caption, color) => {
     const rowRules = getLegendRowRules(caption);
     const specificRules = rowRules.filter(rule => !isHashSpecificRule(rule));
     if (!specificRules.length) return false;
     const specificMatches = ruleMatcher(specificRules);
     const coveredExactly = targetsSomeFeatureExactly(
-      extractedFeatures.value.filter(feature => specificMatches.matchesAny(feature) === true)
+      /** @type {ColorFeature[]} */ (extractedFeatures.value).filter(feature => specificMatches.matchesAny(feature) === true)
     );
     const rowRuleSet = new Set(rowRules);
     return commitRuleWrite((current, revise) => current.filter(rule => !(rowRuleSet.has(rule) && coveredExactly(rule)))
@@ -1129,7 +1222,7 @@ export const createFeatureColorActions = ({
 
   /**
    * @param {DrawingState} drawing
-   * @param {Record<string, any>} feat
+   * @param {ColorFeature} feat
    * @param {string} color
    * @param {string | null} [requestedLegendName]
    * @param {{ closePopupOnDialog?: boolean }} [options]
@@ -1170,7 +1263,7 @@ export const createFeatureColorActions = ({
     });
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} color */
   const updateClickedFeatureColor = async (drawing, color) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1215,7 +1308,7 @@ export const createFeatureColorActions = ({
     });
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {unknown} caption */
   const selectLegendNameOption = async (drawing, caption) => {
     if (!clickedFeature.value) return;
     const selectedCaption = String(caption || '').trim();
@@ -1224,7 +1317,7 @@ export const createFeatureColorActions = ({
     await handleLegendNameCommit(drawing);
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} choice */
   const handleLegendRenameChoice = async (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1275,7 +1368,7 @@ export const createFeatureColorActions = ({
     clearLegendRenameDialog(drawing, { restoreInput: true });
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {number} idx @param {string} newCaption */
   const renameLegendEntry = async (drawing, idx, newCaption) => {
     const entry = drawing.legendEntries.value[idx];
     if (!entry) return;
@@ -1298,7 +1391,7 @@ export const createFeatureColorActions = ({
     });
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} choice */
   const handleColorScopeChoice = async (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1322,7 +1415,7 @@ export const createFeatureColorActions = ({
         // The row's swatch follows the default color again (svg-styles.js).
         delete drawing.legendColorOverrides[defaultColorType];
         setDefaultColor(drawing, defaultColorType, color);
-      } else if (!(await applyColorToLegendSpecificRules(drawing, targetLegendName, color))) {
+      } else if (!(await applyColorToLegendSpecificRules(drawing, /** @type {PythonLegendKey} */ (targetLegendName), color))) {
         const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
         await applyColorToFeatureGroup(drawing, [feat, ...siblings], targetLegendName, color);
       }
@@ -1368,7 +1461,7 @@ export const createFeatureColorActions = ({
   // The stroke edits write the editor intent only. The composition root shows
   // them on the Result through the executor as one History step
   // (`editEditorIntent` in app/app-setup.js), which records Python's strokes.
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string | null | undefined} strokeColor @param {unknown} strokeWidth */
   const updateClickedFeatureStroke = (drawing, strokeColor, strokeWidth) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1399,7 +1492,7 @@ export const createFeatureColorActions = ({
     return true;
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string | null | undefined} strokeColor @param {unknown} strokeWidth */
   const requestClickedFeatureStrokeChange = (drawing, strokeColor, strokeWidth) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1451,6 +1544,7 @@ export const createFeatureColorActions = ({
     return true;
   };
 
+  /** @param {ColorFeatureOrPopup | null | undefined} featureLike */
   const getFeatureStrokeColorValue = (featureLike) => {
     const drawing = state.activeDrawing();
     const feature = featureLike?.feat || featureLike;
@@ -1460,7 +1554,7 @@ export const createFeatureColorActions = ({
       : null;
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string | null} value */
   const setClickedFeatureStrokeColorValue = (drawing, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1497,7 +1591,7 @@ export const createFeatureColorActions = ({
     return true;
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {unknown} value */
   const setClickedFeatureStrokeWidthValue = (drawing, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1518,7 +1612,7 @@ export const createFeatureColorActions = ({
     const feat = clickedFeature.value.feat;
     if (!feat) return;
 
-    const defaultColor = appliedFeatureColors(state)[feat.type];
+    const defaultColor = appliedFeatureColorOf(state, feat.type);
     if (!defaultColor) {
       console.warn('No default color found for feature type:', feat.type);
       return;
@@ -1526,7 +1620,7 @@ export const createFeatureColorActions = ({
 
     const caption = getFeatureCaption(feat);
 
-    const siblings = extractedFeatures.value.filter(
+    const siblings = /** @type {ColorFeature[]} */ (extractedFeatures.value).filter(
       (f) => getFeatureCaption(f) === caption && f.svg_id !== clickedFeature.value.svg_id
     );
 
@@ -1541,7 +1635,7 @@ export const createFeatureColorActions = ({
 
   const closeResetColorDialog = () => closeAfterDialogChoice(() => { resetColorDialog.show = false; });
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} choice */
   const handleResetColorChoice = async (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1549,14 +1643,15 @@ export const createFeatureColorActions = ({
     closeResetColorDialog();
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} choice */
   const doResetFillColor = async (drawing, choice) => {
     const feature = clickedFeature.value?.feat;
     if (!feature || choice === 'cancel') return false;
     const caption = getEffectiveLegendCaption(feature);
     // The reset color is the palette default of the feature being reset.
-    const color = appliedFeatureColors(state)[feature.type];
-    if (choice === 'this_with_legend') return setFeatureColor(drawing, feature, color, caption);
+    const color = appliedFeatureColorOf(state, feature.type);
+    // A type without a palette color has nothing to reset to.
+    if (choice === 'this_with_legend') return color ? setFeatureColor(drawing, feature, color, caption) : false;
     /** @type {SpecificRuleBuild} */
     const reset = (current) => {
       /** @type {Partial<SpecificColorRule>[]} */
@@ -1564,7 +1659,7 @@ export const createFeatureColorActions = ({
         ? rule.cap !== caption : !hashRuleTargetsFeatureExactly(rule, feature)));
       if (choice === 'this' && rules.some(rule => ruleMatchesFeature(feature, rule))) {
         const qualifier = getFeatureQualifier(feature);
-        if (qualifier) rules.push({ feat: feature.type, ...qualifier, color,
+        if (qualifier && color) rules.push({ feat: feature.type, ...qualifier, color,
           cap: feature.type === 'CDS' ? 'other proteins' : `other ${feature.type}s` });
       }
       return rules;
@@ -1574,17 +1669,19 @@ export const createFeatureColorActions = ({
     return applied;
   };
 
+  /** @param {unknown} features @returns {Array<ColorFeature & { svg_id: string }>} */
   const uniqueFeaturesBySvgId = (features) => {
     const seen = new Set();
-    return (Array.isArray(features) ? features : []).filter((feature) => {
+    // The filter keeps only features with a non-empty svg_id.
+    return /** @type {Array<ColorFeature & { svg_id: string }>} */ ((Array.isArray(features) ? features : []).filter((/** @type {ColorFeature | null | undefined} */ feature) => {
       const svgId = String(feature?.svg_id || '').trim();
       if (!svgId || seen.has(svgId)) return false;
       seen.add(svgId);
       return true;
-    });
+    }));
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {unknown} features @param {string} color @param {unknown} caption */
   const applyColorToSelectedFeatures = async (drawing, features, color, caption) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1596,7 +1693,7 @@ export const createFeatureColorActions = ({
     return true;
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {unknown} features @param {string} strokeColor @param {unknown} strokeWidth */
   const applyStrokeToSelectedFeatures = (drawing, features, strokeColor, strokeWidth) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1630,7 +1727,7 @@ export const createFeatureColorActions = ({
     return updatedCount > 0;
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} caption @param {string} strokeColor @param {unknown} strokeWidth */
   const applyStrokeToLegendEntry = (drawing, caption, strokeColor, strokeWidth) => {
     const targetLegendEntry = findLegendEntryByCaption(drawing, caption);
     const svg = getCurrentSvg();
@@ -1659,7 +1756,7 @@ export const createFeatureColorActions = ({
     return stateChanged;
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} choice */
   const handleStrokeScopeChoice = (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1680,7 +1777,7 @@ export const createFeatureColorActions = ({
     let targetFeatures = [];
     let legendCaption = '';
     if (choice === 'rule' && matchingRule) {
-      targetFeatures = extractedFeatures.value.filter((candidate) => (
+      targetFeatures = /** @type {ColorFeature[]} */ (extractedFeatures.value).filter((candidate) => (
         ruleMatchesFeature(candidate, matchingRule)
       ));
       legendCaption = normalizeCaption(matchingRule.cap);
@@ -1718,7 +1815,7 @@ export const createFeatureColorActions = ({
     return applyColorToFeatureGroup(drawing, [feature], caption, resolveColorToHex(color) || color);
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {ColorFeature} feature @param {string | null} value @param {string | null} [customCaption] */
   const setFeatureColorValue = async (drawing, feature, value, customCaption = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1743,6 +1840,7 @@ export const createFeatureColorActions = ({
     cancelLegendRename: () => clearLegendRenameDialog(state.activeDrawing(), { restoreInput: true }),
     cancelResetColor: closeResetColorDialog,
     handleColorScopeChoice: colorScopeChoice,
+    /** @param {[choice: string]} args */
     handleFeatureStyleScopeChoice: (...args) => (featureStyleScopeDialog.kind === 'stroke' ? strokeScopeChoice : colorScopeChoice)(...args),
     handleLegendNameCommit: colorAction(handleLegendNameCommit, { targetRules: false }),
     handleLegendRenameChoice: colorAction(handleLegendRenameChoice),
