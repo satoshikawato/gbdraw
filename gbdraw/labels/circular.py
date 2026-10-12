@@ -4799,7 +4799,22 @@ def _prepare_label_list_today(
 
         _arc = cfg.labels
         _off = cfg.labels.unified_adjustment.outer_labels
-        return embedded_labels + run_design(
+        _inner_today = []
+        if inner_labels:
+            # study only: labels inside the ring (--labels both) keep today's placement
+            _saved = dict(_PROTO_STATE)
+            _PROTO_STATE.update(bypass=True)
+            try:
+                _today = _prepare_label_list_today(
+                    feature_dict, total_length, radius, track_ratio, profile, outer_arena=outer_arena,
+                    feature_track_ratio_factor_override=feature_track_ratio_factor_override, feature_layout=feature_layout,
+                    radial_layout=radial_layout, track_preset=track_preset, feature_lane_direction=feature_lane_direction,
+                    label_font_size=label_font_size, _candidate_cache=_candidate_cache, record_transform=record_transform,
+                )
+            finally:
+                _PROTO_STATE.update(_saved)
+            _inner_today = [lab for lab in _today if lab.get("is_inner") and not lab.get("is_embedded")]
+        return _inner_today + embedded_labels + run_design(
             _proto_design,
             outer_labels,
             total_length=int(total_length),
