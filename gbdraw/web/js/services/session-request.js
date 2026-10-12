@@ -706,6 +706,9 @@ const MODE_LABEL_SCOPE_PATHS = Object.freeze({
 
 /** @type {Readonly<Record<string, string>>} */
 const CIRCULAR_LABEL_SCOPES = Object.freeze({ none: 'none', out: 'outer', both: 'both' });
+// The Labels choice a committed Circular label scope shows; any other scope shows None.
+/** @type {Readonly<Record<string, string>>} */
+const CIRCULAR_LABEL_MODES = Object.freeze({ outer: 'out', both: 'both' });
 
 /**
  * @param {{ labels_mode?: unknown, show_labels_linear?: string }} form
@@ -974,7 +977,11 @@ export const bindCanonicalTypedResource = (value, descriptor) => {
  * @returns {ResourceBuilder}
  */
 const createResourceBuilder = ({ encode = true } = {}) => {
+  // A resource id can be one a Session names (`publicationFileRef`), so the
+  // table is read by own key (OV-564).
+  /** @type {Record<string, ResourceDescriptor>} */
   const resources = {};
+  /** @type {Record<string, string>} */
   const resourceOriginalNames = {};
   const fileResourceIds = new Map();
 
@@ -983,7 +990,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       throw new Error(`Canonical resource ${resourceId} is missing.`);
     }
-    if (resources[resourceId]) return resourceId;
+    if (Object.hasOwn(resources, resourceId)) return resourceId;
     const adoptedSource = /** @type {SessionResourceSource | null} */ (
       getSessionResourceSource(entry)
     );
@@ -1023,7 +1030,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
 
   /** @type {ResourceBuilder['addText']} */
   const addText = (resourceId, kind, name, text) => {
-    if (resources[resourceId]) return resourceId;
+    if (Object.hasOwn(resources, resourceId)) return resourceId;
     const normalized = String(text || '');
     if (!encode) {
       resources[resourceId] = { kind };
@@ -1046,7 +1053,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
 
   /** @type {ResourceBuilder['addJson']} */
   const addJson = (resourceId, kind, name, value) => {
-    if (resources[resourceId]) return resourceId;
+    if (Object.hasOwn(resources, resourceId)) return resourceId;
     if (!encode) {
       resources[resourceId] = { kind };
       generatedResourceValues.set(resources[resourceId], { bindings: [value] });
@@ -1076,7 +1083,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
 
   /** @type {ResourceBuilder['addCanonicalTable']} */
   const addCanonicalTable = (resourceId, rows, columns = null) => {
-    if (resources[resourceId]) return resourceId;
+    if (Object.hasOwn(resources, resourceId)) return resourceId;
     const normalizedRows = Array.isArray(rows)
       ? rows.filter((row) => row && typeof row === 'object' && !Array.isArray(row))
       : [];
@@ -5319,7 +5326,9 @@ export const projectCanonicalSessionRequest = ({
     show_depth: Boolean(overrides.show_depth),
     separate_strands: Boolean(overrides.strandedness),
     labels_mode: renderRequest.mode === 'circular'
-      ? ({ outer: 'out', both: 'both' }[overrides.label_scope] || 'none')
+      ? (Object.hasOwn(CIRCULAR_LABEL_MODES, String(overrides.label_scope))
+          ? CIRCULAR_LABEL_MODES[String(overrides.label_scope)]
+          : 'none')
       : 'none',
     show_labels_linear: renderRequest.mode === 'linear'
       ? (overrides.label_scope || 'none')
