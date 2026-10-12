@@ -68,6 +68,33 @@ test('group lookup reuses valid identities and invalidates on ID edits, new alia
   assert.equal(editor.getOrthogroupById('replacement'), state.orthogroups.value[0]);
 });
 
+// The rename tables are read by own key (OV-553). An own-key check alone is not
+// a Vue dependency, so the first rename of a group must still reach the list.
+test('the group list, a rendered name and the search follow the first rename of a group', () => {
+  const state = {
+    orthogroups: ref([{ id: 'og_1', name: 'LivB', description: 'Python text', members: [] }]),
+    orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
+    selectedOrthogroupId: ref('og_1'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
+  };
+  const editor = createOrthogroupEditor({ state: withDrawings(state) });
+  const rendered = context.Vue.computed(() => [
+    editor.resolveOrthogroupName(editor.selectedOrthogroup.value),
+    editor.resolveOrthogroupDescription(editor.selectedOrthogroup.value)
+  ]);
+  assert.deepEqual([editor.orthogroupRows.value[0].name, ...rendered.value], ['LivB', 'LivB', 'Python text']);
+  editor.setOrthogroupNameOverride('og_1', 'My transporter');
+  editor.setOrthogroupDescriptionOverride('og_1', 'My text');
+  assert.deepEqual(rendered.value, ['My transporter', 'My text']);
+  assert.deepEqual([editor.orthogroupRows.value[0].name, editor.orthogroupRows.value[0].renamed], ['My transporter', true]);
+  editor.resetOrthogroupRename('og_1');
+  state.orthogroupSearch.value = 'transporter';
+  assert.equal(editor.filteredOrthogroups.value.length, 0);
+  editor.setOrthogroupNameOverride('og_1', 'My transporter');
+  assert.equal(editor.filteredOrthogroups.value.length, 1, 'a search finds the group by its new name');
+});
+
 test('group names follow exact member sets and unmatched names stay dormant (CO-08, D-21)', () => {
   const group = (id, ...members) => ({ id, members: members.map((proteinId) => ({ proteinId })) });
   const first = rekeyOrthogroupOverrides({

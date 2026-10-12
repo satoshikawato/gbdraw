@@ -26,18 +26,6 @@ const isHeaderRow = (parts) => {
  */
 
 /**
- * Reads the bulk label table (`labelTextBulkOverrides`) by label text. A label
- * text is free text, so only an own key is an edit: `constructor` or `__proto__`
- * must not read `Object.prototype`. Callers normalize the key and the result.
- * @param {Readonly<Record<string, unknown>> | null | undefined} table
- * @param {string} sourceText
- * @returns {unknown} The stored text, or `undefined` when the table has no such key.
- */
-export const bulkLabelTextOf = (table, sourceText) => (
-  table && Object.hasOwn(table, sourceText) ? table[sourceText] : undefined
-);
-
-/**
  * Projects the bulk label edits (`labelTextBulkOverrides`, {sourceText: text})
  * for one request. Per-feature edits are identity rows (`featureOverrides`,
  * design Q4); a bulk edit is a source-text rule. It reaches every feature whose

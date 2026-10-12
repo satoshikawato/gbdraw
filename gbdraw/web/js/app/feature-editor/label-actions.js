@@ -4,7 +4,7 @@
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
-import { bulkLabelTextOf, parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
+import { parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
 import { escapeRegexLiteral } from '../../services/feature-selector.js';
 import {
   featureIdentityKeyOf,
@@ -17,6 +17,7 @@ import { downloadTextFile } from '../../services/text-download.js';
 import { editorTableRef } from '../../services/file-imports.js';
 import { defaultFeatureRendering } from '../../utils/feature-rendering.js';
 import { readFileText } from '../../services/file-content-cache.js';
+import { ownEntry } from '../../utils/own-entry.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 
@@ -732,7 +733,7 @@ export const createFeatureLabelActions = ({
         ?? textEl.getAttribute('data-label-source-text') ?? getLabelText(textEl);
       textEl.setAttribute('data-label-source-text', sourceText);
       // The source text is free text, so the bulk table is read by own key.
-      const bulkText = bulkLabelTextOf(drawing.labelTextBulkOverrides, sourceText);
+      const bulkText = ownEntry(drawing.labelTextBulkOverrides, sourceText);
       const desiredText = row?.labelText ?? bulkText ?? sourceText;
       if (getLabelText(textEl) === desiredText) return;
       setLabelText(textEl, desiredText);

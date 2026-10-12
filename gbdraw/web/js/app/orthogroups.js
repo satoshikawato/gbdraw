@@ -16,6 +16,7 @@ import {
 import { downloadTextFile } from '../services/text-download.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
+import { ownEntry } from '../utils/own-entry.js';
 import {
   ORTHOGROUP_ID_KEYS,
   RECORD_INDEX_KEYS,
@@ -59,9 +60,6 @@ const COPY_FEEDBACK_LABELS = Object.freeze({
   failure: 'Copy failed'
 });
 
-// A Similarity group id is data, so a rename table is read by own key.
-/** @param {Record<string, unknown>} table @param {string} id */
-const ownOverride = (table, id) => (Object.prototype.hasOwnProperty.call(table, id) ? table[id] : undefined);
 /** @param {unknown} value */
 const normalizeText = (value) => String(value ?? '').trim();
 /** @param {unknown} value */
@@ -552,7 +550,8 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
-    return normalizeText(ownOverride(drawing.orthogroupNameOverrides, id)) || normalizeText(group?.name) || id;
+    // A Similarity group id is data, so the rename tables are read by own key.
+    return normalizeText(ownEntry(drawing.orthogroupNameOverrides, id)) || normalizeText(group?.name) || id;
   };
 
   /** @param {GroupOrId} groupOrId */
@@ -561,7 +560,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
-    return normalizeText(ownOverride(drawing.orthogroupDescriptionOverrides, id)) || normalizeText(group?.description);
+    return normalizeText(ownEntry(drawing.orthogroupDescriptionOverrides, id)) || normalizeText(group?.description);
   };
 
   /** @param {GroupOrId} groupOrId */

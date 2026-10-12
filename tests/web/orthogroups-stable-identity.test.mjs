@@ -39,10 +39,8 @@ await copyModule(
   'gbdraw/web/js/services/orthogroup-feature-metadata.js',
   'services/orthogroup-feature-metadata.js'
 );
-// standalone-interactivity.js reads the bulk label table through its owner.
-await copyModule('gbdraw/web/js/services/label-override-table.js', 'services/label-override-table.js');
-await copyModule('gbdraw/web/js/services/feature-selector.js', 'services/feature-selector.js');
-await copyModule('gbdraw/web/js/utils/tsv-cell.js', 'utils/tsv-cell.js');
+// standalone-interactivity.js reads the bulk label table by own key.
+await copyModule('gbdraw/web/js/utils/own-entry.js', 'utils/own-entry.js');
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
 await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schema.generated.js');

@@ -20,7 +20,7 @@ import {
 } from './preview-svg.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
-import { bulkLabelTextOf } from '../../services/label-override-table.js';
+import { ownEntry } from '../../utils/own-entry.js';
 /** @import { FeatureSearchIndex } from './search-core.js' */
 /** @import { FeatureElementIndex } from './preview-svg.js' */
 
@@ -120,7 +120,7 @@ export const createPreviewFeatureSearch = ({
               feature.search_labels,
               entry?.text,
               featureOverrideValue(drawing.featureOverrides, feature, 'labelText'),
-              ...sources.map((source) => bulkLabelTextOf(drawing.labelTextBulkOverrides, source))
+              ...sources.map((source) => ownEntry(drawing.labelTextBulkOverrides, source))
             ]
           };
         }),
