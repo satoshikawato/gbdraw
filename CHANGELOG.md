@@ -253,7 +253,9 @@ write-up of a release.
 - Web app: the Feature Visibility rule action **Exclude from matching** is now
   **Leave out of protein search**, and the field **Legend caption** of a color
   rule and of the selected-feature bar is now **Legend name**, the words the
-  feature popup uses. Saved Sessions and rule files are unchanged. A Feature
+  feature popup uses; the selected-feature bar's apply button, the Reset Fill
+  Color message and the notice after matching colors say it too. Saved Sessions
+  and rule files are unchanged. A Feature
   Visibility rule shows **Action** on its own line under **Value regex**, so
   the closed list shows the whole action (OV-513).
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters

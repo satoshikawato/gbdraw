@@ -5949,8 +5949,8 @@
                                         class="btn btn-primary btn-sm shrink-0"
                                         data-history-managed
                                         @click="applySelectedFeatureColor"
-                                        title="Apply color and caption to selected features"
-                                        aria-label="Apply color and caption to selected features" :disabled="!semanticMutationAvailable">
+                                        title="Apply color and legend name to selected features"
+                                        aria-label="Apply color and legend name to selected features" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-palette" aria-hidden="true"></i>
                                     <span>Apply</span>
                                 </button>
@@ -7323,7 +7323,7 @@
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="reset-color-title" class="text-lg font-bold text-slate-800 mb-2">Reset Fill Color</h3>
                             <p id="reset-color-description" class="text-sm text-slate-600 mb-4">
-                                There are <span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span>".
+                                There are <span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span> other features with the legend name "<span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span>".
                                 <br>How do you want to reset the color?
                             </p>
 
