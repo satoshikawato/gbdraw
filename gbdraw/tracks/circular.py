@@ -11,6 +11,7 @@ from .parsing import (
     parse_nonnegative_integer,
     parse_track_slot_text,
     split_kv_list,
+    validate_annotation_slot_side,
     validate_overlay_annotation_anchors,
 )
 from .scalars import ScalarSpec, parse_optional_pixel
@@ -661,10 +662,7 @@ def _normalize_circular_track_slots(
             side = _normalize_side_value(slot.side) if slot.side is not None else "outside"
             annotation_params = annotation_track_params_from_mapping(params)
             reserve = side != "overlay"
-            if side == "overlay" and annotation_params.anchor_slot is None:
-                raise ValueError(f"annotation slot '{slot.id}' with side=overlay requires anchor_slot")
-            if side != "overlay" and annotation_params.anchor_slot is not None:
-                raise ValueError(f"annotation slot '{slot.id}' uses anchor_slot without side=overlay")
+            validate_annotation_slot_side(str(slot.id), side, annotation_params)
 
         auto_compress = (
             internal_slot.auto_compress

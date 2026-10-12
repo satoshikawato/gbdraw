@@ -4624,6 +4624,36 @@ assert.deepEqual(
   nestedStyleOverride
 );
 
+// The slot editor has no control for to_slot (an overlay that spans from its
+// anchor slot to a second slot): Generate and a saved Session keep the value.
+for (const [spanState, spanFilesData, requestKey, configKey, gcSlot] of [
+  [circularP3State, filesData, 'circularTrackSlots', 'circular_track_slots',
+    { side: 'inside', width: null, radius: null, inner_gap_px: null, outer_gap_px: null }],
+  [linearP3State, linearFilesData, 'linearTrackSlots', 'linear_track_slots',
+    { side: 'below', height: '', spacing: '' }]
+]) {
+  const spanSlots = [
+    ...spanState.adv[configKey].map((slot) => (slot.id === 'review_overlay'
+      ? { ...slot, params: { ...slot.params, to_slot: 'gc_content' } }
+      : slot)),
+    { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, z: 0, params: {}, ...gcSlot }
+  ];
+  const spanDrawing = { ...spanState, adv: { ...spanState.adv, [configKey]: spanSlots } };
+  const spanCanonical = buildCanonicalRenderRequestRaw({
+    state: spanDrawing,
+    filesData: spanFilesData,
+    ...(configKey === 'linear_track_slots'
+      ? { comparisonPlanSnapshot: comparisonSnapshotForState(spanDrawing, spanFilesData) }
+      : {})
+  });
+  const spanParams = (slots) => slots.find((slot) => slot.id === 'review_overlay').params;
+  assert.equal(spanParams(spanCanonical.renderRequest.diagramOptions.tracks[requestKey]).to_slot, 'gc_content');
+  assert.equal(
+    spanParams(projectCanonicalSessionRequest(spanCanonical).config.adv[configKey]).to_slot,
+    'gc_content'
+  );
+}
+
 const defaultAnnotationPayload = buildCircularTrackSlotPayload({
   id: 'default_annotation',
   renderer: 'annotations',

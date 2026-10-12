@@ -3,9 +3,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from numbers import Integral
-from typing import Any, Collection, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Collection, Literal, Mapping, Sequence
 
 from gbdraw.mode_profiles import validate_dinucleotide
+
+if TYPE_CHECKING:
+    from gbdraw.annotations.models import AnnotationTrackParams
 
 
 @dataclass
@@ -80,6 +83,22 @@ def parse_nonnegative_integer(raw: object, *, field_name: str) -> int:
     return value
 
 
+# An overlay annotation slot refers to other slots by id: parameter name, and its role in messages.
+_OVERLAY_SLOT_REFERENCES = (("anchor_slot", "anchor"), ("to_slot", "to_slot"))
+
+
+def validate_annotation_slot_side(slot_id: str, side: str, annotation: AnnotationTrackParams) -> None:
+    """Require an anchor on an overlay slot, and no slot reference on any other side."""
+
+    if side == "overlay":
+        if annotation.anchor_slot is None:
+            raise ValueError(f"annotation slot '{slot_id}' with side=overlay requires anchor_slot")
+        return
+    for name, _role in _OVERLAY_SLOT_REFERENCES:
+        if getattr(annotation, name) is not None:
+            raise ValueError(f"annotation slot '{slot_id}' uses {name} without side=overlay")
+
+
 def validate_overlay_annotation_anchors(
     slots: Sequence[Any],
     *,
@@ -92,29 +111,32 @@ def validate_overlay_annotation_anchors(
         annotation = getattr(slot, "annotation", None)
         if slot.renderer != "annotations" or slot.side != "overlay" or annotation is None:
             continue
-        anchor = by_id.get(str(annotation.anchor_slot))
-        if anchor is None:
-            raise ValueError(
-                f"annotation slot '{slot.id}' references unknown "
-                f"anchor_slot={annotation.anchor_slot!r}"
-            )
-        if anchor.renderer in anchorless_renderers:
-            raise ValueError(
-                f"annotation slot '{slot.id}' anchor '{anchor.id}' has no drawable band"
-            )
-        if anchor.renderer == "annotations":
-            raise ValueError(
-                f"annotation slot '{slot.id}' cannot use annotation slot "
-                f"'{anchor.id}' as anchor"
-            )
-        if annotation.layer == "underlay" and slot.z >= anchor.z:
-            raise ValueError(
-                f"annotation underlay slot '{slot.id}' must have z less than anchor '{anchor.id}'"
-            )
-        if annotation.layer == "foreground" and slot.z <= anchor.z:
-            raise ValueError(
-                f"annotation foreground slot '{slot.id}' must have z greater than anchor '{anchor.id}'"
-            )
+        for name, role in _OVERLAY_SLOT_REFERENCES:
+            reference = getattr(annotation, name)
+            if reference is None:
+                continue
+            target = by_id.get(str(reference))
+            if target is None:
+                raise ValueError(
+                    f"annotation slot '{slot.id}' references unknown {name}={reference!r}"
+                )
+            if target.renderer in anchorless_renderers:
+                raise ValueError(
+                    f"annotation slot '{slot.id}' {role} '{target.id}' has no drawable band"
+                )
+            if target.renderer == "annotations":
+                raise ValueError(
+                    f"annotation slot '{slot.id}' cannot use annotation slot "
+                    f"'{target.id}' as {role}"
+                )
+            if annotation.layer == "underlay" and slot.z >= target.z:
+                raise ValueError(
+                    f"annotation underlay slot '{slot.id}' must have z less than {role} '{target.id}'"
+                )
+            if annotation.layer == "foreground" and slot.z <= target.z:
+                raise ValueError(
+                    f"annotation foreground slot '{slot.id}' must have z greater than {role} '{target.id}'"
+                )
 
 
 def split_kv_list(raw: str) -> list[tuple[str, str]]:
@@ -175,5 +197,6 @@ __all__ = [
     "parse_track_slot_text",
     "slot_dinucleotide",
     "split_kv_list",
+    "validate_annotation_slot_side",
     "validate_overlay_annotation_anchors",
 ]

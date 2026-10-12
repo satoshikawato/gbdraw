@@ -97,6 +97,7 @@ from gbdraw.tracks import (
     LinearTrackSlot,
     ScalarSpec,
     normalize_circular_track_slots,
+    normalize_linear_track_slots,
 )
 
 
@@ -1547,6 +1548,56 @@ def test_current_circular_writer_uses_only_canonical_layout_fields() -> None:
     assert slot["innerGapPx"] == pytest.approx(4.0)
     assert slot["outerGapPx"] == pytest.approx(6.0)
     assert {"spacing", "strict", "compress", "reserve"}.isdisjoint(slot)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_spanning_annotation_slot_round_trips_with_to_slot(tmp_path: Path, mode: str) -> None:
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    params = {
+        "set_id": "regions",
+        "anchor_slot": "features",
+        "to_slot": "gc_content",
+        "layer": "underlay",
+    }
+    request: CircularDiagramRequest | LinearDiagramRequest
+    if mode == "circular":
+        slots = (
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(id="regions", renderer="annotations", side="overlay", z=-1, params=params),
+        )
+        request = CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(tracks=CircularTrackOptions(circular_track_slots=slots)),
+        )
+    else:
+        slots = (
+            LinearTrackSlot(id="features", renderer="features", side="overlay"),
+            LinearTrackSlot(id="gc_content", renderer="dinucleotide_content", side="below"),
+            LinearTrackSlot(id="regions", renderer="annotations", side="overlay", z=-1, params=params),
+        )
+        request = LinearDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=LinearDiagramOptions(
+                tracks=LinearTrackOptions(linear_track_slots=slots, linear_track_axis_index=0)
+            ),
+        )
+
+    encoded = encode_canonical_request(request)
+    payload_slots = encoded.payload["diagramOptions"]["tracks"][f"{mode}TrackSlots"]
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "span"),
+        output_directory=tmp_path / "output",
+    )
+    decoded_slots = getattr(decoded.options.tracks, f"{mode}_track_slots")
+    normalize = normalize_circular_track_slots if mode == "circular" else normalize_linear_track_slots
+
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert payload_slots[2]["params"]["to_slot"] == "gc_content"
+    assert decoded_slots == slots
+    assert normalize(decoded_slots)[2].annotation.to_slot == "gc_content"
+    assert encode_canonical_request(decoded).payload == encoded.payload
 
 
 @pytest.mark.parametrize("field", ["width", "radius"])

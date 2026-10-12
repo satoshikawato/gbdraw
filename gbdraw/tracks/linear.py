@@ -10,6 +10,7 @@ from .parsing import (
     parse_nonnegative_integer,
     parse_track_slot_text,
     split_kv_list,
+    validate_annotation_slot_side,
     validate_overlay_annotation_anchors,
 )
 from .scalars import ScalarSpec, parse_optional_pixel
@@ -389,10 +390,7 @@ def _normalize_linear_track_slots(
             params["track_index"] = track_index
         elif renderer == "annotations":
             annotation_params = annotation_track_params_from_mapping(params)
-            if side == "overlay" and annotation_params.anchor_slot is None:
-                raise ValueError(f"annotation slot '{slot.id}' with side=overlay requires anchor_slot")
-            if side != "overlay" and annotation_params.anchor_slot is not None:
-                raise ValueError(f"annotation slot '{slot.id}' uses anchor_slot without side=overlay")
+            validate_annotation_slot_side(str(slot.id), side, annotation_params)
         elif renderer in {"features", "spacer"}:
             pass
 

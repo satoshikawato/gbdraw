@@ -1,3 +1,6 @@
+import re
+
+import pandas as pd
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -239,6 +242,234 @@ def test_linear_annotation_cover_anchor_expands_overlay_to_feature_band() -> Non
     covered_height = band_height(True)
     assert uncovered_height == pytest.approx(11.76)
     assert covered_height > uncovered_height
+
+
+def _span_slot(spec: str = "anchor_slot=features,to_slot=gc,layer=underlay,z=-1") -> str:
+    return (
+        "regions:annotations@side=overlay,set_id=regions,padding_px=0,show_labels=false,"
+        f"{spec}"
+    )
+
+
+_SPAN_STACK = (
+    "features:features@side=overlay",
+    "gc:dinucleotide_content@side=below",
+    "skew:dinucleotide_skew@side=below",
+)
+
+
+def _build_linear_span(
+    *slots: str,
+    record_count: int = 1,
+    features: tuple[tuple[int, int], ...] = ((120, 250),),
+    overrides: dict[str, object] | None = None,
+    **kwargs: object,
+):
+    records = []
+    for index in range(1, record_count + 1):
+        record = SeqRecord(Seq("ACGT" * 600), id=f"rec{index}", name=f"rec{index}")
+        record.features = [
+            SeqFeature(FeatureLocation(start, end, strand=1), type="CDS")
+            for start, end in features
+        ]
+        records.append(record)
+    annotations = AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "regions",
+                tuple(
+                    RegionAnnotation(
+                        f"span{index}",
+                        CoordinateSpan(parse_record_selector(f"#{index}"), 100, 300),
+                        mark="highlight",
+                    )
+                    for index in range(1, record_count + 1)
+                ),
+            ),
+        )
+    )
+    return assemble_linear_diagram_from_records(
+        records,
+        cfg=apply_config_overrides(None, {"labels.linear.scope": "none", **(overrides or {})}),
+        legend="none",
+        selected_features_set=["CDS"],
+        linear_track_slots=list(slots),
+        linear_track_axis_index=0,
+        annotation_options=annotations,
+        **kwargs,
+    )
+
+
+def _linear_bands(drawing, record_index: int = 0) -> dict[str, tuple[float, float] | None]:
+    """Each slot's band from its record axis, and the drawn ``span`` rectangle.
+
+    The band of a features slot is its lanes; of a GC content or skew slot, the
+    plot height around its baseline; of a Depth slot, the plot below its origin.
+    """
+
+    record = drawing._gbdraw_track_slot_geometry["records"][record_index]
+    slots = {slot["slotId"]: slot for slot in record["slots"]}
+    bands: dict[str, tuple[float, float] | None] = {}
+    for slot_id, slot in slots.items():
+        origin, height = float(slot["resolvedOriginPx"]), float(slot["heightPx"])
+        if not slot["dataAvailable"]:
+            bands[slot_id] = None
+        elif slot["renderer"] == "features":
+            bands[slot_id] = (slot["paintBand"]["topPx"], slot["paintBand"]["bottomPx"])
+        elif slot["renderer"] in {"depth", "annotations"}:
+            bands[slot_id] = (origin, origin + height)
+        else:
+            bands[slot_id] = (origin - 0.5 * height, origin + 0.5 * height)
+
+    def group_y(element) -> float:
+        return float(re.findall(r"translate\([^,]+,([^)]+)\)", element.attrib["transform"])[-1])
+
+    # Every record draws its regions and gc groups, in record order.
+    root = ElementTree.fromstring(drawing.tostring())
+    span_group, gc_group = (
+        [element for element in root.iter() if element.attrib.get("data-gbdraw-slot-id") == slot_id][
+            record_index
+        ]
+        for slot_id in ("regions", "gc")
+    )
+    rect = next(element for element in span_group.iter() if element.tag.endswith("rect"))
+    axis_y = group_y(gc_group) - float(slots["gc"]["resolvedOriginPx"])
+    top = group_y(span_group) + float(rect.attrib["y"]) - axis_y
+    bands["drawn"] = (top, top + float(rect.attrib["height"]))
+    return bands
+
+
+def test_linear_annotation_to_slot_spans_from_one_slot_band_to_the_other() -> None:
+    bands = _linear_bands(_build_linear_span(*_SPAN_STACK, _span_slot()))
+
+    hull = (bands["features"][0], bands["gc"][1])
+    assert bands["features"][1] < bands["gc"][0]
+    assert bands["regions"] == pytest.approx(hull)
+    assert bands["drawn"] == pytest.approx(hull)
+
+    across = _linear_bands(
+        _build_linear_span(
+            *_SPAN_STACK, _span_slot("anchor_slot=gc,to_slot=skew,layer=underlay,z=-1")
+        )
+    )
+    assert across["drawn"] == pytest.approx((across["gc"][0], across["skew"][1]))
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "anchor_slot=gc,to_slot=features,layer=underlay,z=-1",
+        "anchor_slot=features,to_slot=gc,layer=underlay,z=-1,cover_anchor=true",
+        "anchor_slot=features,to_slot=gc,layer=underlay,z=-1,h=3px",
+        "anchor_slot=features,to_slot=gc,layer=underlay,z=-1,h=200px",
+        "anchor_slot=features,to_slot=gc,layer=foreground,z=1",
+    ],
+)
+def test_linear_annotation_to_slot_ignores_order_cover_anchor_and_own_height(spec: str) -> None:
+    reference = _linear_bands(_build_linear_span(*_SPAN_STACK, _span_slot()))
+    bands = _linear_bands(_build_linear_span(*_SPAN_STACK, _span_slot(spec)))
+
+    assert bands["drawn"] == pytest.approx(reference["drawn"])
+    assert {key: bands[key] for key in ("features", "gc", "skew")} == {
+        key: reference[key] for key in ("features", "gc", "skew")
+    }
+
+
+def test_linear_annotation_to_slot_padding_shrinks_both_edges() -> None:
+    bands = _linear_bands(
+        _build_linear_span(
+            *_SPAN_STACK,
+            "regions:annotations@side=overlay,set_id=regions,padding_px=4,show_labels=false,"
+            "anchor_slot=features,to_slot=gc,layer=underlay,z=-1",
+        )
+    )
+
+    assert bands["drawn"] == pytest.approx((bands["features"][0] + 4.0, bands["gc"][1] - 4.0))
+
+
+@pytest.mark.parametrize(
+    ("spec", "message"),
+    [
+        ("anchor_slot=features,to_slot=missing,layer=underlay,z=-1", "references unknown to_slot='missing'"),
+        ("anchor_slot=features,to_slot=off,layer=underlay,z=-1", "references unknown to_slot='off'"),
+        ("anchor_slot=features,to_slot=space,layer=underlay,z=-1", "to_slot 'space' has no drawable band"),
+        ("anchor_slot=features,to_slot=notes,layer=underlay,z=-1", "cannot use annotation slot 'notes' as to_slot"),
+        ("anchor_slot=features,to_slot=gc,layer=underlay,z=0", "must have z less than anchor 'features'"),
+        ("anchor_slot=features,to_slot=low,layer=underlay,z=-1", "must have z less than to_slot 'low'"),
+        ("anchor_slot=low,to_slot=features,layer=underlay,z=-1", "must have z less than anchor 'low'"),
+        ("anchor_slot=features,to_slot=high,layer=foreground,z=1", "must have z greater than to_slot 'high'"),
+        ("anchor_slot=features,to_slot=,layer=underlay,z=-1", "to_slot cannot be empty"),
+    ],
+)
+def test_linear_annotation_to_slot_reference_errors(spec: str, message: str) -> None:
+    slots = [
+        parse_linear_track_slot(text)
+        for text in (
+            "features:features@side=overlay",
+            "gc:dinucleotide_content",
+            "off:dinucleotide_skew@enabled=false",
+            "space:spacer@h=8px",
+            "notes:annotations@set_id=regions",
+            "low:depth@z=-2",
+            "high:dinucleotide_skew@nt=AT,z=2",
+        )
+    ]
+
+    with pytest.raises(ValueError, match=f"annotation .*slot 'regions'.*{message}|^{message}"):
+        normalize_linear_track_slots([*slots, parse_linear_track_slot(_span_slot(spec))])
+
+
+def test_linear_annotation_to_slot_requires_overlay_side() -> None:
+    slot = LinearTrackSlot(
+        "regions", "annotations", side="above", params={"set_id": "regions", "to_slot": "gc"}
+    )
+
+    with pytest.raises(ValueError, match="annotation slot 'regions' uses to_slot without side=overlay"):
+        normalize_linear_track_slots([parse_linear_track_slot("gc:dinucleotide_content"), slot])
+
+
+def test_linear_annotation_to_slot_covers_every_feature_lane() -> None:
+    overlapping = ((100, 900), (500, 1500), (700, 1700))
+    slots = (*_SPAN_STACK, _span_slot())
+    flat = _linear_bands(_build_linear_span(*slots, features=overlapping))
+    stacked = _linear_bands(
+        _build_linear_span(
+            *slots,
+            features=overlapping,
+            overrides={"canvas.resolve_overlaps": True, "canvas.strandedness": False},
+        )
+    )
+
+    assert stacked["features"][1] - stacked["features"][0] > flat["features"][1] - flat["features"][0]
+    assert stacked["drawn"] == pytest.approx((stacked["features"][0], stacked["gc"][1]))
+
+
+def test_linear_annotation_to_slot_uses_the_bands_each_record_has() -> None:
+    depth = pd.DataFrame(
+        {
+            "reference_name": ["rec1"] * 2400,
+            "position": list(range(1, 2401)),
+            "depth": [20.0] * 2400,
+        }
+    )
+    drawing = _build_linear_span(
+        "features:features@side=overlay",
+        "depth:depth@side=below,track_index=0",
+        "gc:dinucleotide_content@side=below",
+        _span_slot("anchor_slot=features,to_slot=depth,layer=underlay,z=-1"),
+        record_count=2,
+        depth_track_tables=[[depth], [None]],
+        depth_window=100,
+        depth_step=100,
+        layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@2")),
+    )
+
+    with_depth = _linear_bands(drawing, 0)
+    without_depth = _linear_bands(drawing, 1)
+    assert with_depth["drawn"] == pytest.approx((with_depth["features"][0], with_depth["depth"][1]))
+    # A Depth slot without data for a record has no band there: the span keeps to the other slot.
+    assert without_depth["depth"] is None
+    assert without_depth["drawn"] == pytest.approx(without_depth["features"])
 
 
 def test_linear_annotation_clip_policy_creates_clip_path() -> None:
