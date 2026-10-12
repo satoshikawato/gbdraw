@@ -117,8 +117,8 @@ export {
  */
 
 /**
- * A candidate the Result draws as one block, with its ring button.
- * @typedef {AlignmentOverlayCandidate & { record: AlignmentOverlayRecord, svgId: string, element: Element, button: HTMLButtonElement }} AlignmentOverlayRing
+ * A candidate the Result draws, with its blocks and its ring button.
+ * @typedef {AlignmentOverlayCandidate & { record: AlignmentOverlayRecord, svgId: string, blocks: Element[], button: HTMLButtonElement }} AlignmentOverlayRing
  */
 
 /**
@@ -1114,6 +1114,8 @@ export const createFeatureSvgActions = ({
       handlerState.previewAlignmentCandidate = previewAlignmentCandidate;
       handlerState.clearAlignmentCandidatePreview = clearAlignmentCandidatePreview;
 
+      // A feature drawn in several parts (exons) is one span from its first block to its last:
+      // the alignment centres that whole span.
       /** @param {AliasSource} anchor */
       const uniqueRenderedFeature = (anchor) => {
         const requested = featureIdentity(anchor);
@@ -1124,7 +1126,7 @@ export const createFeatureSvgActions = ({
         if (matches.length !== 1) return null;
         const [svgId] = matches[0];
         const blocks = getFeatureFillElements(svg, svgId, ensureFeaturePaths());
-        return blocks.length === 1 ? { svgId, element: blocks[0] } : null;
+        return blocks.length ? { svgId, blocks } : null;
       };
 
       const clearAlignmentOverlay = () => {
@@ -1145,11 +1147,11 @@ export const createFeatureSvgActions = ({
       // units from the Result's left edge, which the preview zoom does not change.
       /**
        * @param {AlignmentOverlayRequest['reference']} reference
-       * @param {Element} referenceElement
+       * @param {Element[]} referenceBlocks
        * @param {AlignmentOverlayRing[]} rings
        * @returns {AlignmentFigureGeometry | null}
        */
-      const measureAlignmentGeometry = (reference, referenceElement, rings) => {
+      const measureAlignmentGeometry = (reference, referenceBlocks, rings) => {
         const frame = svg.getBoundingClientRect();
         const unit = frame.width / (/** @type {SVGSVGElement} */ (svg).viewBox?.baseVal?.width || 0);
         if (!(unit > 0) || !Number.isFinite(unit)) return null;
@@ -1158,6 +1160,10 @@ export const createFeatureSvgActions = ({
           const rect = element.getBoundingClientRect();
           return { left: (rect.left - frame.left) / unit, right: (rect.right - frame.left) / unit };
         };
+        /** @param {FigureSpan[]} spans @returns {FigureSpan} */
+        const around = (spans) => ({
+          left: Math.min(...spans.map(({ left }) => left)), right: Math.max(...spans.map(({ right }) => right))
+        });
         /** @param {Element} element */
         const recordKeyOf = (element) => element.closest('[data-record-key]')?.getAttribute('data-record-key') || '';
         /** @type {Map<string, FigureSpan[]>} */
@@ -1169,10 +1175,10 @@ export const createFeatureSvgActions = ({
           if (!featuresByRecord.has(recordKey)) featuresByRecord.set(recordKey, []);
           featuresByRecord.get(recordKey)?.push(spanOf(block));
         }));
-        const referenceSpan = spanOf(referenceElement);
+        const referenceSpan = around(referenceBlocks.map(spanOf));
         const drawnCandidates = [
           { recordKey: reference.recordKey, key: reference.key, span: referenceSpan },
-          ...rings.map(({ record, key, element }) => ({ recordKey: record.recordKey, key, span: spanOf(element) }))
+          ...rings.map(({ record, key, blocks }) => ({ recordKey: record.recordKey, key, span: around(blocks.map(spanOf)) }))
         ];
         const records = Array.from(svg.querySelectorAll('g[data-record-key]')).flatMap((group) => {
           const recordKey = group.getAttribute('data-record-key') || '';
@@ -1182,8 +1188,7 @@ export const createFeatureSvgActions = ({
           const spans = [...axis, ...features];
           if (!spans.length) return [];
           return [{
-            recordKey, features,
-            extent: { left: Math.min(...spans.map(({ left }) => left)), right: Math.max(...spans.map(({ right }) => right)) },
+            recordKey, features, extent: around(spans),
             candidates: drawnCandidates.filter((candidate) => candidate.recordKey === recordKey)
               .map(({ key, span }) => ({ key, span }))
           }];
@@ -1274,17 +1279,22 @@ export const createFeatureSvgActions = ({
         viewport.appendChild(element);
 
         /**
-         * A block's box in the viewport, or null when the Result does not show it as one box.
-         * @param {Element | null | undefined} target
+         * The box around a feature's blocks in the viewport, or null when the Result does not
+         * show every block.
+         * @param {Element[] | null | undefined} blocks
          * @param {DOMRect} frame
          */
-        const boxIn = (target, frame) => {
-          if (!target?.isConnected || target.getClientRects().length !== 1
-            || window.getComputedStyle(target).visibility === 'hidden') return null;
-          const rect = target.getBoundingClientRect();
-          if (!rect.width || !rect.height) return null;
-          const box = { left: rect.left - frame.left, right: rect.right - frame.left,
-            top: rect.top - frame.top, bottom: rect.bottom - frame.top };
+        const boxIn = (blocks, frame) => {
+          if (!blocks?.length || blocks.some((block) => !block.isConnected || block.getClientRects().length !== 1
+            || window.getComputedStyle(block).visibility === 'hidden')) return null;
+          const rects = blocks.map((block) => block.getBoundingClientRect());
+          const box = {
+            left: Math.min(...rects.map((rect) => rect.left)) - frame.left,
+            right: Math.max(...rects.map((rect) => rect.right)) - frame.left,
+            top: Math.min(...rects.map((rect) => rect.top)) - frame.top,
+            bottom: Math.max(...rects.map((rect) => rect.bottom)) - frame.top
+          };
+          if (!(box.right > box.left) || !(box.bottom > box.top)) return null;
           const x = (box.left + box.right) / 2;
           const y = (box.top + box.bottom) / 2;
           return x < 0 || x > frame.width || y < 0 || y > frame.height ? null : { ...box, x, y };
@@ -1334,7 +1344,7 @@ export const createFeatureSvgActions = ({
           if (!element.isConnected || delegatedFeatureHandlers !== handlerState) return;
           const frame = viewport.getBoundingClientRect();
           const paper = svgContainer.value.getBoundingClientRect();
-          const referenceBox = boxIn(referenceFeature?.element, frame);
+          const referenceBox = boxIn(referenceFeature?.blocks, frame);
           const lineX = referenceBox?.x ?? null;
           placeRing(referenceRing, referenceBox);
           let shapes = '';
@@ -1349,7 +1359,7 @@ export const createFeatureSvgActions = ({
           const hover = overlay.hover;
           tag.hidden = true;
           rings.forEach((ring) => {
-            const box = boxIn(ring.element, frame);
+            const box = boxIn(ring.blocks, frame);
             const hovered = hover === ring;
             placeRing(ring.button, box);
             ring.button.classList.toggle('is-hover', hovered);
@@ -1388,7 +1398,7 @@ export const createFeatureSvgActions = ({
           rings.find(({ button }) => button.dataset.alignmentRecordKey === focusedKeys.alignmentRecordKey
             && button.dataset.alignmentCandidateKey === focusedKeys.alignmentCandidateKey)?.button.focus({ preventScroll: true });
         }
-        return referenceFeature ? measureAlignmentGeometry(reference, referenceFeature.element, rings) : null;
+        return referenceFeature ? measureAlignmentGeometry(reference, referenceFeature.blocks, rings) : null;
       };
 
       handlerState.showAlignmentOverlay = showAlignmentOverlay;

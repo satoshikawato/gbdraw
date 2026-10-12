@@ -787,7 +787,9 @@ record.**, and **Apply** stays disabled until each such record has a candidate o
 **Skip**.
 
 On the figure, a line marks the reference center, a ring surrounds each
-visible candidate, and an arrow shows where the chosen gene moves. Hover a
+visible candidate, and an arrow shows where the chosen gene moves. A gene
+drawn in several parts, such as exons, has one ring around all of them, and
+its center is the middle of that whole span. Hover a
 row, its ring, or its feature to highlight the others and show the gene name
 on the figure; clicking a ring or a candidate feature selects the same anchor
 as its row control. Candidates without a visible ring remain selectable in

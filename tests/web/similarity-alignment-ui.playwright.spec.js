@@ -2691,7 +2691,65 @@ test('records that need a choice come first; a ring or a row chooses, and the ch
   await expect(dialog).toBeHidden();
 });
 
-// C2: a reversed record is drawn in its strip as the figure draws it after Apply.
+// C2: every record is drawn in its strip as the figure draws it after Apply. A feature drawn in
+// several parts (exons) counts as one span from its first block to its last.
+// Each strip box: where its centre lies along its record, as a fraction of the record's extent.
+const stripBoxes = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const draft = app.similarityAlignmentDraft;
+  const number = (element, name) => Number(element.getAttribute(name));
+  return app.similarityAlignmentReview.groups.flatMap((group) => group.cards).flatMap((card) => {
+    const selector = card.kind === 'reference' ? '[data-similarity-alignment-reference]'
+      : `[data-alignment-record-key="${card.recordKey}"]`;
+    const svg = document.querySelector(`[data-similarity-alignment-dialog] ${selector} [data-alignment-strip]`);
+    if (!svg) return [];
+    const axis = svg.querySelector('.axis');
+    const fraction = (x) => (x - number(axis, 'x1')) / (number(axis, 'x2') - number(axis, 'x1'));
+    const line = number(svg.querySelector('.line'), 'x1');
+    return [...svg.querySelectorAll('.candidate')].map((box) => {
+      const key = box.dataset.alignmentCandidateKey;
+      const anchor = card.kind === 'reference' ? draft.response.reference
+        : card.candidates.find((candidate) => candidate.key === key).anchor;
+      const centre = number(box, 'x') + number(box, 'width') / 2;
+      return { recordKey: anchor.recordKey, biologicalFeatureId: anchor.biologicalFeatureId,
+        chosen: box.classList.contains('is-chosen'), fraction: fraction(centre), side: Math.sign(centre - line),
+        onLine: Math.abs(centre - line) };
+    });
+  });
+});
+// The drawn span of each feature in the Result, in client pixels, with its block count.
+const drawnSpans = (page, anchors) => page.evaluate((anchors) => {
+  const app = window.__GBDRAW_APP__;
+  const svg = document.querySelector('.gbdraw-preview-surface svg');
+  return anchors.map(({ recordKey, biologicalFeatureId }) => {
+    const feature = app.extractedFeatures.find((item) => item.recordKey === recordKey
+      && item.biologicalFeatureId === biologicalFeatureId);
+    const rects = feature ? [...svg.querySelectorAll(`[data-gbdraw-feature-id="${feature.svg_id}"]`)]
+      .filter((element) => element.getAttribute('fill') !== 'none').map((element) => element.getBoundingClientRect()) : [];
+    if (!rects.length) return { blocks: 0 };
+    const left = Math.min(...rects.map((rect) => rect.left));
+    const right = Math.max(...rects.map((rect) => rect.right));
+    const group = svg.querySelector(`g[data-record-key="${recordKey}"]`);
+    const extent = [...group.querySelectorAll(':scope > line:not([data-label-feature-id]), [data-gbdraw-feature-id]')]
+      .map((element) => element.getBoundingClientRect()).filter((rect) => rect.width > 0 || rect.height > 0);
+    const recordLeft = Math.min(...extent.map((rect) => rect.left));
+    const recordRight = Math.max(...extent.map((rect) => rect.right));
+    return { blocks: rects.length, left, right, x: (left + right) / 2,
+      fraction: ((left + right) / 2 - recordLeft) / (recordRight - recordLeft) };
+  });
+}, anchors);
+const expectFigureAgreesWithStrips = async (page, strips) => {
+  const figure = await drawnSpans(page, strips);
+  const lineX = figure[strips.findIndex(({ chosen }) => chosen)].x;
+  strips.forEach((box, index) => {
+    const drawn = { fraction: figure[index].fraction, offLine: figure[index].x - lineX };
+    const label = `${box.recordKey} ${box.biologicalFeatureId}: strip ${JSON.stringify(box)}, figure ${JSON.stringify(drawn)}`;
+    expect(Math.abs(box.fraction - drawn.fraction), label).toBeLessThan(0.005);
+    if (box.chosen) expect(Math.abs(drawn.offLine), label).toBeLessThanOrEqual(1);
+    else if (Math.abs(drawn.offLine) > 1) expect(Math.sign(drawn.offLine), label).toBe(box.side);
+  });
+};
+
 test('the strips of reversed records agree with the figure after Apply in order and side', async ({ page }) => {
   test.setTimeout(600000);
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -2704,58 +2762,62 @@ test('the strips of reversed records agree with the figure after Apply in order 
   const reversed = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.records
     .filter((record) => record.reversed).map((record) => record.recordKey));
   expect(reversed.length).toBeGreaterThan(1);
-  // Each strip box: where its centre lies along its record, as a fraction of the record's extent.
-  const strips = await page.evaluate(() => {
-    const app = window.__GBDRAW_APP__;
-    const draft = app.similarityAlignmentDraft;
-    const number = (element, name) => Number(element.getAttribute(name));
-    return app.similarityAlignmentReview.groups.flatMap((group) => group.cards).flatMap((card) => {
-      const selector = card.kind === 'reference' ? '[data-similarity-alignment-reference]'
-        : `[data-alignment-record-key="${card.recordKey}"]`;
-      const svg = document.querySelector(`[data-similarity-alignment-dialog] ${selector} [data-alignment-strip]`);
-      if (!svg) return [];
-      const axis = svg.querySelector('.axis');
-      const fraction = (x) => (x - number(axis, 'x1')) / (number(axis, 'x2') - number(axis, 'x1'));
-      const line = number(svg.querySelector('.line'), 'x1');
-      return [...svg.querySelectorAll('.candidate')].map((box) => {
-        const key = box.dataset.alignmentCandidateKey;
-        const anchor = card.kind === 'reference' ? draft.response.reference
-          : card.candidates.find((candidate) => candidate.key === key).anchor;
-        const centre = number(box, 'x') + number(box, 'width') / 2;
-        return { recordKey: anchor.recordKey, biologicalFeatureId: anchor.biologicalFeatureId,
-          chosen: box.classList.contains('is-chosen'), fraction: fraction(centre), side: Math.sign(centre - line),
-          onLine: Math.abs(centre - line) };
-      });
-    });
-  });
+  const strips = await stripBoxes(page);
   expect(strips.filter(({ recordKey }) => reversed.includes(recordKey)).length).toBeGreaterThan(0);
   for (const box of strips.filter(({ chosen }) => chosen)) expect(box.onLine).toBeLessThan(0.01);
   await applyReview(page, dialog);
-  const figure = await page.evaluate((boxes) => {
+  await expectFigureAgreesWithStrips(page, strips);
+});
+
+// OV-541: a gene with introns is drawn as several blocks, and Apply centres its whole span.
+test('a reference and candidates drawn in several parts get the line, rings and strip boxes around their whole span', async ({ page }) => {
+  test.setTimeout(900000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync('gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz'),
+    'majanivirus_orthogroup.gbdraw-session.json.gz');
+  const { dialog } = await openPopupReview(page, (groupId) => window.__GBDRAW_APP__.extractedFeatures
+    .find((item) => (item.orthogroup_id || item.orthogroupId || item.similarityGroupId) === groupId)?.svg_id, 'og_3');
+  const review = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    const svg = document.querySelector('.gbdraw-preview-surface svg');
-    const centre = (rect) => (rect.left + rect.right) / 2;
-    const featureElement = ({ recordKey, biologicalFeatureId }) => {
-      const feature = app.extractedFeatures.find((item) => item.recordKey === recordKey
-        && item.biologicalFeatureId === biologicalFeatureId);
-      return feature && svg.querySelector(`[data-gbdraw-feature-id="${feature.svg_id}"]`);
-    };
-    const lineX = centre(featureElement(boxes.find(({ chosen }) => chosen)).getBoundingClientRect());
-    return boxes.map((box) => {
-      const group = svg.querySelector(`g[data-record-key="${box.recordKey}"]`);
-      const rects = [...group.querySelectorAll(':scope > line:not([data-label-feature-id]), [data-gbdraw-feature-id]')]
-        .map((element) => element.getBoundingClientRect()).filter((rect) => rect.width > 0 || rect.height > 0);
-      const left = Math.min(...rects.map((rect) => rect.left));
-      const right = Math.max(...rects.map((rect) => rect.right));
-      const x = centre(featureElement(box).getBoundingClientRect());
-      return { fraction: (x - left) / (right - left), offLine: x - lineX };
-    });
-  }, strips);
-  strips.forEach((box, index) => {
-    const drawn = figure[index];
-    const label = `${box.recordKey} ${box.biologicalFeatureId}: strip ${JSON.stringify(box)}, figure ${JSON.stringify(drawn)}`;
-    expect(Math.abs(box.fraction - drawn.fraction), label).toBeLessThan(0.005);
-    if (box.chosen) expect(Math.abs(drawn.offLine), label).toBeLessThanOrEqual(1);
-    else if (Math.abs(drawn.offLine) > 1) expect(Math.sign(drawn.offLine), label).toBe(box.side);
+    const cards = app.similarityAlignmentReview.groups.flatMap((group) => group.cards);
+    return { reference: app.similarityAlignmentDraft.response.reference, cards: cards.length,
+      candidates: cards.flatMap((card) => card.candidates.map(({ key, anchor }) => ({ key, ...anchor }))) };
   });
+  expect((await drawnSpans(page, [review.reference]))[0].blocks).toBeGreaterThan(1);
+  const centre = (box) => box.x + box.width / 2;
+  const line = page.locator('.gbdraw-alignment-line:not(.casing)');
+  await expect(line).toHaveCount(1);
+  // The view is fitted when the panel opens: the line follows the feature until both rest.
+  const lineOffReference = async () => {
+    const lineX = await line.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return (rect.left + rect.right) / 2;
+    });
+    return Math.abs(lineX - (await drawnSpans(page, [review.reference]))[0].x);
+  };
+  await expect.poll(lineOffReference).toBeLessThanOrEqual(1);
+  const [reference] = await drawnSpans(page, [review.reference]);
+  const referenceRing = await page.locator('.gbdraw-alignment-ring.is-reference').boundingBox();
+  expect(Math.abs(centre(referenceRing) - reference.x)).toBeLessThanOrEqual(1);
+  expect(referenceRing.width).toBeGreaterThanOrEqual(reference.right - reference.left);
+  await expect(page.locator('.gbdraw-alignment-flag')).toContainText('· reference');
+  await expect(dialog.locator('[data-alignment-strip]')).toHaveCount(review.cards);
+  // A candidate in several parts has one ring around all of them.
+  const drawn = await drawnSpans(page, review.candidates);
+  const inParts = review.candidates.map((candidate, index) => ({ ...candidate, ...drawn[index] }))
+    .filter(({ blocks }) => blocks > 1);
+  expect(inParts.length).toBeGreaterThan(0);
+  for (const candidate of inParts) {
+    const ring = await candidateRing(page, candidate.key).boundingBox();
+    expect(Math.abs(centre(ring) - candidate.x), candidate.key).toBeLessThanOrEqual(1);
+    expect(ring.width, candidate.key).toBeGreaterThanOrEqual(candidate.right - candidate.left);
+  }
+  await chooseUnresolved(page, dialog);
+  const strips = await stripBoxes(page);
+  expect(strips.filter(({ chosen }) => chosen).length).toBeGreaterThan(2);
+  for (const box of strips.filter(({ chosen }) => chosen)) expect(box.onLine).toBeLessThan(0.01);
+  await applyReview(page, dialog);
+  await expectFigureAgreesWithStrips(page, strips);
 });

@@ -16,7 +16,8 @@
  * @property {string} recordKey
  * @property {FigureSpan} extent The record's axis and every drawn feature.
  * @property {FigureSpan[]} features Every drawn feature block.
- * @property {{ key: string, span: FigureSpan }[]} candidates The candidates drawn as one block, by candidate key.
+ * @property {{ key: string, span: FigureSpan }[]} candidates The drawn candidates, by candidate key. A
+ *   candidate drawn in several parts spans from its first block to its last.
  */
 
 /**
