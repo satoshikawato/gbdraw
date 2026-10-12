@@ -4987,8 +4987,16 @@ const buildOtherModeResult = (other, renderRequest) => {
  */
 
 /**
+ * How a Save ended: the download was handed off, or the person or a newer
+ * operation canceled it.
+ * @typedef {{ status: 'saved', blob: Blob, filename: string }
+ *   | { status: 'canceled', compressedSize?: number }} SessionSaveResult
+ */
+
+/**
  * @param {string | null | undefined} titleOverride
  * @param {ExportSessionDocumentOptions} options
+ * @returns {Promise<SessionSaveResult>}
  */
 const exportSessionDocument = async (
   titleOverride = null,
@@ -6074,7 +6082,7 @@ export const disposeSessionOperations = () => {
  * @property {() => string | null} [resolveTitle] Null when the person canceled the title prompt.
  * @property {(request: { draftRequest: boolean }) => Promise<Pick<ExportSessionDocumentOptions,
  *   'linearRecordCatalog' | 'omittedAnnotationRecordKeys'>>} [beforeExport]
- * @property {(result: { filename?: string }) => void} [onSaved]
+ * @property {(result: Extract<SessionSaveResult, { status: 'saved' }>) => void} [onSaved]
  * @property {(error: UserFacingError | null) => void} [onError]
  */
 
