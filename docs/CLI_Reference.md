@@ -650,6 +650,31 @@ Bind a set to a custom slot with `set_id=<set_id>`. Without custom slots, `highl
 
 `lane` is the zero-based collision-avoidance row within an annotation track. Leave it blank for deterministic automatic packing. Use `0` for the first row, `1` for the second, and so on only when a fixed row is required. Highlights always cover the full feature band, so `lane` does not apply to them.
 
+An annotation slot with `side=overlay` is drawn on another slot instead of taking a row of its own. It takes these parameters after `set_id`:
+
+- `anchor_slot=<slot id>` (required): the slot it is drawn on. The slot must be enabled and have a band: a `spacer` slot, a Circular `ticks` slot, and another `annotations` slot are rejected.
+- `layer=underlay|foreground` (default `foreground`): an underlay needs a `z` below its anchor's, a foreground overlay a `z` above it.
+- `cover_anchor=true|false` (default `false`): the overlay is centred on its anchor and as wide as its own `w` (Linear: as tall as its own `h`). With `true` it takes the anchor's band instead; Linear does this only for a `features` anchor.
+- `to_slot=<slot id>`: the overlay spans from the anchor slot to this second slot, from the innermost edge to the outermost edge of the two slots' bands in Circular and from the top edge to the bottom edge in Linear. It covers every slot between them, and the order of the two IDs does not matter. `to_slot` follows the rules of `anchor_slot`, and the `z` rule applies to both slots. With `to_slot`, `cover_anchor` and the slot's own `w` or `h` are not read, and the span reserves no space of its own, also not for its labels: use `show_labels=false` and name the regions in a second annotation slot.
+
+`padding_px` (default `2`) shrinks the overlay at both edges. The band of a GC content, GC skew, or Depth slot is its plot. The band of a `features` slot is all feature lanes in Linear; in Circular it is the first lane of each strand, so extra lanes from `--resolve_overlaps` are covered only when they lie between the two slots. In Linear, a slot without data for a record (a Depth slot with no file there) has no band on that record and the span keeps to the other slot; in Circular a Depth slot keeps its empty ring, and the span covers it.
+
+```bash
+gbdraw circular --gbk genome.gb --annotation_table regions.tsv -o regions_circular \
+  --circular_track_slot "features:features" \
+  --circular_track_slot "gc_content:dinucleotide_content" \
+  --circular_track_slot "regions:annotations@set_id=regions,side=overlay,anchor_slot=features,to_slot=gc_content,layer=underlay,z=-1,padding_px=0,show_labels=false"
+
+gbdraw linear --gbk genome.gb --annotation_table regions.tsv -o regions_linear \
+  --linear_track_axis_index 0 \
+  --linear_track_slot "features:features@side=overlay" \
+  --linear_track_slot "gc_content:dinucleotide_content@side=below" \
+  --linear_track_slot "gc_skew:dinucleotide_skew@side=below" \
+  --linear_track_slot "regions:annotations@set_id=regions,side=overlay,anchor_slot=features,to_slot=gc_skew,layer=underlay,z=-1,padding_px=0,show_labels=false"
+```
+
+Both commands tint each `highlight` row of the set `regions` behind the tracks, from the feature track to the GC track named by `to_slot`.
+
 The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate column names are rejected, and relative paths resolve against the table file. Unknown columns remain errors for records and track tables. For Annotation TSV only, import discards unknown columns and warns once per table with the ignored column names and their absence from Session and TSV re-export; warnings exclude cell contents. Missing required columns, duplicate headers after normalization, malformed rows, and invalid known values still reject the whole import. Header names are trimmed and a BOM is removed before required-column and duplicate checks. Misspelled optional names such as `fill_colour` are ignored with the same warning; they are not converted to known names.
 
 ### `--records_table`
@@ -1444,9 +1469,10 @@ source binding. When a custom stack is active, enabled Depth slots are
 authoritative for the legend: entries follow slot order, `legend_label`
 overrides the series title, and series without an enabled slot are omitted.
 
-An overlay annotation's `anchor_slot` must resolve to an enabled drawable,
-non-annotation slot in the complete stack. Unknown IDs, non-drawing slots, and
-annotation-to-annotation anchor chains are rejected.
+An overlay annotation's `anchor_slot` and `to_slot` must each resolve to an
+enabled drawable, non-annotation slot in the complete stack. Unknown IDs,
+non-drawing slots, and annotation-to-annotation anchor chains are rejected.
+See [Region annotations](#region-annotations) for the overlay parameters.
 
 `--comparison_height` sets the minimum clear corridor between neighboring
 records. Comparison endpoints follow the painted feature lanes and other tracks,
