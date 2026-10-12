@@ -517,6 +517,7 @@ const identitiesWithHash = (index, hash) => {
 };
 
 // Maps, so a saved value such as `constructor` names no mode (OV-134).
+/** @type {Map<string, NonNullable<FeatureOverrideDraftRow['featureVisibility']>>} */
 const FEATURE_VISIBILITY_MODES = new Map([
   ['on', 'on'], ['off', 'off'], ['exclude_matching', 'exclude_matching'], ['suppress', 'exclude_matching']
 ]);

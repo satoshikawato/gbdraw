@@ -372,7 +372,7 @@ const sortedValue = (value) => Array.isArray(value)
 /**
  * @typedef {{
  *   mode: string, records: unknown[],
- *   layout: { similarityAlignment?: AlignmentPlanView | null, recordTranslations?: { recordKey: string, x?: number }[] }
+ *   layout: { similarityAlignment?: AlignmentPlanView | null, recordTranslations?: { recordKey: string, x?: number }[], [field: string]: unknown }
  * }} AlignmentResetRequest
  */
 /**

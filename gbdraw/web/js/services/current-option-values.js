@@ -47,17 +47,20 @@ const migrateOwnField = (source, obsoleteName, currentName) => {
 };
 
 /**
+ * @template {string} T
  * @param {unknown} value
  * @param {string} fallback
- * @param {readonly string[]} supported
+ * @param {readonly T[]} supported
  * @param {string} label
+ * @returns {T} One of the `supported` names.
  */
 const requireCurrentValue = (value, fallback, supported, label) => {
   const normalized = normalizedValue(value, fallback);
-  if (!supported.includes(normalized)) {
+  if (!(/** @type {readonly string[]} */ (supported)).includes(normalized)) {
     throw new Error(`${label} must be one of: ${supported.join(', ')}.`);
   }
-  return normalized;
+  // `supported` holds it: checked above.
+  return /** @type {T} */ (normalized);
 };
 
 /** @param {unknown} value */

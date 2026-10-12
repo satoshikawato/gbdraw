@@ -608,7 +608,7 @@ export const migrateLegacyLinearComparisonDraft = ({
   return { config, filesData };
 };
 
-/** @typedef {{ kind?: unknown, resourceId?: unknown, settings?: { alignOrthogroupFeature?: unknown } | null }} PreservedComparison */
+/** @typedef {{ kind?: unknown, resourceId?: unknown, settings?: { alignOrthogroupFeature?: unknown, [field: string]: unknown } | null }} PreservedComparison */
 /**
  * @param {{ renderRequest?: { comparisons?: unknown } | null, resources?: Record<string, unknown> | null }} session
  * @param {{ renderRequest: { comparisons?: PreservedComparison[] }, resources: Record<string, unknown> }} promoted
