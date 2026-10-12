@@ -15,11 +15,21 @@
  * }} FeatureIdentity
  */
 /**
- * The fields of a committed request record that the pure checks below read.
+ * A selector of a record in the committed request: by index or by record ID.
+ * @typedef {{ kind?: string, index: number, value?: string }} CommittedRecordSelector
+ */
+/**
+ * A record of the committed request, as the pure checks below, the record
+ * display and the alignment read it. The committed request can be one of an
+ * older schema that a Session keeps until the next Generate, so this is not
+ * the generated `CanonicalRecord`.
  * @typedef {{
  *   recordKey: string,
  *   cardinality?: string,
- *   selector?: { kind?: string, index: number } | null,
+ *   selector?: CommittedRecordSelector | null,
+ *   region?: { selector?: CommittedRecordSelector | null, reverseComplement?: unknown } | null,
+ *   presentation?: { reverseComplement?: unknown } | null,
+ *   display?: { isCircular: boolean | null, startCoordinate: number | null },
  *   source: { resourceId?: string, gffResourceId?: string, fastaResourceId?: string }
  * }} CommittedRecord
  */

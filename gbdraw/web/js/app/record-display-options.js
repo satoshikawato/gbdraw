@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-/** @import { CommittedRecordRequest } from '../services/feature-identity.js' */
+/** @import { CommittedRecord, CommittedRecordRequest } from '../services/feature-identity.js' */
 /** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
 // Source-bound editable rotation intent. The request service owns serialization.
 import {
@@ -50,23 +50,6 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  *   committedReverseComplement: boolean, committedCropped: boolean,
  *   canonicalRecordKey: string, canonicalSource: Record<string, unknown>, recordKey: string
  * }} CommittedDisplayRow
- */
-
-/**
- * A selector of a record in the committed request: by index or by record ID.
- * @typedef {{ kind?: string, index: number, value?: string }} CommittedRecordSelector
- */
-
-/**
- * A record of the committed request, as the record display reads it.
- * @typedef {object} CommittedRequestRecord
- * @property {string} recordKey
- * @property {string} [cardinality]
- * @property {CommittedRecordSelector | null} [selector]
- * @property {{ selector?: CommittedRecordSelector | null, reverseComplement?: boolean } | null} [region]
- * @property {{ reverseComplement?: boolean } | null} [presentation]
- * @property {{ isCircular: boolean | null, startCoordinate: number | null }} [display]
- * @property {{ resourceId?: string, gffResourceId?: string, fastaResourceId?: string }} source
  */
 
 /**
@@ -245,7 +228,7 @@ export const createRecordDisplayControls = ({
     const request = getCommittedRequest();
     return orientations.map((orientation) => {
       const records = request?.mode === 'linear'
-        ? request.records.filter((/** @type {CommittedRequestRecord} */ record) => record.recordKey === orientation.recordKey) : [];
+        ? request.records.filter((/** @type {CommittedRecord} */ record) => record.recordKey === orientation.recordKey) : [];
       const inputs = sources.value.filter(source => source.scope === 'linear'
         && source.sourceUid === orientation.recordKey);
       if (records.length !== 1 || inputs.length !== 1) {
@@ -308,7 +291,7 @@ export const createRecordDisplayControls = ({
     committedRows = allRows.value.filter((row) => row.scope === request.mode
       && boundSources.some((source) => source.scope === row.scope && source.sourceUid === row.sourceUid
         && source.source === row.source && source.paired === row.paired)).flatMap((row) => {
-      const selected = request.records.find((/** @type {CommittedRequestRecord} */ record, /** @type {number} */ index) => {
+      const selected = request.records.find((/** @type {CommittedRecord} */ record, /** @type {number} */ index) => {
         const selector = record.region?.selector || record.selector;
         const matchesSelector = !selector || (selector.kind === 'recordIndex'
           ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value);

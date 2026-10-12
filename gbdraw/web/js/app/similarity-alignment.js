@@ -18,7 +18,7 @@ import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.
 /**
  * @import { FeatureCatalog, FeatureCatalogRow } from '../services/feature-catalog.js'
  * @import { AnnotationCatalogSource } from './annotations/record-catalog.js'
- * @import { AliasSource } from '../services/feature-identity.js'
+ * @import { AliasSource, CommittedRecord } from '../services/feature-identity.js'
  */
 
 const { computed, ref, watch } = window.Vue;
@@ -33,10 +33,6 @@ const { computed, ref, watch } = window.Vue;
  * }} FeatureFacts
  * @typedef {{ label: string, name: string, detail: string }} RecordNameEntry A record's name for the Review panel and the Reset preview.
  * @typedef {-1 | 1 | null} DisplayedStrand
- * @typedef {{
- *   recordKey: string, region?: { reverseComplement?: unknown } | null,
- *   presentation?: { reverseComplement?: unknown } | null
- * }} CommittedRecordRow A record of the committed render request.
  * @typedef {{ groupId?: unknown, reference?: AliasSource | null, source?: string, mode?: string }} AlignmentStartOptions
  * @typedef {ReturnType<typeof reviewRows>[number]} ReviewRow One record of the Review panel.
  * @typedef {{
@@ -1386,11 +1382,11 @@ export const createSimilarityAlignmentActions = ({
     const canonical = getCommittedSession();
     const request = cloneJson(canonical?.renderRequest);
     if (!request) throw new Error('Generate a Linear diagram before aligning.');
-    const recordKeys = request.records.map((/** @type {CommittedRecordRow} */ { recordKey }) => recordKey);
+    const recordKeys = request.records.map((/** @type {CommittedRecord} */ { recordKey }) => recordKey);
     const translations = materializePlan
       ? materializedTranslations(recordKeys, request.layout?.similarityAlignment)
       : cloneJson(request.layout?.recordTranslations || replacementTranslations(state, recordKeys));
-    const orientations = request.records.map((/** @type {CommittedRecordRow} */ record) => ({ recordKey: record.recordKey,
+    const orientations = request.records.map((/** @type {CommittedRecord} */ record) => ({ recordKey: record.recordKey,
       reverseComplement: baseReverseComplement(record) }));
     const materialized = projectCommittedAlignment({ committed: canonical,
       plan: materializePlan ? null : request.layout?.similarityAlignment,
@@ -1476,10 +1472,10 @@ export const createSimilarityAlignmentActions = ({
   const runAlignmentCandidate = async ({ canonical, label, alignmentResetBefore = null,
     alignmentResetReceipt = undefined }) => {
     // Both callers ran `baseline()` first, which throws when no render request is committed.
-    const beforeRecords = new Map(/** @type {Record<string, any>} */ (currentRequest()).records.map((/** @type {CommittedRecordRow} */ record) => [record.recordKey, record]));
-    const changed = canonical.renderRequest.records.filter((/** @type {CommittedRecordRow} */ record) => (
+    const beforeRecords = new Map(/** @type {Record<string, any>} */ (currentRequest()).records.map((/** @type {CommittedRecord} */ record) => [record.recordKey, record]));
+    const changed = canonical.renderRequest.records.filter((/** @type {CommittedRecord} */ record) => (
       baseReverseComplement(record) !== baseReverseComplement(beforeRecords.get(record.recordKey))
-    )).map((/** @type {CommittedRecordRow} */ record) => ({recordKey: record.recordKey, reverseComplement: baseReverseComplement(record)}));
+    )).map((/** @type {CommittedRecord} */ record) => ({recordKey: record.recordKey, reverseComplement: baseReverseComplement(record)}));
     // R13 port: the root commits `orientations` to the record display intent.
     return runRecordAlignment({ canonical, operation: 'align', label, alignmentResetBefore, alignmentResetReceipt,
       orientations: changed });
@@ -1697,7 +1693,7 @@ export const createSimilarityAlignmentActions = ({
     const request = currentRequest();
     const catalog = state.featureCatalog?.value;
     return {
-      records: recordNames({ recordKeys: (request?.records || []).map((/** @type {CommittedRecordRow} */ { recordKey }) => recordKey),
+      records: recordNames({ recordKeys: (request?.records || []).map((/** @type {CommittedRecord} */ { recordKey }) => recordKey),
         request, linearSeqs: state.linearSeqs, catalog }),
       factsOf: catalogFeatureFacts(catalog)
     };
@@ -1790,7 +1786,7 @@ export const createSimilarityAlignmentActions = ({
     const request = currentRequest();
     const names = committedNames.value.records;
     const targets = (receipt?.directions || []).map((/** @type {AlignmentResetReceipt['directions'][number]} */ delta) => {
-      const record = request?.records.find((/** @type {CommittedRecordRow} */ {recordKey}) => recordKey === delta.recordKey);
+      const record = request?.records.find((/** @type {CommittedRecord} */ {recordKey}) => recordKey === delta.recordKey);
       const recordName = names.get(delta.recordKey);
       return {recordKey: delta.recordKey, label: recordName?.label || 'Unavailable record',
         name: shortRecordName(recordName) || 'Unavailable record',
@@ -1830,7 +1826,7 @@ export const createSimilarityAlignmentActions = ({
         // `resetPreview` rejects this scope above unless the receipt is set.
         ? /** @type {AlignmentResetReceipt} */ (receipt).directions.map(delta => [delta.recordKey, delta.before]) : []);
       /** @type {{ recordKey: string, reverseComplement: boolean }[]} */
-      const orientations = current.request.records.map((/** @type {CommittedRecordRow} */ record) => ({recordKey: record.recordKey,
+      const orientations = current.request.records.map((/** @type {CommittedRecord} */ record) => ({recordKey: record.recordKey,
         reverseComplement: restore.has(record.recordKey) ? restore.get(record.recordKey) : baseReverseComplement(record)}));
       if (orientations.some((direction, index) => direction.reverseComplement
         !== baseReverseComplement(current.request.records[index]))) {
