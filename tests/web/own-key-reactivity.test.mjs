@@ -28,8 +28,8 @@ const followed = (read, key, first, second) => {
   return seen;
 };
 
-test('the search labels of a feature follow the first bulk edit of its label text', () => {
-  // The expression of `ensureSearchIndex` (app/feature-search/preview-actions.js).
+test('ownEntry inside a computed follows the first write, a change and the removal of a key', () => {
+  // The expression that `ensureSearchIndex` (app/feature-search/preview-actions.js) uses for a label's sources.
   const sources = ['hypothetical protein', 'constructor'];
   const labels = (table) => sources.map((source) => ownEntry(table, source)).join('|');
   assert.deepEqual(

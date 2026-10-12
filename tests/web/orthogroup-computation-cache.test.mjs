@@ -84,8 +84,10 @@ test('the group list, a rendered name and the search follow the first rename of 
     editor.resolveOrthogroupDescription(editor.selectedOrthogroup.value)
   ]);
   assert.deepEqual([editor.orthogroupRows.value[0].name, ...rendered.value], ['LivB', 'LivB', 'Python text']);
-  editor.setOrthogroupNameOverride('og_1', 'My transporter');
+  // One write at a time: each of the two reads keeps its own dependency.
   editor.setOrthogroupDescriptionOverride('og_1', 'My text');
+  assert.deepEqual(rendered.value, ['LivB', 'My text']);
+  editor.setOrthogroupNameOverride('og_1', 'My transporter');
   assert.deepEqual(rendered.value, ['My transporter', 'My text']);
   assert.deepEqual([editor.orthogroupRows.value[0].name, editor.orthogroupRows.value[0].renamed], ['My transporter', true]);
   editor.resetOrthogroupRename('og_1');

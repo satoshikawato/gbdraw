@@ -840,7 +840,7 @@ const normalizeStandaloneOrthogroupCandidate = (candidate) => {
  */
 const getStandaloneOrthogroupDisplayName = (group, context) => {
   const id = String(group?.id || '').trim();
-  const override = id ? String(context?.orthogroupNameOverrides?.[id] || '').trim() : '';
+  const override = id ? String(ownEntry(context?.orthogroupNameOverrides, id) || '').trim() : '';
   return override || String(group?.display_name || group?.displayName || group?.name || id).trim();
 };
 
@@ -851,7 +851,7 @@ const getStandaloneOrthogroupDisplayName = (group, context) => {
  */
 const getStandaloneOrthogroupDescription = (group, context) => {
   const id = String(group?.id || '').trim();
-  const override = id ? String(context?.orthogroupDescriptionOverrides?.[id] || '').trim() : '';
+  const override = id ? String(ownEntry(context?.orthogroupDescriptionOverrides, id) || '').trim() : '';
   return override || String(group?.description || '').trim();
 };
 
@@ -909,10 +909,10 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
       if (!id || groupIds.has(id)) return null;
       groupIds.add(id);
       const displayName = id
-        ? String(context?.orthogroupNameOverrides?.[id] || '').trim()
+        ? String(ownEntry(context?.orthogroupNameOverrides, id) || '').trim()
         : '';
       const description = id
-        ? String(context?.orthogroupDescriptionOverrides?.[id] || '').trim()
+        ? String(ownEntry(context?.orthogroupDescriptionOverrides, id) || '').trim()
         : '';
       return {
         ...group,

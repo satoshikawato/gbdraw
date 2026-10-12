@@ -62,7 +62,7 @@ const standaloneSource = await readFile(
 );
 await writeFile(
   join(tempDir, 'services', 'standalone-interactivity.js'),
-  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, createStandaloneBiologicalFeatureResolver, getStandaloneDisplayLabel, getStandaloneFeatureOrthogroupEntry, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
+  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, catalogItemWithStandaloneOverrides, createStandaloneBiologicalFeatureResolver, getStandaloneDisplayLabel, getStandaloneFeatureOrthogroupEntry, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
   'utf8'
 );
 await writeFile(join(tempDir, 'app', 'feature-editor-svg-actions.js'), `
@@ -158,6 +158,7 @@ const {
 const {
   buildStandaloneBiologicalFeaturePayloads,
   buildStandaloneOrthogroupPayloads,
+  catalogItemWithStandaloneOverrides,
   createStandaloneBiologicalFeatureResolver,
   getStandaloneDisplayLabel,
   getStandaloneFeatureOrthogroupEntry,
@@ -1968,5 +1969,22 @@ console.log('orthogroup stable identity tests passed');
   assert.equal(
     getStandaloneDisplayLabel(inheritedFeature, 'constructor', { labelTextBulkOverrides: { constructor: 'ctor' } }),
     'ctor'
+  );
+}
+
+// The same for a Similarity group id in the standalone HTML: only an own key of a rename table is a rename.
+{
+  const inheritedGroup = { id: 'constructor', name: 'Own name', description: 'Own description', members: [] };
+  const shown = (context) => [
+    ...buildStandaloneOrthogroupPayloads([], { orthogroups: [inheritedGroup], ...context }),
+    ...catalogItemWithStandaloneOverrides({ features: [], biologicalFeatures: [], orthogroups: [inheritedGroup] }, context).orthogroups
+  ].map((group) => [group.display_name ?? group.name, group.description]);
+  assert.deepEqual(
+    shown({ orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} }),
+    [['Own name', 'Own description'], ['Own name', 'Own description']]
+  );
+  assert.deepEqual(
+    shown({ orthogroupNameOverrides: { constructor: 'Renamed' }, orthogroupDescriptionOverrides: { constructor: 'Edited' } }),
+    [['Renamed', 'Edited'], ['Renamed', 'Edited']]
   );
 }
