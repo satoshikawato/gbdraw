@@ -83,6 +83,8 @@ const paneState = (page) => page.evaluate((storageKey) => {
     hiddenStops: stops.filter((element) => box(element).width === 0 || box(element).height === 0).length,
     generate: { position: getComputedStyle(bar).position, width: Math.round(box(bar).width),
       height: Math.round(box(bar).height), left: Math.round(box(bar).left), bottomGap: Math.round(innerHeight - box(bar).bottom) },
+    generateButton: (({ width, height, bottom }) => ({ size: `${Math.round(width)}x${Math.round(height)}`,
+      bottomGap: Math.round(innerHeight - bottom) }))(box(bar.querySelector(':scope > button'))),
     focus: document.activeElement?.getAttribute('aria-label') || document.activeElement?.id || document.activeElement?.tagName,
     resizeHandle: visible(document.querySelector('.resize-handle')),
     stored
@@ -208,7 +210,9 @@ for (const mode of ['circular', 'linear']) {
     expect(alone).toMatchObject({ display: 'rail', docked: null, paneWidth: 60, areaShown: false, shown: [], marked: [],
       stops: ['switch', 'entry', 'generate'], lastStop: 'Generate Diagram', hiddenStops: 0, resizeHandle: false, stored: 'rail' });
     near(alone.resultWidth, 1494, 'figure area, rail alone');
-    expect(alone.generate).toMatchObject({ position: 'fixed', width: 60, height: 60, left: 16, bottomGap: 32 });
+    expect(alone.generate).toMatchObject({ position: 'fixed', width: 60, left: 16, bottomGap: 32 });
+    // The compact button is 60 px square and ends where the stacked button ends.
+    expect(alone.generateButton).toEqual({ size: '60x60', bottomGap: stacked.generateButton.bottomGap });
     await expect(closeSection(page)).toHaveCount(0);
     await expect(generate(page)).toBeVisible();
     await expect(generate(page)).toHaveText('Generate', { useInnerText: true });
