@@ -163,11 +163,11 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
     record_list = index.index("data-linear-record-list")
     comparison = index.index("data-linear-comparison-card")
     timeline = index.index("data-linear-comparison-timeline")
-    basic = index.index('<div class="card basic-settings">')
+    basic = index.index('<div class="card basic-settings"')
     generate = index.index('<div class="generate-bar')
     advanced = index.index("data-linear-advanced-comparison")
     # UI-12 (Owner decision 2026-10-07): Generate is the last settings Tab stop.
-    about = index.index("About & Citation</summary>")
+    about = index.index('<settings-section-title section="about">')
     settings_end = index.index("<!-- Resize Handle -->")
     assert record_list < add_action < comparison < timeline < basic < advanced
     assert about < generate < settings_end

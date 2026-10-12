@@ -15,7 +15,8 @@ import {
   MarkupPreview,
   RecordName,
   SettingsSectionIndex,
-  SettingsSectionTitle
+  SettingsSectionTitle,
+  settingsSection
 } from './components.js';
 import { CircularMeasureInput } from './app/circular-track-slots/measure-input.js';
 import { DepthTrackIndexInput } from './app/circular-track-slots/track-index-input.js';
@@ -30,6 +31,7 @@ const app = createApp({
   setup: createAppSetup
 });
 app.directive('dialog-focus', dialogFocus);
+app.directive('settings-section', settingsSection);
 
 const mountedApp = app.mount('#app');
 window.__GBDRAW_APP__ = mountedApp;

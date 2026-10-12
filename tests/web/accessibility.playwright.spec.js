@@ -429,13 +429,20 @@ for (const mode of ['circular', 'linear']) {
 }
 
 // UI-12 (Owner decision 2026-10-07): Generate Diagram is the last stop of the
-// settings panel in Tab order, and the bar stays fixed at the bottom.
+// settings panel in Tab order, and the bar stays fixed at the bottom, in the
+// stacked settings, in the icon rail with a docked section, and in the rail alone.
 test('the Generate bar is the last settings Tab stop in both modes and stays fixed', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 800 });
   await openApp(page);
-  for (const mode of ['circular', 'linear']) {
+  const DISPLAYS = [
+    ['stacked', async () => {}],
+    ['rail with a section', () => page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click()],
+    ['rail alone', () => page.getByRole('button', { name: 'Close section', exact: true }).click()]
+  ];
+  for (const mode of ['circular', 'linear']) for (const [display, show] of DISPLAYS) {
     await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+    await show();
     const order = await page.evaluate(() => {
       const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
       const stops = Array.from(document.querySelector('.settings-pane').querySelectorAll(
@@ -445,12 +452,39 @@ test('the Generate bar is the last settings Tab stop in both modes and stays fix
       const box = bar.getBoundingClientRect();
       return {
         last: stops.at(-1)?.getAttribute('aria-label') || '',
+        shown: visible(stops.at(-1)) && box.width > 0 && box.height > 0,
         position: getComputedStyle(bar).position,
         bottomGap: Math.round(innerHeight - box.bottom)
       };
     });
-    expect(order, mode).toEqual({ last: 'Generate Diagram', position: 'fixed', bottomGap: 32 });
+    expect(order, `${mode}, ${display}`).toEqual({ last: 'Generate Diagram', shown: true, position: 'fixed', bottomGap: 32 });
+    if (display === 'rail alone') await page.getByRole('button', { name: 'Expand settings', exact: true }).click();
   }
+});
+
+// The buttons the icon rail adds (its entries with short names, the two
+// switches, the close button, the compact Generate) pass the same name audits.
+test('the icon rail buttons have stable author-provided names', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  const problems = [];
+  const record = async (label) => {
+    const audit = await auditButtons(page);
+    problems.push(...audit.problems.map((problem) => `${label}: ${problem}`));
+    problems.push(...(await auditStateNames(page)).map((change) => `${label}: name changes with state: ${change}`));
+  };
+  await record('stacked');
+  await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
+  await record('rail with a section');
+  await page.getByRole('button', { name: 'Close section', exact: true }).click();
+  await record('rail alone');
+  expect(problems).toEqual([]);
+  // A rail entry shows a short name and is named for what it does.
+  const entries = page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button');
+  expect(await entries.evaluateAll((buttons) => buttons.every((button) => /^Go to \S/.test(button.getAttribute('aria-label'))
+    && button.textContent.trim() && !button.hasAttribute('title')))).toBe(true);
 });
 
 // UI-09: a control disabled for a reason the section does not show names it

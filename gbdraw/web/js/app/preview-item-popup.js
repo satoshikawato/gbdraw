@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry, LinearSeq } from '../state.js' */
+/** @import { RevealSetting } from './settings-pane.js' */
 // The legend-entry and record-definition popups of the preview. A click (or
 // Enter) on a Legend row or a record definition opens the match popup frame
 // with a `previewItem`; this owner derives what the popup shows from the
@@ -57,6 +58,7 @@ import {
  * @typedef {object} PreviewItemPopupOptions
  * @property {PreviewItemState} state
  * @property {<T>(getter: () => T) => { readonly value: T }} computed Vue `computed`
+ * @property {RevealSetting} revealSetting Brings a setting of the settings pane into view and focuses it.
  * @property {(entry: LegendEntry) => string} readLegendEntryColor
  *   The color the Legend panel shows for a row.
  * @property {(entry: LegendEntry) => readonly ColorRuleLike[]} readLegendRowRules
@@ -262,7 +264,7 @@ const CIRCULAR_EDIT_HINTS = {
 
 /** @param {PreviewItemPopupOptions} options */
 export const createPreviewItemPopup = ({
-  state, computed, readLegendEntryColor, readLegendRowRules, countLegendCaptionFeatures,
+  state, computed, revealSetting, readLegendEntryColor, readLegendRowRules, countLegendCaptionFeatures,
   getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
   legendRenameSettled
 }) => {
@@ -391,20 +393,16 @@ export const createPreviewItemPopup = ({
     });
   };
 
-  // Opens the record's settings in the sidebar (each enclosing section) and
-  // focuses the field the popup's first text box edits.
+  // Shows the record's settings in the settings pane: the field the popup's
+  // first text box edits, focused.
   /** @param {RecordDefinitionView} recordView */
   const showRecordSettings = (recordView) => {
     const selector = recordView.draft?.settingsSelector;
     /** @type {HTMLElement | null} */
     const field = selector ? document.querySelector(selector) : null;
     if (!field) return false;
-    for (let section = field.closest('details'); section; section = section.parentElement?.closest('details') || null) {
-      section.setAttribute('open', '');
-    }
     state.clickedPairwiseMatch.value = null;
-    field.scrollIntoView({ block: 'center' });
-    field.focus({ preventScroll: true });
+    void revealSetting(field);
     return true;
   };
 

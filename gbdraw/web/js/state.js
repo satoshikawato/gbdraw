@@ -32,6 +32,7 @@ import {
 } from './services/svg-result-ingestion.js';
 import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
 import { drawnLinearSequences } from './services/record-draw-selection.js';
+import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
 import {
   createDefaultAdv,
   createDefaultCircularConservation,
@@ -579,6 +580,15 @@ const featureVisibilityScopeDialog = reactive({
 // Sidebar resize state
 const sidebarWidth = ref(320); // Initial width in pixels
 const isResizing = ref(false);
+// The display of the settings pane and the entry docked beside its icon rail.
+// services/settings-pane-state.js holds every transition; the browser, not
+// the Session, remembers the display (app/settings-pane.js).
+/** @import { SettingsPaneDisplay } from './services/settings-pane-state.js' */
+/** @import { SettingsSectionKey } from './services/settings-sections.js' */
+/** @type {{ value: SettingsPaneDisplay }} */
+const settingsPaneDisplay = ref(DEFAULT_SETTINGS_PANE_DISPLAY);
+/** @type {{ value: SettingsSectionKey | null }} */
+const settingsPaneDocked = ref(null);
 
 // Legend Editor state
 const originalLegendOrder = ref([]); // Store original order from generation
@@ -1206,6 +1216,8 @@ export const state = {
   labelOnDialog,
   sidebarWidth,
   isResizing,
+  settingsPaneDisplay,
+  settingsPaneDocked,
   originalLegendOrder,
   originalLegendColors,
   legendStrokeOptionsOpen,
