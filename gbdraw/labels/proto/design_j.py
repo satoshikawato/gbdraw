@@ -65,6 +65,13 @@ def _sturn(pts, min_seg: float = 3.0) -> float:
     return turn
 
 
+def _broken(flat) -> bool:
+    """True when a False (a bent leader) lies between two True (straight) ones."""
+    if True not in flat:
+        return False
+    return not all(flat[flat.index(True):len(flat) - flat[::-1].index(True)])
+
+
 def _sturn_arr(anchor, stub, att) -> np.ndarray:
     """Signed turn (degrees, positive clockwise in image coordinates) of the leaders anchor -> stub -> each row of att."""
     u = (stub[0] - anchor[0], stub[1] - anchor[1])
@@ -193,6 +200,8 @@ class _Par:
         self.mid = int(ctx.opt("mid", 1))                # 1: a leader that reaches the left or right end of its box head-on ends at the middle of that end (LP-D18)
         self.midfr = ctx.opt("midfr", 0.3)               # ... within this fraction of the half height of the middle (the metric allows 0.35)
         self.midang = ctx.opt("midang", 11.0)            # ... "head-on" = within this many degrees of the horizontal (the metric: 10)
+        self.fan = int(ctx.opt("fan", 1))                # 1: a chain of labels with a bent leader is seated again as a straight fan, ends at the middle of the box end (round 3)
+        self.fanx = ctx.opt("fanx", 40.0)                # ... a leader may be this many px longer than before
         self.ink = ctx.opt("ink", 3.4)                   # wanted distance of a leader end to the ink of its own text (px)
         self.inkmin, self.inkmax = ctx.opt("inkmin", 2.5), ctx.opt("inkmax", 4.5)   # ... the end is refused outside this range
         self.um = ctx.opt("um", 0.7)                     # an end is nearer to its own ink than to another label's ink by 1 px + this margin
@@ -1054,6 +1063,148 @@ class _Eng:
         info["added_px"] = round(info["added_px"], 1)
         return recs, info
 
+    # ---- straight fans (round 3)
+    def fan_seat(self, L: _Lab, rec, pl: _Placed, pend: _Pending):
+        """The leader along its own first piece (straight), ending at the middle of the near end of the box (then 0.35 and 0.25 of the
+        height from the facing side), at the smallest run (0.5 px steps, at most `fanx` px longer than before) that passes every test
+        against `pl`.  (box, end, yc, run) or None."""
+        par, geo = self.par, self.geo
+        pts = rec[2]
+        vx, vy = L.S[0] - pts[0][0], L.S[1] - pts[0][1]
+        nv = math.hypot(vx, vy)
+        uq, uy = L.sx * vx / nv, vy / nv
+        ts = np.arange(0.0, math.dist(L.S, pts[-1]) + par.fanx + 1e-9, 0.5)
+        h, w = L.h, L.w
+        for frac in (0.5, 0.35, 0.25):
+            yc = L.Sy + ts * uy + (0.5 - frac) * h * (1.0 if uy > 0 else -1.0)
+            q0 = L.Sq + ts * uq + par.lgap
+            ya, ga = L.snap(yc[:, None], q0[:, None], (L.Sy + ts * uy)[:, None], np.full((len(ts), 1), par.lgap), par)
+            ok, cost, _ln = L.static(yc[:, None], q0[:, None], ya, ga, geo, par, par.cone_cos)
+            for i in np.nonzero(ok[:, 0])[0]:
+                x0 = q0[i] if L.sx > 0 else -(q0[i] + w)
+                box = (x0, yc[i] - 0.5 * h, x0 + w, yc[i] + 0.5 * h)
+                end = (L.sx * (q0[i] - ga[i, 0]), ya[i, 0])
+                extra = (np.array([q0[i]]), np.array([cost[i, 0]]), np.array([box]), np.array([end]))
+                res = self.try_at(L, float(yc[i]), pl, pend, extra=extra, only=True)[0]
+                if res is not None:
+                    return res
+        return None
+
+    def fan(self, recs: list, shore: str) -> tuple[list, dict]:
+        """A chain of labels of one stack (boxes at most gap + 3 px apart) in which a leader bends is seated again, nearest the equator
+        first, as a straight fan: every leader straight along its own first piece and ending at the middle of the box end (fan_seat),
+        a label that is straight and within 0.35 of the half height of the middle staying where it is.  The first labels of the chain that
+        can be seated again are kept when the layout still passes every test (each against all others), its labels stay inside the
+        old extent of the labels, and the chain has more straight leaders than before."""
+        par = self.par
+        recs = list(recs)
+        info = {"chains": 0, "accepted": 0, "labels": 0, "gain": 0, "added_px": 0.0}
+        if not recs:
+            return recs, info
+        labs = [self.lab(r[0], shore, 1 if r[3] == "start" else -1) for r in recs]
+        pend = _Pending(labs)
+        for lb in labs:
+            pend.done(lb)
+        ext = (min(r[1][0] for r in recs), min(r[1][1] for r in recs), max(r[1][2] for r in recs), max(r[1][3] for r in recs))
+
+        def straight(r) -> bool:
+            return abs(_sturn(r[2])) < 3.0
+
+        def fixed(k: int) -> bool:                           # straight, ending on the left or right end within 0.35 of the half height of its middle
+            box, pts = recs[k][1], recs[k][2]
+            ex, ey = pts[-1]
+            if abs(_sturn(pts)) >= 1.0 or not (ex <= box[0] + 0.05 or ex >= box[2] - 0.05):
+                return False
+            return abs(ey - 0.5 * (box[1] + box[3])) <= 0.35 * 0.5 * (box[3] - box[1])
+
+        def placed(skip) -> _Placed:
+            pl = _Placed()
+            for j, r in enumerate(recs):
+                if j not in skip:
+                    pl.add(r[1], labs[j].S, r[2][-1], labs[j])
+            return pl
+
+        groups: dict = {}
+        for k, lb in enumerate(labs):
+            groups.setdefault((lb.sx, lb.upper), []).append(k)
+        for ks in groups.values():
+            ks.sort(key=lambda k: 0.5 * (recs[k][1][1] + recs[k][1][3]) * labs[k].d)
+            chains, cur = [], [ks[0]]
+            for k in ks[1:]:
+                a, b = recs[cur[-1]][1], recs[k][1]
+                if max(b[1] - a[3], a[1] - b[3]) <= par.gap + 3.0:
+                    cur.append(k)
+                else:
+                    chains.append(cur)
+                    cur = [k]
+            chains.append(cur)
+            for chain in chains:
+                if len(chain) < 2 or all(straight(recs[k]) for k in chain):
+                    continue
+                info["chains"] += 1
+                before = [abs(_sturn(recs[k][2])) < 1.0 for k in chain]
+                run = []
+                for k in chain:                              # a leader steeper than 60 degrees ends the run (a pole block)
+                    d = (labs[k].S[0] - recs[k][2][0][0], labs[k].S[1] - recs[k][2][0][1])
+                    if abs(d[1]) > 0.866 * math.hypot(*d):
+                        break
+                    run.append(k)
+                if len(run) < 2:
+                    continue
+                fix = {k for k in run if fixed(k)}
+                best = None
+                for seq in (run, run[::-1]):                  # from the equator outward, or from the outermost label inward
+                    pl = placed(set(run) - fix)
+                    new: dict = {}
+                    for k in seq:
+                        if k in fix:
+                            continue
+                        res = self.fan_seat(labs[k], recs[k], pl, pend)
+                        if res is None:
+                            break
+                        new[k] = (res[0], [recs[k][0].anchor, labs[k].S, res[1]])
+                        pl.add(res[0], labs[k].S, res[1], labs[k])
+                    order = [k for k in seq if k in new]
+                    while order:                            # the prefix of the run that stands against the labels that did not move
+                        trial = list(recs)
+                        for k in order:
+                            trial[k] = (recs[k][0], new[k][0], new[k][1], recs[k][3], recs[k][4])
+                        bad = None
+                        for k in order:
+                            others = _Placed()
+                            for j, r in enumerate(trial):
+                                if j != k:
+                                    others.add(r[1], labs[j].S, r[2][-1], labs[j])
+                            yy = 0.5 * (new[k][0][1] + new[k][0][3])
+                            extra = (np.array([new[k][0][0] if labs[k].sx > 0 else -new[k][0][2]]), np.array([0.0]), np.array([new[k][0]]), np.array([new[k][1][-1]]))
+                            if self.try_at(labs[k], yy, others, pend, extra=extra, only=True)[0] is None:
+                                bad = k
+                                break
+                        if bad is None:
+                            break
+                        order = order[:order.index(bad)]
+                    if not order:
+                        continue
+                    inside = all(new[k][0][0] >= ext[0] and new[k][0][1] >= ext[1] and new[k][0][2] <= ext[2] and new[k][0][3] <= ext[3] for k in order)
+                    gain = sum(1 for k in order if abs(_sturn(new[k][1])) < 3.0) - sum(1 for k in order if straight(recs[k]))
+                    after = [abs(_sturn(new[k][1] if k in order else recs[k][2])) < 1.0 for k in chain]
+                    if not inside or gain <= 0 or (_broken(after) and not _broken(before)):     # more straight leaders, and no new bent leader between straight ones
+                        continue
+                    key = (_broken(after), -gain)
+                    if best is None or key < best[0]:
+                        best = (key, order, new, gain)
+                if best is None:
+                    continue
+                _key, order, new, gain = best
+                for k in order:
+                    info["added_px"] += _plen(new[k][1]) - _plen(recs[k][2])
+                    recs[k] = (recs[k][0], new[k][0], new[k][1], recs[k][3], recs[k][4])
+                info["accepted"] += 1
+                info["labels"] += len(order)
+                info["gain"] += gain
+        info["added_px"] = round(info["added_px"], 1)
+        return recs, info
+
     # ---- slide toward the ring (LP-D14)
     def slide(self, recs: list, shore: str) -> tuple[list, dict]:
         """A leader that is straight, or leans, may end wherever its line first meets the grown box: every label of a finished
@@ -1409,6 +1560,9 @@ def place(items: list[Item], ctx: Ctx) -> list[dict]:
     if par.slide:
         out_recs, sym_info["slide_out"] = eng.slide(out_recs, "out")
         in_recs, sym_info["slide_in"] = eng.slide(in_recs, "in")
+    if par.face and par.fan:
+        out_recs, sym_info["fan_out"] = eng.fan(out_recs, "out")
+        in_recs, sym_info["fan_in"] = eng.fan(in_recs, "in")
     recs = out_recs + in_recs
     hide = bool(int(ctx.opt("hide", 0)))
     result = [emit(it, box, None if hide else pts, align=align, tag=tag) for it, box, pts, align, tag in recs]
