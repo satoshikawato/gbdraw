@@ -15,3 +15,16 @@ export const ownEntry = (table, key) => {
   const value = table[key];
   return Object.hasOwn(table, key) ? value : undefined;
 };
+
+/**
+ * Whether the table has the key as its own: for a reader that asks for the key
+ * and not for its value (an own key may hold `undefined`).
+ * @param {Readonly<Record<string, unknown>> | null | undefined} table
+ * @param {string} key
+ * @returns {boolean}
+ */
+export const hasOwnEntry = (table, key) => {
+  if (!table) return false;
+  // `key in table` is the Vue dependency here, as `table[key]` is in `ownEntry`.
+  return key in table && Object.hasOwn(table, key);
+};

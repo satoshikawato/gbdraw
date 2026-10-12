@@ -129,8 +129,9 @@ export const featureTargetsFromSelection = (features) => {
   if (!selected.every((feature) => featureIdentityKeyOf(feature))) return null;
   return selected.map((feature) => ({
     kind: 'featureIdentity',
-    recordKey: feature.record_key ?? feature.recordKey,
-    biologicalFeatureId: feature.biological_feature_id ?? feature.biologicalFeatureId,
+    // featureIdentityKeyOf above accepts a row only when both identity fields are text.
+    recordKey: /** @type {string} */ (feature.record_key ?? feature.recordKey),
+    biologicalFeatureId: /** @type {string} */ (feature.biological_feature_id ?? feature.biologicalFeatureId),
     envelope: 'outer_bounds',
     circularPath: 'shortest'
   }));

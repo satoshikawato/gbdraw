@@ -166,9 +166,14 @@ export const isCurrentRawLosatCacheEntry = (entry) => {
 };
 
 /**
+ * A derived cache entry: what `isLosatDerivedCacheEntry` has checked. `mode` is stored unchecked.
+ * @typedef {{ schema: number, kind: 'derived-losatp-payload', key: string, payload: Record<string, unknown>, idEncoding?: unknown, mode?: unknown }} LosatDerivedCacheEntry
+ */
+
+/**
  * @param {unknown} entry
  * @param {{ allowLegacy?: boolean }} [options]
- * @returns {boolean}
+ * @returns {entry is LosatDerivedCacheEntry}
  */
 export const isLosatDerivedCacheEntry = (entry, { allowLegacy = true } = {}) => (
   isPlainObject(entry) &&

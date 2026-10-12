@@ -40,6 +40,18 @@ from .io.colors import named_color_hex
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
+from .session_contract import (
+    FeatureOverrideDraftRow,
+    FlatDraftFields,
+    GbdrawSession,
+    LegacySessionFields,
+    SessionOtherModeEditorState,
+    SessionOtherModeLegend,
+    SessionOtherModeResult,
+    SessionOtherModeUi,
+    SessionRunMetadata,
+    keys_of,
+)
 from .web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     LOSAT_EXECUTION_FIELDS,
@@ -75,58 +87,21 @@ FEATURE_CATALOG_ENCODING = "biological-authority-v1"
 CURRENT_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
 FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {44: 4, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA}
-CURRENT_SESSION_TOP_LEVEL_FIELDS = frozenset(
-    {
-        "format",
-        "version",
-        "createdAt",
-        "title",
-        "renderRequest",
-        "resources",
-        "webFiles",
-        "config",
-        "ui",
-        "files",
-        "results",
-        "features",
-        "editorState",
-        "orthogroupState",
-        "losatCache",
-        "losatDerivedCache",
-        "proteinIdentityManifest",
-        "legacyArtifacts",
-        "runMetadata",
-        "cliInvocation",
-        "modes",
-        # Session 46: the CLI options a Session 27-44 draft kept in config.
-        "cliOptions",
-        # E1 (Q0): the other diagram mode's committed Result set.
-        "otherModeResult",
-    }
-)
+# The field sets below are the keys of the Session document's declaration
+# (gbdraw.session_contract).
+# Every top-level key a Session of a supported version may hold.
+CURRENT_SESSION_TOP_LEVEL_FIELDS = keys_of(GbdrawSession) | keys_of(LegacySessionFields)
 # The flat Web draft of Sessions 44 and older; Session 46 keeps it per mode in
 # ``modes`` (MODE_SCOPED_SETTINGS).
-FLAT_DRAFT_TOP_LEVEL_FIELDS = frozenset({"config", "features"})
+FLAT_DRAFT_TOP_LEVEL_FIELDS = keys_of(FlatDraftFields)
 # Session 46 keeps the other diagram mode's Result set in ``otherModeResult``:
 # the fields of one committed set, named as at the top level.
-OTHER_MODE_RESULT_FIELDS = frozenset(
-    {"renderRequest", "results", "editorState", "ui", "runMetadata", "cliInvocation"}
-)
+OTHER_MODE_RESULT_FIELDS = keys_of(SessionOtherModeResult)
 # The per-set part of the shared ``ui`` and ``editorState`` objects.
-OTHER_MODE_RESULT_UI_FIELDS = frozenset(
-    {
-        "selectedResultIndex",
-        "generatedLegendPosition",
-        "generatedMultiRecordCanvas",
-        "generatedCircularPlotTitlePosition",
-        "appliedPaletteName",
-        "appliedPaletteColors",
-    }
-)
-OTHER_MODE_RESULT_EDITOR_FIELDS = frozenset(
-    {"featureCatalog", "alignmentResetReceipt", "legend", "originalSvgStroke"}
-)
-OTHER_MODE_RESULT_LEGEND_FIELDS = frozenset({"originalOrder", "originalColors"})
+OTHER_MODE_RESULT_UI_FIELDS = keys_of(SessionOtherModeUi)
+OTHER_MODE_RESULT_EDITOR_FIELDS = keys_of(SessionOtherModeEditorState)
+OTHER_MODE_RESULT_LEGEND_FIELDS = keys_of(SessionOtherModeLegend)
+OTHER_MODE_RESULT_RUN_METADATA_FIELDS = keys_of(SessionRunMetadata)
 # The Web reader names an unusable ``otherModeResult`` as a Session field error.
 _OTHER_MODE_RESULT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
@@ -154,16 +129,7 @@ RETIRED_RENDERED_ID_FEATURE_FIELDS = frozenset(
 # row has no ``scope`` (Session 46).
 DRAFT_SCOPES = ("circular", "linear")
 # The fields of a per-feature edit draft row in a Session 46 mode slice.
-FEATURE_OVERRIDE_DRAFT_FIELDS = frozenset(
-    {
-        "recordKey",
-        "biologicalFeatureId",
-        "featureVisibility",
-        "labelVisibility",
-        "labelText",
-        "labelSourceText",
-    }
-)
+FEATURE_OVERRIDE_DRAFT_FIELDS = keys_of(FeatureOverrideDraftRow)
 # A Session 46 field that names an invalid shape is a Session field error.
 _SESSION_FIELDS_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
@@ -1513,9 +1479,6 @@ _COMPARISON_WARNING_FIELDS = frozenset(
 _FEATURE_IDENTITY_NOTICE_FIELDS = frozenset({"biologicalFeatureId", "kinds", "recordKey", "resultIndex", "status"})
 _FEATURE_IDENTITY_NOTICE_STATUSES = frozenset({"crop_excluded", "absent", "unresolved"})
 _FEATURE_IDENTITY_NOTICE_KINDS = frozenset({"placement", "feature_visibility", "label_visibility", "label_text"})
-OTHER_MODE_RESULT_RUN_METADATA_FIELDS = frozenset(
-    {"trackSlotGeometry", "annotationWarnings", "featureIdentityNotices", "comparisonWarnings"}
-)
 
 
 def _index(value: Any) -> bool:

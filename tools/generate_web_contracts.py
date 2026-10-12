@@ -13,6 +13,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET = REPO_ROOT / "gbdraw" / "web" / "js" / "contracts" / "schema.generated.js"
 REQUEST_TARGET = TARGET.with_name("request.generated.js")
+SESSION_TARGET = TARGET.with_name("session.generated.js")
 sys.path.insert(0, str(REPO_ROOT))
 
 # (Web name, Python module that defines the value, Python name). The Web keeps
@@ -45,6 +46,14 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("LEGACY_PROTEIN_CANDIDATE_SCHEMA", "gbdraw.session_io", "LEGACY_PROTEIN_CANDIDATE_SCHEMA"),
     ("DEPTH_FILE_SCHEMA", "gbdraw.session_io", "DEPTH_FILE_SCHEMA"),
     ("DEPTH_FILE_ENCODING", "gbdraw.session_io", "DEPTH_FILE_ENCODING"),
+    # Session field sets: the keys of the classes of gbdraw/session_contract.py.
+    ("FLAT_DRAFT_TOP_LEVEL_FIELDS", "gbdraw.session_io", "FLAT_DRAFT_TOP_LEVEL_FIELDS"),
+    ("OTHER_MODE_RESULT_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_FIELDS"),
+    ("OTHER_MODE_RESULT_UI_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_UI_FIELDS"),
+    ("OTHER_MODE_RESULT_EDITOR_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_EDITOR_FIELDS"),
+    ("OTHER_MODE_RESULT_LEGEND_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_LEGEND_FIELDS"),
+    ("OTHER_MODE_RESULT_RUN_METADATA_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_RUN_METADATA_FIELDS"),
+    ("CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS", "gbdraw.session_io", "CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS"),
 )
 _CAPABILITIES = ("EXPECTED_WEB_RUNTIME_CAPABILITIES", "gbdraw.web_support.capabilities", "get_web_runtime_capabilities")
 _IDENTIFIER = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*|0|[1-9][0-9]*")
@@ -75,8 +84,9 @@ def _frozen(value: object, indent: str = "") -> str:
 
 def _declaration(web_name: str, value: object) -> str:
     if isinstance(value, (frozenset, set)):
+        items = "string" if all(isinstance(item, str) for item in value) else "number"
         return (
-            "/** @type {readonly number[]} */\n"
+            f"/** @type {{readonly {items}[]}} */\n"
             f"export const {web_name} = {_frozen(sorted(value))};\n"
         )
     if isinstance(value, dict):
@@ -143,13 +153,18 @@ def _jsdoc_type(shape: dict[str, Any]) -> str:
         return f"Record<string, {_jsdoc_type(shape['values'])}>"
     if kind != "object":
         raise TypeError(f"Unsupported contract shape: {kind!r}")
-    if not shape["fields"]:
+    if not shape["fields"] and not shape["open"]:
         return "Record<string, never>"
-    members = (
+    return "{ " + ", ".join(_members(shape)) + " }"
+
+
+def _members(shape: dict[str, Any]) -> list[str]:
+    """The members of an object type; an open object ends with an index signature."""
+    members = [
         f"{_property_name(name)}{'?' if name in shape['optional'] else ''}: {_jsdoc_type(item)}"
         for name, item in shape["fields"].items()
-    )
-    return "{ " + ", ".join(members) + " }"
+    ]
+    return [*members, "[key: string]: unknown"] if shape["open"] else members
 
 
 def _property_name(name: str) -> str:
@@ -159,9 +174,16 @@ def _property_name(name: str) -> str:
 
 
 def _typedefs(types: dict[str, dict[str, Any]]) -> str:
-    """Render named shapes as JSDoc typedefs; an object lists its properties."""
+    """Render named shapes as JSDoc typedefs; an object lists its properties.
+
+    An open object is written as a type literal: ``@property`` has no index signature.
+    """
     parts = []
     for name, shape in types.items():
+        if shape["kind"] == "object" and shape["open"]:
+            members = ",\n".join(f" *   {member}" for member in _members(shape))
+            parts.append(f"/**\n * @typedef {{{{\n{members}\n * }}}} {name}\n */\n")
+            continue
         if shape["kind"] != "object" or not shape["fields"]:
             parts.append(f"/** @typedef {{{_jsdoc_type(shape)}}} {name} */\n")
             continue
@@ -187,6 +209,44 @@ def render_request_typedefs_module() -> str:
     )
 
 
+def _references(shape: object) -> set[str]:
+    """The names a shape refers to."""
+    if isinstance(shape, dict):
+        own = {shape["name"]} if shape.get("kind") == "ref" else set()
+        return own.union(*(_references(item) for item in shape.values()))
+    return set().union(*(_references(item) for item in shape)) if isinstance(shape, list) else set()
+
+
+def render_session_typedefs_module() -> str:
+    from gbdraw.session_contract import describe_session_document
+    from gbdraw.session_request_codec import describe_canonical_request
+
+    description = describe_session_document()
+    types = description["types"]
+    # A name the Session does not define is the request's; a leaf may import a leaf (R13).
+    imported = sorted(_references(types) - set(types))
+    unknown = set(imported) - set(describe_canonical_request()["types"])
+    if unknown:
+        raise RuntimeError(f"The Session description refers to undescribed type(s): {sorted(unknown)}")
+    root = types[description["root"]]["fields"]
+    return (
+        "// @ts-check\n"
+        "// Generated by tools/generate_web_contracts.py from describe_session_document()\n"
+        "// in gbdraw/session_contract.py; do not edit manually.\n"
+        f"// {description['root']} is a Session of the current version as its writers write it.\n"
+        "// A reader takes a SessionInput: the keys a Session of any supported version may\n"
+        "// hold, with unvalidated values; a SessionEnvelope is one whose format and version\n"
+        "// were read.\n"
+        "\n"
+        f"/** @import {{ {', '.join(imported)} }} from './{REQUEST_TARGET.name}' */\n"
+        + _typedefs(types)
+        + "/** @typedef {SessionInput & { format: "
+        + f"{_jsdoc_type(root['format'])}, version: {_jsdoc_type(root['version'])}"
+        + " }} SessionEnvelope */\n"
+        "export {};\n"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -199,6 +259,7 @@ def main() -> int:
     modules = {
         TARGET: render_web_contracts_module(),
         REQUEST_TARGET: render_request_typedefs_module(),
+        SESSION_TARGET: render_session_typedefs_module(),
     }
     if args.check:
         stale = [

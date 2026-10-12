@@ -108,7 +108,7 @@ export const reconcileRecordDisplayDrafts = (drafts, discoveredRows, replacedSou
 // with its record ID; a request selects only an ID that is unique in its file
 // (`buildDisambiguatedRecordEntries`). Returns `drafts` when no draft moves.
 /**
- * @template {Array<{ sourceUid: string, selector: string, recordId: string }>} Drafts
+ * @template {Array<RecordDisplayDraftIdentity & { recordId?: unknown }>} Drafts the record ID is only compared
  * @param {Drafts} drafts
  * @param {Array<{ key: string, sourceUid: string, selector: string, recordId: string }>} rows
  * @returns {Drafts}

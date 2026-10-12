@@ -24,7 +24,7 @@ import { cloneFileBytesForTransfer } from './file-content-cache.js';
  * The fields of a Linear record slot (`LinearSeq` in `state.js`) that the
  * region context reads, with the types `state.js` declares.
  * @typedef {{
- *   region_record_id?: string, region_start?: number | null, region_end?: number | null, region_reverse?: boolean
+ *   region_record_id?: string, region_start?: unknown, region_end?: unknown, region_reverse?: boolean
  * }} LinearRegionSeq
  */
 

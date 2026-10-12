@@ -295,14 +295,12 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 ));
 
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
-/** @import { CanonicalRenderEnvelope } from './session-request.js' */
 /** @import { CanonicalLinearLayout, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
-/** @import { FeatureOverrideDraft } from './feature-placement.js' */
 /** @import { LinearComparisonEdge, LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
@@ -310,84 +308,10 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DiagnosticContext, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { DownloadChoicePort } from './text-download.js' */
 
-/**
- * The editor state of a Session's committed Result: the Legend's original
- * order and colors, the original stroke, the reset receipt, and the admitted
- * feature catalog. The Legend and stroke edits are each mode's
- * (`SessionModeSlice.editorState`, R7).
- * @typedef {object} SessionEditorState
- * @property {Record<string, any>} legend
- * @property {Record<string, any>} originalSvgStroke
- * @property {Record<string, any> | null} alignmentResetReceipt
- * @property {FeatureCatalog | null} featureCatalog
- */
-
-/**
- * The feature edits of a Session. `featureOverrides` carries the identity-keyed
- * rows that JavaScript builds itself; the other fields are open.
- * @typedef {object} SessionFeatureState
- * @property {number} selectedFeatureRecordIdx
- * @property {Record<string, any>} featureColorOverrides
- * @property {Record<string, any>[]} featureVisibilityManualRules
- * @property {FeatureOverrideDraft} featureOverrides
- * @property {Record<string, any>[]} labelOverrideRows
- * @property {Record<string, any>} labelTextBulkOverrides
- */
-
-/**
- * The other diagram mode's Result set (E1): written only when both
- * modes keep a Result. Its fields mirror the top-level fields of one committed
- * set; its request's resources are in the top-level `resources` table.
- * @typedef {object} SessionOtherModeResult
- * @property {CanonicalRenderRequest} renderRequest Its mode differs from the top-level request's.
- * @property {Record<string, any>[]} results At least one.
- * @property {{ featureCatalog: FeatureCatalog, alignmentResetReceipt: Record<string, any> | null,
- *   legend: { originalOrder: string[], originalColors: Record<string, string> },
- *   originalSvgStroke: { color: string | null, width: number | null } }} editorState
- * @property {Record<string, any>} ui The selected Result and the generated layout and palette.
- * @property {Record<string, any>} runMetadata
- * @property {Record<string, any>} [cliInvocation]
- */
-
-/**
- * A gbdraw Session in the current writer format (`SESSION_VERSION`; the
- * writer format only, readers take unvalidated data, R14). The render fields
- * stay in `CanonicalRenderRequest` and `ActiveWebConfig`; the top-level fields
- * equal `CURRENT_SESSION_TOP_LEVEL_FIELDS` in `gbdraw/session_io.py` (a pytest
- * checks this list). `title`, `runMetadata`, `legacyArtifacts`,
- * `otherModeResult`, and `cliInvocation` are written only when they exist.
- * @typedef {object} GbdrawSession
- * @property {string} format `gbdraw-session`.
- * @property {number} version
- * @property {string} createdAt
- * @property {string} [title]
- * @property {CanonicalRenderRequest} renderRequest
- * @property {CanonicalRenderEnvelope['resources']} resources
- * @property {CanonicalRenderEnvelope['webFiles']} webFiles
- * @property {Record<string, any>} ui App-level UI: the selected Result, the shown layout, and `losatExecution`.
- * @property {Record<string, any>[]} results
- * @property {SessionEditorState} editorState The committed Result's artifacts (catalog, receipt, original colors).
- * @property {Record<'circular' | 'linear', SessionModeSlice>} modes Each diagram mode's drawing (PR-1, Session 46).
- * @property {Record<string, any>} orthogroupState
- * @property {Record<string, any>} losatCache
- * @property {Record<string, any>} losatDerivedCache
- * @property {Record<string, any>} proteinIdentityManifest
- * @property {Record<string, any>} [legacyArtifacts]
- * @property {Record<string, any>} [runMetadata]
- * @property {SessionOtherModeResult} [otherModeResult]
- * @property {Record<string, any>} [cliInvocation]
- * @property {Record<string, any>} [cliOptions] CLI options kept for both modes (written by the CLI).
- */
-
-/**
- * One diagram mode's drawing in a Session 46 (`modes.<mode>`): the mode's
- * settings, edits, and per-mode UI.
- * @typedef {object} SessionModeSlice
- * @property {ActiveWebConfig} config
- * @property {Omit<SessionFeatureState, 'selectedFeatureRecordIdx'>} features
- * @property {{ legend: Record<string, any>, featureStrokes: Record<string, any> }} editorState
- * @property {Record<string, any>} ui
- */
+// The Session document's types are generated from gbdraw/session_contract.py:
+// `GbdrawSession` is the writer's type (the current version only); a reader
+// takes unvalidated data (R14).
+/** @import { GbdrawSession, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 
 /**
  * What an older Session's Result needs from the Session: the committed legend
@@ -403,7 +327,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  * Returns whether the SVG changed. `appliesToContent` tells from a Result's
  * text whether it lacks composition metadata, so a Session 40+ Result is
  * parsed only when it does (OV-273).
- * @typedef {((svg: Element, data: LegacyResultSvgData) => boolean)
+ * @typedef {((svg: SVGSVGElement, data: LegacyResultSvgData) => boolean)
  *   & { appliesToContent: (content: unknown) => boolean }} LegacyResultSvgTransform
  */
 export { SESSION_VERSION };
@@ -4980,7 +4904,7 @@ const buildOtherModeResult = (other, renderRequest) => {
  *   linearRecordCatalog?: any,
  *   omittedAnnotationRecordKeys?: string[],
  *   recordDisplayRows?: any,
- *   modes: Record<'circular' | 'linear', SessionModeSlice>,
+ *   modes: Record<'circular' | 'linear', SessionModeSlice & { config: ActiveWebConfig }>,
  *   savedUi: Record<string, any>,
  *   isCurrent: () => boolean,
  *   artifact: SessionArtifactView,

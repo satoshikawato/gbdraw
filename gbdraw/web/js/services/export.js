@@ -77,7 +77,7 @@ const loadPdfLibraries = () => {
  * @typedef {object} ExportSnapshot The captured preview an export action reads.
  * @property {string} name
  * @property {SVGSVGElement | null} [svg]
- * @property {string} [svgContent]
+ * @property {string | null} [svgContent] `getSvgFromString` reads a null content as no SVG.
  * @property {StandaloneInteractivityOptions} [interactivity]
  * @property {number | string} [dpi]
  */

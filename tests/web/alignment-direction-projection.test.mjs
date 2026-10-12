@@ -159,3 +159,25 @@ test('Custom reads a record only by an own key: a record named constructor keeps
   const result = project(rename(response), rename(request), { mode: 'custom', byRecordKey: { ref: 'right' } });
   assert.deepEqual(result.records.map(({ afterReverseComplement }) => afterReverseComplement), [true, false]);
 });
+
+// A helper reply is unchecked data: the validators refuse a wrong shape with the message of its path.
+test('a projection binding that is not text is refused (OV-570)', () => {
+  const hash = 'a'.repeat(64);
+  for (const binding of [[hash], [[hash]], new String(hash)]) {
+    const { response, request } = fixture();
+    response.projection.binding = binding;
+    assert.throws(() => validateSimilarityAlignmentResolution(response, request),
+      { name: 'Error', message: 'Invalid alignment projection binding or coverage.' });
+  }
+  const { response, request } = fixture();
+  assert.equal(validateSimilarityAlignmentResolution(response, request).projection.binding, hash);
+});
+
+test('a decision whose candidates are not a list is refused with its path (OV-571)', () => {
+  for (const candidates of [null, undefined, {}, 'none', 0]) {
+    const { response, request } = fixture();
+    response.records[1].candidates = candidates;
+    assert.throws(() => validateSimilarityAlignmentResolution(response, request),
+      { name: 'Error', message: 'alignment helper response.records[1] contains an unknown decision value.' });
+  }
+});

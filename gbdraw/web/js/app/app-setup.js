@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
-/** @import { DrawingState, LegendEntry, LinearSeq, PopupPosition } from '../state.js' */
+/** @import { DiagramMode, DrawingState, LegendEntry, LinearSeq, PopupPosition } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
@@ -9,17 +9,18 @@
 /** @import { LegendRowColorOf } from './candidate-render.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
-/** @import { LegacyResultSvgTransform } from '../services/config.js' */
+/** @import { LegacyResultSvgData, LegacyResultSvgTransform } from '../services/config.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 /** @import { LegendRowContext } from '../services/specific-color-rules.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
-/** @import { LinearComparisonIssue, LinearComparisonPlan } from '../services/linear-comparisons.js' */
+/** @import { LinearComparisonEdge, LinearComparisonIssue, LinearComparisonPair, LinearComparisonPlan, LinearComparisonResolvedEdge, LinearComparisonSource } from '../services/linear-comparisons.js' */
 /** @import { LinearComparisonUiIssue } from './comparison-ui.js' */
-/** @import { LinearSourceRemovalPlan } from '../services/linear-sources.js' */
+/** @import { LinearSourceGroup, LinearSourceRemovalPlan } from '../services/linear-sources.js' */
 /** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
+/** @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput The Session file input's change event, or an object with its `target`; the type `importSession` of services/config.js declares inline. */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
 import { createResultPaintRecord, editorPaintState } from './result-paint-record.js';
@@ -268,9 +269,26 @@ import {
   syncDepthSlotLabels,
   uploadedDepthFileCount
 } from '../services/depth-track-state.js';
+/** @import { HistoryManagerOptions } from '../services/history.js' */
+/** @import { RulePreparationOptions } from './rule-matching.js' */
+/** @import { AnnotationRecordCatalog } from './annotations/record-catalog.js' */
+/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { MountedResultContext } from './preview-runtime.js' */
+/** @import { UnresolvedNotice } from '../services/feature-visibility.js' */
+/** @import { FeatureListRow } from './pairwise-match-popup.js' */
+/** @import { OrthogroupGroup } from './orthogroups.js' */
+/** @import { SequenceRecordEntry } from '../services/record-discovery.js' */
+/** @import { DepthFileSlots, RawDepthTrackConfig, ReindexDepthSlotsOptions, SyncDepthSlotLabelsOptions } from '../services/depth-track-state.js' */
+/** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
+/** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
+/** @import { RawConservationSeriesEntry } from '../services/conservation-series.js' */
+/** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
+/** @import { SequenceRecord } from '../services/record-discovery.js' */
+/** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
+/** @import { LosatCacheInfoEntry, MultiRecordPosition } from './run-analysis.js' */
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, shallowRef, reactive, isRef } = window.Vue;
-const toRaw = window.Vue.toRaw || ((value) => value);
+const toRaw = window.Vue.toRaw || ((/** @type {unknown} */ value) => value);
 
 /** @type {Promise<typeof import('../services/export.js')> | null} */
 let exportServicePromise = null;
@@ -294,6 +312,18 @@ const loadExportService = () => {
  * @property {{ value: string }} selectedPairwiseBlockOrthogroupId
  * @property {(() => any) | null} [captureSpecificRulePatternDrafts] The feature editor's capture of the unsaved rule pattern drafts.
  * @property {((drafts: any) => void) | null} [restoreSpecificRulePatternDrafts]
+ */
+
+/**
+ * What `capture` holds for `restore`.
+ * @typedef {object} SessionImportRollbackSnapshot
+ * @property {SessionImportRollbackOptions['artifactSlots']} artifactSlots
+ * @property {Readonly<ArtifactSlot>} displayedArtifact
+ * @property {number} circularDepthTrackUiCount
+ * @property {SessionImportRollbackOptions['depthTracks']} depthTracks
+ * @property {number} featureListScrollTop
+ * @property {string} selectedPairwiseBlockOrthogroupId
+ * @property {unknown} [specificRulePatternDrafts] The unsaved rule pattern drafts, as the feature editor captured them; handed back as they are.
  */
 
 /** @param {SessionImportRollbackOptions} options */
@@ -320,7 +350,7 @@ export const createSessionImportRollbackState = ({
     selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value,
     ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
   }),
-  restore: async (snapshot) => {
+  restore: async (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
     Object.assign(artifactSlots, snapshot.artifactSlots);
     installDisplayedArtifact(snapshot.displayedArtifact);
     depthTrackUiCounts.circular = snapshot.circularDepthTrackUiCount;
@@ -349,7 +379,7 @@ const COMPOSITION_ROOT_ATTRIBUTE = new RegExp(`\\s(?:${COMPOSITION_SCHEMA_ATTRIB
 // legacy composition. The saved bytes carry the saved edits. A Session 40+
 // Result takes it only when `appliesToContent` (OV-273).
 /** @type {LegacyResultSvgTransform} */
-export const transformLegacyResultSvg = Object.assign((svg, { composition }) => {
+export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement} */ svg, /** @type {LegacyResultSvgData} */ { composition }) => {
   if (
     svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
     && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
@@ -540,6 +570,10 @@ export const createAppSetup = () => {
       : '';
   });
 
+  /**
+   * @param {LinearComparisonEdge | undefined} left
+   * @param {LinearComparisonEdge | undefined} right
+   */
   const sameLinearComparisonEdge = (left, right) => (
     left?.id === right?.id &&
     left?.queryUid === right?.queryUid &&
@@ -560,9 +594,9 @@ export const createAppSetup = () => {
       drawing.drawnLinearSeqs.value.map((sequence, index) => [String(sequence?.uid || ''), index])
     );
     const resolvedByEdgeKey = new Map(
-      drawing.linearComparisonResolution.value.edges.map((edge) => [edge.edgeKey, edge])
+      drawing.linearComparisonResolution.value.edges.map((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.edgeKey, edge])
     );
-    losatCacheInfo.value = losatCacheInfo.value.flatMap((entry) => {
+    losatCacheInfo.value = losatCacheInfo.value.flatMap((/** @type {LosatCacheInfoEntry} */ entry) => {
       const edgeKey = String(entry?.edgeKey || '');
       if (!edgeKey) return [entry];
       const resolved = resolvedByEdgeKey.get(edgeKey);
@@ -590,7 +624,7 @@ export const createAppSetup = () => {
     files.linearCanonicalComparisons = [];
     if (Array.isArray(losatCacheInfo.value)) {
       if (preserveLosatCacheInfo) reindexLinearLosatCacheInfo(drawing);
-      else losatCacheInfo.value = losatCacheInfo.value.filter((entry) => !entry?.edgeKey);
+      else losatCacheInfo.value = losatCacheInfo.value.filter((/** @type {LosatCacheInfoEntry} */ entry) => !entry?.edgeKey);
     }
   };
 
@@ -619,7 +653,10 @@ export const createAppSetup = () => {
     ));
   };
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {unknown} nextPlan An unvalidated plan; `normalizeLinearComparisonPlan` validates it.
+   */
   const replaceLinearComparisonPlan = (drawing, nextPlan, { invalidate = true } = {}) => {
     const normalized = normalizeLinearComparisonPlan(nextPlan);
     const changed = normalized.mode !== drawing.linearComparisonPlan.mode
@@ -641,7 +678,10 @@ export const createAppSetup = () => {
     if (invalidate) invalidateLinearComparisonArtifacts(drawing);
   };
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {(next: LinearComparisonPlan) => void} mutator
+   */
   const mutateLinearComparisonPlan = (drawing, mutator) => history.runUndoable('Change comparisons', () => {
     const next = normalizeLinearComparisonPlan(drawing.linearComparisonPlan);
     mutator(next);
@@ -680,17 +720,19 @@ export const createAppSetup = () => {
     }
     return !rowsUnchanged || comparisonsChanged;
   };
+  /** @param {string} uid @param {unknown} row */
   const setLinearRecordRow = (uid, row) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     syncLinearRecordLayout({ preserveLosatCacheInfo: true });
-    const previous = drawing.linearRecordRows.find((entry) => entry.uid === uid)?.row;
+    const previous = drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row;
     updateLinearRecordRow(drawing.linearRecordRows, uid, row);
-    if (drawing.linearRecordRows.find((entry) => entry.uid === uid)?.row !== previous) {
+    if (drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row !== previous) {
       invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
     }
   };
+  /** @param {boolean} enabled */
   const setLinearRecordLayoutEnabled = (enabled) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -702,6 +744,7 @@ export const createAppSetup = () => {
     invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
     if (nextEnabled) return materializeAutomaticLinearRecords();
   };
+  /** @param {string} uid @param {number} direction */
   const moveLinearRecordWithinRow = (uid, direction) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -740,6 +783,7 @@ export const createAppSetup = () => {
       : sequence.gb
   )).length >= 2);
 
+  /** @type {{ readonly value: LinearSourceGroup[] }} */
   const linearSourceGroups = computed(() => groupLinearSourceRecords(linearSeqs));
   const linearSourceRemovalDialog = reactive({ open: false, sourceUid: '', origin: '' });
   const linearSourceRemovalReturnFocus = ref(null);
@@ -747,7 +791,10 @@ export const createAppSetup = () => {
     linearSourceGroups.value.find((source) => source.uid === linearSourceRemovalDialog.sourceUid) || null
   ));
   const linearSourceRemovalCanDelete = computed(() => linearSourceGroups.value.length > 1);
-  /** The file names of a Linear File, as its dialogs name it. */
+  /**
+   * The file names of a Linear File, as its dialogs name it.
+   * @param {LinearSourceGroup} source
+   */
   const linearSourceFileName = (source) => {
     const sequence = source.sequence || source.records?.[0]?.sequence || {};
     const names = [sequence.gb, sequence.gff, sequence.fasta]
@@ -769,9 +816,10 @@ export const createAppSetup = () => {
       resolution: drawing.linearComparisonResolution.value
     });
   });
+  /** @param {string} edgeKey */
   const linearComparisonPairForEdgeKey = (edgeKey) => {
     for (const row of linearComparisonTimeline.value.rows) {
-      const pair = row.boundaryAfter?.pairs.find((entry) => entry.edgeKey === edgeKey);
+      const pair = row.boundaryAfter?.pairs.find((/** @type {LinearComparisonPair} */ entry) => entry.edgeKey === edgeKey);
       if (pair) return pair;
     }
     return null;
@@ -790,6 +838,7 @@ export const createAppSetup = () => {
   // view: every "show this setting" path below ends in `revealSetting`, so a
   // setting of a section the icon rail does not show is docked first.
   const settingsPaneActions = createSettingsPaneController({ state });
+  /** @param {string} disclosureKey */
   const openLinearComparisonDisclosure = async (disclosureKey) => {
     if (!disclosureKey) return null;
     const details = /** @type {HTMLDetailsElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-disclosure]')])
@@ -799,10 +848,11 @@ export const createAppSetup = () => {
     await nextTick();
     return details;
   };
-  watch([mode, () => state.drawings.linear.hasActiveLinearLosatIntent.value], ([activeMode, activeLosat]) => {
+  watch([mode, () => state.drawings.linear.hasActiveLinearLosatIntent.value], (/** @type {[DiagramMode, boolean]} */ [activeMode, activeLosat]) => {
     if (activeMode === 'linear' && activeLosat) openLinearComparisonDisclosure('settings');
   }, { flush: 'post' });
 
+  /** @param {string} edgeKey */
   const focusLinearComparisonPair = async (edgeKey) => {
     await openLinearComparisonDisclosure('selected-pairs');
     const container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-edge-key]')])
@@ -877,6 +927,7 @@ export const createAppSetup = () => {
     });
   };
 
+  /** @param {unknown} action */
   const setLinearComparisonGlobalAction = async (action) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -898,6 +949,7 @@ export const createAppSetup = () => {
     return result;
   };
 
+  /** @param {string} modeKey */
   const setLinearComparisonLosatMode = (modeKey) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -912,6 +964,7 @@ export const createAppSetup = () => {
     return true;
   };
 
+  /** @param {string} modeKey */
   const setLinearComparisonLosatpMode = (modeKey) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -946,7 +999,15 @@ export const createAppSetup = () => {
     );
   };
 
+  /**
+   * @param {readonly LinearComparisonEdge[]} edges
+   * @param {string} id
+   */
   const findEdgeIndex = (edges, id) => edges.findIndex((edge) => edge.id === id);
+  /**
+   * @param {readonly LinearComparisonEdge[]} edges
+   * @param {Pick<LinearComparisonPair, 'edgeKey' | 'edgeId'> & Partial<Pick<LinearComparisonPair, 'draft' | 'resolved'>>} pair
+   */
   const findEdgeIndexForPair = (edges, pair) => {
     const ownerId = pair?.draft?.id || pair?.resolved?.id || pair?.edgeId || '';
     const ownerIndex = ownerId ? findEdgeIndex(edges, ownerId) : -1;
@@ -959,6 +1020,10 @@ export const createAppSetup = () => {
     return matchingIndexes.length === 1 ? matchingIndexes[0] : -1;
   };
 
+  /**
+   * @param {LinearComparisonPlan} next
+   * @param {{ id?: string, queryUid: string, subjectUid: string, source?: LinearComparisonSource }} edge
+   */
   const upsertSelectedComparison = (next, {
     id = '',
     queryUid,
@@ -1031,6 +1096,7 @@ export const createAppSetup = () => {
     });
     replaceLinearComparisonPlan(drawing, next);
   };
+  /** @param {string} id */
   const omitLinearComparison = (id) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -1051,6 +1117,7 @@ export const createAppSetup = () => {
       .map((edge) => ({ ...edge, included: false }));
     replaceLinearComparisonPlan(drawing, next);
   };
+  /** @param {string} id @param {'queryUid' | 'subjectUid'} endpoint @param {unknown} uid */
   const setLinearComparisonEndpoint = (id, endpoint, uid) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -1063,6 +1130,7 @@ export const createAppSetup = () => {
     edge.included = true;
     replaceLinearComparisonPlan(drawing, next);
   };
+  /** @param {string} id @param {unknown} source */
   const setLinearComparisonSource = (id, source) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -1077,6 +1145,7 @@ export const createAppSetup = () => {
     edge.included = true;
     replaceLinearComparisonPlan(drawing, next);
   };
+  /** @param {string} id @param {File | null} file */
   const setLinearComparisonFile = (id, file) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -1090,6 +1159,7 @@ export const createAppSetup = () => {
     edge.included = Boolean(file) || edge.included;
     replaceLinearComparisonPlan(drawing, next);
   };
+  /** @param {string} id */
   const reuseLinearComparisonFile = (id) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -1102,6 +1172,7 @@ export const createAppSetup = () => {
     edge.included = true;
     replaceLinearComparisonPlan(drawing, next);
   };
+  /** @param {string} id */
   const deactivateLinearComparisonFile = (id) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -1113,6 +1184,7 @@ export const createAppSetup = () => {
     if (edge.source === LINEAR_COMPARISON_SOURCES.UPLOAD) edge.included = false;
     replaceLinearComparisonPlan(drawing, next);
   };
+  /** @param {string} id @param {unknown} value */
   const setLinearComparisonLosatFilename = (id, value) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -1124,6 +1196,7 @@ export const createAppSetup = () => {
     edge.losatFilenameActive = Boolean(edge.losatFilename.trim());
     replaceLinearComparisonPlan(drawing, next, { invalidate: false });
   };
+  /** @param {string} id */
   const reuseLinearComparisonLosatFilename = (id) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -1136,6 +1209,7 @@ export const createAppSetup = () => {
     edge.included = true;
     replaceLinearComparisonPlan(drawing, next);
   };
+  /** @param {string} id */
   const deactivateLinearComparisonLosatFilename = (id) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -1146,11 +1220,15 @@ export const createAppSetup = () => {
     edge.losatFilenameActive = false;
     replaceLinearComparisonPlan(drawing, next, { invalidate: false });
   };
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {string} edgeKey
+   * @param {(edge: LinearComparisonEdge) => void} updater
+   */
   const updateResolvedLosatFilenameDraft = (drawing, edgeKey, updater) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    const resolved = drawing.linearComparisonResolution.value.edges.find((edge) => edge.edgeKey === edgeKey);
+    const resolved = drawing.linearComparisonResolution.value.edges.find((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === edgeKey);
     if (!resolved) return;
     const next = normalizeLinearComparisonPlan(drawing.linearComparisonPlan);
     const pair = linearComparisonPairForEdgeKey(edgeKey) || {
@@ -1171,6 +1249,7 @@ export const createAppSetup = () => {
     updater(next.edges[index]);
     replaceLinearComparisonPlan(drawing, next, { invalidate: false });
   };
+  /** @param {string} edgeKey @param {unknown} value */
   const setResolvedLinearComparisonLosatFilename = (edgeKey, value) => {
     const drawing = state.drawings.linear;
     updateResolvedLosatFilenameDraft(drawing, edgeKey, (edge) => {
@@ -1178,12 +1257,14 @@ export const createAppSetup = () => {
       edge.losatFilenameActive = Boolean(edge.losatFilename.trim());
     });
   };
+  /** @param {string} edgeKey */
   const reuseResolvedLinearComparisonLosatFilename = (edgeKey) => {
     const drawing = state.drawings.linear;
     updateResolvedLosatFilenameDraft(drawing, edgeKey, (edge) => {
       if (String(edge.losatFilename || '').trim()) edge.losatFilenameActive = true;
     });
   };
+  /** @param {string} edgeKey */
   const deactivateResolvedLinearComparisonLosatFilename = (edgeKey) => {
     const drawing = state.drawings.linear;
     updateResolvedLosatFilenameDraft(drawing, edgeKey, (edge) => {
@@ -1199,6 +1280,7 @@ export const createAppSetup = () => {
     });
     replaceLinearComparisonPlan(drawing, next);
   };
+  /** @param {string} edgeKey @param {string} action */
   const setLinearComparisonGapAction = (edgeKey, action) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -1220,6 +1302,7 @@ export const createAppSetup = () => {
     });
     replaceLinearComparisonPlan(drawing, next);
   };
+  /** @param {string} edgeKey @param {File | null} file */
   const setLinearComparisonCardFile = (edgeKey, file) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -1232,9 +1315,10 @@ export const createAppSetup = () => {
     }
     if (draft) setLinearComparisonFile(draft.id, file);
   };
+  /** @param {string} uid @param {number} fallback */
   const linearRecordRowFor = (uid, fallback) => {
     const drawing = state.drawings.linear;
-    return drawing.linearRecordRows.find((entry) => entry.uid === uid)?.row || fallback;
+    return drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row || fallback;
   };
   const linearLayoutTokens = computed(() => {
     const drawing = state.activeDrawing();
@@ -1246,8 +1330,8 @@ export const createAppSetup = () => {
   });
   const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
     (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [])
-      .filter((entry) => String(entry?.edgeKey || ''))
-      .map((entry) => [String(entry.edgeKey), entry])
+      .filter((/** @type {LosatCacheInfoEntry} */ entry) => String(entry?.edgeKey || ''))
+      .map((/** @type {LosatCacheInfoEntry} */ entry) => [String(entry.edgeKey), entry])
   ));
 
   // The Linear rows whose next record discovery may expand them, each with
@@ -1269,7 +1353,10 @@ export const createAppSetup = () => {
   const requestRecordListAfterUpload = (listMode, sourceKey, recordCount) => {
     if (recordCount > WEB_UX_PROFILE.recordList.autoOpenAbove) recordListRequests.push({ mode: listMode, sourceKey });
   };
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {{ uid: string, records: SequenceRecord[], inferDefinitions?: boolean }} discovered
+   */
   const expandDiscoveredLinearRecords = (drawing, { uid, records, inferDefinitions = false }) => {
     const namesOfThisFile = pendingLinearRecordExpansions.get(uid);
     pendingLinearRecordExpansions.delete(uid);
@@ -1306,6 +1393,7 @@ export const createAppSetup = () => {
     expanded.forEach((seq) => updateLinearRecordRow(drawing.linearRecordRows, seq.uid, row));
     return true;
   };
+  /** @param {{ uid: string, records: SequenceRecord[] }} discovered */
   const handleLinearRecordsDiscovered = ({ uid, records }) => {
     const drawing = state.drawings.linear;
     const isRollbackOrSessionLoad = Boolean(
@@ -1454,6 +1542,12 @@ export const createAppSetup = () => {
     followRestoredSpecificRules: /** @type {never} */ (null),
     retainRulesForRestore: /** @type {never} */ (null)
   };
+  /**
+   * @template {unknown[]} A
+   * @template R
+   * @param {(...args: A) => R} restore
+   * @param {A} args
+   */
   const restoreWithSpecificRuleDrafts = async (restore, ...args) => {
     const drafts = specificRuleRestorePorts.captureSpecificRulePatternDrafts();
     try {
@@ -1471,7 +1565,7 @@ export const createAppSetup = () => {
    * @returns {Promise<T>}
    */
   const followRuleEdits = async (drawing, write) => {
-    const previousRules = drawing.manualSpecificRules.map((rule) => ({ ...rule }));
+    const previousRules = drawing.manualSpecificRules.map((/** @type {SpecificColorRule} */ rule) => ({ ...rule }));
     specificRuleRestorePorts.retainRulesForRestore(previousRules);
     try {
       const written = await write();
@@ -1481,11 +1575,17 @@ export const createAppSetup = () => {
       specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
-  /** @param {DrawingState} drawing */
+  /**
+   * @template {unknown[]} A
+   * @template R
+   * @param {DrawingState} drawing
+   * @param {(...args: A) => R} restore
+   * @param {A} args
+   */
   const restoreRuleEdits = (drawing, restore, ...args) => followRuleEdits(
     drawing, () => restoreWithSpecificRuleDrafts(restore, ...args)
   );
-  const history = createHistoryManager(/** @type {any} */ ({
+  const history = createHistoryManager(/** @type {HistoryManagerOptions} */ ({
     buildIntent: historySnapshots.buildHistoryIntent,
     applyIntent: (...args) => {
       const drawing = state.activeDrawing();
@@ -1547,6 +1647,7 @@ export const createAppSetup = () => {
   });
   const undoHistory = () => history.undo();
   const redoHistory = () => history.redo();
+  /** @param {unknown} value */
   const displayPreservedConfigValue = (value) => {
     const serialized = JSON.stringify(value) ?? String(value);
     return serialized.length <= 240
@@ -1562,6 +1663,7 @@ export const createAppSetup = () => {
         displayValue: displayPreservedConfigValue(value)
       }))
   ));
+  /** @param {string} path */
   const resetUnmanagedConfigOverride = (path) => {
     const drawing = state.activeDrawing();
     return history.runUndoable(
@@ -1575,6 +1677,7 @@ export const createAppSetup = () => {
       }
     );
   };
+  /** @param {unknown} index */
   const selectResult = (index) => previewRuntime.selectResult(index);
 
   const {
@@ -1601,6 +1704,7 @@ export const createAppSetup = () => {
   const ruleMatchingBlocking = ref(false);
   // Python's rule evaluation (R7): the rule preparation's, and the Label TSV
   // import's own stateless one (`evaluateLabelRules`).
+  /** @type {RulePreparationOptions['evaluate']} */
   const evaluateRules = async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result;
   const rulePreparation = createRulePreparation({
     state,
@@ -1755,7 +1859,7 @@ export const createAppSetup = () => {
     nextTick,
     computed,
     isActiveResultReady: previewRuntime.isActiveResultReady,
-    resolveOrthogroups: () => orthogroups.value.map((group) => ({
+    resolveOrthogroups: () => orthogroups.value.map((/** @type {OrthogroupGroup} */ group) => ({
       ...group,
       display_name: orthogroupActions.resolveOrthogroupName(group),
       description: orthogroupActions.resolveOrthogroupDescription(group)
@@ -1782,13 +1886,15 @@ export const createAppSetup = () => {
     featureListScrollTop.value = 0;
     if (featureListScrollRef.value) featureListScrollRef.value.scrollTop = 0;
   };
+  /** @param {Event} event */
   const handleFeatureListScroll = (event) => {
-    const target = event?.currentTarget || event?.target;
+    // A scroll event of the feature list element.
+    const target = /** @type {HTMLElement | null} */ (event?.currentTarget || event?.target);
     featureListScrollTop.value = Number(target?.scrollTop || 0);
     const nextHeight = Number(target?.clientHeight || 0);
     if (nextHeight > 0) featureListViewportHeight.value = nextHeight;
   };
-  watch(featureSearchInput, (value) => {
+  watch(featureSearchInput, (/** @type {unknown} */ value) => {
     if (featureSearchDebounceId !== null) {
       clearTimeout(featureSearchDebounceId);
       featureSearchDebounceId = null;
@@ -1931,11 +2037,13 @@ export const createAppSetup = () => {
     '#17BECF',
     '#7F7F7F'
   ];
+  /** @param {DepthFileSlots | DepthFileSlots[]} value */
   const depthFileCount = (value) => (
     isRecordMajorDepthFileMatrix(value)
       ? representativeDepthFiles(value).filter(Boolean).length
       : uploadedDepthFileCount(value)
   );
+  /** @param {DepthFileSlots | DepthFileSlots[]} value */
   const depthTrackCountLabel = (value) => {
     const count = depthFileCount(value);
     return count === 1 ? '1 TSV' : `${count} TSVs`;
@@ -1954,6 +2062,7 @@ export const createAppSetup = () => {
       ? enabledOptionClass
       : disabledOptionClass
   ));
+  /** @param {LinearSeq | null | undefined} seq */
   const hasLinearDepthFiles = (seq) => depthFileCount(seq?.depth) > 0;
   const depthTrackUiCounts = reactive({
     circular: 1
@@ -1972,6 +2081,7 @@ export const createAppSetup = () => {
     circularDepthRecordCount()
   );
   const circularDepthRepresentatives = () => representativeDepthFiles(circularDepthRows());
+  /** @param {DepthFileSlots | DepthFileSlots[]} slots @param {number} [uiCount] */
   const sourceDepthTrackCount = (slots, uiCount = 1) => Math.max(
     1,
     Number(uiCount) || 1,
@@ -1980,7 +2090,7 @@ export const createAppSetup = () => {
   // The Depth panels read the drawing's series and never write them (OV-109):
   // the Depth transitions and the Session reconcile grow, trim and label the
   // list, and a series it does not hold yet shows its defaults.
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {number} count */
   const rowsForDepthTrackCount = (drawing, count) => {
     const normalizedCount = Math.max(1, Number(count) || 1);
     return Array.from({ length: normalizedCount }, (_, index) => ({
@@ -1992,12 +2102,14 @@ export const createAppSetup = () => {
   const linearDepthRows = () => linearSeqs.map((seq) => depthFileSlotsFromValue(seq?.depth));
   const linearDepthLogicalWidth = () => depthTrackMatrixWidth(linearDepthRows());
   const linearDepthTrackUiCount = () => Math.max(1, linearDepthLogicalWidth());
+  /** @param {number} width */
   const padLinearDepthRows = (width) => {
     const targetWidth = Math.max(0, Number(width) || 0);
     linearSeqs.forEach((seq) => {
       seq.depth = padDepthFileSlots(seq.depth, targetWidth);
     });
   };
+  /** @param {number} index */
   const depthTrackFallbackColor = (index) => depthTrackDefaultColors[index % depthTrackDefaultColors.length];
   /** @param {DrawingState} drawing */
   const depthTrackConfigDefaults = (drawing) => ({
@@ -2009,11 +2121,13 @@ export const createAppSetup = () => {
     smallTickInterval: null,
     tickFontSize: null
   });
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {RawDepthTrackConfig | null | undefined} entry @param {number} index */
   const normalizeDepthTrackConfig = (drawing, entry, index) => (
     normalizeDepthTrackConfigEntry(entry, index, depthTrackConfigDefaults(drawing))
   );
+  /** @param {unknown} value */
   const optionalNumberInputValue = (value) => value ?? '';
+  /** @param {Record<string, unknown> | null | undefined} target @param {string} key @param {unknown} value @param {boolean} [numeric] */
   const setOptionalNumberInputValue = (target, key, value, numeric = false) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2049,10 +2163,12 @@ export const createAppSetup = () => {
     const drawing = state.drawings.linear;
     return rowsForDepthTrackCount(drawing, linearDepthTrackUiCount());
   };
+  /** @param {LinearSourceGroup} source */
   const linearSourceDepthRows = (source) => linearDepthTrackRows().map((track) => ({
     ...track,
     status: linearSourceDepthStatus(source, track.index)
   }));
+  /** @param {LinearSourceGroup} source */
   const linearSourceDepthSummary = (source) => {
     const tracks = linearSourceDepthRows(source);
     const attachedCount = tracks.filter((track) => track.status.selectedCount > 0).length;
@@ -2063,6 +2179,7 @@ export const createAppSetup = () => {
     const drawing = state.activeDrawing();
     return rowsForDepthTrackCount(drawing, activeDepthTrackCount());
   });
+  /** @param {number} trackIndex */
   const linearDepthTrackCoverageLabel = (trackIndex) => {
     const covered = depthTrackCoverageCount(linearDepthRows(), trackIndex);
     const total = linearSeqs.length;
@@ -2093,6 +2210,7 @@ export const createAppSetup = () => {
       { enabled: Boolean(drawing.linearRecordLayoutEnabled.value) }
     );
   });
+  /** @param {unknown} mode */
   const linearLabelVisibilitySummary = (mode) => describeLinearLabelVisibility(mode, {
     hasSharedRow: linearLabelHasSharedRow.value
   });
@@ -2105,7 +2223,7 @@ export const createAppSetup = () => {
   });
   const linearLabelAutoDisclosure = computed(() => {
     if (!linearLabelAutoFields.value.length) return '';
-    const fields = linearLabelAutoFields.value.map((row) => row.label).join(' and ');
+    const fields = linearLabelAutoFields.value.map((/** @type {{ label: string }} */ row) => row.label).join(' and ');
     const shown = resolveLinearLabelVisibility('auto', {
       hasSharedRow: linearLabelHasSharedRow.value
     });
@@ -2119,11 +2237,13 @@ export const createAppSetup = () => {
       ? `${fields}: ${effect} because no rendered row contains multiple records.`
       : `${fields}: ${effect} because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
   });
+  /** @param {string} key */
   const focusLinearLabelVisibility = async (key) => {
     if (mode.value !== 'linear') return;
     const select = document.getElementById(`linear-label-visibility-${key}`);
     if (select) await settingsPaneActions.revealSetting(select);
   };
+  /** @param {unknown} position */
   const legendPositionLabel = (position) => ({
     right: 'Right',
     left: 'Left',
@@ -2135,7 +2255,7 @@ export const createAppSetup = () => {
     lower_right: 'Lower Right',
     none: 'None'
   })[String(position || '').trim().toLowerCase()] || 'None';
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} kind */
   const ensureDefinitionLineStyle = (drawing, kind) => {
     const key = String(kind || '');
     if (
@@ -2155,22 +2275,26 @@ export const createAppSetup = () => {
     }
     return drawing.adv.linear_definition_line_styles[key];
   };
+  /** @param {string} kind */
   const getDefinitionLineStyleSize = (kind) => {
     const drawing = state.activeDrawing();
     return optionalNumberInputValue(
       ensureDefinitionLineStyle(drawing, kind).font_size
     );
   };
+  /** @param {string} kind @param {unknown} value */
   const setDefinitionLineStyleSize = (kind, value) => {
     const drawing = state.activeDrawing();
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     setOptionalNumberInputValue(ensureDefinitionLineStyle(drawing, kind), 'font_size', value);
   };
+  /** @param {string} kind */
   const getDefinitionLineStyleWeight = (kind) => {
     const drawing = state.activeDrawing();
     return ensureDefinitionLineStyle(drawing, kind).font_weight ?? '';
   };
+  /** @param {string} kind @param {unknown} value */
   const setDefinitionLineStyleWeight = (kind, value) => {
     const drawing = state.activeDrawing();
     const sessionBusy = sessionOperationAvailability();
@@ -2178,10 +2302,12 @@ export const createAppSetup = () => {
     const normalized = String(value || '').trim().toLowerCase();
     ensureDefinitionLineStyle(drawing, kind).font_weight = normalized === 'bold' ? 'bold' : null;
   };
+  /** @param {string} kind */
   const getDefinitionLineStyleFill = (kind) => {
     const drawing = state.activeDrawing();
     return ensureDefinitionLineStyle(drawing, kind).fill ?? '';
   };
+  /** @param {string} kind @param {unknown} value */
   const setDefinitionLineStyleColor = (kind, value) => {
     const drawing = state.activeDrawing();
     const sessionBusy = sessionOperationAvailability();
@@ -2189,12 +2315,15 @@ export const createAppSetup = () => {
     const normalized = String(value || '').trim();
     ensureDefinitionLineStyle(drawing, kind).fill = normalized || null;
   };
+  /** @param {string} kind */
   const getDefinitionLineStyleColorMode = (kind) => (
     colorValueMode(getDefinitionLineStyleFill(kind))
   );
+  /** @param {string} kind */
   const getDefinitionLineStyleSwatchValue = (kind) => {
     return toNativeColorInputValue(getDefinitionLineStyleFill(kind));
   };
+  /** @param {{ visibilityKey?: string, visibilityType?: string }} row */
   const isDefinitionLineStyleMuted = (row) => {
     const drawing = state.activeDrawing();
     const key = row?.visibilityKey;
@@ -2206,6 +2335,7 @@ export const createAppSetup = () => {
     }
     return drawing.adv[key] === false;
   };
+  /** @param {CircularTrackSlot | LinearTrackSlot | null | undefined} slot */
   const normalizeDepthSlotTrackIndex = (slot) => {
     const rawTrackIndex = Number(slot?.params?.track_index);
     return Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
@@ -2225,15 +2355,18 @@ export const createAppSetup = () => {
   const readDepthTrackConfig = (drawing, index) => (
     drawing.adv.depth_tracks[index] || normalizeDepthTrackConfig(drawing, null, index)
   );
+  /** @param {number} index */
   const getDepthTrackLabel = (index) => {
     const config = readDepthTrackConfig(state.activeDrawing(), Math.max(0, Number(index) || 0));
     return String(config?.label ?? '');
   };
+  /** @param {number} index */
   const getDepthTrackColor = (index) => {
     const idx = Math.max(0, Number(index) || 0);
     const config = readDepthTrackConfig(state.activeDrawing(), idx);
     return String(config?.color || depthTrackFallbackColor(idx));
   };
+  /** @param {number} index @param {unknown} value */
   const setDepthTrackColor = (index, value) => {
     const drawing = state.activeDrawing();
     const sessionBusy = sessionOperationAvailability();
@@ -2249,10 +2382,10 @@ export const createAppSetup = () => {
     Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [],
     Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : []
   ];
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {number} index */
   const syncDepthTrackSlotLabelsForTrack = (drawing, index) => {
     depthTrackSlotCollections(drawing).forEach((slots) => {
-      syncDepthSlotLabels(/** @type {any} */ ({
+      syncDepthSlotLabels(/** @type {SyncDepthSlotLabelsOptions} */ ({
         slots,
         depthTracks: drawing.adv.depth_tracks,
         activeCount: drawing.adv.depth_tracks.length
@@ -2260,6 +2393,7 @@ export const createAppSetup = () => {
     });
     void index;
   };
+  /** @param {number} index @param {unknown} value */
   const setDepthTrackLabel = (index, value) => {
     const drawing = state.activeDrawing();
     const sessionBusy = sessionOperationAvailability();
@@ -2272,9 +2406,11 @@ export const createAppSetup = () => {
       syncDepthTrackSlotLabelsForTrack(drawing, idx);
     });
   };
+  /** @param {CircularTrackSlot | LinearTrackSlot | null | undefined} slot */
   const getDepthTrackLegendLabelForSlot = (slot) => (
     getDepthTrackLabel(normalizeDepthSlotTrackIndex(slot))
   );
+  /** @param {CircularTrackSlot | LinearTrackSlot | null | undefined} slot @param {unknown} value */
   const setDepthTrackLegendLabelForSlot = (slot, value) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2293,6 +2429,7 @@ export const createAppSetup = () => {
       setDepthTrackLabel(idx, label);
     });
   };
+  /** @param {LinearTrackSlot | null | undefined} slot */
   const syncDepthTrackSlotLabel = (slot) => {
     const drawing = state.activeDrawing();
     if (!slot || slot.renderer !== 'depth') return;
@@ -2303,8 +2440,9 @@ export const createAppSetup = () => {
     if (hasSource) delete slot.depth_binding_error;
     syncDepthTrackSlotLabelsForTrack(drawing, trackIndex);
   };
+  /** @type {string[]} */
   const depthTrackAutoLabels = [];
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {DepthFileSlots} previousFiles @param {DepthFileSlots} nextFiles @param {number} removedIndex */
   const refreshDepthTrackLabelsAfterRemoval = (drawing, previousFiles, nextFiles, removedIndex) => {
     depthFileSlotsFromValue(nextFiles).forEach((file, newIndex) => {
       const oldIndex = newIndex >= removedIndex ? newIndex + 1 : newIndex;
@@ -2345,7 +2483,9 @@ export const createAppSetup = () => {
       syncDepthTrackSlotLabelsForTrack(drawing, index);
     }
   };
+  /** @param {number} index */
   const getCircularDepthFile = (index) => circularDepthRepresentatives()[Number(index)] || null;
+  /** @param {number} index @param {FileLike | null} file */
   const setCircularDepthFile = (index, file) => {
     const drawing = state.drawings.circular;
     const sessionBusy = sessionOperationAvailability();
@@ -2369,8 +2509,9 @@ export const createAppSetup = () => {
       }
     });
   };
+  /** @param {LinearSeq | null | undefined} seq @param {number} index */
   const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {LinearSeq[]} sequences @param {number} index @param {FileLike | null} file */
   const setLinearDepthFiles = (drawing, sequences, index, file) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2399,10 +2540,12 @@ export const createAppSetup = () => {
       }
     });
   };
+  /** @param {LinearSeq} seq @param {number} index @param {FileLike | null} file */
   const setLinearDepthFile = (seq, index, file) => {
     const drawing = state.drawings.linear;
     return setLinearDepthFiles(drawing, [seq], index, file);
   };
+  /** @param {LinearSourceGroup} source @param {number} index @param {FileLike | null} file */
   const setLinearSourceDepthFile = (source, index, file) => {
     const drawing = state.drawings.linear;
     return setLinearDepthFiles(
@@ -2412,6 +2555,7 @@ export const createAppSetup = () => {
       file
     );
   };
+  /** @param {LinearSourceGroup} source @param {number} index */
   const clearLinearSourceDepthFile = (source, index) => history.runUndoable(
     'Clear File Depth TSV',
     () => setLinearSourceDepthFile(source, index, null)
@@ -2433,6 +2577,7 @@ export const createAppSetup = () => {
     ensureDepthTrackConfigCount(drawing, nextCount);
     if (hasAnyLinearDepthFiles.value) drawing.form.show_depth = true;
   };
+  /** @param {number} index */
   const removeCircularDepthTrack = (index) => {
     const drawing = state.drawings.circular;
     const sessionBusy = sessionOperationAvailability();
@@ -2457,12 +2602,12 @@ export const createAppSetup = () => {
       const axis = drawing.adv.circular_track_slots_axis_index;
       const removedBeforeAxis = Number.isInteger(axis)
         ? drawing.adv.circular_track_slots.slice(0, axis)
-          .filter((slot) => isDefaultManagedDepthSlot(slot) && depthSlotTrackIndex(slot) === idx).length
+          .filter((/** @type {CircularTrackSlot} */ slot) => isDefaultManagedDepthSlot(slot) && depthSlotTrackIndex(slot) === idx).length
         : 0;
       drawing.adv.circular_track_slots.splice(
         0,
         drawing.adv.circular_track_slots.length,
-        ...reindexDepthSlots(/** @type {any} */ ({
+        ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
           slots: drawing.adv.circular_track_slots,
           removedIndex: idx,
           activeCount: activeFileCount,
@@ -2474,6 +2619,7 @@ export const createAppSetup = () => {
       circularTrackSlotEditor.normalizeCircularTrackSlots();
     });
   };
+  /** @param {number} index */
   const removeLinearDepthTrack = (index) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -2495,7 +2641,7 @@ export const createAppSetup = () => {
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('linear'));
       const previousAxisIndex = Number(drawing.adv.linear_track_slots_axis_index);
       const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
-        ? drawing.adv.linear_track_slots.reduce((count, slot, slotIndex) => {
+        ? drawing.adv.linear_track_slots.reduce((/** @type {number} */ count, /** @type {LinearTrackSlot} */ slot, /** @type {number} */ slotIndex) => {
             if (slotIndex >= previousAxisIndex || !isDefaultManagedDepthSlot(slot)) return count;
             return depthSlotTrackIndex(slot) === idx ? count + 1 : count;
           }, 0)
@@ -2503,7 +2649,7 @@ export const createAppSetup = () => {
       drawing.adv.linear_track_slots.splice(
         0,
         drawing.adv.linear_track_slots.length,
-        ...reindexDepthSlots(/** @type {any} */ ({
+        ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
           slots: drawing.adv.linear_track_slots,
           removedIndex: idx,
           activeCount: Math.max(0, logicalWidth - 1),
@@ -2564,7 +2710,7 @@ export const createAppSetup = () => {
     files.c_conservation_blasts = [];
     files.c_conservation_blasts_source = null;
   };
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {FileLike | FileLike[] | null | undefined} nextFiles */
   const setCircularConservationSourceFiles = (drawing, nextFiles) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2579,6 +2725,7 @@ export const createAppSetup = () => {
     losatCacheInfo.value = [];
     syncCircularConservationSeries();
   };
+  /** @param {FileLike | FileLike[] | null | undefined} nextFiles */
   const setCircularConservationUploadFiles = (nextFiles) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2612,7 +2759,7 @@ export const createAppSetup = () => {
   };
   const circularConservationSeriesRows = computed(() => {
     const drawing = state.activeDrawing();
-    return (Array.isArray(drawing.circularConservation.series) ? drawing.circularConservation.series : []).map((entry, index) => ({
+    return (Array.isArray(drawing.circularConservation.series) ? drawing.circularConservation.series : []).map((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => ({
       index,
       filename: String(entry?.fileName || `source_${Number(index) + 1}`).trim(),
       sourceLabel: `${isCircularConservationUploadSource(drawing) ? 'BLAST' : 'Comparison'} ${Number(index) + 1}`,
@@ -2628,6 +2775,7 @@ export const createAppSetup = () => {
       )
     }));
   });
+  /** @param {number} index @param {number} direction */
   const canMoveCircularConservationSeries = (index, direction) => {
     const drawing = state.drawings.circular;
     const idx = Number(index);
@@ -2641,6 +2789,7 @@ export const createAppSetup = () => {
       target < drawing.circularConservation.series.length
     );
   };
+  /** @param {number} index @param {number} direction */
   const moveCircularConservationSeries = (index, direction) => {
     const drawing = state.drawings.circular;
     const sessionBusy = sessionOperationAvailability();
@@ -2661,6 +2810,7 @@ export const createAppSetup = () => {
       await Promise.allSettled([...pendingComparisonRecordLabels]);
     }
   };
+  /** @param {Event & { target: HTMLInputElement }} event */
   const addCircularConservationComparisonFile = (event) => {
     const drawing = state.drawings.circular;
     const sessionBusy = sessionOperationAvailability();
@@ -2692,6 +2842,7 @@ export const createAppSetup = () => {
     if (target) target.value = '';
     return step;
   };
+  /** @param {number} sourceIndex @param {Event & { target: HTMLInputElement }} event */
   const setCircularConservationCompanionFile = (sourceIndex, event) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2706,6 +2857,7 @@ export const createAppSetup = () => {
     files.c_conservation_sequence_sources = next;
     if (event?.target) event.target.value = '';
   };
+  /** @param {number} index */
   const removeCircularConservationSource = (index) => {
     const drawing = state.drawings.circular;
     const sessionBusy = sessionOperationAvailability();
@@ -2729,11 +2881,11 @@ export const createAppSetup = () => {
       orderedFastas.splice(idx, 1);
       orderedSequenceSources.splice(idx, 1);
       drawing.circularConservation.series.splice(idx, 1);
-      drawing.circularConservation.series.forEach((seriesEntry, seriesIndex) => {
+      drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ seriesEntry, /** @type {number} */ seriesIndex) => {
         seriesEntry.sourceIndex = seriesIndex;
       });
       drawing.circularConservation.labels = drawing.circularConservation.series
-        .map((seriesEntry) => seriesEntry.label)
+        .map((/** @type {RawConservationSeriesEntry} */ seriesEntry) => seriesEntry.label)
         .join(',');
       files.c_conservation_blasts = orderedBlasts;
       files.c_conservation_fastas = orderedFastas;
@@ -2762,7 +2914,7 @@ export const createAppSetup = () => {
       files.c_conservation_sequence_sources = (Array.isArray(files.c_conservation_sequence_sources)
         ? files.c_conservation_sequence_sources
         : [])
-        .filter((_, fileIndex) => fileIndex !== sourceIndex);
+        .filter((/** @type {unknown} */ _, /** @type {number} */ fileIndex) => fileIndex !== sourceIndex);
     }
     setCircularConservationSourceFiles(drawing, sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex));
   };
@@ -2787,10 +2939,10 @@ export const createAppSetup = () => {
         drawing.adv.circular_track_slots_enabled,
         drawing.circularConservation.enabled,
         drawing.circularConservation.source,
-        drawing.circularConservation.series.map((entry) => `${entry?.sourceKey || ''}:${entry?.label || ''}:${entry?.color || ''}`).join('|')
+        drawing.circularConservation.series.map((/** @type {RawConservationSeriesEntry} */ entry) => `${entry?.sourceKey || ''}:${entry?.label || ''}:${entry?.color || ''}`).join('|')
       ];
     },
-    ([slotsEnabled]) => {
+    (/** @type {[unknown, ...unknown[]]} */ [slotsEnabled]) => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
@@ -2835,6 +2987,7 @@ export const createAppSetup = () => {
   // the later binding steps (`initializeStrokeAndCanvas`).
   /** @type {WeakSet<Element>} */
   const mountedLegendLayouts = new WeakSet();
+  /** @param {MountedResultContext} context */
   const shouldBindComposition = (context) => (
     context.root.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null
     || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
@@ -3053,7 +3206,9 @@ export const createAppSetup = () => {
     omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog().omittedRecordKeys || [],
     onCircularRecordsDiscovered: handleCircularRecordsDiscovered
   });
+  /** @param {{ recordKey: string, biologicalFeatureId: string }} identity */
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
+    /** @param {{ record_key?: unknown, recordKey?: unknown, biological_feature_id?: unknown, biologicalFeatureId?: unknown } | null | undefined} feature */
     const matchesIdentity = (feature) => (
       String(feature?.record_key ?? feature?.recordKey ?? '') === recordKey
       && String(
@@ -3075,7 +3230,7 @@ export const createAppSetup = () => {
     runRecordRotation: ({ canonical, row, transform }) => runCommittedCanonicalCandidate({
       canonical,
       captureIntentCheckpoint: () => recordDisplayControls.captureTargetDraft(row),
-      restoreIntentCheckpoint: (checkpoint) => recordDisplayControls.restoreTargetDraft(checkpoint),
+      restoreIntentCheckpoint: (/** @type {TargetDraftCheckpoint} */ checkpoint) => recordDisplayControls.restoreTargetDraft(checkpoint),
       commitIntent: () => recordDisplayControls.commitResolvedTransform(row, transform)
     }),
     resolveCurrentFeature: resolvePopupRotationFeature,
@@ -3110,7 +3265,7 @@ export const createAppSetup = () => {
     }
   });
   const recordActionsExpanded = ref(false);
-  watch(clickedFeature, (popup) => {
+  watch(clickedFeature, (/** @type {{ feat?: Record<string, unknown> } | null} */ popup) => {
     recordActionsExpanded.value = false;
     if (popup?.feat) {
       featureRecordRotation.open({ feature: popup.feat });
@@ -3196,6 +3351,7 @@ export const createAppSetup = () => {
       ? 'Applying an edit. Retry after the edit finishes.'
       : ''
   );
+  /** @param {string} operation */
   const sessionSaveLoadAvailability = (operation) => (
     sessionOperationAvailability(operation, sessionPreparationBusyReason)
   );
@@ -3231,6 +3387,7 @@ export const createAppSetup = () => {
   let nextSessionPreviewToken = 1;
   // A loaded Session says so in the notice banner, with what the load changed
   // as a list.
+  /** @param {SessionFileInput} event */
   const importSession = async (event) => {
     const name = String(event?.target?.files?.[0]?.name || '');
     // The notice of an earlier operation does not stand for this load.
@@ -3243,6 +3400,7 @@ export const createAppSetup = () => {
     }
     return result;
   };
+  /** @param {SessionFileInput} event */
   const loadSessionFromFile = (event) => importSessionFromFile(event, {
     availability: sessionSaveLoadAvailability,
     transformLegacyResultSvg,
@@ -3287,7 +3445,7 @@ export const createAppSetup = () => {
       captureSpecificRulePatternDrafts: featureActions.captureSpecificRulePatternDrafts,
       restoreSpecificRulePatternDrafts: featureActions.restoreSpecificRulePatternDrafts
     }),
-    afterImport: async (result) => {
+    afterImport: async (/** @type {{ status: string, decompressedCharacters?: number, isCurrent: () => boolean }} */ result) => {
       if (result?.status === 'ok' || result?.status === 'legacy') {
         historySnapshots.clearGeneratedArtifactIdentity({
           retainedBytes: result?.status === 'ok'
@@ -3568,8 +3726,9 @@ export const createAppSetup = () => {
   let labelProjectionResultIdentity = '';
   /** @param {DrawingState} drawing @returns {EditorPaintState} */
   const currentEditorProjectionState = (drawing) => editorPaintState(state, drawing);
+  /** @param {readonly unknown[]} left @param {readonly unknown[]} right */
   const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {MountedResultContext} context */
   const rememberCommittedEditorState = (drawing, context) => {
     const identities = liveResultIdentities();
     const current = currentEditorProjectionState(drawing);
@@ -3598,13 +3757,13 @@ export const createAppSetup = () => {
   /** @param {DrawingState} drawing */
   const displayedIntentSignature = (drawing) => JSON.stringify([
     currentEditorProjectionState(drawing),
-    drawing.deletedLegendEntries.value.map((entry) => entry.originalCaption || entry.caption),
+    drawing.deletedLegendEntries.value.map((/** @type {LegendEntry} */ entry) => entry.originalCaption || entry.caption),
     [...(drawing.addedLegendCaptions.value || [])],
-    drawing.legendEntries.value.filter((entry) => entry.caption !== entry.originalCaption)
-      .map((entry) => [entry.originalCaption, entry.caption]),
+    drawing.legendEntries.value.filter((/** @type {LegendEntry} */ entry) => /** @type {string} */ (entry.caption) !== entry.originalCaption)
+      .map((/** @type {LegendEntry} */ entry) => [entry.originalCaption, entry.caption]),
     // The direct additions, which no Result's inventory lists.
-    drawing.legendEntries.value.filter((entry) => !originalLegendOrder.value.includes(entry.originalCaption || entry.caption))
-      .map((entry) => entry.caption)
+    drawing.legendEntries.value.filter((/** @type {LegendEntry} */ entry) => !originalLegendOrder.value.includes(entry.originalCaption || entry.caption))
+      .map((/** @type {LegendEntry} */ entry) => entry.caption)
   ]);
   /** @param {DrawingState} drawing */
   const rememberDepartingResultProjection = (drawing) => {
@@ -3634,7 +3793,7 @@ export const createAppSetup = () => {
       catalogAdmission: catalog
         ? admitFeatureCatalog(catalog, toRaw(results.value), { mode: state.generatedMode.value })
         : displayedFeatureAddressing(
-          toRaw(extractedFeatures.value) || [], results.value.map((result) => result?.name), resultIndex, svg
+          toRaw(extractedFeatures.value) || [], results.value.map((/** @type {{ name?: unknown } | null | undefined} */ result) => result?.name), resultIndex, svg
         ),
       featureColorOverrides: drawing.featureColorOverrides,
       featureStrokeOverrides: drawing.featureStrokeOverrides,
@@ -3820,7 +3979,7 @@ export const createAppSetup = () => {
     stopDeclinedPaintWait?.();
     stopDeclinedPaintWait = null;
     if (displayBlocked(saving)) {
-      stopDeclinedPaintWait = watch(() => displayBlocked(), (blocked) => { if (!blocked) void showDeclinedPaint(identity); });
+      stopDeclinedPaintWait = watch(() => displayBlocked(), (/** @type {unknown} */ blocked) => { if (!blocked) void showDeclinedPaint(identity); });
       return;
     }
     const lacking = resultPaintRecord.lacking(identity);
@@ -3962,8 +4121,14 @@ export const createAppSetup = () => {
   };
 
   const { requestPaletteChange, selectPalette, requestResetColors } = resultsManager;
-  /** @param {{ joinsOpenStep?: boolean }} [options] History's options for the step. */
-  const undoableAction = (label, fn, options) => (...args) => history.runUndoable(label, () => fn(...args), options);
+  /**
+   * @template {unknown[]} A
+   * @template R
+   * @param {string} label
+   * @param {(...args: A) => R} fn
+   * @param {{ joinsOpenStep?: boolean }} [options] History's options for the step.
+   */
+  const undoableAction = (label, fn, options) => (/** @type {A} */ ...args) => history.runUndoable(label, () => fn(...args), options);
   // Python's report of the per-feature edits the Results do not draw (design
   // Q4 3.4): dormant edits outside the crop or display, edits whose feature
   // the source does not have, and the edits a source-replacing Generate removed.
@@ -3971,7 +4136,7 @@ export const createAppSetup = () => {
     const drawing = state.activeDrawing();
     const notices = Array.isArray(featureIdentityNotices.value) ? featureIdentityNotices.value : [];
     const summary = {
-      dormant: notices.filter((notice) => notice.status !== 'unresolved').length,
+      dormant: notices.filter((/** @type {UnresolvedNotice} */ notice) => notice.status !== 'unresolved').length,
       unmatched: countUnresolvedFeatureEdits({
         featureOverrides: drawing.featureOverrides,
         featurePlacementOverrides: drawing.featurePlacementOverrides,
@@ -4203,11 +4368,14 @@ export const createAppSetup = () => {
   const runInfoCopyStatus = ref('');
   const exactReplayCopyStatus = ref('');
 
+  /** @param {{ elapsedMs?: unknown } | null | undefined} info */
   const runInfoElapsedText = (info) => formatElapsedMs(info?.elapsedMs);
+  /** @param {{ reproducibility?: { level?: unknown } | null } | null | undefined} info */
   const runInfoReproducibilityText = (info) => reproducibilityLabel(info?.reproducibility?.level);
   const runInfoHasCliHelperFiles = computed(() =>
     Array.isArray(lastRunInfo.value?.helperFiles) && lastRunInfo.value.helperFiles.length > 0
   );
+  /** @param {unknown} commandValue @param {{ value: string }} status */
   const copyRunInfoCommand = async (commandValue, status) => {
     const command = String(commandValue || '');
     if (!command) return;
@@ -4234,6 +4402,7 @@ export const createAppSetup = () => {
     exactReplayCopyStatus
   );
 
+  /** @param {Pick<AnnotationRecordCatalog, 'issues'>} catalog */
   const catalogIssueError = (catalog) => {
     const issue = catalog.issues[0];
     return issue ? diagnosticError(issue.code, issue.context) : diagnosticError('INPUT_UNREADABLE');
@@ -4246,7 +4415,7 @@ export const createAppSetup = () => {
       const primary = lInputType.value === 'gff' ? sequence?.gff : sequence?.gb;
       return Boolean(primary && (lInputType.value !== 'gff' || sequence?.fasta));
     });
-    const hasRegionAnnotations = drawing.annotationSets.some((set) => (
+    const hasRegionAnnotations = drawing.annotationSets.some((/** @type {{ annotations?: unknown } | null | undefined} */ set) => (
       Array.isArray(set?.annotations) && set.annotations.length > 0
     ));
     if (!hasAutomaticSequence && !hasRegionAnnotations) {
@@ -4368,7 +4537,7 @@ export const createAppSetup = () => {
     return runAnalysis();
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {unknown} action */
   const chooseImportedComparisonAction = (drawing, action) => history.runUndoable(
     `${String(action || '').toLowerCase()} imported comparison`,
     () => {
@@ -4438,7 +4607,7 @@ export const createAppSetup = () => {
     // checkpoint; the alignment owner holds neither owner.
     runRecordAlignment: ({ orientations, ...run }) => runCommittedCanonicalCandidate({ ...run,
       captureIntentCheckpoint: () => recordDisplayControls.captureAlignmentOrientationIntent(orientations),
-      restoreIntentCheckpoint: (checkpoint) => recordDisplayControls.restoreAlignmentOrientationIntent(checkpoint),
+      restoreIntentCheckpoint: (/** @type {AlignmentOrientationCheckpoint[]} */ checkpoint) => recordDisplayControls.restoreAlignmentOrientationIntent(checkpoint),
       commitIntent: () => recordDisplayControls.commitAlignmentOrientations(orientations) }),
     cancelRunAnalysis,
     runHelperOperation: runDiagramHelperOperation,
@@ -4582,8 +4751,10 @@ export const createAppSetup = () => {
     holdPreviewViewport();
     rightDrawerActions.closeRightDrawer();
   }, { flush: 'sync' });
+  /** @param {Event | null | undefined} event */
   const rememberSimilarityAlignmentInvoker = (event) => {
-    similarityAlignmentReturnFocus = event?.currentTarget || document.activeElement || null;
+    // `currentTarget` is the element the handler is bound to; the declared type of the variable already holds the focused element.
+    similarityAlignmentReturnFocus = /** @type {HTMLElement | null} */ (event?.currentTarget || document.activeElement || null);
   };
   const restoreSimilarityAlignmentFocus = async () => {
     await nextTick();
@@ -4601,19 +4772,22 @@ export const createAppSetup = () => {
     await nextTick();
     document.getElementById('similarity-alignment-dialog-title')?.focus();
   };
+  /** @param {KeyboardEvent} event */
   const handleSimilarityAlignmentEscape = (event) => {
     if (event.key !== 'Escape' || !similarityAlignmentActions.dialogOpen.value) return;
+    // The target of a key press is the focused element.
     if (document.querySelector('[data-linear-source-removal-dialog]')
-      || event.target?.closest?.('.fixed.inset-0')) return;
+      || /** @type {Element | null} */ (event.target)?.closest?.('.fixed.inset-0')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     void cancelSimilarityAlignmentDialog();
   };
+  /** @param {Event | null | undefined} event */
   const openSimilarityAlignmentReset = (event) => {
     rememberSimilarityAlignmentInvoker(event);
     similarityAlignmentActions.openReset();
   };
-  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentActions.resetDialogOpen], async ([open, resetOpen]) => {
+  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentActions.resetDialogOpen], async (/** @type {[unknown, unknown]} */ [open, resetOpen]) => {
     if (resetOpen) {
       await nextTick();
       document.getElementById('similarity-alignment-reset-title')?.focus();
@@ -4629,6 +4803,7 @@ export const createAppSetup = () => {
   onUnmounted(() => {
     document.removeEventListener('keydown', handleSimilarityAlignmentEscape, true);
   });
+  /** @template T @param {T} outcome @returns {Promise<T>} */
   const finishSimilarityAlignmentStart = async (outcome) => {
     if (similarityAlignmentActions.dialogOpen.value) {
       if (similarityAlignmentActions.error.value) {
@@ -4638,6 +4813,7 @@ export const createAppSetup = () => {
     } else await restoreSimilarityAlignmentFocus();
     return outcome;
   };
+  /** @param {string} groupId @param {Event | null} [event] @param {string} [mode] */
   const startSimilarityAlignmentFromDrawer = async (groupId, event = null, mode = 'align') => {
     rememberSimilarityAlignmentInvoker(event);
     return finishSimilarityAlignmentStart(
@@ -4740,6 +4916,7 @@ export const createAppSetup = () => {
     orthogroupActions.clearOrthogroupHighlight();
   };
 
+  /** @param {string} orthogroupId */
   const openOrthogroupInDrawer = (orthogroupId) => {
     if (!orthogroupActions.selectOrthogroup(orthogroupId)) return false;
     rightDrawerActions.openRightDrawerTab('orthogroups');
@@ -4811,7 +4988,7 @@ export const createAppSetup = () => {
       // deleted stays gone).
       const returning = state.activeDrawing().deletedLegendEntries.value
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
-        .filter((key) => originalLegendOrder.value.includes(key));
+        .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
       resetSettingsState(state);
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
@@ -4866,6 +5043,7 @@ export const createAppSetup = () => {
       || ['top', 'right', 'bottom', 'left'].some((side) => Number(padding[side]));
   });
 
+  /** @param {Element | null} target */
   const isInteractiveTarget = (target) => {
     if (!target) return false;
     return Boolean(target.closest('input, textarea, select, button, label, a, [data-nodrag="true"]'));
@@ -4878,6 +5056,7 @@ export const createAppSetup = () => {
   const PAIRWISE_MATCH_POPUP_MIN_WIDTH = 280;
   const PAIRWISE_MATCH_POPUP_MIN_HEIGHT = 180;
 
+  /** @param {unknown} value @param {number} min @param {number} max */
   const clampNumber = (value, min, max) => {
     const safeMin = Number.isFinite(min) ? min : 0;
     const safeMax = Number.isFinite(max) ? Math.max(safeMin, max) : safeMin;
@@ -4972,7 +5151,7 @@ export const createAppSetup = () => {
   const selectedPairwiseBlockOrthogroup = computed(() => {
     const selectedId = String(selectedPairwiseBlockOrthogroupId.value || '').trim();
     if (!selectedId) return null;
-    return pairwiseBlockOrthogroups.value.find((group) => String(group?.id || '').trim() === selectedId) || null;
+    return pairwiseBlockOrthogroups.value.find((/** @type {{ id?: unknown }} */ group) => String(group?.id || '').trim() === selectedId) || null;
   });
   // The group the match popup lists members of: a similarity-group ribbon's
   // own group, or the group picked in a collinear block's gene-pair table.
@@ -4981,16 +5160,18 @@ export const createAppSetup = () => {
       ? selectedPairwiseBlockOrthogroup.value
       : clickedPairwiseMatch.value?.group || null
   ));
+  /** @param {{ id?: unknown } | null | undefined} group */
   const selectPairwiseBlockOrthogroup = (group) => {
     const id = String(group?.id || '').trim();
     selectedPairwiseBlockOrthogroupId.value = selectedPairwiseBlockOrthogroupId.value === id ? '' : id;
   };
+  /** @param {FeatureListRow} row @param {MouseEvent} event */
   const openPairwiseFeatureRow = (row, event) => {
     if (!row?.canOpen || !row?.feature) return;
     openFeatureEditorForFeature(row.feature, event);
   };
 
-  watch(clickedPairwiseMatch, (match) => {
+  watch(clickedPairwiseMatch, (/** @type {{ id?: unknown, matchKind?: unknown, orthogroupId?: unknown } | null} */ match) => {
     selectedPairwiseBlockOrthogroupId.value = '';
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return;
@@ -4998,7 +5179,7 @@ export const createAppSetup = () => {
     const orthogroupId = String(
       match?.matchKind === 'orthogroup' ? match?.orthogroupId : ''
     ).trim();
-    svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((element) => {
+    svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((/** @type {Element} */ element) => {
       const elementMatchId = String(
         element.getAttribute('data-gbdraw-match-id') ||
         element.getAttribute('data-gbdraw-pairwise-match-id') ||
@@ -5021,6 +5202,7 @@ export const createAppSetup = () => {
     });
   });
 
+  /** @param {MouseEvent} event */
   const onPairwiseMatchPopupDrag = (event) => {
     if (!pairwiseMatchPopupDrag.active || pairwiseMatchPopupResize.active) return;
     dragPopupTo(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value,
@@ -5034,6 +5216,7 @@ export const createAppSetup = () => {
     document.removeEventListener('mouseup', endPairwiseMatchPopupDrag);
   };
 
+  /** @param {MouseEvent} event */
   const onPairwiseMatchPopupResize = (event) => {
     if (!pairwiseMatchPopupResize.active) return;
     const constraints = getPairwiseMatchPopupConstraints(clickedPairwiseMatchPos.x, clickedPairwiseMatchPos.y);
@@ -5051,6 +5234,7 @@ export const createAppSetup = () => {
     document.removeEventListener('mouseup', endPairwiseMatchPopupResize);
   };
 
+  /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
   const startPairwiseMatchPopupDrag = (event) => {
     if (event.button !== 0) return;
     if (!clickedPairwiseMatch.value) return;
@@ -5067,6 +5251,7 @@ export const createAppSetup = () => {
     event.preventDefault();
   };
 
+  /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
   const startPairwiseMatchPopupResize = (event) => {
     if (event.button !== 0) return;
     if (!clickedPairwiseMatch.value) return;
@@ -5093,12 +5278,14 @@ export const createAppSetup = () => {
     event.stopPropagation();
   };
 
+  /** @param {MouseEvent} event */
   const onFeaturePopupDrag = (event) => {
     if (!featurePopupDrag.active || featurePopupResize.active) return;
     dragPopupTo(clickedFeaturePos, featurePopupRef.value,
       event.clientX - featurePopupDrag.offsetX, event.clientY - featurePopupDrag.offsetY);
   };
 
+  /** @param {MouseEvent} event */
   const onFeaturePopupResize = (event) => {
     if (!featurePopupResize.active) return;
     const constraints = getFeaturePopupConstraints(clickedFeaturePos.x, clickedFeaturePos.y);
@@ -5123,6 +5310,7 @@ export const createAppSetup = () => {
     document.removeEventListener('mouseup', endFeaturePopupDrag);
   };
 
+  /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
   const startFeaturePopupDrag = (event) => {
     if (event.button !== 0) return;
     if (!clickedFeature.value) return;
@@ -5139,6 +5327,7 @@ export const createAppSetup = () => {
     event.preventDefault();
   };
 
+  /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
   const startFeaturePopupResize = (event) => {
     if (event.button !== 0) return;
     if (!clickedFeature.value) return;
@@ -5165,6 +5354,7 @@ export const createAppSetup = () => {
     event.stopPropagation();
   };
 
+  /** @param {unknown} value */
   const normalizeSessionTitle = (value) => {
     if (value === null || value === undefined) return '';
     return String(value).trim();
@@ -5190,7 +5380,7 @@ export const createAppSetup = () => {
       const drawing = state.activeDrawing();
       return (
         drawing.adv.circular_track_slots_enabled
-          ? drawing.adv.circular_track_slots.some((slot) => (
+          ? drawing.adv.circular_track_slots.some((/** @type {CircularTrackSlot} */ slot) => (
               slot?.renderer === 'ticks' &&
               circularTrackSlotEditor.circularTrackSlotEffectiveEnabled(slot)
             ))
@@ -5220,14 +5410,15 @@ export const createAppSetup = () => {
     const cf = clickedFeature.value;
     if (!cf) return;
     const { title, product } = clickedFeatureHeading.value;
-    copyTextToClipboard([title, product, clickedFeatureSummary.value, ...cf.detailRows.map((row) => `${row.label}: ${row.value}`)]
+    copyTextToClipboard([title, product, clickedFeatureSummary.value, ...cf.detailRows.map((/** @type {{ label: string, value: string }} */ row) => `${row.label}: ${row.value}`)]
       .filter(Boolean).join('\n'));
   };
   const copyClickedFeatureQualifiers = () => {
     const rows = clickedFeature.value?.qualifierRows || [];
-    copyTextToClipboard(rows.flatMap((row) => row.values.map((value) => `/${row.key}="${value}"`)).join('\n'));
+    copyTextToClipboard(rows.flatMap((/** @type {{ key: string, values: string[] }} */ row) => row.values.map((value) => `/${row.key}="${value}"`)).join('\n'));
   };
 
+  /** @param {unknown} filename @param {unknown} text @param {string} [type] */
   const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
     const value = String(text ?? '');
     if (!value) return;
@@ -5238,6 +5429,7 @@ export const createAppSetup = () => {
   const failedInteractiveSvgExport = ref(null);
   const canRetryInteractiveSvgExport = computed(() => Boolean(failedInteractiveSvgExport.value
     && errorLog.value === failedInteractiveSvgExport.value));
+  /** @param {'downloadSVG' | 'downloadInteractiveSVG' | 'downloadPNG' | 'downloadPDF'} methodName @param {string} operation */
   const runExportAction = async (methodName, operation) => {
     const operationId = ++latestExportOperation;
     const previousError = errorLog.value;
@@ -5356,7 +5548,7 @@ export const createAppSetup = () => {
   // OV-503: Edit in the Editor drawer's list opens the popup beside the drawer
   // and the toggle on the drawer's edge (OV-505). Without an event the popup
   // is centred.
-  /** @param {{ clientX?: number, clientY?: number, currentTarget?: EventTarget | null } | null} [event] */
+  /** @param {Record<string, unknown>} feat @param {{ clientX?: number, clientY?: number, currentTarget?: EventTarget | null } | null} [event] */
   const openFeatureEditorFromList = (feat, event = null) => {
     const drawer = event?.currentTarget instanceof Element ? event.currentTarget.closest('.right-drawer') : null;
     const rects = [drawer, drawer?.parentElement?.querySelector(':scope > .drawer-toggle')]
@@ -5371,11 +5563,12 @@ export const createAppSetup = () => {
     });
   };
 
+  /** @param {unknown} selector */
   const getCircularRecordOrderLabel = (selector) => {
     const normalized = String(selector || '').trim();
     if (!normalized) return '';
     const records = Array.isArray(circularRecordList.value) ? circularRecordList.value : [];
-    const matched = records.find((entry) => String(entry?.selector || '').trim() === normalized);
+    const matched = records.find((/** @type {{ selector?: unknown }} */ entry) => String(entry?.selector || '').trim() === normalized);
     if (!matched) return normalized;
     return `${normalized} (${String(matched.record_id || '').trim() || 'Unknown'})`;
   };
@@ -5391,7 +5584,7 @@ export const createAppSetup = () => {
     : Promise.resolve({ status: 'unavailable', reason: 'Source inspection is unavailable.' }));
   const circularRecordPresentationEntries = () => buildDisambiguatedRecordEntries(
     circularRecordDiscoveryState.value.records.map(
-      (record) => ({
+      (/** @type {SequenceRecordEntry} */ record) => ({
         ...record,
         recordId: record?.record_id ?? record?.recordId,
         recordLength: record?.record_length ?? record?.recordLength
@@ -5484,7 +5677,7 @@ export const createAppSetup = () => {
     // edits, so its rename records its own step.
     renameLegendRow: undoableAction('Rename legend item', renameLegendEntry),
     legendRenameSettled: () => (legendRenameDialog.show ? new Promise((resolve) => {
-      const stop = watch(() => legendRenameDialog.show, (shown) => { if (!shown) { stop(); resolve(undefined); } });
+      const stop = watch(() => legendRenameDialog.show, (/** @type {unknown} */ shown) => { if (!shown) { stop(); resolve(undefined); } });
     }) : Promise.resolve())
   });
 
@@ -5545,6 +5738,7 @@ export const createAppSetup = () => {
     })) retireCircularRecordPresentation(drawing);
     else retireCircularRecordSelector(drawing);
   };
+  /** @param {unknown} value */
   const setCircularRecordPresentationSelector = (value) => {
     const drawing = state.drawings.circular;
     const busy = sessionOperationAvailability();
@@ -5566,7 +5760,7 @@ export const createAppSetup = () => {
   };
   watch(() => [mode.value, circularSingleRecordPresentationEnabled.value,
     circularRecordDiscoveryState.value.primaryFile, circularRecordDiscoveryState.value.pairedFile,
-    state.activeDrawing().form.circular_record_selector], async (current, previous = []) => {
+    state.activeDrawing().form.circular_record_selector], async (/** @type {unknown[]} */ current, /** @type {unknown[]} */ previous = []) => {
     if (!current[1] || current.every((value, index) => Object.is(value, previous[index]))) return;
     const origin = document.activeElement;
     const pane = document.querySelector('.settings-scroll');
@@ -5592,17 +5786,18 @@ export const createAppSetup = () => {
   const buildDefaultCircularRecordPositions = () => {
     const selectors = Array.isArray(circularRecordList.value)
       ? circularRecordList.value
-          .map((entry) => String(entry?.selector || '').trim())
+          .map((/** @type {{ selector?: unknown }} */ entry) => String(entry?.selector || '').trim())
           .filter(Boolean)
       : [];
     if (selectors.length === 0) return [];
     const cols = Math.ceil(Math.sqrt(selectors.length));
-    return selectors.map((selector, index) => ({
+    return selectors.map((/** @type {string} */ selector, /** @type {number} */ index) => ({
       selector,
       row: Math.floor(index / cols) + 1
     }));
   };
 
+  /** @param {MultiRecordPosition | null | undefined} position */
   const getCircularRecordRow = (position) => {
     const drawing = state.drawings.circular;
     const rowValue = Number(position?.row);
@@ -5622,17 +5817,18 @@ export const createAppSetup = () => {
   const sortCircularRecordPositionsByRow = (drawing) => {
     if (!Array.isArray(drawing.adv.multi_record_positions) || drawing.adv.multi_record_positions.length <= 1) return;
     const sorted = drawing.adv.multi_record_positions
-      .map((entry, index) => ({ ...entry, __index: index }))
-      .sort((left, right) => {
+      .map((/** @type {MultiRecordPosition} */ entry, /** @type {number} */ index) => ({ ...entry, __index: index }))
+      .sort((/** @type {MultiRecordPosition & { __index: number }} */ left, /** @type {MultiRecordPosition & { __index: number }} */ right) => {
         const leftRow = Number(left.row);
         const rightRow = Number(right.row);
         if (leftRow !== rightRow) return leftRow - rightRow;
         return left.__index - right.__index;
       })
-      .map(({ __index, ...entry }) => entry);
+      .map((/** @type {MultiRecordPosition & { __index: number }} */ { __index, ...entry }) => entry);
     drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...sorted);
   };
 
+  /** @param {number} index @param {unknown} rowValue */
   const setCircularRecordRow = (index, rowValue) => {
     const drawing = state.drawings.circular;
     const sessionBusy = sessionOperationAvailability();
@@ -5648,6 +5844,7 @@ export const createAppSetup = () => {
     sortCircularRecordPositionsByRow(drawing);
   };
 
+  /** @param {number} index */
   const canMoveCircularRecordOrderUp = (index) => {
     const drawing = state.drawings.circular;
     const idx = Number(index);
@@ -5657,6 +5854,7 @@ export const createAppSetup = () => {
     return currentRow === prevRow;
   };
 
+  /** @param {number} index */
   const canMoveCircularRecordOrderDown = (index) => {
     const drawing = state.drawings.circular;
     const idx = Number(index);
@@ -5666,6 +5864,7 @@ export const createAppSetup = () => {
     return currentRow === nextRow;
   };
 
+  /** @param {number} index */
   const moveCircularRecordOrderUp = (index) => {
     const drawing = state.drawings.circular;
     const sessionBusy = sessionOperationAvailability();
@@ -5679,6 +5878,7 @@ export const createAppSetup = () => {
     drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...next);
   };
 
+  /** @param {number} index */
   const moveCircularRecordOrderDown = (index) => {
     const drawing = state.drawings.circular;
     const sessionBusy = sessionOperationAvailability();
@@ -5700,7 +5900,7 @@ export const createAppSetup = () => {
     drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...defaults);
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {readonly Partial<LinearSeq>[]} items */
   const applyLinearSeqMutation = (
     drawing, items,
     {
@@ -5775,9 +5975,10 @@ export const createAppSetup = () => {
     /** @type {HTMLElement | null} */ (document.querySelector('[data-linear-source-removal-primary]'))?.focus();
   };
   // Keeps Tab inside the modal dialog of the overlay that handles the keydown.
+  /** @param {KeyboardEvent & { currentTarget: Element }} event Tab on the overlay that holds the dialog. */
   const trapDialogFocus = (event) => {
-    const dialog = event.currentTarget?.querySelector('[role="dialog"]');
-    const controls = Array.from(dialog?.querySelectorAll('button:not(:disabled)') || []);
+    const dialog = /** @type {HTMLElement | null} */ (event.currentTarget?.querySelector('[role="dialog"]'));
+    const controls = /** @type {HTMLElement[]} */ (Array.from(dialog?.querySelectorAll('button:not(:disabled)') || []));
     if (!controls.length) {
       // A busy choice disables every button: Tab stays on the dialog panel.
       if (dialog) {
@@ -5786,16 +5987,18 @@ export const createAppSetup = () => {
       }
       return;
     }
+    // `controls` is not empty, so `dialog` is an element and `last` is a button.
     const first = controls[0];
-    const last = controls.at(-1);
-    if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+    const last = /** @type {HTMLElement} */ (controls.at(-1));
+    if (event.shiftKey && (document.activeElement === first || !(/** @type {HTMLElement} */ (dialog)).contains(document.activeElement))) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+    } else if (!event.shiftKey && (document.activeElement === last || !(/** @type {HTMLElement} */ (dialog)).contains(document.activeElement))) {
       event.preventDefault();
       first.focus();
     }
   };
+  /** @param {number} sourceIndex */
   const focusLinearSourceAfterRemoval = async (sourceIndex) => {
     await nextTick();
     const cards = document.querySelectorAll('[data-linear-source-card]');
@@ -5804,7 +6007,7 @@ export const createAppSetup = () => {
       || document.querySelector('[data-linear-file-add]'));
     if (typeof target?.focus === 'function') target.focus();
   };
-  /** @param {EventTarget | null} [returnFocus] */
+  /** @param {LinearSourceGroup} source @param {string} origin @param {EventTarget | null} [returnFocus] */
   const openLinearSourceRemovalDialog = (source, origin, returnFocus = null) => {
     if (!source?.uid) return false;
     linearSourceRemovalDialog.sourceUid = source.uid;
@@ -5826,6 +6029,7 @@ export const createAppSetup = () => {
     if (intent === 'clear') next.splice(plan.insertionIndex, 0, createLinearSeq());
     return applyLinearSeqMutation(state.drawings.linear, next);
   };
+  /** @param {'clear' | 'delete'} intent */
   const applyLinearSourceRemoval = async (intent) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -5847,6 +6051,7 @@ export const createAppSetup = () => {
     await focusLinearSourceAfterRemoval(plan.sourceIndex);
     return operation;
   };
+  /** @param {LinearSourceGroup} source @param {EventTarget | null} [returnFocus] */
   const requestLinearSourceRemoval = (source, returnFocus = null) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -5867,6 +6072,7 @@ export const createAppSetup = () => {
     return openLinearSourceRemovalDialog(source, 'global', event?.currentTarget || null);
   };
 
+  /** @param {number} index @param {'gb' | 'gff' | 'fasta'} field @param {FileLike | null | undefined} value */
   const setLinearSeqPrimaryFile = (index, field, value) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -5878,9 +6084,10 @@ export const createAppSetup = () => {
     const nextValue = value ?? null;
     const seq = linearSeqs[idx];
     if (seq[field] === nextValue) return;
-    const group = linearSourceGroups.value.find((entry) => (
+    // `groupLinearSourceRecords` puts every record card of `linearSeqs` in a group, and `seq` is one of them.
+    const group = /** @type {LinearSourceGroup} */ (linearSourceGroups.value.find((entry) => (
       entry.records.some(({ sequence }) => sequence.uid === seq.uid)
-    ));
+    )));
     const members = new Set(group.records.map(({ sequence }) => sequence.uid));
     const replacement = createLinearSeq({
       ...group.sequence,
@@ -6041,7 +6248,7 @@ export const createAppSetup = () => {
     autoOpenRequests: recordListRequests
   });
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {number} sourceIndex @param {number} direction */
   const linearSourceMovePlan = (drawing, sourceIndex, direction) => planLinearSourceRowMove({
     sourceGroups: linearSourceGroups.value,
     entries: drawing.linearRecordRows,
@@ -6056,6 +6263,7 @@ export const createAppSetup = () => {
         : ''
     );
   });
+  /** @param {number} sourceIndex @param {number} direction */
   const canMoveLinearSource = (sourceIndex, direction) => {
     const drawing = state.drawings.linear;
     return (
@@ -6063,6 +6271,7 @@ export const createAppSetup = () => {
     );
   };
 
+  /** @param {number} sourceIndex @param {number} direction */
   const moveLinearSource = (sourceIndex, direction) => {
     const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
@@ -6079,6 +6288,7 @@ export const createAppSetup = () => {
     });
   };
 
+  /** @param {LinearSeq} sequence @param {unknown} value */
   const setLinearRecordSelector = (sequence, value) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -6094,6 +6304,7 @@ export const createAppSetup = () => {
     return true;
   };
 
+  /** @param {unknown} value */
   const setCircularInputType = (value) => {
     const busy = sessionOperationAvailability();
     if (busy) return busy;
@@ -6106,6 +6317,7 @@ export const createAppSetup = () => {
     return { status: 'ok' };
   };
 
+  /** @param {unknown} value */
   const setLinearInputType = (value) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -6116,6 +6328,7 @@ export const createAppSetup = () => {
     return true;
   };
 
+  /** @param {LinearSeq} sequence @param {'region_start' | 'region_end'} field @param {unknown} value */
   const setLinearRecordCrop = (sequence, field, value) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -6129,6 +6342,7 @@ export const createAppSetup = () => {
     return true;
   };
 
+  /** @param {LinearSeq} seq */
   const resetLinearRecordDefinition = (seq) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -6138,6 +6352,7 @@ export const createAppSetup = () => {
     });
   };
 
+  /** @param {LinearSeq} seq */
   const resetLinearRecordSubtitle = (seq) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -6590,6 +6805,7 @@ export const createAppSetup = () => {
     selectedOrthogroup: orthogroupActions.selectedOrthogroup,
     selectedOrthogroupMembersByRecord: orthogroupActions.selectedOrthogroupMembersByRecord,
     resolveOrthogroupName: orthogroupActions.resolveOrthogroupName,
+    orthogroupDescriptionFieldText: orthogroupActions.orthogroupDescriptionFieldText,
     orthogroupScope: orthogroupActions.orthogroupScope,
     orthogroupScopeLabel: orthogroupActions.orthogroupScopeLabel,
     orthogroupRows: orthogroupActions.orthogroupRows,
@@ -6633,6 +6849,7 @@ export const createAppSetup = () => {
     similarityAlignmentDirectionPreview: similarityAlignmentActions.directionPreview,
     setSimilarityAlignmentDirectionMode: similarityAlignmentActions.setDirectionMode,
     setSimilarityAlignmentCustomDirection: similarityAlignmentActions.setCustomDirection,
+    similarityAlignmentCustomDirection: similarityAlignmentActions.customDirection,
     similarityAlignmentResetPreview: similarityAlignmentActions.resetPreview,
     similarityAlignmentResetDialogOpen: similarityAlignmentActions.resetDialogOpen,
     similarityAlignmentResetScope: similarityAlignmentActions.resetScope,

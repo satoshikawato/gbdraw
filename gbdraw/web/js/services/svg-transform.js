@@ -68,3 +68,22 @@ export const parseTransform = (transformStr) => {
     ? { x: finiteNumber(match[1]), y: finiteNumber(match[2]) }
     : { x: 0, y: 0 };
 };
+
+/**
+ * Ends a press on a drag target: true when its translate is no longer the
+ * pressed one. A target that did not move gets its `transform` attribute back
+ * as it was written, so a press that moves nothing changes nothing.
+ * @param {Element} element
+ * @param {string | null} pressedTransform The attribute when the press began.
+ */
+export const releasePressedTransform = (element, pressedTransform) => {
+  const pressed = parseTransform(pressedTransform);
+  const released = parseTransform(element.getAttribute('transform'));
+  if (pressed.x !== released.x || pressed.y !== released.y) return true;
+  if (pressedTransform === null) {
+    element.removeAttribute('transform');
+  } else {
+    element.setAttribute('transform', pressedTransform);
+  }
+  return false;
+};

@@ -26,7 +26,7 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
-import { ownEntry } from '../../utils/own-entry.js';
+import { hasOwnEntry, ownEntry } from '../../utils/own-entry.js';
 import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
 } from '../../services/feature-visibility.js';
@@ -841,7 +841,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (!drawing.adv.feature_shapes || typeof drawing.adv.feature_shapes !== 'object') {
       return defaultFeatureRendering(featureType);
     }
-    return Object.prototype.hasOwnProperty.call(drawing.adv.feature_shapes, featureType)
+    return hasOwnEntry(drawing.adv.feature_shapes, featureType)
       ? normalizeFeatureRendering(drawing.adv.feature_shapes[featureType])
       : defaultFeatureRendering(featureType);
   };

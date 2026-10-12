@@ -12,6 +12,8 @@ import {
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { cloneFileBytesForTransfer } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
+/** @import { FeatureOverrideDraft, FeatureOverrideDraftRow, FeatureOverrideRow, FeatureRequestRecord } from '../../services/feature-placement.js' */
+/** @import { LabelTableInput } from './label-actions.js' */
 
 // Export and Load Feature Edits TSV (design Q4 6.4, Owner Q2 = A): the
 // per-feature edits of the committed records as a --feature_override_table, so
@@ -20,10 +22,16 @@ import { downloadTextFile } from '../../services/text-download.js';
 // counted and not applied (Owner Q3 = A).
 const OPERATION = 'readFeatureOverrideTable';
 const CLEARED_EDITS = Object.freeze(Object.fromEntries(FEATURE_OVERRIDE_EDIT_FIELDS.map((field) => [field, null])));
+/** @param {Readonly<Record<string, unknown>>} row */
 const editsOf = (row) => Object.fromEntries(FEATURE_OVERRIDE_EDIT_FIELDS.map((field) => [field, row[field]]));
+/** @param {Readonly<Record<string, unknown>> | null | undefined} row */
 const hasEdit = (row) => FEATURE_OVERRIDE_EDIT_FIELDS.some((field) => row?.[field] != null);
 
 // The helper's rows must be request rows of the committed records.
+/**
+ * @param {{ rows?: unknown, unmatchedRows?: unknown } | null | undefined} result The helper's reply, checked below.
+ * @param {FeatureRequestRecord[]} records
+ */
 export const admitFeatureOverrideTable = (result, records) => {
   const invalid = () => diagnosticError('RESULT_INVALID', {}, /** @type {{ stage?: string, operation?: string }} */ ({ operation: OPERATION, stage: 'result-admission' }));
   const unmatchedRows = result?.unmatchedRows;
@@ -41,6 +49,11 @@ export const admitFeatureOverrideTable = (result, records) => {
 
 // Load replaces the edits of the committed request's records, as Load Label
 // TSV replaces the label edits; edits of other records stay (R2).
+/**
+ * @param {FeatureOverrideDraft} featureOverrides
+ * @param {Array<FeatureOverrideRow | FeatureOverrideDraftRow>} rows
+ * @param {FeatureRequestRecord[]} records
+ */
 export const replaceFeatureEdits = (featureOverrides, rows, records) => {
   Object.values(featureOverrides).forEach((row) => {
     if (rowBelongsToRequest(row, records)) updateFeatureOverride(featureOverrides, row, CLEARED_EDITS);
@@ -108,6 +121,7 @@ export const createFeatureEditTableActions = ({
     if (canRetryFeatureEditTableImport.value) failure.value.input?.click?.();
   };
 
+  /** @param {{ target: LabelTableInput | null, sourceInput?: LabelTableInput }} event A file input's change event, or the retry's stand-in for it. */
   const loadFeatureEditTable = async (event) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();

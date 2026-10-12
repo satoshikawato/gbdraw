@@ -53,11 +53,9 @@ import { cloneJsonData } from './json-clone.js';
  * @property {string | null} labelText
  */
 
-/**
- * A draft row: a request row that keeps the Web-only `labelSourceText`, the
- * label's text before any edit.
- * @typedef {FeatureOverrideRow & { labelSourceText: string | null }} FeatureOverrideDraftRow
- */
+// A draft row: a request row that keeps the Web-only `labelSourceText`, the
+// label's text before any edit (generated from gbdraw/session_contract.py).
+/** @import { FeatureOverrideDraftRow } from '../contracts/session.generated.js' */
 
 /** @typedef {Record<string, FeaturePlacementDraftRow>} FeaturePlacementDraft */
 /** @typedef {Record<string, FeatureOverrideDraftRow>} FeatureOverrideDraft */

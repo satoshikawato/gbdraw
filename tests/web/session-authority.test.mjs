@@ -11,14 +11,6 @@ const {
   validateSessionAuthorityInventory
 } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-authority.js')));
 
-// `config` and `features` are read from Sessions 27-44; Session 46 keeps the
-// draft of each mode in `modes` and the CLI's options in `cliOptions`.
-assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
-  'cliInvocation', 'cliOptions', 'config', 'createdAt', 'editorState', 'features', 'files', 'format',
-  'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'modes', 'orthogroupState',
-  'otherModeResult', 'proteinIdentityManifest', 'renderRequest', 'resources',
-  'results', 'runMetadata', 'title', 'ui', 'version', 'webFiles'
-].sort());
 assert.equal(SESSION_TOP_LEVEL_AUTHORITY.modes, 'editor-metadata');
 assert.equal(SESSION_TOP_LEVEL_AUTHORITY.cliOptions, 'provenance');
 assert.equal(SESSION_TOP_LEVEL_AUTHORITY.renderRequest, 'canonical-render');

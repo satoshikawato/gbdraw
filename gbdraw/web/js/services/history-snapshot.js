@@ -14,6 +14,7 @@ import {
 } from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
+/** @import { HistoryArtifactHandle } from './history.js' */
 
 export { cloneJsonData };
 
@@ -1533,17 +1534,19 @@ export const createHistorySnapshotService = ({
   };
 
   /**
-   * What a restore reads of a generated artifact handle (History passes the handle it stored).
-   * @typedef {object} GeneratedArtifactHandleData
-   * @property {unknown} [kind]
-   * @property {GeneratedArtifactOwnerSet | null} [ownerSet]
-   * @property {Partial<GeneratedArtifactIntent>} [mutableIntent]
-   * @property {{ canonical?: { committedCanonicalSession?: AlignmentResetCanonical | null } | null } | null} [runtimeState]
-   * @property {HistorySnapshotTransportIdentity | null} [transportIdentity]
-   * @property {unknown} [baseRetainedBytes]
+   * The handle History stored and passes back: History's own type names the fields History reads; these are
+   * the fields `captureGeneratedArtifactHandle` wrote beside them, as a restore reads them.
+   * @typedef {Pick<HistoryArtifactHandle, 'retainedBytes' | 'fileIds' | 'identity'> & {
+   *   kind?: unknown,
+   *   ownerSet?: GeneratedArtifactOwnerSet | null,
+   *   mutableIntent?: Partial<GeneratedArtifactIntent>,
+   *   runtimeState?: { canonical?: { committedCanonicalSession?: AlignmentResetCanonical | null } | null } | null,
+   *   transportIdentity?: HistorySnapshotTransportIdentity | null,
+   *   baseRetainedBytes?: unknown
+   * }} StoredGeneratedArtifactHandle
    */
   const restoreGeneratedArtifactHandle = async (
-    /** @type {GeneratedArtifactHandleData | null | undefined} */
+    /** @type {StoredGeneratedArtifactHandle | null | undefined} */
     handle,
     { clearFailedGeneratePresentation = false } = {}
   ) => {

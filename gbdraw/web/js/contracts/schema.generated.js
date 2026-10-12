@@ -89,6 +89,34 @@ export const DEPTH_FILE_SCHEMA = 1;
 // gbdraw/session_io.py: DEPTH_FILE_ENCODING
 export const DEPTH_FILE_ENCODING = 'gbdraw-depth-table-v1';
 
+// gbdraw/session_io.py: FLAT_DRAFT_TOP_LEVEL_FIELDS
+/** @type {readonly string[]} */
+export const FLAT_DRAFT_TOP_LEVEL_FIELDS = Object.freeze(['config', 'features']);
+
+// gbdraw/session_io.py: OTHER_MODE_RESULT_FIELDS
+/** @type {readonly string[]} */
+export const OTHER_MODE_RESULT_FIELDS = Object.freeze(['cliInvocation', 'editorState', 'renderRequest', 'results', 'runMetadata', 'ui']);
+
+// gbdraw/session_io.py: OTHER_MODE_RESULT_UI_FIELDS
+/** @type {readonly string[]} */
+export const OTHER_MODE_RESULT_UI_FIELDS = Object.freeze(['appliedPaletteColors', 'appliedPaletteName', 'generatedCircularPlotTitlePosition', 'generatedLegendPosition', 'generatedMultiRecordCanvas', 'selectedResultIndex']);
+
+// gbdraw/session_io.py: OTHER_MODE_RESULT_EDITOR_FIELDS
+/** @type {readonly string[]} */
+export const OTHER_MODE_RESULT_EDITOR_FIELDS = Object.freeze(['alignmentResetReceipt', 'featureCatalog', 'legend', 'originalSvgStroke']);
+
+// gbdraw/session_io.py: OTHER_MODE_RESULT_LEGEND_FIELDS
+/** @type {readonly string[]} */
+export const OTHER_MODE_RESULT_LEGEND_FIELDS = Object.freeze(['originalColors', 'originalOrder']);
+
+// gbdraw/session_io.py: OTHER_MODE_RESULT_RUN_METADATA_FIELDS
+/** @type {readonly string[]} */
+export const OTHER_MODE_RESULT_RUN_METADATA_FIELDS = Object.freeze(['annotationWarnings', 'comparisonWarnings', 'featureIdentityNotices', 'trackSlotGeometry']);
+
+// gbdraw/session_io.py: CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS
+/** @type {readonly string[]} */
+export const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze(['biologicalFeatures', 'extractedFeatures', 'featureCatalog', 'featureRecordIds', 'featureSelectorSafetyScope']);
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,

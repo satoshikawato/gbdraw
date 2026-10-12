@@ -1,5 +1,6 @@
 // @ts-check
-/** @import { FeatureOverrideDraft, FeatureOverrideDraftRow, FeaturePlacementDraft, FeatureRequestRecord } from './feature-placement.js' */
+/** @import { FeatureOverrideDraft, FeaturePlacementDraft, FeatureRequestRecord } from './feature-placement.js' */
+/** @import { FeatureOverrideDraftRow } from '../contracts/session.generated.js' */
 import {
   canonicalFeaturePlacements,
   featureIdentityKey,

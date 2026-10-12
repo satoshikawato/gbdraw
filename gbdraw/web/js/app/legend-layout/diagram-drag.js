@@ -1,5 +1,5 @@
 // @ts-check
-import { parseTransform, replaceLeadingTranslate } from '../../services/svg-transform.js';
+import { parseTransform, releasePressedTransform, replaceLeadingTranslate } from '../../services/svg-transform.js';
 import {
   bindCompositionMetadata,
   COMPOSITION_SCHEMA_ATTRIBUTE,
@@ -82,6 +82,12 @@ export const createDiagramDragActions = ({
   let activeDragMode = 'group'; // 'group' | 'record' | 'length_bar' | 'plot_title'
   /** @type {Map<SVGGraphicsElement, { x: number, y: number }>} */
   let activeDragOriginalTransforms = new Map();
+  /**
+   * What each pressed target was before the press. A target whose release
+   * never arrived keeps its first record.
+   * @type {Map<SVGGraphicsElement, { transform: string | null, opacity: string }>}
+   */
+  let pressedDragTargets = new Map();
   let activeLengthBarOffsetStart = { x: 0, y: 0 };
   let activePlotTitleOffsetStart = { x: 0, y: 0 };
   /** @type {number | null} */
@@ -152,12 +158,10 @@ export const createDiagramDragActions = ({
   /** @param {SVGGraphicsElement | null | undefined} group */
   const assignPlotTitleElement = (group) => {
     if (plotTitleElement.value && plotTitleElement.value !== group) {
-      plotTitleElement.value.style.opacity = '1';
       setElementCursor(plotTitleElement.value, '');
     }
     plotTitleElement.value = group || null;
     if (plotTitleElement.value) {
-      plotTitleElement.value.style.opacity = '1';
       setElementCursor(plotTitleElement.value, isLayoutRepositionModeEnabled() ? 'grab' : '');
     }
   };
@@ -193,17 +197,11 @@ export const createDiagramDragActions = ({
   const resetLengthBarPosition = () => {
     lengthBarUserOffset.x = 0;
     lengthBarUserOffset.y = 0;
-    if (lengthBarElement.value) {
-      lengthBarElement.value.style.opacity = '1';
-      applyLengthBarTransform();
-    }
+    if (lengthBarElement.value) applyLengthBarTransform();
   };
 
   const clearLengthBarState = () => {
-    if (lengthBarElement.value) {
-      lengthBarElement.value.style.opacity = '1';
-      setElementCursor(lengthBarElement.value, '');
-    }
+    if (lengthBarElement.value) setElementCursor(lengthBarElement.value, '');
     lengthBarElement.value = null;
     lengthBarOriginalTransform.value = { x: 0, y: 0 };
     lengthBarUserOffset.x = 0;
@@ -225,7 +223,6 @@ export const createDiagramDragActions = ({
 
     const sameElement = lengthBarElement.value === nextLengthBar;
     lengthBarElement.value = nextLengthBar;
-    lengthBarElement.value.style.opacity = '1';
     setElementCursor(lengthBarElement.value, isLayoutRepositionModeEnabled() ? 'grab' : '');
 
     if (!preserveOffset) {
@@ -295,6 +292,24 @@ export const createDiagramDragActions = ({
     });
   };
 
+  // The press of every drag: its targets show the drag and keep what they
+  // were, so the release can put it back (`endDiagramDrag`).
+  /** @param {SVGGraphicsElement[]} targets */
+  const pressDragTargets = (targets) => {
+    activeDragElements = targets;
+    activeDragOriginalTransforms = new Map();
+    targets.forEach((el) => {
+      const transform = el.getAttribute('transform');
+      activeDragOriginalTransforms.set(el, parseTransform(transform));
+      if (!pressedDragTargets.has(el)) pressedDragTargets.set(el, { transform, opacity: el.style.opacity });
+      el.style.opacity = '0.8';
+      el.style.willChange = 'transform';
+      setElementCursor(el, 'grabbing');
+    });
+    document.addEventListener('mousemove', onDiagramDrag);
+    document.addEventListener('mouseup', endDiagramDrag);
+  };
+
   /**
    * @param {MouseEvent} e
    * @param {SVGGraphicsElement | null | undefined} group
@@ -316,14 +331,7 @@ export const createDiagramDragActions = ({
     diagramDragStart.y = e.clientY;
     activeLengthBarOffsetStart = { x: lengthBarUserOffset.x, y: lengthBarUserOffset.y };
     activeDragMode = 'length_bar';
-    activeDragElements = [group];
-    activeDragOriginalTransforms = new Map([[group, parseTransform(group.getAttribute('transform'))]]);
-    group.style.opacity = '0.8';
-    group.style.willChange = 'transform';
-    setElementCursor(group, 'grabbing');
-
-    document.addEventListener('mousemove', onDiagramDrag);
-    document.addEventListener('mouseup', endDiagramDrag);
+    pressDragTargets([group]);
   };
 
   /**
@@ -347,14 +355,7 @@ export const createDiagramDragActions = ({
     plotTitleDragStart.y = e.clientY;
     activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
     activeDragMode = 'plot_title';
-    activeDragElements = [group];
-    activeDragOriginalTransforms = new Map([[group, parseTransform(group.getAttribute('transform'))]]);
-    group.style.opacity = '0.8';
-    group.style.willChange = 'transform';
-    setElementCursor(group, 'grabbing');
-
-    document.addEventListener('mousemove', onDiagramDrag);
-    document.addEventListener('mouseup', endDiagramDrag);
+    pressDragTargets([group]);
   };
 
   /** @param {MouseEvent & { target: Element }} e A mouse event on the mounted SVG, whose targets are elements. */
@@ -421,19 +422,7 @@ export const createDiagramDragActions = ({
     plotTitleDragging.value = false;
     diagramDragStart.x = e.clientX;
     diagramDragStart.y = e.clientY;
-
-    activeDragElements = dragTargets;
-    activeDragOriginalTransforms = new Map();
-
-    activeDragElements.forEach((el) => {
-      activeDragOriginalTransforms.set(el, parseTransform(el.getAttribute('transform')));
-      el.style.opacity = '0.8';
-      el.style.willChange = 'transform';
-      setElementCursor(el, 'grabbing');
-    });
-
-    document.addEventListener('mousemove', onDiagramDrag);
-    document.addEventListener('mouseup', endDiagramDrag);
+    pressDragTargets(dragTargets);
   };
 
   const getActiveDragStart = () => {
@@ -513,10 +502,14 @@ export const createDiagramDragActions = ({
     document.removeEventListener('mousemove', onDiagramDrag);
     document.removeEventListener('mouseup', endDiagramDrag);
 
-    activeDragElements.forEach((el) => {
-      el.style.opacity = '1';
+    // Only a drag that moved a target is an edit (PD-OI-053): the release puts
+    // the drag feedback back, and an unmoved target's transform as written.
+    const moved = [...pressedDragTargets].map(([el, pressed]) => {
+      el.style.opacity = pressed.opacity;
       el.style.willChange = '';
-    });
+      return releasePressedTransform(el, pressed.transform);
+    }).some(Boolean);
+    pressedDragTargets = new Map();
     const completedDragMode = activeDragMode;
     activeDragElements = [];
     activeDragOriginalTransforms = new Map();
@@ -526,11 +519,9 @@ export const createDiagramDragActions = ({
     pendingDiagramPointer = null;
     refreshDiagramDragAffordances();
     if (completedDragMode === 'record') {
-      similarityAlignmentLifecycle?.afterRecordDrag?.({
-        moved: Math.abs(deltaX) > 1e-9 || Math.abs(deltaY) > 1e-9
-      });
+      similarityAlignmentLifecycle?.afterRecordDrag?.({ moved });
     }
-    commitActiveResultEdit?.('diagram-drag');
+    if (moved) commitActiveResultEdit?.('diagram-drag');
     const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
     diagramDragTxPromise = null;
     if (tx && commitHistoryTransaction) await commitHistoryTransaction(tx);
