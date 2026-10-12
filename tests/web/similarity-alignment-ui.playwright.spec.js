@@ -997,6 +997,13 @@ test('one usable member applies directly through one Worker resolve and one Hist
   await expect(resolvedReview.locator('[data-alignment-section="single"]')).toHaveText('One candidate1 (1 record)');
   await expect(resolvedReview.locator('[data-alignment-record-key] .alignment-review-place')).toHaveText(/^[\d,]+\.\.[\d,]+ bp \(.+\)$/);
   await expect(resolvedReview.locator('[data-alignment-record-key]')).toContainText('a0');
+  // The card's second line: the evidence at the left, Skip at the right, level with it.
+  expect(await resolvedReview.locator('[data-alignment-record-key] .alignment-review-gene').evaluate((gene) => {
+    const box = (selector) => gene.querySelector(selector).getBoundingClientRect();
+    const [name, chip, skip] = [box('b'), box('.alignment-review-chip.is-evidence'), box('.alignment-review-skip')];
+    return { below: chip.top >= name.bottom - 1, left: Math.abs(chip.left - name.left) <= 1, right: skip.left > chip.right,
+      level: Math.abs(chip.top + chip.bottom - skip.top - skip.bottom) <= 4 };
+  })).toEqual({ below: true, left: true, right: true, level: true });
   await resolvedReview.getByRole('checkbox', { name: /^Skip / }).check();
   await expect(resolvedReview).toContainText('Unchanged: Skipped by user.');
   await resolvedReview.getByRole('checkbox', { name: /^Skip / }).uncheck();

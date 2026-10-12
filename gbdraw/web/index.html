@@ -1602,6 +1602,9 @@
         .alignment-review-facts code { color: #64748b; font-family: ui-monospace, monospace; font-size: 11px; overflow-wrap: anywhere; }
         .alignment-review-gene.is-hover { box-shadow: 0 0 0 2px #bfdbfe; }
         .alignment-review-place { color: #64748b; font-size: 11px; white-space: nowrap; }
+        /* The second line of a one-candidate card: evidence at the left, Skip at the right. */
+        .alignment-review-evidence { display: flex; flex: 0 0 100%; align-items: center; gap: 4px; min-width: 0; }
+        .alignment-review-evidence .alignment-review-chip { flex: 0 1 auto; }
         .alignment-review-skip { display: flex; flex: none; align-items: center; gap: 4px; margin-left: auto; color: #64748b; font-size: 11px; cursor: pointer; }
         .alignment-review-skip input { width: 12px; height: 12px; margin: 0; }
         .alignment-review-note { margin: 2px 0 0; color: #64748b; font-size: 11px; overflow-wrap: anywhere; }
@@ -7402,15 +7405,18 @@
                                         <b>{{ card.candidates[0].name }}</b>
                                         <code v-if="card.candidates[0].ids">{{ card.candidates[0].ids }}</code>
                                         <span class="alignment-review-place">{{ card.candidates[0].coordinates }} ({{ card.candidates[0].displayedStrand }})</span>
-                                        <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.join(', ') || 'no direct hit' }}</span>
-                                        <label class="alignment-review-skip">
-                                            <input type="checkbox" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-                                                   :checked="card.skipped"
-                                                   :disabled="similarityAlignmentBusy"
-                                                   :aria-label="'Skip ' + record.recordLabel"
-                                                   @change="$event.target.checked ? skipSimilarityAlignmentRecord(card.recordKey) : selectSimilarityAlignmentCandidate(card.recordKey, card.candidates[0].anchor)">
-                                            Skip
-                                        </label>
+                                        <span class="alignment-review-evidence">
+                                            <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.join(', ') || 'no direct hit' }}</span>
+                                            <span v-if="card.candidates[0].representative" class="alignment-review-chip is-evidence">group representative</span>
+                                            <label class="alignment-review-skip">
+                                                <input type="checkbox" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                                                       :checked="card.skipped"
+                                                       :disabled="similarityAlignmentBusy"
+                                                       :aria-label="'Skip ' + record.recordLabel"
+                                                       @change="$event.target.checked ? skipSimilarityAlignmentRecord(card.recordKey) : selectSimilarityAlignmentCandidate(card.recordKey, card.candidates[0].anchor)">
+                                                Skip
+                                            </label>
+                                        </span>
                                     </div>
                                     <template v-else-if="card.kind === 'several'">
                                         <!-- One line: what to do in a record that still needs a choice, and why a candidate is recommended. -->
