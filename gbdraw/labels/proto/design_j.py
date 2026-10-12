@@ -83,6 +83,40 @@ def _off_arc(radii: list, step: float = 2.0) -> bool:
     return any(abs(b - a) > step for a, b in zip(radii, radii[1:]))
 
 
+PORTS_ARR = np.array(PORTS, dtype=float)
+
+
+def _pav_l1(t) -> np.ndarray:
+    """Nondecreasing z minimising sum |z - t| (pool adjacent violators with medians).  Every pooled run takes the value of one of its two
+    middle targets (the one nearer the mean), so that its middle label sits exactly on its target."""
+    blocks: list = []
+    for v in t:
+        blocks.append([float(v)])
+        while len(blocks) > 1 and blocks[-2][(len(blocks[-2]) - 1) // 2] > blocks[-1][(len(blocks[-1]) - 1) // 2]:
+            b = blocks.pop()
+            blocks[-1] = sorted(blocks[-1] + b)
+    out: list = []
+    prev = -math.inf
+    for b in blocks:
+        lo, hi = b[(len(b) - 1) // 2], b[len(b) // 2]
+        mean = sum(b) / len(b)
+        val = lo if abs(lo - mean) <= abs(hi - mean) else hi
+        val = max(val, prev)
+        out += [val] * len(b)
+        prev = val
+    return np.array(out)
+
+
+def _lipschitz(r, slope: float) -> np.ndarray:
+    """The smallest sequence at or above r whose neighbours differ by at most `slope`."""
+    f = np.array(r, dtype=float)
+    for k in range(1, len(f)):
+        f[k] = max(f[k], f[k - 1] - slope)
+    for k in range(len(f) - 2, -1, -1):
+        f[k] = max(f[k], f[k + 1] - slope)
+    return f
+
+
 def _broken(flat) -> bool:
     """True when a False (a bent leader) lies between two True (straight) ones."""
     if True not in flat:
@@ -264,6 +298,12 @@ class _Par:
         self.loosemax = ctx.opt("loosemax", 16.0)
         self.tsq = ctx.opt("tsq", 0.01)                  # P round 4: px of cost per square degree of a bend (shares a displacement between both ends of a cluster)
         self.seats = int(ctx.opt("seats", 2))             # P round 4: seats kept per label of a chain for each row of 3 px (the cheapest, bent and straight apart)
+        self.arcfirst = int(ctx.opt("arcfirst", 0))      # Q: 1: side clusters are built in arc coordinates (arc_chain) instead of the seat DP
+        self.arcslope = ctx.opt("arcslope", 1.9)         # Q: the arc radius of two neighbours differs by at most this many px
+        self.qgap = ctx.opt("qgap", 20.0)                 # Q: boxes at most this many px apart are one run (labels with room stay on their own ray)
+        self.qnq = ctx.opt("qnq", 0.34)                  # Q: a run is built in arc coordinates when every ray is within acos(qnq) degrees of the horizontal
+        self.maxturn = ctx.opt("maxturn", 40.0)          # Q: a bent leader turns at most this many degrees
+        self.rhomax = ctx.opt("rhomax", 40.0)            # Q: the arc of a run moves out at most this many px from its smallest radius
         if self.port:
             self.face = self.mid = self.fan = self.strt = self.sym = self.slide = 0
         self.font = float(ctx.font_size)
@@ -1562,6 +1602,116 @@ class _Eng:
                 return pick
         return None
 
+    # ---- prototype Q: a side cluster in arc coordinates
+    def arc_geom(self, L: _Lab, rho, phi):
+        """The seat of label L whose leader ends on the circle of radius rho at angle phi (radians, + towards +y) from the label's own ray.
+        The last piece S -> end points at a contact point the arrival rule allows (middle of the short side within 45 degrees, the facing
+        vertex 45 to 70, a long-side point beyond).  (box q0, box centre y, end q, end y, contact point index or -1)."""
+        par = self.par
+        c, sn = np.cos(phi), np.sin(phi)
+        aq, ay = rho * (L.nq * c - L.ny * sn), rho * (L.nq * sn + L.ny * c)
+        vq, vy = aq - L.Sq, ay - L.Sy
+        ln = np.hypot(vq, vy)
+        seen = ln >= par.nostraight
+        dq = np.where(seen, vq / np.maximum(ln, 1e-9), L.nq)
+        dy = np.where(seen, vy / np.maximum(ln, 1e-9), L.ny)
+        cq, cy = aq + par.lgap * dq, ay + par.lgap * dy
+        deg = np.degrees(np.arctan2(np.abs(dy), np.abs(dq)))
+        j = np.where(dq <= 0.05, -1, np.where(deg <= 45.0, 4, np.where(deg <= 70.0, np.where(dy > 0, 0, 2), np.where(dy > 0, 6, 9))))
+        fq, fy = PORTS_ARR[np.maximum(j, 0), 0], PORTS_ARR[np.maximum(j, 0), 1]
+        return cq - fq * L.w, cy - (fy - 0.5) * L.h, aq, ay, j
+
+    def arc_static(self, L: _Lab, q0, yc, aq, ay, j):
+        """Seats given by arc_geom against the tests that need no other label (static, and the arrival rule of port_end)."""
+        q0, yc, aq, ay, j = (np.atleast_1d(np.asarray(v, dtype=float)) for v in (q0, yc, aq, ay, j))
+        ok = np.zeros(len(q0), dtype=bool)
+        for jj in np.unique(j[j >= 0]).astype(int):
+            m = j == jj
+            ya, ga = L.port_end(jj, yc[m], q0[m], self.par)
+            okk, _c, _ln = L.static(yc[m][:, None], q0[m][:, None], ya[:, None], ga[:, None], self.geo, self.par, self.par.cone_cos)
+            ok[m] = okk[:, 0] & np.isfinite(ya) & (np.abs(ya - ay[m]) < 0.05) & (np.abs(q0[m] - ga - aq[m]) < 0.05)
+        return ok
+
+    def arc_chain(self, chain: list, labs: list, recs: list, bg: _Placed, pend: _Pending):
+        """Prototype Q: the labels of a side column chain (stack order) are seated in arc coordinates.  The leader end of each label is on a circle
+        of radius rho_k concentric with the ring (neighbours differ by at most `arcslope` px).  The natural place of a label is where its radial
+        ray meets that circle (a straight leader).  The box centres stand at least one row apart (ink boxes `gap` px apart) at the least total
+        displacement (L1, pool adjacent violators: the median label of a pooled run stays straight, the others stand at the row distance on both
+        sides).  A label that fails a hard test or turns more than `maxturn` degrees raises its radius by 2 px (smoothly) and the run is built
+        again, up to `rhomax` px.  The new records {k: (box, points)}, or None."""
+        par = self.par
+        ks = sorted(chain, key=lambda k: recs[k][1][1] + recs[k][1][3])
+        Ls = [labs[k] for k in ks]
+        n = len(ks)
+        self.q_why = "pole"
+        if n < 2 or any(L.shore != "out" or L.nq < par.qnq for L in Ls):
+            return None
+        self.q_why = "nat"
+        rs = [math.hypot(*L.S) for L in Ls]
+        grid = np.arange(0.0, 80.5, 0.5)
+        r0 = []
+        for L, r in zip(Ls, rs):
+            rho = r + grid
+            q0, yc, aq, ay, j = self.arc_geom(L, rho, np.zeros_like(rho))
+            ok = self.arc_static(L, q0, yc, aq, ay, j)
+            if not ok.any():
+                return None
+            r0.append(float(rho[int(np.argmax(ok))]))
+        r0 = np.array(r0)
+        sep = np.array([0.5 * (Ls[i].h + Ls[i + 1].h) + par.gap + 1e-3 for i in range(n - 1)])
+        cum = np.concatenate([[0.0], np.cumsum(sep)])
+        self.q_dbg = {}
+        phis = np.linspace(-0.35, 0.35, 1401)
+        mid = len(phis) // 2
+        r = r0.copy()
+        for _it in range(120):
+            env = _lipschitz(r, par.arcslope)
+            nat, grids = np.empty(n), []
+            for i, L in enumerate(Ls):
+                q0, yc, _aq, _ay, j = self.arc_geom(L, env[i], phis)
+                v = j >= 0
+                grids.append((np.maximum.accumulate(yc[v]), phis[v]))
+                nat[i] = yc[mid]
+            yc_t = _pav_l1(nat - cum) + cum
+            new, bad = {}, set()
+            pl = bg.copy()
+            seats = []
+            for i, L in enumerate(Ls):
+                phi = float(np.interp(yc_t[i], grids[i][0], grids[i][1]))
+                q0, yc, aq, ay, j = (float(v[0]) for v in map(np.atleast_1d, self.arc_geom(L, env[i], phi)))
+                seats.append((q0, yc, aq, ay, int(j)))
+                x0 = q0 if L.sx > 0 else -(q0 + L.w)
+                box = (x0, yc - 0.5 * L.h, x0 + L.w, yc + 0.5 * L.h)
+                att = (L.sx * aq, ay)
+                new[ks[i]] = (box, [L.it.anchor, L.S, att])
+                pl.add(box, L.S, att, L)
+                if j < 0 or not self.arc_static(L, q0, yc, aq, ay, j)[0]:
+                    bad.add(i)
+                    self.q_dbg[i] = "[static]"
+                elif abs(_sturn_arr(L.it.anchor, L.S, np.array([att]))[0]) > par.maxturn:
+                    bad.add(i)
+                    self.q_dbg[i] = "[turn]"
+            base = len(bg.labs())
+            for i, L in enumerate(Ls):
+                if i in bad:
+                    continue
+                box, pts = new[ks[i]]
+                bx, at = np.array([box], dtype=float), np.array([pts[-1]], dtype=float)
+                if not self.legal(L, bx, at, np.array([L.S], dtype=float), _View(pl, base + i), pend, min(L.Sy, bx[0, 1]) - par.lpad - 1.0, max(L.Sy, bx[0, 3]) + par.lpad + 1.0)[0]:
+                    bad.add(i)
+                    pb, _s0, _s1 = pl.arrays()
+                    near = [pl.labs()[m].it.text[:12] + ("*" if m >= base else "") for m in range(len(pb)) if m != base + i and bx[0, 0] < pb[m, 2] + 12 and pb[m, 0] < bx[0, 2] + 12 and bx[0, 1] < pb[m, 3] + 12 and pb[m, 1] < bx[0, 3] + 12]
+                    self.q_dbg[i] = "[legal " + "/".join(near) + "]"
+            if not bad:
+                return new
+            for i in bad:
+                r[i] = max(r[i], env[i]) + 2.0
+            if (r - r0).max() > par.rhomax:
+                self.q_why = "rho:" + ",".join(f"{Ls[i].it.text}{self.q_dbg.get(i, '')}" for i in sorted(bad))
+                return None
+        self.q_why = "iter"
+        return None
+
     def cluster(self, recs: list, shore: str) -> tuple[list, dict]:
         """R3 to R6 as one construction.  A chain of one stack (boxes at most gap + 3 px apart; a lone label is a chain of one) is seated again
         as a whole: every label takes one of its seats (chain_nodes) so that the sum of the leader costs is least and the leaders read
@@ -1580,6 +1730,37 @@ class _Eng:
         for k, lb in enumerate(labs):
             groups.setdefault((lb.sx, lb.upper), []).append(k)
         solved: set = set()
+        qdone: set = set()
+        if par.arcfirst and shore == "out":                      # Q: side clusters in arc coordinates, one column (both halves) at a time
+            cols: dict = {}
+            for k, lb in enumerate(labs):
+                cols.setdefault(lb.sx, []).append(k)
+            for ks in cols.values():
+                ks.sort(key=lambda k: recs[k][1][1])
+                chains, cur = [], [ks[0]]
+                for k in ks[1:]:
+                    if recs[k][1][1] - recs[cur[-1]][1][3] <= par.qgap:
+                        cur.append(k)
+                    else:
+                        chains.append(cur)
+                        cur = [k]
+                chains.append(cur)
+                for chain in chains:
+                    if len(chain) < 2:
+                        continue
+                    bg = _Placed()
+                    for j, r in enumerate(recs):
+                        if j not in chain:
+                            bg.add(r[1], labs[j].S, r[2][-1], labs[j])
+                    new = self.arc_chain(chain, labs, recs, bg, pend)
+                    if new is None:
+                        info["q_kept"] = info.get("q_kept", 0) + 1
+                        info.setdefault("q_kept_names", []).append([self.q_why] + [labs[c].it.text for c in chain])
+                        continue
+                    info["q_built"] = info.get("q_built", 0) + 1
+                    qdone.update(chain)
+                    for k, (box, pts) in new.items():
+                        recs[k] = (recs[k][0], box, pts, recs[k][3], recs[k][4])
         for rnd in range(3):                                     # round 0: every chain; later rounds: the chains that read mixed or off the arc and are new
             for ks in groups.values():
                 ks.sort(key=lambda k: 0.5 * (recs[k][1][1] + recs[k][1][3]) * labs[k].d)
@@ -1593,6 +1774,8 @@ class _Eng:
                         cur = [k]
                 chains.append(cur)
                 for chain in chains:
+                    if qdone.intersection(chain):
+                        continue
                     if rnd and (len(chain) < 2 or tuple(chain) in solved or not (_broken([abs(_sturn(recs[k][2])) < 1.0 for k in chain]) or _off_arc([math.hypot(*recs[k][2][-1]) for k in chain]))):
                         continue
                     solved.add(tuple(chain))
