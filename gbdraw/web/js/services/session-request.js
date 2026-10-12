@@ -87,6 +87,7 @@ import {
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annotation-state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { SESSION_TABLE_LABELS, diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
+import { ownEntry } from '../utils/own-entry.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
@@ -3440,8 +3441,10 @@ const resourcesWithOriginalNames = (resources, originalNameHints) => {
   }));
 };
 
+// A resource id is Session text, so only an own key of the table names a
+// resource (OV-613).
 const resourceAsLegacyFile = (resources, resourceId) => {
-  const entry = resources?.[resourceId];
+  const entry = ownEntry(resources, resourceId);
   if (!entry || typeof entry !== 'object') throw new Error(`Missing canonical resource: ${resourceId}`);
   const { kind: _kind, ...file } = entry;
   return file;
@@ -3897,7 +3900,7 @@ const projectCanonicalDepthTracks = ({
 };
 
 export const decodeCanonicalResourceText = (resources, resourceId) => {
-  const entry = resources?.[resourceId];
+  const entry = ownEntry(resources, resourceId);
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
     throw new Error(`Missing canonical resource: ${resourceId}`);
   }
