@@ -3584,6 +3584,7 @@ export const projectSettingsOnlySession = (data, sessionResourceTable) => ({
   semanticFeatureState: {}
 });
 
+/** @param {unknown} value */
 const cloneCanonicalJsonValue = (value) => (
   value === undefined ? undefined : JSON.parse(JSON.stringify(value))
 );
@@ -4224,10 +4225,10 @@ const projectCircularConservationConfig = (options, files) => {
     : [];
   if (sourceFiles.length === 0) return undefined;
   const labels = Array.isArray(options.conservationLabels)
-    ? options.conservationLabels.map((value) => String(value || '').trim())
+    ? options.conservationLabels.map((/** @type {unknown} */ value) => String(value || '').trim())
     : [];
   const colors = Array.isArray(options.conservationColors)
-    ? options.conservationColors.map((value) => String(value || '').trim())
+    ? options.conservationColors.map((/** @type {unknown} */ value) => String(value || '').trim())
     : [];
   const series = sourceFiles.map((file, index) => {
     const fileName = String(file?.name || `comparison-${index + 1}.tsv`);
@@ -4548,7 +4549,7 @@ export const projectCanonicalSessionRequest = ({
       }
       if (layout.multiRecordPositions !== null && (
         !Array.isArray(layout.multiRecordPositions) ||
-        layout.multiRecordPositions.some((token) => typeof token !== 'string' || !token.trim())
+        layout.multiRecordPositions.some((/** @type {unknown} */ token) => typeof token !== 'string' || !token.trim())
       )) throw new Error(
         'renderRequest.layout.multiRecordPositions must be null or an array of non-empty text.'
       );
@@ -5259,7 +5260,7 @@ export const projectCanonicalSessionRequest = ({
     !canonicalDepth &&
     renderRequest.mode === 'circular' &&
     Array.isArray(options.depthTrackHeights) &&
-    options.depthTrackHeights.some((height) => height !== null && height !== undefined)
+    options.depthTrackHeights.some((/** @type {unknown} */ height) => height !== null && height !== undefined)
   ) {
     throw new Error('diagramOptions.depthTrackHeights must contain only null values for Circular requests.');
   }
@@ -5477,7 +5478,7 @@ export const projectCanonicalSessionRequest = ({
       ? (tracks.linearTrackAxisIndex ?? null)
       : null,
     linear_track_slots: projectedLinearTrackSlots,
-    multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((token) => {
+    multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token) => {
       const split = String(token).lastIndexOf('@');
       return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };
     })
@@ -5502,7 +5503,7 @@ export const projectCanonicalSessionRequest = ({
             : {})
         };
       })
-    : (renderRequest.layout?.multiRecordPositions || []).map((token, index) => {
+    : (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token, /** @type {number} */ index) => {
         const split = String(token).lastIndexOf('@');
         return {
           uid: files.linearSeqs[index]?.uid || '',
@@ -5609,6 +5610,7 @@ export const projectCanonicalSessionRequest = ({
 const PUBLICATION_OUTPUT_ONLY_FIELDS = new Set(['prefix', 'formats', 'overwrite', 'artifactFilename']);
 const PUBLICATION_COMPARISON_FILTER_FIELDS = new Set(['evalue', 'bitscore', 'identity', 'alignmentLength']);
 const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWithPlotTitle: false, conservationReference: 'auto', 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true };
+/** @param {string} id */
 const publicationBytes = async (resource, id) => {
   if (!resource || typeof resource !== 'object' || Array.isArray(resource)) throw new Error(`Canonical request resource '${id}' is missing.`);
   if (typeof resource.readBytes === 'function') return resource.readBytes();
@@ -5622,6 +5624,7 @@ const TSV_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 // none (OV-266, OV-367). Each compares by kind and rows
 // without the header; default colors compare as a set, the others keep their
 // rule order.
+/** @type {Readonly<Record<string, readonly [kind: string, header: string]>>} */
 const PUBLICATION_TABLES = Object.freeze({
   '$.diagramOptions.colors.defaultColors': ['default-colors', 'feature_type\tcolor'],
   '$.diagramOptions.colors.colorTable': ['color-table', 'feature_type\tqualifier_key\tvalue\tcolor\tcaption'],
@@ -5630,7 +5633,9 @@ const PUBLICATION_TABLES = Object.freeze({
   '$.diagramOptions.qualifierPriorityTable': ['qualifier-priority-table', 'feature_type\tpriorities'],
   '$.diagramOptions.labelOverrideTable': ['label-override-table', 'record_id\tfeature_type\tqualifier\tvalue\tlabel_text']
 });
+/** @param {string} path A path of the request from `$`, so never an inherited member's name. */
 const publicationTable = (path) => PUBLICATION_TABLES[path.replace(/\.resourceId$/, '')] || null;
+/** @param {string} id */
 const normalizedPublicationBytes = async (resource, id, normalize, path) => {
   const bytes = await publicationBytes(resource, id);
   const table = publicationTable(path);
@@ -5729,7 +5734,7 @@ const promoteRenderRequestToSchema8 = (
 ) => {
   const sourceSchema = promoted.schema;
   const linearRows = promoted.mode === 'linear'
-    ? (promoted.layout?.multiRecordPositions || []).map((token) => {
+    ? (promoted.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token) => {
         const split = String(token).lastIndexOf('@');
         return Number(String(token).slice(split + 1)) || null;
       })
@@ -5781,10 +5786,15 @@ const promoteRenderRequestToSchema8 = (
   return promoted;
 };
 
+/**
+ * @param {unknown} left
+ * @param {unknown} right
+ */
 const sameCanonicalValue = (left, right) => (
   JSON.stringify(left) === JSON.stringify(right)
 );
 
+/** @param {unknown} selector */
 const materializedRecordSelector = (selector) => {
   const match = String(selector || '').match(/^#([1-9]\d*)$/);
   if (!match) {
@@ -5991,6 +6001,11 @@ const COMMITTED_EDITOR_TABLE_OPTIONS = Object.freeze({
   ...EDITOR_TABLE_OPTIONS
 });
 
+/**
+ * @param {unknown} value
+ * @param {Set<string>} [ids]
+ * @returns {Set<string>}
+ */
 const referencedResourceIds = (value, ids = new Set()) => {
   if (Array.isArray(value)) value.forEach((entry) => referencedResourceIds(entry, ids));
   else if (value && typeof value === 'object') {
