@@ -475,22 +475,6 @@ export const validateProteinRawEntryReferences = (
 };
 
 /**
- * @param {unknown} manifest
- * @param {string} queryInstanceKey
- * @param {string} subjectInstanceKey
- */
-export const proteinRuntimeIdSets = (manifest, queryInstanceKey, subjectInstanceKey) => {
-  if (!validateProteinIdentityManifest(manifest)) return null;
-  const query = manifest.recordInstances[queryInstanceKey];
-  const subject = manifest.recordInstances[subjectInstanceKey];
-  if (!query || !subject) return null;
-  return {
-    query: new Set(Object.values(query.runtimeIds)),
-    subject: new Set(Object.values(subject.runtimeIds))
-  };
-};
-
-/**
  * @param {unknown} text
  * @param {unknown} queryIds
  * @param {unknown} subjectIds
