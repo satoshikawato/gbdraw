@@ -97,6 +97,81 @@ test('the group list, a rendered name and the search follow the first rename of 
   assert.equal(editor.filteredOrthogroups.value.length, 1, 'a search finds the group by its new name');
 });
 
+// OV-556: the "Edited" marker asks whether a rename table has the group's key.
+// The marker must follow a first rename by itself, not through another read of its reader.
+test('the Edited marker of a group follows its first name and its first description', () => {
+  const state = {
+    orthogroups: ref([{ id: 'og_1', name: 'LivB', members: [] }, { id: 'constructor', name: 'Own name', members: [] }]),
+    orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
+    selectedOrthogroupId: ref('og_1'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
+  };
+  const editor = createOrthogroupEditor({ state: withDrawings(state) });
+  const edited = context.Vue.computed(() => ['og_1', 'constructor'].map((id) => editor.isOrthogroupRenamed(id)));
+  assert.deepEqual(edited.value, [false, false], 'a group id that names an inherited member is not edited');
+  state.orthogroupNameOverrides.og_1 = 'My transporter';
+  assert.deepEqual(edited.value, [true, false]);
+  delete state.orthogroupNameOverrides.og_1;
+  assert.deepEqual(edited.value, [false, false]);
+  state.orthogroupDescriptionOverrides.og_1 = 'My text';
+  assert.deepEqual(edited.value, [true, false]);
+  state.orthogroupDescriptionOverrides.constructor = 'Own text';
+  assert.deepEqual(edited.value, [true, true]);
+  delete state.orthogroupDescriptionOverrides.og_1;
+  assert.deepEqual(edited.value, [false, true]);
+  // The list rows carry the same marker.
+  assert.deepEqual(editor.orthogroupRows.value.map((row) => [row.id, row.renamed]), [['og_1', false], ['constructor', true]]);
+  state.orthogroupDescriptionOverrides.og_1 = 'My text';
+  const rows = editor.orthogroupRows.value;
+  assert.deepEqual(rows.map((row) => row.renamed), [true, true]);
+  // The marker asks for the key, not for its text: typing a description rebuilds no row.
+  state.orthogroupDescriptionOverrides.og_1 = 'My longer text';
+  assert.equal(editor.orthogroupRows.value, rows);
+  assert.deepEqual(edited.value, [true, true]);
+});
+
+// OV-559: the Description field shows the user's own text of the selected group
+// (not Python's description). A group id is data, so the field reads it by own
+// key, through the editor. The field is the markup of index.html, compiled by Vue.
+test('the Description field shows only the group\'s own edit and follows its first write (OV-559)', () => {
+  const state = {
+    orthogroups: ref([{ id: 'constructor', name: 'Own name', description: 'Python text', members: [] }]),
+    orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
+    selectedOrthogroupId: ref('constructor'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
+  };
+  const editor = createOrthogroupEditor({ state: withDrawings(state) });
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const markup = html.match(/<textarea id="similarity-group-description"[^>]*><\/textarea>/)?.[0];
+  assert.ok(markup, 'the Description field is found');
+  const render = context.Vue.compile(markup);
+  // What the composition root hands the template (app/app-setup.js).
+  const bindings = {
+    orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides,
+    orthogroupDescriptionFieldText: editor.orthogroupDescriptionFieldText,
+    setOrthogroupDescriptionOverride: editor.setOrthogroupDescriptionOverride,
+    get selectedOrthogroup() { return editor.selectedOrthogroup.value; }
+  };
+  const field = context.Vue.computed(() => render(bindings, []).props.value);
+  assert.equal(field.value, '', 'no edit: the field is empty, whatever the group id is');
+  editor.setOrthogroupDescriptionOverride('constructor', 'Own text');
+  assert.equal(field.value, 'Own text');
+  editor.resetOrthogroupRename('constructor');
+  assert.equal(field.value, '');
+  // The reader, by row and by id.
+  editor.setOrthogroupDescriptionOverride('constructor', 'Own text');
+  assert.equal(editor.orthogroupDescriptionFieldText(editor.selectedOrthogroup.value), 'Own text');
+  assert.equal(editor.orthogroupDescriptionFieldText('constructor'), 'Own text');
+  assert.equal(editor.orthogroupDescriptionFieldText('toString'), '');
+  assert.equal(editor.orthogroupDescriptionFieldText(null), '');
+  // The template reads no rename table by key, and the root binds the reader.
+  assert.doesNotMatch(html, /orthogroup(?:Name|Description)Overrides\s*\[/);
+  const appSetup = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
+  assert.match(appSetup, /orthogroupDescriptionFieldText: orthogroupActions\.orthogroupDescriptionFieldText,/);
+});
+
 test('group names follow exact member sets and unmatched names stay dormant (CO-08, D-21)', () => {
   const group = (id, ...members) => ({ id, members: members.map((proteinId) => ({ proteinId })) });
   const first = rekeyOrthogroupOverrides({

@@ -6604,6 +6604,7 @@ export const createAppSetup = () => {
     selectedOrthogroup: orthogroupActions.selectedOrthogroup,
     selectedOrthogroupMembersByRecord: orthogroupActions.selectedOrthogroupMembersByRecord,
     resolveOrthogroupName: orthogroupActions.resolveOrthogroupName,
+    orthogroupDescriptionFieldText: orthogroupActions.orthogroupDescriptionFieldText,
     orthogroupScope: orthogroupActions.orthogroupScope,
     orthogroupScopeLabel: orthogroupActions.orthogroupScopeLabel,
     orthogroupRows: orthogroupActions.orthogroupRows,

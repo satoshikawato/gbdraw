@@ -26,6 +26,7 @@ import {
   tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
+import { ownEntry } from '../utils/own-entry.js';
 import {
   paramsKeptOnRendererChange,
   parseOptionalCircularScalar,
@@ -127,13 +128,6 @@ const SUPPRESS_CONTROL_LABEL_BY_RENDERER = {
   dinucleotide_content: 'Hide GC Content',
   dinucleotide_skew: 'Hide GC Skew'
 };
-/**
- * A renderer name can come from a hand-edited Session, so a table is read by its own keys only.
- * @param {Record<string, string>} table
- * @param {string} key
- * @returns {string | undefined}
- */
-const ownTableEntry = (table, key) => (Object.hasOwn(table, key) ? table[key] : undefined);
 
 /** @type {Record<string, string>} */
 const PRESET_LABELS = {
@@ -454,7 +448,7 @@ export const hasEnabledCircularTrackRenderer = (slots, renderer) =>
 /** @param {unknown} renderer @param {Record<string, unknown> | null | undefined} [form] */
 export const isCircularTrackRendererSuppressedByForm = (renderer, form = {}) => {
   const normalizedRenderer = String(renderer || '').trim();
-  const formKey = ownTableEntry(SUPPRESS_FORM_KEY_BY_RENDERER, normalizedRenderer);
+  const formKey = ownEntry(SUPPRESS_FORM_KEY_BY_RENDERER, normalizedRenderer);
   return Boolean(formKey && form?.[formKey]);
 };
 
@@ -490,7 +484,7 @@ export const circularTrackSlotHiddenBySuppressForm = (slot, form = {}, nt = 'GC'
 export const applyCircularSuppressControlsToSlots = (slots, form = {}, nt = 'GC') => (
   (Array.isArray(slots) ? slots : []).map((slot) => {
     if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return slot;
-    const token = ownTableEntry(SUPPRESS_KEY_BY_RENDERER, String(slot.renderer || '').trim());
+    const token = ownEntry(SUPPRESS_KEY_BY_RENDERER, String(slot.renderer || '').trim());
     if (!token) return slot;
     const params = cloneParams(slot.params);
     if (circularTrackSlotHiddenBySuppressForm(slot, form, nt)) {
@@ -1458,7 +1452,7 @@ export const createCircularTrackSlotEditor = ({
     if (!drawing.adv.circular_track_slots_enabled) return null;
     const count = activeCircularTrackSlotsForRenderer(drawing, renderer).length;
     if (count === 0) return null;
-    const trackLabel = ownTableEntry(SUPPRESS_TRACK_LABEL_BY_RENDERER, renderer) || 'this track';
+    const trackLabel = ownEntry(SUPPRESS_TRACK_LABEL_BY_RENDERER, renderer) || 'this track';
     return askChoice({
       title: `Hide ${trackLabel}?`,
       description: count === 1
@@ -1483,7 +1477,7 @@ export const createCircularTrackSlotEditor = ({
     const renderer = SUPPRESS_RENDERER_BY_KEY[key];
     if (!renderer) return;
     // Every renderer of SUPPRESS_RENDERER_BY_KEY has a form key.
-    const formKey = /** @type {string} */ (ownTableEntry(SUPPRESS_FORM_KEY_BY_RENDERER, renderer));
+    const formKey = /** @type {string} */ (ownEntry(SUPPRESS_FORM_KEY_BY_RENDERER, renderer));
     const nextChecked = Boolean(checked);
     const previousChecked = Boolean(drawing.form?.[formKey]);
 
@@ -1502,7 +1496,7 @@ export const createCircularTrackSlotEditor = ({
       if (event?.target) event.target.checked = previousChecked;
       return asked.then((choice) => (
         choice === 'hide' && !state.sessionOperationAvailability?.() && Boolean(drawing.form[formKey]) === previousChecked
-          ? runUndoable(ownTableEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || 'Hide track', apply)
+          ? runUndoable(ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || 'Hide track', apply)
           : false
       ));
     }
@@ -1561,7 +1555,7 @@ export const createCircularTrackSlotEditor = ({
     if (!slot || circularTrackSlotHiddenBySuppressForm(slot, drawing.form, drawing.adv.nt)) return;
     slot.enabled = Boolean(enabled);
     if (slot.params && typeof slot.params === 'object' && !Array.isArray(slot.params)) {
-      const token = ownTableEntry(SUPPRESS_KEY_BY_RENDERER, String(slot.renderer || '').trim());
+      const token = ownEntry(SUPPRESS_KEY_BY_RENDERER, String(slot.renderer || '').trim());
       if (token && slot.params[GLOBAL_SUPPRESS_PARAM] === token) {
         slot.params = cloneParams(slot.params);
         delete slot.params[GLOBAL_SUPPRESS_PARAM];
@@ -1586,7 +1580,7 @@ export const createCircularTrackSlotEditor = ({
   const circularTrackSlotSuppressMessage = (slot) => {
     if (!circularTrackSlotHiddenBySuppress(slot)) return '';
     const renderer = String(slot?.renderer || '').trim();
-    const controlLabel = ownTableEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || 'Layout';
+    const controlLabel = ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || 'Layout';
     return `Hidden by ${controlLabel}.`;
   };
 
@@ -1642,7 +1636,7 @@ export const createCircularTrackSlotEditor = ({
   };
 
   /** @param {string} renderer */
-  const circularTrackRendererLabel = (renderer) => ownTableEntry(RENDERER_LABELS, renderer) || renderer;
+  const circularTrackRendererLabel = (renderer) => ownEntry(RENDERER_LABELS, renderer) || renderer;
   /** @param {string} renderer */
   const supportsCircularTrackSlotPlacement = (renderer) => SUPPORTED_RENDERERS.includes(renderer);
   /** @param {CircularTrackSlot | null | undefined} slot */

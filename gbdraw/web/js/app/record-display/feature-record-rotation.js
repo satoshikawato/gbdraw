@@ -1,7 +1,7 @@
 // @ts-check
 import { resolveFeatureAnchor } from './feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
-/** @import { CommittedDisplayRow } from '../record-display-options.js' */
+/** @import { CommittedDisplayRow, ResolvedRecordTransform } from '../record-display-options.js' */
 /** @import { AnchorIntent } from './feature-anchor.js' */
 
 /**
@@ -28,14 +28,6 @@ const sameFeatureIdentity = (feature, identity) => {
  * The popup feature as the Result lists it; its fields come from the rendered
  * feature records (Python owns the shape, R7).
  * @typedef {Record<string, any>} PopupFeature
- */
-
-/**
- * A resolved record transform that Generate or a candidate applies.
- * @typedef {object} ResolvedRecordTransform
- * @property {number} startCoordinate
- * @property {boolean} reverseComplement
- * @property {Record<string, any> | null} anchorIntent
  */
 
 /**
@@ -140,7 +132,8 @@ export const createFeatureRecordRotationAction = ({
   };
 
   // `resolveEligible` throws unless the resolution is eligible, and an
-  // eligible resolution sets the start coordinate and the orientation.
+  // eligible resolution sets the start coordinate, the orientation and the
+  // provenance (`resolveFeatureAnchor`, feature-anchor.js).
   /** @param {{ startCoordinate: number | null, reverseComplement: boolean | null, provenance: Record<string, unknown> | null }} resolved */
   const resolvedTransform = (resolved) => /** @type {ResolvedRecordTransform} */ ({
     startCoordinate: resolved.startCoordinate,

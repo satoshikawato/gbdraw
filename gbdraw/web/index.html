@@ -8000,7 +8000,7 @@
                                 <div>
                                     <label for="similarity-group-description" class="text-xs font-medium text-slate-500 block mb-1">Description</label>
                                     <textarea id="similarity-group-description"
-                                              :value="orthogroupDescriptionOverrides[selectedOrthogroup.id] || ''"
+                                              :value="orthogroupDescriptionFieldText(selectedOrthogroup)"
                                               @input="setOrthogroupDescriptionOverride(selectedOrthogroup.id, $event.target.value)"
                                               placeholder="Describe this similarity group"
                                               rows="2"

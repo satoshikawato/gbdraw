@@ -174,6 +174,11 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
   const feature = { scope: state.mode.value, record_key: 'record-2', biological_feature_id: 'logical-feature' };
   return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
+    // The committed request with every record naming one saved resource id.
+    recommitSources: (resourceId) => {
+      committed = { ...committed, renderRequest: { ...committed.renderRequest,
+        records: committed.renderRequest.records.map((record) => ({ ...record, source: { kind: 'genbank', resourceId } })) } };
+    },
     commitCombined: async () => {
       const bytes = await readFileBytes(file);
       const combined = { ...descriptor(file.name, ''), size: bytes.byteLength,
@@ -394,6 +399,22 @@ test('the record display binding is refreshed for the committed request before t
   assert.notEqual(after.request, before.request);
   assert.equal(after.boundSources[0].source, model.state.files.c_gb);
   assert.equal(isCurrentFeature(model.feature, after), true);
+});
+
+// OV-557: a resource id is Session data. A record that names an id the Session
+// does not hold has no saved source, also when the id names an inherited member.
+test('a record that names a missing resource id matches no saved source', () => {
+  const model = compositeControls();
+  const { matchesSavedSource } = model.controls.sourceBinding();
+  // The combined view of two resources is no saved resource by itself.
+  for (const missing of ['missing', 'constructor', 'toString', '__proto__', undefined]) {
+    assert.equal(matchesSavedSource(model.file, missing), false, String(missing));
+  }
+  assert.equal(isCurrentFeature(model.feature, model.controls.sourceBinding()), true);
+  model.recommitSources('constructor');
+  assert.equal(isCurrentFeature(model.feature, model.controls.sourceBinding()), false,
+    'the feature of a record whose saved source is missing is not current');
+  assert.deepEqual(model.enabled(), []);
 });
 
 test('unsupported draft lanes remain unavailable independently of current placement value', () => {

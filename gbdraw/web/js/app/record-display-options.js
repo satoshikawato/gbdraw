@@ -19,6 +19,7 @@ import { featureIdentityKey, requestFeaturePlacements } from '../services/featur
 import { committedRecordForKey, committedRecordUsesSource } from '../services/feature-identity.js';
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
+import { ownEntry } from '../utils/own-entry.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
@@ -63,8 +64,11 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  */
 
 /**
- * A resolved record transform to write on a row.
- * @typedef {{ startCoordinate: unknown, reverseComplement: unknown, anchorIntent: Partial<Record<keyof AnchorIntent, unknown>> | null | undefined }} ResolvedRecordTransform
+ * A resolved record transform to write on a row: the start, the orientation and
+ * the provenance of an eligible anchor resolution (`resolvedTransform`,
+ * record-display/feature-record-rotation.js, its one writer).
+ * `writeResolvedTransform` checks each field again before a draft takes it.
+ * @typedef {{ startCoordinate: number, reverseComplement: boolean, anchorIntent: AnchorIntent }} ResolvedRecordTransform
  */
 
 /**
@@ -277,7 +281,8 @@ export const createRecordDisplayControls = ({
   };
   /** @param {unknown} file the source file of a File card (`isCurrentFeature` passes it on untyped) @param {string | undefined} resourceId */
   const matchesSavedSource = (file, resourceId) => {
-    const expected = getCommittedSession()?.resources?.[String(resourceId)];
+    // A resource id is Session data: only an own key of the table names a saved resource.
+    const expected = ownEntry(getCommittedSession()?.resources, String(resourceId));
     return matchesSessionResourceDescriptor(/** @type {FileLike | null | undefined} */ (file), expected); // a File card's source is a File or null
   };
   const refreshCommittedRows = () => {

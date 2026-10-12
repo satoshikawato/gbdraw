@@ -563,6 +563,20 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return normalizeText(ownEntry(drawing.orthogroupDescriptionOverrides, id)) || normalizeText(group?.description);
   };
 
+  // The id of a group as the rename tables key it.
+  /** @param {GroupOrId} groupOrId */
+  const renameKey = (groupOrId) => (
+    typeof groupOrId === 'string' ? normalizeText(groupOrId) : orthogroupIdValue(groupOrId)
+  );
+
+  // The text of the editor's Description field: the user's own edit of the
+  // group, and nothing for a group without one (Python's description is not
+  // put into the field).
+  /** @param {GroupOrId} groupOrId */
+  const orthogroupDescriptionFieldText = (groupOrId) => (
+    ownEntry(state.drawings.linear.orthogroupDescriptionOverrides, renameKey(groupOrId)) || ''
+  );
+
   /** @param {GroupOrId} groupOrId */
   const orthogroupScope = (groupOrId) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
@@ -572,19 +586,21 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   /** @param {GroupOrId} groupOrId */
   const orthogroupScopeLabel = (groupOrId) => groupMetadataScopeLabel(orthogroupScope(groupOrId));
 
+  // The ids the rename tables hold. `Object.keys` is the Vue dependency: it
+  // follows a key that is added or removed, and not a change of its text, so
+  // typing a description does not rebuild the list rows.
+  /** @type {{ readonly value: Set<string> }} */
+  const renamedOrthogroupIds = computed(() => {
+    const drawing = state.drawings.linear;
+    return new Set([
+      ...Object.keys(drawing.orthogroupNameOverrides), ...Object.keys(drawing.orthogroupDescriptionOverrides)
+    ]);
+  });
+
   /** @param {GroupOrId} groupOrId */
   const isOrthogroupRenamed = (groupOrId) => {
-    const drawing = state.drawings.linear;
-    const id = typeof groupOrId === 'string'
-      ? normalizeText(groupOrId)
-      : orthogroupIdValue(groupOrId);
-    return Boolean(
-      id &&
-      (
-        Object.prototype.hasOwnProperty.call(drawing.orthogroupNameOverrides, id) ||
-        Object.prototype.hasOwnProperty.call(drawing.orthogroupDescriptionOverrides, id)
-      )
-    );
+    const id = renameKey(groupOrId);
+    return Boolean(id) && renamedOrthogroupIds.value.has(id);
   };
 
   /** @type {{ readonly value: number }} */
@@ -640,9 +656,6 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   });
 
   const orthogroupRows = computed(() => {
-    const drawing = state.drawings.linear;
-    // Renamed markers depend on description override keys, not their text.
-    Reflect.ownKeys(drawing.orthogroupDescriptionOverrides);
     /** @type {(count: string, noun: string) => string} */
     const counted = (count, noun) => `${count} ${count === '1' ? noun : `${noun}s`}`;
     return filteredOrthogroups.value.map((group) => ({
@@ -978,6 +991,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     getOrthogroupById,
     resolveOrthogroupName,
     resolveOrthogroupDescription,
+    orthogroupDescriptionFieldText,
     orthogroupScope,
     orthogroupScopeLabel,
     orthogroupRows,

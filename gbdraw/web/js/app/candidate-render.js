@@ -8,6 +8,7 @@
 /** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
 import { appliedFeatureColors, normalizeDefaultColor, samePaint } from '../utils/color-utils.js';
+import { hasOwnEntry } from '../utils/own-entry.js';
 import { defaultLegendCaptionOrder, isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
@@ -351,7 +352,7 @@ export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows
   const ruleRows = new Set(draft.ruleCaptions);
   /** @param {string} caption @param {PythonLegendKey} key */
   const paletteColor = (caption, key) => (
-    hasOwn(legendColorOverrides, caption) || !rows.originalCaptions.has(key) || ruleRows.has(key) ? null : draft.colorOf(key)
+    hasOwnEntry(legendColorOverrides, caption) || !rows.originalCaptions.has(key) || ruleRows.has(key) ? null : draft.colorOf(key)
   );
   /** @type {Map<string, SwatchColor>} */
   const listed = new Map();
