@@ -486,12 +486,13 @@ export const isSessionResourceFileView = (file) => Boolean(
 );
 
 /**
- * @param {FileLike} file
+ * @param {FileLike | null | undefined} file
  * @param {SessionResourceDescriptor | null | undefined} descriptor the saved descriptor
  * @returns {boolean}
  */
 export const matchesSessionResourceDescriptor = (file, descriptor) => {
-  const backing = fileViewBackings.get(file);
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   // Native Files remain bound by the successful run's object identity.
   if (!backing || backing.dirty) return true;
   if (!descriptor) return false;
@@ -533,9 +534,10 @@ export const matchesSessionResourceDescriptor = (file, descriptor) => {
   return true;
 };
 
-/** @param {FileLike} file */
+/** @param {FileLike | null | undefined} file */
 export const sessionResourceSource = (file) => {
-  const backing = fileViewBackings.get(file);
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing || backing.dirty) return null;
   if (Array.isArray(backing.descriptors)) {
     return Object.freeze({ descriptors: backing.descriptors });
@@ -549,11 +551,12 @@ export const sessionResourceSource = (file) => {
 };
 
 /**
- * @param {FileLike} file
+ * @param {FileLike | null | undefined} file
  * @returns {Promise<Uint8Array> | null}
  */
 export const readSessionResourceBytes = (file) => {
-  const backing = fileViewBackings.get(file);
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return null;
   if (typeof backing.readBytes === 'function') return backing.readBytes();
   // Every combined view defines `readBytes`, so this is a leaf backing.
@@ -561,20 +564,22 @@ export const readSessionResourceBytes = (file) => {
 };
 
 /**
- * @param {FileLike} file
+ * @param {FileLike | null | undefined} file
  * @returns {Promise<string> | null}
  */
 export const readSessionResourceText = (file) => {
-  const backing = fileViewBackings.get(file);
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return null;
   if (typeof backing.readText === 'function') return backing.readText();
   // Every combined view defines `readText`, so this is a leaf backing.
   return materializeText(/** @type {LeafBacking} */ (backing));
 };
 
-/** @param {FileLike} file */
+/** @param {FileLike | null | undefined} file */
 export const releaseSessionResourceContent = (file) => {
-  const backing = fileViewBackings.get(file);
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return false;
   /**
    * @param {LeafBacking | CompositeBacking} candidate

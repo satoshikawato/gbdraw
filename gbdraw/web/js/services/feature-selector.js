@@ -114,7 +114,7 @@ export const normalizeQualifierMap = (qualifiers) => {
   return normalized;
 };
 
-/** @param {object | null | undefined} obj */
+/** @param {Record<string, unknown> | null | undefined} obj */
 const hasOwnValues = (obj) => Object.keys(obj || {}).length > 0;
 
 /**

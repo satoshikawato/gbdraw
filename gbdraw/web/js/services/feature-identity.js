@@ -23,7 +23,7 @@
  *   source: { resourceId?: string, gffResourceId?: string, fastaResourceId?: string }
  * }} CommittedRecord
  */
-/** @typedef {{ mode?: string, records?: CommittedRecord[] }} CommittedRecordRequest */
+/** @typedef {{ mode?: string, records: CommittedRecord[] }} CommittedRecordRequest */
 /**
  * An input source of the record display (the File card and its optional pair).
  * @typedef {{ scope: string, sourceUid: string, source: unknown, paired?: unknown }} RecordDisplaySource
@@ -229,7 +229,7 @@ export const resolveUniqueOrthogroupMemberForFeature = (feature, members = []) =
  * @param {CommittedRecordRequest | null | undefined} request
  * @param {string} key
  */
-export const committedRecordForKey = (request, key) => request?.records?.find((record) => record.recordKey === key
+export const committedRecordForKey = (request, key) => request?.records.find((record) => record.recordKey === key
   || (record.cardinality === 'all' && key.startsWith(`${record.recordKey}:`)
     && /^[1-9]\d*$/.test(key.slice(record.recordKey.length + 1))));
 

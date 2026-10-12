@@ -605,7 +605,7 @@ export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
     if (!isObject(descriptor)) {
       throw new Error('The preserved comparison is missing a required resource.');
     }
-    const existing = candidate.resources?.[resourceId];
+    const existing = candidate.resources[resourceId];
     if (existing && existing !== descriptor) {
       throw new Error(
         'The preserved comparison resource conflicts with the current draft. Choose Replace or Clear.'

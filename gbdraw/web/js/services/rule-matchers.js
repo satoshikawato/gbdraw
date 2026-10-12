@@ -135,7 +135,8 @@ export const ruleKeysPending = (features, keys) => {
 export const ruleMatcher = (rules) => {
   /** @type {Map<string, { rule: Record<string, any>, index: number }>} */
   const firstByKey = new Map();
-  /** @type {Map<string, Set<string>>} */
+  // The two maps key on a feature type as it is read (a Map compares any value).
+  /** @type {Map<unknown, Set<string>>} */
   const keysByFeat = new Map();
   (rules || []).forEach((rule, index) => {
     if (!rule) return;
@@ -144,12 +145,11 @@ export const ruleMatcher = (rules) => {
     if (!keysByFeat.has(rule.feat)) keysByFeat.set(rule.feat, new Set());
     keysByFeat.get(rule.feat)?.add(key);
   });
-  /** @type {Map<Set<string>, Map<string, boolean>>} */
+  /** @type {Map<Set<string>, Map<unknown, boolean>>} */
   const readiness = new Map();
   const ready = (/** @type {RuleFeature} */ feature) => {
     const evaluated = resultsOf(feature)?.evaluated || NOTHING_EVALUATED;
-    // A catalog feature's type is a string; `keysByFeat` and `readiness` key on it.
-    const type = /** @type {string} */ (feature?.type);
+    const type = feature?.type;
     let byType = readiness.get(evaluated);
     if (!byType) readiness.set(evaluated, byType = new Map());
     if (!byType.has(type)) {

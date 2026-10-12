@@ -39,7 +39,7 @@ const asCacheKey = (file) => (
 );
 
 /**
- * @param {FileLike} file
+ * @param {FileLike | null | undefined} file
  * @returns {Promise<Uint8Array>}
  */
 export const readFileBytes = (file) => {
@@ -50,7 +50,8 @@ export const readFileBytes = (file) => {
     // releases them for all (OV-304); the cache below is for ordinary Files.
     // A view has a backing, so its read is never null.
     if (key && isSessionResourceFileView(file)) return /** @type {Promise<Uint8Array>} */ (readSessionResourceBytes(file));
-    if (!key || typeof file.arrayBuffer !== 'function') {
+    // `key` is `file` when it is set.
+    if (!key || typeof /** @type {FileLike} */ (file).arrayBuffer !== 'function') {
       return Promise.reject(new TypeError(
         'A File-like object with arrayBuffer() is required.'
       ));
@@ -72,7 +73,7 @@ export const readFileBytes = (file) => {
   }
 };
 
-/** @param {FileLike} file */
+/** @param {FileLike | null | undefined} file */
 export const readFileText = async (file) => {
   const lazyText = isSessionResourceFileView(file)
     ? readSessionResourceText(file)
@@ -85,10 +86,10 @@ export const readFileText = async (file) => {
   throw new TypeError('A File-like object with arrayBuffer() or text() is required.');
 };
 
-/** @param {FileLike} file */
+/** @param {FileLike | null | undefined} file */
 export const getSessionResourceSource = (file) => sessionResourceSource(file);
 
-/** @param {FileLike} file */
+/** @param {FileLike | null | undefined} file */
 export const releaseFileContentCache = (file) => {
   const key = asCacheKey(file);
   if (!key) return false;

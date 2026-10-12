@@ -14,8 +14,18 @@
  */
 
 /**
- * The vendored WASI shim classes (`WASI`, `File`, `OpenFile`, `PreopenDirectory`, `ConsoleStdout`).
- * @typedef {Record<string, any>} LosatWasiShim
+ * What this module uses of the vendored WASI shim (`vendor/browser_wasi_shim`): five classes. A
+ * file and a file descriptor are only handed back to the shim, so they are opaque here.
+ * @typedef {object} LosatWasiShim
+ * @property {new (args: string[], env: string[], fds: unknown[]) => {
+ *   wasiImport: WebAssembly.ModuleImports,
+ *   start: (instance: WebAssembly.Instance) => number,
+ *   initialize?: (instance: WebAssembly.Instance) => void
+ * }} WASI
+ * @property {new (data: Uint8Array, options?: { readonly?: boolean }) => unknown} File
+ * @property {new (file: unknown) => unknown} OpenFile
+ * @property {new (name: string, contents: Map<string, unknown>) => unknown} PreopenDirectory
+ * @property {new (write: (data: Uint8Array) => void) => unknown} ConsoleStdout
  */
 
 /**

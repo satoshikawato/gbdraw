@@ -109,7 +109,6 @@ const EXPLICIT_ANY_BASELINE = {
   'services/linear-sources.js': 4,
   'services/linear-track-slot-model.js': 1,
   'services/losat-cache.js': 8,
-  'services/losat-runtime.js': 1,
   'services/losat.js': 2,
   'services/main-session-comparison-frame.js': 2,
   'services/match-sequences.js': 12,

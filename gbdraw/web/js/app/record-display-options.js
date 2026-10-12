@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
+/** @import { CommittedRecordRequest } from '../services/feature-identity.js' */
 // Source-bound editable rotation intent. The request service owns serialization.
 import {
   bindRecordDisplayDrafts,
@@ -303,7 +304,8 @@ export const createRecordDisplayControls = ({
   // The committed record's current sources have no read records: say whether
   // the read failed or has not happened, instead of calling the target stale.
   const unreadRecordsError = (recordKey) => {
-    const request = getCommittedRequest();
+    // The committed request is the adopted canonical request: its `records` is always set.
+    const request = /** @type {CommittedRecordRequest | null} */ (getCommittedRequest());
     const record = committedRecordForKey(request, recordKey);
     const discoveries = record ? sources.value
       .filter((source) => source.source && committedRecordUsesSource(request, record, source)).map(discoveryFor) : [];
@@ -407,7 +409,9 @@ export const createRecordDisplayControls = ({
     // for the committed request before it is read (R13).
     sourceBinding: () => {
       refreshCommittedRows();
-      return { request: getCommittedRequest(), sources: sources.value, boundSources, matchesSavedSource };
+      // The committed request is the adopted canonical request: its `records` is always set.
+      return { request: /** @type {CommittedRecordRequest | null} */ (getCommittedRequest()),
+        sources: sources.value, boundSources, matchesSavedSource };
     },
     // The drawn records of the committed request, each with its File card
     // (`sourceUid`) and its request record (`canonicalRecordKey`).

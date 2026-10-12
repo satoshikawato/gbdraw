@@ -200,7 +200,7 @@ const nonnegativeInteger = (value) => (
 const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mode = 'circular' } = {}) => {
   const linear = mode === 'linear';
   const requestRecords = Array.isArray(records) ? records : [];
-  /** @param {LegacySourceFeature} feature */
+  /** @param {LegacySourceFeature | null | undefined} feature */
   const describe = (feature) => {
     const svgOrdinal = Number(text(feature?.svg_id ?? feature?.svgId).match(LINEAR_RECORD_SUFFIX)?.[1]) || null;
     const fileIdx = nonnegativeInteger(feature?.fileIdx);
@@ -723,19 +723,21 @@ export const migrateSessionAnnotationTargets = ({ annotationSets, mode, catalog 
   const index = annotationCatalogIndex(catalog);
   const requestRecords = Array.isArray(records) ? records : [];
   let migratedCount = 0;
-  // A missing target gives no selector, so the reads below never reach it.
-  /** @param {Partial<AnnotationTarget>} target */
+  // A missing target gives no selector, so the reads after the `selector` check
+  // never reach it: the casts below state that.
+  /** @param {Partial<AnnotationTarget> | null | undefined} target */
   const identityTarget = (target) => {
     const selector = target?.kind === 'featureSpan' && Array.isArray(target.selectors) && target.selectors.length === 1
       ? target.selectors[0] : null;
     if (selector?.key !== 'hash') return null;
-    const recordKey = boundRecordKey(target.record, index);
+    const recordKey = boundRecordKey(/** @type {Partial<AnnotationTarget>} */ (target).record, index);
     const matches = [...(index.featuresByHash.get(text(selector.value))?.values() || [])];
     const request = requestRecords.find((record) => recordKeyBelongsToRequest(recordKey, [record]));
     if (!recordKey || matches.length !== 1 || matches[0].recordKey !== recordKey
       || !request || drawnTransformed(request)) return null;
     const migrated = { kind: 'featureIdentity', scope: mode, ...matches[0],
-      envelope: target.envelope, circularPath: target.circularPath };
+      envelope: /** @type {Partial<AnnotationTarget>} */ (target).envelope,
+      circularPath: /** @type {Partial<AnnotationTarget>} */ (target).circularPath };
     return scopedIdentityKeyOf(migrated) ? migrated : null;
   };
   const migratedSets = (Array.isArray(annotationSets) ? annotationSets : []).map((/** @type {Partial<AnnotationSet> | null | undefined} */ set) => (

@@ -354,6 +354,10 @@ export const buildDefaultColorOverrideTsv = ({
   .join('\n');
 
 /**
+ * A table keyed by orientation, read with a value that may be neither `plus` nor `minus`.
+ * @typedef {Readonly<Record<string, string | undefined>>} OrientationTable
+ */
+/**
  * @param {{
  *   blockId: unknown, colorMode: unknown, orientation: unknown, identityFactor: unknown,
  *   colors?: Record<string, string>
@@ -371,18 +375,21 @@ export const resolveCollinearMatchColor = ({
   if (!normalizedBlockId) return null;
 
   const normalizedMode = String(colorMode || '').trim().toLowerCase().replace(/-/g, '_');
-  // Any other value finds no key below (`colorKey` is then undefined).
-  const normalizedOrientation = /** @type {'plus' | 'minus'} */ (String(orientation || '').trim().toLowerCase());
-  const colorKey = COLLINEAR_ORIENTATION_COLOR_KEYS[normalizedOrientation];
-  const minColorKey = COLLINEAR_ORIENTATION_MIN_COLOR_KEYS[normalizedOrientation];
+  const normalizedOrientation = String(orientation || '').trim().toLowerCase();
+  // An orientation other than `plus` or `minus` has no entry in the tables.
+  const colorKey = /** @type {OrientationTable} */ (COLLINEAR_ORIENTATION_COLOR_KEYS)[normalizedOrientation];
+  const minColorKey = /** @type {OrientationTable} */ (COLLINEAR_ORIENTATION_MIN_COLOR_KEYS)[normalizedOrientation];
   if (!colorKey) return null;
-  const orientationColor = colors[colorKey] || DEFAULT_COLLINEAR_ORIENTATION_COLORS[normalizedOrientation];
+  // `colorKey` is set, so the orientation is a key of all four tables.
+  const orientationColor = colors[colorKey]
+    || DEFAULT_COLLINEAR_ORIENTATION_COLORS[/** @type {'plus' | 'minus'} */ (normalizedOrientation)];
 
   if (normalizedMode === 'orientation') return orientationColor;
   if (normalizedMode === 'orientation_identity') {
     const factor = Number(identityFactor);
     if (!Number.isFinite(factor)) return null;
-    const minColor = colors[minColorKey] || DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS[normalizedOrientation];
+    const minColor = colors[/** @type {string} */ (minColorKey)]
+      || DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS[/** @type {'plus' | 'minus'} */ (normalizedOrientation)];
     return interpolateColor(
       minColor,
       orientationColor,
