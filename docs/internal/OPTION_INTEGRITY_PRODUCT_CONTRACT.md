@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `44`
+- Contract revision: `45`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -744,6 +744,52 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 45 change: `PD-OI-061` is replaced for scenario revision `4`
+  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`, extended to the names of color rules
+  and to the list under the feature popup's **Legend name**). It comes from
+  the Product Decision Owner `satoshikawato`'s replies of `2026-10-13` on a
+  user report (OV-580, OV-581, OV-582): in the feature popup of the Web app,
+  choosing another color rule's name from the list under **Legend name** kept
+  the feature's own color, so one Legend name had two colors and both rows
+  were drawn as `<name> [#<hex>]`; renaming a color rule's row onto another
+  color rule's row ended the same way without asking. Each quotation below is
+  the part of a reply that carries the answer.
+  - Reply 1, on the reported Legend:
+    「凡例に色のIDがつくのは許されないので直して。Ownership couplingとか境界型付けの問題でもあると思う。」
+  - Reply 2, on the list under **Legend name**:
+    「Select legend listがまずバグってる気がする」
+  - Reply 3, on merging a whole Legend item into another one:
+    「前は普通にマージできたんだよ全部Transcription regulationに。」
+    Release `0.13.0` asked the Legend Name Conflict dialog for every rename
+    onto an existing name of another color. The scenario-1 receipt
+    (`2026-09-30`) preserved the `PD-OI-042` naming for a target that is a
+    color rule's caption, the scenario-2 receipt kept that term, and the
+    runtime has carried it since commit `4b7b8825` (`2026-10-02`).
+  - Reply 4, to the request to confirm the ready-to-copy `PRODUCT_DECISION`
+    response for this concern and scenario revision, prepared with the
+    decision pack for the report:
+    「Web の操作(PD-OI-061 改訂 4): それでいいです」
+  - The receipt below is that response, byte for byte.
+  - The decision pack described the same outcome in English, with one phrase
+    the receipt does not repeat: a typed rename onto a color rule's name asks
+    the dialog "also when the target is a color rule's name, listed in the
+    legend or not". That phrase is the pack's description, not a receipt
+    field. The receipt's 「衝突先が色ルールの名前でも」 names a color rule's name
+    without a condition on a drawn row, and its Accepted residual risk names
+    a color rule that the figure does not draw.
+  - Scope: scenario revision `4` keeps the outcome
+    `B / MERGE-SAME-FEATURE-TYPE-ONLY` of scenario revision `2` and the
+    choice names of scenario revision `3`. It retires one preservation term
+    of the scenario-2 receipt, 「衝突先が色ルールの caption のときの PD-OI-042 の区別」,
+    and adds the outcome of a pick from the popup's list. The scenario-2 and
+    scenario-3 receipts keep their text and their SHA-256.
+  - `PD-OI-042` is unchanged. One Legend name written with several colors in
+    a color table, by **Add rule**, or on the command line is still drawn as
+    `<name> [#<hex>]` rows; the Owner's decision on that concern is not part
+    of this revision. `PD-OI-088` and `OIC-028` are unchanged.
+  - This change is a static Product Contract co-change: the runtime and tests
+    that implement it are in the same pull request, and the Review is
+    `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -3275,20 +3321,29 @@ Decision date: 2026-09-30
 ### PD-OI-061: Legend rename collisions for every entry
 
 - Concern key: `web.legend.rename-collision`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-061`, scenario revision `2`
-  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`), only by renaming the two choices of
-  the Legend Name Conflict dialog; every scenario-2 term stays in force.
-  Scenario revision `2` superseded scenario revision `1`
+- Scenario revision: `4`
+- Supersedes: `PD-OI-061`, scenario revision `3`. Scenario revision `4`
+  keeps the outcome `B / MERGE-SAME-FEATURE-TYPE-ONLY` and the choice names,
+  retires the scenario-2 preservation term
+  「衝突先が色ルールの caption のときの PD-OI-042 の区別」, and adds the outcome of a
+  pick from the list under the feature popup's **Legend name**. Scenario
+  revision `3` superseded scenario revision `2` only by renaming the two
+  choices of the Legend Name Conflict dialog. Scenario revision `2`
+  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`) superseded scenario revision `1`
   (`A / DIALOG-FOR-ALL-ENTRIES`).
 - Status: `ACCEPTED`
 - Selected outcomes: `B / MERGE-SAME-FEATURE-TYPE-ONLY` (scenario revision
-  `2`) and the label change of scenario revision `3`, whose receipt names no
-  choice code
-- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
-  their nine-field JSON representations below, read together. Where the
-  scenario-2 receipt names **Suffix** and **Merge**, it means the choices now
-  labelled `Keep both: name it "<name 2>"` and `Merge into "<name>"`.
+  `2`, and scenario revision `4` with the names of color rules and the
+  popup's list), and the label change of scenario revision `3`, whose receipt
+  names no choice code
+- Normative outcome: exactly the three approved `PRODUCT_DECISION` receipts
+  and their nine-field JSON representations below, read together. Where the
+  scenario-4 receipt differs from an earlier receipt, the scenario-4 receipt
+  governs: a rename onto the name of a color rule asks the same dialog as a
+  rename onto any other name, and the scenario-2 preservation of the
+  `PD-OI-042` naming for such a target is retired. Where the scenario-2
+  receipt names **Suffix** and **Merge**, it means the choices now labelled
+  `Keep both: name it "<name 2>"` and `Merge into "<name>"`.
 - Decision source (scenario revision `2`): the Owner replies of `2026-10-06`
   quoted verbatim in the Revision 32 entry above. The Owner approved the
   receipt text below as written ("OKです"). Dependent runtime (OV-62) is
@@ -3303,6 +3358,14 @@ Decision date: 2026-09-30
   Contract co-change).
 - Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
   `eb19efb8436cfee30d6955f19fc9b50433c24b5112ef20a7088d4a988a3f5da2`.
+- Decision source (scenario revision `4`): the Owner replies of `2026-10-13`
+  quoted verbatim in the Revision 45 entry above. The third receipt and JSON
+  below reproduce all nine supplied fields without translation or additional
+  terms. The runtime and tests that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `4`; UTF-8, excluding the final newline):
+  `3f96ff5e0e94f2689233e2bde57b17ff945130e3ad92f04070eced277d80bf74`.
 - Acceptance contracts: `OIC-006`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -3360,6 +3423,35 @@ Decision date: 2026-10-11
   "acceptedResidualRisk": "older docs/videos show the old labels.",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-11"
+}
+```
+
+Scenario revision `4` receipt, confirmed by `satoshikawato` on `2026-10-13`:
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.rename-collision
+Scenario revision: 4
+Choice: B / MERGE-SAME-FEATURE-TYPE-ONLY。色ルールの名前も同じ扱いにする。Feature のポップアップの一覧（Choose from color rules…）から選んだ項目には、名前と色の両方を引き継いで入る。
+Rationale: 凡例の名前に色の ID を付けない。一覧から既存の項目を選ぶのは「その項目に入れる」操作なので、色も引き継いで 1 つの項目にまとめる。名前を入力して既存の名前に変えたときは、衝突先が色ルールの名前でも、ほかの項目と同じ選択のダイアログ（Merge into "<name>" / Keep both: name it "<name> (1)" / Cancel）を示す。
+Must preserve: 衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと、Merge は同じ track の同じ feature type の項目どうしだけ、This feature only / All N の範囲の選択、Undo/Redo、Generate と Session での保持。
+May retire: 衝突先が色ルールの caption のときに確認なしで名前だけを変え、PD-OI-042 の色 ID で区別する動作。一覧に別の feature type の色ルールを示すこと。
+Accepted residual risk: 一覧から選ぶと feature の色が変わる（Undo で戻せる）。図に描かれていない色ルール（例: Connector）を選んだときも、そのルールの色になる。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.legend.rename-collision",
+  "scenarioRevision": 4,
+  "choice": "B / MERGE-SAME-FEATURE-TYPE-ONLY。色ルールの名前も同じ扱いにする。Feature のポップアップの一覧（Choose from color rules…）から選んだ項目には、名前と色の両方を引き継いで入る。",
+  "rationale": "凡例の名前に色の ID を付けない。一覧から既存の項目を選ぶのは「その項目に入れる」操作なので、色も引き継いで 1 つの項目にまとめる。名前を入力して既存の名前に変えたときは、衝突先が色ルールの名前でも、ほかの項目と同じ選択のダイアログ（Merge into \"<name>\" / Keep both: name it \"<name> (1)\" / Cancel）を示す。",
+  "mustPreserve": "衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと、Merge は同じ track の同じ feature type の項目どうしだけ、This feature only / All N の範囲の選択、Undo/Redo、Generate と Session での保持。",
+  "mayRetire": "衝突先が色ルールの caption のときに確認なしで名前だけを変え、PD-OI-042 の色 ID で区別する動作。一覧に別の feature type の色ルールを示すこと。",
+  "acceptedResidualRisk": "一覧から選ぶと feature の色が変わる（Undo で戻せる）。図に描かれていない色ルール（例: Connector）を選んだときも、そのルールの色になる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
 }
 ```
 

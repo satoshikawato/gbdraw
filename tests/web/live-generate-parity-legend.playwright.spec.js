@@ -106,20 +106,24 @@ test('a color rule that adds a Legend row serializes the Result once', async ({ 
   await expectLiveEqualsGenerate(page, { label: 'Legend row added by a rule' });
 });
 
-// OV-60: renaming a generated Legend row (GC content) onto the caption of a
-// color rule that draws no row is an explicit rename; Generate draws it too.
-test('a Legend rename onto the caption of a color rule without a drawn row equals Generate', async ({ page }) => {
+// PD-OI-061 revision 4 (was OV-60): renaming a generated Legend row (GC
+// content) onto the name of a color rule that draws no row asks. A row without
+// features cannot merge into the rule's group, so the dialog offers Keep both
+// and Cancel; Generate draws the kept name too.
+test('a Legend rename onto the name of a color rule without a drawn row asks and keeps both', async ({ page }) => {
   test.setTimeout(120_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: '#c83366', cap: 'Zeta' });
-  await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), 'Zeta');
-  });
+  await renameRow(page, 'GC content', 'Zeta');
+  await expect(page.getByRole('heading', { name: 'Legend Name Conflict' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Merge into "/ }), 'Merge is not offered').toHaveCount(0);
+  await page.getByRole('button', { name: 'Keep both: name it "Zeta (1)"' }).click();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.legendRenameDialog.show);
   await settleLive(page);
   const captions = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
-  expect(captions, 'the renamed row is drawn live').toContain('Zeta');
-  await expectLiveEqualsGenerate(page, { label: 'Legend rename onto the caption of a color rule without a row' });
+  expect(captions, 'the renamed row is drawn live').toContain('Zeta (1)');
+  expect(captions, 'no row takes the rule\'s name').not.toContain('Zeta');
+  await expectLiveEqualsGenerate(page, { label: 'Legend rename onto the name of a color rule without a row, Keep both' });
 });
 
 // OV-46: a Legend-only color on a generated row that only one Result of a batch
@@ -594,8 +598,8 @@ const RULE_ROWS = [
   { feat: 'repeat_region', qual: 'note', val: '^RPT_ONE$', color: '#7b2cbf', cap: 'rep' }
 ];
 
-// Two color-rule rows of CDS: a rule-owned listed target keeps PD-OI-042
-// without asking (below), a deleted one asks and its merge adopts its color.
+// Two color-rule rows of CDS: a listed target asks Merge or Keep both (below),
+// a deleted one asks Restore and merge; either merge adopts the target's color.
 test('a Legend rename onto a deleted row of one feature type restores and merges it in one History step (OV-285)', async ({ page }) => {
   test.setTimeout(180_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
@@ -644,16 +648,121 @@ test('a Legend rename between rows of different feature types offers no Merge', 
   await expectLiveEqualsGenerate(page, { label: 'repeat_region row renamed onto a CDS row with Suffix' });
 });
 
-// Two color-rule rows of one feature type: the target is owned by a rule, so the
-// rename keeps its PD-OI-042 disambiguation instead of asking, and Generate agrees.
-test('a Legend rename of a rule row onto another rule row of one feature type equals Generate', async ({ page }) => {
-  test.setTimeout(120_000);
+// PD-OI-061 revision 4 (OV-582): two color-rule rows of one feature type. The
+// rename asks as for any other row, Merge leaves one row in the target's
+// color, and Generate agrees.
+// Every Legend key and text of the Result, rule caption, and list option that carries a color ID.
+const colorIdNames = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const rows = [...app.svgContainer.querySelectorAll('g[data-legend-key]')];
+  return [
+    ...rows.map((row) => row.getAttribute('data-legend-key')),
+    ...rows.map((row) => row.querySelector('text')?.textContent || ''),
+    ...app.legendEntries.map((entry) => entry.caption),
+    ...app.manualSpecificRules.map((rule) => rule.cap),
+    ...[...document.querySelectorAll('select[aria-label="Legend captions of color rules"] option')].map((option) => option.textContent.trim())
+  ].filter((name) => name.includes(' [#'));
+});
+const ruleTable = (page) => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap, color }) => [val, cap, color]));
+test('a Legend rename of a rule row onto another rule row of one feature type asks, and Merge equals Generate', async ({ page }) => {
+  test.setTimeout(180_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
   for (const rule of RULE_ROWS) await addColorRule(page, rule);
+  const before = { rows: await legendState(page), rules: await ruleTable(page) };
+  const shown = await semanticSnapshot(page);
   await renameRow(page, 'beta', 'alpha');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a rule-owned caption does not ask').toBe(false);
+  await conflictAsked(page);
+  await expect(suffixButton(page), 'Keep both is offered').toHaveCount(1);
+  await page.getByRole('button', { name: 'Merge into "alpha"' }).click();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.legendRenameDialog.show);
   await settleLive(page);
-  await expectLiveEqualsGenerate(page, { label: 'same-type rule row renamed onto a rule row' });
+  const merged = await legendState(page);
+  expect(merged.listed.filter((caption) => caption === 'alpha'), 'one row keeps the name').toHaveLength(1);
+  expect(merged.listed, 'beta joined alpha').not.toContain('beta');
+  expect(await ruleTable(page), 'the renamed rule adopts the target\'s name and color').toEqual([
+    ['^FL1$', 'alpha', '#e63946'], ['^FL2$', 'alpha', '#e63946'], ['^RPT_ONE$', 'rep', '#7b2cbf']
+  ]);
+  expect(await colorIdNames(page), 'no name carries a color ID').toEqual([]);
+  await history(page, 'undo');
+  expect({ rows: await legendState(page), rules: await ruleTable(page) }, 'one Undo returns the rows and the rules').toEqual(before);
+  expect(diffSemanticSnapshots(shown, await semanticSnapshot(page)), 'one Undo shows the Result before the rename').toEqual([]);
+  await history(page, 'redo');
+  expect(await legendState(page), 'Redo merges again').toEqual(merged);
+  await expectLiveEqualsGenerate(page, { label: 'same-type rule row merged into a rule row' });
+});
+
+// PD-OI-061 revision 4 (OV-580, OV-581): the list under the popup's Legend
+// name offers the color-rule groups of the clicked feature's type, and a pick
+// joins the picked group: the feature takes its name and its color.
+const UNDRAWN_RULE = { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: '#5a5a5a', cap: 'Connector' };
+const openPopup = async (page, match) => {
+  await evaluateWithRetainedPromise(page, async (fields) => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => (
+      Object.entries(fields).every(([field, value]) => item[field] === value))), null);
+    await window.Vue.nextTick();
+  }, match);
+  return page.getByLabel('Legend captions of color rules');
+};
+const featureFill = async (page, match) => {
+  const id = await page.evaluate((fields) => window.__GBDRAW_APP__.filteredFeatures.find((item) => (
+    Object.entries(fields).every(([field, value]) => item[field] === value))).svg_id, match);
+  return (await semanticSnapshot(page)).features[id]?.fill;
+};
+const legendFills = async (page) => Object.fromEntries(
+  (await semanticSnapshot(page)).legend.map(({ caption, fill }) => [caption, String(fill).toLowerCase()])
+);
+
+test('a pick from the popup Legend name list joins the picked group with its color', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  for (const rule of [...RULE_ROWS, UNDRAWN_RULE]) await addColorRule(page, rule);
+  const before = { rows: await legendState(page), rules: await ruleTable(page) };
+  const shown = await semanticSnapshot(page);
+  const list = await openPopup(page, { locus_tag: 'FL2' });
+  expect(await list.locator('option').allTextContents().then((names) => names.map((name) => name.trim())),
+    'the list offers the CDS groups, each once, drawn or not, and no group of another type')
+    .toEqual(['Choose from color rules…', 'alpha', 'beta', 'Connector']);
+  await list.selectOption({ label: 'alpha' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__.clickedFeature?.appliedLegendName === 'alpha', null, { timeout: 30_000 });
+  await settleLive(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a pick asks no conflict dialog').toBe(false);
+  expect(await featureFill(page, { locus_tag: 'FL2' }), 'the feature takes the group\'s color').toEqual(['#e63946']);
+  const joined = await legendState(page);
+  expect(joined.listed.filter((caption) => caption === 'alpha'), 'one alpha row').toHaveLength(1);
+  expect(joined.listed, 'the row the feature left is gone').not.toContain('beta');
+  expect((await legendFills(page)).alpha, 'the row keeps its color').toBe('#e63946');
+  expect(await colorIdNames(page), 'no name carries a color ID').toEqual([]);
+  await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+  await history(page, 'undo');
+  expect({ rows: await legendState(page), rules: await ruleTable(page) }, 'one Undo returns the rows and the rules').toEqual(before);
+  expect(diffSemanticSnapshots(shown, await semanticSnapshot(page)), 'one Undo shows the Result before the pick').toEqual([]);
+  await history(page, 'redo');
+  expect(await legendState(page), 'Redo joins again').toEqual(joined);
+  await expectLiveEqualsGenerate(page, { label: 'FL2 joined alpha from the popup list' });
+  expect(await colorIdNames(page), 'Generate adds no color ID').toEqual([]);
+});
+
+test('a pick of a color rule that draws no row asks the scope and draws the feature in the rule color', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  for (const rule of [RULE_ROWS[0], UNDRAWN_RULE]) await addColorRule(page, rule);
+  const list = await openPopup(page, { locus_tag: 'FL2' });
+  await list.selectOption({ label: 'Connector' });
+  await expect(page.getByRole('heading', { name: 'Legend Name Scope' })).toBeVisible();
+  await page.getByRole('button', { name: /This feature only/ }).click();
+  await page.waitForFunction(() => window.__GBDRAW_APP__.clickedFeature?.appliedLegendName === 'Connector', null, { timeout: 30_000 });
+  await settleLive(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the scope answer is followed by no conflict dialog').toBe(false);
+  expect(await featureFill(page, { locus_tag: 'FL2' }), 'the feature takes the rule\'s color').toEqual(['#5a5a5a']);
+  expect(await featureFill(page, { product: 'dup alpha' }), 'another feature of the row keeps its color').not.toEqual(['#5a5a5a']);
+  expect((await legendFills(page)).Connector, 'the rule\'s row is drawn in its color').toBe('#5a5a5a');
+  expect((await ruleTable(page)).filter(([, cap]) => cap.startsWith('Connector')).map(([, cap, color]) => [cap, color]),
+    'the rule and the feature share one name and one color').toEqual([['Connector', '#5a5a5a'], ['Connector', '#5a5a5a']]);
+  expect(await colorIdNames(page), 'no name carries a color ID').toEqual([]);
+  await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+  await expectLiveEqualsGenerate(page, { label: 'FL2 joined the Connector rule from the popup list' });
+  expect(await colorIdNames(page), 'Generate adds no color ID').toEqual([]);
 });
 
 // U3a (R14-8): Legend edits the Result executor shows live, without the
