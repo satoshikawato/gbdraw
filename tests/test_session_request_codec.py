@@ -82,7 +82,6 @@ from gbdraw.session_request_codec import (
     CanonicalRequestDecodingError,
     CanonicalRequestEncodingError,
     EncodedCanonicalRequest,
-    _TOP_LEVEL_FIELDS_V5,
     _read_typed_json_resource,
     decode_canonical_request,
     encode_canonical_request,
@@ -3041,11 +3040,6 @@ def test_feature_overrides_require_schema9_and_the_current_row_shape(
         )
 
 
-_WEB_SESSION_REQUEST_JS = (
-    Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "services" / "session-request.js"
-)
-
-
 def _jsdoc_typedef_property_names(source: str, typedef_name: str) -> set[str]:
     """Return the `@property` names of one JSDoc `@typedef`, or fail loudly."""
     blocks = [
@@ -3062,13 +3056,6 @@ def _jsdoc_typedef_property_names(source: str, typedef_name: str) -> set[str]:
     assert names, f"JSDoc @typedef {typedef_name} declares no @property"
     assert len(names) == len(set(names)), f"JSDoc @typedef {typedef_name} repeats a @property"
     return set(names)
-
-
-def test_web_canonical_render_request_typedef_matches_codec_top_level_fields() -> None:
-    source = _WEB_SESSION_REQUEST_JS.read_text(encoding="utf-8")
-    assert _jsdoc_typedef_property_names(source, "CanonicalRenderRequest") == set(
-        _TOP_LEVEL_FIELDS_V5
-    )
 
 
 _WEB_CONFIG_JS = Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "services" / "config.js"

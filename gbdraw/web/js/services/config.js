@@ -292,7 +292,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 ));
 
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
-/** @import { CanonicalRenderEnvelope, CanonicalRenderRequest } from './session-request.js' */
+/** @import { CanonicalRenderEnvelope } from './session-request.js' */
+/** @import { CanonicalLinearLayout, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
@@ -2034,10 +2035,11 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
       featureCatalog: data.editorState?.featureCatalog || null,
       legacyOrthogroupState: data.orthogroupState || null
     });
+    // Only a Linear request has a legacy similarity alignment; its layout may be empty.
     canonicalProjection.config.linearRecordLayout = {
       ...canonicalProjection.config.linearRecordLayout,
-      recordTranslations: promotedRequest.layout.recordTranslations,
-      similarityAlignment: promotedRequest.layout.similarityAlignment
+      recordTranslations: /** @type {Partial<CanonicalLinearLayout>} */ (promotedRequest.layout).recordTranslations,
+      similarityAlignment: /** @type {Partial<CanonicalLinearLayout>} */ (promotedRequest.layout).similarityAlignment
     };
   }
   let restoredConfig = canonicalProjection

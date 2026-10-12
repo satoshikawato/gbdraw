@@ -23,9 +23,11 @@ import { cloneJsonData } from './json-clone.js';
  * @property {string} biologicalFeatureId
  */
 
+/** @import { CanonicalFeatureOverride, CanonicalFeaturePlacement } from '../contracts/request.generated.js' */
+
 /**
  * Where a feature is drawn: the main track, or one lane beside it.
- * @typedef {{ kind: 'main' } | { kind: 'lane', side: string, level: number }} FeaturePlacementTarget
+ * @typedef {CanonicalFeaturePlacement['placement']} FeaturePlacementTarget
  */
 
 /**
@@ -46,8 +48,8 @@ import { cloneJsonData } from './json-clone.js';
  * @typedef {object} FeatureOverrideRow
  * @property {string} recordKey
  * @property {string} biologicalFeatureId
- * @property {string | null} featureVisibility `on`, `off`, `exclude_matching`, or null.
- * @property {string | null} labelVisibility `on`, `off`, or null.
+ * @property {CanonicalFeatureOverride['featureVisibility']} featureVisibility
+ * @property {CanonicalFeatureOverride['labelVisibility']} labelVisibility
  * @property {string | null} labelText
  */
 

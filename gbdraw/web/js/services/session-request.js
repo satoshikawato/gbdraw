@@ -189,22 +189,9 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @typedef {Record<string, any>} RequestDrawing */
 
 export { CANONICAL_REQUEST_SCHEMA };
-/**
- * The canonical render request of the current schema (the writer format only;
- * readers take unvalidated data, R14). Python owns the option field set (R7),
- * so `diagramOptions` is open; the top-level fields equal
- * `_TOP_LEVEL_FIELDS_V5` in `gbdraw/session_request_codec.py` (a pytest checks
- * this list).
- * @typedef {object} CanonicalRenderRequest
- * @property {number} schema
- * @property {string} mode
- * @property {Record<string, any>[]} records
- * @property {Record<string, any>} diagramOptions
- * @property {Record<string, any>} layout
- * @property {Record<string, any>[]} comparisons
- * @property {Record<string, any> | Record<string, any>[]} output
- * @property {string} grouping
- */
+// The canonical render request of the current schema (the writer format only;
+// readers take unvalidated data, R14) is generated from the Python codec.
+/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /**
  * What the request writer returns and the session stores beside the request:
  * the encoded resources by id and the Web-only file metadata.
@@ -2386,7 +2373,10 @@ const buildComparisons = ({
  * @param {Record<string, any>} state
  * @param {RequestDrawing} drawing
  */
-/** @param {number[] | null} [circularSourceIndexes] The file position of each drawn Circular record. */
+/**
+ * @param {number[] | null} [circularSourceIndexes] The file position of each drawn Circular record.
+ * @returns {CanonicalRenderRequest['layout']}
+ */
 const buildLayout = (state, drawing, records = [], circularSourceIndexes = null) => {
   if (state.mode.value === 'linear') {
     const recordKeys = records.map((record) => requireCanonicalText(
@@ -2717,7 +2707,8 @@ const projectCanonicalRenderInput = ({
         explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : 'out')
       );
   const labelProjection = generatedLabelProjection || requestLabelProjection(state, drawing);
-  /** @type {Record<string, any>} */
+  // The option keys are not checked yet; the two keys every request has are.
+  /** @type {Record<string, any> & Pick<CanonicalRenderRequest['diagramOptions'], 'featurePlacements' | 'featureOverrides'>} */
   const diagramOptions = {
     featurePlacements: requestFeaturePlacements(drawing.featurePlacementOverrides, state.mode.value, records),
     // Per-feature edits by source identity (design Q4); the rows of other
@@ -2917,7 +2908,9 @@ const projectCanonicalRenderInput = ({
   }
 
   return /** @satisfies {CanonicalRenderEnvelope} */ ({
-    renderRequest: {
+    // The mode decides the options, the layout, the comparisons and the output
+    // together; tsc cannot see that the builders above agree on it.
+    renderRequest: /** @type {CanonicalRenderRequest} */ ({
       schema: CANONICAL_REQUEST_SCHEMA,
       mode: state.mode.value,
       grouping,
@@ -2933,7 +2926,7 @@ const projectCanonicalRenderInput = ({
       resolvedComparisons
     }),
       output
-    },
+    }),
     resources: resources.resources,
     webFiles
   });

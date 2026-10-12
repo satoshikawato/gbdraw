@@ -57,7 +57,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
-from gbdraw.features.placement import FeaturePlacementOverride
+from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
@@ -4816,6 +4816,260 @@ def _check_singleton_kind(kind: str, seen: set[str], *, path: str) -> None:
     seen.add(kind)
 
 
+def describe_canonical_request() -> dict[str, Any]:
+    """Describe the JSON of a current-schema request as neutral data.
+
+    Returns ``{"root": name, "types": {name: shape}}`` with the shapes of
+    :mod:`gbdraw.contract_shapes`. Each object comes from the dataclass whose
+    fields the encoder writes, and from the tables the encoder and the decoder
+    route option fields with; an object with no dataclass names its encoder.
+    Old schemas are not described.
+    """
+
+    from .contract_shapes import (
+        INTEGER, NULL, STRING, UNKNOWN, Shape,
+        array, literal, nullable, obj, record, ref, shape_of_hint, tuple_of, union,
+    )
+
+    types_: dict[str, Shape] = {}
+
+    def named(name: str, shape: Shape) -> Shape:
+        types_[f"Canonical{name}"] = shape
+        return ref(f"Canonical{name}")
+
+    def kinds(name: str, suffix: str, variants: Mapping[str, Mapping[str, Shape]]) -> Shape:
+        """An object tagged by ``kind``; each variant is named ``<Kind><suffix>``."""
+
+        return named(name, union(*(
+            named(
+                kind[0].upper() + kind[1:] + ("" if kind.endswith(suffix) else suffix),
+                obj({"kind": literal(kind), **variant}),
+            )
+            for kind, variant in variants.items()
+        )))
+
+    # _table_ref and _file_ref.
+    table_ref = named("TableRef", obj({"resourceId": STRING, "representation": literal("canonicalTsv")}))
+    file_ref = named("FileRef", obj({"resourceId": STRING, "representation": literal("file")}))
+    # _encode_selector.
+    selector = kinds("RecordSelector", "Selector", {
+        "recordId": {"value": STRING},
+        "recordIndex": {"index": INTEGER},
+    })
+
+    # The shape of a class the encoder writes its own way, by class.
+    wire: dict[object, Shape] = {
+        DataFrame: table_ref,
+        RecordSelector: selector,
+        # asdict(GbdrawConfig) or a caller's mapping; the decoder migrates it.
+        GbdrawConfig: record(UNKNOWN),
+    }
+
+    def of(hint: object) -> Shape:
+        return shape_of_hint(hint, wire.get)
+
+    def resource(hint: object) -> Shape:
+        """A path or a table that the encoder writes as a resource reference."""
+
+        return shape_of_hint(hint, lambda item: file_ref if item in {str, Path} else wire.get(item))
+
+    def data(
+        cls: type,
+        name: str | None = None,
+        *,
+        files: frozenset[str] = frozenset(),
+        replace: Mapping[str, Shape] | None = None,
+        extra: Mapping[str, Shape] | None = None,
+        kind: str | None = None,
+    ) -> Shape:
+        """The object the encoder writes for a dataclass: one camelCase key per field.
+
+        ``files`` are the fields written as resource references, ``replace``
+        the fields the encoder writes its own way, ``extra`` the keys it adds,
+        and ``kind`` the tag it adds.
+        """
+
+        hints = _class_type_hints(cls)
+        members: dict[str, Shape] = {"kind": literal(kind)} if kind is not None else {}
+        for item in fields(cls):
+            members[_camel(item.name)] = (replace or {}).get(item.name) or (
+                resource if item.name in files else of
+            )(hints[item.name])
+        wire[cls] = named(name or cls.__name__, obj({**members, **(extra or {})}))
+        return wire[cls]
+
+    # _encode_record: RecordInput; _SOURCE_FILE_RESOURCES names each source's resources.
+    source = kinds("RecordSource", "RecordSource", {
+        _camel(kind): {field: STRING for _resource_kind, field in resource_fields}
+        for kind, resource_fields in _SOURCE_FILE_RESOURCES.items()
+    })
+    data(RecordDisplayOptions)
+    data(RecordPresentation)
+    region_hints = _class_type_hints(RegionSpec)
+    region = named("RecordRegion", obj({  # _encode_region
+        "selector": nullable(selector),
+        "start": of(region_hints["start"]),
+        "end": of(region_hints["end"]),
+        "reverseComplement": of(region_hints["reverse_complement"]),
+    }))
+    records = array(data(RecordInput, "Record", replace={
+        "source": source,
+        "region": nullable(region),
+        "record_key": STRING,  # written as given or as record-<n>
+    }))
+
+    # _encode_output: output_directory is the caller's, overwrite is read and ignored.
+    output_hints = _class_type_hints(RenderOutputRequest)
+    output = named("RequestOutput", obj({
+        "prefix": of(output_hints["output_prefix"]),
+        "formats": array(STRING),
+        "overwrite": of(output_hints["overwrite"]),
+        "interactiveMetadataPolicy": of(output_hints["interactive_metadata_policy"]),
+    }))
+
+    # _encode_layout: an empty object when the request has no layout.
+    empty = named("EmptyLayout", obj({}))
+    data(AlignmentAnchorIdentity)
+    data(AlignmentRecordDecision)
+    data(SimilarityAlignmentPlan)
+    data(LinearRecordTranslation)
+    layouts = {
+        "circular": union(empty, data(CircularMultiRecordOptions, "CircularLayout")),
+        "linear": union(empty, data(LinearMultiRecordOptions, "LinearLayout", extra={
+            "similarityAlignment": nullable(wire[SimilarityAlignmentPlan]),
+        })),
+    }
+
+    # _encode_diagram_options and _encode_option_value.
+    data(ColorOptions, files=frozenset({"color_table_file", "default_colors_file"}))
+    data(HatchStyle)
+    data(RegionAnnotationStyle)
+    data(FeatureSelector)
+    data(CoordinateSpan, kind="coordinateSpan")
+    data(FeatureSpan, kind="featureSpan")
+    data(FeatureIdentitySpan, kind="featureIdentity")
+    data(RegionAnnotation)
+    data(AnnotationSet)
+    data(AnnotationOptions, files=frozenset({"table_file"}))
+    data(DepthTrackInput, "DepthTrack", files=frozenset({"source"}))
+    data(ScalarSpec)
+    data(CircularTrackSlot, kind="circularTrackSlot")
+    data(LinearTrackSlot, kind="linearTrackSlot")
+    data(FeatureOverride)  # FeatureOverride.to_mapping
+    # FeaturePlacementOverride.from_mapping: a lane has a side and a level, main neither.
+    target_hints = _class_type_hints(FeaturePlacementTarget)
+    lane = {
+        name: union(*(item for item in of(target_hints[name])["options"] if item != NULL))
+        for name in ("side", "level")
+    }
+    placement_hints = _class_type_hints(FeaturePlacementOverride)
+    wire[FeaturePlacementOverride] = named("FeaturePlacement", obj({
+        "recordKey": of(placement_hints["record_key"]),
+        "biologicalFeatureId": of(placement_hints["biological_feature_id"]),
+        "placement": union(obj({"kind": literal("main")}), obj({"kind": literal("lane"), **lane})),
+    }))
+    modes: dict[str, tuple[type, type, type]] = {
+        "circular": (CircularDiagramOptions, CircularRequestTrackOptions, CircularOutputOptions),
+        "linear": (LinearDiagramOptions, LinearRequestTrackOptions, LinearOutputOptions),
+    }
+    option_files = (
+        _TABLE_FIELDS | _FILE_FIELDS | _TABLE_SEQUENCE_FIELDS | _FILE_SEQUENCE_FIELDS
+        | _OPTIONAL_FILE_SEQUENCE_FIELDS
+    )
+    # The decoder also reads the depth inputs of older writers; the writer
+    # stores every depth input as depthTracks.
+    unwritten = (
+        _COMPARISON_FIELDS | _PLACEMENT_INPUT_FIELDS | _RING_SEARCH_FIELDS | _DEPTH_COMPATIBILITY_FIELDS
+    )
+    diagram_options: dict[str, Shape] = {}
+    for mode, (options_class, track_class, output_class) in modes.items():
+        title = mode.capitalize()
+        # _encode_tracks writes the track fields of both modes, the other mode's as null.
+        track_hints = _class_type_hints(track_class)
+        wire[track_class] = named(f"{title}TrackOptions", obj({
+            _camel(item.name): of(track_hints[item.name]) if owner is track_class else NULL
+            for _options, owner, _output in modes.values()
+            for item in fields(owner)
+        }))
+        data(output_class)
+        hints = _class_type_hints(options_class)
+        members: dict[str, Shape] = {
+            "featurePlacements": array(wire[FeaturePlacementOverride]),
+            "featureOverrides": array(wire[FeatureOverride]),
+        }
+        required = sorted(members)
+        for item in fields(options_class):
+            if item.name not in unwritten:
+                members[_option_wire_key(item.name)] = (
+                    resource if item.name in option_files else of
+                )(hints[item.name])
+        # A shared option of the other mode is accepted at its default only.
+        for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
+            members.setdefault(_option_wire_key(name), literal(default))
+        diagram_options[mode] = named(f"{title}DiagramOptions", obj(
+            members, optional=sorted(set(members) - set(required))
+        ))
+
+    # _encode_comparisons; _PROTEIN_SETTINGS_WIRE names each setting's typed owner.
+    wire[LosslessCollinearityParameters] = named("CollinearityParameters", obj({
+        "kind": literal("lossless"),
+        "parameters": data(LosslessCollinearityParameters),
+    }))
+    setting_hints = {
+        "options": _class_type_hints(LinearDiagramOptions),
+        "search": _class_type_hints(LosatSearchOptions),
+        "runtime": _class_type_hints(LosatRuntimeOptions),
+    }
+    pair = {"queryRecordIndex": INTEGER, "subjectRecordIndex": INTEGER}
+    comparison = kinds("Comparison", "Comparison", {
+        "nucleotideBlast": {"resourceId": STRING, **pair},
+        "precomputedProteinComparison": {
+            "resourceId": STRING, "encoding": literal("canonicalTsv"), **pair,
+        },
+        "orthogroupResult": {"resourceId": STRING, "encoding": literal("canonicalJson")},
+        "collinearityResult": {
+            "resourceId": STRING,
+            "encoding": literal("canonicalJson"),
+            "valueKind": literal("result", "blocks"),
+        },
+        "generatedProteinComparison": {
+            "mode": literal(*LOSATP_MODE_WIRE.values()),
+            "pairs": array(obj(pair)),
+            "settings": named("ProteinComparisonSettings", obj(
+                {key: of(setting_hints[owner][name]) for key, owner, name in _PROTEIN_SETTINGS_WIRE},
+                optional=sorted(_OPTIONAL_PROTEIN_SETTINGS),
+            )),
+        },
+    })
+
+    # _encode_canonical_request and decode_canonical_request.
+    # A CircularDiagramRequest resolves its grouping; a CircularBatchRequest is "batch".
+    grouping = union(
+        *(item for item in of(_class_type_hints(CircularDiagramRequest)["grouping"])["options"]
+          if item != NULL),
+        literal("batch"),
+    )
+    requests = []
+    for mode in modes:
+        top = {
+            "schema": literal(CANONICAL_REQUEST_SCHEMA),
+            "mode": literal(mode),
+            "grouping": grouping if mode == "circular" else literal("single"),
+            "records": records,
+            "diagramOptions": diagram_options[mode],
+            "layout": layouts[mode],
+            # A Circular request has no comparison item.
+            "comparisons": array(comparison) if mode == "linear" else tuple_of(),
+            # A Circular batch has one output per record.
+            "output": union(output, array(output)) if mode == "circular" else output,
+        }
+        if set(top) != _TOP_LEVEL_FIELDS_V5:
+            raise RuntimeError("The request description and _TOP_LEVEL_FIELDS_V5 differ.")
+        requests.append(named(f"{mode.capitalize()}RenderRequest", obj(top)))
+    named("RenderRequest", union(*requests))
+    return {"root": "CanonicalRenderRequest", "types": types_}
+
+
 __all__ = [
     "CANONICAL_REQUEST_SCHEMA",
     "SUPPORTED_CANONICAL_REQUEST_SCHEMAS",
@@ -4827,6 +5081,7 @@ __all__ = [
     "EncodedCanonicalRequest",
     "decode_canonical_typed_resource",
     "decode_canonical_request",
+    "describe_canonical_request",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
     "with_automatic_scale_interval",
