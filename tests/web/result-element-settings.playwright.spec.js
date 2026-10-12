@@ -15,6 +15,10 @@ const DEFAULT_CIRCULAR_SESSION = 'HmmtDNA_basic_circular.gbdraw-session.json';
 const LINEAR_SESSION = 'BGC0000708-BGC0000713.gbdraw-session.json';
 const SETTINGS_HINT = 'Click to open its settings';
 const MOVE_HINT = 'Turn on Layout edit to move this item';
+// One line each: the hint box stays as wide as the longer sentence.
+const BOTH_HINTS = `${SETTINGS_HINT} ${MOVE_HINT}`;
+const hintLines = (page) => hint(page).evaluate((element) => new Set(Array.from(element.querySelectorAll('span'))
+  .filter((span) => span.checkVisibility()).map((span) => Math.round(span.getBoundingClientRect().top))).size);
 const MARKER = '[data-gbdraw-preview-item="settings"]';
 
 const index = (page) => page.getByRole('navigation', { name: 'Settings sections' });
@@ -188,6 +192,13 @@ test('Circular with custom track slots: a tick label opens Axis & Scale and a di
   await page.mouse.move(grab.x, grab.y);
   await page.mouse.down();
   await page.mouse.move(grab.x + 48, grab.y + 30, { steps: 6 });
+  // While it is panned, the track under the pointer shows the canvas's cursor and no hint.
+  await frames(page);
+  expect(await page.evaluate(({ x, y }) => {
+    const hit = document.elementFromPoint(x, y);
+    return [Boolean(hit.closest('[data-gbdraw-preview-item="settings"]')), getComputedStyle(hit).cursor];
+  }, { x: grab.x + 48, y: grab.y + 30 })).toEqual([true, 'grabbing']);
+  await expect(hint(page)).toBeHidden();
   await page.mouse.up();
   await expectClosed(page, 'dinucleotide', 'after a pan');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.canvasPan.x)).toBeCloseTo(pan.x + 48, 0);
@@ -206,10 +217,26 @@ test('Circular with custom track slots: a tick label opens Axis & Scale and a di
   await clickInk(page, '[data-test-moved-feature]');
   await expect(page.locator('.feature-popup').first()).toBeVisible();
   await expectClosed(page, 'dinucleotide', 'a feature inside a track group');
-  // A click on a drawn element closes an open feature popup, as a click beside the feature does, and opens the section.
-  await clickInk(page, TICKS);
-  await expectOpened(page, 'circular-axis', 'Axis & Scale', 'with a feature popup open');
+  // A click on a drawn element that closes an open popup does only that, as a click beside
+  // the feature does: the settings stay where they are. The next click opens the section.
+  const settled = await sectionState(page, 'dinucleotide');
+  await clickInk(page, GC_SKEW);
   await expect(page.locator('.feature-popup')).toHaveCount(0);
+  await expectClosed(page, 'dinucleotide', 'the click that closed the feature popup');
+  expect(await sectionState(page, 'dinucleotide')).toEqual(settled);
+  await clickInk(page, GC_SKEW);
+  await expectOpened(page, 'dinucleotide', 'Dinucleotide content/skew', 'the click after the popup closed');
+  // The same for a feature selection: the first click clears it.
+  await closeSections(page);
+  await page.keyboard.down('Control');
+  await page.locator('.gbdraw-preview-surface path[data-gbdraw-feature-id]').nth(3).click({ force: true });
+  await page.keyboard.up('Control');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.selectedFeatureCount)).toBe(1);
+  await clickInk(page, TICKS);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.selectedFeatureCount)).toBe(0);
+  await expectClosed(page, 'circular-axis', 'the click that cleared the selection');
+  await clickInk(page, TICKS);
+  await expectOpened(page, 'circular-axis', 'Axis & Scale', 'the click after the selection cleared');
 
   // No setting, History step, or Result changed, and an export carries no marker.
   await page.waitForTimeout(150);
@@ -271,7 +298,7 @@ test('Circular, the default layout with a plot title: the title opens Titles & R
 
   // The title is a Layout edit target too: its help cursor and frame stay, and the hint reads both.
   expect(await hover(page, '#plot_title text')).toEqual({ cursor: 'help', outline: 'dashed' });
-  await expect(hint(page)).toHaveText(`${SETTINGS_HINT}. ${MOVE_HINT}`, { useInnerText: true });
+  await expect(hint(page)).toHaveText(BOTH_HINTS, { useInnerText: true });
   await clickInk(page, '#plot_title text');
   await expectOpened(page, 'titles', 'Titles & Record Labels');
 
@@ -299,7 +326,8 @@ test('Linear: the scale opens Axis & Scale and the plot title Titles; Layout edi
   for (const [selector, key, title] of [['#length_bar', 'linear-axis', 'Axis & Scale'], ['#plot_title', 'titles', 'Titles & Record Labels']]) {
     await closeSections(page);
     expect(await hover(page, `${selector} text`), selector).toEqual({ cursor: 'help', outline: 'dashed' });
-    await expect(hint(page)).toHaveText(`${SETTINGS_HINT}. ${MOVE_HINT}`, { useInnerText: true });
+    await expect(hint(page)).toHaveText(BOTH_HINTS, { useInnerText: true });
+    expect(await hintLines(page), 'two lines').toBe(2);
     await clickInk(page, `${selector} text`);
     await expectOpened(page, key, title);
   }
@@ -348,6 +376,29 @@ test('Linear: the scale opens Axis & Scale and the plot title Titles; Layout edi
   await clickInk(page, '#plot_title text');
   await expectClosed(page, 'titles', 'Review alignment open, the title');
   await expect(review).toBeVisible();
+});
+
+test('Linear with several records: the GC content and GC skew track of a record open Dinucleotide content/skew', async ({ page }) => {
+  test.setTimeout(420_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await openApp(page);
+  await loadSession(page, LINEAR_SESSION);
+  // No stored Linear Session draws these tracks: turn them on and generate.
+  expect(await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.form.show_gc = true;
+    app.form.show_skew = true;
+    return (await app.runAnalysis()).status;
+  })).toBe('ok');
+  await frames(page);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  const tracks = await page.locator(`.gbdraw-preview-surface ${MARKER}`).evaluateAll((elements) => elements.map((element) => element.id));
+  expect(tracks.filter((id) => /^gc_(content|skew)_record_\d+$/.test(id))).toHaveLength(10);
+  for (const id of ['gc_content_record_2', 'gc_skew_record_4']) {
+    await closeSections(page);
+    await clickInk(page, `[id="${id}"] *`);
+    await expectOpened(page, 'dinucleotide', 'Dinucleotide content/skew', id);
+  }
 });
 
 test('phone width: a tick label brings Axis & Scale below the header', async ({ page }) => {

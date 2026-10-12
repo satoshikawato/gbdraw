@@ -79,7 +79,7 @@ const withElement = (run) => {
 };
 
 // The section a click on `target` opens, with the group found.
-const sectionOf = (target, svg) => withElement(() => drawnElementSection(target, svg));
+const sectionOf = (target) => withElement(() => drawnElementSection(target));
 
 test('the shared owner of the group patterns gives each kind one selector', () => {
   assert.equal(trackGroupSelector(TICK_GROUPS), 'g[data-gbdraw-slot-renderer="ticks"], g[id="tick"], g[id^="tick_"]');
@@ -121,12 +121,12 @@ test('Circular, the default layout: the ticks open Axis & Scale, a dinucleotide 
     g({ ...slot('gc_content', 'dinucleotide_content'), id: 'gc_content' }, content, g({ id: 'gc_content_axis' }, axis)),
     g({ ...slot('gc_skew', 'dinucleotide_skew'), id: 'skew' }, skew)
   );
-  assert.equal(sectionOf(label, svg), 'circular-axis');
-  assert.equal(sectionOf(content, svg), 'dinucleotide');
-  assert.equal(sectionOf(axis, svg), 'dinucleotide', 'a child group resolves to its track');
-  assert.equal(sectionOf(skew, svg), 'dinucleotide');
-  assert.equal(sectionOf(feature, svg), null);
-  assert.equal(sectionOf(svg, svg), null);
+  assert.equal(sectionOf(label), 'circular-axis');
+  assert.equal(sectionOf(content), 'dinucleotide');
+  assert.equal(sectionOf(axis), 'dinucleotide', 'a child group resolves to its track');
+  assert.equal(sectionOf(skew), 'dinucleotide');
+  assert.equal(sectionOf(feature), null);
+  assert.equal(sectionOf(svg), null);
 });
 
 test('Circular, custom track slots and the grid: the slot renderer and the record ids', () => {
@@ -142,20 +142,33 @@ test('Circular, custom track slots and the grid: the slot renderer and the recor
     g(slot('track_slot_3bf4b9268ef1dc03_features', 'features'), features),
     g(slot('track_slot_11aa22bb33cc44dd_depth', 'depth'), depth)
   );
-  assert.equal(sectionOf(tick, custom), 'circular-axis');
-  assert.equal(sectionOf(atSkew, custom), 'dinucleotide', 'another dinucleotide track');
-  assert.equal(sectionOf(childInk, custom), 'dinucleotide');
-  assert.equal(sectionOf(features, custom), null);
-  assert.equal(sectionOf(depth, custom), null);
+  assert.equal(sectionOf(tick), 'circular-axis');
+  assert.equal(sectionOf(atSkew), 'dinucleotide', 'another dinucleotide track');
+  assert.equal(sectionOf(childInk), 'dinucleotide');
+  assert.equal(sectionOf(features), null);
+  assert.equal(sectionOf(depth), null);
 
   // A Result stored without slot marks is read by id.
   const gridTick = ink('text');
   const gridContent = ink();
   const gridSkew = ink();
   const grid = svgOf(g({ id: 'record_1' }, g({ id: 'tick_1' }, gridTick), g({ id: 'gc_content_1' }, gridContent), g({ id: 'skew_1' }, gridSkew)));
-  assert.equal(sectionOf(gridTick, grid), 'circular-axis');
-  assert.equal(sectionOf(gridContent, grid), 'dinucleotide');
-  assert.equal(sectionOf(gridSkew, grid), 'dinucleotide');
+  assert.equal(sectionOf(gridTick), 'circular-axis');
+  assert.equal(sectionOf(gridContent), 'dinucleotide');
+  assert.equal(sectionOf(gridSkew), 'dinucleotide');
+});
+
+test('a record definition has no section, whatever its record is called', () => {
+  // The definition group is named `<record id>_definition`: these ids start like a track's.
+  for (const record of ['tick_chr1', 'skew_control', 'gc_content_demo', 'gc_skew_1']) {
+    const text = ink('text');
+    const row = g({ 'data-gbdraw-role': 'record-definition-row' }, text);
+    const definition = g({ id: `${record}_definition`, 'data-gbdraw-role': 'record-definition', 'data-gbdraw-record-index': '0' }, row);
+    svgOf(definition);
+    assert.equal(sectionOf(text), null, record);
+    assert.equal(sectionOf(definition), null, record);
+    assert.equal(withElement(() => definition.matches(DRAWN_ELEMENT_SELECTOR)), true, 'the id alone reads like a track');
+  }
 });
 
 test('Linear: the scale opens Axis & Scale, the tracks of every record their section, the title Titles', () => {
@@ -177,19 +190,18 @@ test('Linear: the scale opens Axis & Scale, the tracks of every record their sec
     g({ id: 'gc_skew_record_2' }, secondSkew),
     g({ id: 'legend' }, g({ 'data-legend-key': 'GC skew' }, legendRow), g({ 'data-gbdraw-role': 'comparison-legend' }, comparison))
   );
-  assert.equal(sectionOf(bar, svg), 'linear-axis');
-  assert.equal(sectionOf(barText, svg), 'linear-axis');
-  assert.equal(sectionOf(title, svg), 'titles');
-  assert.equal(sectionOf(content, svg), 'dinucleotide');
-  assert.equal(sectionOf(skew, svg), 'dinucleotide');
-  assert.equal(sectionOf(second, svg), 'dinucleotide');
-  assert.equal(sectionOf(secondSkew, svg), 'dinucleotide');
-  assert.equal(sectionOf(legendRow, svg), null, 'a Legend row is no drawn element with a section');
-  assert.equal(sectionOf(comparison, svg), null, 'the comparison legend');
+  assert.equal(sectionOf(bar), 'linear-axis');
+  assert.equal(sectionOf(barText), 'linear-axis');
+  assert.equal(sectionOf(title), 'titles');
+  assert.equal(sectionOf(content), 'dinucleotide');
+  assert.equal(sectionOf(skew), 'dinucleotide');
+  assert.equal(sectionOf(second), 'dinucleotide');
+  assert.equal(sectionOf(secondSkew), 'dinucleotide');
+  assert.equal(sectionOf(legendRow), null, 'a Legend row is no drawn element with a section');
+  assert.equal(sectionOf(comparison), null, 'the comparison legend');
   // An element of another document, and a target that is no element.
-  assert.equal(sectionOf(title, svgOf()), null);
-  assert.equal(sectionOf({}, svg), null);
-  assert.equal(sectionOf(null, svg), null);
+  assert.equal(sectionOf({}), null);
+  assert.equal(sectionOf(null), null);
 });
 
 test('an export keeps no marker of a drawn element that opens a section', () => {
@@ -245,7 +257,7 @@ const createPane = async (mode, display = 'stacked') => {
     localStorage: null, addEventListener() {}, removeEventListener() {},
     Vue: {
       computed: (read) => ({ get value() { return read(); } }), nextTick: async () => {},
-      onMounted() {}, onUnmounted() {}, ref: (value) => ({ value }), watch() {}
+      onMounted() {}, onUnmounted() {}, reactive: (value) => value, ref: (value) => ({ value }), watch() {}
     }
   };
   const state = { mode: { value: mode }, settingsPaneDisplay: { value: display }, settingsPaneDocked: { value: display === 'rail' ? 'layout' : null } };
@@ -258,7 +270,7 @@ test('the pane opens the section of a key in the shown mode, at the top, with th
   await pane.revealSettingsSection('dinucleotide');
   assert.deepEqual(calls, [['scroll', 40], ['focus', 'dinucleotide', { preventScroll: true }]]);
   assert.equal(sections.get('dinucleotide').details.open, true);
-  assert.deepEqual(pane.settingsPane.value.revealed, { key: 'dinucleotide', top: 140 });
+  assert.deepEqual(pane.settingsReveal.last, { key: 'dinucleotide', top: 140 });
 });
 
 test('a key of the other mode opens the section of the same title in the shown mode', async () => {
@@ -266,7 +278,7 @@ test('a key of the other mode opens the section of the same title in the shown m
   const circular = await createPane('circular');
   await circular.pane.revealSettingsSection('linear-axis');
   assert.deepEqual(circular.calls.at(-1), ['focus', 'circular-axis', { preventScroll: true }]);
-  assert.equal(circular.pane.settingsPane.value.revealed.key, 'circular-axis');
+  assert.equal(circular.pane.settingsReveal.last.key, 'circular-axis');
   const linear = await createPane('linear', 'rail');
   await linear.pane.revealSettingsSection('circular-axis');
   assert.deepEqual(linear.calls.at(-1), ['focus', 'linear-axis', { preventScroll: true }]);
@@ -275,7 +287,7 @@ test('a key of the other mode opens the section of the same title in the shown m
   const before = linear.calls.length;
   await linear.pane.revealSettingsSection('pairwise-comparisons');
   assert.equal(linear.calls.length, before);
-  assert.equal(linear.pane.settingsPane.value.revealed.key, 'linear-axis');
+  assert.equal(linear.pane.settingsReveal.last.key, 'linear-axis');
 });
 
 test('the catalog finds the element of a section in the settings', () => {

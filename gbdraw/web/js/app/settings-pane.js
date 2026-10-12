@@ -14,7 +14,7 @@ import { settingsEntryIn, settingsScrollOwner, settingsSectionElement, settingsV
 /** @import { DiagramMode, SettingsPaneDisplay, SettingsPaneRefs } from '../services/settings-pane-state.js' */
 /** @import { SettingsSectionKey } from '../services/settings-sections.js' */
 
-const { computed, nextTick, onMounted, onUnmounted, ref, watch } = window.Vue;
+const { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } = window.Vue;
 
 /**
  * What the pane shows now. In the phone layout it is the stacked settings
@@ -23,8 +23,14 @@ const { computed, nextTick, onMounted, onUnmounted, ref, watch } = window.Vue;
  * @property {SettingsPaneDisplay} display
  * @property {SettingsSectionKey | null} docked The docked rail entry.
  * @property {boolean} switchable Whether the display can be switched here.
- * @property {{ key: SettingsSectionKey, top: number } | null} revealed
- *   The section last opened by its key, and where that left its top edge.
+ */
+
+/**
+ * The section the pane last opened by its key, and where that left its top
+ * edge. The section index reads it to hold its mark. It is an object of its
+ * own, not a part of the view the root template binds, so opening a section
+ * re-renders the index alone.
+ * @typedef {{ last: { key: SettingsSectionKey, top: number } | null }} SettingsReveal
  */
 
 /**
@@ -51,8 +57,8 @@ export const createSettingsPaneController = ({ state }) => {
   // scroll there), so its breakpoint stays in the stylesheet.
   /** @type {{ value: boolean }} */
   const phoneLayout = ref(false);
-  /** @type {{ value: SettingsPaneView['revealed'] }} */
-  const revealed = ref(null);
+  /** @type {SettingsReveal} */
+  const settingsReveal = reactive({ last: null });
   const settingsArea = () => document.querySelector('.settings-scroll');
   const readLayout = () => {
     const area = settingsArea();
@@ -68,8 +74,7 @@ export const createSettingsPaneController = ({ state }) => {
     return {
       display: rail ? 'rail' : 'stacked',
       docked: rail ? state.settingsPaneDocked.value : null,
-      switchable: !phoneLayout.value,
-      revealed: revealed.value
+      switchable: !phoneLayout.value
     };
   });
 
@@ -117,7 +122,7 @@ export const createSettingsPaneController = ({ state }) => {
     if (!entry || !section || !heading) return;
     if (heading.parentElement instanceof HTMLDetailsElement) heading.parentElement.open = true;
     await revealSetting(section, { align: 'start', focus: focus ?? heading });
-    revealed.value = { key: entry, top: section.getBoundingClientRect().top };
+    settingsReveal.last = { key: entry, top: section.getBoundingClientRect().top };
   };
 
   // R10: a mode written by anything (the mode buttons, Undo, a loaded Session) reconciles the docked entry.
@@ -128,5 +133,5 @@ export const createSettingsPaneController = ({ state }) => {
   });
   onUnmounted(() => window.removeEventListener('resize', readLayout));
 
-  return { settingsPane, showSettingsPaneRail, showSettingsPaneStacked, closeDockedSettings, revealSetting, revealSettingsSection };
+  return { settingsPane, showSettingsPaneRail, showSettingsPaneStacked, closeDockedSettings, revealSetting, revealSettingsSection, settingsReveal };
 };

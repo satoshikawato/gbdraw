@@ -6693,6 +6693,7 @@ export const createAppSetup = () => {
     settingsPane: settingsPaneActions.settingsPane,
     revealSetting: settingsPaneActions.revealSetting,
     revealSettingsSection: settingsPaneActions.revealSettingsSection,
+    settingsReveal: settingsPaneActions.settingsReveal,
     showSettingsPaneRail: settingsPaneActions.showSettingsPaneRail,
     showSettingsPaneStacked: settingsPaneActions.showSettingsPaneStacked,
     closeDockedSettings: settingsPaneActions.closeDockedSettings,
