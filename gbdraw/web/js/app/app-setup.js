@@ -379,7 +379,7 @@ const COMPOSITION_ROOT_ATTRIBUTE = new RegExp(`\\s(?:${COMPOSITION_SCHEMA_ATTRIB
 // legacy composition. The saved bytes carry the saved edits. A Session 40+
 // Result takes it only when `appliesToContent` (OV-273).
 /** @type {LegacyResultSvgTransform} */
-export const transformLegacyResultSvg = Object.assign((svg, /** @type {LegacyResultSvgData} */ { composition }) => {
+export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement} */ svg, /** @type {LegacyResultSvgData} */ { composition }) => {
   if (
     svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
     && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
