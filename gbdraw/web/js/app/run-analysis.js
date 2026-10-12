@@ -3,6 +3,9 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
+/** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
+/** @import { AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
+/** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { keepResultNames } from '../services/result-normalization.js';
@@ -1874,7 +1877,10 @@ export const createRunAnalysis = ({
     ));
   };
 
-  const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(state).current;
+  // `state` is the state.js object, which holds the members the discovery reads.
+  const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(
+    /** @type {CircularDiscoveryState<unknown>} */ (state)
+  ).current;
 
   const circularDiscoveryMatchesCurrentInput = () => (
     circularRecordDiscovery.status === 'ready' &&
@@ -3885,7 +3891,8 @@ export const createRunAnalysis = ({
             const cacheMetadata = await buildCacheMetadata(
               losatArgs, spec.queryIndex, spec.subjectIndex
             );
-            const batch = sourcePlan.bySpec.get(spec);
+            // `prepareLosatSourceBatches` maps every spec of `jobSpecs` to its batch.
+            const batch = /** @type {LosatSourceBatch<typeof spec>} */ (sourcePlan.bySpec.get(spec));
             if (batch.searchContext) cacheMetadata.searchContext = batch.searchContext;
             preparedJobs.push({ spec, losatArgs, cacheMetadata, batch });
           }
@@ -5341,8 +5348,9 @@ export const createRunAnalysis = ({
       const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
         ? candidateCommit.featureState.orthogroups
         : [];
+      // Align and Reset set `alignmentResetBefore` on a Linear Session with a plan, so `canonical` holds the plan and the translations.
       const receipt = alignmentResetBefore
-        ? await buildSimilarityAlignmentResetReceipt({before:alignmentResetBefore, after:canonical})
+        ? await buildSimilarityAlignmentResetReceipt({before:alignmentResetBefore, after:/** @type {AlignmentResetPlannedCanonical} */ (canonical)})
         : alignmentResetReceipt === undefined ? state.similarityAlignmentResetReceipt?.value
           : alignmentResetReceipt;
       await validateSimilarityAlignmentResetReceipt(receipt, canonical);

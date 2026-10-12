@@ -12,14 +12,81 @@ import {
   readFileText
 } from './file-content-cache.js';
 
+/** @import { FileLike } from './session-resource-backing.js' */
+/** @import { GenBankHeader } from './genbank-header.js' */
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
+
+/**
+ * The record catalog of the Circular source files: whose files it was read
+ * from (`inputType`, `primaryFile`, `pairedFile`), and how reading went.
+ * @typedef {object} CircularRecordDiscovery
+ * @property {'idle' | 'loading' | 'deferred' | 'ready' | 'error'} status
+ * @property {UserFacingError | ''} error The reader's error, or '' when there is none.
+ * @property {'' | 'gb' | 'gff'} inputType
+ * @property {FileLike | null} primaryFile
+ * @property {FileLike | null} pairedFile
+ * @property {{ selector: string, record_id: string, recordKey: string }[]} canonicalRecordIdentities
+ */
+
+/**
+ * One record as a reader or the Worker reports it: Python names (`record_id`,
+ * `record_length`, `topology`) or the names `normalizeSequenceRecords` returns.
+ * @typedef {{
+ *   selector?: unknown, record_id?: unknown, recordId?: unknown,
+ *   record_length?: unknown, recordLength?: unknown,
+ *   topology?: string, detectedTopology?: string,
+ *   organism?: unknown, strain?: unknown,
+ *   inferredDefinition?: unknown, inferred_definition?: unknown
+ * }} SequenceRecordEntry
+ */
+
+/**
+ * An unvalidated record-list response: `normalizeSequenceRecords` checks it.
+ * @typedef {{ error?: unknown, records?: (SequenceRecordEntry | null | undefined)[] }} SequenceRecordsPayload
+ */
+
+/**
+ * @typedef {{
+ *   selector: string, recordId: string, recordLength: number | null, detectedTopology: string,
+ *   organism?: string, strain?: string, inferredDefinition?: string
+ * }} SequenceRecord
+ */
+
+/** @typedef {{ role: string, bytes: ArrayBuffer }} HelperFile */
+
+/**
+ * The Worker helper call: `runDiagramHelperOperation` answers it.
+ * @template Result
+ * @typedef {(
+ *   operation: string, payload: { format?: string, files: HelperFile[] }
+ * ) => Promise<{ result?: Result }>} HelperOperationRunner
+ */
+
 // A discovery error the reader reported for the source bytes is final for that
 // exact source instance: reading the same files again returns it again, so a
 // refresh or Generate reuses it. A Worker start-up, staging, transport, Cancel,
 // or unclassified (UNKNOWN) failure is not a property of the bytes and reads again.
-export const discoveryErrorIsFinal = (error) => Boolean(error?.code)
-  && error.code !== 'UNKNOWN' && error.stage === 'helper';
+/** @param {UserFacingError | string | null | undefined} error The stored error, or '' when there is none. */
+export const discoveryErrorIsFinal = (error) => typeof error === 'object' && error !== null
+  && Boolean(error.code) && error.code !== 'UNKNOWN' && error.stage === 'helper';
 
-// A catalog is current only for the exact active source instance and input type.
+/**
+ * The members of the `state.js` state that `circularDiscoveryForInput` reads;
+ * the record list passes through.
+ * @template Entry
+ * @typedef {{
+ *   cInputType: { value: string },
+ *   files: { c_gb: FileLike | null, c_gff: FileLike | null, c_fasta: FileLike | null },
+ *   circularRecordDiscovery: CircularRecordDiscovery,
+ *   circularRecordList: { value: Entry[] }
+ * }} CircularDiscoveryState
+ */
+
+/**
+ * A catalog is current only for the exact active source instance and input type.
+ * @template Entry
+ * @param {CircularDiscoveryState<Entry>} state
+ */
 export const circularDiscoveryForInput = (state) => {
   const inputType = state.cInputType.value;
   const primaryFile = inputType === 'gff' ? state.files.c_gff : state.files.c_gb;
@@ -36,6 +103,7 @@ export const circularDiscoveryForInput = (state) => {
   };
 };
 
+/** @param {unknown} value */
 const normalizeRecordLength = (value) => {
   const numeric = Number(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
@@ -46,6 +114,7 @@ const NON_ORGANISM_PATTERN = /^(?:synthetic construct|artificial sequence|uniden
 // This fast path mirrors gbdraw/core/record_metadata.py, which owns the same
 // inference for the Worker. tests/web/record-metadata-inference.test.mjs and
 // tests/test_record_metadata.py share one fixture table so the two cannot drift.
+/** @param {{ organism?: unknown, strain?: unknown }} [fields] */
 export const formatInferredOrganismStrain = ({ organism = '', strain = '' } = {}) => {
   const rawOrganism = String(organism || '').trim();
   const rawStrain = String(strain || '').trim();
@@ -78,16 +147,21 @@ export const formatInferredOrganismStrain = ({ organism = '', strain = '' } = {}
   return rest ? `${speciesPart} ${rest}`.trim() : speciesPart.trim();
 };
 
+/** @param {string} subject @returns {never} */
 const declineToPythonReader = (subject) => {
   throw new Error(`${subject} needs the Python reader.`);
 };
 
-/** @param {ReturnType<typeof scanGenBankHeader>} [header] */
+/**
+ * @param {unknown} chunk
+ * @param {GenBankHeader | null} [header]
+ */
 export const extractGenBankMetadata = (chunk, header = undefined) => {
   const text = String(chunk || '');
   const sourceMatch = text.match(/^ {5}source\s+[\s\S]*?(?=^ {5}[a-z]|\/\/)/mi);
   const sourceBlock = sourceMatch ? sourceMatch[0] : text;
 
+  /** @param {string} key @param {string} block */
   const extractQualifier = (key, block) => {
     const regex = new RegExp(`/${key}="([^"]*(?:\\r?\\n {21}[^"]*)*)"`, 'i');
     const match = block.match(regex);
@@ -110,23 +184,28 @@ export const extractGenBankMetadata = (chunk, header = undefined) => {
   return { organism, strain: effectiveStrain, inferredDefinition };
 };
 
+/**
+ * @param {SequenceRecordsPayload | null | undefined} payload
+ * @returns {SequenceRecord[]}
+ */
 export const normalizeSequenceRecords = (payload) => {
   if (payload?.error) throw payload.error;
   if (!Array.isArray(payload?.records)) throw new Error('Record list response is invalid.');
 
+  /** @type {SequenceRecord[]} */
   const records = [];
   const seenSelectors = new Set();
   payload.records.forEach((entry, index) => {
     const selector = String(entry?.selector ?? `#${index + 1}`).trim();
     if (!selector || seenSelectors.has(selector)) return;
     seenSelectors.add(selector);
+    const topology = entry?.topology ?? entry?.detectedTopology;
+    /** @type {SequenceRecord} */
     const record = {
       selector,
       recordId: String(entry?.record_id ?? entry?.recordId ?? '').trim() || `Record_${index + 1}`,
       recordLength: normalizeRecordLength(entry?.record_length ?? entry?.recordLength),
-      detectedTopology: ['circular', 'linear'].includes(entry?.topology ?? entry?.detectedTopology)
-        ? (entry.topology ?? entry.detectedTopology)
-        : 'unknown'
+      detectedTopology: topology === 'circular' || topology === 'linear' ? topology : 'unknown'
     };
     const organism = String(entry?.organism ?? '').trim();
     const strain = String(entry?.strain ?? '').trim();
@@ -141,6 +220,7 @@ export const normalizeSequenceRecords = (payload) => {
   return records;
 };
 
+/** @param {unknown} text */
 const parseGenBankRecordText = (text) => {
   const records = String(text || '')
     .split(/^\/\/\s*$/m)
@@ -164,7 +244,9 @@ const parseGenBankRecordText = (text) => {
 
 // Sequence entries with Biopython's FASTA rules; text before the first record
 // or an entry without an ID is left to the Python reader.
+/** @param {string[]} lines */
 const fastaEntries = (lines) => {
+  /** @type {{ id: string, length: number }[]} */
   const entries = [];
   /** @type {{ id: string, length: number } | null} */
   let current = null;
@@ -183,6 +265,7 @@ const fastaEntries = (lines) => {
   return entries;
 };
 
+/** @param {unknown} text */
 const parseFastaRecordText = (text) => normalizeSequenceRecords({
   records: fastaEntries(String(text || '').split(/\r?\n/)).map((entry, index) => ({
     selector: `#${index + 1}`,
@@ -194,8 +277,10 @@ const parseFastaRecordText = (text) => normalizeSequenceRecords({
 // The record IDs BCBio builds from a GFF3 file: the seqid of every feature line
 // before ##FASTA and every embedded FASTA entry. Lines BCBio would reject or
 // match by NCBI-style IDs are left to the Python reader.
+/** @param {unknown} text */
 const gffRecordIds = (text) => {
   const lines = String(text || '').split(/\r?\n/);
+  /** @type {Set<string>} */
   const ids = new Set();
   let index = 0;
   for (; index < lines.length; index += 1) {
@@ -225,6 +310,7 @@ const gffRecordIds = (text) => {
 
 // load_gff_fasta keeps the GFF3 records the FASTA file names, in FASTA order.
 // A GFF3 record missing from the FASTA file is the loader's error to report.
+/** @param {unknown} gffText @param {unknown} fastaText */
 const parseGffFastaRecordText = (gffText, fastaText) => {
   const fasta = fastaEntries(String(fastaText || '').split(/\r?\n/));
   const fastaIds = new Set(fasta.map(({ id }) => id));
@@ -242,12 +328,14 @@ const parseGffFastaRecordText = (gffText, fastaText) => {
   });
 };
 
+/** @param {unknown} text @param {unknown} format */
 export const parseSequenceRecordText = (text, format) => {
   if (format === 'genbank') return parseGenBankRecordText(text);
   if (format === 'fasta') return parseFastaRecordText(text);
   throw new Error(`Unsupported format: ${String(format)}.`);
 };
 
+/** @param {Uint8Array} bytes */
 const startsWithUtf8ByteOrderMark = (bytes) => (
   bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
 );
@@ -256,6 +344,7 @@ const startsWithUtf8ByteOrderMark = (bytes) => (
 // Biopython and BCBio read a leading UTF-8 byte order mark as content while the
 // browser's text decoder drops it, so an upload that starts with one declines.
 // A Session resource is a file Python already read for its Result.
+/** @param {FileLike | null | undefined} file @returns {Promise<string | null>} */
 const readFastPathText = async (file) => {
   if (getSessionResourceSource(file)) return readFileText(file);
   if (typeof file?.text !== 'function') return null;
@@ -265,6 +354,11 @@ const readFastPathText = async (file) => {
 };
 
 // The fast path returns exactly the records the loader reads, or declines.
+/**
+ * @param {FileLike[]} files
+ * @param {(...texts: string[]) => SequenceRecord[]} parse
+ * @returns {Promise<SequenceRecord[] | null>}
+ */
 const fastPathRecords = async (files, parse) => {
   try {
     const texts = await Promise.all(files.map(readFastPathText));
@@ -274,6 +368,12 @@ const fastPathRecords = async (files, parse) => {
   }
 };
 
+/**
+ * @param {{
+ *   file: FileLike | null | undefined, format: string,
+ *   runHelperOperation?: HelperOperationRunner<SequenceRecordsPayload>
+ * }} options
+ */
 export const discoverSequenceRecords = async ({
   file,
   format,
@@ -295,6 +395,12 @@ export const discoverSequenceRecords = async ({
 // D12: the label a ring comparison file names itself (GenBank / DDBJ: first
 // record's DEFINITION, then organism), or null (FASTA). Only the Python ring
 // reader reads the file; there is no fast path.
+/**
+ * @param {{
+ *   file: FileLike,
+ *   runHelperOperation?: HelperOperationRunner<{ error?: unknown, recordLabel?: string | null }>
+ * }} options
+ */
 export const discoverComparisonSequenceRecordLabel = async ({
   file,
   runHelperOperation = runDiagramHelperOperation
@@ -307,6 +413,12 @@ export const discoverComparisonSequenceRecordLabel = async ({
   return response.result?.recordLabel ?? null;
 };
 
+/**
+ * @param {{
+ *   gffFile: FileLike | null | undefined, fastaFile: FileLike | null | undefined,
+ *   runHelperOperation?: HelperOperationRunner<SequenceRecordsPayload>
+ * }} options
+ */
 export const discoverGffFastaRecords = async ({
   gffFile,
   fastaFile,

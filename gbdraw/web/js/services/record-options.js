@@ -1,27 +1,40 @@
 // @ts-check
 import { circularRecordsToDraw } from './record-draw-selection.js';
 
+/** @param {unknown} value */
 const cleanText = (value) => String(value ?? '').trim();
 const NULL_RECORD_SELECTOR_TOKENS = new Set([
   'none', 'null', 'jsnull', 'undefined', 'jsundefined', '-'
 ]);
 
+/** @param {unknown} value */
 export const isUnspecifiedRecordSelectorValue = (value) => {
   const text = cleanText(value);
   return !text || NULL_RECORD_SELECTOR_TOKENS.has(text.toLowerCase());
 };
 
+/** @param {unknown} value */
 const isSafeRecordId = (value) => {
   const recordId = cleanText(value);
   return !isUnspecifiedRecordSelectorValue(recordId) && !recordId.startsWith('#');
 };
 
+/** @param {unknown} value */
 export const formatRecordLength = (value) => {
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || numeric <= 0) return 'length unavailable';
   return `${numeric.toLocaleString('en-US')} bp`;
 };
 
+/**
+ * A discovered record as these functions read it; any other field is kept.
+ * @typedef {{ sourceIndex?: unknown, selector?: unknown, recordId?: unknown }} RecordEntryInput
+ */
+
+/**
+ * @template {RecordEntryInput} T
+ * @param {readonly T[] | null | undefined} records
+ */
 export const buildDisambiguatedRecordEntries = (records) => {
   const normalized = (Array.isArray(records) ? records : []).map((record, index) => ({
     ...record,
@@ -45,6 +58,11 @@ export const buildDisambiguatedRecordEntries = (records) => {
   });
 };
 
+/**
+ * @template {RecordEntryInput} T
+ * @param {readonly T[] | null | undefined} records
+ * @param {unknown} requestedValue
+ */
 export const resolveDisambiguatedRecordSelection = (records, requestedValue) => {
   const entries = buildDisambiguatedRecordEntries(records);
   const requested = cleanText(requestedValue);
@@ -71,7 +89,7 @@ export const resolveDisambiguatedRecordSelection = (records, requestedValue) => 
 // `omittedRecords` are the offered records that are OFF.
 /**
  * @typedef {Object} CircularRequestRecordSetOptions
- * @property {any[]} [records] Discovered records (`record_id` or `recordId`, `recordLength`, `selector`).
+ * @property {readonly (RecordEntryInput & { record_id?: unknown })[] | null} [records] Discovered records (`record_id` or `recordId`, `recordLength`, `selector`).
  * @property {string} [selector]
  * @property {boolean} [multiRecordCanvas]
  * @property {string} [groupingIntent]

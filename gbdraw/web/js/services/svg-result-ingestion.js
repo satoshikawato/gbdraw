@@ -1,6 +1,8 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from './legend-svg.js' */
+/** @import { RenderedIdentityCollection } from './session-feature-metadata.js' */
+/** @import { SvgSanitizer } from './svg-sanitization.js' */
 import {
   AUTO_FEATURE_UNDERLAY_STROKE,
   FEATURE_PART_CONNECTOR,
@@ -46,12 +48,50 @@ const SVG_RESULT_SOURCE_CLASSES = Object.freeze({
 
 let nextResultIdentity = 1;
 
+/** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
+
+/**
+ * The root of a parsed Result SVG: `parseSanitizedSvg` admits only a document
+ * whose root element is an `<svg>`.
+ * @typedef {SVGSVGElement} SvgResultRoot
+ */
+
+/**
+ * One Result of a Worker response or a Session: its `name` and its SVG text
+ * (`content`); the other members pass through unread. A committed copy holds
+ * its runtime state under `COMMITTED_SVG_RESULT`.
+ * @typedef {Record<string, any> & { [COMMITTED_SVG_RESULT]?: CommittedSvgState }} SvgResultEntry
+ */
+
+/**
+ * What a Result's metadata holds once it is committed (`metadataFromCatalogAdmission`,
+ * `ingestSvgResult`). A legacy import has no `drawnLegendKeys`.
+ * @typedef {object} CommittedSvgResultMetadata
+ * @property {RenderedIdentityCollection} renderedFeatureIdentities
+ * @property {string} sourceClass
+ * @property {readonly string[] | null | undefined} selectedFeatureTypes
+ * @property {ReadonlySet<string> | null} [drawnLegendKeys]
+ */
+
+/**
+ * The runtime state of a committed Result, never persisted.
+ * @typedef {object} CommittedSvgState
+ * @property {number} identity
+ * @property {boolean} mounted
+ * @property {string} mountedContent The content the mounted preview shows.
+ * @property {CommittedSvgResultMetadata} metadata
+ */
+
+/**
+ * Where an admission is: the phase it reports and the Result it handles.
+ * @typedef {{ phase: string, resultIndex: number }} SvgAdmissionSite
+ */
 
 /**
  * A caller's rewrite of one parsed Result SVG. The return value is ignored.
  * A transform that returns false changed nothing; any other value counts as a change (OV-345).
- * @typedef {(svg: Element, context: { result: any, resultIndex: number }) => unknown} SvgResultTransform
+ * @typedef {(svg: SvgResultRoot, context: { result: SvgResultEntry, resultIndex: number }) => unknown} SvgResultTransform
  */
 
 /**
@@ -90,7 +130,7 @@ const text = (value) => String(value ?? '').trim();
  * admissions.
  * @typedef {object} SvgResultSource
  * @property {string} sourceClass
- * @property {Record<string, any>[]} results
+ * @property {SvgResultEntry[]} results
  * @property {FeatureCatalogAdmission | null} catalogAdmission Set for a current source only.
  * @property {readonly SvgLegendRowFacts[] | null} [legendRows] Python's Legend row facts, one per Result; set for a current generated source only.
  */
@@ -107,8 +147,8 @@ const text = (value) => String(value ?? '').trim();
  * The DOM services and request facts an admission reads. A missing sanitizer
  * or parser falls back to the page's DOMPurify and DOMParser.
  * @typedef {object} SvgAdmissionRuntime
- * @property {any} [sanitizer] DOMPurify, or an object with `sanitize(svg, options)`.
- * @property {any} [parser] A DOMParser constructor.
+ * @property {SvgSanitizer} [sanitizer] DOMPurify, or an object with `sanitize(svg, options)`.
+ * @property {typeof DOMParser} [parser] A DOMParser constructor.
  * @property {readonly string[] | null} [selectedFeatureTypes] The feature types of the request that drew the Results.
  */
 
@@ -127,12 +167,20 @@ const text = (value) => String(value ?? '').trim();
  * }} LegacyImportAdmissionOptions
  */
 
+/**
+ * @param {SvgResultEntry | null | undefined} result
+ * @returns {CommittedSvgState | null}
+ */
 const committedState = (result) => (
   result && typeof result === 'object' && result[COMMITTED_SVG_RESULT]
     ? result[COMMITTED_SVG_RESULT]
     : null
 );
 
+/**
+ * @param {unknown} results
+ * @returns {SvgResultEntry[]}
+ */
 const requireResultList = (results) => {
   if (!Array.isArray(results)) {
     throw new Error('The diagram engine returned an invalid Result list.');
@@ -145,6 +193,11 @@ const requireResultList = (results) => {
   return results;
 };
 
+/**
+ * @param {FeatureCatalogAdmission | null | undefined} admission
+ * @param {unknown} results
+ * @returns {FeatureCatalogAdmission}
+ */
 const requireAlignedCatalogAdmission = (admission, results) => {
   if (
     !admission
@@ -167,7 +220,7 @@ const requireAlignedCatalogAdmission = (admission, results) => {
 
 /**
  * @param {string} sourceClass
- * @param {Record<string, any>[]} results
+ * @param {SvgResultEntry[]} results
  * @param {FeatureCatalogAdmission | null} [catalogAdmission]
  * @param {readonly SvgLegendRowFacts[] | null} [legendRows]
  * @returns {SvgResultSource}
@@ -191,8 +244,14 @@ const invalidResult = () => diagnosticError('RESULT_INVALID', {}, { stage: 'resu
 // its Legend drew, and the feature rows its records can name that the draft did not
 // draw (hidden or recaptioned features). They are read for one admission and never
 // persisted. Without them (a replayed Session, a stub) a required row stays required.
+/**
+ * @param {unknown} legendRows
+ * @param {SvgResultEntry[]} results
+ * @returns {readonly SvgLegendRowFacts[] | null}
+ */
 const normalizeLegendRowFacts = (legendRows, results) => {
   if (legendRows === undefined) return null;
+  /** @param {unknown} list */
   const keys = (list) => (
     Array.isArray(list) && list.every((key) => typeof key === 'string') ? new Set(list) : null
   );
@@ -211,6 +270,12 @@ const normalizeLegendRowFacts = (legendRows, results) => {
 // Python reports it as removed by the draft there (suppressed), or as belonging to
 // another Result of the batch (drawn or suppressed there). A row Python drew in this
 // Result must be present, and a key no Result reports is stale (OV-46, OV-63).
+/**
+ * @param {readonly SvgLegendRowFacts[] | null | undefined} legendRows
+ * @param {number} resultIndex
+ * @param {string} caption
+ * @returns {boolean}
+ */
 const legendRowMayBeAbsent = (legendRows, resultIndex, caption) => {
   if (!legendRows) return false;
   const own = legendRows[resultIndex];
@@ -225,7 +290,7 @@ const legendRowMayBeAbsent = (legendRows, resultIndex, caption) => {
  * provenance. The catalog keeps this path parse-free and preserves lazy Worker use.
  */
 /**
- * @param {Record<string, any>[]} results
+ * @param {SvgResultEntry[]} results
  * @param {FeatureCatalogAdmission} catalogAdmission
  * @returns {SvgResultSource}
  */
@@ -239,7 +304,7 @@ export const createCurrentSessionResultSource = (results, catalogAdmission) => (
 
 /** Classify persisted historical input as the sole compatibility-normalization source. */
 /**
- * @param {Record<string, any>[]} results
+ * @param {SvgResultEntry[]} results
  * @returns {SvgResultSource}
  */
 export const createLegacyImportResultSource = (results) => (
@@ -249,6 +314,11 @@ export const createLegacyImportResultSource = (results) => (
   )
 );
 
+/**
+ * @param {(SvgResultSource & { [RESULT_SOURCE]?: true }) | null | undefined} source
+ * @param {string} sourceClass
+ * @returns {SvgResultSource}
+ */
 const requireSource = (source, sourceClass) => {
   if (!source?.[RESULT_SOURCE] || source.sourceClass !== sourceClass) {
     throw new Error(`SVG Result source must be classified as ${sourceClass}.`);
@@ -256,6 +326,11 @@ const requireSource = (source, sourceClass) => {
   return source;
 };
 
+/**
+ * @param {string} content
+ * @param {typeof DOMParser} [parser]
+ * @returns {SvgResultRoot}
+ */
 const parseSanitizedSvg = (
   content,
   parser = globalThis.DOMParser || globalThis.window?.DOMParser
@@ -270,9 +345,14 @@ const parseSanitizedSvg = (
   ) {
     throw new Error('The diagram engine returned malformed SVG content.');
   }
-  return document.documentElement;
+  // `localName` is `svg` above; the parser types the root of any document as an HTMLElement.
+  return /** @type {SvgResultRoot} */ (/** @type {unknown} */ (document.documentElement));
 };
 
+/**
+ * @param {SvgResultEntry} result
+ * @param {CommittedSvgResultMetadata} metadata
+ */
 const markCommitted = (result, metadata) => {
   result[COMMITTED_SVG_RESULT] = {
     identity: nextResultIdentity++,
@@ -283,8 +363,13 @@ const markCommitted = (result, metadata) => {
   return result;
 };
 
+/**
+ * @param {SvgResultEntry} result
+ * @param {CommittedSvgResultMetadata} metadata
+ */
 const commitCatalogBackedResult = (result, metadata) => markCommitted(result, metadata);
 
+/** @param {unknown} content */
 const hasSanitizedSvgEnvelope = (content) => {
   const withoutDeclaration = String(content || '')
     .trim()
@@ -292,6 +377,11 @@ const hasSanitizedSvgEnvelope = (content) => {
   return /^<svg(?:\s|>)/i.test(withoutDeclaration);
 };
 
+/**
+ * @param {SvgResultEntry} result
+ * @param {SvgSanitizer | undefined} sanitizer
+ * @param {SvgAdmissionSite} site
+ */
 const sanitizeSvgResultContent = (
   result,
   sanitizer,
@@ -307,6 +397,10 @@ const sanitizeSvgResultContent = (
   return content;
 };
 
+/**
+ * @param {Element} svg
+ * @param {SvgAdmissionSite} site
+ */
 const serializeAdmittedSvg = (svg, { phase, resultIndex }) => {
   const content = serializeCleanSvg(svg);
   recordStructuralMetric('svgSerializationCount', 1, { phase, resultIndex });
@@ -316,6 +410,7 @@ const serializeAdmittedSvg = (svg, { phase, resultIndex }) => {
 // The feature types of the request that drew the Results (its
 // `diagramOptions.selectedFeaturesSet`), or null when it names none. The
 // Features list reads them from the displayed Result's metadata (R13).
+/** @param {readonly string[] | null | undefined} selectedFeatureTypes */
 const resultFeatureTypes = (selectedFeatureTypes) => (
   Array.isArray(selectedFeatureTypes) ? Object.freeze(selectedFeatureTypes.map(String)) : null
 );
@@ -325,7 +420,8 @@ const resultFeatureTypes = (selectedFeatureTypes) => (
 /**
  * @param {FeatureCatalogAdmission} catalogAdmission @param {number} resultIndex @param {string} sourceClass
  * @param {readonly string[] | null} selectedFeatureTypes
- * @param {readonly SvgLegendRowFacts[] | null} [legendRows]
+ * @param {readonly SvgLegendRowFacts[] | null | undefined} [legendRows]
+ * @returns {CommittedSvgResultMetadata}
  */
 const metadataFromCatalogAdmission = (catalogAdmission, resultIndex, sourceClass, selectedFeatureTypes, legendRows = null) => {
   const renderedFeatureIdentities = catalogAdmission.renderedIdentitiesByResult[resultIndex];
@@ -337,26 +433,32 @@ const metadataFromCatalogAdmission = (catalogAdmission, resultIndex, sourceClass
   });
 };
 
+/** @param {SvgResultEntry | null | undefined} result */
 export const isCommittedSvgResult = (result) => Boolean(committedState(result));
 
+/** @param {SvgResultEntry | null | undefined} result */
 export const isCommittedSvgResultMounted = (result) => Boolean(
   committedState(result)?.mounted
 );
 
+/** @param {SvgResultEntry} result */
 export const getCommittedSvgContent = (result) => {
   const runtime = committedState(result);
   if (!runtime) return null;
   return runtime.mounted ? runtime.mountedContent : result.content;
 };
 
+/** @param {SvgResultEntry | null | undefined} result */
 export const getCommittedSvgResultMetadata = (result) => (
   committedState(result)?.metadata || null
 );
 
+/** @param {SvgResultEntry | null | undefined} result */
 export const getCommittedSvgResultRuntimeIdentity = (result) => (
   committedState(result)?.identity ?? null
 );
 
+/** @param {SvgResultEntry} result */
 export const markCommittedSvgResultMounted = (result) => {
   const runtime = committedState(result);
   if (!runtime) return false;
@@ -365,6 +467,7 @@ export const markCommittedSvgResultMounted = (result) => {
   return true;
 };
 
+/** @param {SvgResultEntry} result */
 export const markCommittedSvgResultUnmounted = (result) => {
   const runtime = committedState(result);
   if (!runtime) return false;
@@ -373,10 +476,16 @@ export const markCommittedSvgResultUnmounted = (result) => {
   return true;
 };
 
+/**
+ * @param {SvgMutationPlan} plan
+ * @param {number} resultIndex
+ * @returns {SvgMutationOperations | null}
+ */
 const currentResultOperations = (plan, resultIndex) => (
   plan.operationsByResult[resultIndex] || null
 );
 
+/** @param {SvgMutationOperations | null | undefined} operations */
 const hasOperations = (operations) => Boolean(
   operations
   && (
@@ -395,6 +504,10 @@ const hasOperations = (operations) => Boolean(
   )
 );
 
+/**
+ * @param {SvgMutationOperations | null | undefined} operations
+ * @returns {operations is SvgMutationOperations}
+ */
 const hasDetachedOperations = (operations) => Boolean(
   operations
   && (
@@ -411,6 +524,11 @@ const hasDetachedOperations = (operations) => Boolean(
   )
 );
 
+/**
+ * @param {SvgMutationPlan | undefined} plan
+ * @param {number} resultCount
+ * @returns {SvgMutationPlan}
+ */
 const requireCurrentMutationPlan = (plan, resultCount) => {
   if (
     !plan
@@ -458,6 +576,11 @@ export const createEmptySvgMutationPlan = (resultCount) => {
   });
 };
 
+/**
+ * @param {Element} element
+ * @param {string} name
+ * @param {unknown} value
+ */
 const setAttributeIfDifferent = (element, name, value) => {
   const normalized = String(value);
   if (element.getAttribute(name) === normalized) return false;
@@ -465,6 +588,10 @@ const setAttributeIfDifferent = (element, name, value) => {
   return true;
 };
 
+/**
+ * @param {Element} element
+ * @param {string} name
+ */
 const removeAttributeIfPresent = (element, name) => {
   if (!element.hasAttribute(name)) return false;
   element.removeAttribute(name);
@@ -576,6 +703,21 @@ const restorePaintBases = (root, domains, painted) => {
   return { changed, rowsChanged };
 };
 
+/**
+ * The lookups one admission or reconcile builds from the Result on first use,
+ * and what the operations paint.
+ * @typedef {object} LazyMutationIndex
+ * @property {Map<Element, Set<string>>} painted The attributes an operation set, by element.
+ * @property {boolean} changed Whether a paint attribute changed.
+ * @property {() => Map<string, Element[]>} features The elements of each rendered Feature.
+ * @property {() => { entries: Map<string, Element[]>, groups: Element[] }} legends The Legend rows by key, and the feature Legend groups.
+ */
+
+/**
+ * @param {SvgResultRoot} svg
+ * @param {SvgAdmissionSite} site
+ * @returns {LazyMutationIndex}
+ */
 const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
   /** @type {{ featureElements: Map<string, Element[]> | null, legendEntries: Map<string, Element[]> | null, legendGroups: Element[] | null }} */
   const built = {
@@ -646,6 +788,10 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
 /** @param {Element} entry */
 const isEditorRow = (entry) => entry.getAttribute('data-legend-owner') === 'direct-editor';
 
+/**
+ * @param {LazyMutationIndex} index
+ * @param {string} renderedId
+ */
 const requireFeatureElements = (index, renderedId) => {
   const elements = index.features().get(renderedId) || [];
   if (elements.length === 0) {
@@ -655,7 +801,7 @@ const requireFeatureElements = (index, renderedId) => {
 };
 
 /**
- * @param {any} index
+ * @param {LazyMutationIndex} index
  * @param {string} caption
  * @param {{ allowMissing?: boolean }} [options]
  * @param {(caption: string) => boolean} [mayBeAbsent]
@@ -666,6 +812,10 @@ const requireLegendEntries = (index, caption, { allowMissing = false } = {}, may
   return entries;
 };
 
+/**
+ * @param {LazyMutationIndex} index
+ * @param {Pick<SvgMutationOperations, 'featureFills' | 'featureStrokes' | 'featureVisibility'>} operations
+ */
 const applyFeatureOperations = (index, operations) => {
   operations.featureFills.forEach(({ renderedId, color }) => {
     const targets = filterFeatureFillTargets(requireFeatureElements(index, renderedId));
@@ -696,9 +846,15 @@ const applyFeatureOperations = (index, operations) => {
 // `restoresFills`: the pass returns the feature fills no operation sets to
 // Python's (a reconcile that shows them).
 // Returns whether a Legend row was added, renamed, hidden, or moved.
+/**
+ * @param {LazyMutationIndex} index
+ * @param {Pick<SvgMutationOperations, 'legendFills' | 'legendStrokes' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder'>} operations
+ * @param {{ displayed?: boolean, restoresFills?: boolean, mayBeAbsent?: (caption: string) => boolean }} [options]
+ */
 const applyLegendOperations = (index, operations, {
   displayed = false, restoresFills = false, mayBeAbsent = /** @type {((caption: string) => boolean) | undefined} */ (undefined)
 } = {}) => {
+  /** @param {SvgMutationOperations['legendFills'][number] | LegendStrokeOperation} operation A fill, a stroke, or the like: each names its row by `caption`. */
   const requireRow = (operation) => requireLegendEntries(index, operation.caption, operation, mayBeAbsent);
   // The fill each drawn feature shows once this pass ends, read once per pass
   // for the Legend row strokes (perf-014x S5).
@@ -893,7 +1049,7 @@ const restoreLegendStructure = (index, operations, domains) => {
  * Returns whether the reconcile changed the Result, so a caller commits only
  * a change (OV-345), and whether the Legend's rows changed, so the caller
  * lays it out once.
- * @param {Element} svg
+ * @param {SvgResultRoot} svg
  * @param {SvgMutationOperations} operations
  * @param {{ resultIndex?: number, domains?: readonly string[] }} [options]
  * @returns {{ changed: boolean, legendChanged: boolean }}
@@ -912,6 +1068,10 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
   if (index.legends().groups.length > 0) {
     // Every row operation addresses Python's key (the index keeps it for a
     // renamed row), or an editor row's own key, and may miss its row here.
+    /**
+     * @template {Readonly<Record<string, unknown>>} T
+     * @param {T} operation
+     */
     const allowMissing = (operation) => ({ ...operation, allowMissing: true });
     legendChanged = applyLegendOperations(index, {
       legendFills: operations.legendFills.map(allowMissing),
@@ -991,7 +1151,7 @@ const strokeKind = (element, parts, perRecord) => {
 // edits, or whose parts disagree, is not known: its parts get no record and
 // show the saved stroke until Generate. Returns whether it recorded a value.
 /**
- * @param {Element} svg
+ * @param {SvgResultRoot} svg
  * @param {{ resultIndex: number, catalogAdmission: FeatureCatalogAdmission, edits: SavedResultEdits }} saved
  * @returns {boolean}
  */
@@ -1011,9 +1171,12 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
     element.setAttribute(resultBaseAttribute(name), text(original));
     recorded = true;
   };
-  /** @param {string} key */
+  /**
+   * @param {string} key
+   * @returns {RenderedFeatureId[]}
+   */
   const renderedIdsOf = (key) => (catalogAdmission.renderedTargetsByOverrideKey.get(key) || [])
-    .filter((target) => target.resultIndex === resultIndex).map((target) => target.renderedId);
+    .filter((/** @type {{ resultIndex: number }} */ target) => target.resultIndex === resultIndex).map((/** @type {{ renderedId: RenderedFeatureId }} */ target) => target.renderedId);
   const elementsOf = (/** @type {string} */ renderedId) => index.features().get(renderedId) || [];
 
   /** @type {Map<string, string>} */
@@ -1141,12 +1304,11 @@ const savedLegendRenames = (edits) => {
 // the row. Load records it once, on the one row of Python's with the renamed
 // caption, in a Result that has no row of Python's caption (U3a H1).
 // Returns whether it recorded a key.
-/** @param {Element} svg @param {Map<string, string>} renames @returns {boolean} */
+/** @param {SvgResultRoot} svg @param {Map<string, string>} renames @returns {boolean} */
 const recordSavedLegendKeys = (svg, renames) => {
   let recorded = false;
   const keyRecord = resultBaseAttribute('data-legend-key');
-  // A Result's root is an `<svg>`; the transform list types its argument as an Element.
-  const groups = getAllFeatureLegendGroups(/** @type {SVGSVGElement} */ (svg));
+  const groups = getAllFeatureLegendGroups(svg);
   const rows = groups.flatMap((group) => Array.from(group.querySelectorAll('g[data-legend-key]')));
   const drawnKeys = new Set(rows.flatMap((row) => [text(row.getAttribute('data-legend-key')), text(row.getAttribute(keyRecord))]));
   groups.forEach((group) => {
@@ -1206,9 +1368,9 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
       const transforms = [
         ...(legacy && normalizes(result) ? [legacy.transform] : []),
         ...(needsRecords
-          ? [(/** @type {Element} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
+          ? [(/** @type {SvgResultRoot} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
           : []),
-        ...(renames.size > 0 ? [(/** @type {Element} */ svg) => recordSavedLegendKeys(svg, renames)] : [])
+        ...(renames.size > 0 ? [(/** @type {SvgResultRoot} */ svg) => recordSavedLegendKeys(svg, renames)] : [])
       ];
       return transforms.length > 0
         ? Object.freeze({ ...freezeEmptyOperations(), callerTransforms: Object.freeze(transforms) })
@@ -1217,6 +1379,12 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
   });
 };
 
+/**
+ * @param {SvgResultEntry} result
+ * @param {CommittedSvgResultMetadata} metadata
+ * @param {SvgMutationOperations | null} operations
+ * @param {{ sanitizer?: SvgSanitizer, parser?: typeof DOMParser, resultIndex: number, sourceClass: string, legendRows?: readonly SvgLegendRowFacts[] | null }} options
+ */
 const admitCurrentResult = (
   result,
   metadata,
@@ -1357,6 +1525,10 @@ export const admitCurrentSessionResults = (
   { sanitizer, parser, selectedFeatureTypes }
 );
 
+/**
+ * @param {SvgResultEntry} result
+ * @param {{ sanitizer?: SvgSanitizer, parser?: typeof DOMParser, transformSvg?: SvgResultTransform | null, sourceClass: string, resultIndex: number, selectedFeatureTypes: readonly string[] | null }} options
+ */
 const ingestSvgResult = (
   result,
   {

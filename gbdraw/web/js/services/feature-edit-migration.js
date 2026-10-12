@@ -95,6 +95,11 @@ export const FEATURE_VISIBILITY_NARROWED_NOTICE = (count) => (
  */
 
 /**
+ * The input of `migrateSessionFeatureEdits`: an older Session has no `features`.
+ * @typedef {Omit<FeatureEditMigrationInput, 'features'> & { features: Record<string, unknown> | null | undefined }} SessionFeatureEditMigrationInput
+ */
+
+/**
  * @param {unknown} value
  * @returns {value is Record<string, any>}
  */
@@ -625,7 +630,7 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
  * become `featureOverrides`. When a label map is migrated, the saved label
  * table is cleared: it was the copy of those maps built at the last Generate
  * (the same invariant the editor keeps when label edits change).
- * @param {FeatureEditMigrationInput} input
+ * @param {SessionFeatureEditMigrationInput} input
  * @returns {{
  *   features: Record<string, any>,
  *   droppedCount: number,

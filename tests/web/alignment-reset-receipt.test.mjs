@@ -81,6 +81,13 @@ test('malformed modern receipt never becomes absent historical evidence', async 
     {...receipt, mode:'left'} ];
   for (const invalid of variants) await assert.rejects(admit(invalid, f.after), stale);
 });
+test('a receipt whose binding is not a string fails the shape check and the public check alike', async () => {
+  const f = fixture(); const receipt = await build(f);
+  // A one-element array holding the hash coerces to it in the regex test, so only the type check rejects it.
+  const arrayBinding = { ...receipt, binding: [receipt.binding] };
+  assert.throws(() => admitShape(arrayBinding, f.after.renderRequest), stale);
+  await assert.rejects(admit(arrayBinding, f.after), stale);
+});
 // OV-115 and OV-130: a Linear receipt checked against a Circular request (and any
 // stale receipt) reaches Generate and Save as a specific diagnostic with a way out.
 test('a stale receipt names the Reset alignment evidence and the ways out', async () => {
