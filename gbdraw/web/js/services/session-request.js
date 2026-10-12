@@ -186,10 +186,12 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { CircularRequestRecordSetOptions } from './record-options.js' */
 /** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
-/** @import { RecordDisplayRowView } from './record-display-model.js' */
+/** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
 /** @import { CatalogStateView } from './feature-catalog.js' */
+/** @import { ModeProfileName } from '../mode-profiles.js' */
+/** @import { ExportRef } from './svg-serialization.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -197,30 +199,11 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 // generated artifacts still come from `state`.
 /** @typedef {Record<string, any>} RequestDrawing */
 
-/** @typedef {'circular' | 'linear'} RequestMode */
-/**
- * A Vue ref, or the `{ value }` cell a Gallery Session's request state puts in
- * its place.
- * @template T
- * @typedef {{ value: T }} RequestRef
- */
-/**
- * One resource the request carries: the descriptor of an encoded file, or only
- * its `kind` while the builder defers the bytes (`encode: false`).
- * @typedef {object} ResourceDescriptor
- * @property {string | null} kind
- * @property {string} [name]
- * @property {string} [type]
- * @property {number} [size]
- * @property {number} [lastModified]
- * @property {unknown} [encoding]
- * @property {unknown} [data]
- * @property {string} [checksum]
- */
 /**
  * A file slot's value as `addFile` reads it: a `File` or a Session resource
- * view, or the descriptor of an encoded Session resource.
- * @typedef {FileLike & RawSessionResourceDescriptor} ResourceEntry
+ * view, or the descriptor of an encoded Session resource. Nothing has checked
+ * which, so every field is read as a descriptor's unvalidated field.
+ * @typedef {RawSessionResourceDescriptor} ResourceEntry
  */
 /**
  * What the draft reads of a request record's selector, crop, and orientation
@@ -235,10 +218,6 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @typedef {Omit<CanonicalRecord, 'display'> & { display?: CanonicalRecord['display'] }} RequestDraftRecord
  */
 /**
- * A discovered record row of a source input, as the request projection reads it.
- * @typedef {RecordDisplayRowView & { key: string, scope: string, sourceUid: string, selector: string, recordId: string }} RequestRecordDisplayRow
- */
-/**
  * A comparison ring a Generate resolved (LOSAT), as the request reads it.
  * @typedef {object} ResolvedConservationEntry
  * @property {string} [name]
@@ -250,7 +229,9 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @property {string} [seriesKey]
  */
 /**
- * A file slot of a Linear record, as the request reads it.
+ * A file slot of a Linear record, as the request reads it: a `LinearSeq`
+ * (state.js, which this state-free service cannot import, R13) whose files
+ * are serialized, or the row a Session's request state is rebuilt with.
  * @typedef {object} RequestLinearSeq
  * @property {string} uid
  * @property {ResourceEntry | null} [gb]
@@ -306,7 +287,10 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * }} RequestCanonicalComparison
  */
 /**
- * A comparison entry of the request that names a resource.
+ * A comparison entry that names a resource, as `buildComparisons` writes it
+ * before the request is validated: it copies `encoding` and `valueKind` of a
+ * committed comparison as strings, so it is not yet one of the generated
+ * comparison types (`contracts/request.generated.js`).
  * @typedef {object} RequestComparisonRef
  * @property {string} kind
  * @property {string} resourceId
@@ -319,14 +303,14 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * What the label projection of a request reads of `state`: the displayed
  * Result's catalog features (`resultRenderedFeatures`) and its labels.
  * @typedef {CatalogStateView & {
- *   editableLabels?: RequestRef<{ featureId?: unknown, sourceText?: unknown }[]>
+ *   editableLabels?: ExportRef<{ featureId?: unknown, sourceText?: unknown }[]>
  * }} RequestLabelState
  */
 /**
  * What the generated tables of a request read of `state` (state.js), or of
  * the state a Gallery Session's request is rebuilt from.
  * @typedef {RequestLabelState & {
- *   paletteDefinitions: RequestRef<Record<string, Record<string, string>>>,
+ *   paletteDefinitions: ExportRef<Record<string, Record<string, string>>>,
  *   canonicalPublicationFiles?: Partial<Record<'d_color' | 't_color' | 'whitelist' | 'qualifier_priority', ResourceEntry | null>>
  * }} RequestTableState
  */
@@ -334,8 +318,8 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * What the request reads of `state` (state.js), or of the state a Gallery
  * Session's request is rebuilt from (`buildCanonicalRequestState`).
  * @typedef {RequestTableState & {
- *   mode: RequestRef<RequestMode>, cInputType: RequestRef<string>, lInputType: RequestRef<string>,
- *   circularRecordList: RequestRef<CircularRequestRecordSetOptions['records']>,
+ *   mode: ExportRef<ModeProfileName>, cInputType: ExportRef<string>, lInputType: ExportRef<string>,
+ *   circularRecordList: ExportRef<CircularRequestRecordSetOptions['records']>,
  *   losatExecution?: { threadsPerJob?: unknown }
  * }} RequestState
  */
@@ -349,7 +333,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  */
 /**
  * @typedef {object} ResourceBuilder
- * @property {Record<string, ResourceDescriptor>} resources
+ * @property {Record<string, RawSessionResourceDescriptor>} resources The descriptors as written; no reader has checked them.
  * @property {Record<string, string>} resourceOriginalNames
  * @property {(resourceId: string, kind: string | null, entry: ResourceEntry | null | undefined) => string} addFile
  * @property {(resourceId: string, kind: string, name: string, text: unknown) => string} addText
@@ -777,7 +761,7 @@ const LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
   CONFIG_OVERRIDE_PATHS.normalizeLength
 ]);
 
-/** @param {RequestMode} mode */
+/** @param {ModeProfileName} mode */
 export const managedConfigOverridePathsForMode = (mode) => {
   if (!['circular', 'linear'].includes(mode)) {
     throw new Error(`Unsupported config override mode: ${String(mode)}.`);
@@ -979,7 +963,7 @@ export const bindCanonicalTypedResource = (value, descriptor) => {
 const createResourceBuilder = ({ encode = true } = {}) => {
   // A resource id can be one a Session names (`publicationFileRef`), so the
   // table is read by own key (OV-564).
-  /** @type {Record<string, ResourceDescriptor>} */
+  /** @type {Record<string, RawSessionResourceDescriptor>} */
   const resources = {};
   /** @type {Record<string, string>} */
   const resourceOriginalNames = {};
@@ -998,13 +982,12 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     const effectiveKind = String(encodedEntry.kind || kind);
     const kindResourceIds = fileResourceIds.get(effectiveKind) || new WeakMap();
     const owner = getResourcePayloadOwner(entry);
-    // The lookup is by object identity, so any payload owner is a valid key.
     const identity = /** @type {SessionResourceSource | null} */ (
-      getSessionResourceSource(/** @type {FileLike | null} */ (owner))
+      getSessionResourceSource(owner)
     )?.descriptor || owner;
     const existingResourceId = kindResourceIds.get(identity);
     if (existingResourceId) return existingResourceId;
-    /** @type {ResourceDescriptor} */
+    /** @type {RawSessionResourceDescriptor} */
     const descriptor = {
       kind: effectiveKind,
       name: normalizeResourceName(resourceId, entry.name),
@@ -2692,7 +2675,7 @@ const buildComparisons = ({
 };
 
 /**
- * @param {RequestState & { similarityAlignmentPlan?: RequestRef<unknown>, linearRecordTranslations?: RequestRef<unknown> }} state
+ * @param {RequestState & { similarityAlignmentPlan?: ExportRef<unknown>, linearRecordTranslations?: ExportRef<unknown> }} state
  * @param {RequestDrawing} drawing
  * @param {{ recordKey: string, presentation: { gridRow?: number | null } }[]} [records]
  * @param {number[] | null} [circularSourceIndexes] The file position of each drawn Circular record.
@@ -2782,7 +2765,7 @@ const publicationClone = (value) => value === undefined ? undefined : JSON.parse
 /**
  * @template T
  * @param {T} value
- * @returns {RequestRef<T>}
+ * @returns {ExportRef<T>}
  */
 const publicationRef = (value) => ({ value });
 /** @param {RequestRecordView | null | undefined} record */
@@ -2923,18 +2906,18 @@ const projectCanonicalRenderInput = ({
   const records = recordPlan.records.flatMap((record, index) => {
     const sourceUid = state.mode.value === 'linear'
       ? String(filesData.linearSeqs?.[index]?.uid || record.recordKey) : 'circular';
-    const sourceRows = recordDisplayRows.filter((/** @type {RequestRecordDisplayRow} */ row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
+    const sourceRows = recordDisplayRows.filter((/** @type {RecordDisplayRow} */ row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
     const selector = record.region?.selector || record.selector;
-    const selectedRows = sourceRows.filter((/** @type {RequestRecordDisplayRow} */ row) => !selector
+    const selectedRows = sourceRows.filter((/** @type {RecordDisplayRow} */ row) => !selector
       || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
-    /** @param {RequestRecordDisplayRow} row */
+    /** @param {RecordDisplayRow} row */
     const transformFor = (row) => requestedRecordTransform(row,
-      drafts.find((/** @type {{ sourceUid: string, selector: string }} */ draft) => recordDisplayKey(draft) === row.key) || {}, { ...row, cropped: Boolean(record.region) });
+      drafts.find((/** @type {RecordDisplayDraftIdentity} */ draft) => recordDisplayKey(draft) === row.key) || {}, { ...row, cropped: Boolean(record.region) });
     if (record.cardinality === 'all' && selectedRows.length > 1) {
       const transforms = selectedRows.map(transformFor);
       if (new Set(transforms.map((/** @type {unknown} */ transform) => JSON.stringify(transform))).size > 1) {
         sourceInputIndexes.push(...selectedRows.map(() => index));
-        return selectedRows.map((/** @type {RequestRecordDisplayRow} */ row, /** @type {number} */ rowIndex) => ({ ...record,
+        return selectedRows.map((/** @type {RecordDisplayRow} */ row, /** @type {number} */ rowIndex) => ({ ...record,
           recordKey: `${record.recordKey}:${Number(row.selector.slice(1))}`,
           cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
           presentation: { ...record.presentation,
@@ -2944,7 +2927,7 @@ const projectCanonicalRenderInput = ({
       }
     }
     const selected = selectedRows[0];
-    const savedDraft = drafts.find((/** @type {{ sourceUid: string, selector: string, recordId: string, topologyOverride?: boolean | null, startCoordinate?: number | null, reverseComplementOverride?: boolean | null }} */ draft) => draft.sourceUid === sourceUid
+    const savedDraft = drafts.find((/** @type {RecordDisplayDraftIdentity & Partial<RecordDisplayDraft>} */ draft) => draft.sourceUid === sourceUid
       && (selector?.kind === 'recordIndex' ? draft.selector === `#${selector.index + 1}`
         : selector?.kind === 'recordId' ? draft.recordId === selector.value : true));
     const transform = selected ? transformFor(selected) : {
@@ -4081,7 +4064,7 @@ const sharedLengthOverrideValue = (overrides, path) => {
   return Number.isFinite(shortNumber) && shortNumber === longNumber ? longValue : undefined;
 };
 
-/** @param {{ mode: RequestMode, showLabels?: unknown, allowInnerLabels?: unknown }} input */
+/** @param {{ mode: ModeProfileName, showLabels?: unknown, allowInnerLabels?: unknown }} input */
 const legacyLabelScope = ({ mode, showLabels, allowInnerLabels }) => {
   /** @type {string | undefined} */
   let scope;
@@ -4111,7 +4094,7 @@ const legacyLabelScope = ({ mode, showLabels, allowInnerLabels }) => {
   return scope;
 };
 
-/** @param {RequestMode} mode */
+/** @param {ModeProfileName} mode */
 const projectFullConfigOverrides = (config, mode) => {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
   /** @type {Set<string>} */
@@ -4151,7 +4134,7 @@ const projectFullConfigOverrides = (config, mode) => {
 
 /**
  * @param {Record<string, unknown>} overrides
- * @param {RequestMode} mode
+ * @param {ModeProfileName} mode
  */
 const projectCanonicalConfigOverrides = (overrides, mode) => {
   /** @type {Record<string, any>} */
@@ -4201,7 +4184,7 @@ const projectLegacyFlatConfigOverrides = (overrides) => Object.fromEntries(
 
 /**
  * @param {Record<string, unknown>} overrides
- * @param {RequestMode} mode
+ * @param {ModeProfileName} mode
  */
 const projectExplicitConfigOverrides = (overrides, mode) => {
   const legacyLabelPaths = new Set([

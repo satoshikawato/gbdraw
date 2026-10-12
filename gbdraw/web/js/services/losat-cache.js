@@ -245,7 +245,7 @@ const containsManifestPresentationIdentity = (value, visited = new WeakSet()) =>
 /**
  * @typedef {object} ProteinIdentityInstance
  * @property {number} schema
- * @property {string | number} recordAnalysisId A key of `ProteinIdentityManifest.recordAnalyses`.
+ * @property {unknown} recordAnalysisId Coerces to an own key of `ProteinIdentityManifest.recordAnalyses`; its type is not checked.
  * @property {string} runtimeBindingHash
  * @property {string} displayBindingHash
  * @property {Record<string, string>} runtimeIds feature analysis ID -> runtime handle
