@@ -24,6 +24,7 @@ Options: clear 3, inside 1, cone 70, lgap 2.5, lpad 2.4, stub 1, edge 1, fl 12, 
 from __future__ import annotations
 
 import dataclasses
+import heapq
 import math
 from pathlib import Path
 
@@ -70,6 +71,16 @@ def _sturn(pts, min_seg: float = 3.0) -> float:
             ang = math.degrees(math.acos(max(-1.0, min(1.0, (u[0] * v[0] + u[1] * v[1]) / (nu * nv)))))
             turn += ang if u[0] * v[1] - u[1] * v[0] > 0 else -ang
     return turn
+
+
+def _select(nd: dict, idx) -> dict:
+    """The seats `idx` of a label's seat table."""
+    return {k: (v[idx] if isinstance(v, np.ndarray) and k != "stub" else v) for k, v in nd.items()}
+
+
+def _off_arc(radii: list, step: float = 2.0) -> bool:
+    """True when the leader ends of a cluster, in stack order, change their distance from the centre by more than `step` px (scripts/arc_fit.py)."""
+    return any(abs(b - a) > step for a, b in zip(radii, radii[1:]))
 
 
 def _broken(flat) -> bool:
@@ -246,6 +257,10 @@ class _Par:
         self.kink = ctx.opt("kink", 8.0)                 # P round 2: px of cost of a bend under 8 degrees (it fades out to 8 degrees)
         self.noport = ctx.opt("noport", 400.0)            # P round 2: px of cost of keeping an end that is at no contact point
         self.cluster = int(ctx.opt("cluster", 1))        # P: 1: the cluster construction runs
+        self.parc = ctx.opt("parc", 60.0)                # P round 3: a straight seat may be this many px farther along the ray than the nearest allowed one, when the arc of its cluster asks for it
+        self.rhos = int(ctx.opt("rhos", 12))             # P round 3: radii of the arc tried for a cluster (the cheapest by their lower bound)
+        self.arctol = ctx.opt("arctol", 0.95)            # P round 3: leader ends of a cluster lie within this many px of the arc (neighbours differ by 2 px at most)
+        self.seats = int(ctx.opt("seats", 40))           # P round 3: seats kept per label of a chain (the cheapest of each kind of end)
         if self.port:
             self.face = self.mid = self.fan = self.strt = self.sym = self.slide = 0
         self.font = float(ctx.font_size)
@@ -1352,8 +1367,11 @@ class _Eng:
         straight = turn < 0.5
         keep = straight | (turn >= 3.0)
         t = rn + par.lgap                                   # distance of the point from the stub (straight seats)
-        if (keep & straight).any():                         # R5: no farther than `pslide` px along the ray than the nearest allowed seat
-            keep &= ~straight | (t <= t[keep & straight].min() + par.pslide)
+        far = np.zeros(len(t), dtype=bool)
+        if (keep & straight).any():                         # R5: no farther than `pslide` px along the ray than the nearest allowed seat; R8 may ask for up to `parc`
+            tmin = t[keep & straight].min()
+            keep &= ~straight | (t <= tmin + par.parc)
+            far = straight & (t > tmin + par.pslide)
         stub = np.broadcast_to(np.array(L.S, dtype=float), att.shape)
         idx = np.nonzero(keep)[0]
         if len(idx):
@@ -1376,7 +1394,8 @@ class _Eng:
         sel = np.array(out, dtype=int)
         return {"box": np.vstack([box[sel], np.array([rec[1]], dtype=float)]), "att": np.vstack([att[sel], np.array([cur_pts[-1]], dtype=float)]),
                 "yc": np.concatenate([yc[sel], [yc0]]), "cost": np.concatenate([cost2[sel], [cur_cost]]),
-                "straight": np.concatenate([straight[sel], [cur_turn < 1.0]]), "stub": np.array(L.S, dtype=float)}
+                "straight": np.concatenate([straight[sel], [cur_turn < 1.0]]), "far": np.concatenate([far[sel], [False]]),
+                "present": np.arange(len(sel) + 1) == len(sel), "stub": np.array(L.S, dtype=float)}
 
     def chain_pair(self, a: dict, b: dict, d: float) -> np.ndarray:
         """(Na, Nb): seat i of label a and seat j of label b (b the next one along the stack) stand together: order along the stack, box gap,
@@ -1396,37 +1415,154 @@ class _Eng:
         return ok
 
     @staticmethod
-    def chain_dp(nodes: list, compat: list):
-        """Cheapest choice of one seat per label along the stack with the order bent* straight* bent* (R3).  The index of the seat of every
-        label, or None."""
+    def chain_dp(nodes: list, compat: list, compat2: list, order: bool = True):
+        """Cheapest choice of one seat per label along the stack with the order bent* straight* bent* (R3), where a label stands with
+        its next neighbour (compat) and with the one after (compat2).  The state is the seats of two labels.  The index of the seat of
+        every label and the cost of the choice, or None.  Without `order` any mix of straight and bent seats is allowed."""
         INF = 1e18
-        n0 = nodes[0]
-        c = [np.where(~n0["straight"], n0["cost"], INF), np.where(n0["straight"], n0["cost"], INF), np.full(len(n0["cost"]), INF)]
+        n = len(nodes)
+        if n == 1:
+            c = nodes[0]["cost"]
+            return ([int(c.argmin())], float(c.min())) if c.min() < INF / 2 else None
+        # phase of the order after a seat: 0 bent before the straight run, 1 straight, 2 bent after it; PH[p][s]: the phase of a seat of
+        # kind s (0 bent, 1 straight) after phase p, or -1
+        PH = ((0, 1), (2, 1), (2, -1)) if order else ((0, 0), (0, 0), (0, 0))
+        n0, n1 = nodes[0], nodes[1]
+        s0, s1 = n0["straight"].astype(int), n1["straight"].astype(int)
+        V = np.full((3, len(s0), len(s1)), INF)              # V[phase of the last label, seat of the one before, seat of the last]
+        for a in range(2):
+            for b in range(2):
+                p0 = 0 if a == 0 else 1
+                if PH[p0][b] >= 0:
+                    V[PH[p0][b]] = np.where((s0[:, None] == a) & (s1[None, :] == b) & compat[0], n0["cost"][:, None] + n1["cost"][None, :], V[PH[p0][b]])
         back = []
-        for k in range(1, len(nodes)):
-            nb, comp = nodes[k], compat[k - 1]
-            mins, args = [], []
-            for ph in range(3):
-                m = np.where(comp, c[ph][:, None], INF)
-                args.append(m.argmin(axis=0))
-                mins.append(m.min(axis=0))
-            pick1, pick2 = mins[0] <= mins[1], mins[1] <= mins[2]
-            c = [np.where(~nb["straight"], mins[0] + nb["cost"], INF),
-                 np.where(nb["straight"], np.where(pick1, mins[0], mins[1]) + nb["cost"], INF),
-                 np.where(~nb["straight"], np.where(pick2, mins[1], mins[2]) + nb["cost"], INF)]
-            back.append((args, pick1, pick2))
-        best = min(range(3), key=lambda ph: c[ph].min())
-        if c[best].min() >= INF / 2:
+        for k in range(2, n):
+            nk = nodes[k]
+            sk = nk["straight"].astype(int)
+            ok = compat[k - 1][None, :, :] & compat2[k - 2][:, None, :]            # [a, b, c]: seats of labels k-2, k-1, k
+            new = np.full((3, V.shape[2], len(sk)), INF)
+            arg = np.zeros((3, V.shape[2], len(sk), 2), dtype=int)                 # best (phase before, seat of k-2) of each new state
+            for p in range(3):
+                m = np.where(ok, V[p][:, :, None], INF)
+                am = m.argmin(axis=0)
+                mv = np.take_along_axis(m, am[None], axis=0)[0]                    # [b, c]
+                for sv in range(2):
+                    q = PH[p][sv]
+                    if q < 0:
+                        continue
+                    cand = np.where(sk[None, :] == sv, mv + nk["cost"][None, :], INF)
+                    better = cand < new[q]
+                    new[q] = np.where(better, cand, new[q])
+                    arg[q][better] = np.stack([np.full(int(better.sum()), p), am[better]], axis=1)
+            back.append(arg)
+            V = new
+        best = V.min()
+        if best >= INF / 2:
             return None
-        j, ph, pick = int(c[best].argmin()), best, [0] * len(nodes)
-        for k in range(len(nodes) - 1, -1, -1):
-            pick[k] = j
-            if k == 0:
+        p, b, c = np.unravel_index(int(V.argmin()), V.shape)
+        pick = [0] * n
+        pick[n - 1], pick[n - 2] = int(c), int(b)
+        for k in range(n - 1, 1, -1):
+            pp, a = back[k - 2][p, pick[k - 1], pick[k]]
+            pick[k - 2], p = int(a), int(pp)
+        return pick, float(best)
+
+    def chain_search(self, nodes: list, compat: list, compat2: list, d: float, budget: int, order: bool):
+        """chain_dp over a chain whose labels may also collide with labels farther than the second one (the DP sees two).  The cheapest
+        choice is taken; when two labels of it collide, the later label j is branched on (best first): it takes one of its `fan` cheapest
+        seats with every seat of the other labels that collides with it struck out, or none of them.  The index of the seat of every
+        label, or None when the budget of DP runs is spent."""
+        INF = 1e18
+        n = len(nodes)
+        fan = 8
+
+        def solve(banned):
+            return self.chain_dp([{"cost": np.where(banned[k], INF, x["cost"]), "straight": x["straight"]} for k, x in enumerate(nodes)], compat, compat2, order)
+
+        def collides(j, seat):                                  # the seats of every other label that collide with seat `seat` of label j
+            one = _select(nodes[j], [seat])
+            return {m: ~(self.chain_pair(nodes[m], one, d)[:, 0] if m < j else self.chain_pair(one, nodes[m], d)[0]) for m in range(n) if m != j}
+
+        banned0 = [np.zeros(len(x["cost"]), dtype=bool) for x in nodes]
+        first = solve(banned0)
+        heap, tick = ([(first[1], 0, banned0, first[0])] if first else []), 0
+        while heap and budget > 0:
+            _c, _t, banned, pick = heapq.heappop(heap)
+            at = {key: np.array([nodes[k][key][i] for k, i in enumerate(pick)]) for key in ("box", "att", "yc")}
+            at["stub"] = np.array([x["stub"] for x in nodes])
+            bad = np.argwhere(~self.chain_pair(at, at, None) & ~np.eye(n, dtype=bool))
+            if not len(bad):
+                return pick
+            j = int(bad[0][1])
+            seats = [int(i) for i in np.argsort(nodes[j]["cost"], kind="stable") if not banned[j][i]][:fan]
+            for seat in seats:
+                nb = [b.copy() for b in banned]
+                for m, c in collides(j, seat).items():
+                    nb[m] |= c
+                nb[j] = np.ones(len(banned[j]), dtype=bool)
+                nb[j][seat] = False
+                res = solve(nb)
+                budget -= 1
+                if res:
+                    tick += 1
+                    heapq.heappush(heap, (res[1], tick, nb, res[0]))
+            nb = [b.copy() for b in banned]
+            nb[j][seats] = True
+            res = solve(nb)
+            budget -= 1
+            if res:
+                tick += 1
+                heapq.heappush(heap, (res[1], tick, nb, res[0]))
+        return None
+
+    def chain_pick(self, nodes: list, d: float, budget: int, cap: int, order: bool = True):
+        """chain_search over the seats of every label thinned to the cheapest of each kind of end (`cap` at most; the present seat stays).
+        The index of the seat of every label, or None."""
+        sub, maps = [], []
+        for nd in nodes:
+            seen, keep = set(), []
+            for i in np.argsort(nd["cost"], kind="stable"):
+                key = (bool(nd["straight"][i]), round(float(nd["att"][i][0]) / 4), round(float(nd["att"][i][1]) / 4))
+                if (key not in seen and len(keep) < cap) or nd["present"][i]:
+                    seen.add(key)
+                    keep.append(int(i))
+            keep = sorted(set(keep))
+            sub.append(_select(nd, keep))
+            maps.append(keep)
+        compat = [self.chain_pair(sub[i], sub[i + 1], d) for i in range(len(sub) - 1)]
+        compat2 = [self.chain_pair(sub[i], sub[i + 2], d) for i in range(len(sub) - 2)]
+        pick = self.chain_search(sub, compat, compat2, d, budget, order)
+        return None if pick is None else [maps[k][i] for k, i in enumerate(pick)]
+
+    def chain_arc(self, nodes: list, d: float):
+        """R8: the seats of a chain on one arc concentric with the ring.  For a radius of the arc every label keeps the seats whose end is
+        within `arctol` px of it; the radii are tried from the least lower bound of the cost on, and the cheapest choice is taken.  A chain
+        with no such radius takes its seats without the arc (and without the slides that only the arc asks for).  The seat of every label, or None."""
+        par = self.par
+        rad = [np.hypot(nd["att"][:, 0], nd["att"][:, 1]) for nd in nodes]
+        tries = []
+        if len(nodes) > 1:
+            for rho in np.arange(max(r.min() for r in rad), min(r.max() for r in rad) + 1e-9, 0.5):
+                sel = [np.nonzero(np.abs(r - rho) <= par.arctol)[0] for r in rad]
+                if all(len(x) for x in sel):
+                    tries.append((sum(float(nd["cost"][x].min()) for nd, x in zip(nodes, sel)), float(rho), sel))
+        best = None
+        for lb, _rho, sel in sorted(tries, key=lambda t: t[0])[:par.rhos]:
+            if best and lb >= best[0]:
                 break
-            args, pick1, pick2 = back[k - 1]
-            prev = 0 if ph == 0 else ((0 if pick1[j] else 1) if ph == 1 else (1 if pick2[j] else 2))
-            j, ph = int(args[prev][j]), prev
-        return pick
+            pick = self.chain_pick([_select(nd, x) for nd, x in zip(nodes, sel)], d, 40, self.par.seats)
+            if pick:
+                cost = sum(float(nd["cost"][x[i]]) for nd, x, i in zip(nodes, sel, pick))
+                if not best or cost < best[0]:
+                    best = (cost, [int(x[i]) for x, i in zip(sel, pick)])
+        if best:
+            return best[1]
+        near = [np.nonzero(~nd["far"])[0] for nd in nodes]
+        for order in (True, False):                          # a chain with no seats in the order of R3 is seated as it comes (it reads mixed)
+            pick = self.chain_pick([_select(nd, x) for nd, x in zip(nodes, near)], d, 300, 3 * self.par.seats, order)
+            if pick is not None:
+                return [int(x[i]) for x, i in zip(near, pick)]
+        return None
 
     def cluster(self, recs: list, shore: str) -> tuple[list, dict]:
         """R3 to R6 as one construction.  A chain of one stack (boxes at most gap + 3 px apart; a lone label is a chain of one) is seated again
@@ -1446,7 +1582,7 @@ class _Eng:
         for k, lb in enumerate(labs):
             groups.setdefault((lb.sx, lb.upper), []).append(k)
         solved: set = set()
-        for rnd in range(3):                                     # round 0: every chain; later rounds: the chains that read mixed and are new
+        for rnd in range(3):                                     # round 0: every chain; later rounds: the chains that read mixed or off the arc and are new
             for ks in groups.values():
                 ks.sort(key=lambda k: 0.5 * (recs[k][1][1] + recs[k][1][3]) * labs[k].d)
                 chains, cur = [], [ks[0]]
@@ -1459,7 +1595,7 @@ class _Eng:
                         cur = [k]
                 chains.append(cur)
                 for chain in chains:
-                    if rnd and (len(chain) < 2 or tuple(chain) in solved or not _broken([abs(_sturn(recs[k][2])) < 1.0 for k in chain])):
+                    if rnd and (len(chain) < 2 or tuple(chain) in solved or not (_broken([abs(_sturn(recs[k][2])) < 1.0 for k in chain]) or _off_arc([math.hypot(*recs[k][2][-1]) for k in chain]))):
                         continue
                     solved.add(tuple(chain))
                     info["chains"] += 1
@@ -1468,54 +1604,29 @@ class _Eng:
                         if j not in chain:
                             bg.add(r[1], labs[j].S, r[2][-1], labs[j])
                     nodes = [self.chain_nodes(labs[k], recs[k], bg, pend) for k in chain]
-                    if len(chain) > 40:                             # a dense stack: keep the cheapest seats only
-                        for nd in nodes:
-                            keep = np.argsort(nd["cost"])[:250]
-                            keep = np.union1d(keep, [len(nd["cost"]) - 1])
-                            for key in ("box", "att", "yc", "cost", "straight"):
-                                nd[key] = nd[key][keep]
                     d0 = labs[chain[0]].d
-                    compat = [self.chain_pair(nodes[i], nodes[i + 1], d0) for i in range(len(chain) - 1)]
-                    ok_chain = False
-                    for _try in range(len(chain) + 1):               # a label that fails the check against the others keeps its present seat; again
-                        pick = self.chain_dp(nodes, compat)
-                        if pick is None:
-                            info["kept_dp"] += 1
-                            break
-                        new = {}
-                        for k, nd, i in zip(chain, nodes, pick):
-                            box = tuple(float(v) for v in nd["box"][i])
-                            new[k] = (box, [recs[k][0].anchor, labs[k].S, (float(nd["att"][i][0]), float(nd["att"][i][1]))])
-                        bad = None
-                        for pos, k in enumerate(chain):              # every label against every other, with the whole new chain in place
-                            others = _Placed()
-                            for j, r in enumerate(recs):
-                                if j != k:
-                                    b, pts = (new[j][0], new[j][1]) if j in new else (r[1], r[2])
-                                    others.add(b, labs[j].S, pts[-1], labs[j])
-                            bx = np.array([new[k][0]], dtype=float)
-                            at = np.array([new[k][1][-1]], dtype=float)
-                            if not self.legal(labs[k], bx, at, np.array([labs[k].S], dtype=float), others, pend, min(labs[k].Sy, bx[0, 1]) - par.lpad - 1.0, max(labs[k].Sy, bx[0, 3]) + par.lpad + 1.0)[0]:
-                                bad = pos
-                                break
-                        if bad is None:
-                            ok_chain = True
-                            break
-                        mine = {"box": np.array([new[chain[bad]][0]]), "att": np.array([new[chain[bad]][1][-1]]), "yc": np.zeros(1), "stub": nodes[bad]["stub"]}
-                        todo = [bad if len(nodes[bad]["cost"]) > 1 else -1]       # freeze the label; if it is frozen already, the labels it collides with
-                        if todo[0] < 0:
-                            todo = [q for q, k2 in enumerate(chain) if q != bad and len(nodes[q]["cost"]) > 1 and not self.chain_pair(
-                                mine, {"box": np.array([new[k2][0]]), "att": np.array([new[k2][1][-1]]), "yc": np.zeros(1), "stub": nodes[q]["stub"]}, None)[0, 0]]
-                        if not todo:
+                    pick = self.chain_arc(nodes, d0)
+                    if pick is None:
+                        info["kept_dp"] += 1
+                        continue
+                    new = {}
+                    for k, nd, i in zip(chain, nodes, pick):
+                        box = tuple(float(v) for v in nd["box"][i])
+                        new[k] = (box, [recs[k][0].anchor, labs[k].S, (float(nd["att"][i][0]), float(nd["att"][i][1]))])
+                    ok_chain = True
+                    for k in chain:                                  # every label against everything else, with the whole new chain in place
+                        others = _Placed()
+                        for j, r in enumerate(recs):
+                            if j != k:
+                                b, pts = (new[j][0], new[j][1]) if j in new else (r[1], r[2])
+                                others.add(b, labs[j].S, pts[-1], labs[j])
+                        bx = np.array([new[k][0]], dtype=float)
+                        at = np.array([new[k][1][-1]], dtype=float)
+                        if not self.legal(labs[k], bx, at, np.array([labs[k].S], dtype=float), others, pend, min(labs[k].Sy, bx[0, 1]) - par.lpad - 1.0, max(labs[k].Sy, bx[0, 3]) + par.lpad + 1.0)[0]:
+                            ok_chain = False
                             info["kept_check"] += 1
-                            info.setdefault("kept_names", []).append([labs[k].it.text for k in chain] + [labs[chain[bad]].it.text])
+                            info.setdefault("kept_names", []).append([labs[c].it.text for c in chain] + [labs[k].it.text])
                             break
-                        for q in todo:
-                            for key in ("box", "att", "yc", "cost", "straight"):
-                                nodes[q][key] = nodes[q][key][-1:]
-                        for i in {q2 for q in todo for q2 in (q - 1, q)}:
-                            if 0 <= i < len(chain) - 1:
-                                compat[i] = self.chain_pair(nodes[i], nodes[i + 1], d0)
                     if not ok_chain:
                         continue
                     info["built"] += 1
