@@ -30,6 +30,7 @@ import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
+import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup } from './preview-item-popup.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
@@ -5542,8 +5543,7 @@ export const createAppSetup = () => {
     if (!current[1] || current.every((value, index) => Object.is(value, previous[index]))) return;
     const origin = document.activeElement;
     const pane = document.querySelector('.settings-scroll');
-    const scrollOwner = pane && getComputedStyle(pane).overflowY !== 'visible'
-      ? pane : document.scrollingElement;
+    const scrollOwner = pane ? settingsScrollOwner(pane) : document.scrollingElement;
     const anchored = origin && pane?.contains(origin) && origin.getClientRects().length;
     const top = anchored ? origin.getBoundingClientRect().top : null;
     const scrollTop = scrollOwner?.scrollTop;

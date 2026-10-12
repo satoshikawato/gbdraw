@@ -1646,6 +1646,16 @@
         @layer components {
             .card { @apply mb-2 rounded-xl border p-3 shadow-sm transition-all; background-color: var(--ui-surface); border-color: var(--ui-line); }
 
+            /* Section index: a row of icon buttons pinned above the settings scroll area, with the surface of
+               a card. The index sets its right margin so that the row ends on the cards' right edge, and the
+               left and top of the title it shows for a hovered or keyboard-focused entry. */
+            .settings-index { @apply mb-2 flex flex-none flex-wrap items-center rounded-xl border shadow-sm; gap: 1px; min-height: 36px; padding: 4px 5px; background-color: var(--ui-surface); border-color: var(--ui-line); }
+            .settings-index > button { @apply inline-flex items-center justify-center; width: 22px; height: 26px; border-radius: 6px; font-size: 16px; color: var(--ui-muted); }
+            .settings-index > button:hover { background-color: #f1f5f9; color: var(--ui-text); }
+            .settings-index > button[aria-current="true"] { background-color: var(--ui-accent-soft); color: var(--ui-accent); }
+            .settings-index > button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+            .settings-index-tip { @apply pointer-events-none fixed whitespace-nowrap; z-index: 90; transform: translateX(-50%); padding: 3px 8px; border-radius: 6px; background-color: #1e293b; color: #fff; font-size: 11px; font-weight: 600; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25); }
+
             /* Type scale: card title, nested disclosure (details below), group heading, field label, hint. */
             .card-header { @apply mb-2 flex items-center gap-2; font-size: 14px; font-weight: 600; color: var(--ui-text); }
             .card-header > i { font-size: 16px; color: var(--ui-muted); }
@@ -1788,13 +1798,12 @@
         <div class="settings-pane flex flex-col h-full overflow-hidden relative shrink-0"
              :style="{ width: sidebarWidth + 'px', '--settings-pane-width': sidebarWidth + 'px' }">
 
-            <div class="settings-scroll flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
+            <settings-section-index :mode="mode" controls="settings-sections"></settings-section-index>
 
-                <div class="card">
-                    <div class="card-header min-w-0">
-                        <i class="ph ph-folder-open" aria-hidden="true"></i>
-                        <span class="min-w-0 flex-1">Input Genomes</span>
-                    </div>
+            <div id="settings-sections" class="settings-scroll flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
+
+                <div data-settings-section="input-genomes" class="card">
+                    <div tabindex="-1" class="card-header min-w-0"><settings-section-title section="input-genomes"></settings-section-title></div>
 
                     <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">Record rotation, feature placement, or tolerance has changes pending Generate. This notice covers record display only; the Result keeps its applied settings.</p>
                     <div v-if="mode === 'circular'" class="space-y-4">
@@ -2556,11 +2565,8 @@
                                 </div>
                             </div>
                         </details>
-                        <section data-linear-comparison-card class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-heading">
-                            <div id="linear-comparison-heading" class="flex min-w-0 items-center gap-2 text-base font-bold text-slate-700">
-                                <i class="ph ph-arrows-left-right text-lg text-blue-600" aria-hidden="true"></i>
-                                <span class="min-w-0 flex-1">Comparison</span>
-                            </div>
+                        <section data-linear-comparison-card data-settings-section="comparison" class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-heading">
+                            <div id="linear-comparison-heading" tabindex="-1" class="flex min-w-0 items-center gap-2 text-base font-bold text-slate-700 [&>i]:text-lg [&>i]:text-blue-600"><settings-section-title section="comparison"></settings-section-title></div>
                             <div
                                 v-if="importedComparisonNeedsResolution"
                                 data-imported-comparison-resolution
@@ -2993,9 +2999,9 @@
                     </div>
                 </div>
 
-                <div v-if="mode === 'linear'" data-linear-advanced-comparison class="card">
+                <div v-if="mode === 'linear'" data-linear-advanced-comparison data-settings-section="advanced-comparison" class="card">
                     <details data-linear-comparison-disclosure="advanced">
-                        <summary role="button" aria-label="Advanced comparison and layout"><i class="ph ph-gear-six" aria-hidden="true"></i> Advanced comparison and layout</summary>
+                        <summary role="button" aria-label="Advanced comparison and layout"><settings-section-title section="advanced-comparison"></settings-section-title></summary>
                         <div class="mt-2 min-w-0 space-y-4 border-t border-slate-200 pt-3">
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('record-layout')" class="min-w-0 space-y-2">
                                 <div class="linear-primary-label">Record Layout</div>
@@ -3069,9 +3075,9 @@
                     </details>
                 </div>
 
-                <div class="card">
+                <div data-settings-section="region-annotations" class="card">
                     <details>
-                        <summary aria-label="Region Annotations"><i class="ph ph-brackets-curly" aria-hidden="true"></i> Region Annotations <help-tip text="Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement."></help-tip></summary>
+                        <summary aria-label="Region Annotations"><settings-section-title section="region-annotations"></settings-section-title> <help-tip text="Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement."></help-tip></summary>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> Add set</button>
@@ -3159,9 +3165,9 @@
                     </details>
                 </div>
 
-                <div v-if="mode === 'circular'" class="card">
+                <div v-if="mode === 'circular'" data-settings-section="pairwise-comparisons" class="card">
                     <details>
-                        <summary aria-label="Pairwise Comparisons"><i class="ph ph-arrows-left-right" aria-hidden="true"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
+                        <summary aria-label="Pairwise Comparisons"><settings-section-title section="pairwise-comparisons"></settings-section-title> <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600" :disabled="!semanticMutationAvailable"> Run LOSAT</label>
@@ -3353,9 +3359,9 @@
                 </div>
 
 
-                <div class="card">
+                <div data-settings-section="layout" class="card">
                     <details :open="mode === 'linear'">
-                        <summary aria-label="Layout"><i class="ph ph-layout" aria-hidden="true"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
+                        <summary aria-label="Layout"><settings-section-title section="layout"></settings-section-title> <help-tip text="Control track placement and layout-related options."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <template v-if="mode === 'linear'">
                                 <div class="text-[11px] text-slate-600 space-y-1" data-linear-label-auto-layout>
@@ -4176,9 +4182,9 @@
                     </details>
                 </div>
 
-                <div class="card">
+                <div data-settings-section="titles" class="card">
                     <details>
-                        <summary aria-label="Titles and Record Labels"><i class="ph ph-textbox" aria-hidden="true"></i> Titles &amp; Record Labels <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>
+                        <summary aria-label="Titles and Record Labels"><settings-section-title section="titles"></settings-section-title> <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>
                         <p class="apply-note mt-2" data-applies-on-generate="titles"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                         <div class="mt-2 space-y-4 pt-2 border-t border-slate-200">
                             <section aria-labelledby="plot-title-settings-heading" class="space-y-2">
@@ -4273,9 +4279,9 @@
                     </details>
                 </div>
 
-                <div class="card">
+                <div data-settings-section="legend" class="card">
                     <details>
-                        <summary aria-label="Legend settings"><i class="ph ph-list-bullets" aria-hidden="true"></i> Legend · {{ legendPositionLabel(form.legend) }} <help-tip text="Adjust legend position and typography."></help-tip></summary>
+                        <summary aria-label="Legend settings"><settings-section-title section="legend"></settings-section-title> · {{ legendPositionLabel(form.legend) }} <help-tip text="Adjust legend position and typography."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <p class="apply-note" data-applies-on-generate="legend"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                             <div>
@@ -4310,9 +4316,9 @@
                     </details>
                 </div>
 
-                <div class="card">
+                <div data-settings-section="colors" class="card">
                     <details>
-                        <summary aria-label="Colors"><i class="ph ph-palette" aria-hidden="true"></i> Colors <help-tip text="Customize palettes, default colors, and specific color rules."></help-tip></summary>
+                        <summary aria-label="Colors"><settings-section-title section="colors"></settings-section-title> <help-tip text="Customize palettes, default colors, and specific color rules."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
                                 <div class="flex items-center justify-between mb-2">
@@ -4458,9 +4464,9 @@
                     </details>
                 </div>
 
-                <div class="card">
+                <div data-settings-section="features" class="card">
                     <details>
-                        <summary aria-label="Features"><i class="ph ph-shapes" aria-hidden="true"></i> Features <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
+                        <summary aria-label="Features"><settings-section-title section="features"></settings-section-title> <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <span class="input-label">Feature Types <help-tip id="help-feature-feature-types" text="Select which feature types to draw."></help-tip></span>
@@ -4666,9 +4672,9 @@
                     </details>
                 </div>
 
-                <div class="card">
+                <div data-settings-section="labels" class="card">
                     <details>
-                        <summary aria-label="Labels"><i class="ph ph-text-t" aria-hidden="true"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
+                        <summary aria-label="Labels"><settings-section-title section="labels"></settings-section-title> <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
                                 <span class="input-label text-[10px] mb-1"><label for="linear-show-labels">Show Labels</label> <help-tip id="help-label-show-labels" text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Similarity Group Record' requires LOSATP similarity-group or collinear mode."></help-tip></span>
@@ -4887,9 +4893,9 @@
                     </details>
                 </div>
 
-                <div v-if="mode === 'linear'" class="card">
+                <div v-if="mode === 'linear'" data-settings-section="linear-axis" class="card">
                     <details>
-                        <summary aria-label="Axis &amp; Scale"><i class="ph ph-ruler" aria-hidden="true"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
+                        <summary aria-label="Axis &amp; Scale"><settings-section-title section="linear-axis"></settings-section-title> <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
                         <p class="apply-note mt-2" data-applies-on-generate="axis-scale"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
@@ -5027,9 +5033,9 @@
                     </details>
                 </div>
 
-                <div v-if="mode === 'circular'" class="card">
+                <div v-if="mode === 'circular'" data-settings-section="circular-axis" class="card">
                     <details>
-                        <summary aria-label="Axis &amp; Scale"><i class="ph ph-paint-brush" aria-hidden="true"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
+                        <summary aria-label="Axis &amp; Scale"><settings-section-title section="circular-axis"></settings-section-title> <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
                         <p class="apply-note mt-2" data-applies-on-generate="axis-scale"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
@@ -5095,9 +5101,9 @@
                     </details>
                 </div>
 
-                <div class="card">
+                <div data-settings-section="dinucleotide" class="card">
                     <details>
-                        <summary aria-label="Dinucleotide content/skew"><i class="ph ph-dna" aria-hidden="true"></i> Dinucleotide content/skew <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
+                        <summary aria-label="Dinucleotide content/skew"><settings-section-title section="dinucleotide"></settings-section-title> <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
                                 <div>
@@ -8311,6 +8317,19 @@
         <g :mask="`url(#${ids.a})`"><path transform="matrix(-1,0,0,1,135.46331,2.057498)" d="m 67.732299,11.443229 c -30.079258,0 -54.625089,24.290851 -54.625089,54.173954 0,13.704239 5.172481,26.222963 13.663249,35.771457 h 15.75356 C 31.125119,93.518214 23.69106,80.448212 23.69106,65.617183 c 0,-24.110799 19.629436,-43.591654 44.041239,-43.591654 z"/></g>
         <g :mask="`url(#${ids.b})`"><path transform="matrix(-1,0,0,1,135.46331,2.057498)" d="m 67.732299,11.443229 v 10.5823 c 24.411803,0 44.041241,19.480855 44.041241,43.591654 0,24.1108 -19.629438,43.590107 -44.041241,43.590107 v 0 H 7.930782 v 10.58333 h 59.81547 v 0 c 30.072856,-0.008 54.611138,-24.294982 54.611138,-54.173437 0,-29.883103 -24.545833,-54.173954 -54.625091,-54.173954 z"/></g>
     </svg>
+</script>
+
+<script type="text/x-template" id="settings-section-index-template">
+    <nav class="settings-index" aria-label="Settings sections" data-history-ignore :style="{ marginRight: inset + 'px' }">
+        <button v-for="section in sections" :key="section.key" type="button"
+                :aria-label="section.title" :aria-controls="controls" :aria-current="section.key === current ? 'true' : null"
+                @pointerenter="onEnter(section, $event)" @pointerleave="hideTip"
+                @focus="onFocus(section, $event)" @blur="hideTip" @keydown.esc.stop="hideTip"
+                @click="activate(section.key)">
+            <i class="ph" :class="section.icon" aria-hidden="true"></i>
+        </button>
+        <div v-if="tip" ref="tipElement" class="settings-index-tip" aria-hidden="true" :style="{ left: tip.left + 'px', top: tip.top + 'px' }">{{ tip.title }}</div>
+    </nav>
 </script>
 
 <script type="text/x-template" id="help-tip-template">
