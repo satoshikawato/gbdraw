@@ -43,15 +43,8 @@ import { cloneJsonData } from './json-clone.js';
  * @typedef {FeaturePlacementRow} FeaturePlacementDraftRow
  */
 
-/**
- * A request row of `featureOverrides`. A null field keeps the rule-based result.
- * @typedef {object} FeatureOverrideRow
- * @property {string} recordKey
- * @property {string} biologicalFeatureId
- * @property {CanonicalFeatureOverride['featureVisibility']} featureVisibility
- * @property {CanonicalFeatureOverride['labelVisibility']} labelVisibility
- * @property {string | null} labelText
- */
+// A request row of `featureOverrides` is the generated `CanonicalFeatureOverride`
+// (contracts/request.generated.js). A null field keeps the rule-based result.
 
 // A draft row: a request row that keeps the Web-only `labelSourceText`, the
 // label's text before any edit (generated from gbdraw/session_contract.py).
@@ -251,7 +244,7 @@ export const normalizeFeatureOverrideLabelText = (value) => {
 const hasEdit = (row) => FEATURE_OVERRIDE_EDIT_FIELDS.some((field) => row[field] !== null);
 
 /**
- * @param {FeatureOverrideRow & { labelSourceText?: string | null }} row
+ * @param {CanonicalFeatureOverride & { labelSourceText?: string | null }} row
  * @param {boolean} draft
  */
 const checkedOverrideRow = (row, draft) => {
@@ -276,9 +269,9 @@ const checkedOverrideRow = (row, draft) => {
 
 // Validates request `featureOverrides` rows (an array) or the editor draft map.
 /**
- * @param {FeatureOverrideDraft | FeatureOverrideRow[] | null | undefined} overrides
+ * @param {FeatureOverrideDraft | CanonicalFeatureOverride[] | null | undefined} overrides
  *   An editor draft map, or request rows.
- * @returns {Array<FeatureOverrideRow | FeatureOverrideDraftRow>}
+ * @returns {Array<CanonicalFeatureOverride | FeatureOverrideDraftRow>}
  */
 export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(overrides, checkedOverrideRow);
 
@@ -290,7 +283,7 @@ export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(ov
  * @param {FeatureOverrideDraft | null | undefined} overrides
  * @param {FeatureRequestRecord[]} [records]
  * @param {{ bulkLabelText?: Record<string, string> }} [options]
- * @returns {FeatureOverrideRow[]}
+ * @returns {CanonicalFeatureOverride[]}
  */
 export const requestFeatureOverrides = (overrides, records = [], { bulkLabelText = {} } = {}) => {
   const rows = new Map();

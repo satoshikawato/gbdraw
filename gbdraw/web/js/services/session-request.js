@@ -184,7 +184,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
-/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { FileLike, RawSessionResourceDescriptor, SessionResourceTable } from './session-resource-backing.js' */
 /** @import { CircularRequestRecordSetOptions } from './record-options.js' */
 /** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
@@ -193,6 +193,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { CatalogStateView } from './feature-catalog.js' */
 /** @import { ModeProfileName } from '../mode-profiles.js' */
 /** @import { ExportRef } from './svg-serialization.js' */
+/** @import { JsonValue } from './json-clone.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -246,8 +247,8 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @property {string} [file_subtitle]
  * @property {string} [inferred_definition]
  * @property {string} [region_record_id]
- * @property {number | null} [region_start]
- * @property {number | null} [region_end]
+ * @property {unknown} [region_start] A draft, or the value a Session stores: the projection validates it (R7).
+ * @property {unknown} [region_end]
  * @property {boolean} [region_reverse]
  * @property {CanonicalRecord['cardinality']} [cardinality]
  */
@@ -345,7 +346,18 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 export { CANONICAL_REQUEST_SCHEMA };
 // The canonical render request of the current schema (the writer format only;
 // readers take unvalidated data, R14) is generated from the Python codec.
-/** @import { CanonicalRecord, CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
+/**
+ * @import {
+ *   CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalCircularDiagramOptions,
+ *   CanonicalFileRef, CanonicalRecord, CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan, CanonicalTableRef
+ * } from '../contracts/request.generated.js'
+ */
+/**
+ * The table fields of a request's `diagramOptions` that the generated-table
+ * writers fill; Circular and Linear requests declare them alike.
+ * @typedef {Pick<CanonicalCircularDiagramOptions, 'colors' | 'featureVisibilityTableFile' | 'labelWhitelistTable'
+ *   | 'labelWhitelistFile' | 'qualifierPriorityTable' | 'qualifierPriorityFile' | 'labelOverrideFile'>} RequestTableOptions
+ */
 /**
  * What the request writer returns and the session stores beside the request:
  * the encoded resources by id and the Web-only file metadata.
@@ -357,8 +369,11 @@ export { CANONICAL_REQUEST_SCHEMA };
 const SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET = new Set(SUPPORTED_CANONICAL_REQUEST_SCHEMAS);
 
 /**
- * @param {readonly string[]} keys
+ * @template {string} K
+ * @param {unknown} value
+ * @param {readonly K[]} keys
  * @param {string} path
+ * @returns {Record<K, unknown>} The object, whose own keys are exactly `keys`; no value is checked.
  */
 const requireExactCanonicalKeys = (value, keys, path) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -369,7 +384,8 @@ const requireExactCanonicalKeys = (value, keys, path) => {
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     throw new Error(`${path} contains missing or unknown fields.`);
   }
-  return value;
+  // The own keys equal `keys`.
+  return /** @type {Record<K, unknown>} */ (value);
 };
 
 /**
@@ -387,6 +403,7 @@ const requireCanonicalText = (value, path) => {
 /**
  * @param {unknown} value
  * @param {string} path
+ * @returns {CanonicalAlignmentAnchorIdentity}
  */
 const canonicalAlignmentAnchor = (value, path) => {
   const anchor = requireExactCanonicalKeys(value, [
@@ -396,7 +413,8 @@ const canonicalAlignmentAnchor = (value, path) => {
     'stableFeatureSvgId'
   ], path);
   if (anchor.sourceFeatureIndex !== null && (
-    !Number.isSafeInteger(anchor.sourceFeatureIndex) || anchor.sourceFeatureIndex < 0
+    // A safe integer is a number.
+    !Number.isSafeInteger(anchor.sourceFeatureIndex) || /** @type {number} */ (anchor.sourceFeatureIndex) < 0
   )) throw new Error(`${path}.sourceFeatureIndex must be a non-negative integer or null.`);
   if (anchor.stableFeatureSvgId !== null) {
     requireCanonicalText(anchor.stableFeatureSvgId, `${path}.stableFeatureSvgId`);
@@ -407,10 +425,11 @@ const canonicalAlignmentAnchor = (value, path) => {
       anchor.biologicalFeatureId,
       `${path}.biologicalFeatureId`
     ),
-    sourceFeatureIndex: anchor.sourceFeatureIndex,
+    // Checked above: null or a non-negative safe integer, and null or text.
+    sourceFeatureIndex: /** @type {number | null} */ (anchor.sourceFeatureIndex),
     stableFeatureSvgId: anchor.stableFeatureSvgId === null
       ? null
-      : anchor.stableFeatureSvgId.trim()
+      : /** @type {string} */ (anchor.stableFeatureSvgId).trim()
   };
 };
 
@@ -430,7 +449,7 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
     throw new Error(`${path}.records must be a non-empty array.`);
   }
   const reference = canonicalAlignmentAnchor(plan.reference, `${path}.reference`);
-  const records = plan.records.map((raw, index) => {
+  const records = /** @type {unknown[]} */ (plan.records).map((raw, index) => {
     const decisionPath = `${path}.records[${index}]`;
     const decision = requireExactCanonicalKeys(raw, [
       'recordKey', 'status', 'rationale', 'anchor'
@@ -442,9 +461,11 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
     if (anchor && anchor.recordKey !== recordKey) {
       throw new Error(`${decisionPath}.anchor belongs to another record.`);
     }
+    /** @type {Set<unknown>} */
     const alignedRationales = new Set([
       'user_selected', 'only_usable_candidate', 'unique_direct_rbh'
     ]);
+    /** @type {Set<unknown>} */
     const skippedRationales = new Set([
       'skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable'
     ]);
@@ -456,10 +477,11 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
           ? anchor === null && skippedRationales.has(decision.rationale)
           : false;
     if (!valid) throw new Error(`${decisionPath} contains an invalid plan combination.`);
+    // `valid` holds only for a status with one of its rationales.
     return {
       recordKey,
-      status: decision.status,
-      rationale: decision.rationale,
+      status: /** @type {CanonicalAlignmentRecordDecision['status']} */ (decision.status),
+      rationale: /** @type {CanonicalAlignmentRecordDecision['rationale']} */ (decision.rationale),
       anchor
     };
   });
@@ -1132,7 +1154,10 @@ const createResourceBuilder = ({ encode = true } = {}) => {
   };
 };
 
-/** @param {string} resourceId */
+/**
+ * @param {string} resourceId
+ * @returns {CanonicalFileRef}
+ */
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
 // The table inputs whose committed file a rebuilt request keeps (`publicationFileRef`).
 const REQUEST_TABLE_FILE_SLOTS = Object.freeze(['d_color', 't_color', 'whitelist', 'qualifier_priority']);
@@ -1141,6 +1166,7 @@ const REQUEST_TABLE_FILE_SLOTS = Object.freeze(['d_color', 't_color', 'whitelist
  * @param {Record<string, ResourceEntry | null | undefined>} files
  * @param {string} key
  * @param {string} fallbackId
+ * @returns {CanonicalFileRef | CanonicalTableRef | null}
  */
 const publicationFileRef = (resources, files, key, fallbackId) => {
   if (!files[key]) return null;
@@ -1714,6 +1740,7 @@ export const requestLabelProjection = (state, drawing) => {
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @param {ResourceBuilder} resources
+ * @param {RequestTableOptions} diagramOptions
  * @param {Readonly<Record<string, boolean>>} [tables]
  * @param {ReturnType<typeof requestLabelProjection>} [labelProjection]
  */
@@ -1740,6 +1767,7 @@ const addGeneratedTableResources = (
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @param {ResourceBuilder} resources
+ * @param {RequestTableOptions} diagramOptions
  */
 const addColorTableResources = (state, drawing, resources, diagramOptions) => {
   const paletteName = String(drawing.selectedPalette.value || 'default');
@@ -1778,6 +1806,7 @@ const addColorTableResources = (state, drawing, resources, diagramOptions) => {
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @param {ResourceBuilder} resources
+ * @param {RequestTableOptions} diagramOptions
  */
 const addLabelWhitelistResource = (state, drawing, resources, diagramOptions) => {
   const publicationFiles = state.canonicalPublicationFiles || {};
@@ -1785,10 +1814,8 @@ const addLabelWhitelistResource = (state, drawing, resources, diagramOptions) =>
     resources, publicationFiles, 'whitelist', 'label-whitelist-file'
   );
   if (preservedWhitelist) {
-    diagramOptions[
-      preservedWhitelist.representation === 'canonicalTsv'
-        ? 'labelWhitelistTable' : 'labelWhitelistFile'
-    ] = preservedWhitelist;
+    if (preservedWhitelist.representation === 'canonicalTsv') diagramOptions.labelWhitelistTable = preservedWhitelist;
+    else diagramOptions.labelWhitelistFile = preservedWhitelist;
   } else if (drawing.filterMode.value === 'Whitelist' && drawing.manualWhitelist.length > 0) {
     const whitelist = serializeLabelWhitelistRules(drawing.manualWhitelist);
     if (whitelist) {
@@ -1803,6 +1830,7 @@ const addLabelWhitelistResource = (state, drawing, resources, diagramOptions) =>
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @param {ResourceBuilder} resources
+ * @param {RequestTableOptions} diagramOptions
  */
 const addQualifierPriorityResource = (state, drawing, resources, diagramOptions) => {
   const publicationFiles = state.canonicalPublicationFiles || {};
@@ -1811,10 +1839,8 @@ const addQualifierPriorityResource = (state, drawing, resources, diagramOptions)
     resources, publicationFiles, 'qualifier_priority', 'qualifier-priority-file'
   );
   if (priorityRef) {
-    diagramOptions[
-      priorityRef.representation === 'canonicalTsv'
-        ? 'qualifierPriorityTable' : 'qualifierPriorityFile'
-    ] = priorityRef;
+    if (priorityRef.representation === 'canonicalTsv') diagramOptions.qualifierPriorityTable = priorityRef;
+    else diagramOptions.qualifierPriorityFile = priorityRef;
   } else if (priority) {
     diagramOptions.qualifierPriorityFile = fileRef(resources.addText(
       'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', priority
@@ -1838,6 +1864,7 @@ export const requestLabelTableTsv = (state, drawing, labelProjection = requestLa
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @param {ResourceBuilder} resources
+ * @param {RequestTableOptions} diagramOptions
  * @param {{ rows: string[] }} labelProjection
  */
 const addLabelOverrideResource = (state, drawing, resources, diagramOptions, labelProjection) => {
@@ -2784,6 +2811,7 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
   // The request keeps the tables it was written with, not the files bound as
   // their inputs (OV-367).
   const canonicalPublicationFiles = { ...projection.requestTableFiles };
+  /** @param {Readonly<Record<string, unknown>> | null | undefined} colors */
   const pythonColors = (colors) => Object.fromEntries(Object.entries(colors || {}).filter(
     ([key]) => !key.startsWith('collinear_block_')).sort(([left], [right]) => left.localeCompare(right)));
   const activeColors = pythonColors(config?.colors);
@@ -3023,7 +3051,7 @@ const projectCanonicalRenderInput = ({
       );
   const labelProjection = generatedLabelProjection || requestLabelProjection(state, drawing);
   // The option keys are not checked yet; the two keys every request has are.
-  /** @type {Record<string, any> & Pick<CanonicalRenderRequest['diagramOptions'], 'featurePlacements' | 'featureOverrides'>} */
+  /** @type {Record<string, any> & RequestTableOptions & Pick<CanonicalRenderRequest['diagramOptions'], 'featurePlacements' | 'featureOverrides'>} */
   const diagramOptions = {
     featurePlacements: requestFeaturePlacements(drawing.featurePlacementOverrides, state.mode.value, records),
     // Per-feature edits by source identity (design Q4); the rows of other
@@ -3320,6 +3348,7 @@ export const projectCompositionRecordIdentity = (canonical, keys) => {
   return { mode: request.mode, grouping: request.grouping, records };
 };
 
+/** @type {typeof projectCanonicalRenderInput} */
 export const buildCanonicalRenderRequest = (args) => projectCanonicalRenderInput(args);
 
 /**
@@ -3396,7 +3425,8 @@ const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings 
     if (Object.prototype.hasOwnProperty.call(namedOptionResources, normalizedSlot)) {
       addResourceOriginalNameHint(
         hints,
-        namedOptionResources[normalizedSlot],
+        // An own key of the table, checked above.
+        namedOptionResources[/** @type {keyof typeof namedOptionResources} */ (normalizedSlot)],
         binding?.name
       );
       return;
@@ -3441,8 +3471,13 @@ const resourcesWithOriginalNames = (resources, originalNameHints) => {
   }));
 };
 
+/**
+ * The resources of a Session, as its file stores them: no reader has checked a descriptor.
+ * @typedef {Readonly<Record<string, RawSessionResourceDescriptor>> | null | undefined} StoredResources
+ */
 // A resource id is Session text, so only an own key of the table names a
 // resource (OV-613).
+/** @param {StoredResources} resources */
 const resourceAsLegacyFile = (resources, resourceId) => {
   const entry = ownEntry(resources, resourceId);
   if (!entry || typeof entry !== 'object') throw new Error(`Missing canonical resource: ${resourceId}`);
@@ -3456,7 +3491,10 @@ const resourceAsLegacyFile = (resources, resourceId) => {
  *   binding's recorded name, type, and modification time.
  */
 
-/** @param {ResourceFileResolver | null} [resolveResourceFile] */
+/**
+ * @param {StoredResources} resources
+ * @param {ResourceFileResolver | null} [resolveResourceFile]
+ */
 const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null, schema = 1) => {
   if (binding === null || binding === undefined) return null;
   const resourceId = String(binding.resourceId || '').trim();
@@ -3472,10 +3510,15 @@ const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null, 
   return { ...file, ...metadata, name: schema === 2 ? metadata.name : (metadata.name || file.name) };
 };
 
-/** @param {ResourceFileResolver | null} [resolveResourceFile] */
+/**
+ * @param {StoredResources} resources
+ * @param {unknown} value A binding, or a list of bindings at any depth.
+ * @param {ResourceFileResolver | null} [resolveResourceFile]
+ * @returns {unknown}
+ */
 const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = null, schema = 1) => (
   Array.isArray(value)
-    ? value.map((item) => webBindingValueAsLegacyFile(resources, item, resolveResourceFile, schema))
+    ? /** @type {unknown[]} */ (value).map((item) => webBindingValueAsLegacyFile(resources, item, resolveResourceFile, schema))
     : webBindingAsLegacyFile(resources, value, resolveResourceFile, schema)
 );
 
@@ -3485,7 +3528,7 @@ const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = nul
  * @param {Record<string, any> | null | undefined} resources
  * @param {{
  *   resolveResourceFile?: ResourceFileResolver | null,
- *   sessionResourceTable?: any,
+ *   sessionResourceTable?: SessionResourceTable | null,
  *   adoptCanonicalPayloads?: boolean
  * }} [options]
  */
@@ -3497,6 +3540,7 @@ const applyWebFileBindings = (
 ) => {
   const bindings = webMetadata?.bindings;
   if (bindings === undefined) return files;
+  /** @type {ResourceFileResolver | null} */
   const resolveBinding = bindings.schema === 2 && sessionResourceTable
     ? (id, metadata) => createSessionResourceFileView(sessionResourceTable, id, metadata)
     : resolveResourceFile;
@@ -3575,6 +3619,7 @@ const applyWebFileBindings = (
 // document. No canonical request or committed owner is created by this projection.
 // A settings-only Session's draft: the shown mode's slice (Session 46), or
 // the flat draft of an older Session.
+/** @param {SessionResourceTable | null} [sessionResourceTable] */
 export const projectSettingsOnlySession = (data, sessionResourceTable) => ({
   mode: data.ui.mode,
   inputType: data.ui.mode === 'linear' ? data.ui.lInputType : data.ui.cInputType,
@@ -3727,6 +3772,7 @@ const LEGACY_DEPTH_OPTION_FIELDS = Object.freeze([
 const hasOptionValue = (value) => value !== null && value !== undefined;
 
 /**
+ * @param {Readonly<Record<string, unknown>>} value
  * @param {readonly string[]} required
  * @param {string} fieldName
  */
@@ -3745,6 +3791,7 @@ const requireExactCanonicalFields = (value, required, fieldName) => {
 };
 
 /**
+ * @param {StoredResources} resources
  * @param {string} fieldName
  * @param {ResourceFileResolver | null} [resolveResourceFile]
  */
@@ -3846,6 +3893,7 @@ const projectCanonicalDepthTracks = ({
       ],
       fieldName
     );
+    /** @type {unknown[]} */
     let sourceRefs;
     if (Array.isArray(track.source)) {
       if (track.source.length !== records.length) {
@@ -3899,6 +3947,7 @@ const projectCanonicalDepthTracks = ({
   return { sourceRows, fileRows, tracks };
 };
 
+/** @param {StoredResources} resources */
 export const decodeCanonicalResourceText = (resources, resourceId) => {
   const entry = ownEntry(resources, resourceId);
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
@@ -3945,7 +3994,10 @@ export const readCanonicalResourceRecordCount = async (resources, resourceId, ki
   return counts[kind];
 };
 
-/** @param {{ resourceId?: unknown } | null | undefined} ref */
+/**
+ * @param {StoredResources} resources
+ * @param {{ resourceId?: unknown } | null | undefined} ref
+ */
 const resourceTextFromRef = (resources, ref) => (
   ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
 );
@@ -3984,6 +4036,7 @@ export const legacyTableRowsNotice = (repairs) => {
   const tables = [...new Set(repairs.map(({ table }) => table))];
   return ['Some table rows of this older Session were read as the current version writes them.',
     ...tables.flatMap((table) => {
+      /** @param {string} repair */
       const rows = (repair) => repairs.filter((item) => item.table === table && item.repair === repair)
         .map(({ row }) => row);
       const joined = rows('joined');
@@ -4324,7 +4377,7 @@ const projectLegacyCanonicalCircularSlot = (slot) => {
  * @param {string} [originalName]
  * @param {{
  *   resolveResourceFile?: ResourceFileResolver | null,
- *   sessionResourceTable?: any
+ *   sessionResourceTable?: SessionResourceTable | null
  * }} [options]
  */
 const combineCircularGenbankResources = (
@@ -4360,7 +4413,10 @@ const combineCircularGenbankResources = (
   );
 };
 
-/** @param {number} schema */
+/**
+ * @param {unknown} value
+ * @param {number} schema
+ */
 const validateCanonicalAssemblyOutput = (value, schema) => {
   if (value === undefined || value === null) return;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -4384,6 +4440,7 @@ const validateCanonicalAssemblyOutput = (value, schema) => {
   }
 };
 
+/** @param {readonly unknown[]} records */
 const canonicalGrouping = (renderRequest, records) => {
   if (renderRequest.schema <= 2) {
     if (renderRequest.mode === 'linear') return 'single';
@@ -4417,6 +4474,7 @@ const canonicalGrouping = (renderRequest, records) => {
 };
 
 /**
+ * @param {{ output?: unknown }} renderRequest
  * @param {string} grouping
  * @param {number} recordCount
  */
@@ -4433,7 +4491,8 @@ const canonicalOutputPrefixes = (renderRequest, grouping, recordCount) => {
         : 'Canonical renderRequest output must be an object.'
     );
   }
-  const prefixes = outputs.map((output) => String(output.prefix || '').trim());
+  // Each output passed the object check above.
+  const prefixes = /** @type {{ prefix?: unknown }[]} */ (outputs).map((output) => String(output.prefix || '').trim());
   if (prefixes.some((prefix) => !prefix)) {
     throw new Error('Canonical renderRequest output prefixes must be non-empty.');
   }
@@ -5612,8 +5671,28 @@ export const projectCanonicalSessionRequest = ({
 // Output fields that name files, not the figure; a batch request has one output per record.
 const PUBLICATION_OUTPUT_ONLY_FIELDS = new Set(['prefix', 'formats', 'overwrite', 'artifactFilename']);
 const PUBLICATION_COMPARISON_FILTER_FIELDS = new Set(['evalue', 'bitscore', 'identity', 'alignmentLength']);
+// A request key outside this table reads no default: a JSON value is never an inherited member.
+/** @type {Readonly<Record<string, JsonValue>>} */
 const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWithPlotTitle: false, conservationReference: 'auto', 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true };
-/** @param {string} id */
+/**
+ * A resource of a request under comparison: the descriptor a Session stores or
+ * the writer built (no reader has checked it), or a backing that reads its bytes.
+ * @typedef {RawSessionResourceDescriptor & Pick<SessionResourceSource, 'readBytes'>} PublicationResource
+ */
+/** @typedef {Readonly<Record<string, PublicationResource>> | null | undefined} PublicationResources */
+/**
+ * What one comparison keeps while it walks a request.
+ * @typedef {object} PublicationContext
+ * @property {{ path: string, kind: string, decodedPayloadSha256: string }[]} bindings
+ * @property {boolean} normalize
+ * @property {Map<unknown, Promise<string>>} resourceIdentities Digests by a resource's base64 text.
+ * @property {boolean} ignoreComparisonFilters
+ */
+/**
+ * @param {PublicationResource | undefined} resource
+ * @param {string} id
+ * @returns {Promise<Uint8Array>}
+ */
 const publicationBytes = async (resource, id) => {
   if (!resource || typeof resource !== 'object' || Array.isArray(resource)) throw new Error(`Canonical request resource '${id}' is missing.`);
   if (typeof resource.readBytes === 'function') return resource.readBytes();
@@ -5638,7 +5717,12 @@ const PUBLICATION_TABLES = Object.freeze({
 });
 /** @param {string} path A path of the request from `$`, so never an inherited member's name. */
 const publicationTable = (path) => PUBLICATION_TABLES[path.replace(/\.resourceId$/, '')] || null;
-/** @param {string} id */
+/**
+ * @param {PublicationResource | undefined} resource
+ * @param {string} id
+ * @param {boolean} normalize
+ * @param {string} path
+ */
 const normalizedPublicationBytes = async (resource, id, normalize, path) => {
   const bytes = await publicationBytes(resource, id);
   const table = publicationTable(path);
@@ -5649,7 +5733,8 @@ const normalizedPublicationBytes = async (resource, id, normalize, path) => {
     return textToBytes(`${(sorted ? rows.sort() : rows).join('\n')}\n`);
   }
   if (!normalize) return bytes;
-  if (!path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') return bytes;
+  // `publicationBytes` above refused a missing resource.
+  if (!path.startsWith('$.comparisons') || /** @type {PublicationResource} */ (resource).kind !== 'canonical-tsv') return bytes;
   const rows = bytesToText(bytes).trimEnd().split(/\r?\n/).map((row, index) => index === 0
     ? row : row.split('\t').map((cell) => {
       const number = Number(cell);
@@ -5659,6 +5744,13 @@ const normalizedPublicationBytes = async (resource, id, normalize, path) => {
     }).join('\t'));
   return textToBytes(`${rows.join('\n')}\n`);
 };
+/**
+ * @param {PublicationResources} resources
+ * @param {JsonValue} id
+ * @param {boolean} normalize
+ * @param {string} path
+ * @param {PublicationContext['resourceIdentities']} cache
+ */
 const publicationResourceIdentity = async (resources, id, normalize, path, cache) => {
   const resourceId = String(id || '').trim();
   if (!resourceId) throw new Error('Canonical request contains an empty resourceId.');
@@ -5670,10 +5762,18 @@ const publicationResourceIdentity = async (resources, id, normalize, path, cache
   if (!digest) { digest = normalizedPublicationBytes(resource, resourceId, normalize, path).then((bytes) => sha256Hex(bytes)); if (key) cache.set(key, digest); }
   return { kind, decodedPayloadSha256: await digest };
 };
+/**
+ * @param {JsonValue} value
+ * @param {PublicationResources} resources
+ * @param {PublicationContext} context
+ * @param {string} [path]
+ * @returns {Promise<JsonValue>}
+ */
 const canonicalizePublicationValue = async (value, resources, context, path = '$') => {
   if (Array.isArray(value)) return Promise.all(value.map((entry, index) =>
     canonicalizePublicationValue(entry, resources, context, `${path}[${index}]`)));
   if (!value || typeof value !== 'object') return value;
+  /** @type {{ [key: string]: JsonValue }} */
   const output = {};
   const resourceReference = Object.hasOwn(value, 'resourceId');
   for (const key of Object.keys(value).sort()) {
@@ -5701,6 +5801,16 @@ const canonicalizePublicationValue = async (value, resources, context, path = '$
   }
   return output;
 };
+/**
+ * @typedef {{ path: string, expected: JsonValue | undefined, actual: JsonValue | undefined }} PublicationDifference
+ */
+/** @typedef {{ [key: string]: JsonValue }} JsonEntries An object, or an array read through its own keys. */
+/**
+ * @param {JsonValue} expected
+ * @param {JsonValue} actual
+ * @param {string} [path]
+ * @returns {PublicationDifference | null}
+ */
 const firstPublicationDiff = (expected, actual, path = '$') => {
   if (Object.is(expected, actual)) return null;
   if (!expected || !actual || typeof expected !== 'object' || typeof actual !== 'object'
@@ -5708,8 +5818,10 @@ const firstPublicationDiff = (expected, actual, path = '$') => {
   for (const key of new Set([...Object.keys(expected), ...Object.keys(actual)])) {
     const childPath = Array.isArray(expected) ? `${path}[${key}]` : `${path}.${key}`;
     if (!Object.hasOwn(expected, key) || !Object.hasOwn(actual, key)) return {
-      path: childPath, expected: expected[key], actual: actual[key] };
-    const difference = firstPublicationDiff(expected[key], actual[key], childPath);
+      path: childPath, expected: /** @type {JsonEntries} */ (expected)[key], actual: /** @type {JsonEntries} */ (actual)[key] };
+    const difference = firstPublicationDiff(
+      /** @type {JsonEntries} */ (expected)[key], /** @type {JsonEntries} */ (actual)[key], childPath
+    );
     if (difference) return difference;
   }
   return null;
@@ -5807,6 +5919,7 @@ const materializedRecordSelector = (selector) => {
   return { kind: 'recordIndex', index: Number(match[1]) - 1 };
 };
 
+/** @param {unknown} mode The mode of the committed request, compared as it is. */
 const validateRecordTransformTarget = (target, transform, mode) => {
   if (!target || target.scope !== mode || typeof target.recordKey !== 'string'
     || !target.recordKey || typeof target.canonicalRecordKey !== 'string'
@@ -5831,6 +5944,7 @@ const validateRecordTransformTarget = (target, transform, mode) => {
   }
 };
 
+/** @param {number} recordIndex */
 const materializeCanonicalRecordCollection = (record, target, recordIndex) => {
   const members = Array.isArray(target.members) ? target.members : [];
   const identities = new Set();
@@ -5868,8 +5982,13 @@ const materializeCanonicalRecordCollection = (record, target, recordIndex) => {
   return materialized;
 };
 
+/**
+ * @param {unknown} comparisons
+ * @param {number} recordIndex
+ * @param {number} expansion
+ */
 const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) => (
-  (Array.isArray(comparisons) ? comparisons : []).map((comparison) => {
+  /** @type {unknown[]} */ (Array.isArray(comparisons) ? comparisons : []).map((comparison) => {
     const shifted = cloneCanonicalJsonValue(comparison);
     for (const field of ['queryRecordIndex', 'subjectRecordIndex']) {
       const index = Number(shifted?.[field]);
@@ -6048,6 +6167,7 @@ export const projectCommittedEditorIntent = ({
   };
   const options = candidate.renderRequest.diagramOptions || {};
   candidate.renderRequest.diagramOptions = options;
+  /** @type {Readonly<Record<string, boolean>>} */
   const tables = {
     colors: true, visibility: true, whitelist: false, priority: false, labelOverrides: true
   };
@@ -6108,8 +6228,9 @@ export const projectCommittedSimilarityAlignment = ({ committed: source, plan, t
   return canonical;
 };
 
+/** @param {{ [key: string]: JsonValue }} request A canonical request of schema 5 to 9, as stored or as written. */
 const normalizePublicationRequestAliases = (request) => {
-  const normalized = [5, 6, 7, 8].includes(request?.schema)
+  const normalized = /** @type {readonly unknown[]} */ ([5, 6, 7, 8]).includes(request?.schema)
     ? promoteCanonicalRenderRequestToCurrent(request)
     : cloneCanonicalJsonValue(request);
   for (const comparison of normalized.comparisons || []) {
@@ -6134,26 +6255,44 @@ const normalizePublicationRequestAliases = (request) => {
   });
   return normalized;
 };
+/**
+ * @param {JsonValue} request
+ * @param {PublicationResources} resources
+ * @param {boolean} normalize
+ * @param {PublicationContext['resourceIdentities']} resourceIdentities
+ */
 const publicationRequestIdentity = async (request, resources, normalize, resourceIdentities) => {
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Canonical request equivalence requires a renderRequest object.');
   const normalizedRequest = normalizePublicationRequestAliases(request);
   const conservation = normalizedRequest.diagramOptions?.conservationBlastFiles;
+  /** @type {PublicationContext} */
   const context = { bindings: [], normalize, resourceIdentities,
     ignoreComparisonFilters: !(normalizedRequest.comparisons?.length || (Array.isArray(conservation) ? conservation.length : conservation)) };
   const canonical = await canonicalizePublicationValue(normalizedRequest, resources, context);
   return { canonical, digest: await sha256Hex(textToBytes(JSON.stringify(canonical))),
     resourceBindings: context.bindings };
 };
+/**
+ * The two requests of a Gallery publication check, each with its resource table.
+ * @typedef {object} PublicationComparisonInput
+ * @property {JsonValue} expectedRequest
+ * @property {PublicationResources} expectedResources
+ * @property {JsonValue} actualRequest
+ * @property {PublicationResources} actualResources
+ * @property {boolean} [normalizeReplayGeneratedResources]
+ */
+/** @param {PublicationComparisonInput} input */
 export const compareCanonicalRenderRequests = async (input) => {
   const normalize = input.normalizeReplayGeneratedResources === true;
   const resourceIdentities = new Map(), [expected, actual] = await Promise.all([publicationRequestIdentity(input.expectedRequest, input.expectedResources, normalize, resourceIdentities), publicationRequestIdentity(input.actualRequest, input.actualResources, normalize, resourceIdentities)]);
   const difference = firstPublicationDiff(expected.canonical, actual.canonical);
   return { equivalent: expected.digest === actual.digest, expected, actual, differences: difference ? [difference] : [] };
 };
+/** @param {PublicationComparisonInput} input */
 export const assertCanonicalRenderRequestsEquivalent = async (input) => {
   const comparison = await compareCanonicalRenderRequests(input);
   if (comparison.equivalent) return comparison;
-  const error = /** @type {Error & { comparison?: any }} */ (new Error(`Gallery publication request differs at ${comparison.differences[0]?.path || '$'} (committed ${comparison.expected.digest}, rebuilt ${comparison.actual.digest}).`));
+  const error = /** @type {Error & { comparison?: typeof comparison }} */ (new Error(`Gallery publication request differs at ${comparison.differences[0]?.path || '$'} (committed ${comparison.expected.digest}, rebuilt ${comparison.actual.digest}).`));
   error.comparison = comparison;
   throw error;
 };

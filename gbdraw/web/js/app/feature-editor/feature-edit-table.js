@@ -13,7 +13,8 @@ import { diagnosticError, normalizeUserFacingError } from '../../utils/error-nor
 import { cloneFileBytesForTransfer } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
 /** @import { FeatureOverrideDraftRow } from '../../contracts/session.generated.js' */
-/** @import { FeatureOverrideDraft, FeatureOverrideRow, FeatureRequestRecord } from '../../services/feature-placement.js' */
+/** @import { FeatureOverrideDraft, FeatureRequestRecord } from '../../services/feature-placement.js' */
+/** @import { CanonicalFeatureOverride } from '../../contracts/request.generated.js' */
 /** @import { LabelTableInput } from './label-actions.js' */
 
 // Export and Load Feature Edits TSV (design Q4 6.4, Owner Q2 = A): the
@@ -52,7 +53,7 @@ export const admitFeatureOverrideTable = (result, records) => {
 // TSV replaces the label edits; edits of other records stay (R2).
 /**
  * @param {FeatureOverrideDraft} featureOverrides
- * @param {Array<FeatureOverrideRow | FeatureOverrideDraftRow>} rows
+ * @param {Array<CanonicalFeatureOverride | FeatureOverrideDraftRow>} rows
  * @param {FeatureRequestRecord[]} records
  */
 export const replaceFeatureEdits = (featureOverrides, rows, records) => {
