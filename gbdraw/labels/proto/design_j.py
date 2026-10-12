@@ -24,8 +24,12 @@ Options: clear 3, inside 1, cone 70, lgap 2.5, lpad 2.4, stub 1, edge 1, fl 12, 
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import numpy as np
+from fontTools.ttLib import TTFont
+from PIL import Image, ImageDraw, ImageFont
+from scipy.ndimage import distance_transform_edt
 
 from ...auto_sizes import circular_tick_intervals
 from ...core.numeric import scaled_tick_text
@@ -35,7 +39,9 @@ from .design_g import _seg_box_hit, _seg_cross_matrix
 
 EDGE_FR = (0.5, 0.2, 0.8)
 OFFS = np.array([0, 1, 2, 3, 4, 6, 8, 10, 13, 16, 20, 25, 30, 36, 44, 52, 62, 75, 90, 110, 135], dtype=float)
+OFFS_F = np.concatenate([np.arange(0.0, 41.0), [44, 52, 62, 75, 90, 110, 135]])      # face=1: box positions 1 px apart near the stub (a fan can be tight to a few tenths of a px)
 LEAN = np.tan(np.radians([2, 5, 8, 11, 14, 17, 20, 24, 28, 33, 39, 46, 54, 62]))
+SIDE_FR = (0.08, 0.2, 0.35, 0.5, 0.65, 0.8, 0.92)
 NEAR = [0.0, 1.0, 2.0, 4.0, 6.0, 9.0]
 PUSH = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
 while PUSH[-1] < 4000.0:
@@ -84,6 +90,77 @@ def _turn(pts, min_seg: float = 3.0) -> float:
     return turn
 
 
+FONT_FILE = Path(__file__).resolve().parents[2] / "data" / "LiberationSans-Regular.ttf"
+INK_K, INK_PAD, INK_LEFT, BASE_EM = 4, 18.0, 0.2, 0.352     # field resolution (px^-1), field margin around the ink, first ink column and baseline (em below the middle) as the cairosvg raster draws them
+_INK: dict = {}
+
+
+class _Ink:
+    """Distance (px) to the ink of one text, on a grid of 1/INK_K px, in the frame of the label box: q along the text from the box
+    end that faces the leader (the first ink column stands INK_LEFT px in), y from the middle of the box.  Mirrored for the labels
+    whose text ends at the leader (text-anchor end).  Glyph outlines come from the font file (no kerning, as cairo draws them)."""
+
+    def __init__(self, text: str, fs: float, mirror: bool):
+        font = ImageFont.truetype(str(FONT_FILE), int(round(fs * 2 * INK_K)))
+        cmap, hmtx, upm = _font_tables()
+        scale = 2 * INK_K * fs / upm
+        wid = int(sum(hmtx[cmap[ord(c)]][0] for c in text) * scale) + 4 * INK_K * 2
+        base = int(1.2 * fs * 2 * INK_K)
+        im = Image.new("L", (wid, int(2.4 * fs * 2 * INK_K)), 0)
+        draw = ImageDraw.Draw(im)
+        x = 0.0
+        for c in text:
+            draw.text((x, base), c, font=font, fill=255, anchor="ls")
+            x += hmtx[cmap[ord(c)]][0] * scale
+        big = np.asarray(im) > 127
+        h2, w2 = big.shape[0] // 2 * 2, big.shape[1] // 2 * 2
+        ink = big[:h2, :w2].reshape(h2 // 2, 2, w2 // 2, 2).mean(axis=(1, 3)) > 0.5
+        if mirror:
+            ink = ink[:, ::-1]
+        cols = np.nonzero(ink.any(axis=0))[0]
+        c0, c1 = int(cols.min()), int(cols.max()) + 1
+        k = INK_K
+        self.qmin, self.ymin = INK_LEFT - INK_PAD, -(0.4 * fs + INK_PAD)
+        nq = int(math.ceil((c1 - c0) / k + 2 * INK_PAD)) * k
+        ny = int(math.ceil((1.0 * fs + 2 * INK_PAD) * k))
+        field = np.zeros((ny, nq), dtype=bool)
+        r0 = int(round((BASE_EM * fs - self.ymin) * k)) - base // 2        # row of the first mask row in the field
+        c_off = int(round(INK_PAD * k)) - c0
+        rows = np.arange(ink.shape[0]) + r0
+        keep = (rows >= 0) & (rows < ny)
+        field[rows[keep], c0 + c_off: c1 + c_off] = ink[keep, c0:c1]
+        self.D = (distance_transform_edt(~field) / k).astype(np.float32)
+        self.ny, self.nq = self.D.shape
+
+    def look(self, qq, yy, fast: bool = False):
+        """Distance to the ink at (qq, yy) (arrays of one shape); beyond the field a lower bound.  fast: nearest grid point."""
+        k = INK_K
+        gx, gy = (qq - self.qmin) * k - 0.5, (yy - self.ymin) * k - 0.5
+        cx, cy = np.clip(gx, 0.0, self.nq - 1.0), np.clip(gy, 0.0, self.ny - 1.0)
+        out = np.hypot(gx - cx, gy - cy) / k
+        if fast:
+            return np.where(out > 0, INK_PAD - 1.0 + out, self.D[np.rint(cy).astype(np.int64), np.rint(cx).astype(np.int64)])
+        i0, j0 = np.minimum(cx.astype(np.int64), self.nq - 2), np.minimum(cy.astype(np.int64), self.ny - 2)
+        fx, fy = cx - i0, cy - j0
+        d = self.D
+        v = (d[j0, i0] * (1 - fx) + d[j0, i0 + 1] * fx) * (1 - fy) + (d[j0 + 1, i0] * (1 - fx) + d[j0 + 1, i0 + 1] * fx) * fy
+        return np.where(out > 0, INK_PAD - 1.0 + out, v)
+
+
+def _font_tables():
+    if "font" not in _INK:
+        tt = TTFont(str(FONT_FILE))
+        _INK["font"] = (tt.getBestCmap(), tt["hmtx"], tt["head"].unitsPerEm)
+    return _INK["font"]
+
+
+def _ink(text: str, fs: float, mirror: bool) -> _Ink:
+    key = (text, round(fs, 3), mirror)
+    if key not in _INK:
+        _INK[key] = _Ink(text, fs, mirror)
+    return _INK[key]
+
+
 class _Par:
     def __init__(self, ctx: Ctx):
         self.gap = float(ctx.gap) + 0.05                 # between two label boxes
@@ -93,6 +170,7 @@ class _Par:
         self.lgap = ctx.opt("lgap", 2.5)                 # leader end to its own text box
         self.lpad = min(ctx.opt("lpad", 2.4), self.lgap - 0.1)   # a leader passing another label's box (below lgap:
         #                                                  a label on its own exit ray never blocks a neighbour's ray)
+        self.lpadp = ctx.opt("lpadp", self.lpad)          # a pending label's exit ray to a box
         self.stub = ctx.opt("stub", 1.0)                 # elbow distance beyond the ring edge
         self.edge = ctx.opt("fedge", 1.0)                # allowance for the feature outline stroke
         self.eg = int(ctx.opt("edge", 1))                # 1: the leader may end anywhere on the perimeter of the label box (LP-D13)
@@ -108,6 +186,14 @@ class _Par:
         self.ray = int(ctx.opt("ray", 1))                # 1: candidates exactly on the feature's own ray (straight leaders)
         self.slide = int(ctx.opt("slide", 1))             # 1: a finished layout is slid toward the ring, leaders end where their line meets the box (LP-D14)
         self.shift = int(ctx.opt("shift", 0))             # 1: the slide pass also moves a box straight toward the ring, its leader keeping its direction (LP-D14 probe)
+        self.face = int(ctx.opt("face", 1))              # 1: a leader ends on the half of its box that faces it, at one distance (`ink`) from the ink of its text,
+        #                                                  and nearer to its own ink than to any other label's (LP-D15)
+        self.relax = ctx.opt("relax", 40.0)               # px of push (and of run + push saved) at which a label is seated as in face=0 (0: never)
+        self.strt = int(ctx.opt("strt", 1))               # 1: a bent leader blocked by its neighbour's box is straightened by sliding that neighbour outward (LP-D16)
+        self.ink = ctx.opt("ink", 3.4)                   # wanted distance of a leader end to the ink of its own text (px)
+        self.inkmin, self.inkmax = ctx.opt("inkmin", 2.5), ctx.opt("inkmax", 4.5)   # ... the end is refused outside this range
+        self.um = ctx.opt("um", 0.7)                     # an end is nearer to its own ink than to another label's ink by 1 px + this margin
+        self.font = float(ctx.font_size)
         self.nostraight = 3.0                            # a run shorter than this does not turn (the metric drops pieces under 3 px)
         self.grid_out, self.grid_in = 80, 140
 
@@ -245,6 +331,8 @@ class _Lab:
         self.pa = self.pb = None                           # heights (centre of the box) that cost at most plat more than t
         self.far_only = False                              # no spot near the stub (the label lies across a pole)
         self.memo: dict = {}
+        self.memo_r: dict = {}
+        self.fld = _ink(it.text, float(it.src.get("font_size", par.font)), sx < 0) if par.face else None
         self.lo, self.hi = -math.inf, math.inf
         # the way out that is kept free until the label is seated: straight along the stack direction, inside the cone
         lim = math.radians(par.cone - 1.5)
@@ -274,7 +362,8 @@ class _Lab:
             hug = np.where(dyf < geo.Bb, geo.padw + 1e-6 - np.sqrt(np.maximum(geo.Bb ** 2 - dyf ** 2, 0.0)), 1e9)
         base = np.maximum(qp, hug)
         zero = 0.0 * yc
-        parts = [base + OFFS[None, :], qp + ady * LEAN[None, :], qp - ady * LEAN[None, :], qp - OFFS[None, 1:12] + zero]
+        offs = (OFFS_F if par.face else OFFS)[None, :]
+        parts = [base + offs, qp + ady * LEAN[None, :], qp - ady * LEAN[None, :], qp - OFFS[None, 1:12] + zero]
         if self.shore == "in":
             parts.append(-self.w - 0.5 * par.gap - 1e-6 - OFFS[None, :14] + zero)
         heights = [near + 0.0 * part for part in parts]
@@ -299,11 +388,16 @@ class _Lab:
                         parts.append(np.where(t > 0.5, eq - f * self.w, base))
                         heights.append(np.where(t > 0.5, ye, near))
                         gaps.append(np.where(t > 0.5, -f * self.w, par.lgap))
-            for q0 in [base + OFFS[None, :]] + [self.Sq - f * self.w + zero for f in EDGE_FR]:
+            for q0 in [base + offs] + [self.Sq - f * self.w + zero for f in EDGE_FR]:
                 aq = np.clip(self.Sq, q0 - lg, q0 + self.w + lg)
                 parts.append(q0 + zero)
                 heights.append(np.clip(self.Sy, y0 - lg, y1 + lg) + 0.0 * q0)
                 gaps.append(q0 - aq)
+        if par.face:                                       # the leader meets the box side at several heights (the facing half is kept by the test in static)
+            for f in SIDE_FR:
+                parts.append(base + OFFS_F[None, :31])
+                heights.append(y0 + f * self.h + 0.0 * parts[-1])
+                gaps.append(par.lgap + 0.0 * parts[-1])
         if lean is not None:                               # a symmetric fan: leaders that lean by `lean` degrees (image coordinates, clockwise > 0)
             th = math.radians(self.sx * lean)
             vq, vy = self.nq * math.cos(th) - self.ny * math.sin(th), self.nq * math.sin(th) + self.ny * math.cos(th)
@@ -341,7 +435,36 @@ class _Lab:
                 parts.append(np.where(okr, self.Sq + par.lgap + run * nq, base))
                 heights.append(np.where(okr, np.clip(self.Sy + run * ny, y0, y1), near))
                 gaps.append(np.full_like(base, par.lgap))
-        return np.concatenate(parts, axis=1), np.concatenate(heights, axis=1), np.concatenate(gaps, axis=1), base
+        qs, ya, ga = np.concatenate(parts, axis=1), np.concatenate(heights, axis=1), np.concatenate(gaps, axis=1)
+        if par.face:
+            ya, ga = self.snap(yc, qs, ya, ga, par)
+        return qs, ya, ga, base
+
+    def snap(self, yc, q0, ya, ga, par: _Par):
+        """face=1: the end of every candidate moves along its own line (stub S through the old end) to where it stands `ink` px from
+        the ink of its own text, or touches the box when the ink stays farther inside; NaN gap where that is not within
+        [inkmin, inkmax] (the line passes the text, or the ink is too far from the box side it meets).  Sphere tracing on the field."""
+        aq = q0 - ga
+        vq, vy = aq - self.Sq, ya - self.Sy
+        ln = np.hypot(vq, vy)
+        near = ln < 0.5
+        uq, uy = np.where(near, self.nq, vq / np.maximum(ln, 1e-9)), np.where(near, self.ny, vy / np.maximum(ln, 1e-9))
+        t = np.zeros_like(q0)
+        half = 0.5 * self.h
+
+        def field(t, fast):
+            rq, ry = self.Sq + t * uq - q0, self.Sy + t * uy - yc
+            box = np.hypot(np.maximum(np.maximum(-rq, rq - self.w), 0.0), np.maximum(np.maximum(-ry - half, ry - half), 0.0))
+            d = self.fld.look(rq, ry, fast)
+            return d, np.minimum(d - par.ink, box)
+
+        for _ in range(9):
+            t = t + np.maximum(field(t, True)[1], 0.0)
+        for _ in range(2):
+            t = t + np.maximum(field(t, False)[1], 0.0)
+        d, f = field(t, False)
+        ok = (f <= 0.25) & (d >= par.inkmin) & (d <= par.inkmax) & np.isfinite(ln)
+        return np.where(ok, self.Sy + t * uy, ya), np.where(ok, q0 - (self.Sq + t * uq), np.nan)
 
     def static(self, yc, q0, ya, ga, geo: _Geo, par: _Par, cone_cos: float):
         """Tests that need no other label. yc (n,1), q0, ya and ga (n,m) -> ok, leader cost (run + tw x turn), run length."""
@@ -354,6 +477,13 @@ class _Lab:
         cost = ln + par.tw * np.where(ln < par.nostraight, 0.0, np.degrees(np.arccos(cosv)))
         ok = (dq * self.nq + dy * self.ny >= cone_cos * ln - 1e-9) | (ln < par.short)
         ok &= ~((self.Sq > aq + 1e-9) & (self.Sy > y0) & (self.Sy < y1))        # never through the label's own text
+        if par.face:                                       # LP-D15 (the metric's own test, a little stricter): the end is on the half of the box that faces the leader
+            s10 = math.sin(math.radians(9.5))
+            seen = ln >= 3.0
+            fq, fy = np.where(seen, dq / np.maximum(ln, 1e-9), self.nq), np.where(seen, dy / np.maximum(ln, 1e-9), self.ny)
+            outq, outy = (aq <= q0 + 0.05) | (aq >= q0 + w - 0.05), (ya <= y0 + 0.05) | (ya >= y1 - 0.05)
+            ok &= ~((outq & (np.abs(fy) >= s10) & ((ya - yc) * fy > 0) & (np.abs(ya - yc) > 0.9))
+                    | (outy & (np.abs(fq) >= s10) & ((aq - q0 - 0.5 * w) * fq > 0) & (np.abs(aq - q0 - 0.5 * w) > 0.9)))
         if par.eg:
             lg = par.lgap
             ok &= ~((self.Sq > q0 - lg) & (self.Sq < q0 + w + lg) & (self.Sy > y0 - lg) & (self.Sy < y1 + lg))   # the stub inside the grown box
@@ -389,7 +519,7 @@ class _Lab:
     def _profile(self, geo: _Geo, par: _Par):
         """Alone: the y with the shortest leader (target) and how far the label may drift from it."""
         G = par.grid_out if self.shore == "out" else par.grid_in
-        ys = self.Sy + np.arange(-G, G + 1.0)
+        ys = self.Sy + np.arange(-G, G + 1.0, 2.0 if par.face else 1.0)
         Q, YA, GA, base = self.cands(ys, geo, par)
         ok, cost, _ln = self.static(ys[:, None], Q, YA, GA, geo, par, par.cone_cos)
         full = ok.any(axis=1)
@@ -424,13 +554,23 @@ class _Placed:
         self._b: list = []
         self._s0: list = []
         self._s1: list = []
+        self._lab: list = []
         self._arr = None
 
-    def add(self, box, s, a):
+    def add(self, box, s, a, lab=None):
         self._b.append(box)
         self._s0.append(s)
         self._s1.append(a)
+        self._lab.append(lab)
         self._arr = None
+
+    def labs(self):
+        return self._lab
+
+    def copy(self) -> "_Placed":
+        c = _Placed()
+        c._b, c._s0, c._s1, c._lab = list(self._b), list(self._s0), list(self._s1), list(self._lab)
+        return c
 
     def arrays(self):
         if self._arr is None:
@@ -449,6 +589,9 @@ class _View:
         pb, s0, s1 = self.pl.arrays()
         keep = np.arange(len(pb)) != self.k
         return pb[keep], s0[keep], s1[keep]
+
+    def labs(self):
+        return [lb for i, lb in enumerate(self.pl.labs()) if i != self.k]
 
 
 class _Pending:
@@ -564,12 +707,15 @@ class _Eng:
             rp, rq = rp[m], rq[m]
         if len(rp) and good.any():                       # keep the way out of every label still to be seated
             sel = np.nonzero(good)[0]
-            bad = _seg_box_hit(rp, rq, boxes[sel], par.lpad).any(axis=0)
+            bad = _seg_box_hit(rp, rq, boxes[sel], par.lpadp).any(axis=0)
             bad |= _seg_cross_matrix(stub[sel], att[sel], rp, rq).any(axis=1)
             good[sel[bad]] = False
         if geo.has[L.shore] and good.any():
             sel = np.nonzero(good)[0]
             good[sel[geo.seg_blocked(L.S, att[sel])]] = False
+        if par.face and good.any():
+            sel = np.nonzero(good)[0]
+            good[sel[~self.ink_clear(L, boxes[sel], att[sel], pl)]] = False
         if not good.any():
             return None, alone
         sel = np.nonzero(good)[0]
@@ -579,9 +725,53 @@ class _Eng:
         j = sel[int(np.argmin(cost))]
         return (tuple(float(v) for v in boxes[j]), (float(att[j][0]), float(att[j][1])), yy, float(ln[j])), alone
 
+    def ink_clear(self, L: _Lab, boxes, att, pl) -> np.ndarray:
+        """face=1 (LP-D15): the end of a leader is nearer to the ink of its own text than to the ink of any other label by more than
+        1 px (+ `um`), for the candidate's end against the labels placed and for their ends against the candidate's text."""
+        pb, _s0, s1 = pl.arrays()
+        ok = np.ones(len(boxes), dtype=bool)
+        if not len(pb):
+            return ok
+        labs, need, sx = pl.labs(), 1.0 + self.par.um, L.sx
+        cq0 = boxes[:, 0] if sx > 0 else -boxes[:, 2]
+        cym = 0.5 * (boxes[:, 1] + boxes[:, 3])
+        own = L.fld.look(sx * att[:, 0] - cq0, att[:, 1] - cym)
+        lo_x, hi_x = min(boxes[:, 0].min(), att[:, 0].min()) - 24.0, max(boxes[:, 2].max(), att[:, 0].max()) + 24.0
+        lo_y, hi_y = min(boxes[:, 1].min(), att[:, 1].min()) - 24.0, max(boxes[:, 3].max(), att[:, 1].max()) + 24.0
+        for j in np.nonzero((pb[:, 2] > lo_x) & (pb[:, 0] < hi_x) & (pb[:, 3] > lo_y) & (pb[:, 1] < hi_y))[0]:
+            M = labs[j]
+            if M is None:
+                continue
+            mq0, mym = (pb[j, 0] if M.sx > 0 else -pb[j, 2]), 0.5 * (pb[j, 1] + pb[j, 3])
+            ok &= M.fld.look(M.sx * att[:, 0] - mq0, att[:, 1] - mym) >= own + need                  # my end to its ink
+            own_j = M.fld.look(np.array(M.sx * s1[j, 0] - mq0), np.array(s1[j, 1] - mym))             # its end to my ink
+            ok &= L.fld.look(sx * s1[j, 0] - cq0, s1[j, 1] - cym) >= own_j + need
+        return ok
+
     def seat(self, L: _Lab, y: float, pl: _Placed, pend: _Pending, limit: float | None, tight: float | None):
         """Seat the label at y or further along its stack: the smallest leader run + push.
-        `tight` is the push that puts it exactly one row beyond the label seated before it in the stack."""
+        `tight` is the push that puts it exactly one row beyond the label seated before it in the stack.
+        face=1: a label that the facing rule pushes more than `relax` px along its stack (a fan at its geometric limit) is seated
+        as in face=0 when that is more than `relax` px cheaper (run + push); the metrics count such a label as a residual."""
+        par = self.par
+        best = self._search(L, y, pl, pend, limit, tight)
+        if par.face and par.relax > 0 and (best is None or best[1] > par.relax):
+            par.face, L.memo, L.memo_r = 0, L.memo_r, L.memo
+            try:
+                alt = self._search(L, y, pl, pend, limit, tight)
+            finally:
+                par.face, L.memo, L.memo_r = 1, L.memo_r, L.memo
+            if alt is not None and (best is None or alt[0] + par.relax < best[0]):
+                best = alt
+                self.stats["relaxed"] = self.stats.get("relaxed", 0) + 1
+        if best is None:
+            return None
+        if best[1] > 0:
+            self.stats["pushed"] += 1
+            self.stats["push_max"] = max(self.stats["push_max"], best[1])
+        return best[2]
+
+    def _search(self, L: _Lab, y: float, pl: _Placed, pend: _Pending, limit: float | None, tight: float | None):
         best = None                                       # (leader run + push, push, result)
         floor = None                                      # shortest run at the last height tried, other labels aside
         pushes = PUSH
@@ -605,12 +795,7 @@ class _Eng:
                 floor = alone
             if res is not None and (best is None or res[3] + p < best[0] - 1e-9):
                 best = (res[3] + p, p, res[:3])
-        if best is None:
-            return None
-        if best[1] > 0:
-            self.stats["pushed"] += 1
-            self.stats["push_max"] = max(self.stats["push_max"], best[1])
-        return best[2]
+        return best
 
     def run_column(self, col: list[_Lab], ys, sep, pl: _Placed, pend: _Pending, out: list, tag: str, bounded: bool):
         """Seat a column given top to bottom. Each half is seated in the order its stack grows."""
@@ -640,7 +825,7 @@ class _Eng:
                         return L.it
                     res = self.force(L, y, pl)
                 box, att, yy = res
-                pl.add(box, L.S, att)
+                pl.add(box, L.S, att, L)
                 pend.done(L)
                 out.append((L.it, box, [L.it.anchor, L.S, att], "start" if L.sx > 0 else "end", tag))
                 prev = (k, yy)
@@ -730,7 +915,7 @@ class _Eng:
                 pl = _Placed()
                 for k in range(len(recs)):
                     if k not in chain:
-                        pl.add(recs[k][1], labs[k].S, recs[k][2][-1])
+                        pl.add(recs[k][1], labs[k].S, recs[k][2][-1], labs[k])
                 new, fail = {}, False
                 for k in sorted(chain, key=lambda k: yc[k] * labs[k].d):
                     res, _alone = self.try_at(labs[k], yc[k] + dl, pl, pend, ramp[chain.index(k)])
@@ -738,7 +923,7 @@ class _Eng:
                         fail = True
                         break
                     box, att, _yy, _c = res
-                    pl.add(box, labs[k].S, att)
+                    pl.add(box, labs[k].S, att, labs[k])
                     new[k] = (box, [recs[k][0].anchor, labs[k].S, att])
                 if fail:
                     continue
@@ -754,6 +939,114 @@ class _Eng:
                     it, _b, _p, align, tag = recs[k]
                     recs[k] = (it, win[1][k][0], win[1][k][1], align, tag)
                 info["fixed"] += 1
+        return recs, info
+
+    # ---- straighten a bent leader by sliding the neighbour that blocks its ray (LP-D16)
+    def straighten(self, recs: list, shore: str) -> tuple[list, dict]:
+        """A leader that bends (turn at S of 3 degrees or more) may be blocked only by the box of its neighbour in the stack.  For
+        every bent label and each of its two neighbours: the neighbour is slid outward along its own leader (box and end move together,
+        so the leader keeps its direction, the end stays on the same half of the box and at the same gap to the ink; 2..15 px,
+        a few px longer), the bent label is seated again at heights within 5 px of its own against the new layout (try_at, all
+        the usual tests), and the pair is kept when the sum of their leader costs (run + tw x turn) falls by at least 0.5 px.
+        Rounds repeat so the step moves down the stack.  Straight leaders are preferred to a symmetric bent fan."""
+        par = self.par
+        recs = list(recs)
+        info = {"tried": 0, "moved": 0, "straightened": 0, "added_px": 0.0}
+        if not recs:
+            return recs, info
+        labs = [self.lab(r[0], shore, 1 if r[3] == "start" else -1) for r in recs]
+        pend = _Pending(labs)
+        for lb in labs:
+            pend.done(lb)
+
+        def cost(L: _Lab, att) -> float:
+            vx, vy = att[0] - L.S[0], att[1] - L.S[1]
+            ln = math.hypot(vx, vy)
+            if ln < par.nostraight:
+                return ln
+            cosv = max(-1.0, min(1.0, (vx * L.nq * L.sx + vy * L.ny) / ln))
+            return ln + par.tw * math.degrees(math.acos(cosv))
+
+        def around(skip, centre, reach=70.0) -> _Placed:
+            pl = _Placed()
+            x0, y0, x1, y1 = centre[0] - reach, centre[1] - reach, centre[2] + reach, centre[3] + reach
+            for j, r in enumerate(recs):
+                if j in skip:
+                    continue
+                bx0, by0 = min(r[1][0], r[2][1][0], r[2][-1][0]), min(r[1][1], r[2][1][1], r[2][-1][1])
+                bx1, by1 = max(r[1][2], r[2][1][0], r[2][-1][0]), max(r[1][3], r[2][1][1], r[2][-1][1])
+                if bx1 > x0 and bx0 < x1 and by1 > y0 and by0 < y1:
+                    pl.add(r[1], labs[j].S, r[2][-1], labs[j])
+            return pl
+
+        groups: dict = {}
+        for k, lb in enumerate(labs):
+            groups.setdefault((lb.sx, lb.upper), []).append(k)
+        for _round in range(3):
+            moved = 0
+            for ks in groups.values():
+                ks.sort(key=lambda k: 0.5 * (recs[k][1][1] + recs[k][1][3]))
+                for pos, k in enumerate(ks):
+                    B, itb, ptsb = labs[k], recs[k][0], recs[k][2]
+                    if not 3.0 <= abs(_sturn(ptsb)) <= 40.0:      # a few px of slide cannot straighten a leader that turns more
+                        continue
+                    for sgn, clen in ((-1, 1), (1, 1), (-1, 4), (1, 4)):      # the neighbour above or below; with the labels behind the bent one (up to 3)
+                        if not 0 <= pos + sgn < len(ks):
+                            continue
+                        n = ks[pos + sgn]
+                        chain = [ks[i] for i in range(pos, len(ks) if sgn < 0 else -1, -sgn)][:clen]      # B and the labels further from N
+                        N, (itn, boxn, ptsn, alignn, tagn) = labs[n], recs[n]
+                        vx, vy = ptsn[-1][0] - N.S[0], ptsn[-1][1] - N.S[1]
+                        d = math.hypot(vx, vy)
+                        ux, uy = (vx / d, vy / d) if d >= 3.0 else (N.sx * N.nq, N.ny)
+                        old = cost(N, ptsn[-1]) + sum(cost(labs[j], recs[j][2][-1]) for j in chain)
+                        done = False
+                        base = None
+                        for step in (2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 15.0):
+                            info["tried"] += 1
+                            nb = (boxn[0] + step * ux, boxn[1] + step * uy, boxn[2] + step * ux, boxn[3] + step * uy)
+                            na = (ptsn[-1][0] + step * ux, ptsn[-1][1] + step * uy)
+                            q0, ycn = (nb[0] if N.sx > 0 else -nb[2]), 0.5 * (nb[1] + nb[3])
+                            ok, c, _ln = N.static(np.array([[ycn]]), np.array([[q0]]), np.array([[na[1]]]), np.array([[q0 - N.sx * na[0]]]), self.geo, par, par.cone_cos)
+                            if not ok[0, 0]:
+                                continue
+                            if base is None:                   # the layout around the pair, without the slid label and the chain
+                                span = [boxn] + [recs[j][1] for j in chain]
+                                base = around({n, *chain}, (min(b[0] for b in span) - 20, min(b[1] for b in span) - 20, max(b[2] for b in span) + 20, max(b[3] for b in span) + 20), 90.0)
+                            pl = base.copy()
+                            extra = (np.array([q0]), np.array([c[0, 0]]), np.array([nb]), np.array([na]))
+                            if self.try_at(N, ycn, pl, pend, extra=extra, only=True)[0] is None:
+                                continue
+                            pl.add(nb, N.S, na, N)
+                            new, total = {}, c[0, 0]
+                            for j in chain:                    # seat the chain again, nearest to N first, each at the cheapest spot within a few px of its own
+                                Lj, rj = labs[j], recs[j]
+                                yj, best = 0.5 * (rj[1][1] + rj[1][3]), None
+                                for dy in (0.0, 1.0, -1.0, 2.0, -2.0, 4.0, -4.0, 8.0, -8.0):
+                                    res = self.try_at(Lj, yj + dy, pl, pend)[0]
+                                    if res is not None and (best is None or res[3] < best[3] - 1e-9):
+                                        best = res
+                                if best is None:
+                                    break
+                                pl.add(best[0], Lj.S, best[1], Lj)
+                                new[j] = best
+                                total += best[3]
+                            npts = [itb.anchor, B.S, new[k][1]] if k in new else None
+                            if len(new) == len(chain) and npts is not None and abs(_sturn(npts)) < abs(_sturn(ptsb)) - 1.0 and total < old - 0.5:
+                                info["added_px"] += _plen([itn.anchor, N.S, na]) - _plen(ptsn) + sum(_plen([recs[j][0].anchor, labs[j].S, new[j][1]]) - _plen(recs[j][2]) for j in chain)
+                                info["straightened"] += abs(_sturn(npts)) < 3.0
+                                for j in chain:
+                                    recs[j] = (recs[j][0], new[j][0], [recs[j][0].anchor, labs[j].S, new[j][1]], recs[j][3], recs[j][4])
+                                recs[n] = (itn, nb, [itn.anchor, N.S, na], alignn, tagn)
+                                info["moved"] += 1
+                                moved += 1
+                                done = True
+                                break
+                        if done:
+                            break
+            if not moved:
+                break
+        info["added_px"] = round(info["added_px"], 1)
         return recs, info
 
     # ---- slide toward the ring (LP-D14)
@@ -777,7 +1070,7 @@ class _Eng:
         def build() -> _Placed:
             pl = _Placed()
             for k, r in enumerate(recs):
-                pl.add(r[1], labs[k].S, r[2][-1])
+                pl.add(r[1], labs[k].S, r[2][-1], labs[k])
             return pl
 
         def lcost(L: _Lab, att) -> float:
@@ -817,6 +1110,8 @@ class _Eng:
             if not q0s:
                 return None
             q0a, ya, ga = (np.array(v, dtype=float)[None, :] for v in (q0s, yas, gas))
+            if par.face:
+                ya, ga = L.snap(np.array([[yy]]), q0a, ya, ga, par)
             ok, cost, _run = L.static(np.array([[yy]]), q0a, ya, ga, self.geo, par, par.cone_cos)
             idx = np.nonzero(ok[0])[0]
             if not len(idx):
@@ -1103,6 +1398,9 @@ def place(items: list[Item], ctx: Ctx) -> list[dict]:
     if par.sym:
         out_recs, sym_info["out"] = eng.symmetrize(out_recs, "out")
         in_recs, sym_info["in"] = eng.symmetrize(in_recs, "in")
+    if par.face and par.strt:
+        out_recs, sym_info["strt_out"] = eng.straighten(out_recs, "out")
+        in_recs, sym_info["strt_in"] = eng.straighten(in_recs, "in")
     if par.slide:
         out_recs, sym_info["slide_out"] = eng.slide(out_recs, "out")
         in_recs, sym_info["slide_in"] = eng.slide(in_recs, "in")
