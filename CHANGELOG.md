@@ -216,8 +216,14 @@ write-up of a release.
   that Align reverses shows the old arrow struck through, the new arrow, and a
   **reversed** chip. The reference card says how far its record's left edge
   moves. A record with one usable candidate shows a compact card with a
-  **Skip** checkbox; a record that still needs a choice is marked **Choose
-  one**, and the footer names how many records block **Apply**. The
+  **Skip** checkbox; records that still need a choice come first under **Choose
+  a gene**, and the footer names how many records block **Apply**. The panel is
+  docked in the Result, beside the figure or below it, instead of floating over
+  it: the figure is fitted to the room that remains, the Editor and the feature
+  popup step aside, and all three return when the panel closes. Each card draws
+  its record as it will lie after **Apply**, and on the figure a reference
+  line, a ring on each candidate, and an arrow replace the numbered badges; a
+  click on a ring chooses that gene. The
   **Recommended** chip stays on the recommended candidate after you choose
   another. Behaviour is unchanged: choices stay local until **Apply**, which
   validates, regenerates, and commits in one step.

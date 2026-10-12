@@ -144,7 +144,7 @@ an **Align…** action because the current result is in Similarity-groups mode.
 Select **Align…**. gbdraw regenerates the same 23-group comparison without
 rerunning LOSATP and shifts each record so its `og_1` member shares one
 x-coordinate. If ambiguity opens **Review alignment**, select the
-**Recommended** candidate in each card marked **Choose one**, leave **Keep as
+**Recommended** candidate in each card under **Choose a gene**, leave **Keep as
 is** selected and choose **Apply**. Inspect and accept a refreshed
 preview with another Apply if requested. This is the alignment used by the
 Interactive SVG Gallery.
@@ -172,7 +172,7 @@ seeds, group paths, and computed description.
 Use the same five records and presentation from Steps 1–5. Click the first
 record's left-facing `livA` CDS (`CAG38712.1`, group `og_18`) and choose
 **Review alignment options…**. Choose a
-candidate in each card marked **Choose one**. Start with **Keep as is**, then
+candidate in each card under **Choose a gene**. Start with **Keep as is**, then
 select **All right →**. The reference currently points left while the selected
 targets point right, so only the reference card shows **reversed**. Select **Apply**; if final validation updates
 the preview, inspect it and select **Apply** again. Features and labels reverse
