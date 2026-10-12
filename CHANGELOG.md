@@ -250,10 +250,12 @@ write-up of a release.
     and neither a record turned off nor one that is not selected. They read
     **Auto (by genome size)** when separate diagrams take different sizes, or
     when the one record is cropped to a region (OV-494).
-- Web app sidebar: the Feature Visibility rule action **Exclude from matching**
-  is now **Leave out of protein search**, and the color rule field **Legend
-  caption** is now **Legend name**, the words the feature popup uses. Saved
-  Sessions and rule files are unchanged.
+- Web app: the Feature Visibility rule action **Exclude from matching** is now
+  **Leave out of protein search**, and the field **Legend caption** of a color
+  rule and of the selected-feature bar is now **Legend name**, the words the
+  feature popup uses. Saved Sessions and rule files are unchanged. A Feature
+  Visibility rule shows **Action** on its own line under **Value regex**, so
+  the closed list shows the whole action (OV-513).
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters
   and the appearance first, then **Search limits** and **Performance** (formerly
   **Runtime and reproducibility**). **Selected pairs** shows each pair as one row

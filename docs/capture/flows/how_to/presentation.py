@@ -941,14 +941,23 @@ def capture_gui_feature_presentation(
         final_report = generate_and_inspect(
             page, _inspect_presentation_svg, _assert_feature_presentation_svg
         )
+        # The last rule's Action at the foot of the sidebar keeps every rule
+        # of the list in the frame.
         page.get_by_label(
-            "Visibility rule 1 record ID", exact=True
-        ).scroll_into_view_if_needed()
+            f"Visibility rule {len(EXPECTED_VISIBILITY_RULES)} action", exact=True
+        ).evaluate("(element) => element.scrollIntoView({ block: 'end' })")
+        expect(
+            page.get_by_label("Visibility rule 1 record ID", exact=True)
+        ).to_be_in_viewport(ratio=1)
         screenshot_bytes["presentation-settings.png"] = capture_screenshot(
             page, output_paths["presentation-settings.png"], "Circular"
         )
         toggle_disclosure(features_panel)
         _fit_finished_circular_preview(page)
+        # The pan starts after the zoom has finished. A drag that starts while
+        # the zoom still runs moves the canvas in some captures and not in
+        # others, so the image was not reproducible.
+        _wait_for_preview_transform(page)
         _pan_preview_left(page, 0.06)
         _wait_for_preview_transform(page)
         screenshot_bytes["presentation-result.png"] = capture_screenshot(

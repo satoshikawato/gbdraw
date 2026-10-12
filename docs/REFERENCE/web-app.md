@@ -1117,7 +1117,7 @@ edit** on, a press on these items drags them instead. The comparison legend
 opens no popup. Both popups open beside the clicked item and stay below the
 app header, as the feature popup does.
 
-Ctrl-click selects features for bulk color, legend-caption, visibility, and
+Ctrl-click selects features for bulk color, legend name, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the name of another
 entry of a different color or feature type, or of a deleted entry, opens the

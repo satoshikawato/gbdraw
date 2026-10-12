@@ -63,6 +63,38 @@ test('OV-373: annotation rows name their record before Inspect', async ({ page }
   await expect(panel).not.toContainText('unavailable');
 });
 
+// OV-513: the closed Action select of a Feature Visibility rule shows the
+// whole text of every action, at the default sidebar width and at phone width.
+// The width a select needs is the width of a copy that holds only that option.
+for (const viewport of [{ width: 1600, height: 1000 }, { width: 390, height: 844 }]) {
+  test(`OV-513 at ${viewport.width}x${viewport.height} a Feature Visibility rule shows its whole action`, async ({ page }) => {
+    test.setTimeout(240000);
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    const card = page.locator('summary[aria-label="Features"]');
+    await card.scrollIntoViewIfNeeded();
+    await card.press('Enter');
+    await page.getByRole('button', { name: 'Add feature visibility rule', exact: true }).click();
+    const action = page.getByLabel('Visibility rule 1 action', { exact: true });
+    await action.scrollIntoViewIfNeeded();
+    const missingWidth = () => action.evaluate((select) => {
+      const copy = /** @type {HTMLSelectElement} */ (select.cloneNode(false));
+      copy.removeAttribute('aria-label');
+      copy.append(select.selectedOptions[0].cloneNode(true));
+      copy.style.cssText = 'position: absolute; visibility: hidden; width: auto; min-width: 0; max-width: none;';
+      select.after(copy);
+      const needed = copy.getBoundingClientRect().width;
+      copy.remove();
+      return Math.max(0, Math.ceil(needed - select.getBoundingClientRect().width));
+    });
+    for (const [value, text] of [['show', 'Show'], ['off', 'Off'], ['exclude_matching', 'Leave out of protein search']]) {
+      await action.selectOption(value);
+      await expect(action.locator('option:checked')).toHaveText(text);
+      expect(await missingWidth(), `px missing to show "${text}"`).toBe(0);
+    }
+  });
+}
+
 // A default color edited under "More colors" stays in that grid and keeps
 // focus while it is edited; the grouping does not follow each edit.
 test('a color edited under More colors stays there and keeps focus', async ({ page }) => {

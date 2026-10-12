@@ -414,7 +414,7 @@ def _edit_selected_features(page: Page, feature_ids: tuple[str, ...]) -> None:
     fill.fill(EDIT_FILL)
     expect(fill).to_have_value(EDIT_FILL)
     caption = page.get_by_role(
-        "textbox", name="Selected feature legend caption", exact=True
+        "textbox", name="Selected feature legend name", exact=True
     )
     caption.fill(EDIT_LEGEND)
     page.get_by_role(

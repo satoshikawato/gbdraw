@@ -4869,27 +4869,30 @@
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1 px-1 text-[9px] font-semibold uppercase text-slate-500">
-                                            <span class="col-span-3">Record ID</span>
-                                            <span class="col-span-3">Feature Type</span>
-                                            <span class="col-span-3">Qualifier</span>
-                                            <span class="col-span-3">Action</span>
+                                            <span class="col-span-4">Record ID</span>
+                                            <span class="col-span-4">Feature Type</span>
+                                            <span class="col-span-4">Qualifier</span>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
-                                            <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="`Visibility rule ${i + 1} record ID`" placeholder="record_id" class="form-input form-input-compact col-span-3 font-mono" :disabled="!semanticMutationAvailable">
-                                            <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" :aria-label="`Visibility rule ${i + 1} feature type`" class="form-input form-input-compact col-span-3" :disabled="!semanticMutationAvailable">
+                                            <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="`Visibility rule ${i + 1} record ID`" placeholder="record_id" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
+                                            <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" :aria-label="`Visibility rule ${i + 1} feature type`" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                                 <option v-if="rule.featureType && !featureVisibilityFeatureSuggestions.includes(rule.featureType)" :value="rule.featureType">{{ rule.featureType }}</option>
                                                 <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fv-type-${value}`" :value="value">{{ value }}</option>
                                             </select>
-                                            <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" :aria-label="`Visibility rule ${i + 1} qualifier`" list="feature-visibility-qualifier-options" placeholder="qualifier" class="form-input form-input-compact col-span-3" :disabled="!semanticMutationAvailable">
-                                            <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" :aria-label="`Visibility rule ${i + 1} action`" class="form-input form-input-compact col-span-3" :disabled="!semanticMutationAvailable">
-                                                <option value="show">Show</option>
-                                                <option value="off">Off</option>
-                                                <option value="exclude_matching">Leave out of protein search</option>
-                                            </select>
+                                            <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" :aria-label="`Visibility rule ${i + 1} qualifier`" list="feature-visibility-qualifier-options" placeholder="qualifier" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
                                             <label class="block px-1 text-[9px] font-semibold uppercase text-slate-500">Value regex</label>
                                             <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" :aria-label="`Visibility rule ${i + 1} value regex`" placeholder="value regex" class="form-input form-input-compact w-full font-mono" :disabled="!semanticMutationAvailable">
+                                        </div>
+                                        <!-- The action has its own line: its longest text does not fit a quarter of the row. -->
+                                        <div>
+                                            <span class="block px-1 text-[9px] font-semibold uppercase text-slate-500">Action</span>
+                                            <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" :aria-label="`Visibility rule ${i + 1} action`" class="form-input form-input-compact w-full" :disabled="!semanticMutationAvailable">
+                                                <option value="show">Show</option>
+                                                <option value="off">Off</option>
+                                                <option value="exclude_matching">Leave out of protein search</option>
+                                            </select>
                                         </div>
                                     </div>
                                     <div v-if="featureVisibilityManualRules.length === 0" class="ui-hint italic text-center py-2">No manual visibility rules</div>
@@ -5940,8 +5943,8 @@
                                        v-model="selectedFeatureBulkCaption"
                                        data-history-ignore
                                        class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
-                                       placeholder="Legend caption"
-                                       aria-label="Selected feature legend caption">
+                                       placeholder="Legend name"
+                                       aria-label="Selected feature legend name">
                                 <button type="button"
                                         class="btn btn-primary btn-sm shrink-0"
                                         data-history-managed
