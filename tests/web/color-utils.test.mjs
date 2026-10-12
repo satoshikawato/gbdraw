@@ -54,6 +54,18 @@ assert.equal(resolveCollinearMatchColor({
   identityFactor: 0.5,
   colors
 }), null);
+// Only plus and minus are orientations; an inherited property name is not one (OV-321).
+for (const orientation of ['constructor', '__proto__', 'toString', 'unknown', '']) {
+  for (const colorMode of ['orientation', 'orientation_identity']) {
+    assert.equal(resolveCollinearMatchColor({
+      blockId: 'block_1',
+      colorMode,
+      orientation,
+      identityFactor: 0.5,
+      colors
+    }), null, `${colorMode} ${orientation}`);
+  }
+}
 assert.deepEqual(resolvePairwiseLegendGradientColorKeys('Collinear'), {
   minKey: 'collinear_block_plus_min',
   maxKey: 'collinear_block_plus'
