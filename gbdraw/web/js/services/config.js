@@ -1420,7 +1420,10 @@ const CONFIG_SLICE_ROWS = MODE_SCOPED_SETTINGS.rows.filter((/** @type {{ domain:
  */
 const overlayModeSliceConfig = (projectedConfig, sliceConfig) => {
   /** @type {Record<string, any>} */
-  const config = isPlainObject(projectedConfig) ? cloneJsonData(projectedConfig) : {};
+  // isPlainObject is not a type predicate: the checked value is set.
+  const config = isPlainObject(projectedConfig)
+    ? cloneJsonData(/** @type {NonNullable<typeof projectedConfig>} */ (projectedConfig))
+    : {};
   const slice = isPlainObject(sliceConfig) ? /** @type {Record<string, any>} */ (sliceConfig) : {};
   CONFIG_SLICE_ROWS.forEach((/** @type {{ domain: string, path: string }} */ row) => {
     const container = row.domain === 'config' ? slice : slice[row.domain.slice('config.'.length)];

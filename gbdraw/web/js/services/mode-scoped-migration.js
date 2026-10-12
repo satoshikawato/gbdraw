@@ -187,7 +187,8 @@ const annotationSetsOfMode = (sets, mode) => sets.map((annotationSet) => {
     if (isObject(copy?.target) && copy.target.kind === 'featureIdentity') delete copy.target.scope;
     return [copy];
   });
-  return { ...cloneJsonData(annotationSet), annotations: kept };
+  // `annotations` is an array, so `annotationSet` is an object.
+  return { ...cloneJsonData(/** @type {Record<string, unknown>} */ (annotationSet)), annotations: kept };
 });
 
 /**

@@ -2,11 +2,10 @@
 /**
  * @template T
  * @param {T} value
- * @returns {NonNullable<T>} The clone; a nullish `value` is returned as it is, so callers pass a value they know is set.
+ * @returns {T} The clone; a nullish `value` is returned as it is.
  */
 export const cloneJsonData = (value) => {
-  // A nullish value passes through; callers type their input as set (see @returns).
-  if (value === null || value === undefined) return /** @type {NonNullable<T>} */ (value);
+  if (value === null || value === undefined) return value;
   return JSON.parse(JSON.stringify(value));
 };
 
