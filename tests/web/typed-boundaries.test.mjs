@@ -186,7 +186,7 @@ const isLowerLayer = (path) => path === 'state.js' || path.startsWith('services/
 const declaredTypes = (comments) => [...comments.matchAll(/@(?:typedef|callback)\b[ \t]*/g)].flatMap((match) => {
   let index = match.index + match[0].length;
   if (comments[index] === '{') index = closingBracket(comments, index) + 1;
-  const name = index > 0 ? comments.slice(index).match(/^\s*([A-Za-z_$][\w$]*)/)?.[1] : null;
+  const name = index > 0 ? comments.slice(index).match(/^[\s*]*([A-Za-z_$][\w$]*)/)?.[1] : null;
   return name ? [{ name, index: match.index }] : [];
 });
 const isGeneratedContract = (path) => /^contracts\/[^/]+\.generated\.js$/.test(path);

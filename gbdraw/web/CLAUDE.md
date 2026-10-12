@@ -630,10 +630,10 @@ authority-only change. A new module is checked from its first commit.
   type naming another owner's factory result (`ReturnType<typeof createX>`) is
   a whole-object port.
 - A persisted contract (the Session, the canonical render request, the feature
-  catalog) has one typedef, for the current format only. The Session and the
-  canonical render request are declared once, in Python.
-  `tools/generate_web_contracts.py` writes their typedefs, and the constants
-  of the persisted contracts (among them `SESSION_VERSION`,
+  catalog) has one typedef of what its writer writes, for the current format
+  only. The Session and the canonical render request are declared once, in
+  Python. `tools/generate_web_contracts.py` writes their typedefs, and the
+  constants of the persisted contracts (among them `SESSION_VERSION`,
   `CANONICAL_REQUEST_SCHEMA`, and `FEATURE_CATALOG_SCHEMA`), to the modules
   `js/contracts/*.generated.js`. `js/contracts/` holds only the modules that
   tool writes. They are never edited by hand, and no other module declares a
@@ -642,7 +642,9 @@ authority-only change. A new module is checked from its first commit.
 - A reader of an unvalidated document takes `unknown`, or the generated input
   type whose values are `unknown` (`SessionInput`, and `SessionEnvelope` once
   `format` and `version` are read). The validator of each part returns that
-  part's type. `GbdrawSession` is the writer's type; no reader returns it.
+  part's type. `GbdrawSession` is the writer's type; no reader returns it. A
+  reader that still takes `Record<string, any>` is counted in
+  `EXPLICIT_ANY_BASELINE`.
 - Types are JSDoc in the module that owns them, imported with
   `/** @import { T } from './x.js' */`, never a `.d.ts` or a types module under
   `gbdraw/web/` other than the generated modules of `js/contracts/`. A type
@@ -674,13 +676,13 @@ authority-only change. A new module is checked from its first commit.
 Guards: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
 run, declared factory parameters, no suppression, type-import direction, no
 second declaration of a generated typedef or constant),
-`tests/test_web_contracts_generated.py` (the generated modules equal the
-tool's output, and `js/contracts/` holds nothing else),
 `tests/web/no-implicit-any-ratchet.test.mjs` (`noImplicitAny` diagnostics per
 module), and
 `tests/web/explicit-any-ratchet.test.mjs` (explicit `any` per module). They
 run the `typescript` version pinned in `package.json` and fail until `npm ci`
-has installed it.
+has installed it. `tests/test_web_contracts_generated.py` checks that the
+generated modules equal the tool's output and that `js/contracts/` holds
+nothing else.
 
 ### R15: Drawing context and mode-scoped settings
 
