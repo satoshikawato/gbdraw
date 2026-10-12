@@ -593,12 +593,17 @@ Status: active Product authority
     record's name fields on its card. The reply first says that the Owner had
     looked at the images, then: 「推奨通りでいいです。」
   - Reply 2 (`2026-10-11`), to the request to confirm the draft receipt for a
-    File with one record, whose nine fields had been sent in the preceding
-    message and are recorded below: 「承認します。」
+    File with one record. The message before that request had named the
+    draft file that holds the nine fields recorded below and had summarized
+    what changes, what stays and the accepted risk; it did not show the nine
+    fields themselves. The reply answered two requests, each with
+    「承認します。」; the other one confirmed a correction of the `PD-OI-061`
+    receipt (Revision 40).
   - Reply 3 (`2026-10-12`), to three questions asked with Before/After images
-    of a prototype of this outcome. The reply also covers other matters; the
-    part that answers these questions reads:
-    「A か B か:B.空のカードで先に入力した名前: 消さない;BGC の Gallery Session の保存し直し:保存し直す」
+    of a prototype of this outcome. The reply also covers other matters; its
+    line for these questions begins with the address of the page that asked
+    them and continues:
+    「A か B か:B.空のカードで先に入力した名前: 消さない; BGC の Gallery Session の保存し直し:保存し直す」
     - Its first answer selects option B of the question 「A か B か」. The
       question gave the rule of option B as:
       「カードに出す名前のブロックは常に 1 つ。File の名前があるあいだは dev と同じカード（File のブロックがカード、レコードの欄は Record options の中）で、File の名前が空ならレコードの欄をカードに出す。」
@@ -611,8 +616,8 @@ Status: active Product authority
       no term to this record.
     - Its third answer is about a Gallery example Session and adds no term to
       this record.
-  - The scenario-2 receipt holds the nine fields Reply 2 confirmed, with no
-    character changed. The first selection of Reply 3 is recorded in
+  - The scenario-2 receipt holds the nine fields of the draft that Reply 2
+    approved, with no character changed. The first selection of Reply 3 is recorded in
     `PD-OI-067` below its receipts, in the words of its question. It is not a
     receipt field, and no rationale, preservation, retirement scope, or
     residual risk is added for it.
@@ -3482,8 +3487,8 @@ Decision date: 2026-09-30
 - Decision source (scenario revision `2`): the Owner replies of `2026-10-11`
   and `2026-10-12` quoted in the Revision 41 entry above, which states what
   each quotation leaves out. The second
-  receipt and JSON below reproduce all nine confirmed fields without
-  translation or additional terms. The runtime that implements it merges with
+  receipt and JSON below reproduce all nine fields of the approved draft
+  without translation or additional terms. The runtime that implements it merges with
   it (static Product Contract co-change).
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `93b14a1df028f81ff573dc9c1a60f312b8160e6a7416fe14d0bce8c85be67ee2`.
@@ -3518,7 +3523,8 @@ Decision date: 2026-09-30
 }
 ```
 
-Scenario revision `2` receipt, confirmed by `satoshikawato` on `2026-10-11`:
+Scenario revision `2` receipt (the draft approved by `satoshikawato` on
+`2026-10-11`; Reply 2 of the Revision 41 entry above):
 
 ```text
 PRODUCT_DECISION
