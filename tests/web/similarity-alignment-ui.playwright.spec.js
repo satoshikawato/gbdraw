@@ -853,10 +853,17 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
     const sanitize=window.DOMPurify.sanitize;window.DOMPurify.sanitize=(...args)=>{if(String(args[0]).includes('<svg')){window.DOMPurify.sanitize=sanitize;throw Object.assign(new Error('PRIVATE_CAUSE_SENTINEL'), { code: 'COMPARISON_IDENTITY', stage: 'result-admission', context: { reason: 'SOURCE_VIEW_CONFLICT' }, cause: new Error('PRIVATE_CAUSE_SENTINEL'), stdout: 'PRIVATE_STDOUT_SENTINEL', secondary: [{code:'CLEANUP_FAILED',stage:'cleanup',message:'PRIVATE_CLEANUP_SENTINEL'}] });}return sanitize(...args);};
     return prior;
   });
+  const fitted = await previewView(page);
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   const error = dialog.locator('[data-similarity-alignment-error]');
   await expect(error).toBeVisible({ timeout: 180000 });
   await expect(error).toContainText('Comparison endpoints disagree');
+  // The failed run put the Result back; the review goes on with the figure fitted beside it.
+  await expect.poll(async () => {
+    const view = await previewView(page);
+    return view.zoom === fitted.zoom && Math.abs(view.pan.x - fitted.pan.x) < 0.01
+      && Math.abs(view.pan.y - fitted.pan.y) < 0.01;
+  }).toBe(true);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError)).toMatchObject({code:'COMPARISON_IDENTITY',operation:'align',stage:'result-admission',secondary:[{code:'CLEANUP_FAILED',stage:'cleanup'}]});
   await expect(page.getByRole('alert', { name: 'Alignment error' })).toHaveCount(1);
   await expect(error).toBeFocused();
