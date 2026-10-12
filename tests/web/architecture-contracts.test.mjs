@@ -1489,7 +1489,6 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   assert.equal([...webPrSmoke.matchAll(/python tools\/prepare_browser_wheel\.py/g)].length, 1);
   const webContracts = workflowJob('web-contracts-pr');
   assert.match(webContracts, /Run fast Web JavaScript contracts/);
-  assert.match(webContracts, /! -name 'gallery-session-publication\.test\.mjs'/);
   assert.match(webContracts, /-m "browser and not slow"/);
   assert.doesNotMatch(webPrSmoke, /Run fast Web JavaScript contracts|python -m pytest/);
   assert.match(webPrSmoke, /npm run test:web:pr-smoke/);
@@ -6405,6 +6404,204 @@ test('the Web design rules and the guard registry are pre-registered guard and a
     assertDesignRuleRegistryResolves(JSON.parse(source), REPOSITORY_ROOT);
     assertGateReadsDesignRuleRegistry(source, REPOSITORY_ROOT);
   }
+});
+
+// The guard registry in both directions (boundary audit M5a). (i) Every
+// `tests/` path the Web rules name is registered, and every registered path is
+// named by its rule. (ii) Every guard is selected by the CI job it declares.
+// (iii) Every node test under tests/web is selected by a pull-request job.
+// Selection is read from the workflow's commands, the functional shard file,
+// and the pytest markers of the file, never from a table kept here; a command
+// the resolver cannot read fails by name.
+const expandBraces = (path) => {
+  const braces = path.match(/^(.*?)\{([^{}]*)\}(.*)$/);
+  return braces ? braces[2].split(',').flatMap((part) => expandBraces(`${braces[1]}${part}${braces[3]}`)) : [path];
+};
+const namedTestPaths = (text) => [...new Set(
+  (text.match(/\btests\/[\w./{},-]*\.(?:mjs|cjs|js|json|py|ts)\b/g) || []).flatMap(expandBraces)
+)];
+// A heading's text up to the next heading of its level or above, without code blocks.
+const ruleSection = (text, heading) => {
+  const lines = text.replace(/^```[\s\S]*?^```/gm, '').split(/\r?\n/);
+  const start = lines.findIndex((line) => /^#{1,6} /.test(line) && line.replace(/^#+ /, '') === heading);
+  if (start < 0) return '';
+  const closes = new RegExp(`^#{1,${lines[start].indexOf(' ')}} `);
+  const length = lines.slice(start + 1).findIndex((line) => closes.test(line));
+  return lines.slice(start, length < 0 ? lines.length : start + 1 + length).join('\n');
+};
+// The shell command lines of a job's `run:` steps: a folded scalar is one
+// line, and a literal one is its lines with `\` continuations joined.
+const workflowCommands = (job) => [...`${job}\n`.matchAll(/\n( +)run: *([>|]-?)? *(.*)\n((?:\1 +.*\n|[ \t]*\n)*)/g)]
+  .flatMap(([, , style, inline, block]) => (!style ? [inline]
+    : (style[0] === '|' ? block.replace(/\\\n/g, ' ') : block.replace(/\n/g, ' ')).split('\n')))
+  .map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
+const globMatcher = (glob) => {
+  const pattern = new RegExp(`^${glob.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*')}$`);
+  return (text) => pattern.test(text);
+};
+// What a job's `node --test` commands run: `find <root> [-maxdepth N] -type f
+// [!] -name '<glob>' ... | xargs -0 node --test`, or the files named after it.
+const nodeTestSelectors = (commands) => commands.filter((command) => /\bnode --test\b/.test(command)).map((command) => {
+  const found = command.match(/^find (\S+) (.*)-print0 \| xargs -0 node --test$/);
+  if (found) {
+    const [, root, predicates] = found;
+    const tests = [];
+    const unread = predicates.replace(/(! )?-(maxdepth|type|name) (?:'([^']*)'|(\S+)) /g, (all, negated, key, quoted, bare) => {
+      const value = quoted ?? bare;
+      if (key === 'name') {
+        const matches = globMatcher(value);
+        tests.push((path) => matches(posix.basename(path)) !== Boolean(negated));
+      } else if (key === 'maxdepth' && !negated) tests.push((path) => path.split('/').length <= Number(value));
+      else if (key !== 'type' || value !== 'f' || negated) return all;
+      return '';
+    });
+    assert.equal(unread.trim(), '', `cannot resolve the find predicates of: ${command}`);
+    return (path) => path.startsWith(`${root}/`) && tests.every((matches) => matches(path.slice(root.length + 1)));
+  }
+  const named = command.match(/^node --test((?: \S+)*)$/);
+  assert.ok(named, `cannot resolve the node test command: ${command}`);
+  const files = named[1].split(' ').filter((argument) => argument && !argument.startsWith('--')).map(globMatcher);
+  return (path) => files.some((matches) => matches(path));
+});
+// The marker sets of a pytest file's tests: the file's `pytestmark`, the
+// decorators of a test's class, and the test's own decorators.
+const pytestMarkerSets = (source) => {
+  const markersIn = (text) => [...text.matchAll(/pytest\.mark\.(\w+)/g)].map(([, name]) => name);
+  const fileLevel = markersIn(source.match(/^pytestmark\s*=.*(?:\n[ \t)\]].*)*/m)?.[0] ?? '');
+  const sets = [];
+  let pending = [];
+  let classMarkers = [];
+  source.split(/\r?\n/).forEach((line) => {
+    if (/^\s*@/.test(line)) pending.push(...markersIn(line));
+    const [, indent, keyword, name] = line.match(/^(\s*)(?:async\s+)?(class|def)\s+(\w+)/) || [];
+    if (!keyword) return;
+    if (!indent) classMarkers = keyword === 'class' ? pending : [];
+    if (keyword === 'def' && name.startsWith('test')) sets.push(new Set([...fileLevel, ...(indent ? classMarkers : []), ...pending]));
+    pending = [];
+  });
+  return sets;
+};
+// What a job's `python -m pytest <target> [-m "<expression>"]` commands run:
+// a file under the target with a test whose markers satisfy the expression.
+const pytestSelectors = (commands) => commands.filter((command) => /\bpython -m pytest\b/.test(command)).map((command) => {
+  const [, target, options = ''] = command.match(/^python -m pytest (\S+)(.*)$/) || [];
+  const expression = options.match(/ -m "([\w\s()]*)"/);
+  assert.ok(
+    target && !/ (?:-m|-k|--deselect|--ignore)\b/.test(options.replace(expression?.[0] ?? '', '')),
+    `cannot resolve the pytest command: ${command}`
+  );
+  const source = (expression?.[1] ?? '').replace(/\w+/g, (word) => (
+    { and: '&&', or: '||', not: '!' }[word] ?? `markers.has('${word}')`
+  ));
+  const selects = source.trim() ? new Function('markers', `return ${source};`) : () => true;
+  return (path, markerSets) => (target.endsWith('/') ? path.startsWith(target) : path === target)
+    && markerSets.some((markers) => selects(markers));
+});
+const guardRegistryProblems = (registry, {
+  read = (path) => readFileSync(join(REPOSITORY_ROOT, path), 'utf8'),
+  workflow = TEST_WORKFLOW,
+  nodeTests = readdirSync(join(REPOSITORY_ROOT, 'tests/web'), { recursive: true })
+    .map((path) => `tests/web/${normalizePath(path)}`).filter((path) => path.endsWith('.test.mjs')).sort()
+} = {}) => {
+  const problems = { unregistered: [], unnamed: [], unrun: [] };
+  const registeredPaths = (rule) => [...rule.guards, ...rule.allowlists].map(({ path }) => path);
+  const registered = new Set(registry.rules.flatMap(registeredPaths));
+  namedTestPaths(read(registry.rulesPath)).filter((path) => !registered.has(path)).forEach((path) => {
+    problems.unregistered.push(`${registry.rulesPath} names ${path}, which no rule registers`);
+  });
+  const jobIds = [...workflow.slice(workflow.indexOf('\njobs:\n')).matchAll(/\n {2}([a-z][a-z0-9-]*):\n/g)].map(([, id]) => id);
+  const jobCommands = new Map();
+  const commandsOf = (job) => jobCommands.get(job)
+    ?? jobCommands.set(job, workflowCommands(workflowJob(job, workflow))).get(job);
+  const shards = new Set(JSON.parse(read('tests/ci/functional-shards.json')).shards.flat());
+  // true or false when the job's commands decide it; undefined when the path is not a test of a form they run.
+  const selectedBy = (job, path) => {
+    const commands = commandsOf(job);
+    if (path.endsWith('.test.mjs')) return nodeTestSelectors(commands).some((selects) => selects(path));
+    if (/(?:^|\/)test_[^/]*\.py$/.test(path)) {
+      const markerSets = pytestMarkerSets(read(path));
+      return pytestSelectors(commands).some((selects) => selects(path, markerSets));
+    }
+    if (path.endsWith('.playwright.spec.js') && commands.some((command) => /\bci-impact\.mjs shard-files\b/.test(command))) {
+      return shards.has(path);
+    }
+    return undefined;
+  };
+  registry.rules.forEach((rule) => {
+    const named = new Set(namedTestPaths(ruleSection(read(rule.rulesPath || registry.rulesPath), rule.heading)));
+    [...new Set(registeredPaths(rule))].filter((path) => !named.has(path)).forEach((path) => {
+      problems.unnamed.push(`${rule.id} registers ${path}, which "${rule.heading}" does not name`);
+    });
+    const unrunReason = ({ path, job }, seen = []) => {
+      if (!jobIds.includes(job)) return 'is not a job of .github/workflows/test.yml';
+      const selected = selectedBy(job, path);
+      if (selected !== undefined) return selected ? '' : 'does not select it';
+      if (/\.spec\.js$/.test(path)) return 'has no selection this check can read for it';
+      // A fixture, helper or config runs with a guard of its rule and job that names it.
+      return rule.guards.some((other) => other.job === job && other.path !== path && !seen.includes(other.path)
+        && read(other.path).includes(posix.basename(path)) && !unrunReason(other, [...seen, path]))
+        ? '' : 'runs no guard of this rule that names it';
+    };
+    rule.guards.forEach((guard) => {
+      const reason = unrunReason(guard);
+      if (reason) problems.unrun.push(`${rule.id} ${guard.path}: ${guard.job} ${reason}`);
+    });
+  });
+  nodeTests.filter((path) => !knownJobsFor('pr').some((job) => selectedBy(job, path))).forEach((path) => {
+    problems.unrun.push(`${path}: no pull-request job runs this node test`);
+  });
+  return problems;
+};
+
+test('every test path the Web rules name is registered, and every guard and node test runs in its CI job', (t) => {
+  const registry = JSON.parse(readFileSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH), 'utf8'));
+  const problems = guardRegistryProblems(registry);
+  t.diagnostic(`guard registry: ${registry.rules.length} rules, ${registry.rules.flatMap((rule) => rule.guards).length} guards; `
+    + `${problems.unregistered.length} unregistered named paths, ${problems.unnamed.length} registered paths a rule does not name, `
+    + `${problems.unrun.length} unrun guards or node tests`);
+  assert.deepEqual(problems, { unregistered: [], unnamed: [], unrun: [] });
+});
+
+test('the guard registry check reports an unregistered path, an unnamed guard, an unrun guard, and an unreadable command', () => {
+  const registry = JSON.parse(readFileSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH), 'utf8'));
+  const read = (path) => readFileSync(join(REPOSITORY_ROOT, path), 'utf8');
+  const rule = (id) => registry.rules.find((candidate) => candidate.id === id);
+  assert.deepEqual(guardRegistryProblems(registry, {
+    read: (path) => read(path) + (path === registry.rulesPath ? '\nSee `tests/web/{unregistered,run-info}.test.mjs`.\n' : '')
+  }).unregistered, ['gbdraw/web/CLAUDE.md names tests/web/unregistered.test.mjs, which no rule registers']);
+
+  const moved = structuredClone(registry);
+  moved.rules.find(({ id }) => id === 'R8').guards.push(rule('R12').guards.find(({ path }) => path.endsWith('run-info.test.mjs')));
+  assert.deepEqual(guardRegistryProblems(moved).unnamed, [
+    'R8 registers tests/web/run-info.test.mjs, which "R8: The Multi-Record Canvas owns placement only" does not name'
+  ]);
+
+  // A node test no job selects, and the fixture that only that test reads.
+  const excluding = (name) => TEST_WORKFLOW.replaceAll("-name '*.test.mjs'", `$& ! -name '${name}'`);
+  assert.deepEqual(guardRegistryProblems(registry, { workflow: excluding('record-metadata-inference.test.mjs') }).unrun, [
+    'R4 tests/fixtures/record_metadata_inference_cases.json: web-contracts-pr runs no guard of this rule that names it',
+    'R4 tests/web/record-metadata-inference.test.mjs: web-contracts-pr does not select it',
+    'tests/web/record-metadata-inference.test.mjs: no pull-request job runs this node test'
+  ]);
+  const otherJob = structuredClone(registry);
+  otherJob.rules.find(({ id }) => id === 'R8').guards[0].job = 'web-contracts-pr';
+  otherJob.rules.find(({ id }) => id === 'R12').guards[0].job = 'promotion';
+  assert.deepEqual(guardRegistryProblems(otherJob).unrun, [
+    'R8 tests/test_circular_multi_record_parity.py: web-contracts-pr does not select it',
+    `R12 ${rule('R12').guards[0].path}: promotion is not a job of .github/workflows/test.yml`
+  ]);
+  // A pytest file runs in a job when one of its tests does: one `browser`
+  // test leaves the others in core-pr, and a file of only such tests leaves it.
+  const withBrowserTests = (flags) => (path) => (path === 'tests/test_mode_scoped_settings.py'
+    ? read(path).replace(new RegExp('^def test_', flags), '@pytest.mark.browser\n$&') : read(path));
+  assert.deepEqual(guardRegistryProblems(registry, { read: withBrowserTests('m') }).unrun, []);
+  assert.deepEqual(guardRegistryProblems(registry, { read: withBrowserTests('gm') }).unrun, [
+    'R15 tests/test_mode_scoped_settings.py: core-pr does not select it'
+  ]);
+  assert.throws(
+    () => guardRegistryProblems(registry, { workflow: TEST_WORKFLOW.replaceAll("-name '*.test.mjs'", "-newer package.json $&") }),
+    /cannot resolve the find predicates of: find tests\/web /
+  );
 });
 
 // Owner-graph report (implementation plan Phase B1): the checker prints the
