@@ -1,7 +1,4 @@
 // @ts-check
-/**
- * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
- */
 import {
   annotationRecordSelectorFromValue,
   parseAnnotationRecordSelectorValue
@@ -10,10 +7,14 @@ import { buildDisambiguatedRecordEntries, formatRecordLength } from '../../servi
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 
 /**
+ * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
+ */
+
+/**
  * @typedef {{
  *   key: string, value: string, label: string, recordId: string, recordLength: number | null,
  *   index: number, localIndex: number, sourceIndex?: number, sourceKey: string,
- *   backendSelector: AnnotationRecordSelector | null
+ *   backendSelector: AnnotationRecordSelector
  * }} AnnotationCatalogRecord A record a target may name; `key` survives reorders, `value` is the record ID or `#<n>`.
  * @typedef {{ code: string, context: Record<string, any> }} AnnotationCatalogIssue A producer diagnostic.
  * @typedef {{
@@ -30,26 +31,48 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
  *   Each record carries `recordId` or `record_id`, `recordLength` or `record_length`, and `selector`.
  *   A Linear source with `drawn: false` is an OFF card; the Circular source lists its OFF records
  *   in `omittedRecords`.
+ * @typedef {{ name?: unknown, size?: unknown }} FileFingerprintInput The name and size of a chosen input file.
+ * @typedef {{
+ *   sourceKey: string, localIndex: number, key: string, recordId: string, recordLength: number | null
+ * }} SourceRecord A record of one source before the catalog numbers it.
  * @typedef {object} AnnotationRecordCatalogOptions
  * @property {string} [mode] 'linear' selects `linearSources`; anything else `circularSource`.
  * @property {AnnotationCatalogSource | null} [circularSource]
  * @property {AnnotationCatalogSource[]} [linearSources]
  */
 
+/** @param {unknown} value */
 const cleanText = (value) => String(value ?? '').trim();
 // Catalog issues are producer diagnostics ({ code, context }); wording stays
 // with the error normalizer.
+/**
+ * @param {string} code
+ * @param {AnnotationCatalogIssue['context']} [context]
+ * @returns {AnnotationCatalogIssue}
+ */
 const catalogIssue = (code, context = {}) => ({ code, context });
+/**
+ * @param {unknown} error
+ * @param {AnnotationCatalogIssue['context']} [context]
+ */
 const discoveryIssue = (error, context = {}) => {
   const model = normalizeUserFacingError(error || null);
   return model && model.code !== 'UNKNOWN'
     ? catalogIssue(model.code, { ...model.context, ...context })
     : catalogIssue('INPUT_UNREADABLE', context);
 };
+/** @param {FileFingerprintInput | null | undefined} file */
 const fileFingerprint = (file) => file
   ? [String(file.name || ''), Number(file.size || 0)]
   : null;
 
+/**
+ * @param {{
+ *   scope: unknown, uid?: unknown, inputType?: unknown,
+ *   primaryFile?: FileFingerprintInput | null, pairedFile?: FileFingerprintInput | null
+ * }} input
+ * @returns {string}
+ */
 export const annotationSourceKey = ({
   scope,
   uid = '',
@@ -64,6 +87,12 @@ export const annotationSourceKey = ({
   fileFingerprint(pairedFile)
 ]);
 
+/**
+ * @param {NonNullable<AnnotationCatalogSource['records']>[number] | null | undefined} record
+ * @param {number} fallbackIndex
+ * @param {string} sourceKey
+ * @returns {SourceRecord}
+ */
 const normalizeRecord = (record, fallbackIndex, sourceKey) => {
   const length = Number(record?.recordLength ?? record?.record_length);
   const selector = cleanText(record?.selector) || `#${fallbackIndex + 1}`;
@@ -80,6 +109,11 @@ const normalizeRecord = (record, fallbackIndex, sourceKey) => {
   };
 };
 
+/**
+ * @param {Pick<AnnotationCatalogSource, 'sourceKey' | 'records'> | null | undefined} source
+ * @param {string} fallbackSourceKey
+ * @returns {SourceRecord[]}
+ */
 const sourceRecords = (source, fallbackSourceKey) => (
   (Array.isArray(source?.records) ? source.records : [])
     .map((record, index) => normalizeRecord(
@@ -89,6 +123,10 @@ const sourceRecords = (source, fallbackSourceKey) => (
     ))
 );
 
+/**
+ * @param {SourceRecord[]} records
+ * @param {unknown} selectorValue
+ */
 const selectSourceRecords = (records, selectorValue) => {
   const parsed = parseAnnotationRecordSelectorValue(selectorValue);
   if (parsed.error) return { records: [], error: 'SELECTOR_FORMAT', explicit: true };
@@ -123,19 +161,28 @@ const selectSourceRecords = (records, selectorValue) => {
  */
 export const annotationRecordKeysOf = (source, fallbackSourceKey) => (
   selectSourceRecords(sourceRecords(source, fallbackSourceKey), source?.selector).records
-    .map((/** @type {{ key: string }} */ record) => record.key)
+    .map((record) => record.key)
 );
 
+/**
+ * @param {(SourceRecord & { sourceIndex?: number })[]} records
+ * @returns {AnnotationCatalogRecord[]}
+ */
 const finalizeRecords = (records) => {
   const indexed = records.map((record, index) => ({ ...record, selector: `#${index + 1}` }));
   return buildDisambiguatedRecordEntries(indexed).map((record, index) => ({
     ...record,
     index,
-    backendSelector: annotationRecordSelectorFromValue(record.value),
+    // `value` is a safe record ID or `#<n>`, never an unspecified token, so it parses to a selector.
+    backendSelector: /** @type {AnnotationRecordSelector} */ (annotationRecordSelectorFromValue(record.value)),
     label: `#${index + 1} · ${record.recordId}${record.recordLength ? ` · ${formatRecordLength(record.recordLength)}` : ''}`
   }));
 };
 
+/**
+ * @param {AnnotationCatalogIssue[]} issues
+ * @param {(AnnotationCatalogSource | null | undefined)[]} sources
+ */
 const catalogStatus = (issues, sources) => {
   if (issues.length === 0) return 'ready';
   if (sources.some((source) => source?.status === 'error')) return 'error';
@@ -144,9 +191,15 @@ const catalogStatus = (issues, sources) => {
 
 // `inputOrdinal` is the card number; `sourceIndex` counts the drawn cards, as
 // the request's record files do (materializeLinearRecordFiles).
+/**
+ * @param {AnnotationCatalogSource[] | null | undefined} sources
+ * @returns {AnnotationRecordCatalog}
+ */
 const buildLinearCatalog = (sources) => {
   const normalizedSources = Array.isArray(sources) ? sources : [];
+  /** @type {(SourceRecord & { sourceIndex: number })[]} */
   const records = [];
+  /** @type {AnnotationCatalogIssue[]} */
   const issues = [];
   /** @type {string[]} */
   const omittedRecordKeys = [];
@@ -195,7 +248,12 @@ const buildLinearCatalog = (sources) => {
 
 // circularSource.records are the records the Circular request draws
 // (resolveCircularRequestRecordSet); several records need an explicit target.
+/**
+ * @param {AnnotationCatalogSource | null | undefined} source
+ * @returns {AnnotationRecordCatalog}
+ */
 const buildCircularCatalog = (source) => {
+  /** @type {AnnotationCatalogIssue[]} */
   const issues = [];
   if (!source?.hasInput) {
     issues.push(catalogIssue('INPUT_REQUIRED'));
@@ -214,7 +272,7 @@ const buildCircularCatalog = (source) => {
     signature: records.map((record) => record.key).join('|'),
     omittedRecordKeys: issues.length === 0
       ? sourceRecords({ ...source, records: source?.omittedRecords }, 'circular-source')
-        .map((/** @type {{ key: string }} */ record) => record.key)
+        .map((record) => record.key)
       : []
   };
 };

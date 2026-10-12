@@ -1,19 +1,26 @@
 // @ts-check
-/**
- * @import { AnnotationRecordCatalog } from './record-catalog.js'
- * @import { AnnotationItem } from '../../services/annotation-state.js'
- */
 import {
   annotationRecordSelectorValue,
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../../services/annotation-state.js';
 
+/**
+ * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './record-catalog.js'
+ * @import { AnnotationItem, AnnotationRecordSelector, AnnotationSet } from '../../services/annotation-state.js'
+ */
+
+/** @param {unknown} value */
 const cleanText = (value) => String(value ?? '').trim();
 
+/** @param {AnnotationItem | null | undefined} annotation */
 const bindingFor = (annotation) => cleanText(annotation?.metadata?.[ANNOTATION_RECORD_BINDING_KEY]);
 export const annotationRecordBinding = bindingFor;
 
+/**
+ * @param {AnnotationItem | null | undefined} annotation
+ * @returns {{ selector: AnnotationRecordSelector | null, error: string }}
+ */
 const selectorFromTarget = (annotation) => {
   const raw = annotation?.target?.record;
   if (raw == null) return { selector: null, error: '' };
@@ -34,6 +41,10 @@ const selectorFromTarget = (annotation) => {
 };
 export const annotationRecordSelectorFromTarget = selectorFromTarget;
 
+/**
+ * @param {AnnotationCatalogRecord[]} records
+ * @param {AnnotationRecordSelector | null} selector
+ */
 const recordForSelector = (records, selector) => {
   if (!selector) return null;
   if (selector.kind === 'recordIndex') return records[selector.index] || null;
@@ -41,6 +52,10 @@ const recordForSelector = (records, selector) => {
   return matches.length === 1 ? matches[0] : null;
 };
 
+/**
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ * @param {AnnotationItem | null | undefined} annotation
+ */
 const resolvedRecord = (catalog, annotation) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
   const binding = bindingFor(annotation);
@@ -50,6 +65,10 @@ const resolvedRecord = (catalog, annotation) => {
 };
 export const resolveAnnotationRecord = resolvedRecord;
 
+/**
+ * @param {AnnotationItem | null | undefined} annotation
+ * @param {string} key
+ */
 const setBinding = (annotation, key) => {
   if (!annotation || typeof annotation !== 'object') return;
   if (!annotation.metadata || typeof annotation.metadata !== 'object' || Array.isArray(annotation.metadata)) {
@@ -59,6 +78,10 @@ const setBinding = (annotation, key) => {
   else delete annotation.metadata[ANNOTATION_RECORD_BINDING_KEY];
 };
 
+/**
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ * @param {AnnotationItem | null | undefined} annotation
+ */
 export const annotationRecordValue = (catalog, annotation) => {
   const binding = bindingFor(annotation);
   if (binding) return binding;
@@ -68,6 +91,11 @@ export const annotationRecordValue = (catalog, annotation) => {
   return saved ? `saved:${saved}` : '';
 };
 
+/**
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ * @param {AnnotationItem | null | undefined} annotation
+ * @param {unknown} value
+ */
 export const setAnnotationRecordValue = (catalog, annotation, value) => {
   if (!annotation?.target) return;
   const key = cleanText(value);
@@ -83,10 +111,14 @@ export const setAnnotationRecordValue = (catalog, annotation, value) => {
   setBinding(annotation, record.key);
 };
 
+/**
+ * @param {readonly AnnotationSet[] | null | undefined} sets
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ */
 export const reconcileAnnotationRecordBindings = (sets, catalog) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
   (Array.isArray(sets) ? sets : []).forEach((set) => {
-    (Array.isArray(set?.annotations) ? set.annotations : []).forEach((annotation) => {
+    (Array.isArray(set?.annotations) ? set.annotations : []).forEach((/** @type {AnnotationItem} */ annotation) => {
       if (!annotation?.target || annotation.target.kind === 'featureIdentity') return;
       const binding = bindingFor(annotation);
       const record = binding
@@ -101,6 +133,10 @@ export const reconcileAnnotationRecordBindings = (sets, catalog) => {
 
 // The select shows only for a ready catalog (`showsSelect`), so its options
 // need no wording for a catalog that is not ready.
+/**
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ * @param {AnnotationItem | null | undefined} annotation
+ */
 export const annotationRecordOptions = (catalog, annotation) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
   const currentValue = annotationRecordValue(catalog, annotation);
@@ -138,6 +174,7 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
   const catalog = () => getCatalog?.() || {
     status: 'error', records: [], issues: [], requiresSelection: false
   };
+  /** @param {AnnotationItem | null | undefined} annotation */
   const isMissing = (annotation) => {
     const current = catalog();
     if (current.status !== 'ready') return false;
@@ -169,8 +206,14 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
   return {
     showsSelect,
     captionFor,
+    /** @param {AnnotationItem | null | undefined} annotation */
     optionsFor: (annotation) => annotationRecordOptions(catalog(), annotation),
+    /** @param {AnnotationItem | null | undefined} annotation */
     valueFor: (annotation) => annotationRecordValue(catalog(), annotation),
+    /**
+     * @param {AnnotationItem | null | undefined} annotation
+     * @param {unknown} value
+     */
     setValue: (annotation, value) => setAnnotationRecordValue(catalog(), annotation, value),
     isRequired: () => Boolean(catalog().requiresSelection),
     isMissing,
