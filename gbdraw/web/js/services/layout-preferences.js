@@ -1,23 +1,58 @@
 // @ts-check
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 
+/**
+ * A legend side and a title side, as a diagram of one mode shows them.
+ * @typedef {{ legend: string, plotTitlePosition: string }} ActiveLayoutPreference
+ */
+/**
+ * The circular multi-record sides; null follows the single-record side.
+ * @typedef {{ legend: string | null, plotTitlePosition: string | null }} MultiLayoutPreference
+ */
+/**
+ * The layout of both modes (`drawing.layoutPreferences`).
+ * @typedef {{
+ *   circular: { single: ActiveLayoutPreference, multi: MultiLayoutPreference },
+ *   linear: ActiveLayoutPreference
+ * }} LayoutPreferences
+ */
+/**
+ * Stored layout preferences before normalization: a branch or a side may be absent.
+ * @typedef {{
+ *   circular?: { single?: StoredLayoutSides | null, multi?: StoredLayoutSides | null } | null,
+ *   linear?: StoredLayoutSides | null
+ * }} StoredLayoutPreferences
+ */
+/** @typedef {{ legend?: unknown, plotTitlePosition?: unknown }} StoredLayoutSides */
+
+/** @param {unknown} value */
 export const normalizeCircularPlotTitlePosition = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
 };
 
+/** @param {unknown} value */
 export const normalizeLinearPlotTitlePosition = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} fallback
+ */
 const normalizeLegendPosition = (value, fallback) => {
   const normalized = String(value ?? '').trim().toLowerCase();
   return normalized || fallback;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {value is string}
+ */
 const storedText = (value) => typeof value === 'string' && value.trim() !== '';
 
+/** @returns {LayoutPreferences} */
 export const createDefaultLayoutPreferences = () => ({
   circular: {
     single: {
@@ -35,6 +70,11 @@ export const createDefaultLayoutPreferences = () => ({
   }
 });
 
+/**
+ * @param {StoredLayoutPreferences | null | undefined} preferences
+ * @param {boolean} [useMultiRecord]
+ * @returns {ActiveLayoutPreference}
+ */
 export const resolveCircularLayoutPreference = (preferences, useMultiRecord = false) => {
   const defaults = createDefaultLayoutPreferences();
   const circular = preferences?.circular || defaults.circular;
@@ -58,6 +98,12 @@ export const resolveCircularLayoutPreference = (preferences, useMultiRecord = fa
   };
 };
 
+/**
+ * @param {StoredLayoutPreferences | null | undefined} preferences
+ * @param {string} mode
+ * @param {boolean} [useMultiRecord]
+ * @returns {ActiveLayoutPreference}
+ */
 export const resolveActiveLayoutPreference = (
   preferences,
   mode,
@@ -77,6 +123,12 @@ export const resolveActiveLayoutPreference = (
   return resolveCircularLayoutPreference(preferences, useMultiRecord);
 };
 
+/**
+ * @param {LayoutPreferences} preferences
+ * @param {string} mode
+ * @param {boolean} useMultiRecord
+ * @param {StoredLayoutSides} patch
+ */
 export const updateActiveLayoutPreference = (
   preferences,
   mode,
@@ -112,13 +164,18 @@ export const updateActiveLayoutPreference = (
   }
 };
 
+/**
+ * @param {unknown} source Saved layout preferences, validated here.
+ * @returns {LayoutPreferences}
+ */
 export const normalizeLayoutPreferences = (source) => {
   const defaults = createDefaultLayoutPreferences();
   if (!source || typeof source !== 'object' || Array.isArray(source)) {
     return defaults;
   }
-  const single = resolveCircularLayoutPreference(source, false);
-  const rawMulti = source.circular?.multi;
+  // The guard above makes `source` a non-array object, the stored shape (`StoredLayoutPreferences`).
+  const single = resolveCircularLayoutPreference(/** @type {StoredLayoutPreferences} */ (source), false);
+  const rawMulti = /** @type {StoredLayoutPreferences} */ (source).circular?.multi;
   return {
     circular: {
       single,
@@ -133,16 +190,20 @@ export const normalizeLayoutPreferences = (source) => {
     },
     linear: {
       legend: normalizeLegendPosition(
-        source.linear?.legend,
+        /** @type {StoredLayoutPreferences} */ (source).linear?.legend,
         WEB_UX_PROFILE.linear.legend
       ),
       plotTitlePosition: normalizeLinearPlotTitlePosition(
-        source.linear?.plotTitlePosition
+        /** @type {StoredLayoutPreferences} */ (source).linear?.plotTitlePosition
       )
     }
   };
 };
 
+/**
+ * @param {LayoutPreferences} target
+ * @param {unknown} source
+ */
 export const replaceLayoutPreferences = (target, source) => {
   const normalized = normalizeLayoutPreferences(source);
   Object.assign(target.circular.single, normalized.circular.single);
@@ -150,6 +211,11 @@ export const replaceLayoutPreferences = (target, source) => {
   Object.assign(target.linear, normalized.linear);
 };
 
+/**
+ * @param {Record<string, unknown> | null | undefined} ui
+ * @param {{ mode?: string, multiRecord?: boolean, activeLegend?: string, activePlotTitlePosition?: string }} [context]
+ * @returns {LayoutPreferences}
+ */
 export const migrateLegacyLayoutPreferences = (
   ui,
   {
@@ -229,10 +295,15 @@ export const LEGACY_LAYOUT_PREFERENCE_FIELDS = Object.freeze([
   'circularMultiRecordPlotTitlePosition'
 ]);
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 // Partial objects remain authoritative for session compatibility; normalization
 // supplies the current defaults for omitted branches.
+/** @param {Record<string, unknown> | null | undefined} ui */
 const hasStoredLayoutPreferences = (ui) => (
   isRecord(ui?.layoutPreferences) ||
   LEGACY_LAYOUT_PREFERENCE_FIELDS.some((field) => storedText(ui?.[field]))
@@ -244,9 +315,10 @@ const hasStoredLayoutPreferences = (ui) => (
  * Without one, a canonical Session takes the layout projected from its
  * committed request (`projected`). Legacy fields migrate with the committed
  * values (canonical) or `active` (other payloads) as their fallback.
- * @param {Record<string, any>} ui
- * @param {{ mode: string, multiRecord: boolean, projected?: unknown,
- *   active: { legend: any, plotTitlePosition: any } }} context
+ * @param {Record<string, unknown> | null | undefined} ui
+ * @param {{ mode: string, multiRecord: boolean, projected?: StoredLayoutPreferences | null,
+ *   active: ActiveLayoutPreference }} context
+ * @returns {LayoutPreferences}
  */
 export const restoredLayoutPreferences = (ui, { mode, multiRecord, projected = null, active }) => {
   if (projected && !hasStoredLayoutPreferences(ui)) return normalizeLayoutPreferences(projected);

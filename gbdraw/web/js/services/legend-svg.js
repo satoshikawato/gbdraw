@@ -5,6 +5,11 @@ import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from '
 
 export { parseTransform };
 
+/**
+ * @param {Element | null | undefined} parent
+ * @param {string} id
+ * @returns {Element | null}
+ */
 export const getLegendChildById = (parent, id) => {
   if (!parent) return null;
   for (const child of parent.children || []) {
@@ -28,13 +33,16 @@ export const PAIRWISE_LEGEND_SELECTOR =
 export const COMPARISON_LEGEND_SELECTOR =
   `[data-gbdraw-role="comparison-legend"], ${PAIRWISE_LEGEND_SELECTOR}, #conservation_identity_legend`;
 
+/** @param {Element | null | undefined} parent */
 export const getComparisonLegendGroup = (parent) =>
   getLegendChildById(parent, 'pairwise_legend') ||
   getLegendChildById(parent, 'conservation_identity_legend');
 
+/** @param {Element | null | undefined} el */
 export const isInsideComparisonLegend = (el) =>
   Boolean(el?.closest?.(COMPARISON_LEGEND_SELECTOR));
 
+/** @param {string | null | undefined} transform */
 export const parseTransformXY = (transform) => {
   if (!transform) return { x: 0, y: 0 };
   const number = '([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)';
@@ -44,6 +52,10 @@ export const parseTransformXY = (transform) => {
   return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
 };
 
+/**
+ * @param {SVGSVGElement | null | undefined} svg
+ * @returns {Element[]}
+ */
 export const getAllFeatureLegendGroups = (svg) => {
   if (!svg) return [];
 
@@ -53,6 +65,7 @@ export const getAllFeatureLegendGroups = (svg) => {
   const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
   const verticalLegend = legendGroup.querySelector('#legend_vertical');
 
+  /** @type {Element[]} */
   const groups = [];
 
   if (horizontalLegend && verticalLegend) {
@@ -78,7 +91,7 @@ export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
 export const legendRowShown = (row) => Boolean(row) && row?.getAttribute('display') !== 'none';
 
 // The keys of the feature Legend rows a Result shows.
-/** @param {Element | null | undefined} svg @returns {Set<string>} */
+/** @param {SVGSVGElement | null | undefined} svg @returns {Set<string>} */
 export const shownLegendKeys = (svg) => new Set(getAllFeatureLegendGroups(svg).flatMap((group) => (
   Array.from(group.querySelectorAll('g[data-legend-key]')).filter(legendRowShown)
     .map((row) => String(row.getAttribute('data-legend-key') || '').trim())
@@ -104,7 +117,7 @@ const rowsOfKey = (group, key) => Array.from(group.querySelectorAll('g[data-lege
 
 // Whether a Result shows Python's own row of a key: neither an editor row nor
 // a row a rule commit showed before Python drew it.
-/** @param {Element | null | undefined} svg @param {string} key */
+/** @param {SVGSVGElement | null | undefined} svg @param {string} key */
 export const shownPythonLegendRow = (svg, key) => getAllFeatureLegendGroups(svg).some((group) => (
   rowsOfKey(group, key).some((row) => legendRowShown(row) && !row.getAttribute('data-legend-owner'))
 ));
@@ -115,7 +128,7 @@ export const shownPythonLegendRow = (svg, key) => getAllFeatureLegendGroups(svg)
 // order (recorded when the rows were first reordered, else the drawn order)
 // with `nextKey` in the place of `key`. A commit's row appended before the
 // rerender does not (U3a review M1).
-/** @param {Element | null | undefined} svg @param {string} key @param {string} nextKey */
+/** @param {SVGSVGElement | null | undefined} svg @param {string} key @param {string} nextKey */
 export const legendRowTakesPlace = (svg, key, nextKey) => getAllFeatureLegendGroups(svg).every((group) => {
   const rows = Array.from(group.querySelectorAll('g[data-legend-key]'))
     .filter((row) => row.getAttribute('data-legend-owner') !== 'direct-editor');
@@ -135,7 +148,7 @@ export const pythonLegendKey = (row) => String(pythonDrawnAttribute(row, 'data-l
 
 // Whether a Result's bytes hold Python's row of a Legend key (shown or hidden):
 // a Session saved before the executor kept deleted rows lacks it (O-2).
-/** @param {Element | null | undefined} svg @param {string} key */
+/** @param {SVGSVGElement | null | undefined} svg @param {string} key */
 export const drawsPythonLegendRow = (svg, key) => getAllFeatureLegendGroups(svg).some((group) => (
   Array.from(group.querySelectorAll('g[data-legend-key]'))
     .some((row) => row.getAttribute('data-legend-owner') !== 'direct-editor' && pythonLegendKey(row) === key)
@@ -143,7 +156,7 @@ export const drawsPythonLegendRow = (svg, key) => getAllFeatureLegendGroups(svg)
 
 // Python's order of a Result's feature Legend rows as their Python keys: the
 // order recorded when the rows were first reordered, else null.
-/** @param {Element | null | undefined} svg @returns {string[] | null} */
+/** @param {SVGSVGElement | null | undefined} svg @returns {string[] | null} */
 export const recordedLegendOrder = (svg) => {
   const group = getAllFeatureLegendGroups(svg).find((each) => each.getAttribute(LEGEND_ORDER_RECORD));
   return group ? recordedGroupOrder(group) : null;
@@ -152,7 +165,7 @@ export const recordedLegendOrder = (svg) => {
 // Whether a Result shows Legend structure edits (a renamed, deleted, or added
 // row, or another order), read from its records, so a Result the renderer
 // drew is laid out as Python lays the edited rows out.
-/** @param {Element | null | undefined} svg */
+/** @param {SVGSVGElement | null | undefined} svg */
 export const legendStructureEdited = (svg) => getAllFeatureLegendGroups(svg).some((group) => (
   group.hasAttribute(LEGEND_ORDER_RECORD)
   || Boolean(group.querySelector([
@@ -162,14 +175,19 @@ export const legendStructureEdited = (svg) => getAllFeatureLegendGroups(svg).som
   ].join(', ')))
 ));
 
+/**
+ * @param {SVGSVGElement | null | undefined} svg
+ * @returns {Element | null}
+ */
 export const getVisibleFeatureLegendGroup = (svg) => {
   if (!svg) return null;
 
   const legendGroup = svg.getElementById('legend');
   if (!legendGroup) return null;
 
-  const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-  const verticalLegend = legendGroup.querySelector('#legend_vertical');
+  // The two layout groups of a Legend are SVG groups, which carry `style`.
+  const horizontalLegend = /** @type {SVGElement | null} */ (legendGroup.querySelector('#legend_horizontal'));
+  const verticalLegend = /** @type {SVGElement | null} */ (legendGroup.querySelector('#legend_vertical'));
 
   if (horizontalLegend && verticalLegend) {
     const hVisible =
@@ -186,12 +204,14 @@ export const getVisibleFeatureLegendGroup = (svg) => {
   return featureLegendGroup || legendGroup;
 };
 
+/** @param {SVGSVGElement | null | undefined} svg */
 export const isCurrentLegendHorizontal = (svg) => {
   const legendGroup = svg?.getElementById('legend');
   if (!legendGroup) return false;
 
-  const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-  const verticalLegend = legendGroup.querySelector('#legend_vertical');
+  // The two layout groups of a Legend are SVG groups, which carry `style`.
+  const horizontalLegend = /** @type {SVGElement | null} */ (legendGroup.querySelector('#legend_horizontal'));
+  const verticalLegend = /** @type {SVGElement | null} */ (legendGroup.querySelector('#legend_vertical'));
 
   if (horizontalLegend && verticalLegend) {
     const hVisible =
@@ -203,6 +223,10 @@ export const isCurrentLegendHorizontal = (svg) => {
   return false;
 };
 
+/**
+ * @param {Element | null | undefined} entryGroup
+ * @returns {Element | null}
+ */
 export const getLegendEntrySwatch = (entryGroup) => Array.from(
   entryGroup?.querySelectorAll?.('path') || []
 ).find((path) => {
@@ -213,7 +237,7 @@ export const getLegendEntrySwatch = (entryGroup) => Array.from(
 // The stroke Python drew on the swatch of the Legend row `caption`, which a
 // row stroke edit keeps as `originalStroke*`.
 /**
- * @param {Element | null | undefined} svg
+ * @param {SVGSVGElement | null | undefined} svg
  * @param {string} caption
  * @returns {{ originalStrokeColor: string | null, originalStrokeWidth: number | null }}
  */
@@ -233,7 +257,7 @@ export const drawnLegendRowStroke = (svg, caption) => {
 // automatic underlay: the Result's block-stroke default, which the Session
 // format keeps as `originalSvgStroke`; null without one.
 /**
- * @param {Element | null | undefined} svg
+ * @param {SVGSVGElement | null | undefined} svg
  * @returns {{ color: string | null, width: number | null } | null}
  */
 export const drawnBlockStroke = (svg) => {
@@ -290,7 +314,7 @@ export const pythonLegendRow = (row) => {
 
 // Python's rows of a mounted Result's feature Legend, by Python's key; a
 // Python row wins over an editor row of the same key, as the executor finds them.
-/** @param {Element | null | undefined} svg @returns {Map<PythonLegendKey, PythonLegendRow>} */
+/** @param {SVGSVGElement | null | undefined} svg @returns {Map<PythonLegendKey, PythonLegendRow>} */
 export const pythonLegendRows = (svg) => {
   /** @type {Map<PythonLegendKey, PythonLegendRow>} */
   const rows = new Map();
@@ -345,7 +369,10 @@ export const legendRowFeatureIds = ({ listedIds, namedIds, ownStrokeIds, draftCo
   return [...reached];
 };
 
-/** The anchor of a Legend entry: its text position, else its swatch position. */
+/**
+ * The anchor of a Legend entry: its text position, else its swatch position.
+ * @param {Element | null | undefined} entryGroup
+ */
 export const legendEntryAnchor = (entryGroup) => {
   const groupOffset = parseTransformXY(entryGroup?.getAttribute?.('transform'));
   const target = entryGroup?.querySelector?.('text') || getLegendEntrySwatch(entryGroup);
@@ -369,7 +396,7 @@ export const legendEntryAnchor = (entryGroup) => {
 // The rows of a Result's shown feature Legend group in their visual order
 // (row-major anchors); null without a Legend. The Legend entry owner lists
 // and names them from the drawing's intent.
-/** @param {Element | null | undefined} svg @returns {ResultLegendRow[] | null} */
+/** @param {SVGSVGElement | null | undefined} svg @returns {ResultLegendRow[] | null} */
 export const resultLegendRows = (svg) => {
   const group = getVisibleFeatureLegendGroup(svg);
   if (!group) return null;
@@ -396,6 +423,11 @@ export const resultLegendRows = (svg) => {
   });
 };
 
+/**
+ * @param {Element} entryGroup
+ * @param {number} xPos
+ * @param {number} yPos
+ */
 export const moveLegendEntryToAnchor = (entryGroup, xPos, yPos) => {
   if (!Number.isFinite(xPos) || !Number.isFinite(yPos)) return false;
   const current = legendEntryAnchor(entryGroup);
@@ -427,8 +459,13 @@ export const moveLegendEntryToAnchor = (entryGroup, xPos, yPos) => {
  * the generated order (a renamed entry ranks by its generated caption),
  * followed by the other entries in their current order. Without a generated
  * order, null.
+ * @template {{ caption?: unknown, originalCaption?: unknown }} T
+ * @param {readonly T[] | null | undefined} entries
+ * @param {readonly unknown[] | null | undefined} generatedOrder
+ * @returns {T[] | null}
  */
 export const defaultLegendEntryOrder = (entries, generatedOrder) => {
+  /** @type {Map<string, number>} */
   const rank = new Map();
   (Array.isArray(generatedOrder) ? generatedOrder : []).forEach((caption) => {
     const key = String(caption ?? '').trim();
@@ -436,10 +473,12 @@ export const defaultLegendEntryOrder = (entries, generatedOrder) => {
   });
   if (rank.size === 0) return null;
   const list = Array.isArray(entries) ? entries : [];
+  /** @param {T} entry */
   const generated = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
   return [
     ...list.filter((entry) => rank.has(generated(entry)))
-      .sort((left, right) => rank.get(generated(left)) - rank.get(generated(right))),
+      // Both ranks exist: the filter above keeps the ranked entries.
+      .sort((left, right) => /** @type {number} */ (rank.get(generated(left))) - /** @type {number} */ (rank.get(generated(right)))),
     ...list.filter((entry) => !rank.has(generated(entry)))
   ];
 };
@@ -455,6 +494,7 @@ export const defaultLegendEntryOrder = (entries, generatedOrder) => {
  */
 export const defaultLegendCaptionOrder = (entries, inventory) => {
   const generated = new Set(inventory);
+  /** @param {{ caption?: string, originalCaption?: string }} entry */
   const generatedCaption = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
   const currentCaption = new Map(entries.map((entry) => [generatedCaption(entry), String(entry?.caption || '').trim()]));
   return [...new Set([
@@ -467,12 +507,19 @@ export const defaultLegendCaptionOrder = (entries, inventory) => {
  * Whether Legend entries are in an edited order, not the default order (D-08).
  * Generate replays an edited order; the extraction of a Generate keeps the
  * generated order only while an edited order is replayed.
+ * @template {{ caption?: unknown, originalCaption?: unknown }} T
+ * @param {readonly T[]} entries
+ * @param {readonly unknown[] | null | undefined} generatedOrder
  */
 export const isLegendOrderEdited = (entries, generatedOrder) => {
   const defaultOrder = defaultLegendEntryOrder(entries, generatedOrder);
   return defaultOrder !== null && defaultOrder.some((entry, index) => entry !== entries[index]);
 };
 
+/**
+ * @param {Element | null | undefined} targetGroup
+ * @returns {Element[]}
+ */
 const legendEntryGroups = (targetGroup) => {
   const direct = Array.from(targetGroup?.children || []).filter(
     (child) => String(child.tagName || '').toLowerCase() === 'g' && child.hasAttribute?.('data-legend-key')
@@ -482,9 +529,11 @@ const legendEntryGroups = (targetGroup) => {
     : Array.from(targetGroup?.querySelectorAll?.('g[data-legend-key]') || []);
 };
 
+/** @param {Element} entryGroup */
 const legendEntryCaption = (entryGroup) => String(entryGroup.getAttribute('data-legend-key') || '').trim();
 
 // One Legend group's entries in slot order (row-major anchor order).
+/** @param {Element | null | undefined} targetGroup */
 const legendEntriesInSlotOrder = (targetGroup) => legendEntryGroups(targetGroup)
   .map((entryGroup, index) => ({ entryGroup, index, anchor: legendEntryAnchor(entryGroup) }))
   .sort((left, right) => {
@@ -494,6 +543,10 @@ const legendEntriesInSlotOrder = (targetGroup) => legendEntryGroups(targetGroup)
   });
 
 // Whether the group's entries listed in the order already follow it.
+/**
+ * @param {readonly { entryGroup: Element }[]} positioned
+ * @param {ReadonlyMap<string, number>} rank
+ */
 const followsOrder = (positioned, rank) => {
   const listed = positioned
     .map(({ entryGroup }) => rank.get(legendEntryCaption(entryGroup)))
@@ -511,10 +564,14 @@ const followsOrder = (positioned, rank) => {
  * a displayed batch Result draws entries that the order, read from another
  * Result, does not list (D-07, B18).
  * Returns whether any entry moved or changed document order.
+ * @param {Element} targetGroup
+ * @param {readonly unknown[] | null | undefined} captionOrder
+ * @param {{ keepFollowed?: boolean }} [options]
  */
 export const orderLegendEntries = (targetGroup, captionOrder, { keepFollowed = false } = {}) => {
   const entryGroups = legendEntryGroups(targetGroup);
   if (entryGroups.length < 2) return false;
+  /** @type {Map<string, number>} */
   const rank = new Map();
   (Array.isArray(captionOrder) ? captionOrder : []).forEach((caption) => {
     const key = String(caption ?? '').trim();
@@ -526,8 +583,9 @@ export const orderLegendEntries = (targetGroup, captionOrder, { keepFollowed = f
   const ordered = positioned
     .map((item, slot) => ({ ...item, slot }))
     .sort((left, right) => {
-      const leftRank = rank.has(caption(left.entryGroup)) ? rank.get(caption(left.entryGroup)) : Infinity;
-      const rightRank = rank.has(caption(right.entryGroup)) ? rank.get(caption(right.entryGroup)) : Infinity;
+      // `rank.has` holds in the branch that reads `rank.get`.
+      const leftRank = rank.has(caption(left.entryGroup)) ? /** @type {number} */ (rank.get(caption(left.entryGroup))) : Infinity;
+      const rightRank = rank.has(caption(right.entryGroup)) ? /** @type {number} */ (rank.get(caption(right.entryGroup))) : Infinity;
       return leftRank === rightRank ? left.slot - right.slot : leftRank - rightRank;
     });
   let changed = false;

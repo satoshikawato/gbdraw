@@ -1222,7 +1222,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
  * @property {(handle: Record<string, any>) => any} restoreGeneratedArtifactHandle
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
- * @property {((label: string, execute: (handle?: Record<string, any>) => any, options: Record<string, any>) => Promise<any>) | null} [runGeneratedArtifactReplacement]
+ * @property {((label: string, execute: (handle?: Record<string, any> | null) => any, options: Record<string, any>) => Promise<any>) | null} [runGeneratedArtifactReplacement]
  *   History's undoable replacement of the generated artifact.
  * @property {RunAnalysisPreviewRuntime | null} [previewRuntime]
  * @property {() => Promise<void>} [nextTick] Vue `nextTick`.

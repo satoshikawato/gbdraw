@@ -8,9 +8,17 @@ import {
 
 const getDefaultBaseUrl = () => globalThis.window?.location?.href || globalThis.location?.href || './';
 
+/**
+ * @param {string} path
+ * @param {string} [baseUrl]
+ */
 export const resolveAssetUrl = (path, baseUrl = getDefaultBaseUrl()) =>
   new URL(path, baseUrl).toString();
 
+/**
+ * @param {string} url
+ * @param {string} label
+ */
 export const ensureLocalAsset = async (url, label) => {
   const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
   if (!response.ok) {
