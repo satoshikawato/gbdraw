@@ -13,7 +13,7 @@ import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsView } f
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
-/** @import { RevealSetting, SettingsPaneView } from './app/settings-pane.js' */
+/** @import { SettingsPaneView } from './app/settings-pane.js' */
 
 const { ref, reactive, computed, nextTick, watch, useId, onMounted, onBeforeUnmount } = window.Vue;
 
@@ -100,7 +100,8 @@ const visibleText = (node) => {
 
 // R12 (UI-04): a tip is named after what it explains, "Help: <label>": the
 // author name or visible text of the element that holds it, after the name of
-// the row group it is in. `label` names a tip whose holder has no such text.
+// the row group it is in. `label` names a tip whose holder has no such text;
+// the layout warning beside Generate is named "Layout warning" (not help).
 /** @param {Element | null} tip */
 const helpTipName = (tip) => {
   const holder = tip?.parentElement;
@@ -238,6 +239,11 @@ export const settingsSection = (element, { value }) => {
 // assistive technology and no `title` attribute repeats it. When the rail
 // column scrolls, the text of a hovered entry goes and the text of the focused
 // entry follows it.
+/**
+ * The pane's way to bring a section into view: its top at the top edge of the
+ * settings, the focus on `focus`.
+ * @typedef {(section: HTMLElement, options: { align: 'start', focus: HTMLElement }) => unknown} RevealSection
+ */
 export const SettingsSectionIndex = {
   template: '#settings-section-index-template',
   props: {
@@ -248,7 +254,7 @@ export const SettingsSectionIndex = {
   },
   emits: ['rail', 'stacked', 'close'],
   /**
-   * @param {{ mode: 'circular' | 'linear', controls: string, view: SettingsPaneView, reveal: RevealSetting }} props
+   * @param {{ mode: 'circular' | 'linear', controls: string, view: SettingsPaneView, reveal: RevealSection }} props
    * @param {{ emit: (event: 'rail' | 'stacked' | 'close', section?: SettingsSectionKey) => void }} context
    */
   setup(props, { emit }) {

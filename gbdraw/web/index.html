@@ -1880,10 +1880,13 @@
         }
         .settings-dock-close:hover { background-color: #f1f5f9; color: var(--ui-text); }
         .settings-dock-close:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
-        /* A rail column too low for its entries scrolls and shows it: a 4 px scrollbar beside the entries. */
+        /* A rail column too low for its entries scrolls and shows it: a 4 px scrollbar beside the entries.
+           Where the width cannot be set (Firefox), a thin scrollbar takes up to 8 px: it uses the column's
+           right padding first, so an entry keeps at least 46 px for its name. */
         [data-settings-display="rail"] > .settings-index > nav::-webkit-scrollbar { width: 4px; }
         @supports not selector(::-webkit-scrollbar) {
-            [data-settings-display="rail"] > .settings-index > nav { scrollbar-width: thin; }
+            .settings-pane[data-settings-display="rail"] > .settings-index > nav { scrollbar-width: thin; padding-right: 0; }
+            .settings-pane[data-settings-display="rail"] > .settings-index > nav > button { max-width: 50px; }
         }
         /* Beside the rail alone, Generate is a 60 px button: the icon over the first word, the loader alone
            while it runs, and a layout warning as the mark of its help tip in place of the note. */
