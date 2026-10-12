@@ -1,6 +1,29 @@
 // @ts-check
 import { normalizeOptionalText } from './track-slot-display.js';
 
+/** @import { FileLike } from './session-resource-backing.js' */
+
+/**
+ * The Depth file slots of one record: one file, or a list indexed by series.
+ * @typedef {FileLike | (FileLike | null)[] | null | undefined} DepthFileSlots
+ */
+
+/**
+ * A Depth series config as a draft or a Session holds it: every field is unvalidated.
+ * @typedef {{
+ *   label?: unknown, color?: unknown, height?: unknown, large_tick_interval?: unknown,
+ *   small_tick_interval?: unknown, tick_font_size?: unknown
+ * }} RawDepthTrackConfig
+ */
+
+/**
+ * A Depth series config after `normalizeDepthTrackConfig`.
+ * @typedef {{
+ *   label: string, color: string, height: number | null, large_tick_interval: number | null,
+ *   small_tick_interval: number | null, tick_font_size: number | null
+ * }} DepthTrackConfig
+ */
+
 /**
  * A track slot row. Python owns its field set (R7); this module reads
  * `renderer`, `id`, `enabled`, `params`, and `depth_binding_error`.
@@ -21,16 +44,16 @@ import { normalizeOptionalText } from './track-slot-display.js';
 
 /**
  * @typedef {object} ReconcileDepthTracksToFilesOptions
- * @property {any} [files] Depth file slots of one record (an array or one file).
- * @property {any[]} [depthTracks] The Depth track configs before the change.
+ * @property {DepthFileSlots} [files] Depth file slots of one record (an array or one file).
+ * @property {RawDepthTrackConfig[]} [depthTracks] The Depth track configs before the change.
  * @property {number} [targetCount]
  * @property {DepthTrackDefaults} [defaults]
  */
 
 /**
  * @typedef {object} DepthTrackSessionWidthOptions
- * @property {any[]} [rows] Record-major Depth file rows.
- * @property {any[]} [depthTracks]
+ * @property {DepthFileSlots[]} [rows] Record-major Depth file rows.
+ * @property {RawDepthTrackConfig[]} [depthTracks]
  * @property {DepthSlotRow[]} [slots]
  */
 
@@ -60,7 +83,7 @@ import { normalizeOptionalText } from './track-slot-display.js';
 /**
  * @typedef {object} SyncDepthSlotLabelsOptions
  * @property {DepthSlotRow[]} [slots]
- * @property {any[]} [depthTracks]
+ * @property {RawDepthTrackConfig[]} [depthTracks]
  * @property {number | null} [activeCount]
  */
 
@@ -75,22 +98,32 @@ const DEPTH_TRACK_FALLBACK_COLORS = [
   '#7F7F7F'
 ];
 
+/** @param {unknown} value */
 const normalizePositiveNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 };
 
+/**
+ * @param {unknown} [params]
+ * @returns {Record<string, unknown>}
+ */
 const cloneParams = (params = {}) => {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return {};
   return { ...params };
 };
 
+/** @param {unknown} index */
 const fallbackLabel = (index) => {
   const numericIndex = Math.max(0, Number(index) || 0);
   return numericIndex === 0 ? 'Depth' : `Depth ${numericIndex + 1}`;
 };
 
+/**
+ * @param {number} index
+ * @param {DepthTrackDefaults} [defaults]
+ */
 const fallbackColor = (index, defaults = {}) => {
   if (typeof defaults.colorForIndex === 'function') {
     return String(defaults.colorForIndex(index) || '');
@@ -99,6 +132,7 @@ const fallbackColor = (index, defaults = {}) => {
   return DEPTH_TRACK_FALLBACK_COLORS[index % DEPTH_TRACK_FALLBACK_COLORS.length];
 };
 
+/** @param {FileLike | null | undefined} file */
 const depthFileBaseName = (file) => {
   // split always returns at least one element, so pop is not undefined.
   const rawName = /** @type {string} */ (String(file?.name || '').split(/[\\/]/).pop()).trim();
@@ -106,6 +140,10 @@ const depthFileBaseName = (file) => {
   return rawName.replace(/\.[^.]+$/, '').trim() || rawName;
 };
 
+/**
+ * @param {unknown} label
+ * @param {FileLike | null | undefined} file
+ */
 const depthLabelMatchesFile = (label, file) => {
   const labelText = String(label || '').toLowerCase();
   const fileText = depthFileBaseName(file).toLowerCase();
@@ -115,15 +153,28 @@ const depthLabelMatchesFile = (label, file) => {
   return accessionTokens.some((token) => labelText.includes(token));
 };
 
+/**
+ * @param {DepthFileSlots} value
+ * @returns {(FileLike | null)[]}
+ */
 export const depthFileSlotsFromValue = (value) => {
   if (Array.isArray(value)) return value.slice();
   return value ? [value] : [];
 };
 
+/**
+ * @param {unknown} value
+ * @returns {value is DepthFileSlots[]}
+ */
 export const isRecordMajorDepthFileMatrix = (value) => (
   Array.isArray(value) && value.every((row) => Array.isArray(row))
 );
 
+/**
+ * @param {unknown} value
+ * @param {string} [fieldName]
+ * @returns {number}
+ */
 export const parseDepthTrackIndexIdentity = (value, fieldName = 'track_index') => {
   /** @type {number | null} */
   let numeric = null;
@@ -141,6 +192,11 @@ export const parseDepthTrackIndexIdentity = (value, fieldName = 'track_index') =
   return numeric;
 };
 
+/**
+ * @param {DepthFileSlots | DepthFileSlots[]} value
+ * @param {unknown} [recordCount]
+ * @returns {(FileLike | null)[][]}
+ */
 export const normalizeRecordMajorDepthFileRows = (value, recordCount = 1) => {
   const requestedCount = Math.max(1, Number(recordCount) || 1);
   const sourceIsMatrix = isRecordMajorDepthFileMatrix(value);
@@ -156,6 +212,10 @@ export const normalizeRecordMajorDepthFileRows = (value, recordCount = 1) => {
   return rows.map((row) => padDepthFileSlots(row, width));
 };
 
+/**
+ * @param {DepthFileSlots | DepthFileSlots[]} value
+ * @returns {(FileLike | null)[]}
+ */
 export const representativeDepthFiles = (value) => {
   const rows = isRecordMajorDepthFileMatrix(value)
     ? normalizeRecordMajorDepthFileRows(value, value.length)
@@ -166,6 +226,7 @@ export const representativeDepthFiles = (value) => {
   ));
 };
 
+/** @param {DepthFileSlots} slots */
 export const compactDepthFileSlots = (slots) => {
   const next = depthFileSlotsFromValue(slots);
   while (next.length > 0 && !next[next.length - 1]) {
@@ -174,10 +235,12 @@ export const compactDepthFileSlots = (slots) => {
   return next;
 };
 
+/** @param {DepthFileSlots} value */
 export const uploadedDepthFileCount = (value) => (
   depthFileSlotsFromValue(value).filter(Boolean).length
 );
 
+/** @param {DepthFileSlots[] | null | undefined} rows */
 export const depthTrackMatrixWidth = (rows) => (
   (Array.isArray(rows) ? rows : []).reduce(
     (width, row) => Math.max(width, depthFileSlotsFromValue(row).length),
@@ -185,7 +248,9 @@ export const depthTrackMatrixWidth = (rows) => (
   )
 );
 
+/** @param {DepthFileSlots[] | null | undefined} rows */
 export const activeDepthTrackIndices = (rows) => {
+  /** @type {Set<number>} */
   const active = new Set();
   (Array.isArray(rows) ? rows : []).forEach((row) => {
     depthFileSlotsFromValue(row).forEach((file, trackIndex) => {
@@ -195,6 +260,10 @@ export const activeDepthTrackIndices = (rows) => {
   return Array.from(active).sort((left, right) => left - right);
 };
 
+/**
+ * @param {DepthFileSlots[] | null | undefined} rows
+ * @param {unknown} trackIndex
+ */
 export const depthTrackCoverageCount = (rows, trackIndex) => {
   const idx = Number(trackIndex);
   if (!Number.isInteger(idx) || idx < 0) return 0;
@@ -204,6 +273,10 @@ export const depthTrackCoverageCount = (rows, trackIndex) => {
   );
 };
 
+/**
+ * @param {DepthFileSlots} value
+ * @param {unknown} width
+ */
 export const padDepthFileSlots = (value, width) => {
   const next = depthFileSlotsFromValue(value);
   const targetWidth = Math.max(next.length, Math.max(0, Number(width) || 0));
@@ -211,7 +284,11 @@ export const padDepthFileSlots = (value, width) => {
   return next;
 };
 
-/** @param {number | null} [width] */
+/**
+ * @param {DepthFileSlots} value
+ * @param {unknown} trackIndex
+ * @param {number | null} [width]
+ */
 export const clearDepthTrackSourceAt = (value, trackIndex, width = null) => {
   const idx = Number(trackIndex);
   if (!Number.isInteger(idx) || idx < 0) return depthFileSlotsFromValue(value);
@@ -223,6 +300,10 @@ export const clearDepthTrackSourceAt = (value, trackIndex, width = null) => {
   return next;
 };
 
+/**
+ * @param {DepthFileSlots[] | null | undefined} rows
+ * @param {unknown} trackIndex
+ */
 export const removeDepthTrackColumnAt = (rows, trackIndex) => {
   const idx = Number(trackIndex);
   const sourceRows = Array.isArray(rows) ? rows : [];
@@ -236,7 +317,14 @@ export const removeDepthTrackColumnAt = (rows, trackIndex) => {
   });
 };
 
+/**
+ * @param {RawDepthTrackConfig | null | undefined} entry
+ * @param {number} index
+ * @param {DepthTrackDefaults} [defaults]
+ * @returns {DepthTrackConfig}
+ */
 export const normalizeDepthTrackConfig = (entry, index, defaults = {}) => {
+  /** @type {RawDepthTrackConfig} */
   const source = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
   const hasHeight = Object.prototype.hasOwnProperty.call(source, 'height');
   const labelForIndex = typeof defaults.labelForIndex === 'function'
@@ -258,6 +346,11 @@ export const normalizeDepthTrackConfig = (entry, index, defaults = {}) => {
   };
 };
 
+/**
+ * @param {RawDepthTrackConfig[] | null | undefined} tracks
+ * @param {unknown} count
+ * @param {DepthTrackDefaults} [defaults]
+ */
 export const ensureDepthTrackConfigCount = (tracks, count, defaults = {}) => {
   const rawTracks = Array.isArray(tracks) ? tracks : [];
   const targetCount = Math.max(1, Number(count) || 1);
@@ -270,6 +363,12 @@ export const ensureDepthTrackConfigCount = (tracks, count, defaults = {}) => {
   return normalized;
 };
 
+/**
+ * @param {RawDepthTrackConfig[] | null | undefined} tracks
+ * @param {unknown} count
+ * @param {DepthTrackDefaults} [defaults]
+ * @returns {RawDepthTrackConfig[]}
+ */
 export const ensureDepthTrackConfigShape = (tracks, count, defaults = {}) => {
   const targetTracks = Array.isArray(tracks) ? tracks : [];
   const targetCount = Math.max(1, Number(count) || 1);
@@ -317,6 +416,7 @@ export const reconcileDepthTracksToFiles = ({
 } = {}) => {
   const fileSlots = Array.isArray(files) ? files : depthFileSlotsFromValue(files);
   const rawTracks = Array.isArray(depthTracks) ? depthTracks : [];
+  /** @type {Set<number>} */
   const usedTrackIndexes = new Set();
   return Array.from({ length: Math.max(1, Number(targetCount) || 1) }, (_, index) => {
     const file = fileSlots[index] || null;
@@ -341,7 +441,10 @@ export const reconcileDepthTracksToFiles = ({
 // The logical series a Depth row references: its track_index, else its
 // depth_<n> ID, else 0 (the Python default). A row's position in the stack
 // never selects a series. A row whose series was removed references none.
-/** @returns {number | null} */
+/**
+ * @param {DepthSlotRow | null | undefined} slot
+ * @returns {number | null}
+ */
 export const depthSlotTrackIndex = (slot) => {
   const rawTrackIndex = slot?.params?.track_index;
   if (rawTrackIndex !== null && rawTrackIndex !== undefined && rawTrackIndex !== '') {
@@ -354,6 +457,7 @@ export const depthSlotTrackIndex = (slot) => {
   return 0;
 };
 
+/** @param {DepthSlotRow[] | null | undefined} slots */
 const referencedDepthTrackWidth = (slots) => {
   let width = 0;
   (Array.isArray(slots) ? slots : []).forEach((slot) => {
@@ -371,6 +475,7 @@ export const depthTrackSessionWidth = ({ rows, depthTracks, slots } = {}) => Mat
   referencedDepthTrackWidth(slots)
 );
 
+/** @param {DepthSlotRow} slot */
 const slotHasGeometry = (slot) => (
   normalizeOptionalText(slot?.width) !== null ||
   normalizeOptionalText(slot?.radius) !== null ||
@@ -380,6 +485,10 @@ const slotHasGeometry = (slot) => (
   Number(slot?.z || 0) !== 0
 );
 
+/**
+ * @param {unknown} params
+ * @param {string[]} allowedKeys
+ */
 const paramsOnlyAllowedKeys = (params, allowedKeys) => {
   const allowed = new Set(allowedKeys);
   return Object.entries(cloneParams(params)).every(([key, value]) => (
@@ -387,6 +496,7 @@ const paramsOnlyAllowedKeys = (params, allowedKeys) => {
   ));
 };
 
+/** @param {DepthSlotRow | null | undefined} slot */
 export const isDefaultManagedDepthSlot = (slot) => {
   if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return false;
   if (String(slot.renderer || '') !== 'depth') return false;
@@ -396,12 +506,23 @@ export const isDefaultManagedDepthSlot = (slot) => {
   return paramsOnlyAllowedKeys(slot.params, ['track_index', 'legend_label', 'managed']);
 };
 
+/**
+ * @typedef {DepthSlotRow & { params: Record<string, unknown> }} ClonedDepthSlot
+ */
+
+/**
+ * @param {DepthSlotRow} slot
+ * @returns {ClonedDepthSlot}
+ */
 const cloneSlot = (slot) => ({
   ...slot,
   params: cloneParams(slot?.params)
 });
 
-/** @param {number | null} [removedTrackIndex] */
+/**
+ * @param {DepthSlotRow} slot
+ * @param {number | null} [removedTrackIndex]
+ */
 const disableInvalidManualDepthSlot = (slot, removedTrackIndex = null) => {
   const next = cloneSlot(slot);
   next.enabled = false;
@@ -429,6 +550,7 @@ export const reindexDepthSlots = ({
   if (!Array.isArray(slots) || !Number.isInteger(idx) || idx < 0) {
     return Array.isArray(slots) ? slots.map((slot) => cloneSlot(slot)) : [];
   }
+  /** @type {ClonedDepthSlot[]} */
   const nextSlots = [];
   slots.forEach((slot) => {
     if (!slot || String(slot.renderer || '') !== 'depth') {
@@ -461,7 +583,7 @@ export const dropInvalidManagedDepthSlots = ({
 } = {}) => {
   const count = Math.max(0, Number(activeCount) || 0);
   if (!Array.isArray(slots)) return [];
-  return slots
+  return /** @type {ClonedDepthSlot[]} */ (slots
     .map((slot) => {
       if (!slot || String(slot.renderer || '') !== 'depth') return cloneSlot(slot);
       const trackIndex = depthSlotTrackIndex(slot);
@@ -472,9 +594,10 @@ export const dropInvalidManagedDepthSlots = ({
       }
       return managedPredicate(slot) ? null : disableInvalidManualDepthSlot(slot, trackIndex);
     })
-    .filter(Boolean);
+    .filter(Boolean)); // drops the null of a managed row
 };
 
+/** @param {DepthSlotRow} slot */
 const isDepthSlot = (slot) => Boolean(slot) && String(slot.renderer || '') === 'depth';
 
 /**
@@ -539,7 +662,7 @@ export const syncDepthSlotLabels = ({ slots, depthTracks, activeCount = null } =
  * The Legend captions the draft's Depth series would draw: each series label, and
  * the legend label of each Depth row. The request carries no Depth source while
  * Show Depth is off, so Python cannot name these rows then (OV-81).
- * @param {{ depthTracks?: any[], slots?: any[] }} [options]
+ * @param {{ depthTracks?: RawDepthTrackConfig[], slots?: DepthSlotRow[] }} [options]
  * @returns {string[]}
  */
 export const depthSeriesLegendCaptions = ({ depthTracks, slots } = {}) => {

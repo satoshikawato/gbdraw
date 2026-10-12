@@ -1,5 +1,9 @@
 // @ts-check
 import { namedColorHex } from './named-colors.js';
+/**
+ * @param {string} hex
+ * @returns {{ r: number, g: number, b: number }}
+ */
 export const hexToRgb = (hex) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
@@ -43,6 +47,7 @@ export const DEFAULT_COMPARISON_COLORS = Object.freeze({
 
 export const COMPARISON_COLOR_KEYS = Object.freeze(Object.keys(DEFAULT_COMPARISON_COLORS));
 
+/** @param {unknown} legendKey */
 export const resolvePairwiseLegendGradientColorKeys = (legendKey) => {
   const normalizedKey = String(legendKey || '').trim();
   if (
@@ -64,6 +69,12 @@ export const resolvePairwiseLegendGradientColorKeys = (legendKey) => {
   return { minKey: 'pairwise_match_min', maxKey: 'pairwise_match_max' };
 };
 
+/**
+ * @param {number} r
+ * @param {number} g
+ * @param {number} b
+ * @returns {string}
+ */
 export const rgbToHex = (r, g, b) => {
   return (
     '#' +
@@ -76,6 +87,12 @@ export const rgbToHex = (r, g, b) => {
   );
 };
 
+/**
+ * @param {string} color1
+ * @param {string} color2
+ * @param {number} factor
+ * @returns {string}
+ */
 export const interpolateColor = (color1, color2, factor) => {
   const c1 = hexToRgb(color1);
   const c2 = hexToRgb(color2);
@@ -86,6 +103,12 @@ export const interpolateColor = (color1, color2, factor) => {
   );
 };
 
+/**
+ * @param {string} currentColor
+ * @param {string} minColor
+ * @param {string} maxColor
+ * @returns {number}
+ */
 export const estimateColorFactor = (currentColor, minColor, maxColor) => {
   const current = hexToRgb(currentColor);
   const min = hexToRgb(minColor);
@@ -115,6 +138,11 @@ export const samePaint = (left, right) => (
 // A CSS color name resolves through the table Python shares (OV-160), so
 // Load, the Session split and Python agree with or without a browser; a name
 // outside that table, such as a system color, stays as written (OV-272).
+/**
+ * @template T
+ * @param {T} colorValue a non-string comes back unchanged
+ * @returns {T | string}
+ */
 export const resolveColorToHex = (colorValue) => {
   if (!colorValue || typeof colorValue !== 'string') return colorValue;
   const trimmed = colorValue.trim();
@@ -140,6 +168,10 @@ export const normalizeOptionalHexColor = (value) => {
 // Specific-color table domain, shared with Python's read_color_table:
 // `none`, #RGB, #RRGGBB, or a color name of the table Python uses, resolved
 // to hex. Names only a browser knows are rejected as in Python (OV-271).
+/**
+ * @param {unknown} colorValue
+ * @returns {string | null}
+ */
 export const normalizeSpecificRuleColor = (colorValue) => {
   const color = String(colorValue ?? '').trim().toLowerCase();
   if (color === 'none' || /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/.test(color)) return color;
@@ -185,6 +217,10 @@ export const normalizeDefaultColor = (colorValue) => {
     : null;
 };
 
+/**
+ * @param {unknown} colorValue
+ * @returns {'auto' | 'none' | 'color'}
+ */
 export const colorValueMode = (colorValue) => {
   if (colorValue === null || colorValue === undefined || String(colorValue).trim() === '') {
     return 'auto';
@@ -192,6 +228,11 @@ export const colorValueMode = (colorValue) => {
   return String(colorValue).trim().toLowerCase() === 'none' ? 'none' : 'color';
 };
 
+/**
+ * @param {unknown} colorValue
+ * @param {unknown} [fallback]
+ * @returns {string}
+ */
 export const toNativeColorInputValue = (colorValue, fallback = '#000000') => {
   const resolved = String(resolveColorToHex(colorValue) || '').trim();
   const shortHex = resolved.match(/^#([0-9a-f]{3})$/i);
@@ -205,6 +246,12 @@ export const toNativeColorInputValue = (colorValue, fallback = '#000000') => {
     : '#000000';
 };
 
+/**
+ * @param {unknown} mode
+ * @param {unknown} [currentColor]
+ * @param {unknown} [fallback]
+ * @returns {string | null}
+ */
 export const colorValueForMode = (mode, currentColor = null, fallback = '#000000') => {
   const normalizedMode = String(mode || '').trim().toLowerCase();
   if (normalizedMode === 'auto') return null;
@@ -230,11 +277,17 @@ export const normalizePaletteColors = (colors = {}) => {
   return normalized;
 };
 
+/**
+ * @param {Record<string, Record<string, string> | string> | null} [palettes] the palette file: palette tables and a `title`
+ * @returns {Record<string, Record<string, string>>}
+ */
 export const normalizePaletteDefinitions = (palettes = {}) => {
+  /** @type {Record<string, Record<string, string>>} */
   const normalized = {};
   Object.entries(palettes || {}).forEach(([name, colors]) => {
     if (name === 'title') return;
-    normalized[name] = normalizePaletteColors(colors || {});
+    // Every entry but `title` is a palette table.
+    normalized[name] = normalizePaletteColors(/** @type {Record<string, string>} */ (colors || {}));
   });
   return normalized;
 };
@@ -262,15 +315,21 @@ export const appliedFeatureColors = ({ paletteDefinitions, appliedPaletteName, a
 };
 
 // One color, compared: case, a color name, and `#rgb` against `#rrggbb` (D-15).
+/** @param {unknown} colorValue */
 const normalizeComparableColor = (colorValue) => {
   const color = String(resolveColorToHex(String(colorValue || '').trim()) || '').trim().toLowerCase();
   return /^#[0-9a-f]{3}$/.test(color) ? color.replace(/[0-9a-f]/g, '$&$&') : color;
 };
 
+/**
+ * @param {{ colors?: Record<string, string | null> | null, paletteColors?: Record<string, string> | null }} [options]
+ * @returns {[string, string][]}
+ */
 export const buildPaletteColorOverrideRows = ({
   colors = {},
   paletteColors = {}
 } = {}) => {
+  /** @type {[string, string][]} */
   const rows = [];
   Object.entries(colors || {}).forEach(([key, color]) => {
     const normalizedKey = String(key || '').trim();
@@ -283,6 +342,10 @@ export const buildPaletteColorOverrideRows = ({
   return rows;
 };
 
+/**
+ * @param {{ colors?: Record<string, string | null> | null, paletteColors?: Record<string, string> | null }} [options]
+ * @returns {string}
+ */
 export const buildDefaultColorOverrideTsv = ({
   colors = {},
   paletteColors = {}
@@ -290,6 +353,13 @@ export const buildDefaultColorOverrideTsv = ({
   .map(([key, color]) => `${key}\t${color}`)
   .join('\n');
 
+/**
+ * @param {{
+ *   blockId: unknown, colorMode: unknown, orientation: unknown, identityFactor: unknown,
+ *   colors?: Record<string, string>
+ * }} options
+ * @returns {string | null}
+ */
 export const resolveCollinearMatchColor = ({
   blockId,
   colorMode,
@@ -301,7 +371,8 @@ export const resolveCollinearMatchColor = ({
   if (!normalizedBlockId) return null;
 
   const normalizedMode = String(colorMode || '').trim().toLowerCase().replace(/-/g, '_');
-  const normalizedOrientation = String(orientation || '').trim().toLowerCase();
+  // Any other value finds no key below (`colorKey` is then undefined).
+  const normalizedOrientation = /** @type {'plus' | 'minus'} */ (String(orientation || '').trim().toLowerCase());
   const colorKey = COLLINEAR_ORIENTATION_COLOR_KEYS[normalizedOrientation];
   const minColorKey = COLLINEAR_ORIENTATION_MIN_COLOR_KEYS[normalizedOrientation];
   if (!colorKey) return null;

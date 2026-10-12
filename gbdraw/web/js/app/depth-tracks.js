@@ -1,4 +1,7 @@
 // @ts-check
+
+/** @import { FileLike } from '../services/session-resource-backing.js' */
+
 export const getDepthTrackFallbackLabel = (index) => {
   const numericIndex = Math.max(0, Number(index) || 0);
   return numericIndex === 0 ? 'Depth' : `Depth ${numericIndex + 1}`;
@@ -17,6 +20,11 @@ export const getDepthTrackLabelFromFile = (file, index) => {
   return baseName || getDepthTrackFallbackLabel(index);
 };
 
+/**
+ * @param {unknown} label
+ * @param {number} index
+ * @param {FileLike | null} [file]
+ */
 export const isDepthTrackAutoLabel = (label, index, file = null) => {
   const normalized = String(label ?? '').trim();
   if (!normalized) return true;

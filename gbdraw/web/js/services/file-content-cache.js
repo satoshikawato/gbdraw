@@ -25,19 +25,31 @@ export {
   textToBytes
 };
 
+/** @import { FileLike } from './session-resource-backing.js' */
+
+/** @type {WeakMap<FileLike, Promise<Uint8Array>>} */
 const fileByteCache = new WeakMap();
 
+/**
+ * @param {FileLike | null | undefined} file
+ * @returns {FileLike | null}
+ */
 const asCacheKey = (file) => (
   file && (typeof file === 'object' || typeof file === 'function') ? file : null
 );
 
+/**
+ * @param {FileLike} file
+ * @returns {Promise<Uint8Array>}
+ */
 export const readFileBytes = (file) => {
   try {
     const key = asCacheKey(file);
     // A Session resource view caches its bytes in the backing it shares with
     // every other view of the same resource, so a transfer through one view
     // releases them for all (OV-304); the cache below is for ordinary Files.
-    if (key && isSessionResourceFileView(file)) return readSessionResourceBytes(file);
+    // A view has a backing, so its read is never null.
+    if (key && isSessionResourceFileView(file)) return /** @type {Promise<Uint8Array>} */ (readSessionResourceBytes(file));
     if (!key || typeof file.arrayBuffer !== 'function') {
       return Promise.reject(new TypeError(
         'A File-like object with arrayBuffer() is required.'
@@ -46,7 +58,8 @@ export const readFileBytes = (file) => {
     let pending = fileByteCache.get(key);
     if (!pending) {
       pending = Promise.resolve()
-        .then(() => file.arrayBuffer())
+        // The `typeof` check above holds here; narrowing does not reach the closure.
+        .then(() => /** @type {{ arrayBuffer: () => Promise<ArrayBuffer> }} */ (file).arrayBuffer())
         .then(asBytes);
       fileByteCache.set(key, pending);
       pending.catch(() => {
@@ -59,6 +72,7 @@ export const readFileBytes = (file) => {
   }
 };
 
+/** @param {FileLike} file */
 export const readFileText = async (file) => {
   const lazyText = isSessionResourceFileView(file)
     ? readSessionResourceText(file)
@@ -71,8 +85,10 @@ export const readFileText = async (file) => {
   throw new TypeError('A File-like object with arrayBuffer() or text() is required.');
 };
 
+/** @param {FileLike} file */
 export const getSessionResourceSource = (file) => sessionResourceSource(file);
 
+/** @param {FileLike} file */
 export const releaseFileContentCache = (file) => {
   const key = asCacheKey(file);
   if (!key) return false;
@@ -80,6 +96,7 @@ export const releaseFileContentCache = (file) => {
   return releaseSessionResourceContent(file) || deleted;
 };
 
+/** @param {FileLike} file */
 export const takeFileBytesForTransfer = async (file) => {
   const bytes = await readFileBytes(file);
   const buffer = (
@@ -91,6 +108,7 @@ export const takeFileBytesForTransfer = async (file) => {
   return buffer;
 };
 
+/** @param {FileLike} file */
 export const cloneFileBytesForTransfer = async (file) => {
   const bytes = await readFileBytes(file);
   return bytes.slice().buffer;
