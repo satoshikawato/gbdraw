@@ -204,6 +204,53 @@ def test_a_circular_batch_drawing_still_numbers_its_diagrams(tmp_path: Path) -> 
     assert _svgs(tmp_path / "out") == ["fig_circular_1.svg", "fig_circular_2.svg", "fig_linear.svg"]
 
 
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_saved_session_keeps_to_slot_and_draws_the_same_span(tmp_path: Path, mode: str) -> None:
+    source = tmp_path / "record.gb"
+    SeqIO.write(
+        SeqRecord(Seq("ATGCGCAT" * 300), id="record", annotations={"molecule_type": "DNA"}),
+        source,
+        "genbank",
+    )
+    table = tmp_path / "regions.tsv"
+    table.write_text("set_id\tid\tmark\tstart\tend\nregions\tspan\thighlight\t200\t900\n")
+    span = (
+        "regions:annotations@set_id=regions,side=overlay,anchor_slot=features,"
+        "to_slot=gc_content,layer=underlay,z=-1,show_labels=false"
+    )
+    if mode == "circular":
+        main = circular_main
+        slots = ["features:features", "gc_content:dinucleotide_content", span]
+        slot_args = [arg for slot in slots for arg in ("--circular_track_slot", slot)]
+    else:
+        main = linear_main
+        slots = ["features:features@side=overlay", "gc_content:dinucleotide_content@side=below", span]
+        slot_args = ["--linear_track_axis_index", "0"]
+        slot_args += [arg for slot in slots for arg in ("--linear_track_slot", slot)]
+    session = tmp_path / "span.gbdraw-session.json"
+    main(
+        ["--gbk", str(source), "--annotation_table", str(table), *slot_args,
+         "-o", str(tmp_path / "first"), "--session_output", str(session)]
+    )
+
+    def span_params(node: object) -> list[dict[str, Any]]:
+        if isinstance(node, dict):
+            own = [node["params"]] if node.get("id") == "regions" and "params" in node else []
+            return own + [found for value in node.values() for found in span_params(value)]
+        if isinstance(node, list):
+            return [found for value in node for found in span_params(value)]
+        return []
+
+    saved = span_params(json.loads(session.read_text(encoding="utf-8")))
+    assert saved and all(params["to_slot"] == "gc_content" for params in saved)
+
+    render_main(["--session", str(session), "-o", str(tmp_path / "again")])
+
+    first = (tmp_path / "first.svg").read_text(encoding="utf-8")
+    assert 'data-gbdraw-annotation-id="span"' in first
+    assert (tmp_path / "again.svg").read_text(encoding="utf-8") == first
+
+
 def test_a_session_without_a_committed_render_cannot_render(tmp_path: Path) -> None:
     settings_only = SESSION_FIXTURES / "settings-only.v42.json.gz"
 

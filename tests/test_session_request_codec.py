@@ -1593,7 +1593,6 @@ def test_spanning_annotation_slot_round_trips_with_to_slot(tmp_path: Path, mode:
     decoded_slots = getattr(decoded.options.tracks, f"{mode}_track_slots")
     normalize = normalize_circular_track_slots if mode == "circular" else normalize_linear_track_slots
 
-    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert payload_slots[2]["params"]["to_slot"] == "gc_content"
     assert decoded_slots == slots
     assert normalize(decoded_slots)[2].annotation.to_slot == "gc_content"

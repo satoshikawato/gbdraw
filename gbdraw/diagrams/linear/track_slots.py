@@ -547,7 +547,8 @@ def resolve_linear_record_vertical_plan(
             )
             continue
         relative_origin = float(overlay.y_offset) - float(anchor.y_offset)
-        # A span reserves nothing: its extent comes from the packed slots.
+        # A span pushes no slot: its extent comes from the packed slots. Its label
+        # overhang still joins the record body through its reserve band.
         if annotation.to_slot is None:
             overlays_by_anchor.setdefault(anchor.id, []).append((relative_origin, overlay_footprint))
         relative_overlay_origins[overlay.id] = (anchor.id, relative_origin, annotation.to_slot)

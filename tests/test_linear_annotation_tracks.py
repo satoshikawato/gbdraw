@@ -244,10 +244,12 @@ def test_linear_annotation_cover_anchor_expands_overlay_to_feature_band() -> Non
     assert covered_height > uncovered_height
 
 
-def _span_slot(spec: str = "anchor_slot=features,to_slot=gc,layer=underlay,z=-1") -> str:
+def _span_slot(
+    spec: str = "anchor_slot=features,to_slot=gc,layer=underlay,z=-1", *, labels: bool = False
+) -> str:
     return (
-        "regions:annotations@side=overlay,set_id=regions,padding_px=0,show_labels=false,"
-        f"{spec}"
+        "regions:annotations@side=overlay,set_id=regions,padding_px=0,"
+        f"show_labels={str(labels).lower()},{spec}"
     )
 
 
@@ -461,6 +463,55 @@ def test_linear_annotation_to_slot_covers_every_feature_lane() -> None:
 
     assert stacked["features"][1] - stacked["features"][0] > flat["features"][1] - flat["features"][0]
     assert stacked["drawn"] == pytest.approx((stacked["features"][0], stacked["gc"][1]))
+
+
+def test_linear_annotation_to_slot_follows_a_features_slot_off_the_axis() -> None:
+    stack = ("features:features@side=below", "gc:dinucleotide_content@side=below")
+    # A second overlay on the features slot pushes that slot away from the axis.
+    pushing = (
+        "pin:annotations@side=overlay,set_id=regions,show_labels=false,"
+        "anchor_slot=features,cover_anchor=true,layer=underlay,z=-2"
+    )
+
+    def features_origin(drawing) -> float:
+        slots = drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+        return float(next(slot for slot in slots if slot["slotId"] == "features")["resolvedOriginPx"])
+
+    plain = _build_linear_span(*stack, _span_slot())
+    pushed = _build_linear_span(*stack, pushing, _span_slot())
+    shift = features_origin(pushed) - features_origin(plain)
+    bands = _linear_bands(pushed)
+
+    assert shift > 0
+    assert bands["drawn"] == pytest.approx((_linear_bands(plain)["features"][0] + shift, bands["gc"][1]))
+
+
+@pytest.mark.parametrize(
+    ("spec", "grows"),
+    [
+        pytest.param("anchor_slot=features,to_slot=gc,layer=underlay,z=-1", True, id="ends-at-record-top"),
+        pytest.param("anchor_slot=gc,to_slot=skew,layer=underlay,z=-1", False, id="ends-inside-record"),
+    ],
+)
+def test_linear_annotation_to_slot_labels_add_room_only_at_the_record_edge(
+    spec: str, grows: bool
+) -> None:
+    def build(labels: bool):
+        drawing = _build_linear_span(*_SPAN_STACK, _span_slot(spec, labels=labels), record_count=2)
+        bodies = [
+            (record["recordBodyBand"]["topPx"], record["recordBodyBand"]["bottomPx"])
+            for record in drawing._gbdraw_track_slot_geometry["records"]
+        ]
+        return [_linear_bands(drawing, index) for index in range(2)], bodies
+
+    plain_bands, plain_bodies = build(False)
+    labelled_bands, labelled_bodies = build(True)
+
+    # Labels do not move a slot or the span.
+    assert labelled_bands == plain_bands
+    # label_offset (4) plus half the label font size (10) above an underlay span.
+    overhang = 9.0 if grows else 0.0
+    assert labelled_bodies == pytest.approx([(top - overhang, bottom) for top, bottom in plain_bodies])
 
 
 def test_linear_annotation_to_slot_uses_the_bands_each_record_has() -> None:
