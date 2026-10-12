@@ -259,7 +259,7 @@ _SPAN_STACK = (
 
 
 def _build_linear_span(
-    *slots: str,
+    *slots: str | LinearTrackSlot,
     record_count: int = 1,
     features: tuple[tuple[int, int], ...] = ((120, 250),),
     overrides: dict[str, object] | None = None,
@@ -426,6 +426,25 @@ def test_linear_annotation_to_slot_requires_overlay_side() -> None:
 
     with pytest.raises(ValueError, match="annotation slot 'regions' uses to_slot without side=overlay"):
         normalize_linear_track_slots([parse_linear_track_slot("gc:dinucleotide_content"), slot])
+
+
+@pytest.mark.parametrize("spanning", [False, True])
+def test_linear_overlay_annotation_reads_slot_references_in_any_key_case(spanning: bool) -> None:
+    def bands(anchor_key: str, to_key: str) -> dict[str, tuple[float, float] | None]:
+        params: dict[str, object] = {
+            "set_id": "regions",
+            "layer": "underlay",
+            "show_labels": False,
+            anchor_key: "gc",
+        }
+        if spanning:
+            params[to_key] = "skew"
+        overlay = LinearTrackSlot("regions", "annotations", side="overlay", z=-1, params=params)
+        return _linear_bands(
+            _build_linear_span(*(parse_linear_track_slot(text) for text in _SPAN_STACK), overlay)
+        )
+
+    assert bands("Anchor_Slot", "To_Slot") == bands("anchor_slot", "to_slot")
 
 
 def test_linear_annotation_to_slot_covers_every_feature_lane() -> None:

@@ -31,7 +31,9 @@ write-up of a release.
   `to_slot` follows the anchor rules, and the span reserves no space. The web
   app draws and saves a loaded `to_slot`; its slot editor has no control for it
   yet. The CLI reference now documents the overlay slot parameters
-  (`anchor_slot`, `layer`, `cover_anchor`, `to_slot`).
+  (`anchor_slot`, `layer`, `cover_anchor`, `to_slot`). Fixed: a Python slot
+  mapping that spelled the key with capitals (`Anchor_Slot`) was accepted but
+  drawn on the axis instead of on its anchor slot.
 - Web app feature popup: the header shows the gene name, the product on up to
   two lines, and the record and location with thousands separators. **Edit**
   groups **Appearance** (fill, stroke, the label text with its visibility and

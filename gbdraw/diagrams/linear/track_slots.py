@@ -259,7 +259,9 @@ def resolve_linear_track_layout(
             if slot.renderer == "features"
             else 0.0
         )
-        anchor = anchor_by_id.get(str(slot.params.get("anchor_slot", "")))
+        anchor = anchor_by_id.get(
+            (slot.annotation.anchor_slot or "") if slot.annotation is not None else ""
+        )
         anchor_center = 0.0
         if anchor is not None:
             anchor_center = 0.5 * (
@@ -536,8 +538,8 @@ def resolve_linear_record_vertical_plan(
     for overlay in overlay_tracks:
         if overlay.renderer == "features":
             continue
-        anchor_id = str(overlay.params.get("anchor_slot", "")).strip()
-        anchor = tracks_by_id.get(anchor_id)
+        annotation = annotation_track_params_from_mapping(overlay.params)
+        anchor = tracks_by_id.get(annotation.anchor_slot or "")
         overlay_footprint = footprint_map.get(overlay.id, _default_slot_footprint(overlay))
         if anchor is None:
             standalone_overlays.append(
@@ -545,11 +547,10 @@ def resolve_linear_record_vertical_plan(
             )
             continue
         relative_origin = float(overlay.y_offset) - float(anchor.y_offset)
-        to_slot = annotation_track_params_from_mapping(overlay.params).to_slot
         # A span reserves nothing: its extent comes from the packed slots.
-        if to_slot is None:
+        if annotation.to_slot is None:
             overlays_by_anchor.setdefault(anchor.id, []).append((relative_origin, overlay_footprint))
-        relative_overlay_origins[overlay.id] = (anchor.id, relative_origin, to_slot)
+        relative_overlay_origins[overlay.id] = (anchor.id, relative_origin, annotation.to_slot)
 
     structural_slots: list[LinearResolvedSlot] = []
     seed_band = axis_band

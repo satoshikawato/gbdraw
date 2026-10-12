@@ -247,7 +247,7 @@ def _circular_bands(drawing, record_index: int = 0) -> dict[str, tuple[float, fl
     return bands
 
 
-def _build_circular_span(*slots: str, features: tuple[tuple[int, int], ...] = (), **overrides: bool):
+def _build_circular_span(*slots: str | CircularTrackSlot, features: tuple[tuple[int, int], ...] = (), **overrides: bool):
     record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
     record.features = [
         SeqFeature(FeatureLocation(start, end, strand=1), type="CDS") for start, end in features
@@ -354,6 +354,25 @@ def test_circular_annotation_to_slot_requires_overlay_side() -> None:
 
     with pytest.raises(ValueError, match="annotation slot 'regions' uses to_slot without side=overlay"):
         normalize_circular_track_slots([parse_circular_track_slot("gc:dinucleotide_content"), slot])
+
+
+@pytest.mark.parametrize("spanning", [False, True])
+def test_circular_overlay_annotation_reads_slot_references_in_any_key_case(spanning: bool) -> None:
+    def bands(anchor_key: str, to_key: str) -> dict[str, tuple[float, float]]:
+        params: dict[str, object] = {
+            "set_id": "regions",
+            "layer": "underlay",
+            "padding_px": 0,
+            anchor_key: "gc",
+        }
+        if spanning:
+            params[to_key] = "skew"
+        overlay = CircularTrackSlot("regions", "annotations", side="overlay", z=-1, params=params)
+        return _circular_bands(
+            _build_circular_span(*(parse_circular_track_slot(text) for text in _SPAN_STACK), overlay)
+        )
+
+    assert bands("Anchor_Slot", "To_Slot") == bands("anchor_slot", "to_slot")
 
 
 def test_circular_annotation_to_slot_covers_inward_feature_overflow_lanes() -> None:
