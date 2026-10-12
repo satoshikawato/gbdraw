@@ -266,6 +266,8 @@ export const createRecordDisplayControls = ({
   const captureAlignmentOrientationIntent = (orientations) => {
     const drawing = state.drawings.linear;
     // A draft names no mode (PD-OI-086): these are the Linear drawing's (OV-579).
+    // On their rows first (OV-278): a draft that the capture's own settle moved would not be found.
+    settleDrafts(drawing);
     return alignmentRows(drawing, orientations)
       .map(({recordKey, sequence, drafts}) => ({ recordKey, reverseComplement: Boolean(sequence.region_reverse),
         drafts: drafts.map((/** @type {RecordDisplayDraft} */ draft) => captureTargetDraft({ ...draft, scope: 'linear' })) }));

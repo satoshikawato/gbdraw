@@ -530,3 +530,34 @@ test('a loaded draft selected by record ID is read and edited on its own record 
   assert.deepEqual(model.state.recordDisplayDrafts.map(({ selector, recordId, startCoordinate }) => [selector, recordId, startCoordinate]),
     [['#1', 'first', 7], ['#2', 'second', 12]]);
 });
+
+// OV-579, review U1: a draft that names its record by ID and is not yet on its row (as a Load projects a
+// request that selects by record ID, OV-278) is settled before the checkpoint looks for it.
+test('an alignment checkpoint holds a draft that its own capture moves onto its row (OV-579)', () => {
+  const resources = { both: descriptor('both.gb', 'LOCUS       first 100 bp DNA circular\n//\nLOCUS       second 100 bp DNA circular\n//\n') };
+  const table = adoptCurrentSessionResources(resources);
+  const committed = { resources, renderRequest: { mode: 'linear', records: [{ recordKey: 'record-1', cardinality: 'exactly_one',
+    source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' } }] } };
+  const state = { mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' }, files: { c_gb: null },
+    linearSeqs: [{ uid: 'record-1', gb: createSessionResourceFileView(table, 'both'), region_record_id: 'second', region_reverse: false }],
+    form: createDefaultForm(), adv: createDefaultAdv('linear'),
+    recordDisplayDrafts: [{ sourceUid: 'record-1', selector: '#1', recordId: 'second', topologyOverride: null,
+      startCoordinate: 25, reverseComplementOverride: true, anchorIntent: null }],
+    featurePlacementOverrides: {}, circularRecordList: { value: [] },
+    circularRecordDiscovery: { status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null },
+    featureCatalog: { value: { items: [] } } };
+  const controls = createRecordDisplayControls({ state: withDrawings(state), computed: (fn) => ({ get value() { return fn(); } }),
+    watch: () => {}, linearRecordsFor: () => [
+      { selector: '#1', recordId: 'first', recordLength: 100, detectedTopology: 'circular' },
+      { selector: '#2', recordId: 'second', recordLength: 100, detectedTopology: 'circular' }],
+    linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '',
+    runUndoable: (_label, fn) => fn(), getCommittedRequest: () => committed.renderRequest, getCommittedSession: () => committed });
+  const directions = [{ recordKey: 'record-1', reverseComplement: true }];
+  const checkpoint = controls.captureAlignmentOrientationIntent(directions);
+  assert.equal(state.recordDisplayDrafts[0].selector, '#2', 'the capture settled the draft onto its row');
+  controls.commitAlignmentOrientations(directions);
+  assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, null);
+  controls.restoreAlignmentOrientationIntent(checkpoint);
+  assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, true, 'the row override comes back');
+  assert.equal(state.linearSeqs[0].region_reverse, false);
+});
