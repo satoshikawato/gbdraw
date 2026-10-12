@@ -7,6 +7,10 @@ export const DEFINITION_LINE_STYLE_KINDS = Object.freeze([
   'length'
 ]);
 
+/** @typedef {{ font_size: number | null, font_weight: string | null, fill: string | null }} DefinitionLineStyle */
+/** @typedef {typeof DEFINITION_LINE_STYLE_KINDS[number]} DefinitionLineStyleKind */
+
+/** @param {unknown} value */
 const normalizeDefinitionLineFontSize = (value) => {
   if (value === null || value === undefined) return null;
   const raw = String(value).trim();
@@ -15,6 +19,7 @@ const normalizeDefinitionLineFontSize = (value) => {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 };
 
+/** @param {unknown} value */
 const normalizeDefinitionLineFontWeight = (value) => {
   if (value === null || value === undefined) return null;
   const normalized = String(value).trim().toLowerCase();
@@ -23,23 +28,29 @@ const normalizeDefinitionLineFontWeight = (value) => {
   return /^(100|200|300|400|500|600|700|800|900)$/.test(normalized) ? normalized : null;
 };
 
+/** @param {unknown} value */
 const normalizeDefinitionLineFill = (value) => {
   if (value === null || value === undefined) return null;
   const normalized = String(value).trim();
   return normalized || null;
 };
 
-/** @returns {{ font_size: number | null, font_weight: string | null, fill: string | null }} */
+/** @returns {DefinitionLineStyle} */
 export const createDefaultDefinitionLineStyle = () => ({
   font_size: null,
   font_weight: null,
   fill: null
 });
 
+/** @returns {Record<DefinitionLineStyleKind, DefinitionLineStyle>} */
 export const createDefaultLinearDefinitionLineStyles = () => Object.fromEntries(
   DEFINITION_LINE_STYLE_KINDS.map((kind) => [kind, createDefaultDefinitionLineStyle()])
 );
 
+/**
+ * @param {{ [kind: string]: Partial<Record<keyof DefinitionLineStyle, unknown>> | null | undefined } | null | undefined} source
+ * @returns {Record<DefinitionLineStyleKind, DefinitionLineStyle>}
+ */
 export const normalizeDefinitionLineStyleState = (source) => {
   const normalized = createDefaultLinearDefinitionLineStyles();
   if (!source || typeof source !== 'object' || Array.isArray(source)) return normalized;

@@ -1,6 +1,10 @@
 // @ts-check
 export const LINEAR_LABEL_VISIBILITY_MODES = Object.freeze(['auto', 'show', 'hide']);
 
+/**
+ * @param {unknown} value
+ * @param {string} key
+ */
 const hasOwn = (value, key) => (
   Boolean(value)
   && typeof value === 'object'
@@ -8,6 +12,11 @@ const hasOwn = (value, key) => (
   && Object.prototype.hasOwnProperty.call(value, key)
 );
 
+/**
+ * @param {unknown} value
+ * @param {string} [label]
+ * @returns {string}
+ */
 export const requireLinearLabelVisibilityMode = (value, label = 'Linear label visibility') => {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (!LINEAR_LABEL_VISIBILITY_MODES.includes(normalized)) {
@@ -16,6 +25,11 @@ export const requireLinearLabelVisibilityMode = (value, label = 'Linear label vi
   return normalized;
 };
 
+/**
+ * @param {unknown} mode
+ * @param {{ hasSharedRow?: boolean }} [options]
+ * @returns {boolean}
+ */
 export const resolveLinearLabelVisibility = (mode, { hasSharedRow = false } = {}) => {
   const selected = requireLinearLabelVisibilityMode(mode);
   if (selected === 'show') return true;
@@ -23,12 +37,20 @@ export const resolveLinearLabelVisibility = (mode, { hasSharedRow = false } = {}
   return !hasSharedRow;
 };
 
+/**
+ * @param {unknown} mode
+ * @param {{ hasSharedRow?: boolean }} [options]
+ */
 export const describeLinearLabelVisibility = (mode, options = {}) => {
   const selected = requireLinearLabelVisibilityMode(mode);
   if (selected !== 'auto') return selected === 'show' ? 'Show' : 'Hide';
   return `Auto · ${resolveLinearLabelVisibility(selected, options) ? 'Shown' : 'Hidden'}`;
 };
 
+/**
+ * @param {Record<string, unknown>} [source]
+ * @returns {Record<string, unknown>}
+ */
 export const migrateLegacyLinearLabelVisibility = (source = {}) => {
   if (!source || typeof source !== 'object' || Array.isArray(source)) return source;
   const migrated = { ...source };

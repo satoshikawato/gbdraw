@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { FeatureLike } from './feature-utils.js' */
 const FEATURE_ID_KEY_EMPTY = '';
 
 export const DEFAULT_LABEL_QUALIFIER_PRIORITY = Object.freeze([
@@ -23,18 +24,30 @@ export const SPECIFIC_COLOR_QUALIFIER_PRESETS = Object.freeze([
   'color'
 ]);
 
+/** @param {unknown} value */
 export const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** @param {unknown} value */
 export const exactRegexValue = (value) => `^${escapeRegexLiteral(value)}$`;
 
+/** @param {unknown} value */
 export const normalizeSelectorText = (value) => String(value ?? '').trim();
+/** @param {unknown} value */
 export const normalizeFeatureIdKey = (value) => normalizeSelectorText(value).toLowerCase();
 
+/**
+ * @param {(FeatureLike | null | undefined)[] | null} [features]
+ * @param {({ qual?: unknown } | null | undefined)[] | null} [rules]
+ * @returns {string[]}
+ */
 export const collectSpecificColorQualifierSuggestions = (features = [], rules = []) => {
+  /** @type {Set<string>} */
   const suggestions = new Set(SPECIFIC_COLOR_QUALIFIER_PRESETS);
+  /** @param {unknown} value */
   const addQualifier = (value) => {
     const qualifier = normalizeSelectorText(value);
     if (qualifier) suggestions.add(qualifier);
   };
+  /** @param {unknown} qualifiers */
   const addQualifierMap = (qualifiers) => {
     if (!qualifiers || typeof qualifiers !== 'object' || Array.isArray(qualifiers)) return;
     Object.keys(qualifiers).forEach(addQualifier);
@@ -57,6 +70,10 @@ export const collectSpecificColorQualifierSuggestions = (features = [], rules = 
   return [...SPECIFIC_COLOR_QUALIFIER_PRESETS, ...custom];
 };
 
+/**
+ * @param {...unknown} values
+ * @returns {string}
+ */
 const firstText = (...values) => {
   for (const value of values) {
     if (Array.isArray(value)) {
@@ -70,6 +87,7 @@ const firstText = (...values) => {
   return '';
 };
 
+/** @param {unknown} value */
 const normalizeStrandToken = (value) => {
   const token = normalizeSelectorText(value).toLowerCase();
   if (token === '+' || token === 'positive' || token === 'plus' || token === 'forward' || token === '1') return '+';
@@ -77,7 +95,12 @@ const normalizeStrandToken = (value) => {
   return 'undefined';
 };
 
+/**
+ * @param {unknown} qualifiers
+ * @returns {Record<string, string[]>}
+ */
 export const normalizeQualifierMap = (qualifiers) => {
+  /** @type {Record<string, string[]>} */
   const normalized = {};
   if (!qualifiers || typeof qualifiers !== 'object') return normalized;
   Object.entries(qualifiers).forEach(([keyRaw, valuesRaw]) => {
@@ -91,8 +114,13 @@ export const normalizeQualifierMap = (qualifiers) => {
   return normalized;
 };
 
+/** @param {object | null | undefined} obj */
 const hasOwnValues = (obj) => Object.keys(obj || {}).length > 0;
 
+/**
+ * @param {unknown} recordId
+ * @param {unknown} recordLocation
+ */
 const recordLocationPosition = (recordId, recordLocation) => {
   const record = normalizeSelectorText(recordId);
   const value = normalizeSelectorText(recordLocation);
@@ -101,6 +129,10 @@ const recordLocationPosition = (recordId, recordLocation) => {
   return value.startsWith(prefix) ? value.slice(prefix.length) : '';
 };
 
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {{ requireSelector?: boolean, preferSelector?: boolean }} [options]
+ */
 export const normalizeFeatureSelectorMetadata = (feature, options = {}) => {
   const requireSelector = options.requireSelector === true;
   const preferSelector = options.preferSelector !== false;
@@ -172,6 +204,11 @@ export const normalizeFeatureSelectorMetadata = (feature, options = {}) => {
   };
 };
 
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {unknown} label
+ * @param {{ priority?: unknown }} [options]
+ */
 export const resolveFeatureLabelSelector = (feature, label, options = {}) => {
   const target = normalizeSelectorText(label).toLowerCase();
   if (!target) return null;

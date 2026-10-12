@@ -1,6 +1,7 @@
 // @ts-check
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
+/** @param {string} character */
 const isBase64Whitespace = (character) => (
   character === ' '
   || character === '\t'
@@ -9,12 +10,15 @@ const isBase64Whitespace = (character) => (
   || character === '\r'
 );
 
+/** @param {Uint8Array<ArrayBuffer> | ArrayLike<number> | ArrayBuffer | null | undefined} value */
 export const asBytes = (value) => (
   value instanceof Uint8Array ? value : new Uint8Array(value || [])
 );
 
+/** @param {Uint8Array<ArrayBuffer> | ArrayLike<number> | ArrayBuffer | null | undefined} value */
 export const bytesToBase64 = (value) => {
   const bytes = asBytes(value);
+  /** @type {string[]} */
   const chunks = [];
   // Complete triplets let encoded chunks concatenate without interior padding.
   const chunkSize = 0x6000;
@@ -24,6 +28,7 @@ export const bytesToBase64 = (value) => {
   return chunks.join('');
 };
 
+/** @param {string | null | undefined} value */
 export const base64ToBytes = (value) => {
   const binary = atob(String(value || ''));
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
@@ -32,6 +37,10 @@ export const base64ToBytes = (value) => {
 // Modern engines decode large adopted resources directly into their final
 // buffer in bounded tasks, leaving room for paint and input without a
 // resource-sized binary-string copy.
+/**
+ * @param {string | null | undefined} value
+ * @returns {Promise<Uint8Array>}
+ */
 export const base64ToBytesInTasks = async (value) => {
   const raw = String(value || '');
   // Older engines keep their existing decoder and error behavior.
@@ -62,9 +71,15 @@ export const base64ToBytesInTasks = async (value) => {
   return bytes;
 };
 
+/**
+ * @param {string | null | undefined} value
+ * @param {number} byteLength
+ * @returns {number | null}
+ */
 export const base64DecodedLastByte = (value, byteLength) => {
   if (!Number.isSafeInteger(byteLength) || byteLength <= 0) return null;
   const encoded = String(value || '');
+  /** @type {number[]} */
   const terminalSextets = [];
   // The terminal byte depends only on the final two non-padding sextets and size modulo 3.
   for (let index = encoded.length - 1; index >= 0 && terminalSextets.length < 2; index -= 1) {
@@ -87,14 +102,24 @@ export const base64DecodedLastByte = (value, byteLength) => {
   return ((penultimateSextet & 0x03) << 6) | finalSextet;
 };
 
+/** @param {string | number | boolean | null | undefined} value */
 export const textToBytes = (value) => new TextEncoder().encode(String(value));
 
+/**
+ * @param {Uint8Array<ArrayBuffer> | ArrayLike<number> | ArrayBuffer | null | undefined} value
+ * @param {TextDecoderOptions} [options]
+ */
 export const bytesToText = (value, options) => (
   new TextDecoder('utf-8', options).decode(asBytes(value))
 );
 
+/** @param {string | number | boolean | null | undefined} value */
 export const textToBase64 = (value) => bytesToBase64(textToBytes(value));
 
+/**
+ * @param {Uint8Array<ArrayBuffer> | ArrayLike<number> | ArrayBuffer | null | undefined} value
+ * @returns {Promise<string>}
+ */
 export const sha256Hex = async (value) => {
   if (!globalThis.crypto?.subtle) {
     throw new Error('SHA-256 file identity requires Web Crypto.');

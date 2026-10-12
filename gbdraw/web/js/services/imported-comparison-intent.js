@@ -1,4 +1,44 @@
 // @ts-check
+/**
+ * Whether and how a Session's saved comparison can be edited, as the Imported comparison state holds it.
+ * @typedef {{ disposition: string, action: string | null, message: string, hasCommittedComparison: boolean }} ImportedComparisonIntent
+ */
+/** @typedef {{ queryRecordIndex?: unknown, subjectRecordIndex?: unknown }} SavedEndpoint */
+/**
+ * One saved comparison of the canonical request, as these checks read it.
+ * @typedef {{
+ *   kind?: string,
+ *   resourceId?: unknown,
+ *   encoding?: string,
+ *   valueKind?: string,
+ *   queryRecordIndex?: unknown,
+ *   subjectRecordIndex?: unknown,
+ *   mode?: string,
+ *   settings?: { [field: string]: unknown, collinearityParams?: { kind?: string, parameters?: unknown } | null },
+ *   pairs?: SavedEndpoint[]
+ * }} SavedComparison
+ */
+/**
+ * A generated protein comparison once `pipelineIssue` has accepted it: its settings and pairs are present.
+ * @typedef {SavedComparison & {
+ *   settings: NonNullable<SavedComparison['settings']>,
+ *   pairs: SavedEndpoint[]
+ * }} SavedPipeline
+ */
+/** @typedef {{ recordKey?: unknown, presentation?: { gridRow?: unknown } | null }} SavedRecord */
+/**
+ * The part of the canonical request the checks read.
+ * @typedef {{
+ *   schema?: unknown,
+ *   mode?: unknown,
+ *   comparisons?: SavedComparison[],
+ *   records?: SavedRecord[],
+ *   diagramOptions?: { [option: string]: unknown, conservationBlastFiles?: unknown }
+ * }} SavedRenderRequest
+ */
+/** @typedef {{ [resourceId: string]: { kind?: unknown } }} SavedResources */
+/** @typedef {{ valid?: boolean, hasComparisonIntent?: boolean, error?: string }} ComparisonDraftResolution The current controls' comparison, validated. */
+
 export const IMPORTED_COMPARISON_DISPOSITIONS = Object.freeze({
   EDITABLE: 'EDITABLE',
   PRESERVED_READ_ONLY: 'PRESERVED_READ_ONLY',
@@ -11,13 +51,16 @@ export const IMPORTED_COMPARISON_ACTIONS = Object.freeze({
   CLEAR: 'CLEAR'
 });
 
+/** @type {Set<unknown>} */
 const VALID_ACTIONS = new Set(Object.values(IMPORTED_COMPARISON_ACTIONS));
+/** @type {Set<string | undefined>} */
 const RESOURCE_BACKED_KINDS = new Set([
   'nucleotideBlast',
   'precomputedProteinComparison',
   'orthogroupResult',
   'collinearityResult'
 ]);
+/** @type {Set<string | undefined>} */
 const ENDPOINT_KINDS = new Set([
   'nucleotideBlast',
   'precomputedProteinComparison'
@@ -42,6 +85,7 @@ const LEGACY_PIPELINE_SETTING_FIELDS = new Set([
   ...CURRENT_PIPELINE_SETTING_FIELDS,
   'alignOrthogroupFeature'
 ]);
+/** @type {Readonly<Record<string, string>>} */
 const RESOURCE_KIND_BY_COMPARISON_KIND = Object.freeze({
   nucleotideBlast: 'nucleotide-blast',
   precomputedProteinComparison: 'canonical-tsv',
@@ -49,14 +93,31 @@ const RESOURCE_KIND_BY_COMPARISON_KIND = Object.freeze({
   collinearityResult: 'collinearity-result'
 });
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+/**
+ * @param {unknown} value
+ * @param {number} fallback
+ */
 const positiveRow = (value, fallback) => {
   const row = Number(value);
   return Number.isInteger(row) && row > 0 ? row : fallback;
 };
+/**
+ * @param {SavedRecord | null | undefined} record
+ * @param {number} index
+ */
 const recordKey = (record, index) => String(record?.recordKey || `record-${index + 1}`);
+/**
+ * @param {string} queryKey
+ * @param {string} subjectKey
+ */
 const endpointKey = (queryKey, subjectKey) => `${queryKey}->${subjectKey}`;
 
+/** @returns {ImportedComparisonIntent} */
 export const createImportedComparisonIntentState = () => ({
   disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE,
   action: null,
@@ -64,16 +125,22 @@ export const createImportedComparisonIntentState = () => ({
   hasCommittedComparison: false
 });
 
+/** @param {{ action?: unknown } | null | undefined} intent */
 export const serializeImportedComparisonResolution = (intent) => ({
-  action: VALID_ACTIONS.has(intent?.action) ? intent.action : null
+  // `has` is false for a missing intent, so `intent` is set when it is read.
+  action: VALID_ACTIONS.has(intent?.action) ? /** @type {{ action?: unknown }} */ (intent).action : null
 });
 
+/**
+ * @param {SavedComparison} comparison
+ * @param {SavedResources | null | undefined} resources
+ */
 const comparisonResourceIssue = (comparison, resources) => {
   const resourceId = String(comparison?.resourceId || '').trim();
   if (!resourceId || !isObject(resources?.[resourceId])) {
     return 'The saved comparison is missing a required resource.';
   }
-  if (resources[resourceId].kind !== RESOURCE_KIND_BY_COMPARISON_KIND[comparison.kind]) {
+  if (resources[resourceId].kind !== RESOURCE_KIND_BY_COMPARISON_KIND[/** @type {string} */ (comparison.kind)]) {
     return 'The saved comparison resource has an incompatible kind.';
   }
   if (
@@ -92,7 +159,7 @@ const comparisonResourceIssue = (comparison, resources) => {
     comparison.kind === 'collinearityResult'
     && (
       comparison.encoding !== 'canonicalJson'
-      || !['result', 'blocks'].includes(comparison.valueKind)
+      || !(/** @type {(string | undefined)[]} */ (['result', 'blocks'])).includes(comparison.valueKind)
     )
   ) {
     return 'The saved Collinear result uses an unsupported representation.';
@@ -100,6 +167,10 @@ const comparisonResourceIssue = (comparison, resources) => {
   return '';
 };
 
+/**
+ * @param {SavedEndpoint | null | undefined} comparison
+ * @param {number} recordCount
+ */
 const endpointIssue = (comparison, recordCount) => {
   const query = Number(comparison?.queryRecordIndex);
   const subject = Number(comparison?.subjectRecordIndex);
@@ -117,9 +188,14 @@ const endpointIssue = (comparison, recordCount) => {
   return '';
 };
 
+/**
+ * @param {SavedComparison} comparison
+ * @param {number} recordCount
+ * @param {number} requestSchema
+ */
 const pipelineIssue = (comparison, recordCount, requestSchema) => {
   if (
-    !['none', 'pairwise', 'orthogroup', 'collinear'].includes(comparison?.mode)
+    !(/** @type {(string | undefined)[]} */ (['none', 'pairwise', 'orthogroup', 'collinear'])).includes(comparison?.mode)
     || !isObject(comparison?.settings)
     || !Array.isArray(comparison?.pairs)
   ) {
@@ -141,7 +217,7 @@ const pipelineIssue = (comparison, recordCount, requestSchema) => {
     const parameterKeys = isObject(parameters) ? Object.keys(parameters) : [];
     if (
       !isObject(collinearity)
-      || !['lossless', 'standard'].includes(collinearity.kind)
+      || !(/** @type {unknown[]} */ (['lossless', 'standard'])).includes(collinearity.kind)
       || parameterKeys.length === 0
     ) {
       return 'The saved Collinear parameters are incomplete or unsupported.';
@@ -154,6 +230,10 @@ const pipelineIssue = (comparison, recordCount, requestSchema) => {
   return '';
 };
 
+/**
+ * @param {SavedRecord[]} records
+ * @param {SavedEndpoint[]} comparisons
+ */
 const rowsAreEditable = (records, comparisons) => {
   const rows = records.map((record, index) => (
     positiveRow(record?.presentation?.gridRow, index + 1)
@@ -167,6 +247,10 @@ const rowsAreEditable = (records, comparisons) => {
   });
 };
 
+/**
+ * @param {SavedRecord[]} records
+ * @param {SavedEndpoint[]} comparisons
+ */
 const endpointKeys = (records, comparisons) => comparisons.map((comparison) => (
   endpointKey(
     recordKey(records[Number(comparison.queryRecordIndex)], Number(comparison.queryRecordIndex)),
@@ -174,6 +258,7 @@ const endpointKeys = (records, comparisons) => comparisons.map((comparison) => (
   )
 ));
 
+/** @param {{ records: SavedRecord[], comparisons: SavedComparison[], pipeline: SavedPipeline }} saved */
 const generatedPipelineIsProjectable = ({ records, comparisons, pipeline }) => {
   const endpoints = comparisons.filter((comparison) => ENDPOINT_KINDS.has(comparison.kind));
   if (!rowsAreEditable(records, [...endpoints, ...pipeline.pairs])) return false;
@@ -202,7 +287,10 @@ const generatedPipelineIsProjectable = ({ records, comparisons, pipeline }) => {
   return true;
 };
 
-/** @param {{ renderRequest?: Record<string, any>, resources?: Record<string, any> }} [input] */
+/**
+ * @param {{ renderRequest?: SavedRenderRequest, resources?: SavedResources }} [input]
+ * @returns {ImportedComparisonIntent}
+ */
 export const classifyImportedComparisonIntent = ({
   renderRequest,
   resources = {}
@@ -215,18 +303,21 @@ export const classifyImportedComparisonIntent = ({
     ? renderRequest.diagramOptions.conservationBlastFiles
     : [];
   const hasCommittedComparison = comparisons.length > 0 || conservation.length > 0;
+  /** @param {string} [message] */
   const editable = (message = '') => ({
     disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE,
     action: null,
     message,
     hasCommittedComparison
   });
+  /** @param {string} message */
   const preserved = (message) => ({
     disposition: IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY,
     action: null,
     message,
     hasCommittedComparison
   });
+  /** @param {string} message */
   const decision = (message) => ({
     disposition: IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED,
     action: null,
@@ -257,8 +348,9 @@ export const classifyImportedComparisonIntent = ({
     return decision('The saved comparison has no available records.');
   }
 
-  /** @type {Record<string, any> | null} */
+  /** @type {SavedPipeline | null} */
   let pipeline = null;
+  /** @type {Set<string>} */
   const singletonKinds = new Set();
   for (const comparison of comparisons) {
     const kind = String(comparison?.kind || '');
@@ -269,7 +361,8 @@ export const classifyImportedComparisonIntent = ({
       const issue = pipelineIssue(comparison, records.length, Number(renderRequest?.schema));
       if (issue) return decision(issue);
       if (pipeline) return decision('The saved comparison contains more than one protein pipeline.');
-      pipeline = comparison;
+      // `pipelineIssue` returned no issue, so the settings and pairs are present.
+      pipeline = /** @type {SavedPipeline} */ (comparison);
     } else {
       return decision(`The saved comparison kind '${kind || 'unknown'}' is unsupported.`);
     }
@@ -301,7 +394,7 @@ export const classifyImportedComparisonIntent = ({
     );
   }
   const hasDirectProteinInput = comparisons.some((comparison) => (
-    ['precomputedProteinComparison', 'orthogroupResult', 'collinearityResult']
+    (/** @type {(string | undefined)[]} */ (['precomputedProteinComparison', 'orthogroupResult', 'collinearityResult']))
       .includes(comparison.kind)
   ));
   if (hasDirectProteinInput && !pipeline) {
@@ -318,6 +411,12 @@ export const classifyImportedComparisonIntent = ({
   return editable('The saved comparison is represented by the current controls.');
 };
 
+/**
+ * @param {ImportedComparisonIntent} target
+ * @param {Partial<ImportedComparisonIntent> | null | undefined} classification
+ * @param {{ action?: unknown } | null} [storedResolution]
+ * @returns {ImportedComparisonIntent}
+ */
 export const restoreImportedComparisonIntent = (
   target,
   classification,
@@ -325,6 +424,7 @@ export const restoreImportedComparisonIntent = (
 ) => {
   Object.assign(target, createImportedComparisonIntentState(), classification || {});
   const storedAction = String(storedResolution?.action || '').trim().toUpperCase();
+  /** @type {Set<string>} */
   const allowed = target.disposition === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY
     ? new Set(Object.values(IMPORTED_COMPARISON_ACTIONS))
     : target.disposition === IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED
@@ -337,13 +437,17 @@ export const restoreImportedComparisonIntent = (
   return target;
 };
 
+/**
+ * @param {{ intent: ImportedComparisonIntent, action: unknown, draftResolution: ComparisonDraftResolution | null | undefined }} choice
+ * @returns {{ ok: false, message: string } | { ok: true, action: string }}
+ */
 export const resolveImportedComparisonAction = ({
   intent,
   action,
   draftResolution
 }) => {
   const requested = String(action || '').trim().toUpperCase();
-  if (!VALID_ACTIONS.has(/** @type {any} */ (requested))) {
+  if (!VALID_ACTIONS.has(requested)) {
     return { ok: false, message: 'Choose how to resolve the saved comparison.' };
   }
   if (
@@ -375,6 +479,9 @@ export const resolveImportedComparisonAction = ({
   return { ok: true, action: requested };
 };
 
+/**
+ * @param {{ intent: ImportedComparisonIntent | null | undefined, draftResolution: ComparisonDraftResolution | null | undefined }} state
+ */
 export const importedComparisonExecution = ({ intent, draftResolution }) => {
   if (intent?.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
     return { ok: true, mode: 'draft' };
@@ -407,6 +514,11 @@ export const importedComparisonExecution = ({ intent, draftResolution }) => {
   };
 };
 
+/**
+ * @param {unknown} value
+ * @param {Set<string>} [target]
+ * @returns {Set<string>}
+ */
 const collectComparisonResourceIds = (value, target = new Set()) => {
   if (Array.isArray(value)) {
     value.forEach((entry) => collectComparisonResourceIds(entry, target));
@@ -421,6 +533,11 @@ const collectComparisonResourceIds = (value, target = new Set()) => {
   return target;
 };
 
+/**
+ * @template {{ renderRequest?: SavedRenderRequest, resources: SavedResources }} C
+ * @param {{ candidate: C, committed: { renderRequest?: SavedRenderRequest, resources?: SavedResources } | null | undefined }} drafts
+ * @returns {C}
+ */
 export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
   if (!isObject(candidate?.renderRequest) || !isObject(committed?.renderRequest)) {
     throw new Error('The preserved comparison is unavailable. Reload the Session and try again.');
@@ -435,6 +552,7 @@ export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
   const candidateRecords = Array.isArray(candidate.renderRequest.records)
     ? candidate.renderRequest.records
     : [];
+  /** @type {Map<string, number>} */
   const candidateIndexByKey = new Map();
   candidateRecords.forEach((record, index) => {
     const key = recordKey(record, index);
@@ -443,6 +561,7 @@ export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
     }
     candidateIndexByKey.set(key, index);
   });
+  /** @param {unknown} value */
   const remapIndex = (value) => {
     const sourceIndex = Number(value);
     if (!Number.isInteger(sourceIndex) || !committedRecords[sourceIndex]) {

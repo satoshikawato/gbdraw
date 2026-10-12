@@ -1,6 +1,8 @@
 // @ts-check
+/** @param {unknown} value */
 export const normalizeCollinearAnchorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  /** @type {Record<string, string>} */
   const aliases = {
     all_hits: 'all',
     raw: 'all',
@@ -18,8 +20,10 @@ export const normalizeCollinearAnchorMode = (value) => {
   return ['all', 'one_to_one', 'rbh'].includes(resolved) ? resolved : 'rbh';
 };
 
+/** @param {unknown} value */
 export const normalizeOrthogroupMembershipMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  /** @type {Record<string, string>} */
   const aliases = {
     legacy: 'anchor_core_v1',
     rbh: 'anchor_core_v1',
@@ -38,8 +42,10 @@ export const normalizeOrthogroupMembershipMode = (value) => {
   return resolved === 'anchor_core_v1' ? resolved : 'anchor_core_v1';
 };
 
+/** @param {unknown} value */
 export const normalizeCollinearSearchScope = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  /** @type {Record<string, string>} */
   const aliases = {
     adjacent_pairs: 'adjacent',
     adjacent_pair: 'adjacent',
@@ -54,9 +60,11 @@ export const normalizeCollinearSearchScope = (value) => {
   return ['adjacent', 'all'].includes(resolved) ? resolved : 'adjacent';
 };
 
+/** @param {unknown} value */
 export const collinearGroupScopeForEvidenceScope = (value) =>
   normalizeCollinearSearchScope(value) === 'all' ? 'global_collinear' : 'adjacent_local';
 
+/** @param {unknown} value */
 export const normalizeGroupMetadataScope = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'global_collinear' || normalized === 'all_records') return 'global_collinear';
@@ -65,6 +73,7 @@ export const normalizeGroupMetadataScope = (value) => {
   return 'global';
 };
 
+/** @param {unknown} value */
 export const groupMetadataScopeLabel = (value) => {
   const scope = normalizeGroupMetadataScope(value);
   if (scope === 'global_collinear') return 'Collinearity-backed global evidence';
