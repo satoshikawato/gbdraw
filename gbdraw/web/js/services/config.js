@@ -4321,6 +4321,21 @@ const resetSessionBaseline = () => {
   state.generatedCircularPlotTitlePosition.value = 'none';
 };
 
+/**
+ * The preview zoom and pan as a Session's `ui` holds them.
+ * @typedef {{ zoom: number, canvasPan: { x: number, y: number } }} PersistedPreviewViewport
+ */
+// D-11: the view to save is not always the shown one (Review alignment shows the figure fitted
+// and keeps the view from before it). The composition root registers the pan/zoom owner's
+// reader; the Session writer and the UI capture with navigation read through it.
+/** @type {(() => PersistedPreviewViewport) | null} */
+let previewViewportReader = null;
+/** @param {(() => PersistedPreviewViewport) | null} reader */
+export const setPreviewViewportReader = (reader) => { previewViewportReader = reader; };
+/** @returns {PersistedPreviewViewport} */
+const previewViewportToPersist = () => previewViewportReader?.()
+  ?? { zoom: state.zoom.value, canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y } };
+
 /** @param {DrawingState} drawing */
 export const buildUiStateData = (drawing, { includePreviewNavigation = true } = {}) => {
   const ui = {
@@ -4356,10 +4371,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     plotTitleUserOffset: { ...state.plotTitleUserOffset }
   };
 
-  if (includePreviewNavigation) {
-    ui.zoom = state.zoom.value;
-    ui.canvasPan = { x: state.canvasPan.x, y: state.canvasPan.y };
-  }
+  if (includePreviewNavigation) Object.assign(ui, previewViewportToPersist());
 
   return ui;
 };
@@ -5946,8 +5958,7 @@ export const exportSession = (titleOverride = null, options = {}) => {
     const artifactUi = artifactUiState(artifact);
     const savedUi = {
       mode: state.mode.value,
-      zoom: state.zoom.value,
-      canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y },
+      ...previewViewportToPersist(),
       selectedResultIndex: artifactUi.selectedResultIndex,
       generatedLegendPosition: artifactUi.generatedLegendPosition,
       generatedMultiRecordCanvas: artifactUi.generatedMultiRecordCanvas,

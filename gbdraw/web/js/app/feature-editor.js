@@ -249,6 +249,8 @@ export const createFeatureEditor = ({
     clearAlignmentCandidatePreview: featureSvgActions.clearAlignmentCandidatePreview,
     showAlignmentOverlay: featureSvgActions.showAlignmentOverlay,
     clearAlignmentOverlay: featureSvgActions.clearAlignmentOverlay,
+    holdPreviewPopups: featureSvgActions.holdPreviewPopups,
+    previewPopupsHeld: featureSvgActions.previewPopupsHeld,
     dispose: featureSvgActions.dispose,
     openFeatureEditorForFeature,
     getEditableLabelByFeatureId: labelActions.getEditableLabelByFeatureId,
