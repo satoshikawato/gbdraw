@@ -4,7 +4,7 @@
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
-import { parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
+import { bulkLabelTextOf, parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
 import { escapeRegexLiteral } from '../../services/feature-selector.js';
 import {
   featureIdentityKeyOf,
@@ -732,8 +732,7 @@ export const createFeatureLabelActions = ({
         ?? textEl.getAttribute('data-label-source-text') ?? getLabelText(textEl);
       textEl.setAttribute('data-label-source-text', sourceText);
       // The source text is free text, so the bulk table is read by own key.
-      const bulkText = Object.prototype.hasOwnProperty.call(drawing.labelTextBulkOverrides, sourceText)
-        ? drawing.labelTextBulkOverrides[sourceText] : undefined;
+      const bulkText = bulkLabelTextOf(drawing.labelTextBulkOverrides, sourceText);
       const desiredText = row?.labelText ?? bulkText ?? sourceText;
       if (getLabelText(textEl) === desiredText) return;
       setLabelText(textEl, desiredText);

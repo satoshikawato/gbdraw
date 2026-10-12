@@ -26,6 +26,7 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
+import { bulkLabelTextOf } from '../../services/label-override-table.js';
 import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
 } from '../../services/feature-visibility.js';
@@ -612,8 +613,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const sourceText = normalizeCaption(editableEntry?.sourceText);
     if (sourceText) {
       // The source text is label text: only an own key of the table is an override.
-      const normalizedBulk = Object.hasOwn(drawing.labelTextBulkOverrides, sourceText)
-        ? normalizeCaption(drawing.labelTextBulkOverrides[sourceText]) : '';
+      const normalizedBulk = normalizeCaption(bulkLabelTextOf(drawing.labelTextBulkOverrides, sourceText));
       if (normalizedBulk) return normalizedBulk;
     }
 

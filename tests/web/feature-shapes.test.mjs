@@ -39,6 +39,10 @@ assert.deepEqual(DEFAULT_FEATURE_RENDERINGS, {
 });
 assert.equal(defaultFeatureRendering('repeat_region'), 'underlay');
 assert.equal(defaultFeatureRendering('misc_feature'), 'rectangle');
+// OV-550: a feature type is free text; only an own key of the table is a default.
+for (const inherited of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+  assert.equal(defaultFeatureRendering(inherited), 'rectangle', inherited);
+}
 assert.equal(normalizeFeatureRendering(' UNDERLAY '), 'underlay');
 assert.deepEqual(
   normalizeFeatureRenderingMap({ repeat_region: 'RECTANGLE', CDS: 'underlay' }),

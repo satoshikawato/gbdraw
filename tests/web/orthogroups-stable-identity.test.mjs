@@ -39,6 +39,10 @@ await copyModule(
   'gbdraw/web/js/services/orthogroup-feature-metadata.js',
   'services/orthogroup-feature-metadata.js'
 );
+// standalone-interactivity.js reads the bulk label table through its owner.
+await copyModule('gbdraw/web/js/services/label-override-table.js', 'services/label-override-table.js');
+await copyModule('gbdraw/web/js/services/feature-selector.js', 'services/feature-selector.js');
+await copyModule('gbdraw/web/js/utils/tsv-cell.js', 'utils/tsv-cell.js');
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
 await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schema.generated.js');
@@ -60,7 +64,7 @@ const standaloneSource = await readFile(
 );
 await writeFile(
   join(tempDir, 'services', 'standalone-interactivity.js'),
-  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, createStandaloneBiologicalFeatureResolver, getStandaloneFeatureOrthogroupEntry, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
+  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, createStandaloneBiologicalFeatureResolver, getStandaloneDisplayLabel, getStandaloneFeatureOrthogroupEntry, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
   'utf8'
 );
 await writeFile(join(tempDir, 'app', 'feature-editor-svg-actions.js'), `
@@ -157,6 +161,7 @@ const {
   buildStandaloneBiologicalFeaturePayloads,
   buildStandaloneOrthogroupPayloads,
   createStandaloneBiologicalFeatureResolver,
+  getStandaloneDisplayLabel,
   getStandaloneFeatureOrthogroupEntry,
   selectStandaloneCatalogItem,
   selectStandaloneSequenceSources
@@ -1953,4 +1958,17 @@ console.log('orthogroup stable identity tests passed');
   const protoGroup = { id: 'constructor', name: 'Own name', description: 'Own description', members: [] };
   assert.equal(protoEditor.resolveOrthogroupName(protoGroup), 'Own name');
   assert.equal(protoEditor.resolveOrthogroupDescription(protoGroup), 'Own description');
+}
+
+// OV-554: the source text is label text; only an own key of the bulk table is an edit.
+{
+  const inheritedFeature = { svg_id: 'f1', product: 'constructor' };
+  assert.equal(
+    getStandaloneDisplayLabel(inheritedFeature, 'constructor', { labelTextBulkOverrides: {} }),
+    'constructor'
+  );
+  assert.equal(
+    getStandaloneDisplayLabel(inheritedFeature, 'constructor', { labelTextBulkOverrides: { constructor: 'ctor' } }),
+    'ctor'
+  );
 }
