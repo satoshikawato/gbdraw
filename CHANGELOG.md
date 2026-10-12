@@ -176,6 +176,13 @@ write-up of a release.
   hover and on keyboard focus, and the section at the top is marked. Linear
   mode has entries for **Comparison** and **Advanced comparison and layout**.
   Dragging the panel's resize handle no longer selects page text (OV-534).
+- Web app settings panel: **Collapse settings to icons**, at the right end of the
+  section row, shows the sections as a narrow column of icons with short names
+  and one section beside it; **Close section** leaves the column alone, so the
+  diagram gets the room, and **Expand settings** returns to the full panel. The
+  browser remembers the choice for the site address; it is not part of a Session.
+  Phone-width windows always show the full panel. **Edit pattern** on a color
+  rule error now opens the **Colors** section when it is closed (OV-538).
 - Web app (Linear): a name typed on an empty File card is kept when its file is
   chosen. For a file with several records it becomes the File-level name
   (OV-486).

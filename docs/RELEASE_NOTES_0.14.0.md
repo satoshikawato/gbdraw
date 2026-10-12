@@ -76,6 +76,12 @@ mode. A button opens its section and brings it to the top, so a section far
 down the panel (**Labels** in Linear mode with several files) is one click
 away. The section title shows on hover and on keyboard focus.
 
+**Collapse settings to icons** turns the settings panel into a narrow column of
+icons with one section beside it, and **Close section** leaves only the column,
+which gives the diagram about 265 px more width in a 1600 px window. **Expand
+settings** brings the full panel back. The browser remembers this choice per site
+address (with `gbdraw gui`, until the local server stops).
+
 Each change of a checkbox, radio button, or button is one **Undo** step. Undo
 and Redo are unavailable while Generate runs, and the header says why. Error
 messages name the field, track row, Depth series, table line, or setting
