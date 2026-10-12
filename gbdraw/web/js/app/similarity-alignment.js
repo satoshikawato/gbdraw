@@ -121,6 +121,7 @@ const REVIEW_REASONS = new Set([
   'only_usable_candidate', 'unique_direct_rbh',
   'unique_representative', 'deterministic_candidate_1'
 ]);
+/** @type {Set<AlignmentDecision['status']>} */
 const STATUSES = new Set(['reference', 'aligned', 'skipped']);
 const RATIONALES = new Set([
   'reference',
@@ -132,15 +133,22 @@ const RATIONALES = new Set([
   'skipped_unmappable'
 ]);
 
-/** @param {unknown} value */
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 const isObject = (value) => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
 );
 
-// `value` stays untyped: the result is the checked object, whose fields each caller validates.
 /**
- * @param {readonly string[]} keys
+ * The value itself, known to be an object with exactly `keys`. Its fields stay unchecked:
+ * a validator reads them from the result, so each check narrows the field it reads.
+ * @template {string} K
+ * @param {unknown} value
+ * @param {readonly K[]} keys
  * @param {string} path
+ * @returns {Record<K, unknown>}
  */
 const exactObject = (value, keys, path) => {
   if (!isObject(value) || Object.keys(value).sort().join('\0') !== [...keys].sort().join('\0')) {
@@ -148,6 +156,35 @@ const exactObject = (value, keys, path) => {
   }
   return value;
 };
+
+// The checks of a reply field as type guards: the field has the type once its check has passed.
+/**
+ * @param {unknown} value
+ * @returns {value is number}
+ */
+const isSafeInteger = (value) => Number.isSafeInteger(value);
+
+/**
+ * @param {unknown} value
+ * @returns {value is number}
+ */
+const isFiniteNumber = (value) => Number.isFinite(value);
+
+/**
+ * @template {string | number | null} T
+ * @param {readonly T[]} values
+ * @param {unknown} value
+ * @returns {value is T}
+ */
+const oneOf = (values, value) => /** @type {readonly unknown[]} */ (values).includes(value);
+
+/**
+ * @template T
+ * @param {ReadonlySet<T>} values
+ * @param {unknown} value
+ * @returns {value is T}
+ */
+const inSet = (values, value) => /** @type {ReadonlySet<unknown>} */ (values).has(value);
 
 /**
  * @param {unknown} value
@@ -167,10 +204,10 @@ const text = (value, path) => {
  */
 const nullableInteger = (value, path) => {
   if (value === null) return null;
-  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+  if (!isSafeInteger(value) || value < 0) {
     throw new Error(`${path} must be a non-negative integer or null.`);
   }
-  return /** @type {number} */ (value); // a safe integer, checked above
+  return value;
 };
 
 /**
@@ -402,7 +439,8 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
     label: feature.label,
     name: feature.name,
     ids: feature.ids,
-    evidence: candidate.directEvidence.map((/** @type {string} */ kind) => evidenceLabels[kind] || kind),
+    // A kind is helper text: one the table does not hold is shown as written (OV-573).
+    evidence: candidate.directEvidence.map((kind) => Object.hasOwn(evidenceLabels, kind) ? evidenceLabels[kind] : kind),
     coordinates,
     displayedStrand: strandLabel(candidate.displayedStrand),
     representative: candidate.representative,
@@ -610,20 +648,26 @@ const validateCandidate = (value, path, recordKey) => {
   ], path);
   const anchor = validateAnchor(raw.anchor, `${path}.anchor`);
   if (anchor.recordKey !== recordKey || typeof raw.displayName !== 'string'
-    || !Number.isSafeInteger(raw.sourceStart) || !Number.isSafeInteger(raw.sourceEnd)
+    || !isSafeInteger(raw.sourceStart) || !isSafeInteger(raw.sourceEnd)
     || raw.sourceStart < 0 || raw.sourceEnd < raw.sourceStart
-    || (raw.displayCenter !== null && !Number.isFinite(raw.displayCenter))
-    || ![null, -1, 1].includes(raw.displayedStrand)
+    || (raw.displayCenter !== null && !isFiniteNumber(raw.displayCenter))
+    || !oneOf([null, -1, 1], raw.displayedStrand)
     || typeof raw.hidden !== 'boolean' || typeof raw.representative !== 'boolean'
     || typeof raw.usable !== 'boolean' || typeof raw.role !== 'string'
     || !Array.isArray(raw.directEvidence)
     || raw.directEvidence.some((/** @type {unknown} */ evidence) => typeof evidence !== 'string')) {
     throw new Error(`${path} contains invalid candidate facts.`);
   }
-  if (!['same', 'opposite', 'unknown'].includes(raw.strandRelation)) {
+  if (!oneOf(['same', 'opposite', 'unknown'], raw.strandRelation)) {
     throw new Error(`${path}.strandRelation is invalid.`);
   }
-  return { ...raw, anchor };
+  // The checked fields, in the helper's order.
+  return {
+    anchor, displayName: raw.displayName, sourceStart: raw.sourceStart, sourceEnd: raw.sourceEnd,
+    displayCenter: raw.displayCenter, displayedStrand: raw.displayedStrand, hidden: raw.hidden,
+    representative: raw.representative, role: raw.role, usable: raw.usable,
+    directEvidence: raw.directEvidence, strandRelation: raw.strandRelation
+  };
 };
 
 /**
@@ -636,9 +680,10 @@ const validateDecision = (value, path) => {
     'kind', 'recordKey', 'status', 'rationale', 'reviewReason', 'anchor',
     'candidates'
   ], path);
-  if (raw.kind !== 'decision' || !STATUSES.has(raw.status)
-    || !RATIONALES.has(raw.rationale)
-    || (raw.reviewReason !== null && !REVIEW_REASONS.has(raw.reviewReason))) {
+  if (raw.kind !== 'decision' || !inSet(STATUSES, raw.status)
+    || !inSet(RATIONALES, raw.rationale)
+    || (raw.reviewReason !== null && !inSet(REVIEW_REASONS, raw.reviewReason))
+    || !Array.isArray(raw.candidates)) {
     throw new Error(`${path} contains an unknown decision value.`);
   }
   const recordKey = text(raw.recordKey, `${path}.recordKey`);
@@ -659,7 +704,12 @@ const validateDecision = (value, path) => {
       : anchor === null && skippedRationales.has(raw.rationale)
         && raw.reviewReason === null;
   if (!valid) throw new Error(`${path} contains an invalid decision combination.`);
-  return { ...raw, anchor, candidates };
+  return {
+    kind: raw.kind,
+    // The reply's own spelling, which `text` accepted above.
+    recordKey: /** @type {string} */ (raw.recordKey),
+    status: raw.status, rationale: raw.rationale, reviewReason: raw.reviewReason, anchor, candidates
+  };
 };
 
 /**
@@ -673,8 +723,8 @@ const validateAmbiguity = (value, path) => {
     'recommendedAnchor', 'recommendationReason'
   ], path);
   if (raw.kind !== 'ambiguous' || !Array.isArray(raw.candidates)
-    || raw.candidates.length < 2 || !['unique_representative', 'deterministic_candidate_1']
-      .includes(raw.recommendationReason)) throw new Error(`${path} is not a valid ambiguity.`);
+    || raw.candidates.length < 2 || !oneOf(['unique_representative', 'deterministic_candidate_1'],
+      raw.recommendationReason)) throw new Error(`${path} is not a valid ambiguity.`);
   const recordKey = text(raw.recordKey, `${path}.recordKey`);
   /** @type {AlignmentCandidate[]} */
   const candidates = raw.candidates.map((/** @type {unknown} */ candidate, /** @type {number} */ index) => (
@@ -694,7 +744,8 @@ const validateAmbiguity = (value, path) => {
   if (directRbhCandidates.some((anchor) => !keys.has(anchorKey(anchor)))) {
     throw new Error(`${path} contains unknown direct evidence.`);
   }
-  return { ...raw, recordKey, candidates, directRbhCandidates, recommendedAnchor };
+  return { kind: raw.kind, recordKey, candidates, directRbhCandidates, recommendedAnchor,
+    recommendationReason: raw.recommendationReason };
 };
 
 /**
@@ -720,9 +771,12 @@ const validatePlan = (value, response, path) => {
         recordKey: decision.recordKey, status: decision.status,
         rationale: decision.rationale, anchor: decision.anchor
       })) throw new Error(`${path} differs from helper decisions.`);
-    return fields;
+    // A reply is JSON, and this record equals the checked decision's four fields as JSON.
+    return /** @type {AlignmentPlanRecord} */ (fields);
   });
-  return { schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA, groupId: raw.groupId, reference: raw.reference, records };
+  return { schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA, groupId: raw.groupId,
+    // `validateAnchor` accepted this anchor above; the plan keeps the reply's own object.
+    reference: /** @type {AnchorIdentity} */ (raw.reference), records };
 };
 
 /**
@@ -734,20 +788,20 @@ const validateProjection = (value, request) => {
   if (value === null) return null;
   const raw = exactObject(value, ['binding', 'geometryOrientations', 'records'], 'alignment projection');
   const keys = request.records.map(({ recordKey }) => recordKey);
-  if (!/^[a-f0-9]{64}$/.test(raw.binding) || !Array.isArray(raw.records)
+  if (typeof raw.binding !== 'string' || !/^[a-f0-9]{64}$/.test(raw.binding) || !Array.isArray(raw.records)
     || raw.records.length !== keys.length) throw new Error('Invalid alignment projection binding or coverage.');
-  exactObject(raw.geometryOrientations, keys, 'alignment projection.geometryOrientations');
+  const orientations = exactObject(raw.geometryOrientations, keys, 'alignment projection.geometryOrientations');
   const known = new Set(request.members.map(({ anchor }) => anchorKey(anchor)));
   const finite = (/** @type {unknown} */ number) => { if (!Number.isFinite(number)) throw new Error('Nonfinite alignment placement.'); };
-  raw.records.forEach((record, /** @type {number} */ index) => {
-    exactObject(record, ['recordKey', 'beforeReverseComplement', 'base', 'beforeAxisY',
+  raw.records.forEach((/** @type {unknown} */ recordValue, /** @type {number} */ index) => {
+    const record = exactObject(recordValue, ['recordKey', 'beforeReverseComplement', 'base', 'beforeAxisY',
       'beforeAnchors', 'variants'], 'alignment projection record');
-    if (record.recordKey !== keys[index] || typeof raw.geometryOrientations[record.recordKey] !== 'boolean'
+    if (record.recordKey !== keys[index] || typeof orientations[record.recordKey] !== 'boolean'
       || record.beforeReverseComplement !== baseReverseComplement(request.records[index])) {
       throw new Error('Alignment projection changed record orientation binding.');
     }
-    exactObject(record.base, ['x', 'y'], 'alignment projection base');
-    [record.base.x, record.base.y, record.beforeAxisY].forEach(finite);
+    const base = exactObject(record.base, ['x', 'y'], 'alignment projection base');
+    [base.x, base.y, record.beforeAxisY].forEach(finite);
     /**
      * @param {unknown} anchors
      * @param {boolean} variant
@@ -755,8 +809,8 @@ const validateProjection = (value, request) => {
     const validateAnchors = (anchors, variant) => {
       if (!Array.isArray(anchors)) throw new Error('Alignment projection anchors must be an array.');
       const identities = new Set();
-      anchors.forEach((entry) => {
-        exactObject(entry, variant ? ['anchor', 'displayedStrand', 'displayCenter', 'centerX']
+      anchors.forEach((/** @type {unknown} */ entryValue) => {
+        const entry = exactObject(entryValue, variant ? ['anchor', 'displayedStrand', 'displayCenter', 'centerX']
           : ['anchor', 'centerX'], 'alignment projection anchor');
         const anchor = validateAnchor(entry.anchor, 'alignment projection anchor identity');
         const key = anchorKey(anchor);
@@ -765,7 +819,7 @@ const validateProjection = (value, request) => {
         }
         identities.add(key);
         if (variant) {
-          if (![null, -1, 1].includes(entry.displayedStrand)
+          if (!oneOf([null, -1, 1], entry.displayedStrand)
             || (entry.displayCenter === null) !== (entry.centerX === null)) {
             throw new Error('Alignment projection contains invalid strand or center facts.');
           }
@@ -779,8 +833,8 @@ const validateProjection = (value, request) => {
     if (!Array.isArray(record.variants) || record.variants.length !== 2) {
       throw new Error('Alignment projection requires both absolute directions.');
     }
-    record.variants.forEach((variant, /** @type {number} */ direction) => {
-      exactObject(variant, ['reverseComplement', 'axisY', 'anchors'], 'alignment projection variant');
+    record.variants.forEach((/** @type {unknown} */ variantValue, /** @type {number} */ direction) => {
+      const variant = exactObject(variantValue, ['reverseComplement', 'axisY', 'anchors'], 'alignment projection variant');
       if (variant.reverseComplement !== Boolean(direction)) throw new Error('Invalid alignment direction variant.');
       finite(variant.axisY);
       const anchors = validateAnchors(variant.anchors, true);
@@ -789,13 +843,14 @@ const validateProjection = (value, request) => {
         throw new Error('Alignment projection omitted a source anchor.');
       }
       if (variant.reverseComplement === record.beforeReverseComplement
-        // `validateAnchors(variant.anchors, true)` above checked each entry.
-        && variant.anchors.some((/** @type {ProjectionVariantAnchor} */ { anchor, centerX }) => (centerX !== null) !== beforeAnchors.has(anchorKey(anchor)))) {
+        // `validateAnchors(variant.anchors, true)` above checked the list and each entry.
+        && /** @type {ProjectionVariantAnchor[]} */ (variant.anchors).some(({ anchor, centerX }) => (centerX !== null) !== beforeAnchors.has(anchorKey(anchor)))) {
         throw new Error('Alignment projection changed current anchor mappability.');
       }
     });
   });
-  return raw;
+  // The reply's own object: the checks above cover every field of `AlignmentProjection`.
+  return /** @type {AlignmentProjection} */ (raw);
 };
 
 // One transient resolver is shared by local previews and final helper admission.
@@ -896,18 +951,19 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
     'schema', 'status', 'groupId', 'reference', 'referenceDisplayedStrand',
     'referenceDisplayCenter', 'records', 'plan', 'projection'
   ], 'alignment helper response');
-  if (raw.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA || !['resolved', 'ambiguous'].includes(raw.status)
+  if (raw.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA || !oneOf(['resolved', 'ambiguous'], raw.status)
     || raw.groupId !== request.groupId || !Array.isArray(raw.records)
-    || ![null, -1, 1].includes(raw.referenceDisplayedStrand)
-    || !Number.isFinite(raw.referenceDisplayCenter)) {
+    || !oneOf([null, -1, 1], raw.referenceDisplayedStrand)
+    || !isFiniteNumber(raw.referenceDisplayCenter)) {
     throw new Error('Alignment helper response does not match its request.');
   }
   const reference = validateAnchor(raw.reference, 'alignment helper response.reference');
   if (!sameJson(reference, request.reference)) {
     throw new Error('Alignment helper response changed the exact reference.');
   }
+  // Any value can be asked for its `kind`; only a record of a known kind goes on to its validator.
   /** @type {(AlignmentDecision | AlignmentAmbiguity)[]} */
-  const records = raw.records.map((record, /** @type {number} */ index) => (
+  const records = raw.records.map((/** @type {{ kind?: unknown } | null | undefined} */ record, /** @type {number} */ index) => (
     record?.kind === 'decision'
       ? validateDecision(record, `alignment helper response.records[${index}]`)
       : record?.kind === 'ambiguous'
@@ -1173,7 +1229,7 @@ const anchorsAgree = (left, right) => {
  * @property {string} recordKey
  * @property {string} status
  * @property {string | null} exclusion
- * @property {number} afterArrow
+ * @property {DisplayedStrand} afterArrow
  * @property {boolean} beforeReverseComplement
  * @property {boolean} afterReverseComplement
  * @property {boolean} reversed
@@ -2094,7 +2150,8 @@ export const createSimilarityAlignmentActions = ({
     // The draft's own response and binding, so the projection is never stale.
     const projected = /** @type {ProjectedDirections} */ (projectDraft());
     const { reference, rows, intent } = draft.value;
-    const records = /** @type {DirectionPreviewRecord[]} */ (projected.records.map((record) => {
+    /** @type {DirectionPreviewRecord[]} */
+    const records = projected.records.map((record) => {
       const row = rows.find((/** @type {ReviewRow} */ entry) => entry.recordKey === record.recordKey);
       const isReference = record.status === 'reference';
       const label = isReference ? reference.recordLabel : row?.recordLabel || record.recordKey;
@@ -2110,7 +2167,7 @@ export const createSimilarityAlignmentActions = ({
         // The accessible before/after statement each card and its Custom select describe.
         description: `${label}${isReference ? ' · exact reference' : ''}: Current ${beforeDirection}; after Align ${afterDirection}.`
           + (exclusionLabel ? ` ${exclusionLabel}` : '') };
-    }));
+    });
     const eligible = records.filter(record => !record.exclusion);
     const reversed = records.filter(record => record.reversed);
     // A record still waiting for Select or Skip is counted by the footer, not here.

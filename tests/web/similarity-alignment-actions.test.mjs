@@ -1138,3 +1138,17 @@ test('drawer reference options and the active-plan line use record and gene name
   await fixture.actions.applyDraft();
   assert.equal(fixture.actions.activePlanInspector.value.summary, 'Aligned to gene-clicked in ACC-A');
 });
+
+// Last in this file: without the own-key read, `__proto__` handed `Object.prototype` to the draft's deep freeze.
+test('an evidence kind outside the label table shows as written, also an Object.prototype name (OV-573)', async () => {
+  const fixture = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => {
+      const response = responseFor(request, { ambiguous: true });
+      response.records[1].candidates[0].directEvidence = ['constructor', 'rbh', 'related_homolog', '__proto__', ''];
+      return { result: response };
+    } });
+  await startReview(fixture);
+  assert.deepEqual(fixture.actions.draft.value.rows[0].candidates[0].evidence,
+    ['constructor', 'reciprocal best hit', 'related_homolog', '__proto__', '']);
+  assert.equal(Object.isFrozen(Object.prototype), false);
+});
