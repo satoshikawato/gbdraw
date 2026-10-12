@@ -14,6 +14,7 @@ import { materializeRecordTranslations } from './legend-layout/composition-actio
 import { isInternalProteinDisplayId } from '../services/feature-utils.js';
 import { recordsNeedingChoice } from '../services/alignment-review-view.js';
 import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
+import { ownEntry } from '../utils/own-entry.js';
 
 /**
  * @import { FeatureCatalog, FeatureCatalogRow } from '../services/feature-catalog.js'
@@ -2216,6 +2217,10 @@ export const createSimilarityAlignmentActions = ({
    */
   const setCustomDirection = (recordKey, direction) => setDirectionIntent({mode:'custom',
     byRecordKey:{...draft.value?.intent?.byRecordKey, [recordKey]:direction}});
+  // The Custom choice of a record, for its select: a record key is data, so only an own key
+  // names a choice (OV-572); a record without one keeps its direction, as the projection reads it.
+  /** @param {string} recordKey */
+  const customDirection = (recordKey) => ownEntry(draft.value?.intent?.byRecordKey, recordKey) || 'keep';
 
   const unresolvedCount = computed(() => recordsNeedingChoice(draft.value?.rows || []).length);
 
@@ -2253,6 +2258,7 @@ export const createSimilarityAlignmentActions = ({
     directionPreview,
     setDirectionMode,
     setCustomDirection,
+    customDirection,
     resetPreview,
     resetDialogOpen,
     resetScope,

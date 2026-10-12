@@ -6863,6 +6863,7 @@ export const createAppSetup = () => {
     similarityAlignmentDirectionPreview: similarityAlignmentActions.directionPreview,
     setSimilarityAlignmentDirectionMode: similarityAlignmentActions.setDirectionMode,
     setSimilarityAlignmentCustomDirection: similarityAlignmentActions.setCustomDirection,
+    similarityAlignmentCustomDirection: similarityAlignmentActions.customDirection,
     similarityAlignmentResetPreview: similarityAlignmentActions.resetPreview,
     similarityAlignmentResetDialogOpen: similarityAlignmentActions.resetDialogOpen,
     similarityAlignmentResetScope: similarityAlignmentActions.resetScope,

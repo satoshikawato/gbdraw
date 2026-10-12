@@ -7488,7 +7488,7 @@
                                             </span>
                                             <span v-else-if="card.direction.afterArrow !== null" aria-hidden="true" class="alignment-review-arrow">{{ card.direction.afterArrow === 1 ? '→' : '←' }}</span>
                                             <select v-if="similarityAlignmentDraft.intent.mode === 'custom'"
-                                                    :value="similarityAlignmentDraft.intent.byRecordKey[card.recordKey] || 'keep'"
+                                                    :value="similarityAlignmentCustomDirection(card.recordKey)"
                                                     :aria-label="'Direction for ' + card.direction.label"
                                                     :aria-describedby="'alignment-direction-' + card.recordKey"
                                                     :disabled="!semanticMutationAvailable || similarityAlignmentBusy || Boolean(card.direction.exclusion)"
