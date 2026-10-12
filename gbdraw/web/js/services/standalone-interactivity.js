@@ -156,20 +156,6 @@ const compactWireValue = (value) => {
 const normalizeFeatureElementId = (value) =>
   String(value || '').trim().replace(FEATURE_PART_SUFFIX_RE, '');
 
-/** @param {Element | null | undefined} svg */
-export const stripEditorOnlyCursorStyles = (svg) => {
-  if (!svg) return;
-  svg.querySelectorAll('[style]').forEach((element) => {
-    const style = element.getAttribute('style');
-    if (!style || !/\bcursor\s*:/i.test(style)) return;
-    // `[style]` selects HTML and SVG elements, which carry inline styles.
-    /** @type {HTMLElement | SVGElement} */ (element).style.removeProperty('cursor');
-    if (!element.getAttribute('style')?.trim()) {
-      element.removeAttribute('style');
-    }
-  });
-};
-
 /** @param {Element | null | undefined} element */
 const getElementFeatureId = (element) =>
   normalizeFeatureElementId(
