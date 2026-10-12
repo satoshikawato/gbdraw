@@ -2446,7 +2446,7 @@
                                             <span v-else class="truncate font-normal" :title="linearCardFileLine(source)">{{ linearCardFileLine(source) }}</span>
                                         </span>
                                         <span v-if="linearSourceInspectionFailed(source)" :id="`linear-file-failed-${source.uid}`" class="sr-only">This file could not be read.</span>
-                                        <span v-if="linearSourceGencodeRequired(source)" :id="`linear-file-gencode-${source.uid}`" class="shrink-0 font-normal text-red-700">Gencode required</span>
+                                        <span v-if="linearSourceGencodeRequired(source)" :id="`linear-file-gencode-${source.uid}`" class="font-normal text-red-700">Gencode required</span>
                                     </span>
                                     <!-- A press on or between the move buttons never folds the card. -->
                                     <div v-if="linearSourceGroups.length > 1" class="flex shrink-0 items-center gap-1" @click.prevent>
