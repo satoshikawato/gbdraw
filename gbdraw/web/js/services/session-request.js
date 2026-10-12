@@ -1514,7 +1514,10 @@ const addLabelWhitelistResource = (state, drawing, resources, diagramOptions) =>
     resources, publicationFiles, 'whitelist', 'label-whitelist-file'
   );
   if (preservedWhitelist) {
-    diagramOptions.labelWhitelistFile = preservedWhitelist;
+    diagramOptions[
+      preservedWhitelist.representation === 'canonicalTsv'
+        ? 'labelWhitelistTable' : 'labelWhitelistFile'
+    ] = preservedWhitelist;
   } else if (drawing.filterMode.value === 'Whitelist' && drawing.manualWhitelist.length > 0) {
     const whitelist = serializeLabelWhitelistRules(drawing.manualWhitelist);
     if (whitelist) {
