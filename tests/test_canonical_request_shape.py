@@ -274,8 +274,8 @@ _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]
 # wider than Python there, as the Linear slot scalar was (OV-530, OV-597); a
 # field joins this list only with a reason it cannot be a literal union.
 # - A legend position: the Web writer writes the text its state holds, which a
-#   stored Session can set to any text (OV-652); what it writes then is not
-#   decided.
+#   stored Session can set to any text (OV-652); it narrows once the Web writes
+#   only a position of the mode's set.
 # - A slot's renderer and side: the encoder writes them as its caller gave
 #   them, and the track planner reads other spellings of a name
 #   (_SLOT_SPELLINGS, OV-653).
