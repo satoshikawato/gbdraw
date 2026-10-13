@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
-from gbdraw.core.fonts import custom_font_families, register_font_file_faces
+from gbdraw.cli_utils.common import add_font_file_args, register_font_files
+from gbdraw.core.fonts import custom_font_families
 from gbdraw.render.font_embedding import remove_embedded_font_css
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import (
@@ -161,8 +162,7 @@ def parse_session_pre_args(
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--save_session", action="store_true")
     parser.add_argument("--session_output")
-    parser.add_argument("--font_file", action="append", default=[])
-    parser.add_argument("--no_font_embedding", dest="embed_fonts", action="store_false")
+    add_font_file_args(parser)
     namespace, unknown = parser.parse_known_args(list(cmd_args))
     if unknown:
         parser.error(
@@ -260,6 +260,7 @@ def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
             "PATH; use a .gz suffix for gzip compression."
         ),
     )
+    add_font_file_args(parser)
     namespace = parser.parse_args(list(cmd_args))
     return SessionCliRequest(
         session_path=str(namespace.session),
@@ -270,6 +271,8 @@ def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
         session_output=namespace.session_output,
         drawings=tuple(namespace.drawing or ()),
         list_drawings=bool(namespace.list_drawings),
+        font_files=tuple(namespace.font_file),
+        embed_fonts=bool(namespace.embed_fonts),
     )
 
 
@@ -579,8 +582,7 @@ def render_canonical_session_if_present(
 
     from gbdraw.session import load_session_document
 
-    for font_file in font_files:
-        register_font_file_faces(font_file)
+    register_font_files(font_files)
     from gbdraw.session_io import CANONICAL_SESSION_MIN_VERSION
 
     document = load_session_document(session)
@@ -856,6 +858,8 @@ def render_main(cmd_args: Sequence[str]) -> None:
     from gbdraw.session_io import CANONICAL_SESSION_MIN_VERSION
 
     request = parse_render_args(cmd_args)
+    # Before the Session is read, so its font names resolve to these files.
+    register_font_files(request.font_files)
     document = load_session_document(request.session_path)
     if request.list_drawings:
         for drawing in document.drawings:
@@ -888,6 +892,7 @@ def render_main(cmd_args: Sequence[str]) -> None:
         save_session=request.save_session,
         session_output=request.session_output,
         overwrite=request.overwrite,
+        embed_fonts=request.embed_fonts,
     )
 
 

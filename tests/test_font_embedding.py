@@ -17,6 +17,7 @@ from fontTools.ttLib import TTCollection, TTFont
 import gbdraw.api.diagram as diagram_module
 from gbdraw.api.render import render_to_bytes
 from gbdraw.circular import circular_main
+from gbdraw.cli_utils.session import render_main
 from gbdraw.core import fonts
 from gbdraw.exceptions import ValidationError
 from gbdraw.linear import linear_main
@@ -201,6 +202,20 @@ def test_a_font_whose_license_forbids_embedding_is_refused_by_family(tmp_path: P
 
     assert embedding.refused_families == ("Gbdraw Restricted",)
     assert [face["font-family"] for face in _faces(embedding.css)] == ["'Gbdraw Printable'"]
+
+
+def test_a_font_that_forbids_subsetting_is_embedded_whole(tmp_path: Path) -> None:
+    # D-09: fsType bit 0x0100 (no subsetting) with embedding allowed.
+    path = _renamed_font("LiberationSerif-Regular", "Gbdraw Whole Serif", tmp_path / "w.ttf", fs_type=0x0100)
+    fonts.register_font_file(path)
+
+    embedding = font_embedding.svg_font_embedding(_svg(("'Gbdraw Whole Serif', serif", "normal", "Hi")))
+
+    assert embedding.refused_families == ()
+    (face,) = _faces(embedding.css)
+    _mime, font = _embedded_font(face)
+    assert font.getGlyphOrder() == TTFont(str(path)).getGlyphOrder()
+    assert set(font.getBestCmap()) == set(TTFont(str(path)).getBestCmap())
 
 
 def test_the_css_goes_into_a_defs_of_its_own_and_comes_out_again(tmp_path: Path) -> None:
@@ -442,3 +457,28 @@ def test_ov688_a_session_saved_again_warns_that_it_keeps_only_the_font_name(
 
     assert "The Session stores the font name 'Gbdraw Resave Serif' but not the font file" in caplog.text
     assert "@font-face" not in (tmp_path / "second.gbdraw-session.json").read_text(encoding="utf-8")
+
+
+def test_gbdraw_render_takes_font_files_and_no_font_embedding(tmp_path: Path) -> None:
+    # D-09: `gbdraw render --session` replays a Session that names a custom font.
+    font = _renamed_font("LiberationSerif-Regular", "Gbdraw Render Serif", tmp_path / "s.ttf")
+    gbk = _genbank(tmp_path / "in.gb")
+    session_path = tmp_path / "font.gbdraw-session.json"
+    circular_main([
+        "--gbk", str(gbk), "-o", str(tmp_path / "font"), "-f", "svg",
+        "--font_file", str(font), "--no_font_embedding",
+        "--save_session", "--session_output", str(session_path),
+    ])
+    fonts.clear_registered_fonts()
+
+    render_main(["--session", str(session_path), "-o", str(tmp_path / "embedded"), "-f", "svg", "--font_file", str(font)])
+    render_main([
+        "--session", str(session_path), "-o", str(tmp_path / "plain"), "-f", "svg",
+        "--font_file", str(font), "--no_font_embedding",
+    ])
+
+    embedded = (tmp_path / "embedded.svg").read_text(encoding="utf-8")
+    assert [face["font-family"] for face in _faces(embedded)] == ["'Gbdraw Render Serif'"]
+    plain = (tmp_path / "plain.svg").read_text(encoding="utf-8")
+    assert plain == (tmp_path / "font.svg").read_text(encoding="utf-8")
+    assert font_embedding.remove_embedded_font_css(embedded) == plain

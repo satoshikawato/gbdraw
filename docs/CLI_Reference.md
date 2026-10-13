@@ -579,14 +579,16 @@ options:
                         'Nimbus Sans L', sans-serif; with --font_file, the
                         family of the first file).
   --font_file PATH      A TrueType or OpenType font file (.ttf, .otf, .ttc,
-                        .otc) whose family --font_family can name; every face
-                        of a collection is used. Repeatable. Works with
+                        .otc) whose family the diagram text can use
+                        (--font_family, or the font a Session names); every
+                        face of a collection is used. Repeatable. Works with
                         --session. A Session does not store the file
                         (optional).
   --no_font_embedding   Do not embed fonts in SVG and interactive SVG output.
                         By default, each font the SVG uses that gbdraw does
                         not bundle is embedded as a subset of the characters
-                        it draws, unless its license (OS/2 fsType) forbids
+                        it draws (the whole font when its license forbids
+                        subsetting), unless its license (OS/2 fsType) forbids
                         embedding.
   --session SESSION     Regenerate a diagram from a plain or gzip-compressed
                         gbdraw GUI session JSON file.
@@ -1471,14 +1473,16 @@ options:
                         'Nimbus Sans L', sans-serif; with --font_file, the
                         family of the first file).
   --font_file PATH      A TrueType or OpenType font file (.ttf, .otf, .ttc,
-                        .otc) whose family --font_family can name; every face
-                        of a collection is used. Repeatable. Works with
+                        .otc) whose family the diagram text can use
+                        (--font_family, or the font a Session names); every
+                        face of a collection is used. Repeatable. Works with
                         --session. A Session does not store the file
                         (optional).
   --no_font_embedding   Do not embed fonts in SVG and interactive SVG output.
                         By default, each font the SVG uses that gbdraw does
                         not bundle is embedded as a subset of the characters
-                        it draws, unless its license (OS/2 fsType) forbids
+                        it draws (the whole font when its license forbids
+                        subsetting), unless its license (OS/2 fsType) forbids
                         embedding.
   --normalize_length    Normalize record length (experimental; default:
                         False).
@@ -1592,6 +1596,7 @@ comparisons, but its hit set is not guaranteed to be identical to LOSAT.
 usage: gbdraw render [-h] --session FILE [--drawing ID [ID ...]]
                      [--list_drawings] [-o OUTPUT] [-f FORMAT] [--overwrite]
                      [--save_session | --session_output PATH]
+                     [--font_file PATH] [--no_font_embedding]
 
 Render the drawings of a plain or gzip-compressed gbdraw Session file. Without
 --drawing, every drawing with a committed render is rendered and the others
@@ -1622,6 +1627,18 @@ options:
                         Write the Session again with the rendered drawings
                         replaced to PATH; use a .gz suffix for gzip
                         compression.
+  --font_file PATH      A TrueType or OpenType font file (.ttf, .otf, .ttc,
+                        .otc) whose family the diagram text can use
+                        (--font_family, or the font a Session names); every
+                        face of a collection is used. Repeatable. Works with
+                        --session. A Session does not store the file
+                        (optional).
+  --no_font_embedding   Do not embed fonts in SVG and interactive SVG output.
+                        By default, each font the SVG uses that gbdraw does
+                        not bundle is embedded as a subset of the characters
+                        it draws (the whole font when its license forbids
+                        subsetting), unless its license (OS/2 fsType) forbids
+                        embedding.
 ```
 
 <!-- END GENERATED RENDER HELP -->

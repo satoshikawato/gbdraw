@@ -44,6 +44,8 @@ _FONT_PROPERTIES = ("font-family", "font-weight", "font-style")
 # print, editable) allow it even when bit 1 is set.
 _FS_TYPE_RESTRICTED = 0x0002
 _FS_TYPE_ALLOWED = 0x0004 | 0x0008
+# Bit 8: the font may be embedded only whole, never as a subset (D-09).
+_FS_TYPE_NO_SUBSETTING = 0x0100
 # The root <svg ...> start tag (attribute values may hold ">").
 _ROOT_START_TAG = re.compile(r"<svg\b(?:[^>\"']|\"[^\"]*\"|'[^']*')*>")
 _EMBEDDED_DEFS = re.compile(
@@ -105,12 +107,35 @@ def _drawn_characters(root: ET.Element) -> Dict[_FontKey, set[str]]:
     return drawn
 
 
-def _subset_data_url(face: fonts.FontFace, characters: set[str]) -> str:
-    from fontTools import subset
+def _embedding_refused(font: TTFont) -> bool:
+    """Whether the face's license (OS/2 ``fsType``) allows no embedding."""
+    fs_type = _fs_type(font)
+    return bool(fs_type & _FS_TYPE_RESTRICTED and not fs_type & _FS_TYPE_ALLOWED)
 
+
+def _fs_type(font: TTFont) -> int:
+    return int(font["OS/2"].fsType) if "OS/2" in font else 0
+
+
+def _face_data_url(face: fonts.FontFace, characters: set[str], *, whole: bool) -> str:
+    """The face as a ``data:`` URL: a subset of ``characters``, or the whole
+    face when its license forbids subsetting."""
     font = TTFont(io.BytesIO(fonts.face_source_bytes(face)), fontNumber=face.index, recalcTimestamp=False)
     if face.instance:
         font = fonts.named_instance(font, face.instance)
+    if not whole:
+        _subset(font, characters)
+    font.flavor = None
+    buffer = io.BytesIO()
+    font.save(buffer)
+    mime, css_format = ("font/otf", "opentype") if font.sfntVersion == "OTTO" else ("font/ttf", "truetype")
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f'url(data:{mime};base64,{encoded}) format("{css_format}")'
+
+
+def _subset(font: TTFont, characters: set[str]) -> None:
+    from fontTools import subset
+
     options = subset.Options()
     options.hinting = False
     options.notdef_outline = True
@@ -126,19 +151,14 @@ def _subset_data_url(face: fonts.FontFace, characters: set[str]) -> str:
         subsetter.subset(font)
     finally:
         subset_log.setLevel(level)
-    font.flavor = None
-    buffer = io.BytesIO()
-    font.save(buffer)
-    mime, css_format = ("font/otf", "opentype") if font.sfntVersion == "OTTO" else ("font/ttf", "truetype")
-    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-    return f'url(data:{mime};base64,{encoded}) format("{css_format}")'
 
 
 def svg_font_embedding(svg_text: str) -> FontEmbedding:
     """The ``@font-face`` rules for the custom faces ``svg_text`` draws with.
 
     Each face gets one rule with its own weight and style and a subset of the
-    characters drawn with it. Bundled Liberation faces are never embedded.
+    characters drawn with it (the whole face when its license forbids
+    subsetting). Bundled Liberation faces are never embedded.
     """
     drawn = _drawn_characters(ET.fromstring(svg_text))
     by_face: Dict[tuple[str, fonts.FontFace], set[str]] = {}
@@ -153,9 +173,7 @@ def svg_font_embedding(svg_text: str) -> FontEmbedding:
         font = fonts.load_font(face)
         if font is None:
             continue
-        os2 = font["OS/2"] if "OS/2" in font else None
-        fs_type = int(os2.fsType) if os2 is not None else 0
-        if fs_type & _FS_TYPE_RESTRICTED and not fs_type & _FS_TYPE_ALLOWED:
+        if _embedding_refused(font):
             if family not in refused:
                 refused.append(family)
             continue
@@ -165,7 +183,7 @@ def svg_font_embedding(svg_text: str) -> FontEmbedding:
             f"font-family: {fonts.css_family_token(family)}; "
             f"font-weight: {weight}; "
             f"font-style: {'italic' if italic else 'normal'}; "
-            f"src: {_subset_data_url(face, characters)}; "
+            f"src: {_face_data_url(face, characters, whole=bool(_fs_type(font) & _FS_TYPE_NO_SUBSETTING))}; "
             "}"
         )
     if not rules and not refused:

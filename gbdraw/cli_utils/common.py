@@ -12,8 +12,9 @@ import logging
 import math
 import sys
 from dataclasses import replace
+from typing import Sequence
 
-from gbdraw.core.fonts import complete_font_family, font_family_list_for, register_font_file_faces
+from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
 from gbdraw.api.requests import RecordCardinality, RecordDisplayOptions
@@ -456,6 +457,12 @@ def _add_font_args(parser: argparse.ArgumentParser) -> None:
             "first file)."
         ),
         type=str)
+    add_font_file_args(parser)
+
+
+def add_font_file_args(parser: argparse.ArgumentParser) -> None:
+    """``--font_file`` and ``--no_font_embedding``, for the mode commands and
+    ``gbdraw render`` (also with ``--session``)."""
     parser.add_argument(
         '--font_file',
         metavar='PATH',
@@ -463,8 +470,9 @@ def _add_font_args(parser: argparse.ArgumentParser) -> None:
         default=[],
         help=(
             'A TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) whose family '
-            '--font_family can name; every face of a collection is used. Repeatable. '
-            'Works with --session. A Session does not store the file (optional).'
+            'the diagram text can use (--font_family, or the font a Session names); '
+            'every face of a collection is used. Repeatable. Works with --session. '
+            'A Session does not store the file (optional).'
         ),
         type=str)
     parser.add_argument(
@@ -474,15 +482,21 @@ def _add_font_args(parser: argparse.ArgumentParser) -> None:
         help=(
             'Do not embed fonts in SVG and interactive SVG output. By default, each font '
             'the SVG uses that gbdraw does not bundle is embedded as a subset of the '
-            'characters it draws, unless its license (OS/2 fsType) forbids embedding.'
+            'characters it draws (the whole font when its license forbids subsetting), '
+            'unless its license (OS/2 fsType) forbids embedding.'
         ))
+
+
+def register_font_files(paths: Sequence[str]) -> list[RegisteredFont]:
+    """Register every face of each ``--font_file``, in order."""
+    return [face for path in paths for face in register_font_file_faces(path)]
 
 
 def cli_font_family(args: argparse.Namespace) -> str | None:
     """Register each ``--font_file`` and return the ``font_family`` override:
     ``--font_family`` completed with its generic family, else the family of
     the first file's first face, else None (the configured default)."""
-    registered = [face for path in args.font_file for face in register_font_file_faces(path)]
+    registered = register_font_files(args.font_file)
     if args.font_family:
         return complete_font_family(args.font_family)
     if registered:
