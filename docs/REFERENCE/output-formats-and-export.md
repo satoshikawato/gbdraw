@@ -84,6 +84,57 @@ that formatting must remain exact.
 See [Interactive SVG and semantic
 hooks](interactive-svg-and-semantic-hooks.md) for stable integration tokens.
 
+## Fonts
+
+Diagram text uses Liberation Sans unless you choose another font: **Font** in
+the web app, `--font_family` on the command line, or the
+`objects.text.font_family` config override in Python. gbdraw measures labels,
+the legend, and titles with the font itself, so they fit it. Liberation Sans,
+Serif, and Mono and the names they stand for (Arial, Helvetica, Times New
+Roman, Courier) are built-in fonts. Any other font, and a font you load under a
+built-in name, is a custom font.
+
+SVG and Interactive SVG embed each custom font they use, by default, so they
+show it on computers that do not have it:
+
+- The file starts with `<defs id="gbdraw-embedded-fonts">`, whose `<style>`
+  holds one `@font-face` per font face as a `data:` URL: `font/ttf` for
+  TrueType outlines, `font/otf` for OpenType CFF outlines.
+- Only the characters the diagram draws are embedded. A font whose OS/2
+  `fsType` forbids subsetting (bit `0x0100`) is embedded whole.
+- A font whose `fsType` forbids embedding is not embedded, and a warning names
+  it. The SVG shows it only where it is installed.
+- Built-in fonts are never embedded.
+- If embedding fails, the export is an error that names the opt-out below.
+- DejaVu Serif adds about 11 KB (+12.6%) to the Circular `HmmtDNA` example and
+  about 14 KB (+5.5%) to the Linear `BGC0000708`–`713` comparison.
+
+To keep only the font name, turn embedding off: `--no_font_embedding` on the
+command line (also with `--session`), `embed_fonts=False` in `Diagram.save()`,
+`to_svg()`, `to_bytes()`, or `RenderOutputRequest`, and **Embed font in
+exported SVG** in the web app's **Font** section. A Session and the web app's
+preview never contain a font file; see [Session and request
+compatibility](session-and-request-compatibility.md#fonts).
+
+In the web app, SVG, Interactive SVG, and PNG exports use the embedding. With
+**Embed font in exported SVG** off, a PNG draws the font only if it is
+installed; a font loaded from a file is replaced with the browser's default
+font. PDF export embeds the TrueType outlines of each custom font whatever that
+setting, converting an OpenType CFF font. If the license forbids it or the
+conversion fails, the PDF draws that text in the nearest Liberation font, and
+the notice after the export names both fonts:
+
+- "Font X is not embedded: its license (OS/2 fsType) does not allow embedding.
+  The SVG shows it only where X is installed."
+- "... The PNG draws its text with a substitute font unless X is installed."
+- "Font X is not embedded in the PDF: its license (OS/2 fsType) does not allow
+  embedding. Its text is drawn in S."
+- "Font X could not be prepared for the PDF. Its text is drawn in S."
+
+Exports are not Undo steps. PNG, PDF, EPS, and PS from the command line and
+Python go through CairoSVG and draw the chosen font, including a `--font_file`
+font that is not installed.
+
 ## Raw results and FASTA downloads
 
 Raw LOSAT and LOSATP exports contain the search rows before display filtering

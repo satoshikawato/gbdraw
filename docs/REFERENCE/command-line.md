@@ -144,6 +144,20 @@ layout](palettes-feature-rules-labels-shapes-and-tracks.md).
 by exact selectors; its rows decide before the visibility and label tables (see
 [Feature override table](input-formats-and-tsv-schemas.md#feature-override-table)).
 
+`--font_family` sets the font of all diagram text: one family name such as
+`"DejaVu Serif"` or a CSS font-family list. The default is Liberation Sans.
+gbdraw measures text with the font file of the first family it finds: a
+`--font_file` font, a bundled Liberation font, or a font installed on the
+computer. A family found nowhere is replaced with the nearest Liberation font,
+with a warning. `--font_file PATH` adds the faces of a `.ttf`, `.otf`, `.ttc`,
+or `.otc` file (every face of a collection); repeat it for more files. Without
+`--font_family`, the diagram uses the family of the first file. An unreadable
+file is an error. `circular`, `linear`, and `gbdraw render --session` accept
+both; with `--session`, `--font_file` supplies the font the Session names.
+`--no_font_embedding` keeps only the font name in SVG output. A Session stores
+the font name, not the file; `--save_session` logs that for a custom font. See
+[Fonts](output-formats-and-export.md#fonts).
+
 ## Comparison boundary
 
 `--losat losatp` with `--losatp_mode` (`similarity_groups`, `collinear`, or
