@@ -26,7 +26,7 @@ write-up of a release.
 - Fonts (CLI, Python, web app): diagram text can use any font, including a
   font installed on the computer or loaded from a file, and gbdraw measures
   labels, the legend, and titles with that font instead of Liberation Sans
-  (#1046).
+  (#1046, #1058).
   - CLI: `--font_family` takes a family name or a CSS font-family list.
     `--font_file PATH` (repeatable; `.ttf`, `.otf`, `.ttc`, `.otc`) adds a font
     file, also with `--session` and `gbdraw render --session`. In Python, set
