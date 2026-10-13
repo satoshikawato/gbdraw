@@ -26,7 +26,8 @@ def svg_font_embedding_json(svg_text: str, kind: str = "svg") -> str:
     (the SVG the PNG export draws, which carries every custom font).
 
     A font that cannot be embedded fails the export with the
-    ``FONT_EMBEDDING`` reason, whose guidance names the opt-out (D-09).
+    ``FONT_EMBEDDING`` reason, whose guidance names the opt-out (D-09), or
+    for ``raster`` with ``FONT_RASTER``, since the opt-out does not change PNG.
     """
     embedding_kind = _SVG_EMBEDDING_KINDS.get(str(kind))
     if embedding_kind is None:
@@ -38,7 +39,10 @@ def svg_font_embedding_json(svg_text: str, kind: str = "svg") -> str:
     except Exception as exc:
         raise ValidationError(
             f"Could not embed the fonts in the SVG: {exc}",
-            diagnostic={"code": "INPUT_INVALID", "reason": "FONT_EMBEDDING"},
+            diagnostic={
+                "code": "INPUT_INVALID",
+                "reason": "FONT_RASTER" if embedding_kind == "raster" else "FONT_EMBEDDING",
+            },
         ) from exc
     return json.dumps({"block": embedded_fonts_block(embedding), "refusedFamilies": list(embedding.refused_families)})
 

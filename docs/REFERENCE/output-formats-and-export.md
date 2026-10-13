@@ -107,7 +107,7 @@ show it on computers that do not have it:
   `0x0008`) or allows only bitmaps (bit `0x0200`) is not embedded, and a
   warning names it. The SVG shows it only where it is installed.
 - Built-in fonts are never embedded.
-- If embedding fails, the export is an error that names the opt-out below.
+- If embedding fails, the SVG export is an error that names the opt-out below.
 - DejaVu Serif adds about 11 KB (+12.6%) to the Circular `HmmtDNA` example and
   about 14 KB (+5.5%) to the Linear `BGC0000708`–`713` comparison.
 
@@ -120,7 +120,9 @@ preview never contain a font file; see [Session and request
 compatibility](session-and-request-compatibility.md#fonts).
 
 PNG always draws the chosen font, whatever the embedding setting and the
-font's license: a raster image contains no font file.
+font's license: a raster image contains no font file. In the web app, when a
+font cannot be subset for a PNG, the whole font is used; if that fails too,
+the PNG export is an error that asks you to choose another font.
 
 PDF, EPS, and PS carry the fonts they draw with, always as subsets. They never
 contain a custom font whose `fsType` forbids embedding, allows only bitmaps, or

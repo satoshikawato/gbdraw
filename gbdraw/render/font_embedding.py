@@ -193,7 +193,8 @@ def svg_font_embedding(svg_text: str, kind: Literal["svg", "raster"] = "svg") ->
     Each face gets one rule with its own weight and style and a subset of the
     characters drawn with it, or the whole face, as ``face_embedding``
     decides for ``kind`` (``svg`` for an SVG file, ``raster`` for the SVG the
-    Web PNG export draws). Bundled Liberation faces are never embedded.
+    Web PNG export draws, which takes the whole face when subsetting
+    fails). Bundled Liberation faces are never embedded.
     """
     drawn = _drawn_characters(ET.fromstring(svg_text))
     by_face: Dict[tuple[str, fonts.FontFace], set[str]] = {}
@@ -214,12 +215,19 @@ def svg_font_embedding(svg_text: str, kind: Literal["svg", "raster"] = "svg") ->
                 refused.append(family)
             continue
         weight, italic = fonts.face_weight_and_italic(font)
+        try:
+            src = _face_data_url(face, characters, whole=use == "whole")
+        except Exception:
+            if kind != "raster" or use == "whole":
+                raise
+            # The raster SVG never leaves the page: draw with the whole face.
+            src = _face_data_url(face, characters, whole=True)
         rules.append(
             "@font-face { "
             f"font-family: {fonts.css_family_token(family)}; "
             f"font-weight: {weight}; "
             f"font-style: {'italic' if italic else 'normal'}; "
-            f"src: {_face_data_url(face, characters, whole=use == 'whole')}; "
+            f"src: {src}; "
             "}"
         )
     if not rules and not refused:

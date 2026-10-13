@@ -627,16 +627,38 @@ def test_ov688_a_session_saved_again_warns_that_it_keeps_only_the_font_name(
     assert "@font-face" not in (tmp_path / "second.gbdraw-session.json").read_text(encoding="utf-8")
 
 
-def test_a_web_svg_embedding_failure_names_the_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
-    def broken(_svg: str) -> font_embedding.FontEmbedding:
+@pytest.mark.parametrize("kind, reason", [("svg", "FONT_EMBEDDING"), ("raster", "FONT_RASTER")])
+def test_a_web_embedding_failure_names_the_opt_out_only_for_svg(
+    monkeypatch: pytest.MonkeyPatch, kind: str, reason: str
+) -> None:
+    # F2: the opt-out does not change PNG, so a PNG failure has its own guidance.
+    def broken(_svg: str, _kind: str) -> font_embedding.FontEmbedding:
         raise RuntimeError("subsetter failed")
 
     monkeypatch.setattr(export_fonts, "svg_font_embedding", broken)
 
     with pytest.raises(ValidationError) as caught:
-        export_fonts.svg_font_embedding_json("<svg/>")
+        export_fonts.svg_font_embedding_json("<svg/>", kind)
 
-    assert caught.value.diagnostic == {"code": "INPUT_INVALID", "reason": "FONT_EMBEDDING"}
+    assert caught.value.diagnostic == {"code": "INPUT_INVALID", "reason": reason}
+
+
+def test_f2_a_raster_embeds_the_whole_face_when_subsetting_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The raster SVG never leaves the page, so the whole face may go in it.
+    fonts.register_font_file(_renamed_font("LiberationSans-Regular", "Gbdraw Raster Whole", tmp_path / "w.ttf"))
+    svg = _svg(("'Gbdraw Raster Whole', sans-serif", "normal", "Ab"))
+
+    def broken(_font: TTFont, _characters: set[str]) -> None:
+        raise RuntimeError("subsetter failed")
+
+    monkeypatch.setattr(font_embedding, "_subset", broken)
+
+    (face,) = _faces(font_embedding.svg_font_embedding(svg, kind="raster").css)
+    assert {ord("A"), ord("b"), ord("z")} <= set(_embedded_font(face)[1].getBestCmap())
+    with pytest.raises(RuntimeError, match="subsetter failed"):
+        font_embedding.svg_font_embedding(svg, kind="svg")
 
 
 def test_gbdraw_render_takes_font_files_and_no_font_embedding(tmp_path: Path) -> None:
