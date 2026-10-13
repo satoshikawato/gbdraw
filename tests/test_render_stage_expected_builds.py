@@ -95,6 +95,7 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
             "legend", "legend_box_size", "legend_font_size", "definition_font_size", "definition_line_style",
             "hide_accession", "hide_scale", "keep_definition_left_aligned", "ruler_label_font_size",
             "scale_font_size", "scale_style", "show_replicon", "align_center (rows)", "axis_stroke_width",
+            "multi_record_column_gap_ratio", "multi_record_row_gap_ratio",
         ),
         _LEGEND_LAYOUT,
     ),
