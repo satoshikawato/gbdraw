@@ -6,7 +6,7 @@
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { test, expect } = require('@playwright/test');
-const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const ROW_KINDS = ['outward_both', 'outward_vertical', 'outward_horizontal', 'smaller_font', 'tighter_rows', 'combination'];
 const SCREENSHOTS = process.env.GBDRAW_LABEL_FIT_SCREENSHOTS || '';
@@ -39,11 +39,15 @@ const shot = async (locator, name) => {
   if (SCREENSHOTS) await locator.screenshot({ path: join(SCREENSHOTS, name) });
 };
 
-// LP-D52 (E-ROW): SARS-CoV-2 with labels Out at the defaults overprints two
-// embedded labels; only "separate overlapping features" fits it.
+// LP-D52 (E-ROW): SARS-CoV-2 with labels Out overprints two embedded labels;
+// with Separate Strands off only "separate overlapping features" fits it. (With
+// the Web's Separate Strands on, its outer leaders still cross after that fix,
+// so no row fits: OV-724.)
 test('overlapping labels: the dialog shows every row; Cancel writes nothing; Apply is one step that draws; Undo restores', async ({ page }) => {
   test.setTimeout(600000);
   await openWithOuterLabels(page, { name: 'SARS-CoV-2.gbk', text: SARS() });
+  await reveal(page.locator('#circular-track-preset'));
+  await page.getByRole('checkbox', { name: 'Separate Strands', exact: true }).uncheck();
   await generateAndWaitForResult(page, { expectedStatus: 'error', requireCommittedResult: false });
   const dialog = page.locator('[data-label-fit-dialog]');
   await expect(dialog).toBeVisible();
