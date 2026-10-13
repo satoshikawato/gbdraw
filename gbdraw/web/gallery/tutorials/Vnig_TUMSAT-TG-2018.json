@@ -34,10 +34,26 @@
       "body": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff. The app will detect the two chromosomes and four plasmids in the file.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-01-gbff-upload.webp",
             "alt": "Circular input panel with the Vibrio GBFF file selected.",
             "caption": "GCF_015097735.1_ASM1509773v1_genomic.gbff is selected as the GenBank file."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "viewport": {"width": 1280, "height": 900},
+            "clipSelectors": [
+              "[data-settings-section='input-genomes'] > .card-header",
+              "[data-settings-section='input-genomes'] [role='group'][aria-label='GenBank/DDBJ File selection']"
+            ],
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "circular",
+              "files.c_gb.name": "GCF_015097735.1_ASM1509773v1_genomic.gbff"
+            },
+            "visibleText": ["GCF_015097735.1_ASM1509773v1_genomic.gbff"]
           }
         }
       ]
