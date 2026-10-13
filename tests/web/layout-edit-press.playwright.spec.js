@@ -2,8 +2,10 @@
 // A press that moves nothing leaves the stored Result, History, and the
 // mounted SVG as they were (OV-608). A drag that moves is one step, leaves no
 // inline opacity behind, and Undo restores the stored Result of before it.
+// The pointer shows `grab` on a target, `grabbing` while it is pressed, and
+// `grab` after, also on a Legend row and a record definition (OV-603, OV-604).
 const { test, expect } = require('@playwright/test');
-const { HMMT_SESSION, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
+const { BATCH_FIXTURE, HMMT_SESSION, loadSessionFile, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -86,12 +88,17 @@ const layoutEditOn = async (page) => {
   await settle(page);
 };
 
-// A press on a target starts a Layout edit drag, which shows `grabbing`.
-const pressDown = async (page) => {
+// The cursor the pointer shows: that of the element under it.
+const cursorAt = (page, point) => page.evaluate(({ x, y }) => (
+  getComputedStyle(document.elementFromPoint(x, y)).cursor
+), point);
+
+// A target shows `grab`; a press on it starts a Layout edit drag, which shows
+// `grabbing` (PD-OI-053; a Legend row too, OV-603).
+const pressDown = async (page, point) => {
+  expect(await cursorAt(page, point), 'a Layout edit target shows grab').toBe('grab');
   await page.mouse.down();
-  expect(await page.evaluate(() => (
-    Boolean(document.querySelector('.gbdraw-preview-surface [style*="grabbing"]'))
-  )), 'the press starts a Layout edit drag').toBe(true);
+  expect(await cursorAt(page, point), 'the press starts a Layout edit drag').toBe('grabbing');
 };
 
 const history = (page, method) => page.evaluate(async (name) => {
@@ -99,6 +106,10 @@ const history = (page, method) => page.evaluate(async (name) => {
 }, method);
 
 const expectPressAndDrag = async (page, targets) => {
+  // With Layout edit off a Legend row is the button of its popup (OV-603).
+  const row = await pointOn(page, targets.legend);
+  await page.mouse.move(row.x, row.y);
+  expect(await cursorAt(page, row)).toBe('pointer');
   await layoutEditOn(page);
 
   for (const [kind, selector] of Object.entries(targets)) {
@@ -106,13 +117,13 @@ const expectPressAndDrag = async (page, targets) => {
       const point = await pointOn(page, selector);
       await page.mouse.move(point.x, point.y);
       const undo = await remember(page);
-      await pressDown(page);
+      await pressDown(page, point);
       await page.mouse.up();
       await settle(page);
       expect(await observe(page)).toMatchObject({ undo, storedDifference: null, mountedDifference: null });
 
       // The same after the pointer left the press point and came back to it.
-      await pressDown(page);
+      await pressDown(page, point);
       await page.mouse.move(point.x + DRAG.x, point.y + DRAG.y, { steps: 4 });
       await page.mouse.move(point.x, point.y, { steps: 4 });
       await page.mouse.up();
@@ -125,10 +136,11 @@ const expectPressAndDrag = async (page, targets) => {
     const point = await pointOn(page, selector);
     await page.mouse.move(point.x, point.y);
     const undo = await remember(page);
-    await pressDown(page);
+    await pressDown(page, point);
     await page.mouse.move(point.x + DRAG.x, point.y + DRAG.y, { steps: 6 });
     await page.mouse.up();
     await settle(page);
+    expect(await cursorAt(page, { x: point.x + DRAG.x, y: point.y + DRAG.y }), 'after the drag').toBe('grab');
     return undo;
   };
 
@@ -176,6 +188,25 @@ test('Circular: an unmoved press commits nothing and a drag is one clean step', 
     legend: '#legend text',
     'plot title': '#plot_title text'
   });
+});
+
+// A record definition inside a record group is a handle of that record (OV-604).
+test('Circular Multi-Record Canvas: a record definition shows the drag of its record', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, BATCH_FIXTURE, () => {
+    const app = window.__GBDRAW_APP__;
+    app.form.multi_record_canvas = true;
+    app.adv.circular_grouping_intent = 'grid';
+  });
+  await generateAndWaitForResult(page);
+  await settle(page);
+  await layoutEditOn(page);
+
+  const point = await pointOn(page, '[data-gbdraw-role="record-definition"] text');
+  await page.mouse.move(point.x, point.y);
+  await pressDown(page, point);
+  await page.mouse.up();
+  expect(await cursorAt(page, point), 'after the press').toBe('grab');
 });
 
 test('Linear: an unmoved press commits nothing and a drag is one clean step', async ({ page }) => {
