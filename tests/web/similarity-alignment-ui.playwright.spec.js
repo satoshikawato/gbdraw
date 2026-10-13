@@ -58,6 +58,28 @@ const previewView = (page) => page.evaluate(() => ({
 const editorDrawer = (page) => page.evaluate(() => ({
   open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab
 }));
+// Whether the view is what Fit gives in the canvas as it is now: the largest whole-percent zoom
+// that leaves 8 px around the figure, with the figure centred. `room` is the canvas size.
+const figureFit = (page) => page.evaluate(() => {
+  const { zoom } = window.__GBDRAW_APP__;
+  const canvas = document.querySelector('.preview-canvas');
+  const frame = canvas.getBoundingClientRect();
+  const figure = document.querySelector('.gbdraw-preview-surface svg').getBoundingClientRect();
+  const largest = Math.min((canvas.clientWidth - 16) / (figure.width / zoom), (canvas.clientHeight - 16) / (figure.height / zoom));
+  return {
+    room: [canvas.offsetWidth, canvas.offsetHeight],
+    zoom,
+    fitted: Math.abs(zoom - Math.floor(largest * 100 + 1e-9) / 100) < 1e-9
+      && Math.abs(figure.left + figure.right - frame.left - frame.right) <= 2
+      && Math.abs(figure.top + figure.bottom - frame.top - frame.bottom) <= 2,
+    inFrame: figure.left >= frame.left && figure.right <= frame.right
+      && figure.top >= frame.top && figure.bottom <= frame.bottom
+  };
+});
+// A change of the canvas size has reached its observers once two frames have been drawn.
+const roomSettled = (page) => evaluateWithRetainedPromise(page, () => new Promise((resolve) => {
+  requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+}));
 
 const loadAmbiguousSession = async (page, testInfo) => {
   const directory = testInfo.outputPath('inparalog-fixture');
@@ -2697,10 +2719,131 @@ test('a Session loaded under an open review keeps its own view and Editor when t
     return { zoom, pan: canvasPan };
   });
   expect(savedView).toEqual(loaded);
+  // The view is the loaded Session's now: a change of the room does not fit it.
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(loaded);
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   expect(await previewView(page)).toEqual(loaded);
   expect((await editorDrawer(page)).open).toBe(false);
+});
+
+// OV-536: while the review shows the fitted figure, the figure follows the room of the Result,
+// whatever changed that room: the window, the settings pane's display, a docked section, the
+// pane's width.
+test('the figure is fitted again whenever the room of the Result changes while Review alignment is open', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  // The user's own view.
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.evaluate(() => { window.__GBDRAW_APP__.canvasPan.x += 37; });
+  const before = await previewView(page);
+  const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  const undoAtOpen = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const fittedTo = async (state, room) => {
+    await expect.poll(async () => {
+      const found = await figureFit(page);
+      return found.fitted && found.inFrame && { room: found.room };
+    }, { message: `${state}: ${JSON.stringify(await figureFit(page))}` }).toEqual({ room });
+    return previewView(page);
+  };
+  const opened = await fittedTo('opened at 1600', [842, 650]);
+  // The same room gives the same fit, whatever the view it replaces.
+  const expectOpenedView = (view) => {
+    expect(view.zoom).toBe(opened.zoom);
+    expect(Math.abs(view.pan.x - opened.pan.x) + Math.abs(view.pan.y - opened.pan.y)).toBeLessThan(0.01);
+  };
+
+  // The window: wider, narrower, and back.
+  await page.setViewportSize({ width: 1900, height: 1000 });
+  const wider = await fittedTo('window 1900', [1142, 650]);
+  expect(wider.zoom).toBeGreaterThan(opened.zoom);
+  await page.setViewportSize({ width: 1340, height: 1000 });
+  const narrower = await fittedTo('window 1340', [582, 616]);
+  expect(narrower.zoom).toBeLessThan(opened.zoom);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  expectOpenedView(await fittedTo('window 1600 again', [842, 650]));
+
+  // The settings pane: the icon rail with a section, the rail alone, the stacked pane again.
+  await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
+  expect((await fittedTo('rail with a section', [780, 650])).zoom).toBeLessThan(opened.zoom);
+  await page.getByRole('button', { name: 'Close section', exact: true }).click();
+  expect((await fittedTo('rail alone', [1108, 650])).zoom).toBeGreaterThan(opened.zoom);
+  await page.getByRole('button', { name: 'Expand settings', exact: true }).click();
+  expectOpenedView(await fittedTo('stacked again', [842, 650]));
+
+  // A zoom and a pan made by hand stay while the room stays ...
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.evaluate(() => { window.__GBDRAW_APP__.canvasPan.y += 23; });
+  const byHand = await previewView(page);
+  expect(byHand.zoom).toBeGreaterThan(opened.zoom);
+  await dialog.locator('[data-alignment-record-key]').first().hover();
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(byHand);
+  // ... and the fit replaces them when it changes: here the pane's width drag.
+  const handle = await page.locator('.resize-handle').first().boundingBox();
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 + 100, handle.y + 200, { steps: 5 });
+  await page.mouse.up();
+  const dragged = await fittedTo('pane 110 px wider', [732, 650]);
+  expect(dragged.zoom).toBeLessThan(opened.zoom);
+
+  // No fit is a History step, and a Session saved now holds the view from before the review.
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoAtOpen);
+  const savedView = await evaluateWithRetainedPromise(page, async () => {
+    const { exportSession } = await import('./js/services/config.js');
+    const result = await exportSession('saved after a fit to the room');
+    const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
+    const { zoom, canvasPan } = JSON.parse(text).ui;
+    return { zoom, pan: canvasPan };
+  });
+  expect(savedView).toEqual(before);
+
+  // Apply records its one History action and gives back the view from before the review.
+  await chooseUnresolved(page, dialog);
+  await dialog.getByRole('radio', { name: 'All left', exact: true }).check();
+  await applyReview(page, dialog);
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoAtOpen + 1);
+  // The review is over: a change of the room keeps that view.
+  await page.setViewportSize({ width: 1900, height: 1000 });
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(before);
+  expect(pageErrors).toEqual([]);
+});
+
+test('outside Review alignment a change of the room of the Result keeps the zoom and the position', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.evaluate(() => { window.__GBDRAW_APP__.canvasPan.x += 37; });
+  const view = await previewView(page);
+  const room = async () => (await figureFit(page)).room;
+  const rooms = [await room()];
+  for (const change of [
+    () => page.setViewportSize({ width: 1900, height: 1000 }),
+    () => page.setViewportSize({ width: 1340, height: 800 }),
+    () => page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click(),
+    () => page.getByRole('button', { name: 'Close section', exact: true }).click()
+  ]) {
+    await change();
+    await roomSettled(page);
+    rooms.push(await room());
+    expect(await previewView(page), `room ${rooms.at(-1)}`).toEqual(view);
+  }
+  // Each step did change the room.
+  expect(new Set(rooms.map(String)).size).toBe(rooms.length);
 });
 
 // The majanivirus og_13 review opens with records that need a choice.

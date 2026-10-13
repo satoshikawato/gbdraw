@@ -276,6 +276,12 @@ export const createPanZoom = (state) => {
     resetZoom ? 1.0 : zoom.value
   );
 
+  // The room of the figure is the canvas box, which a zoomed figure's scrollbars do not change.
+  /** @param {HTMLElement} container The preview canvas. */
+  const previewRoom = (container) => `${container.offsetWidth}x${container.offsetHeight}`;
+  // The room the last Fit measured.
+  let fittedRoom = '';
+
   // Fit (UI-11): the largest whole-percent zoom that shows the whole diagram in
   // the visible preview frame (the canvas left of an open Editor drawer), and
   // the pan that centres it under the top-center origin.
@@ -284,6 +290,7 @@ export const createPanZoom = (state) => {
     const surface = svgContainer.value;
     const svg = surface?.querySelector?.('svg');
     if (!container || !svg) return;
+    fittedRoom = previewRoom(container);
     // Measure the current transform itself, not a frame of its transition.
     applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, true);
     const surfaceBox = surface.getBoundingClientRect();
@@ -399,9 +406,24 @@ export const createPanZoom = (state) => {
   // writer and the UI capture read it through `heldPreviewViewport`.
   /** @type {PersistedPreviewViewport | null} */
   let held = null;
-  const holdPreviewViewport = () => { held ??= { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } }; };
+  // While a view is held, the figure shown in its place follows its room: it is fitted again each
+  // time the canvas changes size, whatever changed it (the window, the settings pane, the docked
+  // panel changing sides). A zoom or a pan made in between lasts until the next such change. A
+  // hidden canvas (the Run info tab) has no room, and the room of the last Fit is no change.
+  const heldRoomObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+    const container = canvasContainerRef.value;
+    if (!container?.offsetWidth || !container.offsetHeight || previewRoom(container) === fittedRoom) return;
+    fitPreviewToViewport();
+  }) : null;
+  const holdPreviewViewport = () => {
+    if (held) return;
+    held = { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } };
+    fittedRoom = '';
+    if (canvasContainerRef.value) heldRoomObserver?.observe(canvasContainerRef.value);
+  };
   /** @param {{ restore: boolean }} options `restore` shows the held view again; without it the hold is dropped. */
   const releasePreviewViewport = ({ restore }) => {
+    heldRoomObserver?.disconnect();
     const view = held;
     held = null;
     if (view && restore) setPreviewViewport(view.canvasPan, view.zoom);
