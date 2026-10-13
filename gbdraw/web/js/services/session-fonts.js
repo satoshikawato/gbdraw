@@ -25,13 +25,17 @@ const nameList = (names) => (names.length < 3
 const unique = (values) => [...new Set(values)];
 
 /**
- * The Save Session notice's warnings: one per family of the drawings' fonts
- * that gbdraw does not bundle (`customFontFamilies`).
+ * The Save Session notice's warnings: one per custom family of the drawings'
+ * fonts (`customFontFamilies`).
  * @param {readonly unknown[]} fontFamilies Each drawing's `adv.font_family`.
+ * @param {Iterable<FontFamilyName>} registeredFamilies The families loaded in this page.
  * @returns {string[]}
  */
-export const customFontSaveWarnings = (fontFamilies) => unique(fontFamilies.flatMap(customFontFamilies))
-  .map((family) => `The Session keeps the font name ${family}, not the font file. To open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.`);
+export const customFontSaveWarnings = (fontFamilies, registeredFamilies) => {
+  const registered = [...registeredFamilies];
+  return unique(fontFamilies.flatMap((fontFamily) => customFontFamilies(fontFamily, registered)))
+    .map((family) => `The Session keeps the font name ${family}, not the font file. To open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.`);
+};
 
 /**
  * The fonts a Session names that this page cannot draw, and the nearest font

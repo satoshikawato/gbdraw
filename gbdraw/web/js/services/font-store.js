@@ -262,6 +262,14 @@ export const webFontFamilies = (entries) => {
 };
 
 /**
+ * The names of the page's font families, each once (the registration state
+ * the custom-font and availability rules of font-families.js take).
+ * @param {readonly WebFontEntry[]} entries
+ * @returns {FontFamilyName[]}
+ */
+export const webFontFamilyNames = (entries) => webFontFamilies(entries).map((entry) => entry.family);
+
+/**
  * The faces the Legend layout measures with (`withRegisteredFontFaces`).
  * @param {readonly WebFontEntry[]} entries
  * @returns {RegisteredLegendFace[]}

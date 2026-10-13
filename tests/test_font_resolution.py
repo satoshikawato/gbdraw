@@ -118,6 +118,15 @@ def test_a_registered_font_is_measured_with_its_own_file(tmp_path: Path) -> None
     assert calculate_bbox_dimensions(TEXT, family, 14, 72) != calculate_bbox_dimensions(TEXT, "sans-serif", 14, 72)
 
 
+def test_custom_font_families_among_counts_a_registered_alias_name() -> None:
+    # D-10: a loaded alias name is custom; an alias that was not loaded is not.
+    assert fonts.custom_font_families_among("'Times New Roman', 'DejaVu Serif', serif", ()) == ("DejaVu Serif",)
+    assert fonts.custom_font_families_among(
+        "'Times New Roman', 'DejaVu Serif', serif", ("times new  roman",)
+    ) == ("Times New Roman", "DejaVu Serif")
+    assert fonts.custom_font_families_among("serif", ("serif",)) == ()
+
+
 def test_a_registered_font_wins_over_the_bundled_alias_of_its_name(tmp_path: Path) -> None:
     # Review R2: a registered "Times New Roman" is measured with its own bytes.
     assert fonts.resolve_font_face("'Times New Roman', serif").measurement_name == "LiberationSerif-Regular"

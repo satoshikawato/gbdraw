@@ -54,15 +54,21 @@ const cssFamilyToken = (family) => {
 export const bundledFacePrefix = (family) => FONT_FAMILY_RULES.bundledFamilyAliases[comparableFamilyName(family)] ?? null;
 
 /**
- * Python's `custom_font_families`: the named families of a list that gbdraw
- * does not bundle. A Session stores only their names (D-02), so the note under
- * Font and the Save Session notice name them. The one rule of "custom font".
+ * Python's `custom_font_families_among`: the named families of a list that
+ * gbdraw does not bundle, or that are loaded in this page (a loaded "Times New
+ * Roman" draws with its own file here and with Liberation elsewhere; D-10). A
+ * Session stores only their names (D-02), so the note under Font and the Save
+ * Session notice name them. The one rule of "custom font".
  * @param {unknown} fontFamily
+ * @param {Iterable<FontFamilyName>} registeredFamilies The families loaded in this page.
  * @returns {readonly FontFamilyName[]}
  */
-export const customFontFamilies = (fontFamily) => Object.freeze(
-  parseFontFamilyList(fontFamily).filter((family) => !isGenericFamily(family) && bundledFacePrefix(family) === null)
-);
+export const customFontFamilies = (fontFamily, registeredFamilies) => {
+  const registered = new Set(Array.from(registeredFamilies, comparableFamilyName));
+  return Object.freeze(parseFontFamilyList(fontFamily).filter((family) => (
+    !isGenericFamily(family) && (bundledFacePrefix(family) === null || registered.has(comparableFamilyName(family)))
+  )));
+};
 
 /** The bundled face prefix of a list that resolves to nothing. */
 export const FALLBACK_FACE_PREFIX = FONT_FAMILY_RULES.fallbackFace;

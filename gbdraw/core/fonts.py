@@ -795,22 +795,30 @@ def _resolve_font_family_with(
     )
 
 
-def custom_font_families(font_family: str) -> tuple[str, ...]:
-    """The named families of a list that gbdraw does not bundle.
+def custom_font_families_among(font_family: str, registered_families: Iterable[str]) -> tuple[str, ...]:
+    """The named families of a list that gbdraw does not bundle, where the
+    named families are registered (the one custom-font rule; the Web app
+    passes the families loaded in its page).
 
     A Session stores only their names (D-02), so another computer may draw
     them with a substitute. A registered family named like a bundled alias
     is one of them: here it draws with its own file, elsewhere with Liberation.
     """
+    registered = {_comparable_name(family) for family in registered_families}
     return tuple(
         family
         for family in parse_font_family_list(font_family)
         if not _is_generic(family)
         and (
             _comparable_name(family) not in _BUNDLED_FONT_FAMILY_ALIASES
-            or _comparable_name(family) in _registered
+            or _comparable_name(family) in registered
         )
     )
+
+
+def custom_font_families(font_family: str) -> tuple[str, ...]:
+    """``custom_font_families_among`` the families registered in this process."""
+    return custom_font_families_among(font_family, _registered)
 
 
 def resolve_font_family(font_family: str) -> FontFamilyResolution:
@@ -912,6 +920,7 @@ __all__ = [
     "clear_registered_fonts",
     "complete_font_family",
     "custom_font_families",
+    "custom_font_families_among",
     "font_family_list_for",
     "css_family_token",
     "face_source_bytes",

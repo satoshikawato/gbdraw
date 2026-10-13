@@ -120,6 +120,7 @@ import {
 } from '../services/diagram-generation.js';
 import { createFontSettings } from './font-settings.js';
 import { customFontSaveWarnings } from '../services/session-fonts.js';
+import { webFontFamilyNames } from '../services/font-store.js';
 import { SLICE_MODES } from '../services/mode-scoped-migration.js';
 import {
   recordSessionLifecycleEvent,
@@ -5669,7 +5670,10 @@ export const createAppSetup = () => {
       // D-02: a font gbdraw does not bundle is saved by name only (receipt 〔警告〕).
       showNotice({
         text: `Session saved: ${filename}. Find it in your browser's downloads.`,
-        items: customFontSaveWarnings(SLICE_MODES.map((drawingMode) => state.drawings[drawingMode].adv.font_family))
+        items: customFontSaveWarnings(
+          SLICE_MODES.map((drawingMode) => state.drawings[drawingMode].adv.font_family),
+          webFontFamilyNames(state.loadedFonts.value)
+        )
       });
     }
   });

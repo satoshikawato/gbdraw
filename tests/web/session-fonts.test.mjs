@@ -16,12 +16,14 @@ import {
 } from '../../gbdraw/web/js/services/session-fonts.js';
 
 test('Save warns once per font a Session cannot carry, with the approved text', () => {
-  assert.deepEqual(customFontSaveWarnings([null, "'Liberation Serif', serif"]), []);
-  assert.deepEqual(customFontSaveWarnings(["'Arial', sans-serif", undefined]), [], 'a bundled alias is carried by name');
-  assert.deepEqual(customFontSaveWarnings(["'DejaVu Serif', serif", "'DejaVu Serif', serif"]), [
+  assert.deepEqual(customFontSaveWarnings([null, "'Liberation Serif', serif"], []), []);
+  assert.deepEqual(customFontSaveWarnings(["'Arial', sans-serif", undefined], []), [], 'a bundled alias is carried by name');
+  assert.equal(customFontSaveWarnings(["'Arial', sans-serif"], ['arial']).length, 1,
+    'D-10: a loaded alias name is custom (here its file draws it; elsewhere Liberation)');
+  assert.deepEqual(customFontSaveWarnings(["'DejaVu Serif', serif", "'DejaVu Serif', serif"], []), [
     'The Session keeps the font name DejaVu Serif, not the font file. To open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.'
   ]);
-  assert.equal(customFontSaveWarnings(["'Liberation Serif', 'DejaVu Serif', serif", "'Fira Code', monospace"]).length, 2,
+  assert.equal(customFontSaveWarnings(["'Liberation Serif', 'DejaVu Serif', serif", "'Fira Code', monospace"], []).length, 2,
     'every family of every drawing that gbdraw does not bundle');
 });
 

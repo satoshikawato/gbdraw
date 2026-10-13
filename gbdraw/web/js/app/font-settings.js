@@ -2,7 +2,7 @@
 /** @import { WebFontEntry, WebFontSource, RegisterFontsInWorker } from '../services/font-store.js' */
 /** @import { FontFamilyList, FontFamilyName } from '../services/font-families.js' */
 /** @import { AskChoice } from './app-messages.js' */
-import { loadWebFonts, standardInstalledFaces, webFontFamilies } from '../services/font-store.js';
+import { loadWebFonts, standardInstalledFaces, webFontFamilies, webFontFamilyNames } from '../services/font-store.js';
 import {
   bundledFacePrefix,
   comparableFamilyName,
@@ -81,6 +81,8 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
 
   /** @returns {readonly WebFontEntry[]} */
   const loadedFonts = () => state.loadedFonts.value;
+  /** @returns {FontFamilyName[]} */
+  const loadedFamilies = () => webFontFamilyNames(loadedFonts());
   /** @returns {FontFamilyList | null} */
   const draftFontFamily = () => {
     const value = state.activeDrawing().adv.font_family;
@@ -111,7 +113,7 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
    * @param {FontFamilyList} fontFamily
    */
   const unavailableLabel = (fontFamily) => {
-    const resolution = resolveWebFontFamily(fontFamily, webFontFamilies(loadedFonts()).map((entry) => entry.family));
+    const resolution = resolveWebFontFamily(fontFamily, loadedFamilies());
     const requested = resolution.missing[0] || parseFontFamilyList(fontFamily)[0] || fontFamily;
     const nearest = parseFontFamilyList(resolution.effective).find((family) => !isGenericFamily(family)) || resolution.effective;
     return `${requested} — not available, drawn in ${nearest}`;
@@ -149,7 +151,7 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
    * Whether the drawing's font names a family a Session cannot carry
    * (`customFontFamilies`, the rule of the Save Session warning too; D-02 note).
    */
-  const customFontSelected = computed(() => customFontFamilies(draftFontFamily()).length > 0);
+  const customFontSelected = computed(() => customFontFamilies(draftFontFamily(), loadedFamilies()).length > 0);
 
   /**
    * Load font sources into the page: the browser checks them, Python
@@ -320,7 +322,7 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
     /** @type {string} */
     let problem = '';
     for (;;) {
-      const missing = missingSessionFonts(fontFamilies, webFontFamilies(loadedFonts()).map((entry) => entry.family));
+      const missing = missingSessionFonts(fontFamilies, loadedFamilies());
       if (!missing) return true;
       const question = sessionFontQuestion(missing, { installedFontsSupported: localFontsSupported, loadedFamily });
       const choice = await askChoice(problem ? { ...question, items: [...question.items, problem] } : question);

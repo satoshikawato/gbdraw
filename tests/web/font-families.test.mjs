@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { customFontFamilies, resolveWebFontFamily } from '../../gbdraw/web/js/services/font-families.js';
+import { comparableFamilyName, customFontFamilies, resolveWebFontFamily } from '../../gbdraw/web/js/services/font-families.js';
 import {
   fontIdentityOf,
   identifyWebFontSources,
@@ -39,12 +39,14 @@ test('the port resolves every Python vector exactly', () => {
   });
 });
 
-// R3 (b): one rule says which fonts a Session cannot carry, Python's
-// `custom_font_families`, for the note under Font and the Save notice.
-test('the port finds the families gbdraw does not bundle as Python does', () => {
+// R3 (b), D-10: one rule says which fonts a Session cannot carry, Python's
+// `custom_font_families_among`, for the note under Font and the Save notice;
+// a loaded alias name counts.
+test('the port finds the custom families of each registration state as Python does', () => {
+  assert.ok(vectors.vectors.some((vector) => vector.registered.length > 0 && vector.custom.length > 0));
   vectors.vectors.forEach((vector, index) => {
     assert.ok(Array.isArray(vector.custom), `vector ${index} has Python's custom families`);
-    assert.deepEqual([...customFontFamilies(vector.requested)], vector.custom, `vector ${index}: ${vector.requested}`);
+    assert.deepEqual([...customFontFamilies(vector.requested, vector.registered)], vector.custom, `vector ${index}: ${vector.requested}`);
   });
 });
 
@@ -199,6 +201,22 @@ test('the Legend picks the face of a registered family Python picks for the norm
     }));
     const metrics = withRegisteredFontFaces(createLegendFontMetrics(LEGEND_FONT_METRICS), faces);
     assert.equal(resolveLegendFontFace(metrics, "'Vector Family', serif"), `face${vector.normal}`, `faceMatch[${index}]`);
+  });
+});
+
+// Review R2 / OV-685: the face Python measures a list with for each
+// registration state; a registered family wins over the bundled alias of its
+// name, generic keywords keep their Liberation face.
+test('the Legend face of every vector is the face Python measures with', () => {
+  vectors.vectors.forEach((vector, index) => {
+    const faces = vector.registered.map((family) => ({
+      family, weight: 400, italic: false, measurementName: `registered:${comparableFamilyName(family)}`, table: SERIF_TABLE
+    }));
+    const metrics = withRegisteredFontFaces(createLegendFontMetrics(LEGEND_FONT_METRICS), faces);
+    const expected = vector.face.startsWith('registered:')
+      ? `registered:${comparableFamilyName(vector.face.slice('registered:'.length))}`
+      : vector.face;
+    assert.equal(resolveLegendFontFace(metrics, vector.requested), expected, `vector ${index}: ${vector.requested}`);
   });
 });
 

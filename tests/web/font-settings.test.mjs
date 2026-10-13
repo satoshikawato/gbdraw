@@ -96,6 +96,8 @@ test('the custom-font note names any family gbdraw does not bundle, not only the
   assert.equal(setup({ fontFamily: "'Liberation Serif', 'DejaVu Serif', serif" }).settings.customFontSelected.value, true);
   assert.equal(setup({ fontFamily: "'Arial', sans-serif" }).settings.customFontSelected.value, false);
   assert.equal(setup().settings.customFontSelected.value, false);
+  assert.equal(setup({ fontFamily: quoted('Times New Roman'), loaded: [loadedEntry('Times New Roman')] }).settings.customFontSelected.value, true,
+    'D-10: a loaded alias name is custom');
 });
 
 test('Load font file… reads, loads, and selects the font as one History step, loading from the read on (R6)', async () => {

@@ -116,10 +116,14 @@ def render_legend_font_metrics_module() -> str:
     )
 
 
-# Requested lists and the families registered in the page, each resolved by
-# Python's rule with the Web's availability (bundled + registered), with the
-# families of the list that gbdraw does not bundle (``custom_font_families``,
-# the rule of the custom-font warnings).
+# Requested lists and the families registered in the page. Each vector pins
+# the Web ports of Python's family rules for that registration state: the
+# resolution with the Web's availability (bundled + registered,
+# ``resolve_font_family_among``), the custom families
+# (``custom_font_families_among``, the rule of the custom-font warnings, D-10),
+# and the face the normal weight and style is measured with (``face``:
+# services/legend-layout.js ``resolveLegendFontFace``; a registered family wins
+# over the bundled alias of its name, review R2).
 RESOLUTION_CASES = (
     ("'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif", ()),
     ("'DejaVu Serif', serif", ()),
@@ -149,6 +153,14 @@ RESOLUTION_CASES = (
     ("Courier", ()),
     ("'Ming Light'", ()),
     ("'Garamond Premier', fantasy", ()),
+    ("'Times New Roman', serif", ("Times New Roman",)),
+    ("Arial, sans-serif", ("arial",)),
+    ("'Liberation Serif', serif", ("Liberation Serif",)),
+    ("'Gone A', 'Courier New', monospace", ()),
+    ("'Gone A', 'Font B', 'Courier New'", ("Font B",)),
+    ("serif, 'Font B'", ("Font B",)),
+    ("sans-serif", ("sans-serif",)),
+    ("'Gone A'", ()),
 )
 
 
@@ -195,25 +207,6 @@ def render_font_family_rules_module() -> str:
     )
 
 
-# Requested lists and the families registered in the page: the face Python
-# measures the normal weight and style with (``resolve_font_face`` without
-# fontconfig), which the Web Legend layout ports
-# (services/legend-layout.js ``resolveLegendFontFace``). A registered family
-# wins over the bundled alias of its name (review R2).
-FACE_RESOLUTION_CASES = (
-    ("'Times New Roman', serif", ()),
-    ("'Times New Roman', serif", ("Times New Roman",)),
-    ("Arial, sans-serif", ("arial",)),
-    ("'Liberation Serif', serif", ("Liberation Serif",)),
-    ("'Gone A', 'Courier New', monospace", ()),
-    ("'Gone A', 'Font B', 'Courier New'", ("Font B",)),
-    ("serif, 'Font B'", ("Font B",)),
-    ("sans-serif", ("sans-serif",)),
-    ("'Gone A'", ()),
-    ("", ()),
-)
-
-
 def _face_resolution(requested: str, registered: tuple[str, ...]) -> str:
     """A bundled face's measurement name, or ``registered:<family>``."""
     names = {gbdraw_fonts._comparable_name(family) for family in registered}
@@ -241,7 +234,8 @@ def render_resolution_vectors() -> str:
             "registered": list(registered),
             "effective": resolution.effective,
             "missing": list(resolution.missing),
-            "custom": list(gbdraw_fonts.custom_font_families(requested)),
+            "custom": list(gbdraw_fonts.custom_font_families_among(requested, registered)),
+            "face": _face_resolution(requested, registered),
         })
     face_match = []
     for faces in FACE_MATCH_CASES:
@@ -254,12 +248,8 @@ def render_resolution_vectors() -> str:
             "faces": [{"weight": weight, "italic": italic} for weight, italic in faces],
             "normal": next(index for index, candidate in enumerate(candidates) if candidate[2] == chosen),
         })
-    face_resolution = [
-        {"requested": requested, "registered": list(registered), "face": _face_resolution(requested, registered)}
-        for requested, registered in FACE_RESOLUTION_CASES
-    ]
     return json.dumps(
-        {"schema": 1, "vectors": vectors, "faceMatch": face_match, "faceResolution": face_resolution},
+        {"schema": 1, "vectors": vectors, "faceMatch": face_match},
         indent=2,
         ensure_ascii=False,
     ) + "\n"
