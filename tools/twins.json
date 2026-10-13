@@ -499,8 +499,8 @@
       "jsOwner": [
         "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionAnnotationTargets"
       ],
-      "vector": "tests/fixtures/annotation-target-migration-vectors.json",
-      "reason": "Both Load paths migrate; the 19 vectors run in Python and the Web test has its own cases.",
+      "vector": null,
+      "reason": "Both Load paths migrate. Only the Python test runs the 19 cases of tests/fixtures/annotation-target-migration-vectors.json; the Web test has its own inline cases (OV-714), so the row names no shared vector.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (annotation targets; OV-134)"
     },
@@ -513,8 +513,8 @@
       "jsOwner": [
         "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionFeatureEdits"
       ],
-      "vector": "tests/fixtures/feature-edit-migration-vectors.json",
-      "reason": "Both Load paths migrate; the vectors run in Python and the Web test has its own cases.",
+      "vector": null,
+      "reason": "Both Load paths migrate. The Python test runs the edit cases of tests/fixtures/feature-edit-migration-vectors.json through this function; the Web test runs only the vector's source-read cases (through projectCanonicalSessionRequest) and has its own inline edit cases (OV-714), so the row names no shared vector.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (rendered-ID edits; OV-114)"
     },
@@ -891,6 +891,20 @@
       "source": "inventory C section B (region check; CI-01, GX-09)"
     },
     {
+      "id": "concern:request-record-cardinality",
+      "concern": "Record cardinality of a render request schema 5 and older (saved none)",
+      "pythonOwner": [
+        "gbdraw/session_request_codec.py:legacy_record_cardinality"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-request.js:promoteRenderRequestToSchema8"
+      ],
+      "vector": null,
+      "reason": "Both readers infer the cardinality a legacy request did not save (a Linear record without selector and region draws every record of its source, any other record one); no shared vector pins them.",
+      "retireWhen": "Python alone promotes a legacy render request at Load and the Web reads the promoted request",
+      "source": "inventory C section B (request record cardinality; OV-149)"
+    },
+    {
       "id": "constant:LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION",
       "concern": "Last Session version with legacy Linear track slots (32)",
       "pythonOwner": [
@@ -903,19 +917,6 @@
       "vector": null,
       "reason": "Three hand-written copies (two in Python) and no test that compares them.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "FINDINGS OV-323"
-    },
-    {
-      "id": "constant:LEGACY_PROTEIN_CANDIDATE_SCHEMA",
-      "concern": "Legacy protein candidate envelope schema (1)",
-      "pythonOwner": [
-        "gbdraw/session_io.py:LEGACY_PROTEIN_CANDIDATE_SCHEMA",
-        "gbdraw/analysis/protein_colinearity.py:LEGACY_PROTEIN_RAW_CANDIDATE_SCHEMA"
-      ],
-      "jsOwner": [],
-      "vector": null,
-      "reason": "Python defines it twice under two names; the Web imports the generated value.",
-      "retireWhen": "one Python module imports the other's definition",
       "source": "FINDINGS OV-323"
     },
     {

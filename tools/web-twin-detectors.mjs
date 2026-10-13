@@ -172,7 +172,7 @@ const DETECTED_ROW_ID = /^(?:vector|function):/;
 /** @param {unknown} value */
 const isText = (value) => typeof value === 'string' && /\S/.test(value);
 /** @param {unknown} value */
-const isPathList = (value) => Array.isArray(value) && value.every(isText);
+const isPathList = (value) => Array.isArray(value) && value.length > 0 && value.every(isText);
 
 /**
  * Compares the registry with the detected twins: every detected twin has a
@@ -189,7 +189,7 @@ export const checkTwinRegistry = (registry, detected) => {
     ? /** @type {{ schemaVersion?: unknown, twins?: unknown }} */ (registry)
     : null;
   if (!rows || rows.schemaVersion !== 1) errors.push(`${TWIN_REGISTRY_PATH}: schemaVersion must be 1`);
-  const entries = Array.isArray(rows?.twins) ? rows.twins : null;
+  const entries = Array.isArray(rows?.twins) ? /** @type {unknown[]} */ (rows.twins) : null;
   if (!entries) errors.push(`${TWIN_REGISTRY_PATH}: twins must be an array`);
   /** @type {Set<string>} */
   const ids = new Set();
@@ -204,7 +204,7 @@ export const checkTwinRegistry = (registry, detected) => {
       if (!isText(row[field])) errors.push(`${location}.${field}: expected text`);
     }
     for (const field of /** @type {const} */ (['pythonOwner', 'jsOwner'])) {
-      if (!isPathList(row[field])) errors.push(`${location}.${field}: expected a list of paths`);
+      if (!isPathList(row[field])) errors.push(`${location}.${field}: expected a non-empty list of paths`);
     }
     if (row.vector !== null && !(typeof row.vector === 'string' && /^tests\/fixtures\/[^/]+\.json$/.test(row.vector))) {
       errors.push(`${location}.vector: expected tests/fixtures/<name>.json or null`);

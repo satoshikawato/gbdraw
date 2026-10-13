@@ -107,13 +107,19 @@ test('a malformed twin row is reported', () => {
       { id: 'twin:x', concern: 'c', pythonOwner: [], jsOwner: [], vector: null, reason: 'r', retireWhen: ' ', source: 's' }
     ]
   }, []);
+  // A twin has two sides: a row with an empty owner list is not a twin.
   assert.deepEqual(check.errors, [
+    'tools/twins.json: twins[0].pythonOwner: expected a non-empty list of paths',
+    'tools/twins.json: twins[0].jsOwner: expected a non-empty list of paths',
     'tools/twins.json: twins[0].vector: expected tests/fixtures/<name>.json or null',
     'tools/twins.json: twins[1].id: duplicate vector:x',
     'tools/twins.json: twins[1].concern: expected text',
-    'tools/twins.json: twins[1].pythonOwner: expected a list of paths',
+    'tools/twins.json: twins[1].pythonOwner: expected a non-empty list of paths',
+    'tools/twins.json: twins[1].jsOwner: expected a non-empty list of paths',
     'tools/twins.json: twins[2].id: expected vector:, function:, constant: or concern: and a name',
-    'tools/twins.json: twins[2].retireWhen: expected text'
+    'tools/twins.json: twins[2].retireWhen: expected text',
+    'tools/twins.json: twins[2].pythonOwner: expected a non-empty list of paths',
+    'tools/twins.json: twins[2].jsOwner: expected a non-empty list of paths'
   ]);
   assert.deepEqual(checkTwinRegistry([], []).errors, [
     'tools/twins.json: schemaVersion must be 1',
