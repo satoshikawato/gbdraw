@@ -8,7 +8,7 @@ import {
   legendMeasurementFace,
   loadLegendFontMetrics
 } from '../../services/legend-layout.js';
-import { getComparisonLegendGroup, getLegendEntrySwatch, legendRowShown, pythonLegendKey } from '../../services/legend-svg.js';
+import { drawnLegendRowName, getComparisonLegendGroup, getLegendEntrySwatch, legendRowShown, pythonLegendKey } from '../../services/legend-svg.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 
 // The dpi Python lays the Legend out at unless the Result says otherwise
@@ -56,6 +56,7 @@ const readSolidRows = (group) => {
     const swatch = getLegendEntrySwatch(entry);
     return /** @type {LegendLayoutRow} */ ({
       key: pythonLegendKey(entry),
+      name: drawnLegendRowName(entry),
       type: 'solid',
       stroke: swatch?.getAttribute('stroke') || 'none',
       strokeWidth: Number(swatch?.getAttribute('stroke-width') || 0)
@@ -82,6 +83,7 @@ const readGradientRows = (group) => {
       .find((path) => String(path.getAttribute('fill') || '').startsWith('url(')) || entry.querySelector('path');
     return /** @type {LegendLayoutRow} */ ({
       key: pythonLegendKey(entry),
+      name: drawnLegendRowName(entry),
       type: 'gradient',
       stroke: bar?.getAttribute('stroke') || 'none',
       strokeWidth: Number(bar?.getAttribute('stroke-width') || 0),

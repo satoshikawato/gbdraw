@@ -1312,8 +1312,10 @@ test('OV-294: a second Legend color on the row a rule\'s caption names recolors 
   const expected = { rules: ['#2266aa'], ruleFeature: ['#2266aa'], rows: { repeat_region: '#ff8800', 'repeat_region [#2266aa]': '#2266aa' } };
   expect(await shown(await semanticSnapshot(page)), 'the second edit recolors the row').toEqual(expected);
   await history(page, 'undo');
+  // The first Legend color gives the row the rule row's name and swatch, so
+  // the two are one row again (D-28): the rule's row draws it.
   expect(await shown(await semanticSnapshot(page)), 'Undo returns the row\'s first Legend color').toEqual({
-    ...expected, rows: { ...expected.rows, repeat_region: '#2266aa' }
+    ...expected, rows: { 'repeat_region [#2266aa]': '#2266aa' }
   });
   await history(page, 'redo');
   expect(await shown(await semanticSnapshot(page)), 'Redo recolors the row again').toEqual(expected);

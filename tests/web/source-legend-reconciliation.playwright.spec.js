@@ -79,6 +79,26 @@ const expectRow = async (page, caption, style) => {
   expect(current.result).toEqual(current.result.map(() => style));
   expect(current.mounted).toEqual(current.result);
 };
+// The name the row of `key` draws in each Legend group of the selected Result
+// and of the mounted SVG. A renamed row keeps its key (D-25) and draws the new name.
+const expectDrawnName = async (page, key, name) => {
+  const current = await page.evaluate(async target => {
+    const { state: s } = await import('./js/state.js');
+    const { getAllFeatureLegendGroups, drawnLegendRowName } = await import('./js/services/legend-svg.js');
+    const names = svg => getAllFeatureLegendGroups(svg).map(group => {
+      const row = group.querySelector(`g[data-legend-key="${CSS.escape(target)}"]`);
+      return row && drawnLegendRowName(row);
+    });
+    const content = s.results.value[s.selectedResultIndex.value].content;
+    return {
+      result: names(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
+      mounted: names(s.svgContainer.value.querySelector('svg'))
+    };
+  }, key);
+  expect(current.result.length).toBeGreaterThan(0);
+  expect(current.result).toEqual(current.result.map(() => name));
+  expect(current.mounted).toEqual(current.result);
+};
 
 // OV-86: a style on a row the Legend editor added failed every later Generate.
 for (const mode of ['linear', 'circular']) {
@@ -118,20 +138,22 @@ for (const mode of ['linear', 'circular']) {
       }, await page.evaluate(legendIndex, 'Manual row'));
       await expect.poll(() => page.evaluate(legendIndex, 'Manual renamed')).toBeGreaterThanOrEqual(0);
       await generate(page);
-      await expectRow(page, 'Manual renamed', styled);
-      await expectRow(page, 'Manual row', null);
+      // The renamed row keeps its key, under which its style stays (D-25).
+      await expectRow(page, 'Manual row', styled);
+      await expectDrawnName(page, 'Manual row', 'Manual renamed');
       const saved = testInfo.outputPath(`added-row-style-${mode}.gbdraw-session.json.gz`);
       await download(page, 'Save Session', saved);
       fresh = await load(browser, saved);
-      await expectRow(fresh, 'Manual renamed', styled);
+      await expectRow(fresh, 'Manual row', styled);
       await generate(fresh);
-      await expectRow(fresh, 'Manual renamed', styled);
+      await expectRow(fresh, 'Manual row', styled);
+      await expectDrawnName(fresh, 'Manual row', 'Manual renamed');
       await fresh.evaluate(caption => {
         const app = window.__GBDRAW_APP__;
         app.deleteLegendEntry(app.legendEntries.findIndex(e => e.caption === caption));
       }, 'Manual renamed');
       await generate(fresh);
-      await expectRow(fresh, 'Manual renamed', null);
+      await expectRow(fresh, 'Manual row', null);
       expect(page.externalRequests).toEqual([]);
       expect(fresh.externalRequests).toEqual([]);
     } finally {
@@ -576,11 +598,13 @@ for (const mode of ['linear', 'circular']) {
       await deleteLegendRow(page, 'Manual renamed');
       await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
       await settleLive(page);
-      const { mounted } = await rowStroke(page, 'Manual renamed');
+      // The renamed row keeps its key (D-25).
+      const { mounted } = await rowStroke(page, 'Manual row');
       expect(mounted.length).toBeGreaterThan(0);
       expect(mounted).toEqual(mounted.map(() => drawn));
       await generate(page);
-      await expectStroke(page, 'Manual renamed', drawn);
+      await expectStroke(page, 'Manual row', drawn);
+      await expectDrawnName(page, 'Manual row', 'Manual renamed');
       expect(page.externalRequests).toEqual([]);
     } finally {
       await page.context().close();

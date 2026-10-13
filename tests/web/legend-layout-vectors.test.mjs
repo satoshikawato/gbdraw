@@ -107,12 +107,15 @@ const circularResult = (layout) => ({
 
 const layoutCase = (vector) => {
   const options = { ...vector.options };
+  // Python's vector tables draw each row under its key (no rename), so the
+  // name the layout measures is the key.
+  const rows = vector.rows.map((row) => ({ ...row, name: row.key }));
   const result = vector.mode === 'linear'
-    ? linearResult(buildLinearLegendLayout(vector.rows, options, metrics))
-    : circularResult(buildCircularLegendLayout(vector.rows, options, metrics));
+    ? linearResult(buildLinearLegendLayout(rows, options, metrics))
+    : circularResult(buildCircularLegendLayout(rows, options, metrics));
   const legend = vector.mode === 'linear'
-    ? linearLegendLocalBounds(buildLinearLegendLayout(vector.rows, options, metrics), options.colorRectSize)
-    : circularLegendLocalBounds(buildCircularLegendLayout(vector.rows, options, metrics), options.colorRectSize);
+    ? linearLegendLocalBounds(buildLinearLegendLayout(rows, options, metrics), options.colorRectSize)
+    : circularLegendLocalBounds(buildCircularLegendLayout(rows, options, metrics), options.colorRectSize);
   const inputs = vector.composition;
   const plan = planLegendComposition({
     primary: box(inputs.primary),
