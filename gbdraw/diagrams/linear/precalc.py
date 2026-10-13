@@ -13,7 +13,7 @@ from gbdraw.features.placement import FeaturePlacementSlot
 
 from collections.abc import Collection
 import math
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from ...canvas import LinearCanvasConfigurator
@@ -35,6 +35,9 @@ from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 
 FeatureDict = dict[str, FeatureObject]
@@ -70,6 +73,7 @@ def _precalculate_definition_metrics(
     cfg: GbdrawConfig,
     line_kinds_by_record: Sequence[Collection[str] | None] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    record_presentations: Sequence[RecordPresentation | None] | None = None,
 ) -> tuple[float, list[float], list[float]]:
     """
     Pre-calculate definition widths and heights for all records.
@@ -94,6 +98,7 @@ def _precalculate_definition_metrics(
             cfg=cfg,
             line_kinds=line_kinds,
             record_transform=(record_transforms[index] if record_transforms is not None else None),
+            record_presentation=(record_presentations[index] if record_presentations is not None else None),
         )
         if def_group.definition_bounding_box_width > max_definition_width:
             max_definition_width = def_group.definition_bounding_box_width

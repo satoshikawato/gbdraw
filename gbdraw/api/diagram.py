@@ -206,6 +206,7 @@ from .prepared import ResolvedFeatureInputs
 
 if TYPE_CHECKING:
     from gbdraw.analysis.conservation import ConservationSearchResult
+    from gbdraw.api.requests import RecordPresentation
 
 
 DEFAULT_SELECTED_FEATURES = DEFAULT_FEATURE_TYPES
@@ -1217,6 +1218,7 @@ def _build_circular_plot_title_group(
     species: str | None,
     strain: str | None,
     plot_title: str | None,
+    record_presentation: RecordPresentation | None,
 ) -> tuple[Group, Aabb]:
     plot_title_canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix,
@@ -1233,6 +1235,7 @@ def _build_circular_plot_title_group(
         definition_profile="shared_common",
         definition_group_id="plot_title",
         cfg=cfg,
+        record_presentation=record_presentation,
     )
     return definition.get_group(), definition.local_bounds
 
@@ -1518,16 +1521,17 @@ def _web_normalize_cache_label(label: object, fallback: str) -> str:
 
 def _linear_losat_cache_filenames(
     records: Sequence[SeqRecord],
+    presentations: Sequence[RecordPresentation] | None,
     pairs: Sequence[tuple[int, int]] | None = None,
 ) -> tuple[str, ...]:
     """Raw TSV names of the displayed pairs (consecutive records by default)."""
 
     def label(index: int) -> str:
         record = records[index]
-        annotations = getattr(record, "annotations", {}) or {}
+        presentation = presentations[index] if presentations is not None else None
         fallback = f"seq_{index + 1}"
         return _web_normalize_cache_label(
-            str(annotations.get("gbdraw_record_label") or "").strip()
+            str((presentation.label if presentation is not None else None) or "").strip()
             or str(record.id or "").strip()
             or fallback,
             fallback,
@@ -1713,6 +1717,7 @@ def assemble_linear_diagram_from_records(
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
@@ -1917,7 +1922,7 @@ def assemble_linear_diagram_from_records(
     resolved_linear_comparisons: list[LinearComparison] = list(linear_comparisons or ())
     resolved_orthogroups: OrthogroupResult | OrthogroupGraphResult | None = orthogroups
     resolved_collinearity_result: CollinearityResult | None = None
-    losat_cache_filenames = _linear_losat_cache_filenames(records)
+    losat_cache_filenames = _linear_losat_cache_filenames(records, _record_presentations)
 
     def project_collinearity_comparisons(
         result: CollinearityResult,
@@ -2009,7 +2014,7 @@ def assemble_linear_diagram_from_records(
                     "pairwise",
                     records,
                     analysis_cache_filenames=_linear_losat_cache_filenames(
-                        records, pair_inputs
+                        records, _record_presentations, pair_inputs
                     ),
                     pairwise_pairs=pair_inputs,
                 ),
@@ -2133,6 +2138,7 @@ def assemble_linear_diagram_from_records(
 
     canvas = assemble_linear_diagram(
         record_transforms=_record_transforms,
+        record_presentations=_record_presentations,
         records=list(records),
         blast_files=list(blast_files) if blast_files else None,
         canvas_config=canvas_config,
@@ -2238,6 +2244,7 @@ def assemble_circular_diagram_from_record(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
+    _record_presentation: RecordPresentation | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
 
@@ -2576,11 +2583,13 @@ def assemble_circular_diagram_from_record(
             species=species,
             strain=strain,
             plot_title=normalized_plot_title or None,
+            record_presentation=_record_presentation,
         )
         title_placement = TitlePlacement(normalized_plot_title_position)
 
     result = _assemble_circular_diagram_result(
         record_transform=_record_transform,
+        record_presentation=_record_presentation,
         gb_record=gb_record,
         canvas_config=canvas_config,
         gc_df=gc_df,
@@ -2680,6 +2689,7 @@ def assemble_circular_diagram_from_records(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
@@ -3028,6 +3038,9 @@ def assemble_circular_diagram_from_records(
             _resolved_feature_inputs=resolved_feature_inputs,
             _resolved_record_features=(_resolved_record_features[record_index],) if _resolved_record_features else (),
             _record_transform=(_record_transforms[record_index] if _record_transforms is not None else None),
+            _record_presentation=(
+                _record_presentations[record_index] if _record_presentations is not None else None
+            ),
         )
         result = _require_circular_assembly_result(sub_canvas)
         record_results.append(result)
@@ -3077,6 +3090,7 @@ def assemble_circular_diagram_from_records(
             species=species,
             strain=strain,
             plot_title=normalized_plot_title or None,
+            record_presentation=_record_presentations[0] if _record_presentations else None,
         )
 
     legend_canvas_config = CircularCanvasConfigurator(
@@ -3409,6 +3423,7 @@ def build_circular_diagram(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
+    _record_presentation: RecordPresentation | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build a circular diagram using mode-specific typed options."""
@@ -3485,6 +3500,7 @@ def build_circular_diagram(
             _resolved_feature_inputs=_resolved_feature_inputs,
             _resolved_record_features=_resolved_record_features,
             _record_transform=_record_transform,
+            _record_presentation=_record_presentation,
         )
 
     return _checked_circular_drawing(assemble)
@@ -3502,6 +3518,7 @@ def _build_linear_diagram(
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
@@ -3586,6 +3603,7 @@ def _build_linear_diagram(
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
+        _record_presentations=_record_presentations,
         _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=_return_build_result,
     )
@@ -3602,6 +3620,7 @@ def build_linear_diagram(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
@@ -3618,6 +3637,7 @@ def build_linear_diagram(
         _resolved_annotations=_resolved_annotations,
         _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
+        _record_presentations=_record_presentations,
         _alignment_anchor_centers=_alignment_anchor_centers,
     )
     return cast(Drawing, result)
@@ -3634,6 +3654,7 @@ def build_linear_diagram_result(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> LinearDiagramBuildResult:
@@ -3650,6 +3671,7 @@ def build_linear_diagram_result(
         _resolved_annotations=_resolved_annotations,
         _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
+        _record_presentations=_record_presentations,
         _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=True,
     )
@@ -3666,6 +3688,7 @@ def build_circular_multi_diagram(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build a circular grid using mode-specific typed options."""
@@ -3750,6 +3773,7 @@ def build_circular_multi_diagram(
             _resolved_feature_inputs=_resolved_feature_inputs,
             _resolved_record_features=_resolved_record_features,
             _record_transforms=_record_transforms,
+            _record_presentations=_record_presentations,
         )
 
     return _checked_circular_drawing(assemble)

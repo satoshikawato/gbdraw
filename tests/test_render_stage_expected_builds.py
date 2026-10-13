@@ -10,12 +10,6 @@ The classes are those of the DEPMAP measurement (``P1_P2_OPTIONS``). Each
 variant starts from a cache that holds the base: the harness renders the base
 again after each variant. The slow cases are split into chunks of variants,
 each from the case base, so each test fits the 300 s pytest timeout.
-
-One gap is listed apart, so removing it shrinks the lists:
-
-- ``RECORD_PRESENTATION_GAP``: a record label or subtitle is written into the
-  record, so it is part of the record identity and rebuilds every stage of
-  the record.
 """
 
 from __future__ import annotations
@@ -131,15 +125,8 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     **dict.fromkeys(("evalue", "bitscore", "alignment_length"), _LEGEND),
 }
 
-RECORD_PRESENTATION_GAP: Mapping[str, frozenset[str]] = dict.fromkeys(
-    ("record_label", "record_subtitle"),
-    _FEATURE_EDIT | _DEPTH_FRAME | {"gc_skew_data"},
-)
-
-
 def allowed_builds(option_id: str) -> frozenset[str]:
-    allowed = EXPECTED_BUILDS.get(option_id, frozenset())
-    return allowed | RECORD_PRESENTATION_GAP.get(option_id, frozenset())
+    return EXPECTED_BUILDS.get(option_id, frozenset())
 
 
 def p1_p2_variants(case_id: str, *, include_slow: bool) -> list[tuple[OptionSpec, Variant]]:

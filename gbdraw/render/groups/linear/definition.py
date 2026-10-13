@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from dataclasses import dataclass
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group, TSpan, Text
@@ -25,6 +25,9 @@ from ....svg.ids import definition_group_svg_id
 from ....layout.record_labels import display_coordinate_label
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 _COORD_BASE_KEY = "gbdraw_coord_base"
 _COORD_STEP_KEY = "gbdraw_coord_step"
@@ -71,8 +74,10 @@ class DefinitionGroup:
         record_count: int = 1,
         definition_part: str = "main",
         record_transform: RecordDisplayTransform | None = None,
+        record_presentation: RecordPresentation | None = None,
     ) -> None:
         self.record_transform = record_transform
+        self.record_presentation = record_presentation
         self.record: SeqRecord = record
         self.title_start_x: float = title_start_x
         self.title_start_y: float = title_start_y
@@ -179,21 +184,15 @@ class DefinitionGroup:
             record_count=self.record_count,
         )
 
-        override = None
-        if getattr(self.record, "annotations", None):
-            override = self.record.annotations.get("gbdraw_record_label")
-        if override is not None:
-            override = str(override).strip()
-
-        self.record_name: str = override if override else ""
+        presentation = self.record_presentation
+        override = presentation.label if presentation is not None else None
+        self.record_name: str = override.strip() if override else ""
         self.record_name_parts = parse_mixed_content_text(self.record_name)
         # parse_mixed_content_text parts carry text as str | None (the bool is the italic flag).
         self.record_name_plain = "".join(cast(str, part.get("text") or "") for part in self.record_name_parts).strip()
 
-        subtitle = None
-        if getattr(self.record, "annotations", None):
-            subtitle = self.record.annotations.get("gbdraw_record_subtitle")
-        self.record_subtitle: str = str(subtitle).strip() if subtitle is not None else ""
+        subtitle = presentation.subtitle if presentation is not None else None
+        self.record_subtitle: str = subtitle.strip() if subtitle is not None else ""
         self.record_subtitle_parts = parse_mixed_content_text(self.record_subtitle)
         self.record_subtitle_plain = "".join(
             cast(str, part.get("text") or "") for part in self.record_subtitle_parts

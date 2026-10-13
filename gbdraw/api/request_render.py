@@ -161,6 +161,7 @@ from .record_planning import (
     _load_source_records,
     _prepared_source_cache_spec,
     _similarity_candidate_from_orthogroup_member,
+    effective_record_presentation,
     project_similarity_alignment_centers,
     project_source_bound_comparisons,
     resolve_circular_batch_outputs,
@@ -837,6 +838,7 @@ class CircularRequestPlan:
                 self.records[0],
                 options=self.request.options,
                 _record_transform=self.transforms[0],
+                _record_presentation=self.provenance[0].presentation,
                 **depth_kwargs,
             )
         return build_circular_multi_diagram(
@@ -844,6 +846,7 @@ class CircularRequestPlan:
             options=self.request.options,
             layout=self.layout,
             _record_transforms=self.transforms,
+            _record_presentations=tuple(item.presentation for item in self.provenance),
             **shared_kwargs,
         )
 
@@ -1103,6 +1106,7 @@ class LinearRequestPlan:
                 kwargs["_resolved_record_features"] = self.inputs.record_features
         kwargs["_resolved_annotations"] = self.resolved_annotations
         kwargs["_record_transforms"] = self.transforms
+        kwargs["_record_presentations"] = tuple(item.presentation for item in self.provenance)
         kwargs["similarity_alignment"] = self.request.similarity_alignment
         kwargs["_alignment_anchor_centers"] = self.alignment_anchor_centers
         built = build_linear_diagram_result(self.records, **kwargs)
@@ -1404,11 +1408,11 @@ def _normalize_request_records(
     collection = get_or_build_resolved_records(key, resource_identities, resolve)
     # Per-record identity (design 2.1, M1): the elements of the key above that
     # shape one record, so a record's render stages survive a change to another
-    # record. Collection regions, labels and subtitles apply by the place in
-    # the whole collection, which every input shapes, so with collection
-    # options a record has the whole key and its place.
+    # record. Collection regions apply by the place in the whole collection,
+    # which every input shapes, so with collection regions a record has the
+    # whole key and its place. Labels and subtitles shape no record.
     # The source feature catalog of a record is resolved with it.
-    default_collection = request.record_options == RecordCollectionOptions()
+    default_collection = not request.record_options.regions
     for record, provenance in zip(collection.records, collection.provenance, strict=True):
         input_index = provenance.input_index
         record_identity = (
@@ -1451,9 +1455,9 @@ def _region_preparation_key(value: Any) -> Hashable:
 
 
 def _presentation_preparation_key(value: RecordPresentation) -> Hashable:
+    # Label and subtitle shape no record: the provenance carries them
+    # (``effective_record_presentation``), so they are not in the key.
     return (
-        value.label,
-        value.subtitle,
         bool(value.reverse_complement),
         value.grid_row,
         value.grid_column,
@@ -1473,11 +1477,7 @@ def _record_input_preparation_key(value: RecordInput) -> Hashable:
 def _record_collection_preparation_key(
     value: RecordCollectionOptions,
 ) -> Hashable:
-    return (
-        tuple(_region_preparation_key(region) for region in value.regions),
-        tuple(value.labels),
-        tuple(value.subtitles),
-    )
+    return tuple(_region_preparation_key(region) for region in value.regions)
 
 
 def _coerce_resolved_collection(
@@ -1488,14 +1488,23 @@ def _coerce_resolved_collection(
 
     if isinstance(value, ResolvedRecordCollection):
         # Cached records represent selection/RC/crop, not display intent. Rebind
-        # transient context without changing records, source membership or keys.
-        if all(item.display == request.records[item.input_index].display
-               for item in value.provenance):
-            return value
-        return ResolvedRecordCollection(value.records, tuple(
-            replace(item, display=request.records[item.input_index].display)
+        # transient context (display options, label and subtitle) without
+        # changing records, source membership or keys.
+        rebound = tuple(
+            replace(
+                item,
+                display=request.records[item.input_index].display,
+                presentation=effective_record_presentation(
+                    request.records[item.input_index].presentation,
+                    request.record_options,
+                    item.resolved_index,
+                ),
+            )
             for item in value.provenance
-        ))
+        )
+        if rebound == value.provenance:
+            return value
+        return ResolvedRecordCollection(value.records, rebound)
     records = tuple(value)
     if len(records) != len(request.records):
         raise ValidationError(
@@ -1529,7 +1538,9 @@ def _coerce_resolved_collection(
                 cardinality=record_input.cardinality,
                 selector=record_input.selector,
                 region=record_input.region,
-                presentation=record_input.presentation,
+                presentation=effective_record_presentation(
+                    record_input.presentation, request.record_options, index
+                ),
                 display=record_input.display,
                 source_length=record.annotations.get("gbdraw_source_length"),
                 detected_topology=_detected_topology(record, source_kind),
@@ -1563,16 +1574,13 @@ def _materialized_record_inputs(
         collection.provenance,
         strict=True,
     ):
-        annotations = getattr(record, "annotations", {})
-        label = annotations.get("gbdraw_record_label")
-        subtitle = annotations.get("gbdraw_record_subtitle")
         source_presentation = provenance.presentation
         materialized.append(
             RecordInput(
                 source=InMemoryRecordSource(record, source_feature_catalog=provenance.source_feature_catalog),
                 presentation=RecordPresentation(
-                    label=str(label) if label is not None else None,
-                    subtitle=str(subtitle) if subtitle is not None else None,
+                    label=source_presentation.label,
+                    subtitle=source_presentation.subtitle,
                     reverse_complement=False,
                     grid_row=source_presentation.grid_row,
                     grid_column=source_presentation.grid_column,

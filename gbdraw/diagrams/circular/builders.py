@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -42,6 +42,9 @@ from .positioning import (
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 def add_depth_group_on_canvas(
     canvas: Drawing,
@@ -241,6 +244,7 @@ def add_record_definition_group_on_canvas(
     record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
     species_line_count: int = 1,
+    record_presentation: RecordPresentation | None = None,
 ) -> Drawing:
     """
     Adds the record definition group to the canvas.
@@ -268,6 +272,7 @@ def add_record_definition_group_on_canvas(
         record_count=record_count,
         record_transform=record_transform,
         species_line_count=species_line_count,
+        record_presentation=record_presentation,
     )
     definition_group: Group = definition_builder.get_group()
     setattr(definition_group, "_gbdraw_local_bounds", definition_builder.local_bounds)

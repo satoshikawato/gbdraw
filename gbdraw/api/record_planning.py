@@ -940,19 +940,33 @@ def _unqualified_region(region: RegionSpec) -> RegionSpec:
     )
 
 
-def _apply_presentation(
-    record: SeqRecord,
-    presentation: RecordPresentation,
-    *,
-    record_key: str,
-) -> None:
+def _apply_record_key(record: SeqRecord, *, record_key: str) -> None:
     if getattr(record, "annotations", None) is None:
         record.annotations = {}
-    if presentation.label:
-        record.annotations["gbdraw_record_label"] = presentation.label
-    if presentation.subtitle:
-        record.annotations["gbdraw_record_subtitle"] = presentation.subtitle
     record.annotations["gbdraw_record_key"] = record_key
+
+
+def effective_record_presentation(
+    presentation: RecordPresentation,
+    options: RecordCollectionOptions,
+    resolved_index: int,
+) -> RecordPresentation:
+    """The presentation a resolved record is drawn with.
+
+    A non-empty collection label or subtitle at the record's place replaces the
+    one of its input. The record itself carries neither, so a record is the
+    same object, with the same render-stage identity, whatever its label.
+    """
+
+    label = options.labels[resolved_index] if resolved_index < len(options.labels) else None
+    subtitle = options.subtitles[resolved_index] if resolved_index < len(options.subtitles) else None
+    if not label and not subtitle:
+        return presentation
+    return replace(
+        presentation,
+        label=label or presentation.label,
+        subtitle=subtitle or presentation.subtitle,
+    )
 
 
 def _apply_provenance_annotations(
@@ -993,20 +1007,14 @@ def _apply_collection_options(
             records = apply_region_specs(records, options.regions, log=logger)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
-    for field_name, annotation_key in (
-        ("labels", "gbdraw_record_label"),
-        ("subtitles", "gbdraw_record_subtitle"),
-    ):
-        values = getattr(options, field_name)
-        if len(values) > len(records):
+    # Labels and subtitles apply by place through effective_record_presentation.
+    for field_name in ("labels", "subtitles"):
+        if len(getattr(options, field_name)) > len(records):
             logger.warning(
                 "WARNING: More record %s were provided than records resolved; "
                 "extra values will be ignored.",
                 field_name,
             )
-        for index, value in enumerate(values[: len(records)]):
-            if value:
-                records[index].annotations[annotation_key] = value
     for record, item in zip(records, provenance, strict=True):
         _apply_provenance_annotations(record, item)
     return records
@@ -1124,22 +1132,23 @@ def resolve_record_inputs(
                 is_cropped=source_cropped,
                 source_feature_catalog=parsed.source_feature_catalogs[source_record_index],
             )
-            _apply_presentation(
-                record,
-                record_input.presentation,
-                record_key=record_key,
-            )
+            _apply_record_key(record, record_key=record_key)
             _apply_provenance_annotations(record, item)
             records.append(record)
             provenance.append(item)
     before_collection = records
-    records = _apply_collection_options(
-        records,
-        provenance,
-        record_options or RecordCollectionOptions(),
-    )
-    provenance = [replace(item, has_collection_region=record is not before)
-                  for item, record, before in zip(provenance, records, before_collection, strict=True)]
+    collection_options = record_options or RecordCollectionOptions()
+    records = _apply_collection_options(records, provenance, collection_options)
+    provenance = [
+        replace(
+            item,
+            has_collection_region=record is not before,
+            presentation=effective_record_presentation(
+                item.presentation, collection_options, item.resolved_index
+            ),
+        )
+        for item, record, before in zip(provenance, records, before_collection, strict=True)
+    ]
     return ResolvedRecordCollection(tuple(records), tuple(provenance))
 
 

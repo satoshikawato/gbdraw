@@ -194,6 +194,7 @@ _COMPARISON_ENDPOINT_GAP_PX = 4.0
 
 if TYPE_CHECKING:
     from ...api.options import LinearMultiRecordOptions
+    from ...api.requests import RecordPresentation
 
 
 def _linear_feature_placement_slot(side: str, separate_strands: bool) -> FeaturePlacementSlot:
@@ -927,21 +928,18 @@ def _centered_vertical_band(center_y: float, height: float) -> VerticalBand | No
 
 
 _ROW_ELIGIBLE_LINE_KINDS: tuple[str, ...] = ("name", "subtitle")
-_ROW_ELIGIBLE_ANNOTATIONS: dict[str, str] = {
-    "name": "gbdraw_record_label",
-    "subtitle": "gbdraw_record_subtitle",
-}
 _RECORD_LOCAL_LINE_KINDS = frozenset({"replicon", "accession", "length"})
 
 
-def _record_definition_text(record: SeqRecord, annotation: str) -> str:
-    """Return one explicit definition annotation of a record, or an empty string."""
-    annotations = getattr(record, "annotations", None) or {}
-    return str(annotations.get(annotation) or "").strip()
+def _record_definition_text(presentation: RecordPresentation | None, kind: str) -> str:
+    """Return a record's explicit label ("name") or subtitle, or an empty string."""
+    if presentation is None:
+        return ""
+    return str((presentation.label if kind == "name" else presentation.subtitle) or "").strip()
 
 
 def _row_wide_definition_line_kinds(
-    records: list[SeqRecord],
+    presentations: Sequence[RecordPresentation | None],
     row_record_indices: list[int],
     *,
     leading_index: int,
@@ -965,14 +963,13 @@ def _row_wide_definition_line_kinds(
 
     row_wide: set[str] = set()
     for kind in _ROW_ELIGIBLE_LINE_KINDS:
-        annotation = _ROW_ELIGIBLE_ANNOTATIONS[kind]
-        leading_text = _record_definition_text(records[leading_index], annotation)
+        leading_text = _record_definition_text(presentations[leading_index], kind)
         if not leading_text:
             break
         if any(
             text and text != leading_text
             for text in (
-                _record_definition_text(records[index], annotation)
+                _record_definition_text(presentations[index], kind)
                 for index in row_record_indices
             )
         ):
@@ -982,7 +979,7 @@ def _row_wide_definition_line_kinds(
 
 
 def _split_definition_line_kinds(
-    records: list[SeqRecord],
+    presentations: Sequence[RecordPresentation | None],
     *,
     rows_by_record: tuple[int, ...],
     row_leading_indices: set[int],
@@ -999,7 +996,7 @@ def _split_definition_line_kinds(
     """
 
     row_record_indices: dict[int, list[int]] = {}
-    for index in range(len(records)):
+    for index in range(len(presentations)):
         row_record_indices.setdefault(rows_by_record[index], []).append(index)
 
     leading_index_by_row = {
@@ -1007,7 +1004,7 @@ def _split_definition_line_kinds(
     }
     row_wide_by_row = {
         row: _row_wide_definition_line_kinds(
-            records,
+            presentations,
             indices,
             leading_index=leading_index_by_row[row],
         )
@@ -1016,7 +1013,7 @@ def _split_definition_line_kinds(
 
     local_kinds: list[frozenset[str]] = []
     row_kinds: list[frozenset[str]] = []
-    for index in range(len(records)):
+    for index in range(len(presentations)):
         row_wide = row_wide_by_row[rows_by_record[index]]
         local_kinds.append(
             _RECORD_LOCAL_LINE_KINDS | (frozenset(_ROW_ELIGIBLE_LINE_KINDS) - row_wide)
@@ -1839,13 +1836,19 @@ def assemble_linear_diagram(
     similarity_alignment: SimilarityAlignmentPlan | None = None,
     alignment_anchor_centers: Sequence[float | None] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    record_presentations: Sequence[RecordPresentation] | None = None,
 ) -> Drawing:
     """
     Assembles a linear diagram of genomic records with optional BLAST comparison data,
     and returns the SVG canvas (not saved).
+
+    ``record_presentations`` hold each record's label and subtitle.
     """
     profile = canvas_config.profile
     cfg = profile.config
+    presentations: tuple[RecordPresentation | None, ...] = (
+        tuple(record_presentations) if record_presentations is not None else (None,) * len(records)
+    )
     record_keys = stable_record_keys(records)
     ordered_record_indices, rows_by_record = resolve_record_row_positions(
         records,
@@ -2074,7 +2077,7 @@ def assemble_linear_diagram(
             local_definition_line_kinds,
             row_definition_line_kinds,
         ) = _split_definition_line_kinds(
-            records,
+            presentations,
             rows_by_record=rows_by_record,
             row_leading_indices=row_leading_indices,
         )
@@ -2084,6 +2087,7 @@ def assemble_linear_diagram(
         cfg=cfg,
         line_kinds_by_record=local_definition_line_kinds,
         record_transforms=record_transforms,
+        record_presentations=presentations,
     )
     row_definition_width = 0.0
     row_definition_widths = [0.0 for _record in records]
@@ -2099,6 +2103,7 @@ def assemble_linear_diagram(
             cfg=cfg,
             line_kinds_by_record=list(row_definition_line_kinds),
             record_transforms=record_transforms,
+            record_presentations=presentations,
         )
 
     record_depth_data: list[list[DepthTrackData]] = (
@@ -3013,6 +3018,7 @@ def assemble_linear_diagram(
                 record_index=record_index,
                 record_count=total_records,
                 record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                record_presentation=presentations[record_index],
                 definition_column_left=definition_column_left,
             )
             continue

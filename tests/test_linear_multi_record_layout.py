@@ -279,12 +279,13 @@ def test_single_record_rows_publish_boundary_constraints_and_fit_canvas() -> Non
 
 def test_multi_record_local_header_clears_previous_row_body() -> None:
     records = _records(1000, 1000, 1000)
-    for index, record in enumerate(records):
-        record.annotations["gbdraw_record_label"] = (
-            f"Very long record header {index}"
-        )
+    presentations = [
+        RecordPresentation(label=f"Very long record header {index}")
+        for index in range(len(records))
+    ]
     canvas = assemble_linear_diagram_from_records(
         records,
+        _record_presentations=presentations,
         cfg=apply_config_overrides(
             None,
             {
@@ -399,10 +400,10 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
     ruler_on_axis: bool,
 ) -> None:
     records = _records(1000, 800)
-    for record in records:
-        record.annotations["gbdraw_record_label"] = "TUMSAT-TG-2018"
-    records[0].annotations["gbdraw_record_subtitle"] = "chromosome 1"
-    records[1].annotations["gbdraw_record_subtitle"] = "chromosome 2"
+    presentations = [
+        RecordPresentation(label="TUMSAT-TG-2018", subtitle="chromosome 1"),
+        RecordPresentation(label="TUMSAT-TG-2018", subtitle="chromosome 2"),
+    ]
     for record in records:
         record.features.append(
             SeqFeature(
@@ -425,6 +426,7 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
 
     svg = assemble_linear_diagram_from_records(
         records,
+        _record_presentations=presentations,
         cfg=GbdrawConfig.from_dict(config_dict),
         layout=LinearMultiRecordOptions(
             record_gap_px=24,
@@ -502,9 +504,10 @@ def test_multi_record_row_keeps_only_row_wide_definition_lines_on_the_left(
 
     def render(labels: tuple[str, str], subtitles: tuple[str, str]) -> dict[str, list[str]]:
         records = _records(1000, 800)
-        for record, label, subtitle in zip(records, labels, subtitles, strict=True):
-            record.annotations["gbdraw_record_label"] = label
-            record.annotations["gbdraw_record_subtitle"] = subtitle
+        presentations = [
+            RecordPresentation(label=label, subtitle=subtitle)
+            for label, subtitle in zip(labels, subtitles, strict=True)
+        ]
         config_dict = load_config_toml("gbdraw.data", "config.toml")
         config_dict["canvas"]["show_gc"] = False
         config_dict["canvas"]["show_skew"] = False
@@ -518,6 +521,7 @@ def test_multi_record_row_keeps_only_row_wide_definition_lines_on_the_left(
         definition_cfg["show_length"] = False
         svg = assemble_linear_diagram_from_records(
             records,
+            _record_presentations=presentations,
             cfg=GbdrawConfig.from_dict(config_dict),
             layout=LinearMultiRecordOptions(
                 record_gap_px=24,
@@ -592,8 +596,7 @@ def test_row_definition_split_covers_every_definition_line_kind() -> None:
     """No line DefinitionGroup can draw may fall outside the row/local split."""
 
     record = _records(1000)[0]
-    record.annotations["gbdraw_record_label"] = "Label"
-    record.annotations["gbdraw_record_subtitle"] = "Subtitle"
+    presentation = RecordPresentation(label="Label", subtitle="Subtitle")
     record.features.append(
         SeqFeature(
             FeatureLocation(0, 10, strand=1),
@@ -617,7 +620,9 @@ def test_row_definition_split_covers_every_definition_line_kind() -> None:
 
     drawable_kinds = {
         line.kind
-        for line in DefinitionGroup(record, canvas_config, cfg=cfg).definition_lines
+        for line in DefinitionGroup(
+            record, canvas_config, cfg=cfg, record_presentation=presentation
+        ).definition_lines
     }
     assert drawable_kinds == (
         set(_ROW_ELIGIBLE_LINE_KINDS) | set(_RECORD_LOCAL_LINE_KINDS)
@@ -627,13 +632,11 @@ def test_row_definition_split_covers_every_definition_line_kind() -> None:
 def test_row_definition_split_is_decided_per_row() -> None:
     """A row that shares nothing loses its heading without affecting other rows."""
 
-    records = _records(1000, 800, 600)
     labels = ("Lambda selected region", "Lividomycin cluster", "Ribostamycin cluster")
-    for record, label in zip(records, labels, strict=True):
-        record.annotations["gbdraw_record_label"] = label
+    presentations = [RecordPresentation(label=label) for label in labels]
 
     local_kinds, row_kinds = _split_definition_line_kinds(
-        list(records),
+        presentations,
         rows_by_record=(0, 1, 1),
         row_leading_indices={0, 2},
     )

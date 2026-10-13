@@ -15,7 +15,7 @@ import math
 import copy
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import Any, Callable, Optional, Mapping, Sequence, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, Mapping, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -146,6 +146,9 @@ from .presets import (
     circular_track_slots_from_preset_order,
     normalize_circular_track_preset,
 )
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 
 LEGEND_LABEL_MARGIN_PX = 2.0 * DEFAULT_COMPOSITION_SPACING.overlay_clearance_px
@@ -1199,6 +1202,7 @@ def _definition_reserved_radius_px(
     definition_profile: str,
     record_transform: RecordDisplayTransform | None = None,
     species_line_count: int = 1,
+    record_presentation: RecordPresentation | None = None,
 ) -> float:
     cfg = canvas_config.profile.config
     definition_group = DefinitionGroup(
@@ -1211,6 +1215,7 @@ def _definition_reserved_radius_px(
         definition_profile=definition_profile,
         record_transform=record_transform,
         species_line_count=species_line_count,
+        record_presentation=record_presentation,
     ).get_group()
 
     # Track-slot reservation is a record-local compatibility contract. Keep its
@@ -1283,6 +1288,7 @@ def _resolve_radial_layout_fitting_definition(
     definition_position: str,
     center_reserved_radius: float | None,
     record_transform: RecordDisplayTransform | None,
+    record_presentation: RecordPresentation | None,
 ) -> tuple[CircularRadialLayout, float | None, int]:
     """Place the slots around the center definition (PD-OI-078).
 
@@ -1311,6 +1317,7 @@ def _resolve_radial_layout_fitting_definition(
             definition_profile=definition_profile,
             record_transform=record_transform,
             species_line_count=line_count,
+            record_presentation=record_presentation,
         )
 
     reserved = reserved_for(1)
@@ -2006,6 +2013,7 @@ def add_record_on_circular_canvas(
     annotation_record_index: int = 0,
     definition_record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
+    record_presentation: RecordPresentation | None = None,
 ) -> _CircularPlotAssembly:
     """
     Adds various record-related groups to a circular canvas.
@@ -2216,6 +2224,7 @@ def add_record_on_circular_canvas(
             definition_position=definition_position,
             center_reserved_radius=center_reserved_radius,
             record_transform=record_transform,
+            record_presentation=record_presentation,
         )
     )
     resolved_track_slots = list(radial_layout.slots)
@@ -2630,6 +2639,7 @@ def add_record_on_circular_canvas(
         strain,
         **definition_kwargs,
         record_transform=record_transform,
+        record_presentation=record_presentation,
     )
     definition_target = next(
         (
@@ -2947,6 +2957,7 @@ def _assemble_circular_diagram_result(
     title_bounds: Aabb | None = None,
     title_placement: TitlePlacement | str = TitlePlacement.NONE,
     record_transform: RecordDisplayTransform | None = None,
+    record_presentation: RecordPresentation | None = None,
 ) -> CircularAssemblyResult:
     """
     Assembles a circular diagram for a GenBank record and returns the SVG canvas.
@@ -3051,6 +3062,7 @@ def _assemble_circular_diagram_result(
         annotation_record_index=annotation_record_index,
         definition_record_count=definition_record_count,
         record_transform=record_transform,
+        record_presentation=record_presentation,
     )
     return _compose_circular_plot(
         plot,

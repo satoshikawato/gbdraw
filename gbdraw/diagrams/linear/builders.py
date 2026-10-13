@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -40,6 +40,9 @@ from .positioning import (
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 def add_record_group(
     canvas: Drawing,
@@ -260,6 +263,7 @@ def add_record_definition_group(
     record_index: int = 0,
     record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
+    record_presentation: RecordPresentation | None = None,
     definition_column_left: float = 0.0,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas.
@@ -292,6 +296,7 @@ def add_record_definition_group(
             record_index=record_index,
             record_count=record_count,
             record_transform=record_transform,
+            record_presentation=record_presentation,
         )
         record_definition_group = definition_group_obj.get_group()
         header_y = (
@@ -328,6 +333,7 @@ def add_record_definition_group(
                 record_count=record_count,
                 definition_part="row",
                 record_transform=record_transform,
+                record_presentation=record_presentation,
             )
             if not row_group_obj.definition_lines:
                 # Nothing describes this row as a whole, so it gets no heading.
@@ -367,6 +373,7 @@ def add_record_definition_group(
         record_index=record_index,
         record_count=record_count,
         record_transform=record_transform,
+        record_presentation=record_presentation,
     )
     definition_position = place_linear_definition(
         width=definition_group_obj.definition_bounding_box_width,
