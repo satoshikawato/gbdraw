@@ -11,8 +11,10 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from importlib import resources
-from typing import Mapping, Optional
+from typing import Iterator, Mapping, Optional
 
 import pandas as pd
 from pandas import DataFrame
@@ -369,6 +371,27 @@ def _is_specific_table_color(color: str) -> bool:
     return True
 
 
+_RULE_CAPTIONS_AS_WRITTEN: ContextVar[bool] = ContextVar(
+    "gbdraw_rule_captions_as_written", default=False
+)
+
+
+@contextmanager
+def rule_captions_as_written() -> Iterator[None]:
+    """Read color table files as a rule list being edited, not as saved files.
+
+    The Web app sends its rule list to a render as a color table file. Those
+    captions are drawn as the app shows them; ``read_color_table`` applies the
+    reading of a saved file (``saved_rule_captions``) everywhere else.
+    """
+
+    token = _RULE_CAPTIONS_AS_WRITTEN.set(True)
+    try:
+        yield
+    finally:
+        _RULE_CAPTIONS_AS_WRITTEN.reset(token)
+
+
 def read_color_table(color_table_file: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "qualifier_key", "value", "color", "caption"]
     mandatory_cols = ["feature_type", "qualifier_key", "value", "color"]
@@ -420,7 +443,11 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
                 diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": idx + 1},
             )
 
-    return df
+    if _RULE_CAPTIONS_AS_WRITTEN.get():
+        return df
+    from ..legend.table import saved_rule_captions  # that module reads colors from this one
+
+    return saved_rule_captions(df)
 
 
 __all__ = [
@@ -431,6 +458,7 @@ __all__ = [
     "named_color_hex",
     "read_color_table",
     "resolve_color_to_hex",
+    "rule_captions_as_written",
 ]
 
 

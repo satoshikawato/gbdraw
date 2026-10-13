@@ -7,7 +7,8 @@ import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-edito
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { readFileSync } from 'node:fs';
 import {
-  createRuleLegendCaptions, diffLegendIntents, generatedLegendRow, legendRowRules, ruleCommitLegendRows, ruleLegendCaptions
+  createRuleLegendCaptions, diffLegendIntents, generatedLegendRow, legendRowRules, prepareSpecificColorImport,
+  ruleCommitLegendRows, ruleLegendCaptions, savedRuleCaption, savedSpecificRules
 } from '../../gbdraw/web/js/services/specific-color-rules.js';
 import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
@@ -965,3 +966,32 @@ test('Reset all on a keyed row removes the rules of that row only (OV-640)', () 
   await popup.handleResetColorChoice('all');
   assert.deepEqual(table(),['gene #445566 Shared']);
 }));
+
+// The compatibility reading of PD-OI-042 scenario revision 2 (accepted residual
+// risk): a caption that ends in its own rule's color ID is read without it from
+// a saved Session and from a color table file. Python's answer is
+// gbdraw/legend/table.py::saved_rule_caption (tests/test_specific_color_captions.py).
+const savedCaptions = JSON.parse(
+  readFileSync(new URL('../fixtures/saved_rule_captions.json', import.meta.url), 'utf8')
+).cases;
+for (const { name, caption, color, read } of savedCaptions) {
+  test(`saved rule caption: ${name}`, () => {
+    assert.equal(savedRuleCaption(caption, color), read);
+  });
+}
+
+test('saved rules and an imported color table are read without the color IDs of their own rules', () => {
+  const saved = [
+    { feat: 'CDS', qual: 'gene', val: '^cox1$', color: '#ffe700', cap: 'Complex IV [#ffe700]', fromFile: true },
+    { feat: 'CDS', qual: 'gene', val: '^cox2$', color: '#1f77b4', cap: 'Complex IV [#1f77b4]' },
+    { feat: 'CDS', qual: 'gene', val: '^nad1$', color: '#2ca02c', cap: 'Complex I [#ffe700]' }
+  ];
+  const read = savedSpecificRules(saved);
+  assert.deepEqual(read, [
+    { ...saved[0], cap: 'Complex IV' }, { ...saved[1], cap: 'Complex IV' }, saved[2]
+  ]);
+  // The rows are the keys the older build drew as text, so Legend edits saved under them stay on their rows.
+  assert.deepEqual(read.map(createRuleLegendCaptions(read)), ['Complex IV [#ffe700]', 'Complex IV [#1f77b4]', 'Complex I [#ffe700]']);
+  const text = saved.map((rule) => [rule.feat, rule.qual, rule.val, rule.color, rule.cap].join('\t')).join('\n');
+  assert.deepEqual(prepareSpecificColorImport(text).nextRules.map((rule) => rule.cap), ['Complex IV', 'Complex IV', 'Complex I [#ffe700]']);
+});

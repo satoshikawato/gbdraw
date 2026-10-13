@@ -371,6 +371,44 @@ for (const { session, rule, identity, color } of [
   });
 }
 
+// PD-OI-042 scenario revision 2, accepted residual risk: the Web app of
+// first-parent main 9839de8e saved one caption written in two colors as
+// `Complex IV [#ffe700]` and `Complex IV [#1f77b4]`
+// (rule-captions-with-color-id.provenance.json). Load reads each caption
+// without its own rule's color ID. Generate numbers the names, and the row keys
+// are the texts that build drew, so the Legend stroke it saved stays on its row.
+test('a Session that saved rule captions with their color IDs loads without them and keeps its Legend row edit', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSession(page, 'tests/fixtures/sessions/rule-captions-with-color-id.v46.gbdraw-session.json.gz');
+  const read = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const { getVisibleFeatureLegendGroup } = await import('/gbdraw/web/js/services/legend-svg.js');
+    const svg = new DOMParser().parseFromString(
+      state.results.value[state.selectedResultIndex.value].content, 'image/svg+xml'
+    ).documentElement;
+    return {
+      captions: state.activeDrawing().manualSpecificRules.map((rule) => rule.cap),
+      rows: Object.fromEntries([...getVisibleFeatureLegendGroup(svg).querySelectorAll('g[data-legend-key]')].map((row) => [
+        row.getAttribute('data-legend-key'),
+        [row.querySelector('text').textContent, row.querySelector('path').getAttribute('stroke'),
+          Number(row.querySelector('path').getAttribute('stroke-width'))]
+      ]))
+    };
+  });
+  const loaded = await read();
+  expect(loaded.captions).toEqual(['Complex IV', 'Complex IV', 'Complex I']);
+  expect(loaded.rows['Complex IV [#ffe700]'].slice(1)).toEqual(['#d62728', 2]);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const generated = await read();
+  expect(generated.captions).toEqual(loaded.captions);
+  expect(generated.rows['Complex IV [#ffe700]']).toEqual(['Complex IV (1)', '#d62728', 2]);
+  expect(generated.rows['Complex IV [#1f77b4]'][0]).toBe('Complex IV (2)');
+  expect(generated.rows['Complex I'][0]).toBe('Complex I');
+  expect(Object.values(generated.rows).filter(([name]) => name.includes(' [#'))).toEqual([]);
+});
+
 test('a Session 33 without a feature catalog keeps its feature edits', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);

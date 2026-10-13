@@ -1,0 +1,60 @@
+{
+  "purpose": "Positive fixture for the reading of a saved color-rule caption that ends in its own rule's color ID (PD-OI-042 scenario revision 2, accepted residual risk). First-parent main from fe6861f0 (PD-OI-042 scenario revision 1, #752) rewrote one caption written with several colors to `caption [#rrggbb]` and saved the rewritten captions in the Session (the draft's rules and the request's color table file) and in the downloaded color-table TSV. The Session also holds a Legend row edit (a stroke) stored under the text that build drew.",
+  "history": "first-parent main 9839de8eec50935d9479738f50d7953eedff49fa (2026-10-11, #1003); the rewrite entered first-parent main with fe6861f06d0eaaecac0ba4ee6b1c3095019789df (2026-10-04, #752). No release tag holds it (0.13.0 is older).",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web) and gbdraw/web/js/app/feature-editor/rule-actions.js downloadSpecificRulesTsv of that commit; both files' bytes kept unchanged (the Session as the writer gzipped it)",
+  "checkout": "git worktree add --detach <dir> 9839de8e (outside the repository); python tools/prepare_browser_wheel.py in <dir>; Playwright (@playwright/test) with that commit's playwright.config.js and tests/web/helpers (audit-browser.cjs openWithGenBank and settle, app-lifecycle.cjs generateAndWaitForResult, mode-transition.cjs download)",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.1",
+    "python": "3.13.3"
+  },
+  "sessions": {
+    "rule-captions-with-color-id.v46.gbdraw-session.json.gz": {
+      "sourceCommit": "9839de8eec50935d9479738f50d7953eedff49fa",
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 46,
+      "records": "tests/fixtures/sessions/cli-web-mito.gb (sha256 f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92), Circular, one Result",
+      "steps": [
+        "GenBank/DDBJ File = cli-web-mito.gb; Generate Diagram",
+        "Specific Table (-t) = complexes.tsv: CDS gene ^COX1$ #ffe700 Complex IV / CDS gene ^COX2$ #1f77b4 Complex IV / CDS gene ^ND1$ #2ca02c Complex I (tab-separated). The app shows \"Updated 2 specific-color caption(s) to distinguish their colors.\"",
+        "Generate Diagram",
+        "Legend row Complex IV [#ffe700]: stroke color #d62728, stroke width 2",
+        "TSV (download the specific color rules) -> rule-captions-with-color-id.specific-colors.tsv",
+        "Save Session"
+      ],
+      "rules": "modes.circular.config.rules captions: Complex IV [#ffe700], Complex IV [#1f77b4], Complex I (all fromFile). renderRequest.diagramOptions.colors.colorTableFile -> resource colors-color-table-file (specific-colors.tsv) with the same captions.",
+      "legend": {
+        "rows": [
+          "tRNA",
+          "rRNA",
+          "Complex IV [#ffe700]",
+          "Complex IV [#1f77b4]",
+          "Complex I",
+          "other proteins",
+          "GC content",
+          "GC skew (+)",
+          "GC skew (-)"
+        ],
+        "strokeOverrides": {
+          "Complex IV [#ffe700]": {
+            "strokeColor": "#d62728",
+            "strokeWidth": 2
+          }
+        }
+      },
+      "sha256": "0b2ff093ccca9ced72a0707670b4217898494d8bf5389f19f93750eb88c5fbb8",
+      "decompressedSha256": "0e986cee60a78fab2dffa49b9ea0eebcff34039be512ec26aa5d2397a658ffab"
+    }
+  },
+  "colorTables": {
+    "rule-captions-with-color-id.specific-colors.tsv": {
+      "sourceCommit": "9839de8eec50935d9479738f50d7953eedff49fa",
+      "sha256": "a55fa0605e1b83cdfd08dd666169150159ea072c5e1c4225cfb08e76c7ce6fa8",
+      "captions": [
+        "Complex IV [#ffe700]",
+        "Complex IV [#1f77b4]",
+        "Complex I"
+      ]
+    }
+  }
+}

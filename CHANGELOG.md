@@ -44,10 +44,10 @@ write-up of a release.
     distinguish their colors." is gone. The numbers follow the legend order:
     they change when a row is added, removed, or moved, and a name left with
     one row loses its number.
-  - Compatibility: when a color table or a saved Session is read, a caption
-    that ends in its own rule's color ID, such as `Packaging [#ffe700]` on a
-    rule colored `#ffe700`, loses that ID, also when you typed that name
-    yourself.
+  - Compatibility: when a color table file or a saved Session is read, a
+    caption that ends in its own rule's color ID, such as
+    `Packaging [#ffe700]` on a rule colored `#ffe700`, loses that ID, also
+    when you typed that name yourself.
   - Web app: the Legend tab, the popups, and the dialogs show the drawn name.
     The feature popup's **Legend name** field no longer offers suggestions;
     the list under it is the only place that offers an existing group

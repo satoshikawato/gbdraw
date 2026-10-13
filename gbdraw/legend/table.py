@@ -239,6 +239,44 @@ def write_legend_row_names(
     return write
 
 
+def _rule_fill_key(caption: str, fill: str) -> str:
+    """The key of a rule row that its fill tells apart: ``caption [fill]``."""
+
+    return f"{caption} [{fill}]"
+
+
+def saved_rule_caption(caption: str, color: object) -> str:
+    """The caption of a color rule as a saved color table or Session is read.
+
+    Builds from first-parent ``main`` fe6861f0 until the naming rule
+    (``drawn_legend_names``) saved the key ``caption [fill]`` as the caption of
+    a rule whose caption was written with several colors, in the Session and
+    in the downloaded color table. A caption that ends in the fill identity of
+    its own rule is read without it, once; one that would be left blank is read
+    as written (PD-OI-042 scenario revision 2, accepted residual risk).
+    """
+
+    name = caption.removesuffix(_rule_fill_key("", _legend_fill_identity(color)))
+    return name if name.strip() else caption
+
+
+def saved_rule_captions(color_table: DataFrame) -> DataFrame:
+    """A saved color table with each caption read by ``saved_rule_caption``.
+
+    Returns ``color_table`` itself when no caption changes.
+    """
+
+    if "caption" not in color_table:
+        return color_table
+    captions = [
+        saved_rule_caption(caption, color)
+        for caption, color in zip(color_table["caption"], color_table["color"])
+    ]
+    if captions == color_table["caption"].tolist():
+        return color_table
+    return color_table.assign(caption=captions)
+
+
 def rule_legend_keys(
     rules: Iterable[tuple[object, object]],
     renderer_swatches: Mapping[str, tuple[object, ...]],
@@ -265,7 +303,7 @@ def rule_legend_keys(
         renderer_swatch = renderer_swatches.get(caption)
         for fill in sorted(fills[caption]):
             if len(fills[caption]) > 1 or renderer_swatch not in (None, rule_swatch(fill)):
-                key = _unique_legend_key(reserved, f"{caption} [{fill}]")
+                key = _unique_legend_key(reserved, _rule_fill_key(caption, fill))
                 reserved.add(key)
             else:
                 key = caption

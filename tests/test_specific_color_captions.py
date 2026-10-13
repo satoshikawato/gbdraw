@@ -2,6 +2,7 @@
 
 import json
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,7 +30,20 @@ from gbdraw.api.requests import (
     RenderOutputRequest,
 )
 from gbdraw.features.colors import get_color_with_info
-from gbdraw.legend.table import _legend_fill_identity, legend_swatch, rule_legend_keys
+from gbdraw.io.colors import read_color_table
+from gbdraw.legend.table import (
+    _legend_fill_identity,
+    legend_swatch,
+    rule_legend_keys,
+    saved_rule_caption,
+)
+from gbdraw.session import (
+    build_session_document,
+    load_session_document,
+    materialize_session,
+    session_to_request,
+)
+from gbdraw.web_support.request_render import render_canonical_web_request
 
 
 def table(rows):
@@ -368,3 +382,149 @@ def test_a_rule_row_that_shares_a_default_track_row_survives_explicit_track_slot
     )
     rows = legend_rows(result.output_paths[0])
     assert rows["GC content"][:2] == ("GC content", "GC content")
+
+
+# The compatibility reading of PD-OI-042 scenario revision 2 (accepted residual
+# risk): a caption that ends in its own rule's color ID is read without it from
+# a color table file and from a saved Session. The Web app's answer to the same
+# cases is services/specific-color-rules.js::savedRuleCaption.
+SAVED_CAPTIONS = json.loads(
+    (Path(__file__).parent / "fixtures" / "saved_rule_captions.json").read_text(encoding="utf-8")
+)["cases"]
+# What the Web app of first-parent `main` 9839de8e downloaded and saved for one
+# caption in two colors (tests/fixtures/sessions/rule-captions-with-color-id.provenance.json).
+SAVED_COLOR_TABLE = (
+    Path(__file__).parent / "fixtures" / "sessions" / "rule-captions-with-color-id.specific-colors.tsv"
+)
+SAVED_SESSION = SAVED_COLOR_TABLE.with_name("rule-captions-with-color-id.v46.gbdraw-session.json.gz")
+
+
+@pytest.mark.parametrize("case", SAVED_CAPTIONS, ids=[case["name"] for case in SAVED_CAPTIONS])
+def test_a_saved_caption_answers_the_shared_fixture(case):
+    assert saved_rule_caption(case["caption"], case["color"]) == case["read"]
+
+
+def test_a_color_table_file_is_read_without_the_color_ids_of_its_own_rules(tmp_path):
+    path = tmp_path / "saved.tsv"
+    path.write_text(
+        "".join(
+            f"CDS\tgene\t^g{index}$\t{case['color']}\t{case['caption']}\n"
+            for index, case in enumerate(SAVED_CAPTIONS)
+        ),
+        encoding="utf-8",
+    )
+    original = path.read_bytes()
+    assert read_color_table(str(path)).caption.tolist() == [case["read"] for case in SAVED_CAPTIONS]
+    assert path.read_bytes() == original
+
+
+def _saved_caption_request(tmp_path, colors):
+    record = SeqRecord(
+        Seq("ATGC" * 250),
+        id="record",
+        annotations={"molecule_type": "DNA", "topology": "circular"},
+    )
+    record.features = [
+        SeqFeature(
+            SimpleLocation(i * 200 + 10, i * 200 + 160, strand=1),
+            type="CDS",
+            qualifiers={"gene": [gene]},
+        )
+        for i, gene in enumerate(["COX1", "COX2", "ND1"])
+    ]
+    return CircularDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(record), record_key="record"),),
+        options=CircularDiagramOptions(colors=colors),
+        output=RenderOutputRequest(
+            formats=("interactive_svg",), output_directory=tmp_path, output_prefix="saved", overwrite=True
+        ),
+    )
+
+
+def test_the_downloaded_color_table_of_an_older_build_draws_numbered_names(tmp_path):
+    saved = SAVED_COLOR_TABLE.read_text(encoding="utf-8")
+    assert "Complex IV [#1f77b4]" in saved and "Complex IV [#ffe700]" in saved
+    request = _saved_caption_request(tmp_path, ColorOptions(color_table_file=str(SAVED_COLOR_TABLE)))
+    result = render_request(request)
+    assert result.request.options.colors.color_table.caption.tolist() == [
+        "Complex IV",
+        "Complex IV",
+        "Complex I",
+    ]
+    rows = legend_rows(result.output_paths[0])
+    # The keys are the texts the older build drew, so Legend edits saved under them stay on their rows.
+    assert rows["Complex IV [#ffe700]"] == ("Complex IV", "Complex IV (1)", "#ffe700")
+    assert rows["Complex IV [#1f77b4]"] == ("Complex IV", "Complex IV (2)", "#1f77b4")
+    assert rows["Complex I"] == ("Complex I", "Complex I", "#2ca02c")
+
+
+def test_the_session_of_an_older_build_replays_with_numbered_names(tmp_path):
+    with materialize_session(load_session_document(SAVED_SESSION), output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        # The Web app saves its rule list as a color table file.
+        assert request.options.colors.color_table_file is not None
+        output = RenderOutputRequest(
+            formats=("interactive_svg",), output_directory=tmp_path, output_prefix="replay", overwrite=True
+        )
+        result = render_request(replace(request, output=output))
+        rows = legend_rows(result.output_paths[0])
+    assert result.request.options.colors.color_table.caption.tolist() == [
+        "Complex IV",
+        "Complex IV",
+        "Complex I",
+    ]
+    assert rows["Complex IV [#ffe700]"] == ("Complex IV", "Complex IV (1)", "#ffe700")
+    assert rows["Complex IV [#1f77b4]"] == ("Complex IV", "Complex IV (2)", "#1f77b4")
+    assert not any("[#" in text or "[#" in name for name, text, _ in rows.values())
+
+
+def test_the_web_request_draws_its_rule_captions_as_written(tmp_path):
+    # The Web app's request holds its rule list, in the file form: a caption
+    # typed with its own color ID is drawn as the app shows it.
+    path = tmp_path / "specific-colors.tsv"
+    path.write_text("CDS\tgene\t^COX1$\t#ffe700\tComplex IV [#ffe700]\n", encoding="utf-8")
+    document = build_session_document(_saved_caption_request(tmp_path, ColorOptions()))
+    payload = document.to_dict()["renderRequest"]
+    payload["diagramOptions"]["colors"]["colorTableFile"] = {
+        "resourceId": "colors-color-table-file",
+        "representation": "file",
+    }
+    with materialize_session(document, output_directory=tmp_path / "web") as materialized:
+        response = render_canonical_web_request(
+            payload,
+            resource_paths={**materialized.resource_paths, "colors-color-table-file": path},
+            output_directory=tmp_path / "web-output",
+        )
+    svg = tmp_path / "web.svg"
+    svg.write_text(response["results"][0]["content"], encoding="utf-8")
+    assert legend_rows(svg)["Complex IV [#ffe700]"] == (
+        "Complex IV [#ffe700]",
+        "Complex IV [#ffe700]",
+        "#ffe700",
+    )
+
+
+@pytest.mark.parametrize("form", ["file", "table"])
+def test_a_saved_session_is_read_without_the_color_ids_of_its_own_rules(form, tmp_path):
+    rows = [
+        ["CDS", "gene", "^COX1$", "#ffe700", "Complex IV [#ffe700]"],
+        ["CDS", "gene", "^COX2$", "#1f77b4", "Complex IV [#1f77b4]"],
+        ["CDS", "gene", "^ND1$", "#2ca02c", "Complex I [#ffe700]"],
+    ]
+    path = tmp_path / "rules.tsv"
+    table(rows).to_csv(path, sep="\t", index=False, header=False)
+    colors = (
+        ColorOptions(color_table_file=str(path)) if form == "file" else ColorOptions(color_table=table(rows))
+    )
+    document = build_session_document(_saved_caption_request(tmp_path, colors))
+    with materialize_session(document, output_directory=tmp_path / "replay") as materialized:
+        result = render_request(session_to_request(materialized))
+        assert result.request.options.colors.color_table.caption.tolist() == [
+            "Complex IV",
+            "Complex IV",
+            "Complex I [#ffe700]",
+        ]
+        rows_drawn = legend_rows(result.output_paths[0])
+    assert rows_drawn["Complex IV [#ffe700]"][:2] == ("Complex IV", "Complex IV (1)")
+    assert rows_drawn["Complex IV [#1f77b4]"][:2] == ("Complex IV", "Complex IV (2)")
+    assert rows_drawn["Complex I [#ffe700]"][:2] == ("Complex I [#ffe700]", "Complex I [#ffe700]")

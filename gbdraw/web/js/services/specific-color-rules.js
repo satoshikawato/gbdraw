@@ -82,6 +82,31 @@ const fillOf = (value) => /** @type {SwatchColor} */ (fillIdentity(value));
 const captionRowKey = (caption) => /** @type {PythonLegendKey} */ (caption);
 /** @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
 const allocatedRowBase = (rule) => `${rule.cap} [${fillIdentity(rule.color)}]`;
+// The caption of a rule as a saved Session or a color table file is read
+// (PD-OI-042 scenario revision 2, accepted residual risk). Builds from
+// first-parent `main` fe6861f0 until the naming rule saved the key above as
+// the caption of a rule whose caption was written with several colors. A
+// caption that ends in the color ID of its own rule is read without it, once;
+// one that would be left blank is read as written. Python's reading is
+// gbdraw/legend/table.py::saved_rule_caption; both answer
+// tests/fixtures/saved_rule_captions.json.
+/** @param {string} caption @param {unknown} color */
+export const savedRuleCaption = (caption, color) => {
+  const colorId = allocatedRowBase({ cap: '', color: String(color ?? '') });
+  const name = caption.endsWith(colorId) ? caption.slice(0, -colorId.length) : caption;
+  return name.trim() ? name : caption;
+};
+/**
+ * Saved rules with each caption read by `savedRuleCaption`.
+ * @template {{ readonly cap?: unknown, readonly color?: unknown }} Rule
+ * @param {readonly Rule[]} rules
+ * @returns {Rule[]}
+ */
+export const savedSpecificRules = (rules) => rules.map((rule) => {
+  const caption = String(rule.cap ?? '');
+  const read = savedRuleCaption(caption, rule.color);
+  return read === caption ? rule : { ...rule, cap: read };
+});
 /**
  * @param {string} caption
  * @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule
@@ -494,7 +519,7 @@ export const prepareSpecificColorImport = (text, currentRules = []) => {
   const retainedRules = (Array.isArray(currentRules) ? currentRules : [])
     .filter((rule) => !rule?.fromFile)
     .map((rule) => normalizeSpecificRule(rule));
-  const nextRules = [...retainedRules, ...rules.map((rule) => normalizeSpecificRule(rule, { fromFile: true }))];
+  const nextRules = [...retainedRules, ...savedSpecificRules(rules).map((rule) => normalizeSpecificRule(rule, { fromFile: true }))];
   return {
     nextRules,
     importedCount: rules.length

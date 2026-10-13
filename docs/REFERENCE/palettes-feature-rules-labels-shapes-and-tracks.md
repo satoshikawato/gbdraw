@@ -183,10 +183,15 @@ they change when a row is added, removed, or moved, and a name left with one
 row loses its number. gbdraw does not rewrite a rule's caption: the color
 table, the Web app's rule list and popup, the downloaded color-table TSV, and
 a saved Session keep it as written, and no legend name carries a color ID.
-One compatibility reading applies when a color table or a saved Session is
-read: a caption that ends in its own rule's color ID, such as
+One compatibility reading applies when a color table file or a saved Session
+is read: a caption that ends in its own rule's color ID, such as
 `Packaging [#ffe700]` on a rule colored `#ffe700`, loses that ID, also when
-you typed that name yourself.
+you typed that name yourself. The ID is the form older builds saved: a space,
+then the rule's color as lower-case `#rrggbb` (or `none`) in square brackets.
+Another spelling of the color (`[#FFE700]`, a color name), the ID of another
+color, and a caption that is only the ID stay as written. A caption typed in
+the Web app is drawn as typed until its Session is saved and loaded, and a
+color table passed to the Python API as a `DataFrame` is used as written.
 
 Whitelist and blacklist label filters are mutually exclusive. An ordinary
 label override cannot restore a label removed by the active filter. Exact-match

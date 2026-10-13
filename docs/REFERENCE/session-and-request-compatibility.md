@@ -112,8 +112,9 @@ and two readings keep older files usable:
 
 - A specific color rule's caption that ends in its own rule's color ID, such
   as `Packaging [#ffe700]` on a rule colored `#ffe700`, is read without that
-  ID, from a saved Session and from a color table, also when you typed that
-  name yourself.
+  ID, from a saved Session and from a color table file, also when you typed
+  that name yourself. The Web app, the CLI `--session` replay, and the Python
+  Session readers read it so in a Session of any version.
 - Release 0.13.0 drew two tracks with one legend label as `GC content` and
   `GC content (2)`. Its Sessions load, and their legend row edits stay on the
   rows of the same tracks. The rows are now drawn `GC content (1)` and

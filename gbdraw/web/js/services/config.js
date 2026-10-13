@@ -162,7 +162,7 @@ import { importSessionFile } from './session-import-client.js';
 import { convertMainSessionComparisonFrames } from './main-session-comparison-frame.js';
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
-import { applySpecificRuleProvenance } from './specific-color-rules.js';
+import { applySpecificRuleProvenance, savedSpecificRules } from './specific-color-rules.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
   buildValidatedProteinIdentityIndex,
@@ -5715,6 +5715,8 @@ const importSessionDocument = async (e, options = {}) => {
       modeConfigs[mode] = modeScopedSession
         ? (committed && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, modeSlices[mode].config))
         : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, modeSlices[mode].config);
+      // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
+      if (Array.isArray(modeConfigs[mode].rules)) modeConfigs[mode].rules = savedSpecificRules(modeConfigs[mode].rules);
       // A saved unmanaged override is checked against its own drawing's mode (PD-OI-009, OV-106).
       const savedOverrides = modeSlices[mode].config?.unmanagedConfigOverrides;
       if (isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
