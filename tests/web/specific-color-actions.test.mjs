@@ -349,6 +349,25 @@ test('a rule captioned like a generated row commits, and is edited through, its 
   assert.deepEqual(intents, [{ caption: 'CDS [#00ff00]', color: '#00ff00', name: 'CDS' }]);
 });
 
+// A caption written in two colors is two rows, each under its own key. A
+// feature belongs to the row of its rule, and a feature with only a color edit
+// of that caption and color (its rule match not known) to the same row.
+test('a feature of a caption written in two colors belongs to the row of its color', () => {
+  const s = setup();
+  s.state.manualSpecificRules.push(...rules.map((rule) => ({ ...rule })));
+  const [a, b] = s.state.extractedFeatures.value;
+  const edited = { type: 'CDS', svg_id: 'c', qualifiers: { gene: ['c'] } };
+  s.state.extractedFeatures.value.push(edited);
+  const keys = s.state.manualSpecificRules.map(ruleKey);
+  const matches = [[0], [1], []];
+  recordRuleMatches([a, b, edited], keys, (index) => ({ matched: matches[index], priorities: matches[index].map(() => 0), declined: [] }));
+  s.state.featureColorOverrides.c = { color: '#445566', caption: 'Shared' };
+  s.state.originalLegendOrder = { value: ['Shared [#112233]', 'Shared [#445566]'] };
+  s.state.svgContainer = mounted([['Shared [#112233]', '#112233'], ['Shared [#445566]', '#445566']]);
+  const captionOf = s.actions.effectiveLegendCaptions();
+  assert.deepEqual([a, b, edited].map(captionOf), ['Shared [#112233]', 'Shared [#445566]', 'Shared [#445566]']);
+});
+
 // OV-308 (OV-306 on the commit path): Python draws no row for a feature type
 // once a rule captioned with that type colors a feature, so the rule draws the
 // row under the type's name in its own color. The commit adds that row, not

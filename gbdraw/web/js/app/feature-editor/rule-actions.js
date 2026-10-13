@@ -645,10 +645,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       const rule = ruleMatches.first(feat);
       if (rule && normalizeCaption(rule.cap)) return legendCaption(rule);
 
-      const overrideCaption = normalizeCaption(
-        getFeatureOverride(drawing.featureColorOverrides, feat)?.caption
-      );
-      if (overrideCaption) return overrideCaption;
+      // A color edit carries a name (its rule's caption): its row is the one
+      // the rules of that caption and color draw, else the row it names.
+      const override = getFeatureOverride(drawing.featureColorOverrides, feat);
+      const overrideCaption = normalizeCaption(override?.caption);
+      if (overrideCaption) return legendCaption({ cap: overrideCaption, color: override.color });
 
       return normalizeCaption(feat.type) || normalizeCaption(getIndividualFeatureLabel(feat));
     };
