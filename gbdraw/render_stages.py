@@ -59,11 +59,8 @@ RenderStageName = Literal[
     "comparison_rows",
     "protein_extraction",
     "derived_losat_entries",
-    "protein_comparison_analysis",
     "feature_layers",
     "feature_dom_index",
-    "linear_labels",
-    "definition_metrics",
 ]
 
 # The sections of GbdrawConfig each stage reads (design 2.2). A section is a
@@ -84,11 +81,8 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "comparison_rows": frozenset(),
     "protein_extraction": frozenset(),
     "derived_losat_entries": frozenset(),
-    "protein_comparison_analysis": frozenset(),
     "feature_layers": frozenset(),
     "feature_dom_index": frozenset(),
-    "linear_labels": frozenset(),
-    "definition_metrics": frozenset(),
 }
 
 _TOP_SECTIONS = ("canvas", "labels", "objects")

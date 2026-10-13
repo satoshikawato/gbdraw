@@ -87,7 +87,7 @@ def font_size_and_gc_window(config: GbdrawConfig) -> tuple[float, int]:
 
 def outer_font_size(config: GbdrawConfig) -> float:
     CALLS.append("outer_font_size")
-    return render_stage("linear_labels", font_size, config)
+    return render_stage("legend_measurement", font_size, config)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -236,33 +236,33 @@ def test_only_module_level_functions_and_classes_are_cached() -> None:
 
 
 def test_a_declared_section_is_in_the_key_and_others_are_not(declared) -> None:
-    declared(linear_labels=frozenset({"labels.font_size"}))
+    declared(legend_measurement=frozenset({"labels.font_size"}))
     cache = PreparedBiologicalInputCache()
     base = _config()
     with _transaction(cache):
-        assert render_stage("linear_labels", font_size, base) == base.labels.font_size.long
+        assert render_stage("legend_measurement", font_size, base) == base.labels.font_size.long
     other_section = _config(**{"objects.sliding_window.default": [77, 7]})
     warm: dict[str, object] = {}
     with _transaction(cache, warm):
-        render_stage("linear_labels", font_size, other_section)
-    assert _metrics(warm)["renderStageHit:linear_labels"] == 1
+        render_stage("legend_measurement", font_size, other_section)
+    assert _metrics(warm)["renderStageHit:legend_measurement"] == 1
     bigger = _config(**{"labels.font_size.long": base.labels.font_size.long + 3})
     with _transaction(cache):
-        assert render_stage("linear_labels", font_size, bigger) == bigger.labels.font_size.long
+        assert render_stage("legend_measurement", font_size, bigger) == bigger.labels.font_size.long
     assert CALLS == ["font_size", "font_size"]
 
 
 def test_an_undeclared_read_is_returned_counted_and_never_stored(declared) -> None:
-    declared(linear_labels=frozenset({"labels.font_size"}))
+    declared(legend_measurement=frozenset({"labels.font_size"}))
     cache = PreparedBiologicalInputCache()
     config = _config()
     for _ in range(2):
         metrics: dict[str, object] = {}
         with _transaction(cache, metrics):
-            value = render_stage("linear_labels", font_size_and_gc_window, config)
+            value = render_stage("legend_measurement", font_size_and_gc_window, config)
             render_stage("feature_dom_index", count, value)
         assert value == (config.labels.font_size.long, config.objects.sliding_window.default[0])
-        assert _metrics(metrics)["renderStageUndeclaredRead:linear_labels"] == 1
+        assert _metrics(metrics)["renderStageUndeclaredRead:legend_measurement"] == 1
         assert _metrics(metrics)["renderStageUndeclaredReadCount"] == 1
         # The unstored result has no identity, so its consumer is not cached either.
         assert _metrics(metrics)["renderStageUncacheable:feature_dom_index"] == 1
@@ -272,7 +272,7 @@ def test_an_undeclared_read_is_returned_counted_and_never_stored(declared) -> No
 def test_an_inner_stage_that_declares_more_marks_the_outer_stage(declared) -> None:
     declared(
         legend_table=frozenset({"objects.sliding_window"}),
-        linear_labels=frozenset({"labels.font_size"}),
+        legend_measurement=frozenset({"labels.font_size"}),
     )
     cache = PreparedBiologicalInputCache()
     metrics: dict[str, object] = {}
@@ -280,14 +280,14 @@ def test_an_inner_stage_that_declares_more_marks_the_outer_stage(declared) -> No
         render_stage("legend_table", outer_font_size, _config())
     assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
     # The inner stage declared what it read and was stored.
-    assert "renderStageUndeclaredRead:linear_labels" not in _metrics(metrics)
+    assert "renderStageUndeclaredRead:legend_measurement" not in _metrics(metrics)
     assert _metrics(metrics)["renderStageUndeclaredReadCount"] == 1
 
 
 def test_an_inner_read_declared_by_both_marks_neither(declared) -> None:
     declared(
         legend_table=frozenset({"labels.font_size"}),
-        linear_labels=frozenset({"labels.font_size"}),
+        legend_measurement=frozenset({"labels.font_size"}),
     )
     cache = PreparedBiologicalInputCache()
 
@@ -299,45 +299,45 @@ def test_an_inner_read_declared_by_both_marks_neither(declared) -> None:
 
 
 def outer_window_through_inner(config: GbdrawConfig) -> tuple[float, int]:
-    return render_stage("linear_labels", font_size_and_gc_window, config)
+    return render_stage("legend_measurement", font_size_and_gc_window, config)
 
 
 def test_an_inner_read_undeclared_by_both_marks_both(declared) -> None:
     declared(
         legend_table=frozenset({"labels.font_size"}),
-        linear_labels=frozenset({"labels.font_size"}),
+        legend_measurement=frozenset({"labels.font_size"}),
     )
     cache = PreparedBiologicalInputCache()
     metrics: dict[str, object] = {}
     with _transaction(cache, metrics):
         render_stage("legend_table", outer_window_through_inner, _config())
     assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
-    assert _metrics(metrics)["renderStageUndeclaredRead:linear_labels"] == 1
+    assert _metrics(metrics)["renderStageUndeclaredRead:legend_measurement"] == 1
 
 
 def test_a_config_in_a_frozen_dataclass_gets_a_view_without_rerunning_post_init(declared) -> None:
-    declared(linear_labels=frozenset({"labels.font_size"}))
+    declared(legend_measurement=frozenset({"labels.font_size"}))
     cache = PreparedBiologicalInputCache()
     profile = Profile(_config(), 1.5)
     CALLS.clear()
     metrics: dict[str, object] = {}
     with _transaction(cache, metrics):
-        result = render_stage("linear_labels", profile_font_size, profile)
+        result = render_stage("legend_measurement", profile_font_size, profile)
     assert result == profile.config.labels.font_size.long * 3.0
     assert CALLS == ["profile_font_size"]
     assert _metrics(metrics)["renderStageUndeclaredReadCount"] == 0
     with _transaction(cache):
-        render_stage("linear_labels", profile_font_size, Profile(profile.config, 1.5))
+        render_stage("legend_measurement", profile_font_size, Profile(profile.config, 1.5))
     assert CALLS == ["profile_font_size", "profile_post_init"]
 
 
 def test_a_config_inside_a_tuple_is_not_keyable(declared) -> None:
-    declared(linear_labels=frozenset({"labels.font_size"}))
+    declared(legend_measurement=frozenset({"labels.font_size"}))
     cache = PreparedBiologicalInputCache()
     metrics: dict[str, object] = {}
     with _transaction(cache, metrics):
-        render_stage("linear_labels", count, (_config(),))
-    assert _metrics(metrics)["renderStageUncacheable:linear_labels"] == 1
+        render_stage("legend_measurement", count, (_config(),))
+    assert _metrics(metrics)["renderStageUncacheable:legend_measurement"] == 1
 
 
 def test_a_table_is_keyed_by_its_resource_identity(tmp_path: Path) -> None:
@@ -394,7 +394,7 @@ def section_long(section: object) -> float:
 
 
 def outer_section_long(config: GbdrawConfig) -> float:
-    return render_stage("linear_labels", section_long, config.labels.font_size)
+    return render_stage("legend_measurement", section_long, config.labels.font_size)
 
 
 def test_a_section_passed_to_an_inner_stage_marks_the_outer_stage() -> None:
@@ -420,7 +420,7 @@ def test_a_section_passed_by_value_is_keyed_like_the_section(declared) -> None:
             render_stage("legend_table", outer_section_long, config)
     # The inner stage is keyed by the section's value, not by the view's class.
     with _transaction(cache):
-        assert render_stage("linear_labels", section_long, config.labels.font_size) == config.labels.font_size.long
+        assert render_stage("legend_measurement", section_long, config.labels.font_size) == config.labels.font_size.long
     assert CALLS == ["section_long"]
 
 
