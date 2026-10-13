@@ -10,6 +10,9 @@ Rendered pages and figures are not committed because of their size. They stay in
 builders) and `figures/` (about 90 MB, comparison figures with `figures/README.md`). The Owner decision log is
 `DECISIONS.md` in that folder (LP-D01 to LP-D52); it holds long Japanese quotes and is not copied here.
 
+The Owner confirmed the verdict lines of A to G as written on 2026-10-14 (one question per design, all "これでよい";
+task-folder DECISIONS.md LP-D53).
+
 Contents of this folder:
 
 - `reports/`: `STUDY.md` (the study report), `design-*.md` (one report per design), `part2-breaking-points.md`,
