@@ -1252,14 +1252,17 @@ export const buildConfigData = (drawing) => ({
   linearRecordLayout: {
     enabled: Boolean(drawing.linearRecordLayoutEnabled.value),
     recordGap: Number(drawing.linearRecordGap.value) || 0,
-    rows: (drawing.linearRecordRows || []).map((entry) => ({
+    // A row of the Linear layout as state holds it: a Session load stores saved rows unchecked (OV-568), so it
+    // is read unvalidated. The casts: `Number.isInteger(entry?.canonicalColumn)` in the same expression proves
+    // the row object and that number; `canonicalRow` stays unvalidated.
+    rows: (drawing.linearRecordRows || []).map((/** @type {UnvalidatedFields<keyof LinearRecordRow>} */ entry) => ({
       uid: String(entry?.uid || ''),
       row: Number(entry?.row) || 1,
       ...(entry?.canonicalCardinality === 'exactly_one'
         ? { canonicalCardinality: 'exactly_one' } : {}),
       ...(Number(entry?.canonicalRow) === Number(entry?.row)
-        && Number.isInteger(entry?.canonicalColumn) && entry.canonicalColumn > 0
-        ? { canonicalRow: entry.canonicalRow, canonicalColumn: entry.canonicalColumn }
+        && Number.isInteger(entry?.canonicalColumn) && /** @type {number} */ (/** @type {NonNullable<typeof entry>} */ (entry).canonicalColumn) > 0
+        ? { canonicalRow: /** @type {NonNullable<typeof entry>} */ (entry).canonicalRow, canonicalColumn: /** @type {NonNullable<typeof entry>} */ (entry).canonicalColumn }
         : {})
     }))
   },
@@ -3750,9 +3753,10 @@ export const serializeActiveRenderFiles = async (
       })
     : null;
   const linearComparisons = resolvedComparisonPlan ? await Promise.all(
+    // The plan is a resolved one: the caller's snapshot of `resolveLinearComparisonPlan`, or the call above.
     resolvedComparisonPlan.edges
-      .filter((edge) => edge.source === 'upload' && edge.fileActive && edge.file)
-      .map(async (edge) => ({
+      .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'upload' && edge.fileActive && edge.file)
+      .map(async (/** @type {LinearComparisonResolvedEdge} */ edge) => ({
       id: String(edge.id || ''),
       file: await serializeFile(edge.file)
     }))
@@ -4094,7 +4098,8 @@ const applyFiles = (filesData, {
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
     targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...collapsed);
     if (resolveRecordInputs) {
-      const rowByUid = new Map(targetDrawing.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
+      // A saved row, unvalidated (OV-568): the lines below test each field they keep.
+      const rowByUid = new Map(targetDrawing.linearRecordRows.map((/** @type {UnvalidatedFields<keyof LinearRecordRow>} */ entry) => [String(entry?.uid || ''), entry]));
       targetDrawing.linearRecordRows.splice(
         0,
         targetDrawing.linearRecordRows.length,
