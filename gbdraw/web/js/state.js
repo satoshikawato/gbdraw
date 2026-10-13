@@ -554,7 +554,14 @@ const legendRenameDialog = reactive({
   // PD-OI-061 revision 4: the new caption is the name of a color rule that no
   // Legend row shows.
   targetRuleOnly: false,
-  suffixCaption: '', // the name "Keep both" gives the renamed row
+  // PD-OI-061 scenario revision 5: the name the renamed row is drawn with
+  // after "Keep both", and the target row's drawn name after it ('' when the
+  // target is not drawn or its drawn name stays).
+  keepBothName: '',
+  targetNameAfter: '',
+  // D-28: "Keep both" onto a deleted row in the renamed row's color restores
+  // that row first, as Merge does: rows of one name and one swatch are one row.
+  keepBothRestores: false,
   pendingRequest: null
 });
 

@@ -93,9 +93,11 @@ import {
  * @property {number} [siblingCount]
  * @property {ColorFeature[]} [features]
  * @property {'single' | 'group' | 'manual' | null} [sourceScope]
- * @property {'merge' | 'suffix' | null} [targetResolution]
+ * @property {'merge' | 'keep-both' | null} [targetResolution]
  * @property {string} [finalCaption]
  * @property {string} [finalColor]
+ * @property {PythonLegendKey} [keepBothAfter] Keep both of features split off their row: the key of the
+ *   target row the new row is placed right after (D-29).
  */
 /**
  * What a rename collides with: a listed or deleted Legend row, or a color-rule
@@ -125,6 +127,7 @@ import {
  * @property {LegendRowIsNamedPort} [legendRowIsNamed]
  * @property {LegendRowNamePort} [legendRowName]
  * @property {FindLegendRowNamedPort} [findLegendRowNamed]
+ * @property {KeepBothNamesPort} [keepBothNamesOf]
  * @property {LegendEntryNamePort} [legendEntryName]
  */
 
@@ -149,6 +152,14 @@ import {
  * scenario revision 5): by the name the Legend draws for it, else by its name, the row in `color`
  * first; null when no listed or deleted row has the name.
  * @typedef {(typed: string, color: string) => PythonLegendKey | null} FindLegendRowNamedPort
+ */
+/**
+ * The names "Keep both" gives (the Legend owner's `keepBothNamesOf`, PD-OI-061 scenario revision 5):
+ * the name the renamed row is drawn with, and the target row's drawn name after the rename when the
+ * target is drawn and that name changes, else null. `renamedKey` is the row renamed in place; null
+ * for features split off their row, which are placed right after `targetKey` (D-29) in `color`.
+ * @typedef {(rename: { name: string, renamedKey: PythonLegendKey | null, targetKey: PythonLegendKey | null, color: string })
+ *   => { keepBothName: string, targetNameAfter: string | null }} KeepBothNamesPort
  */
 /**
  * The tracks of the request that drew the displayed Result (`drawnTracks`), which give a track's
@@ -178,7 +189,8 @@ export const createFeatureColorActions = ({
     const named = [...drawing.legendEntries.value, ...drawing.deletedLegendEntries.value]
       .find((/** @type {LegendEntry} */ entry) => String(entry.caption).toLowerCase() === typed.toLowerCase());
     return named ? legendEntryKey(named) : null;
-  }
+  },
+  keepBothNamesOf = ({ name }) => ({ keepBothName: name, targetNameAfter: null })
 }) => {
   const {
     extractedFeatures,
@@ -672,7 +684,9 @@ export const createFeatureColorActions = ({
     legendRenameDialog.mergeAvailable = true;
     legendRenameDialog.deletedTargetKey = '';
     legendRenameDialog.targetRuleOnly = false;
-    legendRenameDialog.suffixCaption = '';
+    legendRenameDialog.keepBothName = '';
+    legendRenameDialog.targetNameAfter = '';
+    legendRenameDialog.keepBothRestores = false;
     legendRenameDialog.pendingRequest = null;
   });
 
@@ -710,42 +724,13 @@ export const createFeatureColorActions = ({
     return /** @type {ColorFeature[]} */ (extractedFeatures.value).filter((feat) => captionsMatch(captionOf(feat), normalizedCaption));
   };
 
-  /** @param {DrawingState} drawing @param {string} caption @param {{ ignoreCaptions?: unknown }} [options] */
-  const getUniqueLegendCaption = (drawing, caption, options = {}) => {
-    const normalizedCaption = normalizeCaption(caption);
-    if (!normalizedCaption) return '';
-
-    const ignoreCaptionKeys = new Set(
-      (Array.isArray(options.ignoreCaptions) ? options.ignoreCaptions : [])
-        .map((value) => normalizeCaptionKey(value))
-        .filter(Boolean)
-    );
-
-    const existingKeys = new Set();
-    // A deleted row keeps its caption for Restore (R15-3).
-    [...drawing.legendEntries.value, ...drawing.deletedLegendEntries.value].forEach((entry) => {
-      const key = normalizeCaptionKey(entry?.caption);
-      if (key) existingKeys.add(key);
-    });
-    drawing.manualSpecificRules.forEach((/** @type {ColorRule} */ rule) => {
-      const key = normalizeCaptionKey(rule?.cap);
-      if (key) existingKeys.add(key);
-    });
-    Object.values(drawing.featureColorOverrides).forEach((override) => {
-      const key = normalizeCaptionKey(override?.caption);
-      if (key) existingKeys.add(key);
-    });
-
-    let finalCaption = normalizedCaption;
-    const baseCaption = normalizeCaption(normalizedCaption.replace(/\s*\(\d+\)\s*$/, '')) || normalizedCaption;
-    let counter = 1;
-
-    while (existingKeys.has(normalizeCaptionKey(finalCaption)) && !ignoreCaptionKeys.has(normalizeCaptionKey(finalCaption))) {
-      finalCaption = `${baseCaption} (${counter})`;
-      counter += 1;
-    }
-
-    return finalCaption;
+  // Whether a rename takes every feature of the row of `sourceKey` (also a
+  // row without features): the row is renamed whole, in its place; else the
+  // features split off into a row of their own.
+  /** @param {PythonLegendKey} sourceKey @param {readonly ColorFeature[]} features */
+  const takesWholeRow = (sourceKey, features) => {
+    const selected = new Set(features.map(feature => feature.svg_id));
+    return getFeaturesForLegendCaption(sourceKey).every(feature => selected.has(feature.svg_id));
   };
 
   // Each feature's `hash` rule replaces the first rule that targets it
@@ -921,9 +906,7 @@ export const createFeatureColorActions = ({
       const rules = request.sourceScope === 'group' && sourceRules.length
         ? (current, revise) => current.map(rule => (sourceRules.includes(rule) ? revise(rule, { cap: caption, color }) : rule))
         : (current) => featureRuleCandidate(current, features, color, caption);
-      const selected = new Set(features.map(feature => feature.svg_id));
-      const retireOld = features.length > 0 && getFeaturesForLegendCaption(request.sourceKey)
-        .every(feature => selected.has(feature.svg_id));
+      const retireOld = features.length > 0 && takesWholeRow(request.sourceKey, features);
       const oldEntry = drawing.legendEntries.value.find((/** @type {LegendEntry} */ entry) => legendEntryKey(entry) === request.sourceKey);
       return commitRuleWrite(rules, 'Rename legend item', {
         drawing,
@@ -931,7 +914,9 @@ export const createFeatureColorActions = ({
         // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
         // and every record stored under its key; a row that joins another row
         // keeps that row's place.
-        legendPlacement: retireOld && oldEntry ? { name: caption, color, at: request.sourceKey, replaces: true } : null,
+        // Features that Keep both split off go right after the target row (D-29).
+        legendPlacement: retireOld && oldEntry ? { name: caption, color, at: request.sourceKey, replaces: true }
+          : request.keepBothAfter ? { name: caption, color, at: request.keepBothAfter } : null,
         afterCommit: () => {
           const committedCaptionOf = effectiveLegendCaptions();
           for (const feature of features) updateClickedFeatureLegendState(feature, committedCaptionOf(feature), color);
@@ -962,9 +947,10 @@ export const createFeatureColorActions = ({
    * @param {RenameTarget} target
    * @param {boolean} mergeAvailable
    * @param {PythonLegendKey | ''} deletedTargetKey The key of a deleted target row, else ''.
-   * @param {string} suffixCaption The name "Keep both" gives the renamed row.
+   * @param {{ keepBothName: string, targetNameAfter: string | null, keepBothRestores: boolean }} keepBoth
+   *   What "Keep both" names the rows, and whether it restores the deleted target first.
    */
-  const openLegendRenameTargetDialog = (request, target, mergeAvailable, deletedTargetKey, suffixCaption) => {
+  const openLegendRenameTargetDialog = (request, target, mergeAvailable, deletedTargetKey, keepBoth) => {
     legendRenameDialog.show = true;
     legendRenameDialog.mode = 'target';
     legendRenameDialog.sourceKey = request.sourceKey;
@@ -977,7 +963,9 @@ export const createFeatureColorActions = ({
     legendRenameDialog.mergeAvailable = mergeAvailable;
     legendRenameDialog.deletedTargetKey = deletedTargetKey;
     legendRenameDialog.targetRuleOnly = target.ruleOnly;
-    legendRenameDialog.suffixCaption = suffixCaption;
+    legendRenameDialog.keepBothName = keepBoth.keepBothName;
+    legendRenameDialog.targetNameAfter = keepBoth.targetNameAfter ?? '';
+    legendRenameDialog.keepBothRestores = keepBoth.keepBothRestores;
     legendRenameDialog.pendingRequest = request;
   };
 
@@ -1026,7 +1014,7 @@ export const createFeatureColorActions = ({
     }
 
     // D-06 (PD-OI-061): a rename onto another name of a different color asks
-    // Merge, Keep both (suffix), or Cancel, with or without features.
+    // Merge, Keep both, or Cancel, with or without features.
     // Revision 4 (OV-580 to OV-582): the name of a color rule is such a name,
     // whether its rules draw a row or not, and a pick from the popup's list
     // (`joinGroup`) is its own Merge where Merge is allowed.
@@ -1092,6 +1080,14 @@ export const createFeatureColorActions = ({
       return;
     }
 
+    // PD-OI-061 scenario revision 5: Keep both keeps the typed name, and
+    // every row of the name is numbered in legend order. A row renamed whole
+    // keeps its place; features split off their row go right after the target
+    // row (D-29). Rows of one name and one swatch are one row (D-28): onto a
+    // deleted target in the renamed row's color, Keep both restores the target
+    // first (the composition root, as for Merge), so the row shows.
+    const splitsRow = !takesWholeRow(request.sourceKey, features);
+    const keepBothAfter = splitsRow && listedTarget ? legendEntryKey(listedTarget) : undefined;
     if (target && (deletedTarget || !mergeAllowed || !sameColor)) {
       if (!resolution) {
         openLegendRenameTargetDialog(
@@ -1099,7 +1095,11 @@ export const createFeatureColorActions = ({
           target,
           mergeAllowed,
           deletedTarget ? legendEntryKey(deletedTarget) : '',
-          getUniqueLegendCaption(drawing, newCaption, { ignoreCaptions: [oldCaption] })
+          {
+            ...keepBothNamesOf({ name: newCaption, renamedKey: splitsRow ? null : request.sourceKey,
+              targetKey: listedTarget ? legendEntryKey(listedTarget) : null, color: currentColor }),
+            keepBothRestores: Boolean(deletedTarget) && sameColor
+          }
         );
         return;
       }
@@ -1115,7 +1115,7 @@ export const createFeatureColorActions = ({
         currentColor,
         features,
         ...(resolution === 'merge' ? { finalCaption: target.caption, finalColor: target.color }
-          : { finalCaption: getUniqueLegendCaption(drawing, newCaption, { ignoreCaptions: [oldCaption] }), finalColor: currentColor })
+          : { finalCaption: newCaption, finalColor: currentColor, ...(keepBothAfter ? { keepBothAfter } : {}) })
       });
       clearLegendRenameDialog(drawing);
       return;
@@ -1342,10 +1342,10 @@ export const createFeatureColorActions = ({
         return;
       }
 
-      if (choice === 'suffix') {
+      if (choice === 'keep-both') {
         await continueLegendRenameRequest(drawing, {
           ...pendingRequest,
-          targetResolution: 'suffix'
+          targetResolution: 'keep-both'
         });
         return;
       }

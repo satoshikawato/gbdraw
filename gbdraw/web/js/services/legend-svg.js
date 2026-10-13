@@ -85,6 +85,9 @@ export const getAllFeatureLegendGroups = (svg) => {
 // The owner mark of a Legend row a rule commit shows before Python draws it
 // (the executor's `ifAbsent` addition); the rules own it, not the editor.
 export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
+// D-28: the marker of a Legend row the naming pass hides because an earlier
+// row has its name and its swatch (svg-result-ingestion.js `nameLegendRows`).
+export const LEGEND_MERGED_ROW = 'data-legend-merged';
 
 // The one absence predicate of a Legend row: a row is absent when the Result
 // lacks it or a Legend delete hid it (the executor keeps a deleted row of
@@ -509,6 +512,7 @@ export const legendEntryAnchor = (entryGroup) => {
  * @property {boolean} editor A row the Legend editor added.
  * @property {boolean} pythonShown Python drew it shown: a row a rule commit retired is not.
  * @property {boolean} shown The row shows.
+ * @property {boolean} merged The naming pass hides it: an earlier row has its name and its swatch (D-28).
  * @property {SwatchColor} color The fill its swatch shows.
  * @property {number} xPos
  * @property {number} yPos
@@ -536,6 +540,7 @@ export const resultLegendRows = (svg) => {
       editor: row.getAttribute('data-legend-owner') === 'direct-editor',
       pythonShown: pythonDrawnAttribute(row, 'display') !== 'none',
       shown: legendRowShown(row),
+      merged: row.hasAttribute(LEGEND_MERGED_ROW),
       color: /** @type {SwatchColor} */ (getLegendEntrySwatch(row)?.getAttribute('fill') || '#cccccc'),
       xPos: anchor.x,
       yPos: anchor.y
@@ -553,7 +558,7 @@ export const resultLegendRows = (svg) => {
  * and the name the Legend draws for it (its name while the row is hidden);
  * and what a typed name is matched with: whether the row shows, and its
  * swatch and fill.
- * @typedef {{ name: LegendRowName, drawnName: DrawnLegendName, shown: boolean, swatch: LegendSwatchIdentity, color: SwatchColor }} ShownLegendRowNames
+ * @typedef {{ name: LegendRowName, drawnName: DrawnLegendName, shown: boolean, merged: boolean, swatch: LegendSwatchIdentity, color: SwatchColor }} ShownLegendRowNames
  */
 
 // The names of the rows of a Result's shown feature Legend group, by each
@@ -566,6 +571,7 @@ export const shownLegendRowNames = (svg) => new Map((resultLegendRows(svg) || []
     name: row.name,
     drawnName: row.shown && row.drawnName ? row.drawnName : /** @type {DrawnLegendName} */ (/** @type {string} */ (row.name)),
     shown: row.shown,
+    merged: row.merged,
     swatch: row.swatch,
     color: row.color
   }

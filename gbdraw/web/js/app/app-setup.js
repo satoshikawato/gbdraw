@@ -1867,6 +1867,7 @@ export const createAppSetup = () => {
     legendRowIsNamed: legendActions.legendRowIsNamed,
     legendRowName: legendActions.legendRowName,
     findLegendRowNamed: legendActions.findLegendRowNamed,
+    keepBothNamesOf: legendActions.keepBothNamesOf,
     legendEntryName: legendActions.legendEntryName,
     shownLegendName: legendActions.shownLegendName,
     askChoice,
@@ -4330,10 +4331,13 @@ export const createAppSetup = () => {
   // R15-3 (OV-285): the Merge of a rename onto a deleted row's caption is the
   // Restore of that row (by its Python key), then the merge, in one History
   // checkpoint: the merge's rule commit joins it, so one Undo returns both.
+  // Keep both onto a deleted row in the renamed row's color restores it the
+  // same way: the two are one row (D-28).
   /** @param {string} choice */
   const chooseLegendRename = (choice) => {
     const key = legendRenameDialog.deletedTargetKey;
-    if (choice !== 'merge' || !key) return handleLegendRenameChoice(choice);
+    const restores = choice === 'merge' || (choice === 'keep-both' && legendRenameDialog.keepBothRestores);
+    if (!restores || !key) return handleLegendRenameChoice(choice);
     return history.runUndoableCheckpoint('Rename legend item', async () => {
       const deleted = state.activeDrawing().deletedLegendEntries.value;
       const index = deleted.findIndex((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === key);
@@ -7193,6 +7197,7 @@ export const createAppSetup = () => {
     // (OV-125). The deleted row's stroke leaves its features (OV-293).
     shownLegendName: legendActions.shownLegendName,
     shownLegendEntryName: legendActions.shownLegendEntryName,
+    legendEntryMerged: legendActions.legendEntryMerged,
     deleteLegendEntry: editEditorIntent('Delete legend item', deleteLegendEntry, { domains: [...LEGEND_STRUCTURE_DOMAINS, ...STROKE_DOMAINS] }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.

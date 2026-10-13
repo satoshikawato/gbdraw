@@ -603,9 +603,11 @@ const legendRowsByCaption = page => page.evaluate(() => {
 const oneRowEach = ({ editor }) => Object.fromEntries(editor.map(caption => [caption, 1]));
 
 // OV-151 (GUI audit FL-04, PD-OI-061 revision 2): GC skew (+) and GC skew (-)
-// draw no features, so renaming one onto the other offers Suffix and Cancel,
-// never Merge, and a forced Merge changes nothing. After Suffix each caption has
-// one drawn row, live and at Generate, and the editor order stays. The renamed
+// draw no features, so renaming one onto the other offers Keep both and
+// Cancel, never Merge, and a forced Merge changes nothing. After Keep both the
+// renamed row keeps the typed name and the two rows of the name are drawn
+// `(1)` and `(2)` (PD-OI-061 scenario revision 5), live and at Generate, and
+// the editor order stays. The renamed
 // row is the last row; in Linear a renamed row before it moves at Generate
 // (OV-156, owned by the Legend layout port).
 for (const mode of ['linear', 'circular']) {
@@ -642,12 +644,15 @@ for (const mode of ['linear', 'circular']) {
 
       await rename();
       await dialog.getByRole('button', { name: /^Keep both: name it "/ }).click();
-      await expect.poll(() => page.evaluate(legendIndex, 'GC skew (+) (1)')).toBeGreaterThanOrEqual(0);
+      await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.legendEntries
+        .find(e => e.originalCaption === 'GC skew (-)')?.caption)).toBe('GC skew (+)');
       await settleLive(page);
       const renamed = await legendRowsByCaption(page);
-      expect(renamed.editor).toEqual([...before.editor.slice(0, -1), 'GC skew (+) (1)']);
-      expect(renamed.drawn, 'one drawn row per caption, live').toEqual(oneRowEach(renamed));
-      await expectGenerateKeepsLegend(page, 'Generate after the Suffix');
+      expect(renamed.editor).toEqual([...before.editor.slice(0, -1), 'GC skew (+)']);
+      const { 'GC skew (+)': _shared, ...others } = oneRowEach(renamed);
+      expect(renamed.drawn, 'the two rows of the name are numbered, live')
+        .toEqual({ ...others, 'GC skew (+) (1)': 1, 'GC skew (+) (2)': 1 });
+      await expectGenerateKeepsLegend(page, 'Generate after Keep both');
       expect(await legendRowsByCaption(page), 'one drawn row per caption at Generate, editor order kept').toEqual(renamed);
       expect(page.externalRequests).toEqual([]);
     } finally {

@@ -1831,6 +1831,34 @@ const legendRows = (svg) => svg.querySelectorAll('g[data-legend-key]').map((row)
   row.getAttribute('data-legend-key'), row.querySelector('text').textContent, row.getAttribute('display')
 ]);
 
+// D-28 (PD-OI-061 scenario revision 5): rows of one name and one swatch are
+// one row. The naming pass hides the later of them and shows it again once its
+// swatch differs; a delete of the merged row keeps it hidden, and a reconcile
+// without the delete returns it to the merge.
+test('rows of one name and one swatch are one row: the later row is hidden until it differs (D-28)', () => {
+  const svg = legendSvg();
+  const merged = () => svg.querySelectorAll('g[data-legend-key]').filter((row) => row.hasAttribute('data-legend-merged'))
+    .map((row) => row.getAttribute('data-gbdraw-base-data-legend-key'));
+  const renamed = legendOperations({ legendRenames: [{ from: 'tRNA', to: 'CDS', allowMissing: false }] });
+  assert.deepEqual(reconcileMountedResult(svg, renamed), { changed: true, legendChanged: true });
+  // A hidden row keeps the text it last showed.
+  assert.deepEqual(legendRows(svg), [['CDS', 'CDS', null], ['CDS', 'tRNA', 'none'], ['rRNA', 'rRNA', null]]);
+  assert.deepEqual(merged(), ['tRNA']);
+  assert.deepEqual(reconcileMountedResult(svg, renamed), { changed: false, legendChanged: false }, 'merged once');
+  const recolored = legendOperations({ ...renamed, legendFills: [{ caption: 'tRNA', color: '#ff0000' }] });
+  reconcileMountedResult(svg, recolored);
+  assert.deepEqual(legendRows(svg), [['CDS', 'CDS (1)', null], ['CDS', 'CDS (2)', null], ['rRNA', 'rRNA', null]], 'another swatch: two rows');
+  assert.deepEqual(merged(), []);
+  reconcileMountedResult(svg, renamed);
+  assert.deepEqual(merged(), ['tRNA'], 'one swatch again: one row');
+  reconcileMountedResult(svg, legendOperations({ ...renamed, legendDeletes: [{ caption: 'tRNA', allowMissing: false }] }));
+  assert.deepEqual([legendRows(svg)[1][2], merged()], ['none', []], 'a deleted merged row stays hidden as deleted');
+  reconcileMountedResult(svg, renamed);
+  assert.deepEqual([legendRows(svg)[1][2], merged()], ['none', ['tRNA']], 'without the delete it is merged again');
+  reconcileMountedResult(svg, legendOperations());
+  assert.deepEqual(legendRows(svg), [['CDS', 'CDS', null], ['tRNA', 'tRNA', null], ['rRNA', 'rRNA', null]], 'without the rename, Python\'s rows');
+});
+
 // U3a H1: main's writer renamed a generated row (GC content to "GC %") by
 // rewriting its key without a record; Load records Python's key on that row
 // once, so a live fill addressed by Python's key reaches it and a reconcile

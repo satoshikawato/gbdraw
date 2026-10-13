@@ -3,7 +3,7 @@
 /** @import { PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort, ShownLegendNamePort } from './feature-editor/svg-actions.js' */
-/** @import { FindLegendRowNamedPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
+/** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
@@ -65,6 +65,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {LegendRowIsNamedPort} [legendRowIsNamed]
  * @property {LegendRowNamePort} [legendRowName]
  * @property {FindLegendRowNamedPort} [findLegendRowNamed]
+ * @property {KeepBothNamesPort} [keepBothNamesOf]
  * @property {LegendEntryNamePort} [legendEntryName]
  * @property {ShownLegendNamePort} [shownLegendName]
  * @property {AskChoice} askChoice The root's choice dialog.
@@ -104,6 +105,7 @@ export const createFeatureEditor = ({
   legendRowIsNamed,
   legendRowName,
   findLegendRowNamed,
+  keepBothNamesOf,
   legendEntryName,
   shownLegendName,
   askChoice,
@@ -145,6 +147,7 @@ export const createFeatureEditor = ({
     legendRowIsNamed,
     legendRowName,
     findLegendRowNamed,
+    keepBothNamesOf,
     legendEntryName
   });
   // The visibility owner comes before the label owner, which receives its

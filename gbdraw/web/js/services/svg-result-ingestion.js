@@ -21,6 +21,7 @@ import {
   legendRowName,
   legendRowShown,
   legendRowSwatch,
+  LEGEND_MERGED_ROW,
   namedLegends,
   moveLegendEntryToAnchor,
   orderLegendEntries,
@@ -671,13 +672,33 @@ const paintElementKind = (element) => {
 // revision 2): after the Legend operations of a pass, each shown row's text is
 // the naming rule's answer (legend-row-names.js) for the rows the Legend shows,
 // by their names and the swatches they show. No operation writes a row's text;
-// Python's own texts are this rule's answer for the rows it drew. Returns
-// whether a text changed.
+// Python's own texts are this rule's answer for the rows it drew. Rows of one
+// name and one swatch are one row (D-28): the later of them is hidden under
+// `LEGEND_MERGED_ROW`, and shows again on the pass that finds its name or
+// swatch different (a delete or a retirement of a merged row first shows it,
+// `unmergeLegendRow`). Returns whether a text or a merge changed.
 /** @param {Parameters<typeof namedLegends>[0]} svg */
 const nameLegendRows = (svg) => {
   let changed = false;
+  const displayRecord = resultBaseAttribute('display');
   namedLegends(svg).forEach((legend) => {
-    const rows = Array.from(legend.querySelectorAll('g[data-legend-key]')).filter(legendRowShown);
+    const all = Array.from(legend.querySelectorAll('g[data-legend-key]'));
+    const merged = new Set(all.filter((row) => row.hasAttribute(LEGEND_MERGED_ROW)));
+    merged.forEach((row) => {
+      row.removeAttribute(LEGEND_MERGED_ROW);
+      if (!row.hasAttribute(displayRecord)) row.removeAttribute('display');
+    });
+    /** @type {Set<string>} */
+    const seen = new Set();
+    const rows = all.filter(legendRowShown).filter((row) => {
+      const identity = JSON.stringify([legendRowName(row), legendRowSwatch(row)]);
+      if (!seen.has(identity)) return seen.add(identity);
+      row.setAttribute('display', 'none');
+      row.setAttribute(LEGEND_MERGED_ROW, '');
+      if (!merged.delete(row)) changed = true;
+      return false;
+    });
+    if (merged.size > 0) changed = true;
     const drawn = drawnLegendNames(rows.map((row) => ({ name: legendRowName(row), swatch: legendRowSwatch(row) })));
     rows.forEach((row, at) => {
       const label = row.querySelector('text');
@@ -687,6 +708,15 @@ const nameLegendRows = (svg) => {
     });
   });
   return changed;
+};
+
+// A row the naming pass merged shows again, so an operation that hides it
+// hides a shown row (D-28).
+/** @param {Element} row */
+const unmergeLegendRow = (row) => {
+  if (!row.hasAttribute(LEGEND_MERGED_ROW)) return;
+  row.removeAttribute(LEGEND_MERGED_ROW);
+  row.removeAttribute('display');
 };
 
 // An added row's key and name: `data-legend-name` only where the name is not
@@ -1000,6 +1030,7 @@ const applyLegendOperations = (index, operations, {
   // Python draws the Legend again.
   operations.legendDeletes.forEach(({ caption, allowMissing, retire = false }) => {
     requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
+      unmergeLegendRow(entry);
       changed = (retire ? setAttributeIfDifferent(entry, 'display', 'none') : setPaintAttribute(index, entry, 'display', 'none'))
         || changed;
     });

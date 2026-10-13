@@ -8,8 +8,10 @@
  */
 /** @typedef {EntryRecord & { caption: string, originalCaption: string }} ListedEntry A row a Result lists, under its caption and its key. */
 import { normalizeOptionalHexColor, resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
+import { keepBothNames, legendSwatch } from '../../services/legend-row-names.js';
 import {
   defaultLegendKeyOrder,
+  drawnBlockStroke,
   getAllFeatureLegendGroups,
   isLegendOrderEdited,
   legendEntryKey,
@@ -128,6 +130,11 @@ export const createLegendEntryActions = ({
     const caption = legendCaption(entry);
     return legendRowNames.value.get(key)?.name ?? (caption && caption !== key ? /** @type {LegendRowName} */ (caption) : legendRowName(key));
   };
+  // Whether the Legend tab leaves out a row of the drawing's lists: the
+  // displayed Result shows it as one row with an earlier row of its name and
+  // swatch (D-28). Its entry stays, so its rename and edits stay.
+  /** @param {EntryRecord} entry */
+  const legendEntryMerged = (entry) => legendRowNames.value.get(legendEntryKey(entry))?.merged === true;
   // The name the Legend tab shows for a row of the drawing's lists.
   /** @param {EntryRecord} entry @returns {string} */
   const shownLegendEntryName = (entry) => legendRowNames.value.get(legendEntryKey(entry))?.drawnName ?? legendEntryName(entry);
@@ -169,6 +176,25 @@ export const createLegendEntryActions = ({
     ].filter(({ entry }) => String(legendEntryName(entry)).toLowerCase() === lower);
     const found = named.find((row) => normalizedColor(row.color) === wanted) || named[0];
     return found ? legendEntryKey(found.entry) : null;
+  };
+
+  // PD-OI-061 scenario revision 5: the names "Keep both" gives, for the rows
+  // the displayed Result draws. The row renamed whole keeps its place and its
+  // swatch; features split off their row (`renamedKey` null) are a row placed
+  // right after the target row (D-29), drawn in `color` with the Result's
+  // block stroke, as Python draws a color rule's row.
+  /** @type {import('../feature-editor/color-actions.js').KeepBothNamesPort} */
+  const keepBothNamesOf = ({ name, renamedKey, targetKey, color }) => {
+    const rows = [...legendRowNames.value].filter(([, names]) => names.shown)
+      .map(([key, names]) => ({ key, name: names.name, swatch: names.swatch }));
+    const renamed = rows.find((row) => row.key === renamedKey);
+    const block = renamed ? null : drawnBlockStroke(svgContainer.value?.querySelector?.('svg') || null);
+    return keepBothNames(rows, {
+      name: /** @type {LegendRowName} */ (name),
+      swatch: renamed?.swatch ?? legendSwatch({ fill: color, stroke: block?.color, width: block?.width }),
+      renamedKey: renamed ? renamed.key : null,
+      targetKey
+    });
   };
 
   /** @param {(options?: { commit?: boolean }) => unknown} handler The root's refresh of the Legend geometry. */
@@ -760,6 +786,8 @@ export const createLegendEntryActions = ({
     deleteLegendEntry,
     extractLegendEntries,
     findLegendRowNamed,
+    keepBothNamesOf,
+    legendEntryMerged,
     legendEntryName,
     legendRowIsNamed,
     legendRowName,

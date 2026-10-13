@@ -263,7 +263,7 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (curre
         notes.push(`hidden label text ${choice}`);
         answer(app.handleHiddenLabelTextChoice(choice));
       } else if (app.legendRenameDialog.show) {
-        const choice = choose(app.legendRenameDialog.mode === 'target' ? ['merge', 'suffix'] : ['single', 'group']);
+        const choice = choose(app.legendRenameDialog.mode === 'target' ? ['merge', 'keep-both'] : ['single', 'group']);
         notes.push(`legend rename ${app.legendRenameDialog.mode} ${choice}`);
         answer(app.handleLegendRenameChoice(choice));
       } else if (finished && outstanding === 0) {

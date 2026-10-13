@@ -7247,6 +7247,9 @@
                                 <p v-else>
                                     "{{ legendRenameDialog.newCaption }}" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item.' : 'already exists with another color.' }}
                                 </p>
+                                <p v-if="legendRenameDialog.targetNameAfter" class="mt-2">
+                                    The existing "{{ shownLegendName(legendRenameDialog.targetKey) }}" becomes "{{ legendRenameDialog.targetNameAfter }}".
+                                </p>
                                 <ul class="mt-2 space-y-1">
                                     <li class="flex items-center gap-2">
                                         <span class="w-4 h-4 rounded border border-slate-300 inline-block shrink-0" :style="{ backgroundColor: legendRenameDialog.targetColor }"></span>
@@ -7284,11 +7287,11 @@
                                     <span v-if="legendRenameDialog.deletedTargetKey">Restore "{{ legendRenameDialog.targetKey ? shownLegendName(legendRenameDialog.targetKey) : legendRenameDialog.targetCaption }}" and merge into it</span>
                                     <span v-else>Merge into "{{ legendRenameDialog.targetKey ? shownLegendName(legendRenameDialog.targetKey) : legendRenameDialog.targetCaption }}"</span>
                                 </button>
-                                <button @click="handleLegendRenameChoice('suffix')"
+                                <button @click="handleLegendRenameChoice('keep-both')"
                                         data-history-managed
                                         :class="['choice-option', { 'is-primary': !legendRenameDialog.mergeAvailable }]" :disabled="!semanticMutationAvailable">
                                     <span class="w-5 h-5 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: legendRenameDialog.currentColor }"></span>
-                                    <span>Keep both: name it "{{ legendRenameDialog.suffixCaption }}"</span>
+                                    <span>Keep both: name it "{{ legendRenameDialog.keepBothName }}"</span>
                                 </button>
                             </div>
 
@@ -7764,6 +7767,7 @@
 
                         <div class="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
                             <div v-for="(entry, idx) in legendEntries" :key="idx" data-legend-drawer-row
+                                 v-show="!legendEntryMerged(entry)"
                                  class="px-1.5 py-1 bg-slate-50 rounded border"
                                  :class="legendReorder.over === idx && legendReorder.from !== null && legendReorder.from !== idx ? 'border-blue-400' : 'border-slate-100'"
                                  @dragover="overLegendReorder($event, idx)" @drop="dropLegendReorder($event, idx)">
