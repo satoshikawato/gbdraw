@@ -119,7 +119,8 @@ def render_legend_font_metrics_module() -> str:
 # Requested lists and the families registered in the page. Each vector pins
 # the Web ports of Python's family rules for that registration state: the
 # resolution with the Web's availability (bundled + registered,
-# ``resolve_font_family_among``), the custom families
+# ``resolve_font_family_among``; ``replaced``: the families before the one
+# drawn, which the Session-load question and the CLI warning name, OV-743), the custom families
 # (``custom_font_families_among``, the rule of the custom-font warnings, D-10),
 # and the face the normal weight and style is measured with (``face``:
 # services/legend-layout.js ``resolveLegendFontFace``; a registered family wins
@@ -161,6 +162,8 @@ RESOLUTION_CASES = (
     ("serif, 'Font B'", ("Font B",)),
     ("sans-serif", ("sans-serif",)),
     ("'Gone A'", ()),
+    ("'Liberation Serif', 'Gone A', serif", ()),
+    ("'Gone A', 'Font B', 'Gone C', serif", ("Font B",)),
 )
 
 
@@ -234,6 +237,7 @@ def render_resolution_vectors() -> str:
             "registered": list(registered),
             "effective": resolution.effective,
             "missing": list(resolution.missing),
+            "replaced": list(resolution.replaced),
             "custom": list(gbdraw_fonts.custom_font_families_among(requested, registered)),
             "face": _face_resolution(requested, registered),
         })

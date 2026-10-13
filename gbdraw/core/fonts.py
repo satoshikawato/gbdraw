@@ -130,7 +130,22 @@ class FontFamilyResolution:
 
     @property
     def substituted(self) -> bool:
+        """Whether ``effective`` differs from ``requested``."""
         return bool(self.missing)
+
+    @property
+    def replaced(self) -> tuple[str, ...]:
+        """The requested families before the first one a drawing uses: what
+        is drawn differs from the requested first family only when this is
+        not empty (OV-743). A missing family after one that resolves is
+        dropped from ``effective`` without changing the text."""
+        missing = set(self.missing)
+        leading: list[str] = []
+        for family in parse_font_family_list(self.requested):
+            if family not in missing:
+                break
+            leading.append(family)
+        return tuple(leading)
 
     @property
     def nearest(self) -> str:
@@ -140,18 +155,21 @@ class FontFamilyResolution:
 
     @property
     def message(self) -> Optional[str]:
-        """The warning for a substitution; None when nothing was replaced."""
-        if not self.missing:
+        """The warning for a substitution: None when the requested first
+        family is drawn (``replaced`` is empty)."""
+        replaced = self.replaced
+        if not replaced:
             return None
         parts: list[str] = []
-        unavailable = [name for name in self.missing if name not in self.unchecked]
+        unchecked = [name for name in replaced if name in self.unchecked]
+        unavailable = [name for name in replaced if name not in self.unchecked]
         if unavailable:
             noun, verb = ("Font", "is") if len(unavailable) == 1 else ("Fonts", "are")
             parts.append(f"{noun} {_css_family_list(unavailable)} {verb} not available")
-        if self.unchecked:
-            noun = "Font" if len(self.unchecked) == 1 else "Fonts"
+        if unchecked:
+            noun = "Font" if len(unchecked) == 1 else "Fonts"
             parts.append(
-                f"{noun} {_css_family_list(self.unchecked)} could not be checked because fontconfig did not answer"
+                f"{noun} {_css_family_list(unchecked)} could not be checked because fontconfig did not answer"
             )
         return (
             f"{'; '.join(parts)}; text uses {css_family_token(self.nearest)} instead "

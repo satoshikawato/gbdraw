@@ -148,8 +148,8 @@ by exact selectors; its rows decide before the visibility and label tables (see
 `"DejaVu Serif"` or a CSS font-family list. The default is Liberation Sans.
 gbdraw measures text with the font file of the first family it finds: a
 `--font_file` font, a bundled Liberation font, or a font installed on the
-computer. A family found nowhere is replaced with the nearest Liberation font,
-with a warning. `--font_file PATH` adds the faces of a `.ttf`, `.otf`, `.ttc`,
+computer. When the first family is found nowhere, gbdraw warns and draws the
+next family it finds, else the nearest Liberation font. `--font_file PATH` adds the faces of a `.ttf`, `.otf`, `.ttc`,
 or `.otc` file (every face of a collection); repeat it for more files. Without
 `--font_family`, the diagram uses the family of the first file. An unreadable
 file is an error. `circular`, `linear`, and `gbdraw render --session` accept

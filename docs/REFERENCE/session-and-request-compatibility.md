@@ -313,9 +313,11 @@ never embeds a font; only exported SVG does (see
 notes this under **Font** and in the **Save Session** notice, and
 `--save_session` logs it.
 
-When a Session's font is not available, the command line and Python log a
-warning and draw the nearest font: the first available family of the list, else
-the Liberation face of its generic kind (serif, sans-serif, or monospace). Give
+When the first family of a Session's font list is not available, the command
+line and Python log a warning and draw the nearest font: the first available
+family of the list, else the Liberation face of its generic kind (serif,
+sans-serif, or monospace). A later family that is not available changes
+nothing, because it is not drawn. Give
 the font with `--font_file` to use it. The web app asks before it loads such a
 Session, without starting the drawing Worker: **Load font file…**, **Use
 installed font…** (Chrome and Edge), **Load with** the nearest font, or

@@ -38,9 +38,10 @@ export const customFontSaveWarnings = (fontFamilies, registeredFamilies) => {
 };
 
 /**
- * The fonts a Session names that this page cannot draw, and the nearest font
- * each list is drawn with instead (the first family of the list Python
- * resolves to); null when every family resolves.
+ * The fonts a Session names that this page cannot draw where the family drawn
+ * differs from the requested first family (Python's `replaced`, OV-743), and
+ * the nearest font each such list is drawn with instead (the first family of
+ * the list Python resolves to); null when every list draws its first family.
  * @typedef {{ missing: FontFamilyName[], nearest: FontFamilyName[] }} MissingSessionFonts
  */
 
@@ -54,10 +55,10 @@ export const missingSessionFonts = (fontFamilies, registeredFamilies) => {
   const resolutions = fontFamilies
     .filter((value) => typeof value === 'string' && value.trim() !== '')
     .map((value) => resolveWebFontFamily(String(value), registered))
-    .filter((resolution) => resolution.missing.length > 0);
+    .filter((resolution) => resolution.replaced.length > 0);
   if (resolutions.length === 0) return null;
   return {
-    missing: unique(resolutions.flatMap((resolution) => resolution.missing)),
+    missing: unique(resolutions.flatMap((resolution) => resolution.replaced)),
     nearest: unique(resolutions.map((resolution) => (
       parseFontFamilyList(resolution.effective).find((family) => !isGenericFamily(family)) || resolution.effective
     )))

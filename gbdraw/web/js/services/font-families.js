@@ -19,6 +19,8 @@ import { FONT_FAMILY_RULES } from '../utils/font-family-rules.generated.js';
  * @property {FontFamilyList} requested
  * @property {FontFamilyList} effective The list a drawing uses: only families that resolve.
  * @property {readonly FontFamilyName[]} missing The requested families that do not resolve, in order.
+ * @property {readonly FontFamilyName[]} replaced Python's `replaced`: the requested families before the
+ *   first one a drawing uses; empty when the requested first family is drawn (OV-743).
  */
 
 const GENERIC_FAMILIES = new Set(FONT_FAMILY_RULES.genericFamilies);
@@ -104,11 +106,18 @@ export const resolveFontFamilyWith = (fontFamily, available) => {
   const kept = [];
   /** @type {FontFamilyName[]} */
   const missing = [];
+  /** @type {FontFamilyName[]} */
+  const replaced = [];
   for (const family of parseFontFamilyList(requested)) {
     if (isGenericFamily(family) || available(family)) kept.push(family);
-    else missing.push(family);
+    else {
+      missing.push(family);
+      if (kept.length === 0) replaced.push(family);
+    }
   }
-  if (missing.length === 0) return Object.freeze({ requested, effective: requested, missing: Object.freeze([]) });
+  if (missing.length === 0) {
+    return Object.freeze({ requested, effective: requested, missing: Object.freeze([]), replaced: Object.freeze([]) });
+  }
   const generics = kept.filter(isGenericFamily);
   if (generics.length === kept.length) {
     const generic = nearestGeneric(generics, missing);
@@ -119,7 +128,8 @@ export const resolveFontFamilyWith = (fontFamily, available) => {
   return Object.freeze({
     requested,
     effective: kept.map(cssFamilyToken).join(', '),
-    missing: Object.freeze(missing)
+    missing: Object.freeze(missing),
+    replaced: Object.freeze(replaced)
   });
 };
 

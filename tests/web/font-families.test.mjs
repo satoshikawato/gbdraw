@@ -36,6 +36,7 @@ test('the port resolves every Python vector exactly', () => {
     const resolution = resolveWebFontFamily(vector.requested, vector.registered);
     assert.equal(resolution.effective, vector.effective, `vector ${index}: ${vector.requested}`);
     assert.deepEqual([...resolution.missing], vector.missing, `vector ${index} missing`);
+    assert.deepEqual([...resolution.replaced], vector.replaced, `vector ${index} replaced (OV-743)`);
   });
 });
 

@@ -121,7 +121,7 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
    */
   const unavailableLabel = (fontFamily) => {
     const resolution = resolveWebFontFamily(fontFamily, loadedFamilies());
-    const requested = resolution.missing[0] || parseFontFamilyList(fontFamily)[0] || fontFamily;
+    const requested = resolution.replaced[0] || parseFontFamilyList(fontFamily)[0] || fontFamily;
     const nearest = parseFontFamilyList(resolution.effective).find((family) => !isGenericFamily(family)) || resolution.effective;
     return `${requested} — not available, drawn in ${nearest}`;
   };

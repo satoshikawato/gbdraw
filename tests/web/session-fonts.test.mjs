@@ -38,6 +38,13 @@ test('Load asks only when a named family is neither bundled nor loaded', () => {
   }, 'one question for both drawings');
 });
 
+test('OV-743: Load asks only when the drawn family is not the requested first family', () => {
+  assert.equal(missingSessionFonts(["'Liberation Serif', 'Foo', serif"], []), null, 'Liberation Serif is drawn; nothing is replaced');
+  assert.deepEqual(missingSessionFonts(["'Foo', 'DejaVu Serif', 'Bar', serif"], ['DejaVu Serif']), {
+    missing: ['Foo'], nearest: ['DejaVu Serif']
+  }, 'names only the families before the one drawn');
+});
+
 test('the question has the approved title, texts, and buttons', () => {
   const missing = missingSessionFonts(["'Garamond Premier Pro', serif"], []);
   assert.deepEqual(sessionFontQuestion(missing, { installedFontsSupported: true, loadedFamily: null }), {

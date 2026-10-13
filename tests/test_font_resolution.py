@@ -644,3 +644,15 @@ def test_the_platform_font_folders_of_each_system(monkeypatch: pytest.MonkeyPatc
 
     assert windows[0].endswith("Fonts") and "Microsoft" in windows[1]
     assert mac[:2] == ("/System/Library/Fonts", "/Library/Fonts")
+
+
+def test_ov743_no_warning_when_the_first_family_is_drawn() -> None:
+    resolution = fonts.resolve_font_family("'Liberation Serif', 'Gbdraw Never Installed', serif")
+
+    assert resolution.replaced == ()
+    assert resolution.message is None
+    assert resolution.effective == "'Liberation Serif', serif"
+    replaced = fonts.resolve_font_family("'Gbdraw Never Installed', 'Gbdraw Gone Too', serif")
+    assert replaced.replaced == ("Gbdraw Never Installed", "Gbdraw Gone Too")
+    assert replaced.message is not None
+
