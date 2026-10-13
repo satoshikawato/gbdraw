@@ -1278,6 +1278,40 @@ test('Load names a saved rule row keyed for a renderer row of another swatch, an
   }
 });
 
+// F2: a caption saved with its own color ID whose rule is the only rule of
+// that caption (the older build kept `Complex IV [#ffe700]` once the other
+// color's rule was gone; here that rule is `Complex III`) is read as
+// `Complex IV`, so its row's key changes from the saved text to the caption.
+// Load moves the row of the saved figure and every Legend record saved under
+// the old key to the new key, so the row shows its name and keeps its edits;
+// a per-feature color edit saved with the old caption is read the same way.
+// A caption that keeps several colors keeps its key.
+const ONE_COLOR_CAPTION = (session) => JSON.parse(JSON.stringify(session).split('Complex IV [#1f77b4]').join('Complex III'));
+test('Load moves a one-color rule row saved under its color ID, with its stored Legend edits, to the key of the read caption (F2)', () => {
+  const full = sessionFixture(RULE_CAPTIONS);
+  assert.equal(savedResultEdits(full, 'circular', full.editorState, full.version, full.modes.circular.config.rules).legendRekeys.size, 0,
+    'a caption in two colors keeps its keys');
+  const session = ONE_COLOR_CAPTION(full);
+  const results = normalizeLogicalResults(session.results);
+  const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, session.modes.circular.config.rules);
+  assert.deepEqual([...edits.legendRekeys], [['Complex IV [#ffe700]', 'Complex IV']]);
+  assert.deepEqual(edits.rules.map((rule) => rule.cap), ['Complex IV', 'Complex III', 'Complex I']);
+  assert.deepEqual(Object.keys(edits.legendStrokeOverrides), ['Complex IV'], 'the stroke moves to the new key');
+  assert.deepEqual(edits.originalLegendOrder.slice(1, 4), ['rRNA', 'Complex IV', 'Complex III'], 'in its place');
+  assert.deepEqual(edits.legendEntries.slice(2, 3).map(({ caption, originalCaption }) => [caption, originalCaption]), [['Complex IV', 'Complex IV']]);
+  assert.equal(edits.featureColorOverrides['record-1\u0000f48b7bf2f'].caption, 'Complex IV', 'item 3: the feature edit is read like its rule');
+  const svg = parseSvgText(results[0].content);
+  const { callerTransforms } = createSavedResultPlan(results, admission, edits).operationsByResult[0];
+  callerTransforms.forEach((transform) => transform(svg));
+  assert.deepEqual(savedLegendRows(svg).filter(([key]) => key.startsWith('Complex')), [
+    ['Complex IV', null, 'Complex IV'], ['Complex III', null, 'Complex III'], ['Complex I', null, 'Complex I']
+  ]);
+  const row = svg.querySelectorAll('g[data-legend-key]').find((each) => each.getAttribute('data-legend-key') === 'Complex IV');
+  assert.equal(row.querySelector('path').getAttribute('stroke'), '#d62728', 'the saved stroke stays on its row');
+  assert.equal(reconcileMountedResult(svg, createEmptySvgMutationPlan(1).operationsByResult[0]).legendChanged, false);
+});
+
 // OV-288 (R15-4): the stroked repeat_region row has a Legend color of its
 // own. Load finds the row's features by Python's row color, not the
 // swatch's, so Reset returns them to Python's stroke.

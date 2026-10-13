@@ -107,6 +107,20 @@ export const savedSpecificRules = (rules) => rules.map((rule) => {
   const read = savedRuleCaption(caption, rule.color);
   return read === caption ? rule : { ...rule, cap: read };
 });
+// Per-feature color edits as a saved Session is read: an older build wrote a
+// rule's rewritten caption into the edits of the features the rule colored,
+// so an edit's caption is read as its rule's is, by the edit's own color.
+/**
+ * @template {Record<string, unknown>} Edits
+ * @param {Edits | null | undefined} edits
+ * @returns {Edits}
+ */
+export const savedFeatureColorEdits = (edits) => /** @type {Edits} */ (Object.fromEntries(Object.entries(edits || {}).map(([key, edit]) => {
+  if (!edit || typeof edit !== 'object' || typeof (/** @type {{ caption?: unknown }} */ (edit)).caption !== 'string') return [key, edit];
+  const { caption, color } = /** @type {{ caption: string, color?: unknown }} */ (edit);
+  const read = savedRuleCaption(caption, color);
+  return [key, read === caption ? edit : { ...edit, caption: read }];
+})));
 /**
  * @param {string} caption
  * @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule
@@ -406,16 +420,44 @@ export const createRuleLegendCaptions = (rules = [], rendererRows = []) => {
  * @returns {Map<PythonLegendKey, PythonLegendKey>}
  */
 export const rekeyedRuleRows = (before, after, rendererRows = []) => {
-  const keyBefore = createRuleLegendCaptions([...before], rendererRows);
-  const keyAfter = createRuleLegendCaptions([...after], rendererRows);
   const kept = new Set(after.map((rule) => legendGroupKey(normalizeSpecificRule(rule))));
+  const groups = before.map((rule) => normalizeSpecificRule(rule)).filter((group) => kept.has(legendGroupKey(group)));
+  return changedRowKeys(groups.map((group) => [group, group]),
+    createRuleLegendCaptions([...before], rendererRows), createRuleLegendCaptions([...after], rendererRows));
+};
+
+// The rule rows the reading of saved captions re-keys (F2): a caption saved
+// with its own rule's color ID is read without it (`savedSpecificRules`), and
+// when the read caption has one swatch, its row's key is the caption, no
+// longer the text saved. `context.rules` are the rules as saved; each is
+// paired with its own reading. A caption still written in several colors, or
+// naming a row of another swatch, keeps its key.
+/**
+ * @param {LegendRowContext} context
+ * @returns {Map<PythonLegendKey, PythonLegendKey>}
+ */
+export const savedRuleRowRekeys = (context) => {
+  const saved = [...context.rules || []];
+  const read = savedSpecificRules(saved);
+  return changedRowKeys(saved.map((rule, index) => [rule, read[index]]),
+    ruleLegendCaptions({ ...context, rules: saved }), ruleLegendCaptions({ ...context, rules: read }));
+};
+
+// Old key to new key of each pair of one rule before and after a change whose key differs.
+/**
+ * @param {readonly [Partial<SpecificColorRule>, Partial<SpecificColorRule>][]} pairs
+ * @param {(rule: Partial<SpecificColorRule>) => PythonLegendKey} keyBefore
+ * @param {(rule: Partial<SpecificColorRule>) => PythonLegendKey} keyAfter
+ * @returns {Map<PythonLegendKey, PythonLegendKey>}
+ */
+const changedRowKeys = (pairs, keyBefore, keyAfter) => {
   /** @type {Map<PythonLegendKey, PythonLegendKey>} */
   const rekeyed = new Map();
-  for (const rule of before) {
-    const group = normalizeSpecificRule(rule);
-    if (group.cap && kept.has(legendGroupKey(group)) && keyBefore(group) !== keyAfter(group)) {
-      rekeyed.set(keyBefore(group), keyAfter(group));
-    }
+  for (const [before, after] of pairs) {
+    if (!normalizeText(before.cap) || !normalizeText(after.cap)) continue;
+    const from = keyBefore(before);
+    const to = keyAfter(after);
+    if (from !== to) rekeyed.set(from, to);
   }
   return rekeyed;
 };

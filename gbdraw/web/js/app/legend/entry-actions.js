@@ -14,6 +14,7 @@ import {
   isLegendOrderEdited,
   legendEntryKey,
   recordedLegendOrder,
+  rekeyLegendRecords,
   resultLegendRows,
   shownLegendRowNames
 } from '../../services/legend-svg.js';
@@ -274,21 +275,23 @@ export const createLegendEntryActions = ({
           colors.has(legendCaption(entry)) ? { ...entry, color: colors.get(legendCaption(entry)) } : entry
         ));
         // A re-keyed row (OV-645) is the row the commit removes, added under
-        // its new key: it keeps its place and its rank in the inventory.
-        const rekeys = [...rekeyed].filter(([from, to]) => removed.has(from) && added.has(to))
-          .map(([at, caption]) => ({ caption, at }));
-        if (rekeys.length > 0) {
-          /** @type {Map<string, string>} */
-          const newKey = new Map(rekeys.map(({ caption, at }) => [at, caption]));
-          originalLegendOrder.value = originalLegendOrder.value.map((/** @type {string} */ key) => newKey.get(key) ?? key);
+        // its new key: the row and every record stored under its key move to
+        // the new key in place (OV-660), so it keeps its place, its rank in
+        // the inventory, and its edits; the Result shows it before the row it
+        // replaces.
+        /** @type {Map<PythonLegendKey, PythonLegendKey>} */
+        const moves = new Map([...rekeyed].filter(([from, to]) => removed.has(from) && added.has(to)));
+        /** @type {Map<string, string>} A row the commit adds, and the row it is shown before. */
+        const before = new Map([...moves].map(([from, to]) => [to, from]));
+        if (moves.size > 0) {
+          entries = moveLegendRecords(drawing, entries, moves);
+          moves.forEach((to) => added.delete(to));
         }
         // OV-158 (Owner decision 2026-10-07): the row a rename draws takes the
         // place of the row it renames, so the editor list records the edited
         // order Generate replays (PD-OI-063).
         const renamed = placement && intents.some((intent) => intent.caption === placement.caption) ? [placement] : [];
-        /** @type {Map<string, string>} A row the commit adds, and the row it is shown before. */
-        const before = new Map();
-        for (const { caption, at: key } of [...rekeys, ...renamed]) {
+        for (const { caption, at: key } of renamed) {
           const row = added.get(caption) || entries.find((entry) => legendCaption(entry) === caption);
           const others = entries.filter((entry) => legendCaption(entry) !== caption);
           const at = others.findIndex((entry) => legendCaption(entry) === key);
@@ -307,6 +310,46 @@ export const createLegendEntryActions = ({
         return rows.add.length > 0 || rows.retire.length > 0 ? rows : null;
       }
     };
+  };
+
+  // Moves the drawing's Legend records, the generated inventory and colors,
+  // and the open Stroke options of each re-keyed row to its new key
+  // (`rekeyLegendRecords`, OV-660); returns `entries`, the list being
+  // written, moved.
+  /**
+   * @param {DrawingState} drawing
+   * @param {EntryRecord[]} entries
+   * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} moves
+   * @returns {EntryRecord[]}
+   */
+  const moveLegendRecords = (drawing, entries, moves) => {
+    /** @type {Set<string>} */
+    const strokeOptionsOpen = state.legendStrokeOptionsOpen || new Set();
+    const moved = rekeyLegendRecords({
+      entries,
+      deletedEntries: /** @type {EntryRecord[]} */ (drawing.deletedLegendEntries.value || []),
+      dormantEntries: /** @type {EntryRecord[]} */ (drawing.dormantLegendEntries.value || []),
+      colorOverrides: { ...drawing.legendColorOverrides },
+      strokeOverrides: { ...drawing.legendStrokeOverrides },
+      addedCaptions: [...drawing.addedLegendCaptions.value],
+      originalOrder: /** @type {string[]} */ (originalLegendOrder.value),
+      originalColors: /** @type {Record<string, string>} */ (originalLegendColors.value),
+      strokeOptionsOpen: [...strokeOptionsOpen]
+    }, moves);
+    drawing.deletedLegendEntries.value = moved.deletedEntries;
+    drawing.dormantLegendEntries.value = moved.dormantEntries;
+    for (const [store, records] of /** @type {const} */ ([
+      [drawing.legendColorOverrides, moved.colorOverrides], [drawing.legendStrokeOverrides, moved.strokeOverrides]
+    ])) {
+      Object.keys(store).forEach((key) => { delete store[key]; });
+      Object.assign(store, records);
+    }
+    drawing.addedLegendCaptions.value = new Set(moved.addedCaptions);
+    originalLegendOrder.value = moved.originalOrder;
+    originalLegendColors.value = moved.originalColors;
+    strokeOptionsOpen.clear();
+    moved.strokeOptionsOpen.forEach((caption) => strokeOptionsOpen.add(caption));
+    return moved.entries;
   };
 
   // The drawing's Legend intent that names a Result's rows.

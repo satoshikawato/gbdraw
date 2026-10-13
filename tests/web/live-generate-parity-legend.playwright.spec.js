@@ -1603,6 +1603,33 @@ test('legend names: a rule row keeps its place when its key changes with the sha
   await expectNamesLiveAndGenerated(page, ['other proteins', 'alpha', 'repeat_region', 'beta'], 'the name stops being shared in a user order');
 });
 
+// OV-660: a stroke stored on a rule row follows the row when its key changes
+// with the sharing of its name (`alpha [#e63946]` to `alpha` and back), live
+// and at Generate.
+test('legend names: a stroke stored on a rule row follows the row when its key changes, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
+  await setRuleField(page, 1, 'cap', 'alpha');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.legendEntries.findIndex((entry) => entry.caption === 'alpha [#e63946]');
+    return app.updateLegendEntryStrokeColor(index, '#111111') && app.updateLegendEntryStrokeWidth(index, 3);
+  });
+  await settleLive(page);
+  const redRow = (snapshot) => snapshot.legend.filter(({ fill }) => fill.toLowerCase() === '#e63946')
+    .map(({ key, stroke }) => [key, stroke.toLowerCase()]);
+  const rest = ['other proteins', 'repeat_region'];
+  await setRuleField(page, 1, 'cap', 'gamma');
+  expect(redRow(await semanticSnapshot(page)), 'the other rule renamed away, live').toEqual([['alpha', '#111111']]);
+  expect(redRow(await expectNamesLiveAndGenerated(page, ['alpha', 'gamma', ...rest], 'the other rule renamed away')))
+    .toEqual([['alpha', '#111111']]);
+  await setRuleField(page, 1, 'cap', 'alpha');
+  expect(redRow(await semanticSnapshot(page)), 'the name shared again, live').toEqual([['alpha [#e63946]', '#111111']]);
+  expect(redRow(await expectNamesLiveAndGenerated(page, ['alpha (1)', 'alpha (2)', ...rest], 'the name shared again')))
+    .toEqual([['alpha [#e63946]', '#111111']]);
+});
+
 // A row key keeps the string 0.13.0 gave the second source of a label
 // (`GC content (2)`), so the edits a Session stores under it stay on that
 // track's row. Once both tracks have one swatch they share the first row, and

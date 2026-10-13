@@ -1147,6 +1147,8 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
  * @property {Record<string, string>} originalLegendColors
  * @property {string[]} originalLegendOrder The captions of the rows Python drew (the Legend inventory).
  * @property {readonly Partial<SpecificColorRule>[]} rules The color rules the mode's drawing loads, read as saved rules.
+ * @property {ReadonlyMap<PythonLegendKey, PythonLegendKey>} [legendRekeys] The rule rows whose key that reading
+ *   changes (`savedRuleRowRekeys`, F2), old key to new; the other fields are already under the new keys.
  * @property {'circular' | 'linear'} mode
  * @property {number} sessionVersion The version of the Session that saved the edits.
  */
@@ -1358,6 +1360,27 @@ const recordSavedLegendKeys = (svg, renames) => {
   return recorded;
 };
 
+// F2: a rule row whose key the reading of the saved captions changes (a
+// caption saved with its own color ID whose rule is the only rule of that
+// caption) shows its old key in the saved figure. Load moves the row to its
+// new key, as it moves the edits stored under it (`rekeyLegendRecords`), and
+// draws the names. A rename's record of the old key moves with it. Returns
+// whether it moved a row.
+/** @param {SvgResultRoot} svg @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} rekeyed @returns {boolean} */
+const rekeySavedRuleRows = (svg, rekeyed) => {
+  const lookup = /** @type {ReadonlyMap<string, string>} */ (rekeyed);
+  let moved = false;
+  getAllFeatureLegendGroups(svg).flatMap((group) => Array.from(group.querySelectorAll('g[data-legend-key]'))).forEach((row) => {
+    ['data-legend-key', resultBaseAttribute('data-legend-key')].forEach((attribute) => {
+      const to = lookup.get(text(row.getAttribute(attribute)));
+      if (to === undefined) return;
+      row.setAttribute(attribute, to);
+      moved = true;
+    });
+  });
+  return moved && (nameLegendRows(svg), true);
+};
+
 // D-19: a build of first-parent main (fe6861f0 to this naming rule) drew a
 // color rule's row under its key, `Complex IV [#ffe700]` or `tRNA [#ff0000]`,
 // as the row's text and wrote no `data-legend-name`. Load names such a row
@@ -1418,7 +1441,8 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
   const renames = edits ? savedLegendRenames(edits) : new Map();
   const captioned = Boolean(edits?.rules.some((rule) => text(rule.cap)));
   const namesRuleRows = (/** @type {{ content?: unknown }} */ result) => captioned && SAVED_COLOR_ID.test(String(result?.content ?? ''));
-  if (legacyNormalizationCount === 0 && renames.size === 0 && !needsRecords && !results.some(namesRuleRows)) {
+  const rekeyed = edits?.legendRekeys ?? new Map();
+  if (legacyNormalizationCount === 0 && renames.size === 0 && !needsRecords && rekeyed.size === 0 && !results.some(namesRuleRows)) {
     return createEmptySvgMutationPlan(results.length);
   }
   const savedEdits = /** @type {SavedResultEdits} */ (edits);
@@ -1427,11 +1451,13 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
     legacyNormalizationCount,
     operationsByResult: Object.freeze(results.map((result, resultIndex) => {
       // The records find a row by the key the normalized Legend shows, so the
-      // normalization comes first; the paint records find a renamed row by the
-      // key it shows, so they come before the key records. The names read
-      // Python's fills and the renamed rows, so they come last.
+      // normalization comes first, then the re-key of the rows whose stored
+      // edits Load moved; the paint records find a renamed row by the key it
+      // shows, so they come before the key records. The names read Python's
+      // fills and the renamed rows, so they come last.
       const transforms = [
         ...(legacy && normalizes(result) ? [legacy.transform] : []),
+        ...(rekeyed.size > 0 ? [(/** @type {SvgResultRoot} */ svg) => rekeySavedRuleRows(svg, rekeyed)] : []),
         ...(needsRecords
           ? [(/** @type {SvgResultRoot} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
           : []),

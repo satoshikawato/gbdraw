@@ -308,6 +308,77 @@ export const setsFeatureStroke = (override) => {
 /** @param {{ caption?: unknown, originalCaption?: unknown }} entry @returns {PythonLegendKey} */
 export const legendEntryKey = (entry) => /** @type {PythonLegendKey} */ (String(entry.originalCaption || entry.caption || '').trim());
 
+/**
+ * A drawing's Legend records stored under a row's key, in the form Load reads
+ * and a commit writes them. Each is optional.
+ * @typedef {object} LegendKeyedRecords
+ * @property {readonly { caption?: unknown, originalCaption?: unknown }[]} [entries]
+ * @property {readonly { caption?: unknown, originalCaption?: unknown }[]} [deletedEntries]
+ * @property {readonly { caption?: unknown, originalCaption?: unknown }[]} [dormantEntries]
+ * @property {readonly string[]} [originalOrder] The generated inventory.
+ * @property {Readonly<Record<string, unknown>>} [originalColors]
+ * @property {Readonly<Record<string, unknown>>} [colorOverrides]
+ * @property {Readonly<Record<string, unknown>>} [strokeOverrides]
+ * @property {readonly string[]} [addedCaptions]
+ * @property {readonly string[]} [strokeOptionsOpen] The rows whose Stroke options are open.
+ */
+
+// The one move of a Legend row's records from its old key to its new key (F2,
+// OV-660), for the rows a re-key map names: a rule row whose key the
+// allocation changes (a rule commit) or the reading of a saved caption
+// changes (Load). Every collection is moved at once, so a swap of two keys
+// moves both; a record the new key already has stays, and the old one is
+// dropped. Returns new collections: none is written in place (History and the
+// artifact slot hold them).
+/**
+ * @template {LegendKeyedRecords} Records
+ * @param {Records} records
+ * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} rekeyed
+ * @returns {Records}
+ */
+export const rekeyLegendRecords = (records, rekeyed) => {
+  if (rekeyed.size === 0) return records;
+  const lookup = /** @type {ReadonlyMap<string, string>} */ (rekeyed);
+  /** @param {unknown} key */
+  const moved = (key) => lookup.get(String(key ?? '').trim());
+  /** @template {{ caption?: unknown, originalCaption?: unknown }} Entry @param {readonly Entry[]} list @returns {Entry[]} */
+  const entries = (list) => {
+    /** @type {Set<string>} */
+    const held = new Set(list.map((entry) => legendEntryKey(entry)).filter((key) => !lookup.has(key)));
+    return list.flatMap((entry) => {
+      const key = moved(legendEntryKey(entry));
+      if (key && held.has(key)) return [];
+      const caption = moved(entry.caption);
+      const originalCaption = moved(entry.originalCaption);
+      return [caption || originalCaption ? { ...entry, ...(caption ? { caption } : {}), ...(originalCaption ? { originalCaption } : {}) } : entry];
+    });
+  };
+  /** @param {Readonly<Record<string, unknown>>} record @returns {Record<string, unknown>} */
+  const keyed = (record) => {
+    const kept = Object.entries(record).filter(([key]) => !lookup.has(key));
+    const result = Object.fromEntries(kept);
+    Object.entries(record).forEach(([key, value]) => {
+      const to = lookup.get(key);
+      if (to !== undefined && !Object.hasOwn(result, to)) result[to] = value;
+    });
+    return result;
+  };
+  /** @param {readonly string[]} list @returns {string[]} */
+  const keys = (list) => [...new Set(list.map((key) => lookup.get(key) ?? key))];
+  /** @type {LegendKeyedRecords} */
+  const next = { ...records };
+  if (records.entries) next.entries = entries(records.entries);
+  if (records.deletedEntries) next.deletedEntries = entries(records.deletedEntries);
+  if (records.dormantEntries) next.dormantEntries = entries(records.dormantEntries);
+  if (records.originalOrder) next.originalOrder = keys(records.originalOrder);
+  if (records.originalColors) next.originalColors = keyed(records.originalColors);
+  if (records.colorOverrides) next.colorOverrides = keyed(records.colorOverrides);
+  if (records.strokeOverrides) next.strokeOverrides = keyed(records.strokeOverrides);
+  if (records.addedCaptions) next.addedCaptions = keys(records.addedCaptions);
+  if (records.strokeOptionsOpen) next.strokeOptionsOpen = keys(records.strokeOptionsOpen);
+  return /** @type {Records} */ (next);
+};
+
 /** @param {Element} row @returns {PythonLegendRow} */
 export const pythonLegendRow = (row) => {
   const color = String(pythonDrawnAttribute(getLegendEntrySwatch(row), 'fill') ?? '').trim();

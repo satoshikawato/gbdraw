@@ -896,6 +896,7 @@ const mockLegendEntry = (caption, color, x) => {
       originalLegendColors: ref({}),
       legendStrokeOverrides: {},
       legendColorOverrides: {},
+      addedLegendCaptions: ref(new Set()),
       manualSpecificRules: [],
       skipCaptureBaseConfig: ref(false)
     };
@@ -915,6 +916,10 @@ const mockLegendEntry = (caption, color, x) => {
   // "alpha". Both rows stay where they were.
   const generated = [RED, TEAL, 'CDS', 'tRNA'];
   const stops = setup({ listed: generated, inventory: generated });
+  // OV-660: the row's stored edits follow its key.
+  stops.state.legendStrokeOverrides[RED] = { strokeColor: '#111111', strokeWidth: 3 };
+  stops.state.legendColorOverrides[RED] = '#ff0000';
+  stops.state.legendStrokeOverrides[TEAL] = { strokeColor: '#222222', strokeWidth: 1 };
   const unshared = await stops.actions.prepareFileLegendEntries(
     [{ caption: 'alpha', color: '#e63946' }, { caption: 'gamma', color: '#2a9d8f' }],
     { previousFileIntents: sharedRows, placement: { caption: 'gamma', at: TEAL }, rekeyed: new Map([[RED, 'alpha']]) }
@@ -925,11 +930,16 @@ const mockLegendEntry = (caption, color, x) => {
   });
   assert.deepEqual(stops.listed(), ['alpha', 'gamma', 'CDS', 'tRNA']);
   assert.deepEqual(stops.state.originalLegendOrder.value, ['alpha', TEAL, 'CDS', 'tRNA'], 'the re-keyed row keeps its rank');
+  assert.deepEqual(stops.state.legendStrokeOverrides, {
+    alpha: { strokeColor: '#111111', strokeWidth: 3 }, [TEAL]: { strokeColor: '#222222', strokeWidth: 1 }
+  }, 'OV-660: the stroke follows the re-keyed row; a row the commit replaces keeps its record');
+  assert.deepEqual(stops.state.legendColorOverrides, { alpha: '#ff0000' });
 
   // The rule list renames "beta" onto "alpha" (no placement): the first row
   // keeps its place under its new key, and the order is still the default one.
   const starts = setup({ listed: ['alpha', 'beta', 'CDS', 'tRNA'], inventory: ['alpha', 'beta', 'CDS', 'tRNA'] });
   const inventoryBefore = starts.state.originalLegendOrder.value;
+  starts.state.legendStrokeOverrides.alpha = { strokeColor: '#111111', strokeWidth: 3 };
   const nowShared = await starts.actions.prepareFileLegendEntries(shared, {
     previousFileIntents: [{ caption: 'alpha', color: '#e63946' }, { caption: 'beta', color: '#2a9d8f' }],
     rekeyed: new Map([['alpha', RED]])
@@ -942,6 +952,7 @@ const mockLegendEntry = (caption, color, x) => {
   assert.deepEqual(starts.state.originalLegendOrder.value, [RED, 'beta', 'CDS', 'tRNA']);
   assert.deepEqual(inventoryBefore, ['alpha', 'beta', 'CDS', 'tRNA'], 'the inventory History holds is not written in place');
   assert.equal(starts.edited(), false, 'a re-key alone is no edited order');
+  assert.deepEqual(starts.state.legendStrokeOverrides, { [RED]: { strokeColor: '#111111', strokeWidth: 3 } }, 'OV-660, the other direction');
 
   // A user order keeps the re-keyed row's place.
   const moved = setup({ listed: ['tRNA', RED, 'CDS', TEAL], inventory: generated });
