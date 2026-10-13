@@ -987,6 +987,14 @@ class LinearRequestPlan:
     alignment_anchor_centers: tuple[float | None, ...] = ()
     # Raw cache entries of the LOSATN / TLOSATX searches this plan resolved.
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
+    # The request keeps its comparison rows in the search frame; the plan
+    # projects them into the drawn record views once, which also checks their
+    # source bindings, and the build draws these options (OV-399).
+    _drawn_options: LinearDiagramOptions = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, LinearDiagramRequest):
@@ -1028,6 +1036,15 @@ class LinearRequestPlan:
             raise ValidationError(
                 "Linear alignment anchor centers must align with its records."
             )
+        object.__setattr__(
+            self,
+            "_drawn_options",
+            project_source_bound_comparisons(
+                self.request.options,
+                self.records,
+                self.provenance,
+            ),
+        )
 
     @property
     def mode(self) -> Literal["linear"]:
@@ -1044,13 +1061,7 @@ class LinearRequestPlan:
         losatp_cache: LosatpCacheManager | None = None,
         protein_extraction: ProteinExtractionResult | None = None,
     ) -> LinearDiagramBuildResult:
-        # The request keeps its comparison rows in the search frame; only the
-        # drawing reads them in the drawn record views (OV-399).
-        options = (
-            project_source_bound_comparisons(self.request.options, self.records, self.provenance)
-            if self.provenance
-            else self.request.options
-        )
+        options = self._drawn_options
         kwargs: dict[str, Any] = {"options": options}
         if self.layout is not None:
             kwargs["layout"] = self.layout
@@ -1861,9 +1872,6 @@ def plan_linear_request(
         resolved_options, losat_cache_entries = _resolve_nucleotide_losat(
             resolved_options, collection, resolved_layout
         )
-        # Check the source bindings now, so a Session writer rejects them; the
-        # request keeps the rows as given and the build projects them (OV-399).
-        project_source_bound_comparisons(resolved_options, collection.records, collection.provenance)
         materialized_request = (
             unresolved_request
             if _is_materialized_exact_one_request(unresolved_request)
@@ -1879,6 +1887,9 @@ def plan_linear_request(
             collection,
             cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
         )
+    # The plan checks the source bindings of the comparison rows when it is
+    # built, so a Session writer rejects them; the request keeps the rows as
+    # given (OV-399).
     return LinearRequestPlan(
         request=materialized_request,
         records=collection.records,
