@@ -274,6 +274,12 @@
           "rootCause": "P4",
           "job": "web-contracts-pr",
           "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/twin-registry.test.mjs",
+          "rootCause": "P4",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
         }
       ],
       "allowlists": [
@@ -281,6 +287,11 @@
           "path": "tests/web/genbank-header-reader-owner.test.mjs",
           "symbol": "OUTSIDE_OWNER_BASELINE",
           "kind": "count-map"
+        },
+        {
+          "path": "tools/twins.json",
+          "symbol": "twins",
+          "kind": "json-ids"
         }
       ]
     },
@@ -626,7 +637,7 @@
     {
       "id": "TYPE-DEBT",
       "heading": "Type checking",
-      "rulesPath": "CLAUDE.md",
+      "rulesPath": "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md",
       "guards": [
         {
           "path": "tests/test_type_check_ratchet.py",

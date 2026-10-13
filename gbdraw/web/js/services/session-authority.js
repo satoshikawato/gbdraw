@@ -392,7 +392,7 @@ export const hasBiologicalSessionInputs = (files = {}) => (
  * @param {SessionEnvelope | null | undefined} data
  * @returns {boolean}
  */
-export const isSettingsOnlySessionDocument = data => data != null && [42, 44, MODE_SCOPED_SESSION_VERSION].includes(data.version)
+export const isSettingsOnlySessionDocument = data => data != null && [42, 44, MODE_SCOPED_SESSION_VERSION, SESSION_VERSION].includes(data.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 /** @typedef {UnvalidatedFields<'entries', UnvalidatedFields<'length'>>} ArtifactCacheFields */
@@ -660,8 +660,8 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     }
   }
-  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION].includes(Number(version))) {
-    throw new Error('Web binding schema 2 requires session version 41, 42, 44, or 46.');
+  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION, SESSION_VERSION].includes(Number(version))) {
+    throw new Error(`Web binding schema 2 requires session version 41, 42, 44, ${MODE_SCOPED_SESSION_VERSION}, or ${SESSION_VERSION}.`);
   }
   if (Number(version) < CANONICAL_SESSION_MIN_VERSION) return;
   if (

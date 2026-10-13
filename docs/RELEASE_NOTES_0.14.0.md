@@ -254,7 +254,7 @@ and [typed Python alignment](./REFERENCE/python-api.md#typed-linear-similarity-g
 
 ## Sessions, Run Info, and reproducing a figure
 
-gbdraw 0.14.0 saves Sessions as session version 46, with
+gbdraw 0.14.0 saves Sessions as session version 47, with
 canonical `renderRequest` schema 9. These format numbers are separate from
 the gbdraw version. A Session now keeps
 the settings and edits of Circular and Linear mode separately, and **Save
@@ -519,6 +519,9 @@ Some older figures can change:
   instead of `GC content` and `GC content (2)`. Legend row edits of a 0.13.0
   Session stay on the rows of the same tracks; edits saved for a second row
   that now shares the first row are not used.
+  In the web app, **Keep both** in the **Legend Name Conflict** dialog keeps
+  the name you typed and numbers every row of that name, for example
+  `CDS (1)` and `CDS (2)`, instead of giving only the renamed row a number.
 - Label, Legend, and title widths use the font's kerning, so text measures as
   browsers draw it. PNG, PDF, EPS, and PS export place circular tick labels and
   mixed italic and roman captions where browsers do. Web PDF pages are 75% of

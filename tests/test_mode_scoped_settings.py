@@ -357,7 +357,7 @@ def session_46(written_session_46: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_session_46_reads_two_mode_slices_and_rejects_session_45(session_46: dict[str, Any]) -> None:
-    assert CURRENT_SESSION_VERSION == 46 and 45 not in SUPPORTED_SESSION_VERSIONS
+    assert CURRENT_SESSION_VERSION == 47 and 45 not in SUPPORTED_SESSION_VERSIONS
     assert set(session_46["modes"]) == {"circular", "linear"}
     validate_session(session_46)
     with pytest.raises(ValidationError, match="Unsupported session version: 45"):
@@ -451,7 +451,7 @@ def test_cli_resave_keeps_a_session_46_slices(tmp_path: Path) -> None:
         )
 
     written = [load_session_document(path).to_dict() for path in (first, second)]
-    assert [payload["version"] for payload in written] == [46, 46]
+    assert [payload["version"] for payload in written] == [CURRENT_SESSION_VERSION] * 2
     assert written[1]["modes"] == written[0]["modes"]
     assert "config" not in written[1] and "features" not in written[1]
 

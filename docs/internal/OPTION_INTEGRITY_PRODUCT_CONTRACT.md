@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `48`
+- Contract revision: `49`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -932,6 +932,52 @@ Status: active Product authority
     receipt lists them before the load, and its Accepted residual risk states
     the interim in which they are replaced without a notice.
   - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 49 changes: `PD-OI-061` is replaced for scenario revision `5`
+  (concern `web.legend.rename-collision`; its receipt names no choice code).
+  It comes from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-13` on the Legend Name Conflict choice **Keep both** after
+  Revision 47: `PD-OI-042` scenario revision `2` numbers every drawn row of a
+  name shared by rows of different swatches, while **Keep both** gave the
+  renamed row alone a numbered name and left the other row's name without a
+  number. Each quotation below is the part of a reply that carries the
+  answer.
+  - Reply 1, to the request to confirm three receipt texts (`PD-OI-042`
+    scenario revision `2`; the new concern `legend.row-name-multiplicity`,
+    scenario revision `1`; `PD-OI-061` scenario revision `5`) and two
+    choices. This is Reply 8 of the Revision 47 entry, which records the
+    request in full.
+    「すべて推奨通り。」
+    The receipt recorded below is the third of those texts, byte for byte.
+  - Reply 2, to three options for this change:
+    「A（推奨）PR 3 を 0.14.0 から外して止める / B 小さい PR 3（色ルールと feature の改名だけ rev 5）/ C Session の形式変更まで含めて全部やる（一番大きい）」
+    「C: Session の形式変更まで含めて全部やります（一番大きい）。もう始めたんでしょ？あとどれくらいかかるの？」
+  - Reply 3, to the question
+    「P-8（Session の版）: 推奨は、この PR で version 47 にすることです。ただし、複数 drawing の決定（PD-OI-090）の文面が「47」を予定しているので、そちらを 48 に読み替える必要があります。」
+    「P-8（Session の版）: 推奨通り」
+    Session version `47` is written by this change.
+  - Reply 4, to the question
+    「P-9（同じ色の行で Keep both を選んだとき）: 推奨は、「同名同色は 1 行」の規則どおり 1 行にまとめることです。保留中の P-5 も同じ扱いになります。」
+    「P-9：推奨通り」
+    P-5 is the item of that name in the change's decision record
+    (`pharokka-legend-merge-20261013/DECISIONS.md`); this entry does not
+    restate it.
+  - Reply 5, to the question
+    「P-10（feature を 1 つだけ切り出して Keep both にしたときの新しい行の位置）: 推奨は、同じ名前の行のすぐ後ろに置くことです。こうすると、ダイアログに出る (2) が凡例の表示と一致します。」
+    「P-10:　推奨通り」
+  - Reply 6 (`2026-10-14`), to the question
+    「残る制限（D-33）: 同じ名前・同じ色の 2 グループは 1 行にまとめて描きます。その行の色を変えると、変わるのは見えている方のグループだけです。もう一方は元の色のまま別の行として戻り、凡例は「名前 (1)」「名前 (2)」の 2 行になります。また、Generate の後にこれが起きると、戻った行が凡例タブの一覧に出るのは次の描画のときです。どうしますか？」
+    the selected option and its description:
+    「PR 3 の中で直す (Recommended)」
+    「まとめた行の色を変えると、その行にまとめたすべてのグループの色が変わり、1 行のまま残る。凡例タブもすぐ更新される。PR 3 のマージは半日ほど遅れますが、0.14.0 は boundary-audit を待つので、リリース日は変わりません。」
+  - Scope: scenario revision `5` keeps the outcome
+    `B / MERGE-SAME-FEATURE-TYPE-ONLY`, the choices of the dialog, and the
+    conditions of **Merge**. The scenario-2, scenario-3, and scenario-4
+    receipts keep their text and their SHA-256.
+  - `PD-OI-042`, `PD-OI-095`, and `PD-OI-090` keep their text. No other
+    record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -3477,8 +3523,12 @@ Decision date: 2026-09-30
 ### PD-OI-061: Legend rename collisions for every entry
 
 - Concern key: `web.legend.rename-collision`
-- Scenario revision: `4`
-- Supersedes: `PD-OI-061`, scenario revision `3`. Scenario revision `4`
+- Scenario revision: `5`
+- Supersedes: `PD-OI-061`, scenario revision `4`. Scenario revision `5`
+  keeps the outcome `B / MERGE-SAME-FEATURE-TYPE-ONLY`, the choices, and the
+  conditions of **Merge**, and retires the naming in which the original row
+  keeps its name without a number and only the renamed row gets a numbered
+  name. Scenario revision `4`
   keeps the outcome `B / MERGE-SAME-FEATURE-TYPE-ONLY` and the choice names,
   retires the scenario-2 preservation term
   「衝突先が色ルールの caption のときの PD-OI-042 の区別」, and adds the outcome of a
@@ -3490,11 +3540,16 @@ Decision date: 2026-09-30
 - Status: `ACCEPTED`
 - Selected outcomes: `B / MERGE-SAME-FEATURE-TYPE-ONLY` (scenario revision
   `2`, and scenario revision `4` with the names of color rules and the
-  popup's list), and the label change of scenario revision `3`, whose receipt
-  names no choice code
-- Normative outcome: exactly the three approved `PRODUCT_DECISION` receipts
-  and their nine-field JSON representations below, read together. Where the
-  scenario-4 receipt differs from an earlier receipt, the scenario-4 receipt
+  popup's list), the label change of scenario revision `3`, and the naming of
+  **Keep both** of scenario revision `5`; the receipts of scenario revisions
+  `3` and `5` name no choice code
+- Normative outcome: exactly the four approved `PRODUCT_DECISION` receipts
+  and their nine-field JSON representations below, read together, and the
+  Owner's Replies 4, 5, and 6 of the Revision 49 entry with their questions.
+  Where the scenario-5 receipt differs from an earlier receipt, the
+  scenario-5 receipt governs: **Keep both** keeps the typed name, and every
+  row of that name is numbered in legend order. Where the scenario-4 receipt
+  differs from an earlier receipt, the scenario-4 receipt
   governs: a rename onto the name of a color rule asks the same dialog as a
   rename onto any other name, and the scenario-2 preservation of the
   `PD-OI-042` naming for such a target is retired. Where the scenario-2
@@ -3522,6 +3577,14 @@ Decision date: 2026-09-30
   evidence.
 - Receipt SHA-256 (scenario revision `4`; UTF-8, excluding the final newline):
   `3f96ff5e0e94f2689233e2bde57b17ff945130e3ad92f04070eced277d80bf74`.
+- Decision source (scenario revision `5`): the Owner replies of `2026-10-13`
+  quoted verbatim in the Revision 49 entry above. The fourth receipt and JSON
+  below reproduce all nine supplied fields without translation or additional
+  terms. The runtime, tests, and documentation that implement it merge with
+  it (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (scenario revision `5`; UTF-8, excluding the final newline):
+  `fe82de9744104885fea0d9f44209565f879373c6b9462ae6f44df99f06247f63`.
 - Acceptance contracts: `OIC-006`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -3606,6 +3669,35 @@ Decision date: 2026-10-13
   "mustPreserve": "衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと、Merge は同じ track の同じ feature type の項目どうしだけ、This feature only / All N の範囲の選択、Undo/Redo、Generate と Session での保持。",
   "mayRetire": "衝突先が色ルールの caption のときに確認なしで名前だけを変え、PD-OI-042 の色 ID で区別する動作。一覧に別の feature type の色ルールを示すこと。",
   "acceptedResidualRisk": "一覧から選ぶと feature の色が変わる（Undo で戻せる）。図に描かれていない色ルール（例: Connector）を選んだときも、そのルールの色になる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
+}
+```
+
+Scenario revision `5` receipt, confirmed by `satoshikawato` on `2026-10-13`:
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.rename-collision
+Scenario revision: 5
+Choice: Legend Name Conflict の "Keep both" を選ぶと、名前を変えた行は入力した名前をそのまま持ち、同じ名前の行はすべて凡例に並ぶ順で番号付きになる（"<name> (1)" と "<name> (2)"）。ボタンは今の形のまま、名前を変えた行が受け取る名前を示す（例 Keep both: name it "<name> (2)"）。ダイアログの説明に、もう一方の行の新しい名前を 1 文で示す（The existing "<name>" becomes "<name> (1)".）。番号付きで表示されている名前（例 "<name> (2)"）を入力したときは、その行を衝突先として同じダイアログを示す。選択肢（Merge / Keep both / Cancel）と Merge の条件は変えない。
+Rationale: 凡例の名前の番号付けを 1 つの仕組みに揃える。
+Must preserve: scenario revision 4 の内容すべて。
+May retire: 元の行を番号なしのまま残し、名前を変えた行だけを "<name> (1)" にする名前の付け方。
+Accepted residual risk: 以前の付け方で保存した名前（例 "CDS (1)"）は、その文字列のまま読む。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.legend.rename-collision",
+  "scenarioRevision": 5,
+  "choice": "Legend Name Conflict の \"Keep both\" を選ぶと、名前を変えた行は入力した名前をそのまま持ち、同じ名前の行はすべて凡例に並ぶ順で番号付きになる（\"<name> (1)\" と \"<name> (2)\"）。ボタンは今の形のまま、名前を変えた行が受け取る名前を示す（例 Keep both: name it \"<name> (2)\"）。ダイアログの説明に、もう一方の行の新しい名前を 1 文で示す（The existing \"<name>\" becomes \"<name> (1)\".）。番号付きで表示されている名前（例 \"<name> (2)\"）を入力したときは、その行を衝突先として同じダイアログを示す。選択肢（Merge / Keep both / Cancel）と Merge の条件は変えない。",
+  "rationale": "凡例の名前の番号付けを 1 つの仕組みに揃える。",
+  "mustPreserve": "scenario revision 4 の内容すべて。",
+  "mayRetire": "元の行を番号なしのまま残し、名前を変えた行だけを \"<name> (1)\" にする名前の付け方。",
+  "acceptedResidualRisk": "以前の付け方で保存した名前（例 \"CDS (1)\"）は、その文字列のまま読む。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-13"
 }

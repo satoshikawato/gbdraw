@@ -85,6 +85,10 @@ export const getAllFeatureLegendGroups = (svg) => {
 // The owner mark of a Legend row a rule commit shows before Python draws it
 // (the executor's `ifAbsent` addition); the rules own it, not the editor.
 export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
+// D-28: the marker of a Legend row the naming pass hides because an earlier
+// row has its name and its swatch (svg-result-ingestion.js `nameLegendRows`);
+// its value is the key of that earlier row, which the Legend draws for both.
+export const LEGEND_MERGED_ROW = 'data-legend-merged';
 
 // The one absence predicate of a Legend row: a row is absent when the Result
 // lacks it or a Legend delete hid it (the executor keeps a deleted row of
@@ -92,11 +96,21 @@ export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
 /** @param {Element | null | undefined} row */
 export const legendRowShown = (row) => Boolean(row) && row?.getAttribute('display') !== 'none';
 
-// The keys of the feature Legend rows a Result shows.
+// D-35: the keys of the rows a Legend row of a Result stands for: its own key,
+// then the keys of the rows the naming pass merged into it. A Legend color or
+// stroke edit of the row edits each of them, so it stays one row.
+/** @param {SVGSVGElement | null | undefined} svg @param {PythonLegendKey} key @returns {PythonLegendKey[]} */
+export const legendRowKeys = (svg, key) => [...new Set([key, ...getAllFeatureLegendGroups(svg).flatMap((group) => (
+  Array.from(group.querySelectorAll('g[data-legend-key]'))
+    .filter((row) => row.getAttribute(LEGEND_MERGED_ROW) === key)
+    .map((row) => /** @type {PythonLegendKey} */ (pythonLegendKey(row)))
+))])];
+
+// The keys of the feature Legend rows a Result shows (a renamed row's key,
+// not the name it shows).
 /** @param {SVGSVGElement | null | undefined} svg @returns {Set<string>} */
 export const shownLegendKeys = (svg) => new Set(getAllFeatureLegendGroups(svg).flatMap((group) => (
-  Array.from(group.querySelectorAll('g[data-legend-key]')).filter(legendRowShown)
-    .map((row) => String(row.getAttribute('data-legend-key') || '').trim())
+  Array.from(group.querySelectorAll('g[data-legend-key]')).filter(legendRowShown).map(pythonLegendKey)
 )));
 
 // The order a feature Legend group recorded as Python's, else null.
@@ -115,7 +129,7 @@ const recordedGroupOrder = (group) => {
 // The rows of a key each feature Legend group of a Result holds, shown or hidden.
 /** @param {Element} group @param {string} key */
 const rowsOfKey = (group, key) => Array.from(group.querySelectorAll('g[data-legend-key]'))
-  .filter((row) => String(row.getAttribute('data-legend-key') || '').trim() === key);
+  .filter((row) => pythonLegendKey(row) === key);
 
 // Whether a Result shows Python's own row of a key: neither an editor row nor
 // a row a rule commit showed before Python drew it.
@@ -236,17 +250,18 @@ export const getLegendEntrySwatch = (entryGroup) => Array.from(
   return fill && fill !== 'none' && !fill.startsWith('url(');
 }) || null;
 
-// The stroke Python drew on the swatch of the Legend row `caption`, which a
-// row stroke edit keeps as `originalStroke*`.
+// The stroke Python drew on the swatch of the Legend row of `key`, shown or
+// merged into a shown row (D-35), which a row stroke edit keeps as
+// `originalStroke*`.
 /**
  * @param {SVGSVGElement | null | undefined} svg
- * @param {string} caption
+ * @param {string} key
  * @returns {{ originalStrokeColor: string | null, originalStrokeWidth: number | null }}
  */
-export const drawnLegendRowStroke = (svg, caption) => {
+export const drawnLegendRowStroke = (svg, key) => {
   const swatch = getAllFeatureLegendGroups(svg)
     .map((group) => getLegendEntrySwatch(Array.from(group.querySelectorAll('g[data-legend-key]'))
-      .find((entry) => entry.getAttribute('data-legend-key') === caption && legendRowShown(entry)) || null))
+      .find((entry) => pythonLegendKey(entry) === key && (legendRowShown(entry) || entry.hasAttribute(LEGEND_MERGED_ROW))) || null))
     .find(Boolean) || null;
   const width = Number.parseFloat(String(pythonDrawnAttribute(swatch, 'stroke-width') ?? ''));
   return {
@@ -500,13 +515,16 @@ export const legendEntryAnchor = (entryGroup) => {
 /**
  * A row of a Result's shown feature Legend group, as the Result holds it.
  * @typedef {object} ResultLegendRow
+ * @property {PythonLegendKey} key The row's key: Python's (the record a rename keeps), else an editor row's own.
  * @property {ShownLegendKey} shownKey The key the row shows.
  * @property {LegendRowName} name The row's name (`legendRowName`).
  * @property {DrawnLegendName} drawnName The name the Legend draws for it.
+ * @property {LegendSwatchIdentity} swatch The swatch it shows (`legendRowSwatch`).
  * @property {PythonLegendKey | null} recordedKey Python's key that a rename keeps as a record; null without one.
  * @property {boolean} editor A row the Legend editor added.
- * @property {boolean} pythonShown Python drew it shown: a row a rule commit retired is not.
+ * @property {boolean} pythonShown Python drew it shown, merged or not: a row a rule commit retired is not.
  * @property {boolean} shown The row shows.
+ * @property {boolean} merged The naming pass hides it: an earlier row has its name and its swatch (D-28).
  * @property {SwatchColor} color The fill its swatch shows.
  * @property {number} xPos
  * @property {number} yPos
@@ -525,13 +543,17 @@ export const resultLegendRows = (svg) => {
     const anchor = legendEntryAnchor(row);
     const recordedKey = row.getAttribute(resultBaseAttribute('data-legend-key'));
     return [{
+      key: /** @type {PythonLegendKey} */ (pythonLegendKey(row)),
       shownKey,
       name: legendRowName(row),
+      swatch: legendRowSwatch(row),
       drawnName: drawnLegendRowName(row),
       recordedKey: recordedKey === null ? null : /** @type {PythonLegendKey} */ (recordedKey),
       editor: row.getAttribute('data-legend-owner') === 'direct-editor',
-      pythonShown: pythonDrawnAttribute(row, 'display') !== 'none',
+      // A merged row is Python's shown row the naming pass hides (D-35).
+      pythonShown: row.hasAttribute(LEGEND_MERGED_ROW) || pythonDrawnAttribute(row, 'display') !== 'none',
       shown: legendRowShown(row),
+      merged: row.hasAttribute(LEGEND_MERGED_ROW),
       color: /** @type {SwatchColor} */ (getLegendEntrySwatch(row)?.getAttribute('fill') || '#cccccc'),
       xPos: anchor.x,
       yPos: anchor.y
@@ -546,17 +568,26 @@ export const resultLegendRows = (svg) => {
 
 /**
  * What the editor shows for a Legend row instead of its key: the row's name,
- * and the name the Legend draws for it (its name while the row is hidden).
- * @typedef {{ name: LegendRowName, drawnName: DrawnLegendName }} ShownLegendRowNames
+ * and the name the Legend draws for it (its name while the row is hidden);
+ * and what a typed name is matched with: whether the row shows, and its
+ * swatch and fill.
+ * @typedef {{ name: LegendRowName, drawnName: DrawnLegendName, shown: boolean, merged: boolean, swatch: LegendSwatchIdentity, color: SwatchColor }} ShownLegendRowNames
  */
 
-// The names of the rows of a Result's shown feature Legend group, by the key
-// each row shows. The Legend tab, the popups, and the dialogs show a row by
-// its drawn name, never by its key (PD-OI-042 scenario revision 2).
-/** @param {SVGSVGElement | null | undefined} svg @returns {Map<string, ShownLegendRowNames>} */
+// The names of the rows of a Result's shown feature Legend group, by each
+// row's key, in legend order. The Legend tab, the popups, and the dialogs show
+// a row by its drawn name, never by its key (PD-OI-042 scenario revision 2).
+/** @param {SVGSVGElement | null | undefined} svg @returns {Map<PythonLegendKey, ShownLegendRowNames>} */
 export const shownLegendRowNames = (svg) => new Map((resultLegendRows(svg) || []).map((row) => [
-  row.shownKey,
-  { name: row.name, drawnName: row.shown && row.drawnName ? row.drawnName : /** @type {DrawnLegendName} */ (/** @type {string} */ (row.name)) }
+  row.key,
+  {
+    name: row.name,
+    drawnName: row.shown && row.drawnName ? row.drawnName : /** @type {DrawnLegendName} */ (/** @type {string} */ (row.name)),
+    shown: row.shown,
+    merged: row.merged,
+    swatch: row.swatch,
+    color: row.color
+  }
 ]));
 
 /**
@@ -620,23 +651,20 @@ export const defaultLegendEntryOrder = (entries, generatedOrder) => {
 };
 
 /**
- * The captions of a Result's default order (D-08, OV-47): its generated
- * inventory with each renamed entry's current caption, followed by the other
- * entries in their current order. A Result applies it through
- * `orderLegendEntries`, which skips the captions it does not draw.
- * @param {{ caption?: string, originalCaption?: string }[]} entries
- * @param {string[]} inventory
- * @returns {string[]}
+ * The row keys of a Result's default order (D-08, OV-47): its generated
+ * inventory, followed by the keys of the other entries in their current
+ * order. A Result applies it through `orderLegendEntries`, which skips the
+ * keys it does not draw.
+ * @param {readonly { caption?: unknown, originalCaption?: unknown }[]} entries
+ * @param {readonly string[]} inventory
+ * @returns {PythonLegendKey[]}
  */
-export const defaultLegendCaptionOrder = (entries, inventory) => {
+export const defaultLegendKeyOrder = (entries, inventory) => {
   const generated = new Set(inventory);
-  /** @param {{ caption?: string, originalCaption?: string }} entry */
-  const generatedCaption = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
-  const currentCaption = new Map(entries.map((entry) => [generatedCaption(entry), String(entry?.caption || '').trim()]));
-  return [...new Set([
-    ...inventory.map((caption) => currentCaption.get(caption) || caption),
-    ...entries.filter((entry) => !generated.has(generatedCaption(entry))).map((entry) => String(entry?.caption || '').trim())
-  ])].filter(Boolean);
+  return /** @type {PythonLegendKey[]} */ ([...new Set([
+    ...inventory,
+    ...entries.map(legendEntryKey).filter((key) => !generated.has(key))
+  ])].filter(Boolean));
 };
 
 /**
@@ -665,8 +693,6 @@ const legendEntryGroups = (targetGroup) => {
     : Array.from(targetGroup?.querySelectorAll?.('g[data-legend-key]') || []);
 };
 
-/** @param {Element} entryGroup */
-const legendEntryCaption = (entryGroup) => String(entryGroup.getAttribute('data-legend-key') || '').trim();
 
 // One Legend group's entries in slot order (row-major anchor order).
 /** @param {Element | null | undefined} targetGroup */
@@ -685,15 +711,16 @@ const legendEntriesInSlotOrder = (targetGroup) => legendEntryGroups(targetGroup)
  */
 const followsOrder = (positioned, rank) => {
   const listed = positioned
-    .map(({ entryGroup }) => rank.get(legendEntryCaption(entryGroup)))
+    .map(({ entryGroup }) => rank.get(pythonLegendKey(entryGroup)))
     .filter((value) => value !== undefined);
   return listed.every((value, index) => index === 0 || listed[index - 1] < value);
 };
 
 /**
- * Put one Legend group's entries in the requested caption order. Entries keep
+ * Put one Legend group's entries in the requested order of row keys (a
+ * renamed row ranks by its key, as two rows may show one name). Entries keep
  * the group's current slots (row-major anchor order) and receive them in the
- * new order; captions missing from the order follow in their current order.
+ * new order; keys missing from the order follow in their current order.
  * Live Sort and Move and the Generate replay of the order (D-08) share this.
  * With `keepFollowed`, a group whose listed entries already follow the order
  * keeps its order, so the entries the order does not list keep their places:
@@ -713,7 +740,7 @@ export const orderLegendEntries = (targetGroup, captionOrder, { keepFollowed = f
     const key = String(caption ?? '').trim();
     if (key && !rank.has(key)) rank.set(key, rank.size);
   });
-  const caption = legendEntryCaption;
+  const caption = pythonLegendKey;
   const positioned = legendEntriesInSlotOrder(targetGroup);
   if (keepFollowed && followsOrder(positioned, rank)) return false;
   const ordered = positioned

@@ -53,8 +53,12 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  */
 
 /**
- * A Legend row a rule commit draws in the place of the row `at` (OV-158).
- * @typedef {{ caption: string, at: string }} LegendPlacement
+ * A Legend row a rule commit draws, named by its name and color (the commit
+ * allocates its key), and where it goes: with `replaces`, in the place of the
+ * row of key `at`, which it replaces with every record stored under that key
+ * (a whole row renamed, OV-158); else right after the row of key `at` (a row
+ * split off, D-29).
+ * @typedef {{ name: string, color: string, at: PythonLegendKey, replaces?: boolean }} LegendPlacement
  */
 
 /**
@@ -69,7 +73,7 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
 /**
  * @typedef {object} FeatureRuleActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: LegendPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
+ * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: { caption: PythonLegendKey, after: PythonLegendKey } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
@@ -163,7 +167,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     /** @type {LegendEntry[]} */
     const listed = drawing.legendEntries.value || [];
     const takenRows = listed.filter(entry => takenKeys.has(legendEntryKey(entry)))
-      .map(entry => ({ caption: entry.caption, color: entry.color }));
+      .map(entry => ({ caption: legendEntryKey(entry), color: entry.color }));
     const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
     return {
       intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents,
@@ -197,13 +201,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {DrawingState} drawing
    * @param {Record<string, any>[]} before
    * @param {Record<string, any>[]} after
-   * @param {{ rows?: import('../candidate-render.js').RuleLegendRows | null, placement?: LegendPlacement | null, holdsRow?: (caption: string) => boolean }} [options]
+   * @param {{ rows?: import('../candidate-render.js').RuleLegendRows | null, replaced?: ReadonlyMap<string, string>, holdsRow?: (caption: string) => boolean }} [options]
    *   `rows`: the rows the commit's own show adds and retires on the displayed
-   *   Result (else the Result shows what History restored); `placement`: the
-   *   commit's Legend placement; `holdsRow`: whether the Legend already holds
-   *   the default row of a type.
+   *   Result (else the Result shows what History restored); `replaced`: the
+   *   rows the commit's show draws in the place of the rows they replace (old
+   *   key to new key); `holdsRow`: whether the Legend already holds the default
+   *   row of a type.
    */
-  const redrawsLegendFor = (drawing, before, after, { rows = null, placement = null, holdsRow = () => false } = {}) => {
+  const redrawsLegendFor = (drawing, before, after, { rows = null, replaced = new Map(), holdsRow = () => false } = {}) => {
     const kept = typeRowCaptions(after);
     const svg = state.svgContainer?.value?.querySelector?.('svg');
     const drawnKeys = shownLegendKeys(svg);
@@ -216,7 +221,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     // row takes the old row's place only as the commit's placement left it.
     // The rows a restore splits are exact when they are Python's (L1).
     const placed = rows
-      ? (/** @type {string} */ key, /** @type {string} */ nextKey) => placement?.caption === nextKey && placement.at === key
+      ? (/** @type {string} */ key, /** @type {string} */ nextKey) => replaced.get(key) === nextKey
       : (/** @type {string} */ key, /** @type {string} */ nextKey) => legendRowTakesPlace(svg, key, nextKey);
     return !legendRowsShowable(
       resultLegendRowKeys(state, legendSourceContext(drawing, before)),
@@ -421,18 +426,25 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (!current()) return false;
     const { intents, previousIntents, removedRuleRows, rekeyed } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
+    // The placed row is the intent of its name and color, by the key the
+    // commit allocates to it (`X [<fill>]` while another row shows `X`).
+    /** @type {PythonLegendKey | undefined} */
+    const placedKey = legendPlacement ? intents.find(intent => captionMatches(intent.name ?? intent.caption, legendPlacement.name)
+      && resolveColorToHex(intent.color) === resolveColorToHex(legendPlacement.color))?.caption : undefined;
+    /** @type {Map<PythonLegendKey, PythonLegendKey>} */
+    const replaced = new Map(placedKey && legendPlacement?.replaces && placedKey !== legendPlacement.at ? [[legendPlacement.at, placedKey]] : []);
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
       .some((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,
       previousFileIntents: previousIntents,
       isCurrent: current,
-      placement: legendPlacement,
-      rekeyed
+      placement: placedKey && legendPlacement && !legendPlacement.replaces ? { caption: placedKey, after: legendPlacement.at } : null,
+      rekeyed: new Map([...rekeyed, ...replaced])
     });
     if (!legend) return false;
     const redrawsLegend = redrawsLegendFor(drawing, [...drawing.manualSpecificRules], candidate.rules, {
       rows: { add: legend.diff.add, retire: legend.diff.remove.map(({ caption }) => caption) },
-      placement: legendPlacement
+      replaced
     });
     let applied = false;
     // One History step: the rule transition first, then the legend rows it

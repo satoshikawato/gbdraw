@@ -49,7 +49,7 @@ const setup = (count, count_) => {
   const rules = features.map((_, index) => count_.feature({ feat: 'CDS', qual: 'hash', val: hashOf(index), color: '#111111', cap: 'CDS' }));
   const state = withDrawings({
     extractedFeatures: ref(features), biologicalFeatures: ref(features), manualSpecificRules: rules,
-    svgResultIdentity: ref('one'), legendEntries: ref([{ caption: 'CDS', color: '#111111' }]),
+    svgResultIdentity: ref('one'), legendEntries: ref([{ caption: 'CDS', color: '#111111' }]), deletedLegendEntries: ref([]),
     featureColorOverrides: {}, legendColorOverrides: {}, legendStrokeOverrides: {}, featureStrokeOverrides: {},
     addedLegendCaptions: ref(new Set())
   });

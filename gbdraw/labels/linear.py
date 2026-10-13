@@ -11,7 +11,7 @@ from functools import lru_cache
 from typing import Any, NamedTuple, cast
 from .coordinates import display_label_segment
 
-from .filtering import get_label_text
+from .filtering import get_label_text, label_filter_maps
 from ..config.models import LinearRenderProfile
 from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
@@ -457,13 +457,14 @@ def prepare_label_list_linear(
     labels_overrides_only: bool = False,
     feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    label_filtering: Mapping[str, Any] | None = None,
 ):
     """
     Prepares a list of labels for linear genome visualization with proper track organization.
 
     A feature outside the label display scope (``labels_overrides_only``, or
     not selected by orthogroup eligibility) is labeled only by its per-feature
-    override.
+    override. ``label_filtering``: the compiled maps when the caller holds them.
     """
     cfg = profile.config
     embedded_labels = []
@@ -498,7 +499,8 @@ def prepare_label_list_linear(
         )
     base_rotation_deg = profile.label_rotation
     interval = cfg.canvas.dpi
-    label_filtering = cfg.labels.filtering.as_dict()
+    if label_filtering is None:
+        label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
     # First pass: Calculate feature track positions
     for feature_id, feature_object in feature_dict.items():
         if len(feature_object.coordinates) == 0:

@@ -211,8 +211,9 @@ test('a rule row whose key is the key of another listed row is refused, and a Se
     expect(rejected.rules).toEqual(before.rules);expect(rejected.svg).toBe(before.svg);
     expect(rejected.result).toEqual(before.result);expect(rejected.names).toEqual(before.names);
     expect(rejected.names['Conflict']).toBe('Conflict');expect(rejected.names['Conflict [#112233]']).toBe('Conflict [#112233]');
-    expect(await errorLog()).toEqual({code:'UNKNOWN',operation:'evaluateRules',
-      summary:'The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.'});
+    // OV-644: the refusal says what to change, without the row key.
+    expect(await errorLog()).toEqual({code:'LEGEND_ROW_CONFLICT',operation:'evaluateRules',
+      summary:'A color rule would draw a Legend item that already exists in another color. Change the rule\'s Legend name or color, or rename that Legend item.'});
     expect(await page.evaluate(async()=>JSON.stringify((await import('./js/state.js')).state.annotationWarnings.value))).toBe(warningBefore);
     // A draft fixture: one listed row of a caption that two rules write in two
     // colors, with an unchanged preview.

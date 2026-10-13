@@ -441,6 +441,47 @@ test('a Session that saved rule captions with their color IDs loads without them
   expect(generated.captions).toEqual(loaded.captions);
 });
 
+// PD-OI-061 revision 5 (Session 47): first-parent main 9839de8e saved this
+// Session 46 after renaming GC skew (+) to Z and GC content to GC skew (+)
+// (then red), stroking Z, and renaming GC skew (-) to W (blue, deleted)
+// (legend-renamed-rows.provenance.json). Session 46 stored the edits under the
+// shown captions; Load reads them under the row keys, so each stays on the row
+// it was made on, after Load and after Generate.
+test('a Session 46 with renamed Legend rows keeps each color and stroke on its row', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSession(page, 'tests/fixtures/sessions/legend-renamed-rows.v46.gbdraw-session.json.gz');
+  const read = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const drawing = state.activeDrawing();
+    const rows = Object.fromEntries([...window.__GBDRAW_APP__.svgContainer.querySelectorAll('svg g[data-legend-key]')]
+      .filter((row) => row.getAttribute('display') !== 'none')
+      .map((row) => {
+        const swatch = row.querySelector('path, rect');
+        return [row.querySelector('text').textContent,
+          [swatch.getAttribute('fill'), swatch.getAttribute('stroke'), Number(swatch.getAttribute('stroke-width'))]];
+      }));
+    return {
+      colors: { ...drawing.legendColorOverrides },
+      strokes: Object.keys(drawing.legendStrokeOverrides),
+      rows
+    };
+  });
+  const expectRowsKeepTheirEdits = async (label) => {
+    const { colors, strokes, rows } = await read();
+    expect(colors, label).toEqual({ 'GC content': '#ff0000', 'GC skew (-)': '#0000ff' });
+    expect(strokes, label).toEqual(['GC skew (+)']);
+    expect(rows['GC skew (+)'][0], `${label}: the GC content row, drawn GC skew (+)`).toBe('#ff0000');
+    expect(rows.Z[0], `${label}: the GC skew (+) row, drawn Z`).not.toBe('#ff0000');
+    expect(rows.Z.slice(1), label).toEqual(['#00aa00', 2]);
+    expect(rows.W, `${label}: the deleted row`).toBeUndefined();
+  };
+  await expectRowsKeepTheirEdits('after Load');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  await expectRowsKeepTheirEdits('after Generate');
+});
+
 // F2: the same Session where `Complex IV [#ffe700]` is the only rule of its
 // caption (the other rule is `Complex III`; the older build kept such a
 // caption once the other color's rule was gone). Its read caption has one

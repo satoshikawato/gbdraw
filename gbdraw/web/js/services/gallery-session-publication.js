@@ -3,13 +3,14 @@ import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
 import {
   LEGACY_LAYOUT_PREFERENCE_FIELDS, normalizeLayoutPreferences, resolveActiveLayoutPreference, restoredLayoutPreferences
 } from './layout-preferences.js';
-import { splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
+import { sessionLegendEditsByRowKey, splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
 import {
   CANONICAL_REQUEST_SCHEMA as CURRENT_REQUEST_SCHEMA,
   FLAT_DRAFT_TOP_LEVEL_FIELDS,
+  MODE_SCOPED_SESSION_VERSION,
   PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   PROTEIN_LOSAT_CACHE_SCHEMA,
   SESSION_VERSION as CURRENT_VERSION
@@ -407,9 +408,12 @@ export const createGallerySessionPublication = (owners) => {
   /** @param {PublicationSession} session */
   const admit = (session) => {
     const version = Number(session?.version);
-    if (version === CURRENT_VERSION) {
-      validateCurrentFields(session);
-      return isCliWritten(session) ? validateEnvelope(session) : validateCurrent(session);
+    if (version === CURRENT_VERSION || version === MODE_SCOPED_SESSION_VERSION) {
+      // A Session 46 differs only in the keys of its Legend edits.
+      const current = version === CURRENT_VERSION
+        ? session : { ...sessionLegendEditsByRowKey(session, version).session, version: CURRENT_VERSION };
+      validateCurrentFields(current);
+      return isCliWritten(current) ? validateEnvelope(current) : validateCurrent(current);
     }
     // An older Session is promoted to the current request and kept as a flat
     // draft until `prepare` splits it into the Session's mode slice.
@@ -422,7 +426,7 @@ export const createGallerySessionPublication = (owners) => {
           legacyOrthogroupState: session.orthogroupState || null
         }
       ) }));
-    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44; received ${String(session?.version)}.`);
+    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44/${MODE_SCOPED_SESSION_VERSION}; received ${String(session?.version)}.`);
     return validateCurrent(promoteVisibilityState(owners.promoteSession(session)));
   };
   /** @param {PublicationSession} session */

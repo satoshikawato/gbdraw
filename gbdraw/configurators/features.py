@@ -85,8 +85,9 @@ class FeatureDrawingConfigurator:
         self.underlay_feature_types: set[str] = resolve_underlay_feature_types(
             self.feature_shapes
         )
-        self.canvas_config = canvas_config
-        self.length_param = self.canvas_config.length_param
+        # Only the length parameter of the canvas is kept, so a render stage
+        # keys this configurator by its values (M2).
+        self.length_param = canvas_config.length_param
         self.block_fill_color: str = default_colors[default_colors["feature_type"] == "default"]["color"].values[0]
         self.block_stroke_color: str = cfg.objects.features.block_stroke_color
         self.block_stroke_width: float = cfg.objects.features.block_stroke_width.for_length_param(self.length_param)

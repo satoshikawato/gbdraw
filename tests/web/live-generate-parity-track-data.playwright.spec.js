@@ -338,7 +338,8 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     const undoRestores = async (page, row) => {
       await undo(page);
       expect(await restored(page), 'data restored').toBe(true);
-      expect((await legendStyleOf(page, row)).color).toBe(COLORED);
+      // A renamed row's style is stored under its key (PR 3, D-25).
+      expect((await legendStyleOf(page, renamedFrom || row)).color).toBe(COLORED);
       if (renamedFrom) expect(await legendNames(page), 'the rename is restored').toContain(`${renamedFrom}=>${row}`);
       await expectLiveEqualsGenerate(page, { label: `${name}, Undo` });
     };
@@ -387,7 +388,7 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     await renameAndColorRow(drawDepthFile(), depthCaption, 'Coverage')(page);
     await addDepthFile(page, 'depth.tsv');
     expect(await legendNames(page)).toContain('depth=>Coverage');
-    expect((await legendStyleOf(page, 'Coverage')).color).toBe(COLORED);
+    expect((await legendStyleOf(page, 'depth')).color, 'the style stays under the row key').toBe(COLORED);
     await expectLiveEqualsGenerate(page, { label: 'renamed depth row, file replaced with the same label' });
     expect(await drawnLegendCaptions(page)).toContain('Coverage');
   });

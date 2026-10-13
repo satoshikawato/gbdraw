@@ -3,17 +3,20 @@
 // above each constant; do not edit manually.
 
 // gbdraw/session_io.py: CURRENT_SESSION_VERSION
-export const SESSION_VERSION = 46;
+export const SESSION_VERSION = 47;
 
 // gbdraw/session_io.py: SUPPORTED_SESSION_VERSIONS
 /** @type {readonly number[]} */
-export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46]);
+export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47]);
 
 // gbdraw/session_io.py: TYPED_DRAFT_SESSION_MIN_VERSION
 export const TYPED_DRAFT_SESSION_VERSION = 44;
 
 // gbdraw/session_io.py: MODE_SCOPED_SESSION_MIN_VERSION
 export const MODE_SCOPED_SESSION_VERSION = 46;
+
+// gbdraw/session_io.py: ROW_KEYED_LEGEND_SESSION_MIN_VERSION
+export const ROW_KEYED_LEGEND_SESSION_VERSION = 47;
 
 // gbdraw/session_io.py: DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION
 export const DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41;
@@ -59,7 +62,8 @@ export const LEGACY_FEATURE_CATALOG_SCHEMA = 3;
 /** @type {Readonly<Record<number, number>>} */
 export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({
   44: 4,
-  46: 5
+  46: 5,
+  47: 5
 });
 
 // gbdraw/analysis/protein_colinearity.py: PROTEIN_LOSAT_CACHE_SCHEMA

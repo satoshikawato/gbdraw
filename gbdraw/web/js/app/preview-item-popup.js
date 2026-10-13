@@ -6,7 +6,7 @@
 // displayed Result and the current settings. It holds no edit of its own: the
 // template calls the Legend panel's operations, and a record edit writes the
 // setting the sidebar field writes, as one History step.
-import { COMPARISON_LEGEND_SELECTOR, legendEntryKey } from '../services/legend-svg.js';
+import { COMPARISON_LEGEND_SELECTOR, legendEntryKey, pythonLegendKey } from '../services/legend-svg.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import {
   resolveLinearRecordEffectiveDefinition,
@@ -110,7 +110,7 @@ export const previewItemTarget = (target, svg) => {
   const element = target instanceof Element ? target.closest(PREVIEW_ITEM_SELECTOR) : null;
   if (!element || !svg.contains(element) || element.closest(COMPARISON_LEGEND_SELECTOR)) return null;
   if (element.hasAttribute('data-legend-key')) {
-    const key = text(element.getAttribute('data-legend-key'));
+    const key = text(pythonLegendKey(element));
     return key ? { element, item: { kind: 'legend-entry', key } } : null;
   }
   const index = text(element.getAttribute('data-gbdraw-record-index'));
@@ -279,7 +279,7 @@ export const createPreviewItemPopup = ({
   /** @param {string} key @param {boolean} matchesReady */
   const legendView = (key, matchesReady) => {
     const entries = legendEntries();
-    const index = entries.findIndex((entry) => text(legendEntryKey(entry)) === key || text(entry.caption) === key);
+    const index = entries.findIndex((entry) => text(legendEntryKey(entry)) === key);
     const entry = entries[index];
     if (!entry) return null;
     /** @type {readonly ColorRuleLike[]} */
@@ -288,13 +288,13 @@ export const createPreviewItemPopup = ({
     let featureCount = null;
     try {
       rules = readLegendRowRules(entry);
-      if (matchesReady) featureCount = countLegendCaptionFeatures(text(entry.caption));
+      if (matchesReady) featureCount = countLegendCaptionFeatures(text(legendEntryKey(entry)));
     } catch {
       // The rule matches are still preparing: the popup shows the color alone.
     }
     const featureTypes = new Set(state.extractedFeatures.value.map((feature) => text(feature?.type)));
     return buildLegendEntryView({
-      entry, name: readShownLegendName(text(entry.caption)), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes
+      entry, name: readShownLegendName(text(legendEntryKey(entry))), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes
     });
   };
 
@@ -415,20 +415,22 @@ export const createPreviewItemPopup = ({
 
   // A rename may ask a choice first (a name another row has) and may change
   // the row's key. Once the choice is answered, the open popup follows the
-  // row: it stays on a row that kept its name (Cancel), else moves to the name
-  // the rename added (a rename, or Keep both), else to the row it joined (Merge).
+  // row by its key: it stays on a row that kept its key (Cancel, a Legend-only
+  // rename, or Keep both of such a row), else moves to the one key the rename
+  // added (a rule row's rename), else to the row it joined, which has the
+  // typed name (Merge).
   /** @param {number} index @param {string} caption */
   const renameLegendEntry = async (index, caption) => {
     const opened = state.clickedPairwiseMatch.value;
     const before = legendEntries();
-    const oldCaption = text(before[index]?.caption);
-    const known = new Set(before.map((entry) => text(entry.caption)));
+    const renamedKey = before[index] ? text(legendEntryKey(before[index])) : '';
+    const known = new Set(before.map((entry) => text(legendEntryKey(entry))));
     const result = await renameLegendRow(index, caption);
     await legendRenameSettled();
     if (state.clickedPairwiseMatch.value !== opened || opened?.previewItem?.kind !== 'legend-entry') return result;
     const entries = legendEntries();
-    const added = entries.filter((entry) => !known.has(text(entry.caption)));
-    const entry = entries.find((row) => text(row.caption) === oldCaption)
+    const added = entries.filter((entry) => !known.has(text(legendEntryKey(entry))));
+    const entry = entries.find((row) => text(legendEntryKey(row)) === renamedKey)
       || (added.length === 1 ? added[0] : null)
       || entries.find((row) => text(row.caption) === text(caption));
     if (entry) opened.previewItem = { kind: 'legend-entry', key: text(legendEntryKey(entry)) };

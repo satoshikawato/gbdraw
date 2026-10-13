@@ -9,10 +9,10 @@ import math
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import lru_cache
-from typing import Literal, TypeAlias, cast
+from typing import Any, Literal, TypeAlias, cast
 
 from ..features.coordinates import get_strand
-from .filtering import preprocess_label_filtering
+from .filtering import label_filter_maps
 from .circular_candidates import build_circular_label_candidates
 from .circular_leaders import chosen_contact_end, leader_polyline
 from .circular_radial import place_radial_labels
@@ -4927,6 +4927,7 @@ def prepare_label_list(
     record_transform: RecordDisplayTransform | None = None,
     probe: bool = False,
     definition_text: Sequence[Aabb] = (),
+    label_filtering: Mapping[str, Any] | None = None,
 ):
     """Return the record's drawn label list: embedded labels, then external labels.
 
@@ -4935,13 +4936,14 @@ def prepare_label_list(
     overlaps, because such a layout does not fit. Otherwise slight defects of
     the final horizontal layout are repaired locally (LP-D57); ``definition_text``
     is the centre definition's lines, in the labels' coordinates.
+    ``label_filtering``: the compiled maps when the caller holds them.
     """
     cfg = profile.config
     embedded_labels = []
     outer_labels = []
     inner_labels = []
-    label_filtering = cfg.labels.filtering.as_dict()
-    label_filtering = preprocess_label_filtering(label_filtering)
+    if label_filtering is None:
+        label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
     label_rendering = profile.label_rendering
     length_threshold = cfg.labels.length_threshold.circular
     length_param = determine_length_parameter(total_length, length_threshold)

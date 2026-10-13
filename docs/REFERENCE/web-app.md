@@ -55,7 +55,7 @@ including a Generate; switching modes changes no setting and shows that mode's
 settings and Result. **Reset Settings** resets both modes, and one **Undo**
 restores both. The input files, LOSAT run settings (run mode and threads), and
 the rich feature popup are shared. A saved Session keeps each mode's settings
-(Session 46, [compatibility](session-and-request-compatibility.md)).
+(Session 47, [compatibility](session-and-request-compatibility.md)).
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
@@ -1096,11 +1096,22 @@ app header, as the feature popup does.
 
 Ctrl-click selects features for bulk color, legend-caption, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the
-editor state. Renaming a legend entry, with or without features, to the caption of another
-entry of a different color asks you to choose **Merge into "<name>"**, **Keep
-both** (the dialog shows the numbered name the renamed entry gets), or **Cancel**. The name of a specific color rule asks the same way, also when
+editor state. Renaming a legend entry, with or without features, to the name of another
+entry of a different color or feature type, or of a deleted entry, opens the
+**Legend Name Conflict** dialog with **Merge into "<name>"**, **Keep both**, or
+**Cancel**. The name of a specific color rule asks the same way, also when
 the rule draws no legend entry, and **Merge** takes the color of the name you
-merge into. In the color scope, legend name, and
+merge into. **Keep both** keeps the name you typed, and every row of that name
+is numbered in legend order. Its button shows the name the renamed entry is
+drawn with, for example **Keep both: name it "CDS (2)"**, and when the other
+row's drawn name changes, the dialog says so in one sentence, for example
+`The existing "CDS" becomes "CDS (1)".` Typing a numbered name the legend
+shows, such as `CDS (2)`, opens the dialog for that row; **Keep both** then
+keeps `CDS (2)` as written, and the numbering of `CDS` skips it. Rows of one
+name and one swatch are one row, so **Keep both** with an equal swatch gives
+one row and its button names it without a number. When the rename takes only
+some features of a row, their new row goes right after the row of that name,
+so the legend draws the name the dialog showed. In the color scope, legend name, and
 **Reset fill color** dialogs, whether a fill color in the popup or the Features
 list, a popup stroke edit, or a legend rename opens them, each choice is one
 History step and **Cancel** records none. After a choice the dialog stays open with its buttons
@@ -1186,8 +1197,9 @@ The Legend tab, the Legend item popup, the feature popup's **Legend name**,
 and the dialogs name a row as the legend draws it. Rows that share a name are
 one row when their swatches (fill and line) are equal; with different swatches
 every one is numbered in legend order, for example `Packaging (1)` and
-`Packaging (2)`, and a name drawn once has no number. The same holds for two
-tracks with one legend label. The number is not part of a color rule's
+`Packaging (2)`, and a name drawn once has no number. A color or stroke edit
+of such a merged row changes every row it stands for, so it stays one row.
+The same holds for two tracks with one legend label. The number is not part of a color rule's
 caption: the rule list, the downloaded color table, and the Session keep the
 caption as written. The rule is specified under
 [Feature presentation](palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation).

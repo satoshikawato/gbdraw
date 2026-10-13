@@ -16,6 +16,7 @@ from gbdraw.analysis.depth import depth_df, read_depth_tsv
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
+from gbdraw.render_stages import render_stage
 from gbdraw.tracks.parsing import parse_nonnegative_integer
 
 if TYPE_CHECKING:
@@ -151,11 +152,20 @@ def _record_major_sources(
     return rows, False
 
 
+def _read_depth_table(path: str) -> DataFrame:
+    """Read one depth file and give the table its resource identity, if any."""
+
+    # Deferred: gbdraw.api imports this module.
+    from gbdraw.api.prepared import register_prepared_resource_value
+
+    return register_prepared_resource_value(read_depth_tsv(path), path)
+
+
 def _read_depth_series(path: str, series_index: int) -> DataFrame:
     """Read one logical series source; failures name the series, not the file."""
 
     try:
-        return read_depth_tsv(path)
+        return _read_depth_table(path)
     except GbdrawError as exc:
         if exc.diagnostic is not None:
             exc.diagnostic = {**exc.diagnostic, "seriesIndex": series_index}
@@ -440,7 +450,7 @@ def normalize_depth_tracks(
         raise ValidationError("Pass either depth_tables or depth_files, not both.")
 
     if depth_table is not None or depth_file is not None:
-        table = depth_table if depth_table is not None else read_depth_tsv(str(depth_file))
+        table = depth_table if depth_table is not None else _read_depth_table(str(depth_file))
         return _tracks_from_record_major_values(
             [[table]],
             records=records,
@@ -594,6 +604,58 @@ def clone_depth_config(
     return config
 
 
+def depth_track_data(
+    spec: DepthTrackSpec,
+    df: DataFrame,
+    base_config: DepthConfigurator,
+    window: int,
+    step: int,
+    shared_max_depth: float | None,
+) -> DepthTrackData:
+    """Build one track's data and drawing config (render stage ``depth_track_data``).
+
+    ``shared_max_depth`` is the maximum over every record's frame of this
+    logical track when the axis is shared; the config is complete when it is
+    returned, so nothing writes into it afterwards (M5).
+    """
+
+    config = clone_depth_config(
+        base_config,
+        fill_color=spec.fill_color,
+        window=window,
+        step=step,
+        large_tick_interval=spec.large_tick_interval,
+        small_tick_interval=spec.small_tick_interval,
+        tick_font_size=spec.tick_font_size,
+    )
+    if shared_max_depth is not None:
+        config.max_depth = shared_max_depth
+    return DepthTrackData(
+        id=spec.id,
+        label=spec.label,
+        df=df,
+        config=config,
+        track_index=spec.track_index,
+        height=spec.height,
+    )
+
+
+def _shared_max_depths(
+    frames: Sequence[Sequence[tuple[DepthTrackSpec, DataFrame]]],
+) -> dict[int, float]:
+    """The maximum depth of each logical track over every record's frame."""
+
+    shared: dict[int, float] = {}
+    for row in frames:
+        for spec, frame in row:
+            if frame.empty or "depth" not in frame.columns:
+                continue
+            value = float(frame["depth"].max())
+            previous = shared.get(spec.track_index)
+            shared[spec.track_index] = value if previous is None else max(previous, value)
+    return shared
+
+
 def build_depth_track_dataframes(
     records: Sequence[SeqRecord],
     record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
@@ -602,7 +664,12 @@ def build_depth_track_dataframes(
     depth_df_builder: DepthDfBuilder = depth_df,
     window_steps: Sequence[tuple[int, int]] | None = None,
 ) -> list[list[DepthTrackData]]:
-    """Build depth dataframes once for each record/track pair."""
+    """Build depth dataframes once for each record/track pair.
+
+    Two render stages per record and track: ``depth_frame`` (the binned
+    dataframe) and ``depth_track_data`` (the frame with its drawing config,
+    taking the shared axis maximum as an argument).
+    """
 
     if base_config is None or not record_depth_tracks:
         return [[] for _ in records]
@@ -611,67 +678,56 @@ def build_depth_track_dataframes(
             f"Expected depth tracks for {len(records)} record(s); got {len(record_depth_tracks)}."
         )
 
-    output: list[list[DepthTrackData]] = []
+    record_window_steps: list[tuple[int, int]] = []
+    frames: list[list[tuple[DepthTrackSpec, DataFrame]]] = []
     for record_index, (record, track_specs) in enumerate(zip(records, record_depth_tracks)):
         index_depth_track_row(track_specs, record_index=record_index)
         if window_steps is not None and record_index < len(window_steps):
             window, step = window_steps[record_index]
         else:
             window, step = int(base_config.window), int(base_config.step)
-        row: list[DepthTrackData] = []
-        for spec in track_specs:
-            config = clone_depth_config(
-                base_config,
-                fill_color=spec.fill_color,
-                window=int(window),
-                step=int(step),
-                large_tick_interval=spec.large_tick_interval,
-                small_tick_interval=spec.small_tick_interval,
-                tick_font_size=spec.tick_font_size,
-            )
-            row.append(
-                DepthTrackData(
-                    id=spec.id,
-                    label=spec.label,
-                    df=depth_df_builder(
+        record_window_steps.append((int(window), int(step)))
+        frames.append(
+            [
+                (
+                    spec,
+                    render_stage(
+                        "depth_frame",
+                        depth_df_builder,
                         record,
                         spec.table,
                         int(window),
                         int(step),
-                        normalize=bool(config.normalize),
-                        min_depth=config.min_depth,
-                        max_depth=config.max_depth,
+                        normalize=bool(base_config.normalize),
+                        min_depth=base_config.min_depth,
+                        max_depth=base_config.max_depth,
                     ),
-                    config=config,
-                    track_index=spec.track_index,
-                    height=spec.height,
                 )
-            )
-        output.append(row)
-
-    if bool(getattr(base_config, "share_axis", False)) and base_config.max_depth is None:
-        indexed_rows = [
-            index_depth_track_row(row, record_index=record_index)
-            for record_index, row in enumerate(output)
-        ]
-        track_count = depth_track_data_count(output)
-        for track_index in range(track_count):
-            max_values = [
-                float(track.df["depth"].max())
-                for row in indexed_rows
-                if (track := row.get(track_index)) is not None
-                and not track.df.empty
-                and "depth" in track.df.columns
+                for spec in track_specs
             ]
-            if not max_values:
-                continue
-            shared_max = max(max_values)
-            for indexed_row in indexed_rows:
-                track = indexed_row.get(track_index)
-                if track is not None:
-                    track.config.max_depth = shared_max
+        )
 
-    return output
+    shared_max_depths = (
+        _shared_max_depths(frames)
+        if bool(getattr(base_config, "share_axis", False)) and base_config.max_depth is None
+        else {}
+    )
+    return [
+        [
+            render_stage(
+                "depth_track_data",
+                depth_track_data,
+                spec,
+                frame,
+                base_config,
+                window,
+                step,
+                shared_max_depths.get(spec.track_index),
+            )
+            for spec, frame in row
+        ]
+        for row, (window, step) in zip(frames, record_window_steps)
+    ]
 
 
 def sync_depth_track_legend_entries(
@@ -733,6 +789,7 @@ __all__ = [
     "build_depth_track_dataframes",
     "clone_depth_config",
     "depth_track_count",
+    "depth_track_data",
     "depth_track_data_count",
     "depth_track_heights",
     "depth_track_indices",

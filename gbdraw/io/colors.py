@@ -277,12 +277,69 @@ def resolve_color_to_hex(color_str: str) -> str:
     )
 
 
-def load_default_colors(
-    user_defined_default_colors: str,
+_DEFAULT_COLOR_COLUMNS = ["feature_type", "color"]
+
+
+def read_default_color_overrides(user_defined_default_colors: str) -> DataFrame:
+    """Read a ``feature_type<TAB>color`` file: the rows that override a palette.
+
+    A header row and rows with a blank color are left out.
+    """
+
+    try:
+        user_df = read_literal_table(
+            user_defined_default_colors,
+            names=_DEFAULT_COLOR_COLUMNS,
+            label="default colors file",
+            legacy_rows=LEGACY_TABLE_ROWS["default-colors"],
+            engine="c",
+        )
+        # A `feature_type<TAB>color` header row (the Web writes one) names the columns.
+        header = (user_df["feature_type"].astype(str).str.strip().str.lower() == "feature_type") & (
+            user_df["color"].astype(str).str.strip().str.lower() == "color"
+        )
+        user_df = user_df[~header]
+        # Drop rows with a missing or blank colour cell, as the web import does
+        missing = user_df["color"].isna() | user_df["color"].astype(str).str.strip().eq("")
+        if missing.any():
+            for ft in user_df[missing]["feature_type"].tolist():
+                logger.warning(
+                    f"WARNING: colour missing for feature '{ft}' "
+                    f"in '{user_defined_default_colors}' – "
+                    "keeping built-in value."
+                )
+            user_df = user_df[~missing]
+    except FileNotFoundError:
+        logger.error(
+            f"ERROR: override file '{user_defined_default_colors}' not found"
+        )
+        raise InputFileError(
+            f"Override file '{user_defined_default_colors}' not found"
+        )
+    except ParseError:
+        raise
+    except Exception as exc:
+        logger.error(
+            f"ERROR: failed to read '{user_defined_default_colors}' – {exc}"
+        )
+        raise ParseError(
+            f"Failed to read '{user_defined_default_colors}': {exc}"
+        ) from exc
+    user_df = user_df.reset_index(drop=True)
+    # Names the file in the errors of ``merge_default_colors``; not a key.
+    user_df.attrs["source"] = user_defined_default_colors
+    return user_df
+
+
+def merge_default_colors(
+    overrides: DataFrame | None,
     palette: str = "default",
     load_comparison: bool = False,
 ) -> DataFrame:
-    column_names = ["feature_type", "color"]
+    """The packaged ``palette`` with the ``overrides`` rows applied.
+
+    With ``load_comparison`` the override colors become hex codes.
+    """
 
     # ── 1) Load TOML
     try:
@@ -299,64 +356,48 @@ def load_default_colors(
     else:
         palette_dict = palettes_dict[palette]
 
-    default_colors = pd.DataFrame(palette_dict.items(), columns=column_names).set_index(
+    default_colors = pd.DataFrame(palette_dict.items(), columns=_DEFAULT_COLOR_COLUMNS).set_index(
         "feature_type"
     )
 
-    # ── 2) Apply user TSV overrides
-    if user_defined_default_colors:
-        try:
-            user_df = (
-                read_literal_table(
-                    user_defined_default_colors,
-                    names=column_names,
-                    label="default colors file",
-                    legacy_rows=LEGACY_TABLE_ROWS["default-colors"],
-                    engine="c",
-                ).set_index("feature_type")
-            )
-            # A `feature_type<TAB>color` header row (the Web writes one) names the columns.
-            header = (user_df.index.astype(str).str.strip().str.lower() == "feature_type") & (
-                user_df["color"].astype(str).str.strip().str.lower() == "color"
-            )
-            user_df = user_df[~header]
-            # Drop rows with a missing or blank colour cell, as the web import does
-            missing = user_df["color"].isna() | user_df["color"].astype(str).str.strip().eq("")
-            if missing.any():
-                for ft in user_df[missing].index.tolist():
-                    logger.warning(
-                        f"WARNING: colour missing for feature '{ft}' "
-                        f"in '{user_defined_default_colors}' – "
-                        "keeping built-in value."
-                    )
-                user_df = user_df[~missing]
-            if load_comparison:  # if load_comparison is true, replace color names with hex codes
-                for idx, row in user_df.iterrows():
-                    resolved_color = resolve_color_to_hex(row["color"])
-                    user_df.at[idx, "color"] = resolved_color
-
-            default_colors = user_df.combine_first(default_colors)
-            logger.info(f"User overrides applied: {user_defined_default_colors}")
-
-        except FileNotFoundError:
-            logger.error(
-                f"ERROR: override file '{user_defined_default_colors}' not found"
-            )
-            raise InputFileError(
-                f"Override file '{user_defined_default_colors}' not found"
-            )
-        except ParseError:
-            raise
-        except Exception as exc:
-            logger.error(
-                f"ERROR: failed to read '{user_defined_default_colors}' – {exc}"
-            )
-            raise ParseError(
-                f"Failed to read '{user_defined_default_colors}': {exc}"
-            ) from exc
+    # ── 2) Apply user overrides
+    if overrides is not None:
+        user_df = overrides.set_index("feature_type")
+        if load_comparison:  # if load_comparison is true, replace color names with hex codes
+            source = overrides.attrs.get("source", "default colors")
+            # A repeated feature type takes its first row's color on every row; later
+            # rows of it are not read.
+            first_hex: dict[object, str] = {}
+            try:
+                for feature_type, color in zip(user_df.index, user_df["color"]):
+                    if feature_type not in first_hex:
+                        first_hex[feature_type] = resolve_color_to_hex(color)
+                user_df = user_df.assign(color=[first_hex[feature_type] for feature_type in user_df.index])
+            except Exception as exc:
+                logger.error(f"ERROR: failed to read '{source}' – {exc}")
+                raise ParseError(f"Failed to read '{source}': {exc}") from exc
+        default_colors = user_df.combine_first(default_colors)
 
     # ── 3) Return tidy DataFrame (index reset for downstream code)
     return default_colors.reset_index()
+
+
+def load_default_colors(
+    user_defined_default_colors: str,
+    palette: str = "default",
+    load_comparison: bool = False,
+) -> DataFrame:
+    """Read an overrides file (optional) and apply it to ``palette``."""
+
+    overrides = (
+        read_default_color_overrides(user_defined_default_colors)
+        if user_defined_default_colors
+        else None
+    )
+    merged = merge_default_colors(overrides, palette, load_comparison)
+    if user_defined_default_colors:
+        logger.info(f"User overrides applied: {user_defined_default_colors}")
+    return merged
 
 
 def _is_specific_table_color(color: str) -> bool:
@@ -455,6 +496,8 @@ __all__ = [
     "check_user_color",
     "is_user_color",
     "load_default_colors",
+    "merge_default_colors",
+    "read_default_color_overrides",
     "named_color_hex",
     "read_color_table",
     "resolve_color_to_hex",

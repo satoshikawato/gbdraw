@@ -87,23 +87,38 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Regenerate tracked SVG reference outputs.",
     )
+    parser.addoption(
+        "--render-stage-universe",
+        action="store_true",
+        default=False,
+        help="Run the render-stage universe tests (hours; see tests/utils/render_stage_equivalence.py).",
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "render_stage_universe: render-stage universe tests, run only with --render-stage-universe",
+    )
 
 
 def pytest_collection_modifyitems(
     config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
-    """Skip reference generation unless its write operation was requested."""
+    """Skip each write or hours-long operation unless its option was given."""
 
-    if config.getoption("--update-reference-outputs"):
-        return
-
-    skip_generation = pytest.mark.skip(
-        reason="reference generation requires --update-reference-outputs"
+    gated = (
+        ("--update-reference-outputs", "reference_generation", "reference generation"),
+        ("--render-stage-universe", "render_stage_universe", "the render-stage universe"),
     )
-    for item in items:
-        if "reference_generation" in item.keywords:
-            item.add_marker(skip_generation)
+    for option, keyword, what in gated:
+        if config.getoption(option):
+            continue
+        skip = pytest.mark.skip(reason=f"{what} requires {option}")
+        for item in items:
+            if keyword in item.keywords:
+                item.add_marker(skip)
 
 
 @pytest.fixture(scope="session")

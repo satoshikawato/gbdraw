@@ -26,6 +26,7 @@ from gbdraw.legend.table import (
     _other_feature_legend_key,
     prepare_legend_table,
 )
+from gbdraw.render_stages import render_stage
 
 if TYPE_CHECKING:
     from gbdraw.configurators import (
@@ -63,50 +64,71 @@ class LegendRowFacts:
     def suppressed(self) -> tuple[LegendRowKey, ...]:
         """Rows the records can name that the draft did not draw.
 
-        The rows are those of every feature type of the records (hidden or not
-        selected included): the type row, its ``other`` row, and every row
-        ``prepare_legend_table`` yields when no feature is hidden, plus the GC
-        content and GC skew rows (a switched-off track draws none), plus the
-        keys of the sources whose row another source of the same name and
-        swatch draws.
+        The rows are those of :func:`producible_legend_rows` plus the keys of
+        the sources whose row another source of the same name and swatch draws.
         """
 
-        feature_config = self._feature_config
-        feature_types = list(
-            dict.fromkeys(
-                str(feature.type) for record in self._records for feature in record.features
-            )
-        )
-        used_rules, default_used = precompute_used_color_rules(
+        producible = render_stage(
+            "legend_table",
+            producible_legend_rows,
             self._records,
-            feature_config.specific_color_rules,
-            feature_config.default_color_map,
-            set(feature_config.selected_features_set),
-            feature_visibility_rules=feature_config.feature_visibility_rules,
-            record_features=feature_config.record_features,
-            include_hidden=True,
-        )
-        producible = prepare_legend_table(
+            self._feature_config,
             self._gc_config,
             self._skew_config,
-            feature_config,
-            feature_types,
-            used_color_rules=used_rules,
-            default_used_features=default_used,
-            show_gc=True,
-            show_skew=True,
-            show_depth=False,
         )
-        rows: dict[LegendRowKey, None] = dict.fromkeys(
+        rows = dict.fromkeys([*producible, *self._shared])
+        drawn = set(self.drawn)
+        return tuple(row for row in rows if row not in drawn)
+
+
+def producible_legend_rows(
+    records: tuple[SeqRecord, ...],
+    feature_config: FeatureDrawingConfigurator,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+) -> tuple[LegendRowKey, ...]:
+    """Every feature row the records can name (render stage ``legend_table``).
+
+    The rows of every feature type of the records (hidden or not selected
+    included): the type row, its ``other`` row, and every row
+    ``prepare_legend_table`` yields when no feature is hidden, plus the GC
+    content and GC skew rows (a switched-off track draws none).
+    """
+
+    feature_types = list(
+        dict.fromkeys(
+            str(feature.type) for record in records for feature in record.features
+        )
+    )
+    used_rules, default_used = precompute_used_color_rules(
+        records,
+        feature_config.specific_color_rules,
+        feature_config.default_color_map,
+        set(feature_config.selected_features_set),
+        feature_visibility_rules=feature_config.feature_visibility_rules,
+        record_features=feature_config.record_features,
+        include_hidden=True,
+    )
+    producible = prepare_legend_table(
+        gc_config,
+        skew_config,
+        feature_config,
+        feature_types,
+        used_color_rules=used_rules,
+        default_used_features=default_used,
+        show_gc=True,
+        show_skew=True,
+        show_depth=False,
+    )
+    return tuple(
+        dict.fromkeys(
             [
                 *producible,
                 *map(_key_of_name, feature_types),
                 *(_other_feature_legend_key(feature_type) for feature_type in feature_types),
-                *self._shared,
             ]
         )
-        drawn = set(self.drawn)
-        return tuple(row for row in rows if row not in drawn)
+    )
 
 
 def attach_legend_row_facts(canvas: object, facts: LegendRowFacts) -> None:
@@ -136,4 +158,5 @@ __all__ = [
     "LegendRowFacts",
     "attach_legend_row_facts",
     "collect_legend_row_facts",
+    "producible_legend_rows",
 ]

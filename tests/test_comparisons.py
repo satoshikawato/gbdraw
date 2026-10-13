@@ -377,7 +377,6 @@ def test_identity_100_legend_is_a_safe_zero_span_at_the_maximum_color() -> None:
         min_color="#ffffff",
         max_color="#000000",
         identity=100,
-        hide_pairwise_identity_legend=False,
     )
 
     legend = prepare_legend_table(

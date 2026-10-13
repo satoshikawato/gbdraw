@@ -112,6 +112,27 @@ test('a color rule that adds a Legend row serializes the Result once', async ({ 
 // content) onto the name of a color rule that draws no row asks. A row without
 // features cannot merge into the rule's group, so the dialog offers Keep both
 // and Cancel; Generate draws the kept name too.
+// PD-OI-061 scenario revision 5: the dialog's button names the row Keep both
+// draws, and its sentence the target row's new drawn name; Keep both draws
+// exactly those names, live.
+const keepBothButton = (page) => page.getByRole('button', { name: /^Keep both: name it "/ });
+const chooseKeepBoth = async (page) => {
+  const said = await page.evaluate(() => {
+    const dialog = window.__GBDRAW_APP__.legendRenameDialog;
+    return { name: dialog.keepBothName, after: dialog.targetNameAfter, color: String(dialog.currentColor).toLowerCase() };
+  });
+  await expect(keepBothButton(page)).toHaveText(`Keep both: name it "${said.name}"`);
+  const sentence = page.locator('#legend-rename-description p', { hasText: /The existing "/ });
+  await expect(sentence).toHaveCount(said.after ? 1 : 0);
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.handleLegendRenameChoice('keep-both'); });
+  await settleLive(page);
+  const drawn = (await semanticSnapshot(page)).legend;
+  expect(drawn.filter((row) => row.caption === said.name).map((row) => row.fill.toLowerCase()), 'the renamed row is drawn with the name the button said')
+    .toContain(said.color);
+  if (said.after) expect(drawn.map((row) => row.caption), 'the target row is drawn with the name the sentence said').toContain(said.after);
+  return said;
+};
+
 test('a Legend rename onto the name of a color rule without a drawn row asks and keeps both', async ({ page }) => {
   test.setTimeout(120_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
@@ -121,12 +142,10 @@ test('a Legend rename onto the name of a color rule without a drawn row asks and
   await expect(page.locator('#legend-rename-description p'), 'OV-586: the dialog says what the name is')
     .toHaveText('"Zeta" is the name of a color rule with another color.');
   await expect(page.getByRole('button', { name: /^Merge into "/ }), 'Merge is not offered').toHaveCount(0);
-  await page.getByRole('button', { name: 'Keep both: name it "Zeta (1)"' }).click();
-  await page.waitForFunction(() => !window.__GBDRAW_APP__.legendRenameDialog.show);
-  await settleLive(page);
-  const captions = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
-  expect(captions, 'the renamed row is drawn live').toContain('Zeta (1)');
-  expect(captions, 'no row takes the rule\'s name').not.toContain('Zeta');
+  await expect(keepBothButton(page), 'no other row draws the name: no number').toHaveText('Keep both: name it "Zeta"');
+  await chooseKeepBoth(page);
+  const entries = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => [entry.originalCaption, entry.caption]));
+  expect(entries, 'the renamed row keeps the typed name').toContainEqual(['GC content', 'Zeta']);
   await expectLiveEqualsGenerate(page, { label: 'Legend rename onto the name of a color rule without a row, Keep both' });
 });
 
@@ -527,16 +546,15 @@ for (const { name, from, linearFile = SINGLE_FIXTURE, row, prepare = null } of O
 }
 
 // OV-62 (PD-OI-061 amended): two Legend rows merge only when both draw features
-// of one same type. Anything else offers Suffix and Cancel only.
+// of one same type. Anything else offers Keep both and Cancel only.
 const legendCaptions = (page) => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
 const choose = async (page, choice) => {
   await evaluateWithRetainedPromise(page, async (picked) => { await window.__GBDRAW_APP__.handleLegendRenameChoice(picked); }, choice);
   await settleLive(page);
 };
 const mergeButton = (page) => page.getByRole('button', { name: /^Merge into "/ });
-const suffixButton = (page) => page.getByRole('button', { name: /^Keep both: name it "/ });
 
-test('a Legend rename of GC content onto CDS offers no Merge, and Suffix equals Generate', async ({ page }) => {
+test('a Legend rename of GC content onto CDS offers no Merge, and Keep both equals Generate', async ({ page }) => {
   test.setTimeout(120_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'CDS' });
@@ -544,21 +562,19 @@ test('a Legend rename of GC content onto CDS offers no Merge, and Suffix equals 
   await renameRow(page, 'GC content', 'CDS');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
   await expect(mergeButton(page), 'Merge is not offered').toHaveCount(0);
-  await expect(suffixButton(page), 'Suffix is offered').toHaveCount(1);
+  await expect(keepBothButton(page), 'Keep both is offered').toHaveCount(1);
   await choose(page, 'merge');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a refused Merge closes the dialog').toBe(false);
   expect(await legendCaptions(page), 'a refused Merge changes no row').toEqual(before);
   await renameRow(page, 'GC content', 'CDS');
-  await choose(page, 'suffix');
-  const renamed = await legendCaptions(page);
-  expect(renamed.filter((caption) => caption === 'CDS'), 'one row keeps the caption CDS').toHaveLength(1);
-  expect(renamed, 'GC content is gone').not.toContain('GC content');
-  expect(renamed.some((caption) => caption !== 'CDS' && caption.startsWith('CDS')), 'the plot has a suffixed caption').toBe(true);
-  await expectLiveEqualsGenerate(page, { label: 'GC content renamed onto CDS with Suffix' });
+  await chooseKeepBoth(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.find((entry) => entry.originalCaption === 'GC content')?.caption),
+    'the renamed row keeps the typed name').toBe('CDS');
+  await expectLiveEqualsGenerate(page, { label: 'GC content renamed onto CDS with Keep both' });
 });
 
 // R15-3 (OV-285): a rename onto a deleted row's caption asks as onto a listed
-// row. Rows that cannot merge (GC rows have no features) offer Suffix and
+// row. Rows that cannot merge (GC rows have no features) offer Keep both and
 // Cancel only; rows of one feature type offer Restore and merge, which is one
 // History step.
 const legendState = (page) => page.evaluate(() => {
@@ -571,7 +587,7 @@ const conflictAsked = async (page) => {
   await expect(page.getByRole('heading', { name: 'Legend Name Conflict' })).toBeVisible();
 };
 
-test('a Legend rename onto a deleted GC skew row asks with Suffix and Cancel only (OV-285)', async ({ page }) => {
+test('a Legend rename onto a deleted GC skew row asks with Keep both and Cancel only (OV-285)', async ({ page }) => {
   test.setTimeout(120_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
   await deleteLegendRow(page, 'GC skew (-)');
@@ -581,19 +597,73 @@ test('a Legend rename onto a deleted GC skew row asks with Suffix and Cancel onl
   await conflictAsked(page);
   await expect(restoreMergeButton(page), 'Restore and merge is not offered').toHaveCount(0);
   await expect(mergeButton(page), 'Merge is not offered').toHaveCount(0);
-  await expect(suffixButton(page), 'Suffix is offered').toHaveCount(1);
+  await expect(keepBothButton(page), 'Keep both is offered').toHaveCount(1);
   await choose(page, 'cancel');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'Cancel closes the dialog').toBe(false);
   expect(await legendState(page), 'Cancel changes no row').toEqual(before);
   expect(diffSemanticSnapshots(shown, await semanticSnapshot(page)), 'Cancel leaves the Result as it was').toEqual([]);
   await renameRow(page, 'GC skew (+)', 'GC skew (-)');
   await conflictAsked(page);
-  await choose(page, 'suffix');
-  expect(await legendState(page), 'Suffix steps over the deleted caption').toEqual({
-    listed: before.listed.map((caption) => (caption === 'GC skew (+)' ? 'GC skew (-) (1)' : caption)),
+  await chooseKeepBoth(page);
+  expect(await legendState(page), 'Keep both keeps the typed name beside the deleted row').toEqual({
+    listed: before.listed.map((caption) => (caption === 'GC skew (+)' ? 'GC skew (-)' : caption)),
     deleted: before.deleted
   });
-  await expectLiveEqualsGenerate(page, { label: 'GC skew (+) renamed onto the deleted GC skew (-) with Suffix' });
+  await expectLiveEqualsGenerate(page, { label: 'GC skew (+) renamed onto the deleted GC skew (-) with Keep both' });
+});
+
+// PR 3 (D-25, D-28): two rows of one name keep their own Legend colors under
+// their keys; once their swatches match they are one row, live and at
+// Generate. The dialog said the names Keep both draws. D-35: an edit of that
+// one row edits both.
+test('two rows of one name keep their own colors, and one swatch draws one row that edits as one, live = Generate (D-28, D-35)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  const colorRow = async (key, color) => {
+    await page.evaluate(({ row, value }) => {
+      const app = window.__GBDRAW_APP__;
+      return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => (entry.originalCaption || entry.caption) === row), value);
+    }, { row: key, value: color });
+    await settleLive(page);
+  };
+  const drawn = async () => (await semanticSnapshot(page)).legend
+    .filter((row) => row.caption.startsWith('GC skew')).map((row) => [row.caption, row.fill.toLowerCase()]);
+  await renameRow(page, 'GC skew (-)', 'GC skew (+)');
+  await conflictAsked(page);
+  const said = await chooseKeepBoth(page);
+  expect([said.name, said.after], 'the button and the sentence').toEqual(['GC skew (+) (2)', 'GC skew (+) (1)']);
+  await colorRow('GC skew (+)', '#e63946');
+  await colorRow('GC skew (-)', '#2a9d8f');
+  expect(await drawn(), 'each row keeps its own color').toEqual([['GC skew (+) (1)', '#e63946'], ['GC skew (+) (2)', '#2a9d8f']]);
+  await expectLiveEqualsGenerate(page, { label: 'two rows of one name, each colored' });
+  await colorRow('GC skew (-)', '#e63946');
+  expect(await drawn(), 'one name and one swatch: one row').toEqual([['GC skew (+)', '#e63946']]);
+  // D-35: a color or stroke edit of the one row edits every row it merges:
+  // it stays one row, and the Legend tab lists one row, live and after Generate.
+  const tabRows = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.legendEntries.filter((entry) => !app.legendEntryMerged(entry)).map((entry) => app.shownLegendEntryName(entry))
+      .filter((name) => name.startsWith('GC skew'));
+  });
+  const listedKeys = () => page.evaluate(() => window.__GBDRAW_APP__.legendEntries
+    .map((entry) => entry.originalCaption || entry.caption).filter((key) => key.startsWith('GC skew')));
+  await colorRow('GC skew (+)', '#f4a261');
+  expect(await drawn(), 'the recolored row stays one row').toEqual([['GC skew (+)', '#f4a261']]);
+  expect(await tabRows(), 'the Legend tab lists one row').toEqual(['GC skew (+)']);
+  await expectLiveEqualsGenerate(page, { label: 'two rows of one name and one swatch, recolored as one' });
+  expect(await drawn(), 'one row after Generate').toEqual([['GC skew (+)', '#f4a261']]);
+  expect(await listedKeys(), 'after Generate the merged row stays listed, not dormant').toEqual(['GC skew (+)', 'GC skew (-)']);
+  expect(await tabRows(), 'the Legend tab lists one row after Generate').toEqual(['GC skew (+)']);
+  await colorRow('GC skew (+)', '#264653');
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLegendEntryStrokeColorValue(app.legendEntries.findIndex((entry) => (entry.originalCaption || entry.caption) === 'GC skew (+)'), '#1d3557');
+  });
+  await settleLive(page);
+  expect(await drawn(), 'recolored and stroked after Generate: one row').toEqual([['GC skew (+)', '#264653']]);
+  expect(await tabRows(), 'the Legend tab still lists one row').toEqual(['GC skew (+)']);
+  await expectLiveEqualsGenerate(page, { label: 'the one row recolored and stroked after Generate' });
+  expect(await drawn(), 'one row after the next Generate').toEqual([['GC skew (+)', '#264653']]);
 });
 
 const RULE_ROWS = [
@@ -615,7 +685,7 @@ test('a Legend rename onto a deleted row of one feature type restores and merges
   await conflictAsked(page);
   await expect(restoreMergeButton(page), 'Restore and merge is offered').toHaveCount(1);
   await expect(mergeButton(page), 'the listed-row Merge label is not shown').toHaveCount(0);
-  await expect(suffixButton(page), 'Suffix is offered').toHaveCount(1);
+  await expect(keepBothButton(page), 'Keep both is offered').toHaveCount(1);
   await choose(page, 'merge');
   const merged = await legendState(page);
   expect(merged.listed.filter((caption) => caption === 'beta'), 'the restored row is listed once').toHaveLength(1);
@@ -645,11 +715,10 @@ test('a Legend rename between rows of different feature types offers no Merge', 
   await renameRow(page, 'rep', 'alpha');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
   await expect(mergeButton(page), 'Merge is not offered').toHaveCount(0);
-  await choose(page, 'suffix');
-  const renamed = await legendCaptions(page);
-  expect(renamed.filter((caption) => caption === 'alpha'), 'one row keeps the caption').toHaveLength(1);
-  expect(renamed.some((caption) => caption !== 'alpha' && caption.startsWith('alpha')), 'the repeat row has a suffixed caption').toBe(true);
-  await expectLiveEqualsGenerate(page, { label: 'repeat_region row renamed onto a CDS row with Suffix' });
+  await chooseKeepBoth(page);
+  expect((await semanticSnapshot(page)).legend.map((row) => row.caption).filter((caption) => caption.startsWith('alpha')),
+    'both rows of the name are numbered in legend order, never drawn by key').toEqual(['alpha (1)', 'alpha (2)']);
+  await expectLiveEqualsGenerate(page, { label: 'repeat_region row renamed onto a CDS row with Keep both' });
 });
 
 // PD-OI-061 revision 4 (OV-582): two color-rule rows of one feature type. The
@@ -676,9 +745,10 @@ test('a Legend rename of a rule row onto another rule row of one feature type as
   const shown = await semanticSnapshot(page);
   await renameRow(page, 'beta', 'alpha');
   await conflictAsked(page);
-  await expect(page.locator('#legend-rename-description p'), 'a Legend item keeps its sentence')
+  await expect(page.locator('#legend-rename-description p').first(), 'a Legend item keeps its sentence')
     .toHaveText('"alpha" already exists with another color.');
-  await expect(suffixButton(page), 'Keep both is offered').toHaveCount(1);
+  await expect(keepBothButton(page), 'Keep both numbers both rows').toHaveText('Keep both: name it "alpha (2)"');
+  await expect(page.locator('#legend-rename-description p').nth(1)).toHaveText('The existing "alpha" becomes "alpha (1)".');
   await page.getByRole('button', { name: 'Merge into "alpha"' }).click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.legendRenameDialog.show);
   await settleLive(page);
@@ -1242,8 +1312,10 @@ test('OV-294: a second Legend color on the row a rule\'s caption names recolors 
   const expected = { rules: ['#2266aa'], ruleFeature: ['#2266aa'], rows: { repeat_region: '#ff8800', 'repeat_region [#2266aa]': '#2266aa' } };
   expect(await shown(await semanticSnapshot(page)), 'the second edit recolors the row').toEqual(expected);
   await history(page, 'undo');
+  // The first Legend color gives the row the rule row's name and swatch, so
+  // the two are one row again (D-28): the rule's row draws it.
   expect(await shown(await semanticSnapshot(page)), 'Undo returns the row\'s first Legend color').toEqual({
-    ...expected, rows: { ...expected.rows, repeat_region: '#2266aa' }
+    ...expected, rows: { 'repeat_region [#2266aa]': '#2266aa' }
   });
   await history(page, 'redo');
   expect(await shown(await semanticSnapshot(page)), 'Redo recolors the row again').toEqual(expected);

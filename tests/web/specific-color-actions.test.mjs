@@ -270,10 +270,11 @@ test('a This feature only rule on a cropped record paints its feature live as Ge
 const resultSvg = (rows) => {
   const element = (attributes, children = []) => ({
     getAttribute: (name) => attributes[name] ?? null,
+    hasAttribute: (name) => name in attributes,
     querySelector: () => null,
     querySelectorAll: () => children
   });
-  const legend = element({}, rows.map(([key, fill]) => element({ 'data-legend-key': key }, [element({ fill })])));
+  const legend = element({}, rows.map(([key, fill, attributes = {}]) => element({ 'data-legend-key': key, ...attributes }, [element({ fill })])));
   return { getElementById: (id) => (id === 'legend' ? legend : null) };
 };
 const mounted = (rows) => {
@@ -517,6 +518,103 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   assert.deepEqual(state.legendColorOverrides, { CDS: '#123456' }, 'a Legend-only color');
 });
 
+// D-35: a Legend color edit of a row that merges a rule's row (one name, one
+// swatch, D-28) revises that rule and writes the Legend color of the other
+// keys in the rule commit's one step, so the row stays one row.
+test('the Legend editor recolors every row a merged row stands for, a rule row through its rule, in one step (D-35)', () => {
+  const ref = (value) => ({ value });
+  const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
+  const state = {
+    manualSpecificRules: [rule],
+    // Python drew CDS in its palette color; its Legend color makes it the rule's swatch.
+    svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000', { display: 'none', 'data-legend-merged': 'CDS' }]]),
+    results: ref([]), selectedResultIndex: ref(0),
+    legendEntries: ref([
+      { caption: 'CDS', originalCaption: 'CDS', color: '#ff0000' },
+      { caption: 'CDS [#ff0000]', originalCaption: 'CDS [#ff0000]', color: '#ff0000' }
+    ]),
+    originalLegendOrder: ref(['CDS', 'CDS [#ff0000]']), deletedLegendEntries: ref([]), originalLegendColors: ref({}),
+    legendStrokeOverrides: {}, legendColorOverrides: { CDS: '#ff0000' }, adv: {}
+  };
+  const committed = [];
+  const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: (build, label, options) => {
+    committed.push({ rules: build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch })), label });
+    options?.afterCommit?.([]);
+    return true;
+  }, readShownLegendColor: (entry) => entry?.color });
+  assert.equal(legend.legendRowHasRules(0), true, 'the shown row stands for a rule row');
+  assert.equal(legend.updateLegendEntryColor(0, '#00ff00'), true);
+  assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
+  assert.deepEqual(state.legendColorOverrides, { CDS: '#00ff00' }, 'the other key\'s Legend color, in the rule commit');
+  assert.equal(state.legendEntries.value[0].color, '#00ff00');
+});
+
+// Review N-1 of #1051 (D-35): the feature popup's "Legend item" scope edits the
+// row the Legend draws, so on a merged row it reaches every row the row stands
+// for, through the Legend owner's writers, and the row stays one row.
+test('the popup\'s Legend item scope recolors and restrokes every row a merged row stands for (D-35, review N-1)', async () => {
+  const ref = (value) => ({ value });
+  const cds = { id: 'c1', svg_id: 'c1', type: 'CDS', qualifiers: {} };
+  // CDS renamed `Shared` in the color of the tRNA rule row `Shared`: one row.
+  const fixture = (defaultColorType) => {
+    const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#445566', cap: 'Shared' };
+    const state = {
+      manualSpecificRules: [rule],
+      svgContainer: mounted([['CDS', '#445566'], ['Shared', '#445566', { display: 'none', 'data-legend-merged': 'CDS' }]]),
+      results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ CDS: '#445566' }),
+      extractedFeatures: ref([cds]), biologicalFeatures: ref([cds]), clickedFeature: ref(null),
+      featureStyleScopeDialog: { show: true, kind: 'fill', feat: cds, color: '#ff0000', strokeColor: null, strokeWidth: null,
+        legendName: 'CDS', matchingRule: null, siblingCount: 1, ruleMatchCount: 0, defaultColorType },
+      resetColorDialog: {}, legendRenameDialog: {},
+      legendEntries: ref([
+        { caption: 'Shared', originalCaption: 'CDS', color: '#445566' },
+        { caption: 'Shared', originalCaption: 'Shared', color: '#445566' }
+      ]),
+      originalLegendOrder: ref(['CDS', 'Shared']), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
+      originalLegendColors: ref({}), featureColorOverrides: {}, featureStrokeOverrides: {},
+      legendStrokeOverrides: {}, legendColorOverrides: { CDS: '#445566' }, adv: {}
+    };
+    const committed = [];
+    const defaults = [];
+    const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: () => assert.fail('no Legend editor commit'),
+      readShownLegendColor: (entry) => entry?.color });
+    const popup = createFeatureColorActions({
+      state: withDrawings(state), readDrawnTracks: () => [], getFeatureElements: () => [], getFeatureFillElements: () => [],
+      readUserDefaultColor: () => null, setDefaultColor: (_drawing, type, color) => { defaults.push([type, color]); },
+      writeLegendRowColor: legend.writeLegendRowColor,
+      ruleActions: {
+        commitSpecificRules: async (build, label, options = {}) => {
+          state.manualSpecificRules = build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+          committed.push(label);
+          options.afterCommit?.([]);
+          return true;
+        },
+        getLegendRowRules: (key) => (key === 'Shared' ? state.manualSpecificRules : []),
+        effectiveLegendCaptions: () => () => 'CDS',
+        findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
+        findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
+        getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }), getLabelSpecificRule: () => null,
+        runWithRuleMatches: (_rules, commit) => commit()
+      }
+    });
+    return { state, popup, committed, defaults };
+  };
+  for (const defaultColorType of [null, 'CDS']) {
+    const { state, popup, committed, defaults } = fixture(defaultColorType);
+    await popup.handleColorScopeChoice('caption');
+    assert.deepEqual(state.manualSpecificRules.map(({ cap, color }) => [cap, color]), [['Shared', '#ff0000']],
+      `the merged rule row's rule (${defaultColorType})`);
+    assert.equal(committed.length, 1, 'one rule commit');
+    if (defaultColorType) assert.deepEqual(defaults, [['CDS', '#ff0000']], 'the palette row\'s default color');
+    else assert.deepEqual(state.legendColorOverrides, { CDS: '#ff0000' }, 'the other key\'s Legend color, in the rule commit');
+  }
+  const { state, popup } = fixture(null);
+  Object.assign(state.featureStyleScopeDialog, { kind: 'stroke', color: null, strokeColor: '#00aa00', strokeWidth: 2 });
+  assert.equal(await popup.handleFeatureStyleScopeChoice('caption'), true);
+  assert.deepEqual(Object.keys(state.legendStrokeOverrides).sort(), ['CDS', 'Shared'], 'the stroke of every key');
+  assert.deepEqual([state.legendStrokeOverrides.Shared.strokeColor, state.legendStrokeOverrides.Shared.strokeWidth], ['#00aa00', 2]);
+});
+
 test('a color action prepares the color matches of its rules without the caption evaluation, and a prepared table answers at once', async () => {
   const kinds = [];
   const s = setup(async (payload, options) => { kinds.push(payload.kind); return evaluatePythonRules(payload, options); });
@@ -655,7 +753,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...rulesPanel);
   state.legendEntries.value = [{ caption: 'alpha', color: '#112233' }];
   assert.equal(await actions.commitSpecificRules(() => [tagRule('A|B', 'beta')], 'Rename legend item',
-    { legendPlacement: { caption: 'beta', at: 'alpha' } }), true);
+    { legendPlacement: { name: 'beta', color: '#112233', at: 'alpha', replaces: true } }), true);
   assert.equal(rerenders, first + 1, 'the renamed row is shown at once in its place');
   shownKeys = ['beta'];
   const beta = state.manualSpecificRules.map(rule => ({ ...rule }));

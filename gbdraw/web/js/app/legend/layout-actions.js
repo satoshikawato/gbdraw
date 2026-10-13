@@ -8,7 +8,7 @@ import {
   legendMeasurementFace,
   loadLegendFontMetrics
 } from '../../services/legend-layout.js';
-import { getComparisonLegendGroup, getLegendEntrySwatch, legendRowShown } from '../../services/legend-svg.js';
+import { drawnLegendRowName, getComparisonLegendGroup, getLegendEntrySwatch, legendRowShown, pythonLegendKey } from '../../services/legend-svg.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 
 // The dpi Python lays the Legend out at unless the Result says otherwise
@@ -55,7 +55,8 @@ const readSolidRows = (group) => {
   const rows = entries.map((entry) => {
     const swatch = getLegendEntrySwatch(entry);
     return /** @type {LegendLayoutRow} */ ({
-      key: String(entry.getAttribute('data-legend-key') || ''),
+      key: pythonLegendKey(entry),
+      name: drawnLegendRowName(entry),
       type: 'solid',
       stroke: swatch?.getAttribute('stroke') || 'none',
       strokeWidth: Number(swatch?.getAttribute('stroke-width') || 0)
@@ -81,7 +82,8 @@ const readGradientRows = (group) => {
     const bar = Array.from(entry.querySelectorAll('path'))
       .find((path) => String(path.getAttribute('fill') || '').startsWith('url(')) || entry.querySelector('path');
     return /** @type {LegendLayoutRow} */ ({
-      key: String(entry.getAttribute('data-legend-key') || ''),
+      key: pythonLegendKey(entry),
+      name: drawnLegendRowName(entry),
       type: 'gradient',
       stroke: bar?.getAttribute('stroke') || 'none',
       strokeWidth: Number(bar?.getAttribute('stroke-width') || 0),
@@ -109,7 +111,7 @@ const placeEntry = (entry, layout) => {
 const placeEntries = (entries, layouts) => {
   const byKey = new Map(layouts.map((layout) => [layout.key, layout]));
   entries.forEach((entry) => {
-    const layout = byKey.get(String(entry.getAttribute('data-legend-key') || ''));
+    const layout = byKey.get(pythonLegendKey(entry));
     if (layout) placeEntry(entry, layout);
   });
 };

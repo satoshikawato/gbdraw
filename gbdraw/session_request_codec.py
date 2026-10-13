@@ -3899,8 +3899,15 @@ def _decode_comparisons(
                         f"Could not decode {path}: {exc}",
                         diagnostic=cause and {**cause, "queryRecordIndex": query_index, "subjectRecordIndex": subject_index},
                     ) from exc
+                from gbdraw.api.prepared import register_prepared_resource_value
+
                 explicit_comparisons.append(
-                    LinearComparison(query_index, subject_index, table, search_frame_text=text)
+                    LinearComparison(
+                        query_index,
+                        subject_index,
+                        register_prepared_resource_value(table, resource_path),
+                        search_frame_text=text,
+                    )
                 )
             else:
                 blast_files.append(str(resource_path))

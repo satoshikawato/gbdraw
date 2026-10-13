@@ -200,6 +200,20 @@ Session 40+ Result without composition metadata, which Load gives the legacy
 composition (OV-273); as a CLI Session it holds no manual positions (no
 `ui` offsets). Commands, inputs, and hashes are in each `.provenance.json`.
 
+`legend-renamed-rows.v46.gbdraw-session.json.gz` is the Session that the Web
+app of first-parent `main` commit `9839de8e` wrote (bytes unchanged; see its
+`.provenance.json`) after renaming the Legend rows GC skew (+) to `Z` and GC
+content to `GC skew (+)`, coloring the latter red, adding a stroke to `Z`, and
+renaming GC skew (-) to `W`, coloring it blue, and deleting it. Session 46
+stored these edits under the shown captions (`GC skew (+)`, `Z`, `W`). It is
+the positive fixture of the Session 47 reading that moves them to the row keys
+(`GC content`, `GC skew (+)`, `GC skew (-)`): `tests/test_session_io.py`
+upgrades and re-saves it, and `tests/web/mode-split-vectors.test.mjs` loads
+it. `legend-row-key-vectors.json` holds the cases that the Web
+(`legendEditsByRowKey`) and Python (`legend_edits_by_row_key`) readers share.
+The Session's decompressed SHA-256 is
+`8efd7a20948b7dcc9e5cb815d2391178d2b7a48c22bf37ece64160385340237a`.
+
 `rule-captions-with-color-id.v46.gbdraw-session.json.gz` and
 `rule-captions-with-color-id.specific-colors.tsv` are the Session and the
 downloaded color-table TSV that the Web app of first-parent `main` commit

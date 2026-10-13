@@ -270,7 +270,7 @@ test('a wrapped Circular Legend on top is laid out as Python drew it (Z1 inputs)
 // OV-156: in Linear, a row without features renamed in the Legend editor keeps
 // its place in the Legend, live and at Generate, also when it is not the last
 // row. HmmtDNA with GC content and GC skew; `GC skew (+)` is renamed (the M9
-// rename), then renamed onto `GC skew (-)` with Suffix (the Linear half of the
+// rename), then renamed onto `GC skew (-)` with Keep both (the Linear half of the
 // OV-151 M10 rename).
 test('a renamed Linear row that is not last keeps its place live and at Generate (OV-156)', async ({ page }) => {
   test.setTimeout(300_000);
@@ -287,10 +287,10 @@ test('a renamed Linear row that is not last keeps its place live and at Generate
   }, { from, to });
   const steps = [
     ['rename GC skew (+)', 'skew plus', async () => rename('GC skew (+)', 'skew plus')],
-    ['rename it onto GC skew (-) with Suffix', 'GC skew (-) (1)', async () => {
+    ['rename it onto GC skew (-) with Keep both', 'GC skew (-)', async () => {
       await rename('skew plus', 'GC skew (-)');
       expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
-      await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.handleLegendRenameChoice('suffix'); });
+      await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.handleLegendRenameChoice('keep-both'); });
     }]
   ];
   for (const [name, caption, run] of steps) {
@@ -303,9 +303,9 @@ test('a renamed Linear row that is not last keeps its place live and at Generate
     await generate(page);
     expect(await captions(), `${name}: Generate keeps the editor order`).toEqual(expected);
     const generated = await legendGeometry(page);
-    // The shown orientation draws each caption once, in the editor's order.
+    // The shown orientation draws each listed row once, in the editor's order
+    // (two rows may share a name after Keep both: PD-OI-061 scenario revision 5).
     expect(drawnKeys(generated), `${name}: drawn rows`).toEqual(expected.filter((entry) => drawnKeys(generated).includes(entry)));
-    expect(new Set(drawnKeys(generated)).size, `${name}: one row per caption`).toBe(drawnKeys(generated).length);
     expect(generated, `${name}: live equals Generate`).toEqual(live);
   }
 });

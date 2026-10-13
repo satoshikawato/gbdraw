@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../state.js' */
-import { isLegendOrderEdited } from '../services/legend-svg.js';
+import { isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
 
 // Which editor state each Result's bytes show (design §5.4). A Result
 // displayed again receives a domain only when that state changed since it
@@ -52,9 +52,9 @@ export const editorPaintState = (state, drawing) => ({
     ]),
     drawing.labelTextBulkOverrides
   ]),
-  // An edited Legend order, or '' for the default order (D-08).
+  // An edited Legend order of row keys, or '' for the default order (D-08).
   legendOrder: isLegendOrderEdited(drawing.legendEntries.value, state.originalLegendOrder.value)
-    ? JSON.stringify(drawing.legendEntries.value.map((/** @type {LegendEntry} */ entry) => entry.caption))
+    ? JSON.stringify(drawing.legendEntries.value.map(legendEntryKey))
     : ''
 });
 

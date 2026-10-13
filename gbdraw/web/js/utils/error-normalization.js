@@ -152,6 +152,9 @@ const DEFINITIONS = Object.freeze({
   // Generate fails the same way until the feature's popup choice changes.
   LABEL_NOT_DRAWN: ['Label visibility is On for a feature, but this diagram does not draw its label.', ['edit-input']],
   INPUT_INVALID: ['An input value is invalid.', ['edit-input', 'retry']],
+  // OV-644: a rule commit whose Legend row would take the key of a listed row
+  // of another color; committing again fails the same way.
+  LEGEND_ROW_CONFLICT: ['A color rule would draw a Legend item that already exists in another color. Change the rule\'s Legend name or color, or rename that Legend item.', ['edit-input']],
   INPUT_REQUIRED: ['Supply GenBank input or matching GFF3 and FASTA inputs.', ['select-input', 'retry']],
   FASTA_REQUIRED: ['Supply a matching FASTA input for each GFF3 input.', ['select-input', 'retry']],
   INPUT_UNREADABLE: ['An input could not be read. Replace or reselect it.', ['select-input', 'retry']],
