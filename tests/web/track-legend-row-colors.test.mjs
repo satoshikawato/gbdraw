@@ -101,7 +101,7 @@ for (const { name, palette, rows: expected, ...request } of readJson('../fixture
   });
 }
 
-// The rows of a request without explicit slots (Python's `_generated_legend_fills`).
+// The rows of a request without explicit slots (Python's `_generated_legend_rows`).
 test('the track rows of a request without slots are Python\'s default rows', () => {
   const trackKeys = ['gc_content', 'skew_high', 'skew_low'];
   for (const { name, dinucleotide, rows } of readJson('../fixtures/legend_generated_rows.json').cases) {

@@ -20,6 +20,7 @@ from gbdraw.api.prepared import (
     PreparedResourceIdentity,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.colors import rule_captions_as_written
 from gbdraw.web_support.error_adapter import WebErrorAttributes, web_error_stage
 from gbdraw.legend.row_facts import collect_legend_row_facts
 from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
@@ -118,7 +119,8 @@ def _render_canonical_web_request_with_prepared_inputs(
     _resource_identities: Mapping[str, PreparedResourceIdentity] | None,
 ) -> dict[str, Any]:
     def render() -> dict[str, Any]:
-        with _capture_request_render_diagnostics(_diagnostics):
+        # The request's color table is the app's rule list, not a saved file.
+        with _capture_request_render_diagnostics(_diagnostics), rule_captions_as_written():
             return _render_canonical_web_request(
                 payload,
                 resource_paths=resource_paths,

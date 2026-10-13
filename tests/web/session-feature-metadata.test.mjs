@@ -69,6 +69,11 @@ await copyModule('gbdraw/web/js/services/svg-result-normalization.js', 'services
 await copyModule('gbdraw/web/js/services/svg-sanitization.js', 'services/svg-sanitization.js');
 await copyModule('gbdraw/web/js/services/svg-serialization.js', 'services/svg-serialization.js');
 await copyModule('gbdraw/web/js/config.js', 'config.js');
+// The Legend naming rule and the key mirror of the color rules, which the Legend reader and the admission import.
+for (const name of ['services/legend-row-names.js', 'services/specific-color-rules.js', 'services/file-imports.js',
+  'services/rule-matchers.js', 'utils/color-utils.js', 'utils/named-colors.js', 'utils/tsv-cell.js']) {
+  await copyModule(`gbdraw/web/js/${name}`, name);
+}
 
 const {
   alignRecoveredFeatureIdsToRenderedSvg,

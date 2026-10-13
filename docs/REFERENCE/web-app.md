@@ -1024,7 +1024,8 @@ and **Apply Label** on one line), **Feature visibility**, and **Legend name**.
 The list under it (**Choose from color rules…**) names the color rules for the
 feature's type and those for every feature type (`*` in a color table), each
 once; choosing one puts the feature into that group with its name and its
-color. When the
+color. The **Legend name** field offers no suggestions while you type; the
+list is the only place that offers an existing group. When the
 feature has no label, one line names the reason, for example `No label shown (Show Labels = None).
 Choose On to show it.` The **Similarity group** section follows when the
 feature belongs to one: one line with the group ID, its name, and **N genes in
@@ -1105,9 +1106,10 @@ list, a popup stroke edit, or a legend rename opens them, each choice is one
 History step and **Cancel** records none. After a choice the dialog stays open with its buttons
 disabled and shows **Applying an edit…** until the edit is applied. The first
 choice after a page or Session load can wait several seconds while the Python
-runtime starts. A legend row that a rule draws with a hex suffix, such as
-`rRNA [#ff0000]`, belongs to that rule: renaming it or changing its color edits
-the rule, and the generated `rRNA` row stays a legend-only row. The color scope dialog offers **This feature only** first, then,
+runtime starts. A legend row that a color rule draws under the name of a
+generated row in another color (the two are then numbered, such as `rRNA (1)`
+and `rRNA (2)`) belongs to that rule: renaming it or changing its color edits
+the rule, and the generated row stays a legend-only row. The color scope dialog offers **This feature only** first, then,
 under **All features with the same**, the matching **Color rule**, **Legend item**, **Label**, and **Source label**
 with their feature counts. **Label** and **Source label** become
 one anchored qualifier rule only when the selected features share one feature
@@ -1179,6 +1181,16 @@ options, and **Remove from legend**. Drag a row by its grip, or focus the grip
 and press the Up or Down arrow, to move it; each move is one **Undo** step.
 **Reset position** and **Reset strokes** sit with the sort buttons above the
 rows.
+
+The Legend tab, the Legend item popup, the feature popup's **Legend name**,
+and the dialogs name a row as the legend draws it. Rows that share a name are
+one row when their swatches (fill and line) are equal; with different swatches
+every one is numbered in legend order, for example `Packaging (1)` and
+`Packaging (2)`, and a name drawn once has no number. The same holds for two
+tracks with one legend label. The number is not part of a color rule's
+caption: the rule list, the downloaded color table, and the Session keep the
+caption as written. The rule is specified under
+[Feature presentation](palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation).
 
 **Region Annotations → Selected features** makes one annotation per selected
 feature that names the source feature the same way; its row shows the

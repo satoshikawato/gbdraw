@@ -162,7 +162,8 @@ import { importSessionFile } from './session-import-client.js';
 import { convertMainSessionComparisonFrames } from './main-session-comparison-frame.js';
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
-import { applySpecificRuleProvenance } from './specific-color-rules.js';
+import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
+import { rekeyLegendRecords } from './legend-svg.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
   buildValidatedProteinIdentityIndex,
@@ -299,6 +300,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { CanonicalLinearLayout, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
+/** @import { PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
@@ -1576,17 +1578,22 @@ const overlayModeSliceConfig = (projectedConfig, sliceConfig) => {
  * @param {'circular' | 'linear'} mode
  * @param {Record<string, any>} slice
  * @param {{ projectedConfig?: Record<string, any> | null, resolveTrackPlacements?: boolean, applyCanvasPadding?: boolean,
- *   droppedLegendColors?: { list: string, caption: string }[] | null }} [options]
+ *   droppedLegendColors?: { list: string, caption: string }[] | null,
+ *   legendRekeys?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
  *   `applyCanvasPadding: false` leaves the padding to the caller (Load pads the shown Result after it mounts).
+ *   `legendRekeys`: the rule rows whose key the reading of the saved captions changes (`savedLegendRekeys`, F2);
+ *   their Legend records move to the new keys, and per-feature color edits are read as the rules are.
  */
 const applyModeSliceData = (drawing, mode, slice, {
-  projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true, droppedLegendColors = null
+  projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true, droppedLegendColors = null,
+  legendRekeys = new Map()
 } = {}) => {
   const config = overlayModeSliceConfig(projectedConfig, slice.config);
   if (Object.keys(config).length) applyConfigData(drawing, config, { resolveTrackPlacements });
-  applyDrawingFeatureData(drawing, isPlainObject(slice.features) ? slice.features : {});
-  applyDrawingEditorData(drawing, normalizeEditorStateData(isPlainObject(slice.editorState) ? slice.editorState : {},
-    { droppedLegendColors }));
+  const features = isPlainObject(slice.features) ? slice.features : {};
+  applyDrawingFeatureData(drawing, { ...features, featureColorOverrides: savedFeatureColorEdits(features.featureColorOverrides) });
+  const editorState = normalizeEditorStateData(isPlainObject(slice.editorState) ? slice.editorState : {}, { droppedLegendColors });
+  applyDrawingEditorData(drawing, { ...editorState, legend: rekeyLegendRecords(editorState.legend, legendRekeys) });
   const ui = isPlainObject(slice.ui) ? slice.ui : {};
   if (isPlainObject(ui.layoutPreferences)) {
     replaceLayoutPreferences(drawing.layoutPreferences, {
@@ -2387,31 +2394,66 @@ const restoreLoadedSetSequenceSources = async ({
 // The stroke and color edits the saved Results of `mode` show (its Session 46
 // slice, else the flat draft) and the values the Session kept as Python's
 // (`setEditorState`: the set's own editor state). Load records Python's values
-// from them on a Result of a Session that saved no such records.
+// from them on a Result of a Session that saved no such records. `rules` are
+// the color rules the mode's drawing loads, as saved: Load names the rule rows
+// of a Result an older build saved by their captions (D-19), read as the
+// drawing reads them (`savedSpecificRules`).
 /**
  * @param {Record<string, any>} data
  * @param {'circular' | 'linear'} mode
  * @param {unknown} setEditorState
  * @param {number} sessionVersion The version of the Session `data`.
+ * @param {unknown} [rules]
  * @returns {SavedResultEdits}
  */
-export const savedResultEdits = (data, mode, setEditorState, sessionVersion) => {
+export const savedResultEdits = (data, mode, setEditorState, sessionVersion, rules) => {
   const slice = sessionVersion >= MODE_SCOPED_SESSION_VERSION
     ? data.modes?.[mode]
     : { editorState: data.editorState, features: data.features };
   const edits = normalizeEditorStateData(isPlainObject(slice?.editorState) ? slice.editorState : {});
   const kept = normalizeEditorStateData(isPlainObject(setEditorState) ? /** @type {Record<string, any>} */ (setEditorState) : {});
+  const legendRekeys = savedLegendRekeys(rules, kept.legend);
+  const legend = rekeyLegendRecords({
+    entries: [...edits.legend.entries, ...edits.legend.dormantEntries],
+    colorOverrides: edits.legend.colorOverrides,
+    strokeOverrides: edits.legend.strokeOverrides,
+    originalColors: kept.legend.originalColors,
+    originalOrder: kept.legend.originalOrder
+  }, legendRekeys);
   return {
-    featureColorOverrides: cloneJsonObject(slice?.features?.featureColorOverrides),
+    featureColorOverrides: savedFeatureColorEdits(cloneJsonObject(slice?.features?.featureColorOverrides)),
     featureStrokeOverrides: edits.featureStrokes.overrides,
-    legendEntries: [...edits.legend.entries, ...edits.legend.dormantEntries],
-    legendColorOverrides: edits.legend.colorOverrides,
-    legendStrokeOverrides: edits.legend.strokeOverrides,
-    originalLegendColors: kept.legend.originalColors,
-    originalLegendOrder: kept.legend.originalOrder,
+    legendEntries: legend.entries,
+    legendColorOverrides: legend.colorOverrides,
+    legendStrokeOverrides: legend.strokeOverrides,
+    originalLegendColors: legend.originalColors,
+    originalLegendOrder: legend.originalOrder,
+    rules: savedSpecificRules(Array.isArray(rules) ? rules : []),
+    legendRekeys,
     mode,
     sessionVersion
   };
+};
+
+// The rule rows whose key the reading of the saved captions `rules` changes
+// (F2), allocated over the generated rows a saved Result set kept (`kept`: its
+// inventory and Python's colors; none for a mode without a Result).
+/**
+ * @param {unknown} rules
+ * @param {{ originalOrder: string[], originalColors: Record<string, string> }} kept
+ * @returns {Map<PythonLegendKey, PythonLegendKey>}
+ */
+const savedLegendRekeys = (rules, kept) => {
+  /** @type {Map<PythonLegendKey, PythonLegendRow>} */
+  const pythonRows = new Map();
+  kept.originalOrder.forEach((caption) => {
+    const key = /** @type {PythonLegendKey} */ (caption);
+    const color = kept.originalColors[caption];
+    if (color) pythonRows.set(key, { key, color: /** @type {PythonLegendRow['color']} */ (color) });
+  });
+  return savedRuleRowRekeys({
+    rules: Array.isArray(rules) ? rules : [], pythonRows, features: [], originalLegendOrder: kept.originalOrder
+  });
 };
 
 // E1: the Results of one saved Result set of a current Session (the top-level
@@ -2461,6 +2503,8 @@ const buildLoadedArtifactSlot = (set, {
     isPlainObject(set.editorState) ? /** @type {Record<string, any>} */ (set.editorState) : {},
     { featureCatalog, droppedLegendColors }
   );
+  // The set's generated inventory and colors under the keys its rows have after Load (F2).
+  const keptLegend = rekeyLegendRecords(editorState.legend, savedEdits?.legendRekeys ?? new Map());
   const ui = isPlainObject(set.ui) ? /** @type {Record<string, any>} */ (set.ui) : {};
   const runMetadata = isPlainObject(set.runMetadata) ? /** @type {Record<string, any>} */ (set.runMetadata) : {};
   return createArtifactSlot({
@@ -2491,10 +2535,10 @@ const buildLoadedArtifactSlot = (set, {
       appliedPaletteName: String(ui.appliedPaletteName || 'default'),
       appliedPaletteColors: cloneColors(ui.appliedPaletteColors),
       similarityAlignmentResetReceipt: editorState.alignmentResetReceipt ?? null,
-      originalLegendColors: editorState.legend.originalColors,
+      originalLegendColors: keptLegend.originalColors,
       originalSvgStroke: editorState.originalSvgStroke
     },
-    legendInventory: editorState.legend.originalOrder,
+    legendInventory: keptLegend.originalOrder,
     matchSequenceOwner: state.matchSequenceRegistry?.buildSourceOwner?.([
       ...(features.sequenceSources || []), ...restoredSequenceSources
     ]) || null,
@@ -5552,10 +5596,14 @@ const importSessionDocument = async (e, options = {}) => {
     const selectedFeatureTypes = currentSchemaSession
       ? adoptedCanonicalSession?.renderRequest?.diagramOptions?.selectedFeaturesSet
       : null;
+    const committedSavedEdits = savedResultEdits(
+      data, committedMode === 'linear' ? 'linear' : 'circular', data.editorState, sourceSessionVersion,
+      draftConfigOf(committedDraftMode)?.rules
+    );
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? admitLoadedSetResults(logicalImportedResults, {
           featureCatalog: validatedSessionCatalog, mode: committedMode, selectedFeatureTypes,
-          savedEdits: savedResultEdits(data, committedMode === 'linear' ? 'linear' : 'circular', data.editorState, sourceSessionVersion),
+          savedEdits: committedSavedEdits,
           legacy: transformLegacyResultSvg
             ? { transform: transformRestoredSessionSvg, applies: transformLegacyResultSvg.appliesToContent }
             : null
@@ -5592,11 +5640,19 @@ const importSessionDocument = async (e, options = {}) => {
     const slotOptions = {
       resources: data.resources, resourceTable: currentResourceTable, webFiles: data.webFiles, droppedLegendColors
     };
+    const otherSavedEdits = otherModeResult
+      ? savedResultEdits(data, otherSetMode, otherModeResult.editorState, sourceSessionVersion, draftConfigOf(otherSetMode)?.rules)
+      : null;
+    // The rule rows of each drawing whose keys the reading of its saved
+    // captions changes (F2): its Result set's, else over no generated rows.
+    /** @param {'circular' | 'linear'} mode @returns {ReadonlyMap<PythonLegendKey, PythonLegendKey>} */
+    const legendRekeysOf = (mode) => ((mode === committedDraftMode ? committedSavedEdits : mode === otherSetMode ? otherSavedEdits : null)
+      ?.legendRekeys ?? savedLegendRekeys(draftConfigOf(mode)?.rules, { originalOrder: [], originalColors: {} }));
     const otherArtifactSlot = otherModeResult && otherModeCatalogAdmitted
       ? buildLoadedArtifactSlot(otherModeResult, {
           ...slotOptions,
           featureCatalog: otherModeCatalogAdmitted,
-          savedEdits: savedResultEdits(data, otherSetMode, otherModeResult.editorState, sourceSessionVersion),
+          savedEdits: otherSavedEdits,
           restoredSequenceSources: (await restoreLoadedSetSequenceSources({
             ...setSequenceSourceOptions,
             mode: otherSetMode,
@@ -5784,6 +5840,8 @@ const importSessionDocument = async (e, options = {}) => {
       modeConfigs[mode] = modeScopedSession
         ? (committed && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, modeSlices[mode].config))
         : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, modeSlices[mode].config);
+      // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
+      if (Array.isArray(modeConfigs[mode].rules)) modeConfigs[mode].rules = savedSpecificRules(modeConfigs[mode].rules);
       // A saved unmanaged override is checked against its own drawing's mode (PD-OI-009, OV-106).
       const savedOverrides = modeSlices[mode].config?.unmanagedConfigOverrides;
       if (isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
@@ -5864,7 +5922,8 @@ const importSessionDocument = async (e, options = {}) => {
       applyModeSliceData(state.drawings[mode], mode, { ...modeSlices[mode], ...features, config: modeConfigs[mode] }, {
         resolveTrackPlacements: !settingsOnly && !storedSlice,
         applyCanvasPadding: mode !== displayMode,
-        droppedLegendColors
+        droppedLegendColors,
+        legendRekeys: legendRekeysOf(mode)
       });
     }
     // App-level settings: LOSAT execution (after the drafts, whose request
@@ -6015,7 +6074,8 @@ const importSessionDocument = async (e, options = {}) => {
         catalogFeatureState: currentCatalogFeatureState
       }
     );
-    applyEditorArtifactData(currentSchemaSession ? restoredEditorState : normalizeEditorStateData(restoredEditorState));
+    const artifactEditorState = currentSchemaSession ? restoredEditorState : normalizeEditorStateData(restoredEditorState);
+    applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedDraftMode)) });
     if (legacyFeatureRecoveryPlan) {
       applySessionFeatureRecoveryPlan(state.drawings[committedDraftMode], legacyFeatureRecoveryPlan, { generationId: 'session-load' });
     }

@@ -173,15 +173,18 @@ const trackSideFill = (track, side) => {
 /**
  * The Legend rows Python drew for the tracks in a Result, by Python's key.
  *
- * Python draws one row under a track's label when its two fills were equal at
- * the Generate, else "<label> (+)" and "<label> (-)", and numbers a key the
- * table already holds ("<key> (2)"). A skew slot with both colors of its own
- * says which; any other track takes the form whose rows the Result has left
- * over. A key is given to a track only where the Result has exactly as many
- * rows of that key as tracks that draw one, in their order: a row the tracks
- * cannot be told apart for (a feature row of the same caption, tracks whose
- * forms the Result leaves open) is no track's row here and keeps the color
- * Python drew.
+ * Python gives a track one key under its label when its two fills were equal
+ * at the Generate, else "<label> (+)" and "<label> (-)", and numbers a key
+ * taken before it ("<key> (2)"). A track whose row has the name and the
+ * swatch of an earlier row draws no row and still takes its key, so the n-th
+ * track of a key has the n-th numbered key whether or not it is drawn
+ * (tests/fixtures/legend_track_slot_rows.json, `shared`). A skew slot with
+ * both colors of its own says which form it has; any other track takes the
+ * form whose rows the Result has left over. A key is given to its track only
+ * where the Result has no more rows of that key than tracks that take one: a
+ * row the tracks cannot be told apart for (a feature row of the same caption,
+ * tracks whose forms the Result leaves open) is no track's row here and keeps
+ * the color Python drew.
  * @param {readonly DrawnTrack[]} tracks `drawnTracks` of the request that drew the Result.
  * @param {ReadonlyMap<PythonLegendKey, PythonLegendRow>} pythonRows The Legend rows Python drew in the Result.
  * @returns {TrackLegendRows}
@@ -189,40 +192,40 @@ const trackSideFill = (track, side) => {
 export const trackLegendRows = (tracks, pythonRows) => {
   /** @type {Set<string>} */
   const drawnKeys = new Set(pythonRows.keys());
-  /** @param {string} preferred @returns {PythonLegendKey[]} The drawn keys Python numbered from one preferred key. */
-  const numberedKeys = (preferred) => {
-    const keys = [];
-    for (let key = preferred, number = 2; drawnKeys.has(key); key = `${preferred} (${number++})`) keys.push(/** @type {PythonLegendKey} */ (key));
-    return keys;
-  };
+  /** @param {string} preferred @param {number} index @returns {PythonLegendKey} The key of the n-th source of one preferred key. */
+  const numberedKey = (preferred, index) => /** @type {PythonLegendKey} */ (index ? `${preferred} (${index + 1})` : preferred);
+  /** @param {string} preferred @param {number} count @returns {PythonLegendKey[]} The drawn keys among the first `count` of one preferred key. */
+  const drawnAmong = (preferred, count) => Array.from({ length: count }, (_, index) => numberedKey(preferred, index)).filter((key) => drawnKeys.has(key));
   /** @type {Map<string, DrawnTrack[]>} */
   const tracksByLabel = new Map();
   tracks.forEach((track) => tracksByLabel.set(track.label, [...(tracksByLabel.get(track.label) || []), track]));
   /** @type {Map<PythonLegendKey, TrackLegendRow>} */
   const rows = new Map();
-  /** @param {PythonLegendKey[]} keys @param {DrawnTrack[]} drawers @param {'positive' | 'negative'} side */
-  const give = (keys, drawers, side) => {
-    if (keys.length !== drawers.length) return;
-    keys.forEach((key, index) => {
-      const row = { key, slotId: drawers[index].slotId, ...trackSideFill(drawers[index], side) };
-      if (drawers[index].saved && row.ownColor && !samePaint(row.ownColor, pythonRows.get(key)?.color)) return;
+  /** @param {string} preferred @param {DrawnTrack[]} drawers @param {'positive' | 'negative'} side */
+  const give = (preferred, drawers, side) => {
+    if (drawnKeys.has(numberedKey(preferred, drawers.length))) return;
+    drawers.forEach((drawer, index) => {
+      const key = numberedKey(preferred, index);
+      if (!drawnKeys.has(key)) return;
+      const row = { key, slotId: drawer.slotId, ...trackSideFill(drawer, side) };
+      if (drawer.saved && row.ownColor && !samePaint(row.ownColor, pythonRows.get(key)?.color)) return;
       rows.set(key, row);
     });
   };
   tracksByLabel.forEach((group, label) => {
-    const oneRowKeys = numberedKeys(label);
-    const positiveKeys = numberedKeys(`${label} (+)`);
-    const negativeKeys = numberedKeys(`${label} (-)`);
+    // One key more than the tracks could take tells a row of another source.
+    const oneRowKeys = drawnAmong(label, group.length + 1).length;
+    const twoRowKeys = Math.max(drawnAmong(`${label} (+)`, group.length + 1).length, drawnAmong(`${label} (-)`, group.length + 1).length);
     const stated = group.map((track) => (track.positiveColor && track.negativeColor ? track.positiveColor === track.negativeColor : null));
     const leftOver = (/** @type {number} */ keyCount, /** @type {boolean} */ oneRow) => keyCount - stated.filter((form) => form === oneRow).length;
-    const open = leftOver(oneRowKeys.length, true) <= 0 ? false
-      : leftOver(Math.max(positiveKeys.length, negativeKeys.length), false) <= 0 ? true : null;
+    const open = leftOver(oneRowKeys, true) <= 0 ? false
+      : leftOver(twoRowKeys, false) <= 0 ? true : null;
     const oneRow = stated.map((form) => form ?? open);
     if (oneRow.includes(null)) return;
     const twoRowTracks = group.filter((_, index) => !oneRow[index]);
-    give(oneRowKeys, group.filter((_, index) => oneRow[index]), 'positive');
-    give(positiveKeys, twoRowTracks, 'positive');
-    give(negativeKeys, twoRowTracks, 'negative');
+    give(label, group.filter((_, index) => oneRow[index]), 'positive');
+    give(`${label} (+)`, twoRowTracks, 'positive');
+    give(`${label} (-)`, twoRowTracks, 'negative');
   });
   return rows;
 };

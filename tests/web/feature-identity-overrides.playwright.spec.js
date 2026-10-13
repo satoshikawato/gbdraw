@@ -371,6 +371,136 @@ for (const { session, rule, identity, color } of [
   });
 }
 
+// PD-OI-042 scenario revision 2, accepted residual risk: the Web app of
+// first-parent main 9839de8e saved one caption written in two colors as
+// `Complex IV [#ffe700]` and `Complex IV [#1f77b4]`
+// (rule-captions-with-color-id.provenance.json). Load reads each caption
+// without its own rule's color ID. The row keys are the texts that build drew,
+// so the Legend stroke it saved stays on its row. Load names the rule rows of
+// the saved figure by the loaded captions (D-19): the figure, the Legend tab,
+// and an Undo back to the loaded state show the numbered names before the
+// first Generate, as Generate draws them.
+test('a Session that saved rule captions with their color IDs loads without them and keeps its Legend row edit', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSession(page, 'tests/fixtures/sessions/rule-captions-with-color-id.v46.gbdraw-session.json.gz');
+  const read = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const { getVisibleFeatureLegendGroup } = await import('/gbdraw/web/js/services/legend-svg.js');
+    const svg = new DOMParser().parseFromString(
+      state.results.value[state.selectedResultIndex.value].content, 'image/svg+xml'
+    ).documentElement;
+    return {
+      captions: state.activeDrawing().manualSpecificRules.map((rule) => rule.cap),
+      rows: Object.fromEntries([...getVisibleFeatureLegendGroup(svg).querySelectorAll('g[data-legend-key]')].map((row) => [
+        row.getAttribute('data-legend-key'),
+        [row.querySelector('text').textContent, row.querySelector('path').getAttribute('stroke'),
+          Number(row.querySelector('path').getAttribute('stroke-width'))]
+      ]))
+    };
+  });
+  // The names the mounted figure draws and the Legend tab shows, by row key.
+  const shown = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      figure: Object.fromEntries([...app.svgContainer.querySelectorAll('svg g[data-legend-key]')]
+        .filter((row) => row.getAttribute('display') !== 'none')
+        .map((row) => [row.getAttribute('data-legend-key'), row.querySelector('text').textContent])),
+      tab: Object.fromEntries(app.legendEntries.map((entry) => [entry.caption, app.shownLegendName(entry.caption)]))
+    };
+  });
+  const expectNumberedNames = async (label) => {
+    const state = await read();
+    expect(state.rows['Complex IV [#ffe700]'], `${label}: the saved stroke stays on its row`).toEqual(['Complex IV (1)', '#d62728', 2]);
+    expect(state.rows['Complex IV [#1f77b4]'][0], label).toBe('Complex IV (2)');
+    expect(state.rows['Complex I'][0], label).toBe('Complex I');
+    const { figure, tab } = await shown();
+    for (const names of [figure, tab]) {
+      expect([names['Complex IV [#ffe700]'], names['Complex IV [#1f77b4]'], names['Complex I']], label)
+        .toEqual(['Complex IV (1)', 'Complex IV (2)', 'Complex I']);
+    }
+    expect([...Object.values(state.rows).map(([name]) => name), ...Object.values(figure), ...Object.values(tab)]
+      .filter((name) => name.includes(' [#')), `${label}: no name carries a color ID`).toEqual([]);
+    return state;
+  };
+  const loaded = await expectNumberedNames('after Load, before Generate');
+  expect(loaded.captions).toEqual(['Complex IV', 'Complex IV', 'Complex I']);
+  // A Legend edit and its Undo return the loaded figure, not the saved texts.
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'Complex I'));
+  });
+  await settle(page);
+  expect((await shown()).tab['Complex I']).toBeUndefined();
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  await expectNumberedNames('after a Legend edit and its Undo');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const generated = await expectNumberedNames('after Generate');
+  expect(generated.captions).toEqual(loaded.captions);
+});
+
+// F2: the same Session where `Complex IV [#ffe700]` is the only rule of its
+// caption (the other rule is `Complex III`; the older build kept such a
+// caption once the other color's rule was gone). Its read caption has one
+// color, so its row's key changes to `Complex IV` at Load: the figure, the
+// Legend tab, the stored stroke, and the per-feature color edit move with it,
+// before and after Generate, and Generate admits its Result.
+test('saved rule captions with their color IDs: a caption left with one color keeps its row and its Legend edit (F2)', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const OLD = 'Complex IV [#1f77b4]';
+  const rename = (text) => text.split(OLD).join('Complex III');
+  const session = JSON.parse(rename(gunzipSync(readFileSync(
+    'tests/fixtures/sessions/rule-captions-with-color-id.v46.gbdraw-session.json.gz'
+  )).toString('utf8')));
+  for (const resource of Object.values(session.resources)) {
+    const bytes = Buffer.from(resource.data, 'base64').toString('latin1');
+    if (!bytes.includes(OLD)) continue;
+    const renamed = Buffer.from(rename(bytes), 'latin1');
+    Object.assign(resource, { data: renamed.toString('base64'), size: renamed.length });
+  }
+  const file = testInfo.outputPath('one-color-rule-caption.gbdraw-session.json');
+  writeFileSync(file, JSON.stringify(session));
+  await openFresh(page);
+  await loadSession(page, file);
+  const read = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const app = window.__GBDRAW_APP__;
+    const drawing = state.activeDrawing();
+    const row = [...app.svgContainer.querySelectorAll('svg g[data-legend-key]')]
+      .find((each) => each.getAttribute('data-legend-key') === 'Complex IV');
+    return {
+      captions: drawing.manualSpecificRules.map((rule) => rule.cap),
+      figure: [...app.svgContainer.querySelectorAll('svg g[data-legend-key]')]
+        .filter((each) => each.getAttribute('display') !== 'none')
+        .map((each) => [each.getAttribute('data-legend-key'), each.querySelector('text').textContent]),
+      tab: app.legendEntries.map((entry) => [entry.caption, app.shownLegendName(entry.caption)]),
+      stroke: row ? [row.querySelector('path').getAttribute('stroke'), Number(row.querySelector('path').getAttribute('stroke-width'))] : null,
+      strokeKeys: Object.keys(drawing.legendStrokeOverrides),
+      featureCaption: drawing.featureColorOverrides['record-1\u0000f48b7bf2f']?.caption ?? null
+    };
+  });
+  const expectRow = async (label) => {
+    const state = await read();
+    expect(state.figure.filter(([key]) => key.startsWith('Complex')), label)
+      .toEqual([['Complex IV', 'Complex IV'], ['Complex III', 'Complex III'], ['Complex I', 'Complex I']]);
+    expect(state.tab.filter(([key]) => key.startsWith('Complex')), label)
+      .toEqual([['Complex IV', 'Complex IV'], ['Complex III', 'Complex III'], ['Complex I', 'Complex I']]);
+    expect(state.stroke, `${label}: the saved stroke stays on its row`).toEqual(['#d62728', 2]);
+    expect(state.strokeKeys, label).toEqual(['Complex IV']);
+    expect([...state.figure, ...state.tab].flat().filter((name) => name.includes(' [#')), `${label}: no color ID`).toEqual([]);
+    return state;
+  };
+  const loaded = await expectRow('after Load, before Generate');
+  expect(loaded.captions).toEqual(['Complex IV', 'Complex III', 'Complex I']);
+  expect(loaded.featureCaption).toBe('Complex IV');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const generated = await expectRow('after Generate');
+  expect(generated.captions).toEqual(loaded.captions);
+});
+
 test('a Session 33 without a feature catalog keeps its feature edits', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);

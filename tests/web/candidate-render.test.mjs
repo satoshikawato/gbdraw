@@ -319,6 +319,72 @@ test('a Legend style may miss its row only in a Result that draws none of its fe
   ]);
 });
 
+// A caption written in two colors draws one row per color, each under its own
+// key; the rules keep the caption as written, and so does the color edit a
+// rule's feature carries. The edit reaches its row through the key the rules
+// allocate, live and at Generate.
+test('a Legend style on a row of a caption written in two colors knows the row\'s features by its key', () => {
+  const options = {
+    catalogAdmission: { ...admission(), resultNames: ['record-a.svg', 'record-b.svg'] },
+    featureColorOverrides: { [stableKey]: { color: '#112233', caption: 'Shared' } },
+    manualSpecificRules: [
+      { feat: 'CDS', qual: 'hash', val: 'fef810304', color: '#112233', cap: 'Shared' },
+      { feat: 'CDS', qual: 'gene', val: '^b$', color: '#445566', cap: 'Shared' }
+    ],
+    legendEntries: [
+      { caption: 'Shared [#112233]', originalCaption: 'Shared [#112233]', color: '#112233' },
+      { caption: 'Shared [#445566]', originalCaption: 'Shared [#445566]', color: '#445566' }
+    ],
+    originalLegendOrder: ['Shared [#112233]', 'Shared [#445566]', 'CDS'],
+    legendColorOverrides: { 'Shared [#112233]': '#123456' },
+    legendStrokeOverrides: { 'Shared [#112233]': { strokeColor: '#445566', strokeWidth: 2 } }
+  };
+  const live = { drawnTracks: [], domains: ['legendFills', 'legendStrokes'], paletteColors: {}, drawnContext: null };
+  for (const livePreview of [null, live]) {
+    const plan = compileDirectEditorMutationPlan({ ...options, livePreview });
+    const state = livePreview ? 'live' : 'at Generate';
+    // (Live, the other row also shows its rule's color.)
+    assert.deepEqual(plan.operationsByResult.map(({ legendFills }) => legendFills
+      .filter(({ caption }) => caption === 'Shared [#112233]').map(({ color, allowMissing }) => [color, allowMissing])), [
+      [['#123456', false]], [['#123456', true]]
+    ], `${state}: the Result that draws none of the row's features may lack the row`);
+    assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
+      ({ caption, allowMissing, reach }) => ({ caption, allowMissing, namedIds: reach.namedIds })
+    )), [
+      [{ caption: 'Shared [#112233]', allowMissing: false, namedIds: [] }],
+      [{ caption: 'Shared [#112233]', allowMissing: true, namedIds: [] }]
+    ], `${state}: the rule draws the edit, so the stroke reaches the feature by the row's color`);
+  }
+});
+
+// OV-643: a listed row is a rule's row by its key, never by the rule's name.
+// The rows of a caption written in two colors are keyed "<caption> [<color>]"
+// and Python draws them, so the compile adds neither, also when neither the
+// generated order nor the renderer-drawn set holds them. Added, a row would be
+// drawn by its key.
+test('a listed row of a caption written in two colors is its rule\'s row by its key', () => {
+  const options = {
+    catalogAdmission: admission(),
+    manualSpecificRules: [
+      { feat: 'CDS', qual: 'gene', val: '^a$', color: '#112233', cap: 'Shared' },
+      { feat: 'CDS', qual: 'gene', val: '^b$', color: '#445566', cap: 'Shared' }
+    ],
+    legendEntries: [
+      { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
+      { caption: 'Shared [#112233]', originalCaption: 'Shared [#112233]', color: '#112233' },
+      { caption: 'Shared [#445566]', originalCaption: 'Shared [#445566]', color: '#445566' },
+      { caption: 'Mine', originalCaption: 'Mine', color: '#778899' }
+    ],
+    originalLegendOrder: ['CDS']
+  };
+  const live = { drawnTracks: [], domains: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'], paletteColors: {}, drawnContext: null };
+  for (const livePreview of [null, live]) {
+    const { legendAdds } = compileDirectEditorMutationPlan({ ...options, livePreview }).operationsByResult[0];
+    assert.deepEqual(legendAdds.map(({ caption, name }) => [caption, name]), [['Mine', undefined]],
+      `${livePreview ? 'live' : 'at Generate'}: only the editor row is added`);
+  }
+});
+
 // OV-46, OV-63: a Legend row with no known features is required by the plan in each
 // Result. Admission lets Python's Legend row facts excuse the absence (suppressed by
 // the draft, or drawn by another Result), so the plan carries no guess of its own.

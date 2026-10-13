@@ -109,21 +109,36 @@ test('late Python evaluation cannot replace a newer rule or a loaded Session', a
   await page.evaluate(async () => { window.__RELEASE_RULES__(); await window.__OLD_RULE_EDIT__; });
   expect(await fills(page)).toEqual(newer);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[0].val)).toBe('(?i)ATP');
-  // A caption edit that gives one caption two colors asks Python to
-  // normalize the captions before the matches (U3a 1e); the Load runs while
-  // that request is late. A pending match would make the Load wait instead.
+  // No late evaluation crosses a Load: a rule edit's only request is its
+  // match (a pattern not matched before, so the edit asks), and Load waits
+  // for it (OV-377). A Load chosen while the match is held is refused and
+  // changes nothing. Once the edit is applied, the loaded Session replaces
+  // the rules and their fills. (The caption normalization request that a
+  // Load used to take over is gone with the caption rewrite.)
+  const sessionFile = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
   await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
-    Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)cytochrome', color: '#2266aa', cap: 'Shared' });
-    await a.addSpecificRule();
     window.__RELEASE_RULES__ = null;
     window.__HOLD_RULES__ = true;
-    window.__OLD_RULE_EDIT__ = a.setSpecificRuleField(0, 'cap', 'Shared');
+    window.__OLD_RULE_EDIT__ = a.setSpecificRuleField(0, 'val', '(?i)nadh');
   });
   await page.waitForFunction(() => window.__RELEASE_RULES__);
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
-  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && !window.__GBDRAW_APP__.manualSpecificRules.length);
+  const held = () => page.evaluate(() => {
+    const a = window.__GBDRAW_APP__;
+    return { available: a.sessionLoadAvailable, importing: a.sessionImportPending, rules: JSON.stringify(a.manualSpecificRules) };
+  });
+  const beforeLoad = await held();
+  expect(beforeLoad).toMatchObject({ available: false, importing: false });
+  await page.locator('input[accept^=".json,"]').setInputFiles(sessionFile);
+  expect(await held()).toEqual(beforeLoad);
   await page.evaluate(async () => { window.__RELEASE_RULES__(); await window.__OLD_RULE_EDIT__; });
+  expect(await page.evaluate(() => {
+    const a = window.__GBDRAW_APP__;
+    return [a.sessionLoadAvailable, a.manualSpecificRules.map((rule) => rule.val)];
+  })).toEqual([true, ['(?i)nadh']]);
+  expect((await fills(page)).length).toBeGreaterThan(0);
+  await page.locator('input[accept^=".json,"]').setInputFiles(sessionFile);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && !window.__GBDRAW_APP__.manualSpecificRules.length);
   expect(await fills(page)).toEqual([]);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules)).toEqual([]);
 });

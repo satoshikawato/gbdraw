@@ -1,0 +1,33 @@
+{
+  "description": "The caption of a color rule as a saved color table or a saved Session is read (PD-OI-042 scenario revision 2, accepted residual risk). Builds between first-parent `main` fe6861f0 and the naming rule rewrote one caption written with several colors to `caption [fill]`, the fill being the rule's color as lower-case #rrggbb (a color name or #rgb resolved) or `none`, and saved the rewritten caption in the Session and in the downloaded color-table TSV. A caption that ends in ` [fill]` of its own rule's color is read without it, once; any other caption is read as written, also one that would be left blank. Python's answer is gbdraw/legend/table.py::saved_rule_caption (tests/test_specific_color_captions.py); the Web app's is services/specific-color-rules.js::savedRuleCaption (tests/web/specific-color-actions.test.mjs).",
+  "cases": [
+    { "name": "the rule's own color ID is removed",
+      "caption": "Packaging [#ffe700]", "color": "#ffe700", "read": "Packaging" },
+    { "name": "the rule's color written in upper case",
+      "caption": "Packaging [#ffe700]", "color": "#FFE700", "read": "Packaging" },
+    { "name": "the rule's color written as #rgb",
+      "caption": "Tail [#ffee00]", "color": "#fe0", "read": "Tail" },
+    { "name": "the rule's color written as a color name",
+      "caption": "Tail [#ff0000]", "color": "red", "read": "Tail" },
+    { "name": "a rule without a color",
+      "caption": "Hidden [none]", "color": "none", "read": "Hidden" },
+    { "name": "the ID of another color is kept",
+      "caption": "Packaging [#ffe700]", "color": "#1f77b4", "read": "Packaging [#ffe700]" },
+    { "name": "the rule's color in upper case in the caption is no ID",
+      "caption": "Packaging [#FFE700]", "color": "#ffe700", "read": "Packaging [#FFE700]" },
+    { "name": "the rule's color as a color name in the caption is no ID",
+      "caption": "Tail [red]", "color": "#ff0000", "read": "Tail [red]" },
+    { "name": "a caption that is only the ID is kept",
+      "caption": "[#ffe700]", "color": "#ffe700", "read": "[#ffe700]" },
+    { "name": "two IDs lose the last one",
+      "caption": "Packaging [#ffe700] [#ffe700]", "color": "#ffe700", "read": "Packaging [#ffe700]" },
+    { "name": "an ID followed by a number is kept",
+      "caption": "Packaging [#ffe700] (2)", "color": "#ffe700", "read": "Packaging [#ffe700] (2)" },
+    { "name": "an ID without the space before it is kept",
+      "caption": "Packaging[#ffe700]", "color": "#ffe700", "read": "Packaging[#ffe700]" },
+    { "name": "a caption without an ID",
+      "caption": "Packaging", "color": "#ffe700", "read": "Packaging" },
+    { "name": "a blank caption",
+      "caption": "", "color": "#ffe700", "read": "" }
+  ]
+}

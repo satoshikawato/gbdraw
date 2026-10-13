@@ -16,7 +16,7 @@ from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, Sequence, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.table_text import legacy_table_rows
@@ -483,6 +483,25 @@ def _active_materialization(materialized: MaterializedSession) -> None:
         )
 
 
+def _with_saved_rule_captions(request: DiagramRequest) -> DiagramRequest:
+    """The request of a saved Session with the captions of its color table read as saved.
+
+    A color table file of the request is read so by ``read_color_table``.
+    """
+
+    from gbdraw.legend.table import saved_rule_captions
+
+    colors = request.options.colors
+    if colors is None or colors.color_table is None:
+        return request
+    color_table = saved_rule_captions(colors.color_table)
+    if color_table is colors.color_table:
+        return request
+    options = replace(request.options, colors=replace(colors, color_table=color_table))
+    # Each request type takes its own options type, which mypy cannot pair.
+    return cast("DiagramRequest", replace(cast(Any, request), options=options))
+
+
 def _decode_drawing(
     materialized: MaterializedSession,
     drawing: SessionDrawingParts,
@@ -513,7 +532,7 @@ def _decode_drawing(
             output_directory=materialized.output_directory,
         )
         return promote_legacy_session_similarity_alignment_request(
-            request,
+            _with_saved_rule_captions(request),
             drawing.artifacts,
         )
     except (CanonicalRequestCodecError, ValidationError) as exc:

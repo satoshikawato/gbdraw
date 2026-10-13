@@ -7,6 +7,7 @@ from gbdraw.svg.elements import Group, LinearGradient, Path
 
 from ....configurators.legend import LegendMeasurement
 from ....legend.circular_layout import CircularGradientLegendLayout
+from ....legend.table import LegendRowKey, write_legend_row_names
 from ....svg.text_path import generate_text_path
 from ....svg.ids import stable_svg_id
 
@@ -22,6 +23,7 @@ class LegendGroup:
         self.canvas_config = canvas_config
         self.legend_measurement = legend_measurement
         self.legend_table = legend_table
+        self._name_entry = write_legend_row_names(legend_table)
         self.font_family = self.legend_measurement.font_family
         self.font_size = self.legend_measurement.font_size
         self.dpi = self.canvas_config.dpi
@@ -48,7 +50,7 @@ class LegendGroup:
         )
         return rectangle_path
 
-    def _gradient_id(self, key: str, properties: Mapping[str, object]) -> str:
+    def _gradient_id(self, key: LegendRowKey, properties: Mapping[str, object]) -> str:
         return stable_svg_id(
             "circular_legend_grad",
             "circular-conservation-gradient",
@@ -72,7 +74,7 @@ class LegendGroup:
                 properties = compact_entry.properties
                 gradient_id = self._gradient_id(compact_entry.key, properties)
                 entry_group = Group()
-                entry_group.attribs["data-legend-key"] = str(compact_entry.key)
+                drawn_name = self._name_entry(entry_group.attribs, compact_entry.key)
 
                 gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
                 gradient.add_stop_color(offset="0%", color=properties["min_color"])
@@ -80,7 +82,7 @@ class LegendGroup:
                 entry_group.add(gradient)
 
                 label_path = generate_text_path(
-                    compact_entry.key,
+                    drawn_name,
                     0,
                     0,
                     0,
@@ -136,7 +138,7 @@ class LegendGroup:
             properties = entry.properties
             gradient_id = self._gradient_id(entry.key, properties)
             entry_group = Group()
-            entry_group.attribs["data-legend-key"] = str(entry.key)
+            drawn_name = self._name_entry(entry_group.attribs, entry.key)
 
             gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
             gradient.add_stop_color(offset="0%", color=properties["min_color"])
@@ -144,7 +146,7 @@ class LegendGroup:
             entry_group.add(gradient)
 
             title_path = generate_text_path(
-                entry.key,
+                drawn_name,
                 0,
                 0,
                 0,
@@ -212,7 +214,7 @@ class LegendGroup:
         feature_group = Group(id="feature_legend") if layout.gradient is not None else self.legend_group
         for entry in layout.solid_entries:
             entry_group = Group()
-            entry_group.attribs["data-legend-key"] = str(entry.key)
+            drawn_name = self._name_entry(entry_group.attribs, entry.key)
 
             rect_path = Path(
                 d=path_desc,
@@ -223,7 +225,7 @@ class LegendGroup:
             rect_path.translate(entry.rect_x, entry.rect_y)
             entry_group.add(rect_path)
             legend_path = generate_text_path(
-                entry.key,
+                drawn_name,
                 0,
                 0,
                 0,

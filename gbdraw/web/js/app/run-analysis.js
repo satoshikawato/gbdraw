@@ -98,7 +98,6 @@ import {
   serializeQualifierPriorityRules,
   serializeSpecificRules
 } from '../services/file-imports.js';
-import { rebindRuleColorOverrides } from './rule-matching.js';
 import {
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
@@ -2447,25 +2446,17 @@ export const createRunAnalysis = ({
   // render here, the Generate compiler's one trigger of the rule preparation.
   // `isCurrent` is the run's own staleness: the candidate is null when the run
   // went stale during the preparation, and is admitted (`shouldAdmit`) while
-  // the run and the rule inputs it was prepared from stay current. The run
-  // commits the feature color overrides rebound to the normalized captions.
+  // the run and the rule inputs it was prepared from stay current.
   /**
    * @param {DrawingState} drawing
    * @param {() => boolean} isCurrent
    * @param {Record<string, any>} [options]
    */
   const prepareAndAdmitCandidate = async (drawing, isCurrent, options) => {
-    if (!rulePreparation) {
-      return { rules: drawing.manualSpecificRules, featureColorOverrides: drawing.featureColorOverrides, shouldAdmit: isCurrent, notifyChanges: () => {} };
-    }
+    if (!rulePreparation) return { rules: drawing.manualSpecificRules, shouldAdmit: isCurrent };
     const candidate = await rulePreparation.prepareCandidate(drawing.manualSpecificRules, options);
     if (!candidate || !isCurrent()) return null;
-    return {
-      rules: candidate.rules,
-      featureColorOverrides: rebindRuleColorOverrides(drawing.featureColorOverrides, drawing.manualSpecificRules, candidate.rules),
-      shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent(),
-      notifyChanges: () => rulePreparation.notifyChanges(candidate)
-    };
+    return { rules: candidate.rules, shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent() };
   };
 
   /**
@@ -5143,7 +5134,7 @@ export const createRunAnalysis = ({
         prepareCommit: prepareCandidateCommit,
         prepareCommitInput: {
           sourceReplaced,
-          featureColorOverrides: colorCandidate.featureColorOverrides,
+          featureColorOverrides: drawing.featureColorOverrides,
           featureStrokeOverrides: drawing.featureStrokeOverrides,
           featureOverrides: drawing.featureOverrides,
           legendEntries: drawing.legendEntries.value,
@@ -5443,7 +5434,6 @@ export const createRunAnalysis = ({
           { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
         );
       }
-      colorCandidate.notifyChanges();
       return {
         status: 'ok',
         generatedArtifactCandidate: activatedGeneratedArtifactCandidate
@@ -6115,7 +6105,7 @@ export const createRunAnalysis = ({
         shouldAdmit: colorCandidate.shouldAdmit,
         prepareCommit: prepareReflowResultCommit,
         prepareCommitInput: {
-          featureColorOverrides: colorCandidate.featureColorOverrides,
+          featureColorOverrides: drawing.featureColorOverrides,
           featureStrokeOverrides: drawing.featureStrokeOverrides,
           featureOverrides: drawing.featureOverrides,
           legendEntries: drawing.legendEntries.value,
@@ -6164,7 +6154,6 @@ export const createRunAnalysis = ({
         execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions, drawnPaint
       );
       logPostGbdrawTimings(timingEntries);
-      colorCandidate.notifyChanges();
       return { status: 'ok' };
     } catch (e) {
       if (isDiagramGenerationCanceled(e)) {

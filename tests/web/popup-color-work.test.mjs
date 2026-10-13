@@ -22,7 +22,6 @@ const savedRule = { feat: 'CDS', qual: 'product', val: '^p3$', color: '#111111',
 
 // Python's answer for `hash` and `product` rules (gbdraw/web_support/rule_matching.py).
 const evaluateRules = async ({ features: payloads, rules, kind }) => {
-  if (kind === 'color-captions') return { rules };
   const matches = payloads.map((payload) => rules.flatMap((rule, index) => {
     const values = rule.qual === 'hash' ? [payload.selector.hash] : payload.qualifiers[rule.qual] || [];
     return values.some((value) => new RegExp(rule.val).test(value)) ? [index] : [];

@@ -103,10 +103,16 @@ export {
  */
 
 /**
+ * The name the Legend draws for the row a caption is the key of (the Legend owner's `shownLegendName`).
+ * @typedef {(caption: string) => string} ShownLegendNamePort
+ */
+
+/**
  * @typedef {object} FeatureSvgActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(feature: Record<string, any>) => string} getFeatureColor The rule owner's color of a feature.
  * @property {(feature: Record<string, any>) => string} [getEffectiveLegendCaption] The rule owner's Legend caption of a feature.
+ * @property {ShownLegendNamePort} [shownLegendName]
  * @property {(() => void) | null} [onFeaturePopupOpened] The label owner's sync of its editor when the popup opens.
  * @property {PrepareDrawnFeatureMatchesPort} [prepareDrawnFeatureMatches]
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads.
@@ -196,6 +202,7 @@ export const createFeatureSvgActions = ({
   state,
   getFeatureColor,
   getEffectiveLegendCaption,
+  shownLegendName = (caption) => caption,
   onFeaturePopupOpened = null,
   // R13: the popup opens once the rule matches `resolveFeatureDrawn` reads are
   // prepared; the composition root injects the visibility owner's preparation.
@@ -346,7 +353,8 @@ export const createFeatureSvgActions = ({
     const locusTag = getQualifierFirstValue(feat, 'locus_tag');
     const note = getQualifierFirstValue(feat, 'note');
     const locationText = formatFeatureLocation(feat);
-    const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || '').trim();
+    // The feature's row as the Legend draws it; its caption is the row's key, which is never shown.
+    const legendName = shownLegendName(String(getEffectiveLegendCaption?.(feat) || '').trim());
     /** @type {Array<[string, unknown, boolean?]>} */
     const rows = [];
 
@@ -358,7 +366,7 @@ export const createFeatureSvgActions = ({
     rows.push(['Location', locationText]);
     rows.push(['Record', feat?.record_id || '']);
     if (feat?.orthogroupId) rows.push(['Similarity group', feat.orthogroupId]);
-    if (effectiveCaption && effectiveCaption !== primaryLabel) rows.push(['Legend', effectiveCaption]);
+    if (legendName && legendName !== primaryLabel) rows.push(['Legend', legendName]);
     return rows;
   };
 

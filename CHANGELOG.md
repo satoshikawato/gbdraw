@@ -23,6 +23,37 @@ write-up of a release.
   compatibility, and installation availability. Publication dates are recorded
   in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
 
+- Legend names (CLI, Python, web app): legend rows that share a name follow
+  one rule, and no legend name carries a color ID. Rows with the same name and
+  the same swatch (fill and line) are one row. When two or more rows with the
+  same name and different swatches are drawn, every one is numbered in legend
+  order (`Packaging (1)`, `Packaging (2)`); a name drawn once has no number.
+  The rule replaces the `name [#hex]` captions of one caption in several
+  colors and of a rule named like a generated row (now `tRNA (1)` and
+  `tRNA (2)`), and it covers track and region-annotation rows with one
+  `legend_label`.
+  - Changed drawing: two depth tracks labelled `Coverage`, which 0.13.0 drew
+    as `Coverage` and `Coverage (2)`, now draw `Coverage (1)` and
+    `Coverage (2)` when their colors differ and one `Coverage` row when they
+    are equal. Two GC content tracks always have the palette's GC content
+    color, so 0.13.0's `GC content` and `GC content (2)` are now one row. A 0.13.0
+    Session still loads, and its legend row edits stay on the rows of the same
+    tracks; edits saved for a second row that now shares the first row are not
+    used.
+  - gbdraw no longer rewrites a rule's caption. The color table, the rule
+    list, the popup, the downloaded color-table TSV, and the Session keep it
+    as written, and the web app notice "Updated N specific-color caption(s) to
+    distinguish their colors." is gone. The numbers follow the legend order:
+    they change when a row is added, removed, or moved, and a name left with
+    one row loses its number.
+  - Compatibility: when a color table file or a saved Session is read, a
+    caption that ends in its own rule's color ID, such as
+    `Packaging [#ffe700]` on a rule colored `#ffe700`, loses that ID, also
+    when you typed that name yourself.
+  - Web app: the Legend tab, the popups, and the dialogs show the drawn name.
+    The feature popup's **Legend name** field no longer offers suggestions;
+    the list under it is the only place that offers an existing group
+    (OV-583, OV-584, OV-585, OV-587; PD-OI-042, PD-OI-095).
 - Region annotations (CLI, Python, Session): an overlay annotation slot can
   span several tracks. With `to_slot=<slot id>` next to `anchor_slot`, the
   overlay runs from one slot's band to the other's in Circular and Linear, for
@@ -1177,8 +1208,8 @@ decisions are in
   failure caused by an explicit `center_reserved_radius` names that radius
   instead (`CENTER_RESERVED`) (PV-08, PD-OI-078).
 - A specific-color rule whose caption equals a generated legend row, such as a
-  rule captioned `rRNA` on tRNA features, keeps its own color row with a hex
-  suffix (`rRNA [#ff0000]`) instead of being dropped (N-06).
+  rule captioned `rRNA` on tRNA features, keeps its own color row instead of
+  being dropped; the two rows are numbered `rRNA (1)` and `rRNA (2)` (N-06).
 
 - Non-pseudo CDS translated without `/translation` now start with `M` when the
   5' end is complete, the reading frame starts at the first base, and the first
@@ -1270,10 +1301,10 @@ decisions are in
   legend row until Generate (D-14).
 - Hiding a feature also hides its label in the current Result, as Generate
   does; with **Auto Reflow** on, the remaining labels are placed again.
-- A legend row that a specific-color rule draws with a hex suffix, such as
-  `rRNA [#ff0000]`, now edits that rule in the Legend editor, and a live rule
-  edit keeps that row instead of recoloring or failing on the generated `rRNA`
-  row (N-06).
+- A legend row that a specific-color rule draws under the name of a generated
+  row in another color (the two are numbered, such as `rRNA (1)` and
+  `rRNA (2)`) now edits that rule in the Legend editor, and a live rule edit
+  keeps that row instead of recoloring or failing on the generated row (N-06).
 
 - History records one Undo step for each checkbox, radio button, or button
   change, also when it is made with its label text or the keyboard, or while a

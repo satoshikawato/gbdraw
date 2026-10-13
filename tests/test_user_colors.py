@@ -8,7 +8,6 @@ elements need no svgwrite validation.
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 import tempfile
@@ -29,7 +28,6 @@ from gbdraw.config.modify import validate_config_overrides
 from gbdraw.exceptions import ValidationError
 from gbdraw.io import colors as color_io
 from gbdraw.io.colors import is_user_color, load_default_colors, resolve_color_to_hex
-from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.session import load_session_document, materialize_session, session_to_request
 
 REPO = Path(__file__).resolve().parents[1]
@@ -142,7 +140,7 @@ def test_accepted_colors_pass_every_entry_point(value: str) -> None:
     defaults = load_default_colors("")
     defaults.loc[defaults["feature_type"] == "CDS", "color"] = value
     # A color table without captions writes its colors as given; captions need
-    # a name or hex color (normalize_specific_color_captions, unchanged).
+    # a name or hex color (`_check_caption_colors`, gbdraw/api/prepared.py).
     table = DataFrame(
         [["CDS", "product", "kinase", value]],
         columns=["feature_type", "qualifier_key", "value", "color"],
@@ -154,23 +152,18 @@ def test_accepted_colors_pass_every_entry_point(value: str) -> None:
 
 @pytest.mark.parametrize("color", ["rgb(1,2,3)", "transparent", "hsl(120,50%,50%)", "#junk", "#abcd", "notacolor"])
 def test_captioned_color_tables_keep_their_hex_domain(color: str) -> None:
-    # Every value outside none / name / #RGB / #RRGGBB carries one diagnostic,
-    # also through the Web rule check (evaluate_rules_json).
+    # Every value outside none / name / #RGB / #RRGGBB carries one diagnostic.
     table = DataFrame(
         [["CDS", "product", "kinase", color, "Kinase"]],
         columns=["feature_type", "qualifier_key", "value", "color", "caption"],
     )
-    expected = {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": 1}
-    if is_user_color(color):  # the others stop earlier, at the feature color check
-        with pytest.raises(ValidationError, match=re.escape(f"{color!r} in the color table (row 1)")) as raised:
-            resolve_feature_inputs(
-                color_table=table, default_colors=load_default_colors(""), feature_visibility_table=None
-            )
-        assert raised.value.diagnostic == expected
-    rule = {"feat": "CDS", "qual": "product", "val": "kinase", "color": color, "cap": "Kinase"}
-    with pytest.raises(ValidationError) as web:
-        evaluate_rules_json("[]", json.dumps([rule]), "color-captions")
-    assert web.value.diagnostic == expected
+    # The values that are no user color stop earlier, at the feature color check.
+    message = f"{color!r} in the color table (row 1)" if is_user_color(color) else "(row 1)"
+    with pytest.raises(ValidationError, match=re.escape(message)) as raised:
+        resolve_feature_inputs(
+            color_table=table, default_colors=load_default_colors(""), feature_visibility_table=None
+        )
+    assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": 1}
 
 
 @pytest.mark.parametrize("color", ["#11223344", "#abcd"])

@@ -64,7 +64,7 @@ from ...render.groups.linear.length_bar import (
 from ...io.comparisons import filter_comparison_dataframe, load_comparisons
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.table import (
-    _unique_legend_key,
+    LegendTable,
     configure_pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
 )
@@ -437,12 +437,12 @@ def _slot_legend_label(slot, fallback: str) -> str:
 
 
 def _sync_legend_table_for_linear_slots(
-    legend_table: dict,
+    legend_table: LegendTable,
     *,
     linear_track_slots: list | None,
     skew_config: GcSkewConfigurator,
     depth_tracks: list[DepthTrackData] | None,
-) -> dict:
+) -> LegendTable:
     """Replace singleton numeric legends with slot-authoritative entries."""
     if linear_track_slots is None:
         return legend_table
@@ -458,7 +458,7 @@ def _sync_legend_table_for_linear_slots(
         f"{default_nt} skew (+)",
         f"{default_nt} skew (-)",
     ):
-        out.pop(key, None)
+        out.discard_default_track(key)
 
     for slot in linear_track_slots:
         if not getattr(slot, "enabled", True):
@@ -469,25 +469,25 @@ def _sync_legend_table_for_linear_slots(
         label = _slot_legend_label(slot, f"{nt} skew")
         slot_skew_config = _slot_skew_config(skew_config, slot, nt)
         if slot_skew_config.high_fill_color == slot_skew_config.low_fill_color:
-            out[_unique_legend_key(out, label)] = {
+            out.add_source(label, {
                 "type": "solid",
                 "fill": slot_skew_config.high_fill_color,
                 "stroke": slot_skew_config.stroke_color,
                 "width": slot_skew_config.stroke_width,
-            }
+            })
         else:
-            out[_unique_legend_key(out, f"{label} (+)")] = {
+            out.add_source(f"{label} (+)", {
                 "type": "solid",
                 "fill": slot_skew_config.high_fill_color,
                 "stroke": slot_skew_config.stroke_color,
                 "width": slot_skew_config.stroke_width,
-            }
-            out[_unique_legend_key(out, f"{label} (-)")] = {
+            })
+            out.add_source(f"{label} (-)", {
                 "type": "solid",
                 "fill": slot_skew_config.low_fill_color,
                 "stroke": slot_skew_config.stroke_color,
                 "width": slot_skew_config.stroke_width,
-            }
+            })
     return out
 
 
@@ -2114,7 +2114,7 @@ def assemble_linear_diagram(
     )
     # Prepare legend group
     configure_pairwise_identity_legend_from_comparisons(blast_config, comparisons)
-    legend_table: dict = {}
+    legend_table = LegendTable()
     if canvas_config.legend_position != "none":
         color_map = feature_config.specific_color_rules
         default_color_map = feature_config.default_color_map

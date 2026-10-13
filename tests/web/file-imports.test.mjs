@@ -46,6 +46,11 @@ await writeFile(
   await readFile(join(sourceDir, 'rule-matchers.js'), 'utf8'),
   'utf8'
 );
+await writeFile(
+  join(tempDir, 'legend-row-names.js'),
+  await readFile(join(sourceDir, 'legend-row-names.js'), 'utf8'),
+  'utf8'
+);
 
 const { parseColorTable, parsePriorityRules, parseSpecificRules, parseWhitelistRules, serializeSpecificRules } = await import(
   pathToFileURL(join(tempDir, 'file-imports.js'))

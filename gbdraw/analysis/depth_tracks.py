@@ -20,6 +20,7 @@ from gbdraw.tracks.parsing import parse_nonnegative_integer
 
 if TYPE_CHECKING:
     from gbdraw.api.options import DepthTrackInput
+    from gbdraw.legend.table import LegendTable
 
 
 @dataclass(frozen=True)
@@ -674,11 +675,11 @@ def build_depth_track_dataframes(
 
 
 def sync_depth_track_legend_entries(
-    legend_table: dict,
+    out: LegendTable,
     depth_tracks: Sequence[DepthTrackData] | None,
     *,
     slots: Sequence[object] | None = None,
-) -> dict:
+) -> LegendTable:
     """Replace the singleton Depth legend with logical-track-aware entries.
 
     When ``slots`` is supplied, it is authoritative: only enabled Depth slots are
@@ -686,9 +687,8 @@ def sync_depth_track_legend_entries(
     """
 
     if not depth_tracks:
-        return legend_table
-    out = dict(legend_table)
-    out.pop("Depth", None)
+        return out
+    out.discard_default_track("Depth")
     track_count = depth_track_data_count([depth_tracks])
     selected: list[tuple[DepthTrackData, object | None]]
     if slots is None:
@@ -718,18 +718,12 @@ def sync_depth_track_legend_entries(
         params = getattr(slot, "params", {}) or {}
         raw_label = params.get("legend_label", params.get("label"))
         override = str(raw_label).strip() if raw_label is not None else ""
-        label = override or fallback
-        unique_label = label
-        suffix = 2
-        while unique_label in out:
-            unique_label = f"{label} ({suffix})"
-            suffix += 1
-        out[unique_label] = {
+        out.add_source(override or fallback, {
             "type": "solid",
             "fill": track.config.fill_color,
             "stroke": track.config.stroke_color,
             "width": track.config.stroke_width,
-        }
+        })
     return out
 
 

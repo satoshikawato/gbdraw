@@ -31,6 +31,8 @@ import { displayedLegendRowContext } from '../services/feature-visibility.js';
  *   The preview owner's runtime identity of the mounted Result.
  * @property {import('./candidate-render.js').LegendRowColorOf} readShownLegendColor
  *   The root's color of a listed row as the Legend panel shows it (OV-282).
+ * @property {import('./legend/entry-actions.js').LegendEntryActionsOptions['legendRowNames']} [legendRowNames]
+ *   The root's reactive holder of the names the displayed Result shows for its rows; the entry owner writes it.
  * @property {() => unknown} showLegendStructure The root's show of the Legend structure intent (R1).
  */
 
@@ -44,10 +46,11 @@ export const createLegendManager = ({
   commitActiveResultEdit = null,
   readActiveResultIdentity = null,
   readShownLegendColor,
+  legendRowNames,
   showLegendStructure
 }) => {
   const layoutActions = createLegendLayoutActions();
-  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor });
+  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor, legendRowNames });
   const sortActions = createLegendSortActions({ state, showLegendStructure });
   const strokeActions = createLegendStrokeActions({ state });
   // The rules a row draws, by its key among Python's rows of the displayed

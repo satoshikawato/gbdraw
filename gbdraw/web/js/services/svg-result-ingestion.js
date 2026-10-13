@@ -2,6 +2,7 @@
 /** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from './legend-svg.js' */
 /** @import { RenderedIdentityCollection } from './session-feature-metadata.js' */
+/** @import { SpecificColorRule } from './specific-color-rules.js' */
 /** @import { SvgSanitizer } from './svg-sanitization.js' */
 import {
   AUTO_FEATURE_UNDERLAY_STROKE,
@@ -16,15 +17,22 @@ import {
   getAllFeatureLegendGroups,
   getLegendEntrySwatch as legendSwatch,
   legendRowFeatureIds,
+  legendRowName,
+  legendRowShown,
+  legendRowSwatch,
+  namedLegends,
   moveLegendEntryToAnchor,
   orderLegendEntries,
   pythonLegendKey,
   pythonLegendRow,
+  pythonLegendRows,
   setsFeatureStroke,
   SPECIFIC_COLOR_FILE_OWNER
 } from './legend-svg.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { drawnLegendNames } from './legend-row-names.js';
+import { ruleLegendCaptions } from './specific-color-rules.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
 import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -658,17 +666,41 @@ const paintElementKind = (element) => {
   return 'feature';
 };
 
-/** @param {Element} entry @param {string} caption */
-const updateLegendCaption = (entry, caption) => {
-  entry.setAttribute('data-legend-key', caption);
-  const label = entry.querySelector('text');
-  if (label) label.textContent = caption;
+// THE writer of the names a Result's Legend draws (D-09, PD-OI-042 scenario
+// revision 2): after the Legend operations of a pass, each shown row's text is
+// the naming rule's answer (legend-row-names.js) for the rows the Legend shows,
+// by their names and the swatches they show. No operation writes a row's text;
+// Python's own texts are this rule's answer for the rows it drew. Returns
+// whether a text changed.
+/** @param {Parameters<typeof namedLegends>[0]} svg */
+const nameLegendRows = (svg) => {
+  let changed = false;
+  namedLegends(svg).forEach((legend) => {
+    const rows = Array.from(legend.querySelectorAll('g[data-legend-key]')).filter(legendRowShown);
+    const drawn = drawnLegendNames(rows.map((row) => ({ name: legendRowName(row), swatch: legendRowSwatch(row) })));
+    rows.forEach((row, at) => {
+      const label = row.querySelector('text');
+      if (!label || label.textContent === drawn[at]) return;
+      label.textContent = drawn[at];
+      changed = true;
+    });
+  });
+  return changed;
+};
+
+// An added row's key and name: `data-legend-name` only where the name is not
+// the key, as Python writes it (a rule's row, whose name is the rule's caption).
+/** @param {Element} row @param {string} key @param {string | undefined} name */
+const setAddedRowIdentity = (row, key, name) => {
+  row.setAttribute('data-legend-key', key);
+  if (name && name !== key) row.setAttribute('data-legend-name', name);
+  else row.removeAttribute('data-legend-name');
 };
 
 /**
  * Return every attribute the executor changed in `domains` and no operation
- * of this pass set to the value Python drew (a Legend row's key with its
- * text). Returns whether an attribute returned, and whether a Legend row did.
+ * of this pass set to the value Python drew (a Legend row's key; its text
+ * follows in `nameLegendRows`). Returns whether an attribute returned, and whether a Legend row did.
  * @param {Element} root
  * @param {readonly string[]} domains
  * @param {Map<Element, Set<string>>} painted
@@ -693,7 +725,6 @@ const restorePaintBases = (root, domains, painted) => {
       const value = element.getAttribute(base);
       if (value === null) return;
       if (value === '') element.removeAttribute(name);
-      else if (name === 'data-legend-key') updateLegendCaption(element, value);
       else element.setAttribute(name, value);
       element.removeAttribute(base);
       changed = true;
@@ -880,7 +911,7 @@ const applyLegendOperations = (index, operations, {
   // the Result has stays as it is, shown again if a commit retired it.
   // An editor row goes before the rows of the later additions, as Generate
   // appends them in order, so a renamed editor row keeps its place among them.
-  operations.legendAdds.forEach(({ caption, color, xPos, yPos, ifAbsent = false, before = '' }, addIndex) => {
+  operations.legendAdds.forEach(({ caption, name, color, xPos, yPos, ifAbsent = false, before = '' }, addIndex) => {
     const { entries, groups } = index.legends();
     const existingEntries = entries.get(caption) || [];
     if (ifAbsent && existingEntries.length > 0) {
@@ -896,6 +927,7 @@ const applyLegendOperations = (index, operations, {
         // The editor row's own color is its drawn fill; Python drew none.
         const recolored = setAttributeIfDifferent(swatch, 'fill', color);
         const unrecorded = removeAttributeIfPresent(swatch, resultBaseAttribute('fill'));
+        setAddedRowIdentity(entry, caption, name);
         if (setAttributeIfDifferent(entry, 'data-legend-owner', 'direct-editor') || recolored || unrecorded) index.changed = true;
         changed = moveLegendEntryToAnchor(entry, xPos, yPos) || changed;
       });
@@ -913,7 +945,7 @@ const applyLegendOperations = (index, operations, {
       // Python draws no hidden row.
       restorePaintBases(row, RESULT_PAINT_DOMAINS, new Map());
       row.removeAttribute('display');
-      updateLegendCaption(row, caption);
+      setAddedRowIdentity(row, caption, name);
       const swatch = legendSwatch(row);
       if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
       swatch.setAttribute('fill', color);
@@ -958,9 +990,7 @@ const applyLegendOperations = (index, operations, {
   // layout then places every row in the Legend's order, as Python does (OV-156).
   operations.legendRenames.forEach(({ from, to, allowMissing }) => {
     requireLegendEntries(index, from, { allowMissing }, mayBeAbsent).forEach((entry) => {
-      if (!setPaintAttribute(index, entry, 'data-legend-key', to)) return;
-      updateLegendCaption(entry, to);
-      changed = true;
+      changed = setPaintAttribute(index, entry, 'data-legend-key', to) || changed;
     });
   });
   // A delete hides the row and keeps it with Python's key, so a reconcile
@@ -1084,9 +1114,10 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
     legendChanged = restoreLegendStructure(index, operations, domains) || legendChanged;
   }
   const restored = restorePaintBases(svg, domains, index.painted);
+  const named = nameLegendRows(svg);
   return {
-    changed: index.changed || legendChanged || restored.changed,
-    legendChanged: restored.rowsChanged || legendChanged
+    changed: index.changed || legendChanged || restored.changed || named,
+    legendChanged: restored.rowsChanged || legendChanged || named
   };
 };
 
@@ -1115,6 +1146,9 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
  * @property {Record<string, SavedStrokeEdit>} legendStrokeOverrides
  * @property {Record<string, string>} originalLegendColors
  * @property {string[]} originalLegendOrder The captions of the rows Python drew (the Legend inventory).
+ * @property {readonly Partial<SpecificColorRule>[]} rules The color rules the mode's drawing loads, read as saved rules.
+ * @property {ReadonlyMap<PythonLegendKey, PythonLegendKey>} [legendRekeys] The rule rows whose key that reading
+ *   changes (`savedRuleRowRekeys`, F2), old key to new; the other fields are already under the new keys.
  * @property {'circular' | 'linear'} mode
  * @property {number} sessionVersion The version of the Session that saved the edits.
  */
@@ -1326,6 +1360,55 @@ const recordSavedLegendKeys = (svg, renames) => {
   return recorded;
 };
 
+// F2: a rule row whose key the reading of the saved captions changes (a
+// caption saved with its own color ID whose rule is the only rule of that
+// caption) shows its old key in the saved figure. Load moves the row to its
+// new key, as it moves the edits stored under it (`rekeyLegendRecords`), and
+// draws the names. A rename's record of the old key moves with it. Returns
+// whether it moved a row.
+/** @param {SvgResultRoot} svg @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} rekeyed @returns {boolean} */
+const rekeySavedRuleRows = (svg, rekeyed) => {
+  const lookup = /** @type {ReadonlyMap<string, string>} */ (rekeyed);
+  let moved = false;
+  getAllFeatureLegendGroups(svg).flatMap((group) => Array.from(group.querySelectorAll('g[data-legend-key]'))).forEach((row) => {
+    ['data-legend-key', resultBaseAttribute('data-legend-key')].forEach((attribute) => {
+      const to = lookup.get(text(row.getAttribute(attribute)));
+      if (to === undefined) return;
+      row.setAttribute(attribute, to);
+      moved = true;
+    });
+  });
+  return moved && (nameLegendRows(svg), true);
+};
+
+// D-19: a build of first-parent main (fe6861f0 to this naming rule) drew a
+// color rule's row under its key, `Complex IV [#ffe700]` or `tRNA [#ff0000]`,
+// as the row's text and wrote no `data-legend-name`. Load names such a row
+// once, as Python names it now: the row whose key the key mirror allocates to
+// a loaded rule takes that rule's caption as its name, and the naming pass
+// draws the names. The key stays, so the edits saved under it stay on the row.
+// A row that has a name, or shows a rename, keeps it. Returns whether it
+// named a row.
+const SAVED_COLOR_ID = / \[(?:#[0-9a-f]{6}|none)\]/;
+/** @param {SvgResultRoot} svg @param {SavedResultEdits} edits @returns {boolean} */
+const nameSavedRuleRows = (svg, edits) => {
+  const keyOf = ruleLegendCaptions({
+    rules: edits.rules, pythonRows: pythonLegendRows(svg), features: [], originalLegendOrder: edits.originalLegendOrder
+  });
+  /** @type {Map<string, string>} */
+  const names = new Map(edits.rules.filter((rule) => text(rule.cap)).map((rule) => [keyOf(rule), text(rule.cap)]));
+  const keyRecord = resultBaseAttribute('data-legend-key');
+  let named = false;
+  namedLegends(svg).flatMap((legend) => Array.from(legend.querySelectorAll('g[data-legend-key]'))).forEach((row) => {
+    const key = text(row.getAttribute('data-legend-key'));
+    const name = names.get(key);
+    if (!name || name === key || row.hasAttribute('data-legend-name') || row.hasAttribute(keyRecord)) return;
+    row.setAttribute('data-legend-name', name);
+    named = true;
+  });
+  return named && (nameLegendRows(svg), true);
+};
+
 /**
  * A legacy normalization of a Result saved without composition metadata (a
  * Session 40 Result of main 8228ffab or 7aad9e3e, OV-273): `applies` tells it
@@ -1338,8 +1421,10 @@ const recordSavedLegendKeys = (svg, renames) => {
  * for each Result the legacy normalization applies to, that normalization;
  * for each Result of a Session older than 46, which saved no records of
  * Python's paint, the records of the edits it shows (`recordSavedEditBases`);
- * and for each Result the records of Python's key on the rows a Session
- * renamed without one (`recordSavedLegendKeys`).
+ * for each Result the records of Python's key on the rows a Session
+ * renamed without one (`recordSavedLegendKeys`); and for each Result whose
+ * text shows a color ID while the Session has captioned color rules, the names
+ * of its rule rows (`nameSavedRuleRows`).
  * @param {readonly { content?: unknown }[]} results
  * @param {FeatureCatalogAdmission} catalogAdmission
  * @param {SavedResultEdits | null} edits
@@ -1354,7 +1439,10 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
   const normalizes = (/** @type {{ content?: unknown }} */ result) => Boolean(legacy?.applies(result?.content));
   const legacyNormalizationCount = results.filter(normalizes).length;
   const renames = edits ? savedLegendRenames(edits) : new Map();
-  if (legacyNormalizationCount === 0 && renames.size === 0 && !needsRecords) {
+  const captioned = Boolean(edits?.rules.some((rule) => text(rule.cap)));
+  const namesRuleRows = (/** @type {{ content?: unknown }} */ result) => captioned && SAVED_COLOR_ID.test(String(result?.content ?? ''));
+  const rekeyed = edits?.legendRekeys ?? new Map();
+  if (legacyNormalizationCount === 0 && renames.size === 0 && !needsRecords && rekeyed.size === 0 && !results.some(namesRuleRows)) {
     return createEmptySvgMutationPlan(results.length);
   }
   const savedEdits = /** @type {SavedResultEdits} */ (edits);
@@ -1363,14 +1451,18 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
     legacyNormalizationCount,
     operationsByResult: Object.freeze(results.map((result, resultIndex) => {
       // The records find a row by the key the normalized Legend shows, so the
-      // normalization comes first; the paint records find a renamed row by the
-      // key it shows, so they come before the key records.
+      // normalization comes first, then the re-key of the rows whose stored
+      // edits Load moved; the paint records find a renamed row by the key it
+      // shows, so they come before the key records. The names read Python's
+      // fills and the renamed rows, so they come last.
       const transforms = [
         ...(legacy && normalizes(result) ? [legacy.transform] : []),
+        ...(rekeyed.size > 0 ? [(/** @type {SvgResultRoot} */ svg) => rekeySavedRuleRows(svg, rekeyed)] : []),
         ...(needsRecords
           ? [(/** @type {SvgResultRoot} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
           : []),
-        ...(renames.size > 0 ? [(/** @type {SvgResultRoot} */ svg) => recordSavedLegendKeys(svg, renames)] : [])
+        ...(renames.size > 0 ? [(/** @type {SvgResultRoot} */ svg) => recordSavedLegendKeys(svg, renames)] : []),
+        ...(namesRuleRows(result) ? [(/** @type {SvgResultRoot} */ svg) => nameSavedRuleRows(svg, savedEdits)] : [])
       ];
       return transforms.length > 0
         ? Object.freeze({ ...freezeEmptyOperations(), callerTransforms: Object.freeze(transforms) })
@@ -1413,9 +1505,9 @@ const admitCurrentResult = (
   recordStructuralMetric('applicationSvgParseCount', 1, { phase, resultIndex });
   const index = createLazyMutationIndex(svg, { phase, resultIndex });
   applyFeatureOperations(index, operations);
-  const rowsChanged = applyLegendOperations(index, operations, {
+  const rowsChanged = [applyLegendOperations(index, operations, {
     mayBeAbsent: (caption) => legendRowMayBeAbsent(legendRows, resultIndex, caption)
-  });
+  }), nameLegendRows(svg)].includes(true);
   // Every transform runs; one that returns false changed nothing.
   const transformed = operations.callerTransforms
     .map((transform) => transform(svg, { result, resultIndex }) !== false).includes(true);

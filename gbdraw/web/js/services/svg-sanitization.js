@@ -34,6 +34,7 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-gbdraw-slot-renderer',
     'data-gbdraw-annotation-clipped',
     'data-legend-key',
+    'data-legend-name',
     'data-legend-owner',
     'data-label-key',
     'data-label-feature-id',

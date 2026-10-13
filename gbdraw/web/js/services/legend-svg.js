@@ -1,6 +1,8 @@
 // @ts-check
 import { parseTransform } from './svg-transform.js';
 import { isAutoFeatureUnderlay } from './feature-dom.js';
+import { legendSwatch, sameLegendLine } from './legend-row-names.js';
+/** @import { DrawnLegendName, LegendRowName, LegendSwatchIdentity } from './legend-row-names.js' */
 import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 
 export { parseTransform };
@@ -296,12 +298,86 @@ export const setsFeatureStroke = (override) => {
  * @typedef {object} PythonLegendRow
  * @property {PythonLegendKey} key
  * @property {SwatchColor | null} color Null when the row has no swatch fill.
+ * @property {boolean} [ruleLine] False when Python drew the swatch with another line than a color-rule
+ *   row's (the Result's block stroke): a rule named like the row then draws a row of its own (D-13).
+ *   `pythonLegendRows` gives it.
  */
 
 // The key of a listed Legend row: its key record (`originalCaption`), else
 // its caption (a row saved before U3a has no record).
 /** @param {{ caption?: unknown, originalCaption?: unknown }} entry @returns {PythonLegendKey} */
 export const legendEntryKey = (entry) => /** @type {PythonLegendKey} */ (String(entry.originalCaption || entry.caption || '').trim());
+
+/**
+ * A drawing's Legend records stored under a row's key, in the form Load reads
+ * and a commit writes them. Each is optional.
+ * @typedef {object} LegendKeyedRecords
+ * @property {readonly { caption?: unknown, originalCaption?: unknown }[]} [entries]
+ * @property {readonly { caption?: unknown, originalCaption?: unknown }[]} [deletedEntries]
+ * @property {readonly { caption?: unknown, originalCaption?: unknown }[]} [dormantEntries]
+ * @property {readonly string[]} [originalOrder] The generated inventory.
+ * @property {Readonly<Record<string, unknown>>} [originalColors]
+ * @property {Readonly<Record<string, unknown>>} [colorOverrides]
+ * @property {Readonly<Record<string, unknown>>} [strokeOverrides]
+ * @property {readonly string[]} [addedCaptions]
+ * @property {readonly string[]} [strokeOptionsOpen] The rows whose Stroke options are open.
+ */
+
+// The one move of a Legend row's records from its old key to its new key (F2,
+// OV-660), for the rows a re-key map names: a rule row whose key the
+// allocation changes (a rule commit) or the reading of a saved caption
+// changes (Load). Every collection is moved at once, so a swap of two keys
+// moves both; a record the new key already has stays, and the old one is
+// dropped. Returns new collections: none is written in place (History and the
+// artifact slot hold them).
+/**
+ * @template {LegendKeyedRecords} Records
+ * @param {Records} records
+ * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} rekeyed
+ * @returns {Records}
+ */
+export const rekeyLegendRecords = (records, rekeyed) => {
+  if (rekeyed.size === 0) return records;
+  const lookup = /** @type {ReadonlyMap<string, string>} */ (rekeyed);
+  /** @param {unknown} key */
+  const moved = (key) => lookup.get(String(key ?? '').trim());
+  /** @template {{ caption?: unknown, originalCaption?: unknown }} Entry @param {readonly Entry[]} list @returns {Entry[]} */
+  const entries = (list) => {
+    /** @type {Set<string>} */
+    const held = new Set(list.map((entry) => legendEntryKey(entry)).filter((key) => !lookup.has(key)));
+    return list.flatMap((entry) => {
+      const key = moved(legendEntryKey(entry));
+      if (key && held.has(key)) return [];
+      const caption = moved(entry.caption);
+      const originalCaption = moved(entry.originalCaption);
+      return [caption || originalCaption ? { ...entry, ...(caption ? { caption } : {}), ...(originalCaption ? { originalCaption } : {}) } : entry];
+    });
+  };
+  /** @param {Readonly<Record<string, unknown>>} record @returns {Record<string, unknown>} */
+  const keyed = (record) => {
+    const kept = Object.entries(record).filter(([key]) => !lookup.has(key));
+    const result = Object.fromEntries(kept);
+    Object.entries(record).forEach(([key, value]) => {
+      const to = lookup.get(key);
+      if (to !== undefined && !Object.hasOwn(result, to)) result[to] = value;
+    });
+    return result;
+  };
+  /** @param {readonly string[]} list @returns {string[]} */
+  const keys = (list) => [...new Set(list.map((key) => lookup.get(key) ?? key))];
+  /** @type {LegendKeyedRecords} */
+  const next = { ...records };
+  if (records.entries) next.entries = entries(records.entries);
+  if (records.deletedEntries) next.deletedEntries = entries(records.deletedEntries);
+  if (records.dormantEntries) next.dormantEntries = entries(records.dormantEntries);
+  if (records.originalOrder) next.originalOrder = keys(records.originalOrder);
+  if (records.originalColors) next.originalColors = keyed(records.originalColors);
+  if (records.colorOverrides) next.colorOverrides = keyed(records.colorOverrides);
+  if (records.strokeOverrides) next.strokeOverrides = keyed(records.strokeOverrides);
+  if (records.addedCaptions) next.addedCaptions = keys(records.addedCaptions);
+  if (records.strokeOptionsOpen) next.strokeOptionsOpen = keys(records.strokeOptionsOpen);
+  return /** @type {Records} */ (next);
+};
 
 /** @param {Element} row @returns {PythonLegendRow} */
 export const pythonLegendRow = (row) => {
@@ -320,11 +396,52 @@ export const pythonLegendRows = (svg) => {
   const rows = new Map();
   const drawn = getAllFeatureLegendGroups(svg).flatMap((group) => Array.from(group.querySelectorAll('g[data-legend-key]')));
   const editor = (/** @type {Element} */ row) => row.getAttribute('data-legend-owner') === 'direct-editor';
+  const block = drawnBlockStroke(svg);
+  const ruleLine = { stroke: block?.color, width: block?.width };
   [...drawn.filter((row) => !editor(row)), ...drawn.filter(editor)].forEach((element) => {
     const row = pythonLegendRow(element);
-    if (row.key && !rows.has(row.key)) rows.set(row.key, row);
+    if (!row.key || rows.has(row.key)) return;
+    const swatch = getLegendEntrySwatch(element);
+    rows.set(row.key, {
+      ...row,
+      ruleLine: sameLegendLine({ stroke: pythonDrawnAttribute(swatch, 'stroke'), width: pythonDrawnAttribute(swatch, 'stroke-width') }, ruleLine)
+    });
   });
   return rows;
+};
+
+// The three facts of a Legend row the naming rule reads and writes (D-09,
+// legend-row-names.js), each read from the row at one place. Its name is what
+// the user or Python wrote: the key a rename shows, else `data-legend-name`,
+// which Python and a rule row's addition write where the name is not the key,
+// else the key. Its swatch is what the row shows. Its drawn name is its text,
+// which the executor writes (services/svg-result-ingestion.js).
+/** @param {Element} row @returns {LegendRowName} */
+export const legendRowName = (row) => /** @type {LegendRowName} */ (
+  (row.hasAttribute(resultBaseAttribute('data-legend-key')) ? null : row.getAttribute('data-legend-name'))
+    ?? String(row.getAttribute('data-legend-key') || '')
+);
+/** @param {Element} row @returns {LegendSwatchIdentity} */
+export const legendRowSwatch = (row) => {
+  const stops = Array.from(row.querySelectorAll('stop'));
+  if (stops.length > 1) {
+    return legendSwatch({ type: 'gradient', minColor: stops[0].getAttribute('stop-color'), maxColor: stops[stops.length - 1].getAttribute('stop-color') });
+  }
+  const swatch = getLegendEntrySwatch(row) || row.querySelector('path');
+  return legendSwatch({ fill: swatch?.getAttribute('fill'), stroke: swatch?.getAttribute('stroke'), width: swatch?.getAttribute('stroke-width') });
+};
+/** @param {Element} row @returns {DrawnLegendName} */
+export const drawnLegendRowName = (row) => /** @type {DrawnLegendName} */ (String(row.querySelector('text')?.textContent ?? ''));
+
+// The Legends a Result names its rows in: one, or the horizontal and the
+// vertical copy of a Result that holds both. The rows of one are named
+// together, in document order, as Python names the rows of its Legend table.
+/** @param {{ querySelector: (selector: string) => Element | null } | null | undefined} svg @returns {Element[]} */
+export const namedLegends = (svg) => {
+  const legend = svg?.querySelector('#legend');
+  if (!legend) return [];
+  const copies = [legend.querySelector('#legend_horizontal'), legend.querySelector('#legend_vertical')];
+  return copies[0] && copies[1] ? [copies[0], copies[1]] : [legend];
 };
 
 /**
@@ -384,6 +501,8 @@ export const legendEntryAnchor = (entryGroup) => {
  * A row of a Result's shown feature Legend group, as the Result holds it.
  * @typedef {object} ResultLegendRow
  * @property {ShownLegendKey} shownKey The key the row shows.
+ * @property {LegendRowName} name The row's name (`legendRowName`).
+ * @property {DrawnLegendName} drawnName The name the Legend draws for it.
  * @property {PythonLegendKey | null} recordedKey Python's key that a rename keeps as a record; null without one.
  * @property {boolean} editor A row the Legend editor added.
  * @property {boolean} pythonShown Python drew it shown: a row a rule commit retired is not.
@@ -407,6 +526,8 @@ export const resultLegendRows = (svg) => {
     const recordedKey = row.getAttribute(resultBaseAttribute('data-legend-key'));
     return [{
       shownKey,
+      name: legendRowName(row),
+      drawnName: drawnLegendRowName(row),
       recordedKey: recordedKey === null ? null : /** @type {PythonLegendKey} */ (recordedKey),
       editor: row.getAttribute('data-legend-owner') === 'direct-editor',
       pythonShown: pythonDrawnAttribute(row, 'display') !== 'none',
@@ -422,6 +543,21 @@ export const resultLegendRows = (svg) => {
     return Math.abs(xDelta) >= 1 ? xDelta : a.shownKey.localeCompare(b.shownKey, undefined, { sensitivity: 'base' });
   });
 };
+
+/**
+ * What the editor shows for a Legend row instead of its key: the row's name,
+ * and the name the Legend draws for it (its name while the row is hidden).
+ * @typedef {{ name: LegendRowName, drawnName: DrawnLegendName }} ShownLegendRowNames
+ */
+
+// The names of the rows of a Result's shown feature Legend group, by the key
+// each row shows. The Legend tab, the popups, and the dialogs show a row by
+// its drawn name, never by its key (PD-OI-042 scenario revision 2).
+/** @param {SVGSVGElement | null | undefined} svg @returns {Map<string, ShownLegendRowNames>} */
+export const shownLegendRowNames = (svg) => new Map((resultLegendRows(svg) || []).map((row) => [
+  row.shownKey,
+  { name: row.name, drawnName: row.shown && row.drawnName ? row.drawnName : /** @type {DrawnLegendName} */ (/** @type {string} */ (row.name)) }
+]));
 
 /**
  * @param {Element} entryGroup

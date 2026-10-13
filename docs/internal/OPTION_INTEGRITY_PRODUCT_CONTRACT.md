@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `46`
+- Contract revision: `47`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -38,7 +38,7 @@ Status: active Product authority
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
-  `PD-OI-092`, `PD-OI-093`, and `PD-OI-094`
+  `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, and `PD-OI-095`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -821,6 +821,70 @@ Status: active Product authority
     header line only; the Accepted residual risk below states what is then
     out of sight until the card is opened, the common Depth TSV assignment
     of `PD-OI-025` included.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 47 changes: `PD-OI-042` is replaced for scenario revision `2`
+  (`B / NUMBERED-NAMES`, concern
+  `styles.specific-color-caption-multiplicity`), and `PD-OI-095` is added
+  (concern `legend.row-name-multiplicity`; its receipt names no choice code).
+  They come from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-13` on the user report of the Revision 45 entry and on three
+  findings made with it (OV-583, OV-584, OV-585): one Legend name written
+  with several colors was drawn as `<name> [#<hex>]` rows by the CLI, the
+  Python API, and the Web app; the rule list, the popup, and the downloaded
+  color table held the rewritten captions; and the second track row of one
+  label was named `<label> (2)` by another mechanism. Each quotation below is
+  the part of a reply that carries the answer.
+  - Reply 1, on the reported Legend. This is Reply 1 of the Revision 45
+    entry.
+    「凡例に色のIDがつくのは許されないので直して。Ownership couplingとか境界型付けの問題でもあると思う。」
+  - Reply 2, to the question on one Legend name written with several colors,
+    asked with three outcomes: `A`, one row per color, each drawn with the
+    name as written; `B`, numbered names (`name (1)`, `name (2)`), which the
+    question described as still rewriting the names and the rule captions;
+    `C`, one row with a swatch per color.
+    「1 つの名前に複数の色があるとき(PD-OI-042 改訂 2):色が違う場合はB.色が一緒の場合はマージ。てかそうだったでしょ今まで？前はPharokkaでもできたんだから。」
+  - Reply 3, on the report that two mechanisms make a Legend name unique
+    (numbers and color IDs): 「これはだめだろ。」
+  - Reply 4, to the question whether the first color keeps the name without
+    a number while later colors get `(2)`, `(3)`:
+    「2色目が出るなら全部番号アリがいいのでは？今までそうだっただろ？」
+  - Reply 5, to the question whether the Legend Name Conflict choice
+    **Keep both** starts at `(2)` instead of `(1)`:
+    「何言ってるのかわからないけど、(1), (2), ってなるべきでは？」
+    That choice belongs to `PD-OI-061`, which this revision does not change.
+  - Reply 6, to the question whether track rows with one label, drawn
+    `GC content` and `GC content (2)` since release `0.13.0`, follow the same
+    rule:
+    「色が同じなら凡例は1個のままでいいよね。色が違うならGC content (1) / GC content (2) に揃える」
+  - Reply 7, to the question on the feature popup's **Legend name** field,
+    whose suggestions and the list under it offered the same names with two
+    results (OV-587), asked with two options: remove the field's suggestions
+    (recommended), or make a chosen suggestion join the group.
+    「入力欄の候補と一覧の食い違い(OV-587)：候補を消す(推奨)でいきましょう」
+    The removal is implemented in the same pull request and adds no term to
+    a record.
+  - Reply 8, to the request to confirm three receipt texts (`PD-OI-042`
+    scenario revision `2`; the new concern `legend.row-name-multiplicity`,
+    scenario revision `1`; `PD-OI-061` scenario revision `5`) and two
+    choices: 「選択 1: 保存済みの色 ID の扱い」 with
+    「A（推奨）読み込むときに外す / B そのまま読む」, and 「選択 2: OV-587」 with
+    「A（推奨）入力候補を外す / B 入力候補を選んでも一覧と同じ動作にする」. The request offered
+    the reply form 「文面 1〜3 は承認。選択 1 は A。選択 2 は A。」
+    「すべて推奨通り。」
+  - The two receipts recorded below are the first and the second of those
+    three texts, byte for byte. Option `A` of 選択 1 is in the Accepted
+    residual risk of the `PD-OI-042` receipt (「読み込むときにその ID を外す」).
+    Unlike the description of `B` in the question of Reply 2, the
+    `PD-OI-042` receipt keeps a rule's caption as written
+    (「rule の caption は書かれたとおりに保つ」). The third text is not recorded by this revision: `PD-OI-061` keeps its
+    text and its scenario revision `4`.
+  - Scope: scenario revision `2` of `PD-OI-042` replaces scenario revision
+    `1` (`A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS`) as a whole. The
+    scenario-1 outcome fields, its receipt, and its Acceptance IDs (`CLR-01`
+    to `CLR-05`) are not carried into the record; Git history retains them.
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
@@ -2481,35 +2545,46 @@ Decision date: 2026-10-12
 ### PD-OI-042: Specific-color caption disambiguation
 
 - Concern key: `styles.specific-color-caption-multiplicity`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-042`, scenario revision `1`
+  (`A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS`
-- Normative outcome: 同 caption・異色 rule を受け付け、全色に lowercase normalized hex を付けた caption を canonical rule として採用する（例 Transporter [#112233] / Transporter [#445566]）。同名同色は共有、空 caption は凡例なし。既存 literal caption/legend key に衝突する場合は予約後に決定的な追加 suffix で区別。first/last-wins は廃止。各実際に使用された色を別の solid 凡例行で示す。
-- User access / feedback: import/manual edit の正常完了時に caption 変更を通知。利用者は生成した solid 行を既存 editor から編集できる。
-- Session / regeneration: admitted caption は普通の文字列として保存。Load は preview/draft を保ち自動 Generate しない。過去の同名異色 draft は次の rule edit/Generate の通常 preparation で通知付き正規化。
-- Export / artifact: 新 TSV は区別した canonical caption。SVG/PNG/PDF は各色の solid 行。元ファイルの同名 caption のままの lossless 復元は約束しない。
-- Failure / recovery: 自動区別後すぐ図を使える。必要なら caption を編集して再生成。stale/preparation failure は直前 rules/Result に戻す。
-- Approval receipt: 「すべて推奨案で承認します。」, selecting exactly this
-  complete Choice A outcome, approved by `satoshikawato` on `2026-09-26`.
-- Decision source: The complete outcome and `PRODUCT_DECISION` receipt in
-  [`APPROVED_PRODUCT_DECISIONS.md`](./issue-600-implementation-20260926/APPROVED_PRODUCT_DECISIONS.md),
-  reproduced without inferred rationale, preservation, retirement, or risk
-  terms. This is an inert serialization in the existing static authority;
-  it cannot authorize dependent runtime until merged into its base.
-- Acceptance IDs: `CLR-01`, `CLR-02`, `CLR-03`, `CLR-04`, `CLR-05`; their definitions remain owned by
-  [`MASTER_PLAN.md`](./issue-600-implementation-20260926/MASTER_PLAN.md).
+- Selected outcome: `B / NUMBERED-NAMES`, as the Choice field of the receipt
+  below states it
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-13` quoted verbatim in the
+  Revision 47 entry above. The receipt and JSON below reproduce all nine
+  supplied fields without translation or additional terms. The runtime,
+  tests, and documentation that implement it merge with it (static Product
+  Contract co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `506a9f6df4ebd2536a70714ff666ccf1e1acaffa0eb17ac78b115d2b0766350b`.
+
+```text
+PRODUCT_DECISION
+Concern: styles.specific-color-caption-multiplicity
+Scenario revision: 2
+Choice: B / NUMBERED-NAMES。同じ名前で見本（塗りと線）が同じ行は 1 つの凡例行にまとめる。同じ名前で見本が違う行が 2 つ以上描かれるときは、その全部の名前に、凡例に並ぶ順で (1), (2), … を付ける（例 Packaging (1) / Packaging (2)）。描画が名付けた行（feature type、other …、track）と同じ名前の rule の行にも同じ規則を使う（例 tRNA (1) / tRNA (2)）。番号は凡例に描く名前だけに付け、rule の caption は書かれたとおりに保つ。
+Rationale: 凡例の名前に色の ID を付けない。名前を区別する仕組みは番号付けの 1 つだけにする。利用者が書いた名前を gbdraw が書き換えない。
+Must preserve: feature の色、rule の順序と precedence、同名同色の共有、空 caption は凡例なし、使われていない rule を凡例に出さないこと、使った色をすべて凡例に示すこと、Undo/Redo、Session と Generate での保持、CLI・Python API・Web で同じ規則。
+May retire: 名前に hex suffix を付ける区別（同名異色の caption、描画が名付けた行と同じ名前の rule）。rule の caption の書き換えとその通知（Updated N specific-color caption(s) to distinguish their colors.）。区別済みの caption を色表の TSV に書き出すこと（書かれたとおりの caption を書き出す）。
+Accepted residual risk: 番号は凡例に並ぶ順なので、行が増える・減る・並び替わると番号が変わる。1 行だけになった名前は番号なしに戻る。保存済みの Session と色表で、caption の末尾がその rule 自身の色の ID のとき（例: 色が #ffe700 の rule の Packaging [#ffe700]）は、読み込むときにその ID を外す。利用者が自分でその形の名前を書いていた場合も外れる。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
 
 ```json
 {
   "concern": "styles.specific-color-caption-multiplicity",
-  "scenarioRevision": 1,
-  "choice": "A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS",
-  "rationale": "近い色を使う rule を拒否せず、実際の各色を凡例に表示する。今回は既存 solid 行を再利用する自動 caption 区別を採用し、複数 swatch 用の renderer・editor・保存形式を追加せずに fresh/live/native の意味を揃える。",
-  "mustPreserve": "feature 色、rule 順序/precedence、同名同色共有、single-color caption、unused rule の凡例除外、既存 solid editor・保存 preview・failure/History 契約。 rule order/regex/precedence/visibility を変えない。使用色の忠実な図示、stable identity、file/manual provenance、Result rollback、既存 SVG sanitizer を維持。",
-  "mayRetire": "caption 衝突による Web 拒否、過去の last-wins/上書き。退役は specific-color rule の同名異色 scope に限定。",
-  "acceptedResidualRisk": "凡例が長くなり元の同名文字列は変わる。multi-swatch grouping を望む利用者には複数行になる。hex suffix、既存 edit、layout 再計測で扱いを明確にする。",
+  "scenarioRevision": 2,
+  "choice": "B / NUMBERED-NAMES。同じ名前で見本（塗りと線）が同じ行は 1 つの凡例行にまとめる。同じ名前で見本が違う行が 2 つ以上描かれるときは、その全部の名前に、凡例に並ぶ順で (1), (2), … を付ける（例 Packaging (1) / Packaging (2)）。描画が名付けた行（feature type、other …、track）と同じ名前の rule の行にも同じ規則を使う（例 tRNA (1) / tRNA (2)）。番号は凡例に描く名前だけに付け、rule の caption は書かれたとおりに保つ。",
+  "rationale": "凡例の名前に色の ID を付けない。名前を区別する仕組みは番号付けの 1 つだけにする。利用者が書いた名前を gbdraw が書き換えない。",
+  "mustPreserve": "feature の色、rule の順序と precedence、同名同色の共有、空 caption は凡例なし、使われていない rule を凡例に出さないこと、使った色をすべて凡例に示すこと、Undo/Redo、Session と Generate での保持、CLI・Python API・Web で同じ規則。",
+  "mayRetire": "名前に hex suffix を付ける区別（同名異色の caption、描画が名付けた行と同じ名前の rule）。rule の caption の書き換えとその通知（Updated N specific-color caption(s) to distinguish their colors.）。区別済みの caption を色表の TSV に書き出すこと（書かれたとおりの caption を書き出す）。",
+  "acceptedResidualRisk": "番号は凡例に並ぶ順なので、行が増える・減る・並び替わると番号が変わる。1 行だけになった名前は番号なしに戻る。保存済みの Session と色表で、caption の末尾がその rule 自身の色の ID のとき（例: 色が #ffe700 の rule の Packaging [#ffe700]）は、読み込むときにその ID を外す。利用者が自分でその形の名前を書いていた場合も外れる。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-26"
+  "decisionDate": "2026-10-13"
 }
 ```
 
@@ -5114,6 +5189,51 @@ Decision date: 2026-10-13
   "mustPreserve": "〔畳む・開く〕各 File カードの見出しの行を押すとカードを 1 行に畳み、もう一度押すと開く。上下の移動ボタンを押したときは畳まれない。畳んだ行には File の番号、ファイル名、上下の移動ボタンが出る。〔最初の状態〕Session または example を読み込んだとき、ファイルがそろっているカードは畳んだ状態で出る。ファイルのないカードと、GFF3 + FASTA の片方だけのカードは開いている。自分で追加したカードは開いている。ファイルを選んでもカードは畳まれない。〔畳んでも変わらないもの〕カードの中身（ファイル、名前、Depth TSV の割り当て、Record options、レコードの一覧）と設定の値。開いたカードの中身は今と同じ（入力欄からはみ出す長いファイル名だけは、両端で切れる代わりに末尾を「…」で省略する）。畳んだ状態は Session に保存せず、Undo の履歴と図にも入らない。カードを上下に移動すると、畳んだ状態も一緒に動く。〔問題の表示〕畳んだカードに直すべき問題（読み取れなかったファイル、足りないファイル、Gencode required）があるときは、畳んだ行にも出る。設定へ案内する操作（レコードのポップアップの Show in settings）は、行き先のカードを開く。",
   "mayRetire": "none",
   "acceptedResidualRisk": "畳んだカードでは、名前、Depth TSV の割り当て（付いているかどうかを含む）、Record options、レコードの一覧は、開くまで見えない（1 回押す手間が増える）。Session や example を読み込んだ直後はカードが畳まれている。一番狭い設定ペイン（240 px）では、畳んだ行のファイル名は数文字まで省略される。File カードが写っている Gallery と docs の capture は、撮り直すまで見出しの行に開閉の印がない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
+}
+```
+
+### PD-OI-095: One naming rule for Legend rows that share a name
+
+- Concern key: `legend.row-name-multiplicity`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: the Choice field of the receipt below, which names no
+  choice code
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-13` quoted verbatim in the
+  Revision 47 entry above. The receipt and JSON below reproduce all nine
+  supplied fields without translation or additional terms. This record does
+  not supersede another decision. The runtime, tests, and documentation that
+  implement it merge with it (static Product Contract co-change); this record
+  supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `52dc43606bf87dfd8b1dd53395522fb9d52f43e7b7ac36cd781a3efb8e0db9bc`.
+
+```text
+PRODUCT_DECISION
+Concern: legend.row-name-multiplicity
+Scenario revision: 1
+Choice: 凡例のすべての行に 1 つの規則を使う。同じ名前で見本（塗りと線）が同じ行は 1 つにまとめる。同じ名前で見本が違う行が 2 つ以上描かれるときは、その全部の名前に、凡例に並ぶ順で (1), (2), … を付ける。1 回だけ使う名前には番号を付けない。track の行（GC content、GC skew、Depth、Conservation）と region annotation の行にも使う（例: 同じ label の GC content が 2 つあり、色が同じなら GC content の 1 行、色が違えば GC content (1) / GC content (2)）。
+Rationale: 凡例の名前を区別する仕組みを番号付けの 1 つに揃える。同じ見本の行を 2 つに分けない。
+Must preserve: track と annotation の legend_label、slot の順、見本の色と線、保存済みの Session（0.13.0 を含む）が読めて、凡例の行に付けた編集が同じ track の行に残ること。
+May retire: 同じ label の 2 つ目以降の行だけに (2), (3) を付け、1 つ目を番号なしにする名前の付け方。色が同じでも行を分ける動作。
+Accepted residual risk: 0.13.0 が GC content / GC content (2) と描いた図は、色が違えば GC content (1) / GC content (2) に、色が同じなら GC content の 1 行に変わる。1 行にまとめられた 2 つ目の行に付けていた編集は使われなくなる。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "legend.row-name-multiplicity",
+  "scenarioRevision": 1,
+  "choice": "凡例のすべての行に 1 つの規則を使う。同じ名前で見本（塗りと線）が同じ行は 1 つにまとめる。同じ名前で見本が違う行が 2 つ以上描かれるときは、その全部の名前に、凡例に並ぶ順で (1), (2), … を付ける。1 回だけ使う名前には番号を付けない。track の行（GC content、GC skew、Depth、Conservation）と region annotation の行にも使う（例: 同じ label の GC content が 2 つあり、色が同じなら GC content の 1 行、色が違えば GC content (1) / GC content (2)）。",
+  "rationale": "凡例の名前を区別する仕組みを番号付けの 1 つに揃える。同じ見本の行を 2 つに分けない。",
+  "mustPreserve": "track と annotation の legend_label、slot の順、見本の色と線、保存済みの Session（0.13.0 を含む）が読めて、凡例の行に付けた編集が同じ track の行に残ること。",
+  "mayRetire": "同じ label の 2 つ目以降の行だけに (2), (3) を付け、1 つ目を番号なしにする名前の付け方。色が同じでも行を分ける動作。",
+  "acceptedResidualRisk": "0.13.0 が GC content / GC content (2) と描いた図は、色が違えば GC content (1) / GC content (2) に、色が同じなら GC content の 1 行に変わる。1 行にまとめられた 2 つ目の行に付けていた編集は使われなくなる。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-13"
 }

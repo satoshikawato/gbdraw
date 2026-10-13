@@ -37,7 +37,7 @@ import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup } from './preview-item-popup.js';
-import { colorRuleLegendGroups, legendRowRules } from '../services/specific-color-rules.js';
+import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules } from '../services/specific-color-rules.js';
 import { drawnTracks, loadedTracks } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
@@ -1728,7 +1728,6 @@ export const createAppSetup = () => {
   setHeldPreviewViewportReader(heldPreviewViewport);
   const { startResizing } = createSidebarResize(state);
 
-  const specificRuleNotice = ref('');
   const { ruleMatchingPending } = state;
   // An edit's rule preparation: Save and Load wait for it, not for a popup's (OV-377).
   const ruleMatchingBlocking = ref(false);
@@ -1740,7 +1739,6 @@ export const createAppSetup = () => {
     state,
     pending: ruleMatchingPending,
     blocking: ruleMatchingBlocking,
-    notify: notice => { specificRuleNotice.value = notice; },
     evaluate: evaluateRules,
     visibilityRules: () => requestFeatureVisibilityRules(state.activeDrawing().featureVisibilityManualRules)
   });
@@ -1758,6 +1756,7 @@ export const createAppSetup = () => {
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
     readShownLegendColor: (entry) => legendEntryColor(entry),
+    legendRowNames: shallowRef(new Map()),
     showLegendStructure: () => showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendStructure })
   });
   // R13: the palette watcher reacts through the root's palette and rules
@@ -1865,6 +1864,9 @@ export const createAppSetup = () => {
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true }),
     readUserDefaultColor: resultsManager.readUserDefaultColor,
     setDefaultColor: resultsManager.setDefaultColor,
+    legendRowIsNamed: legendActions.legendRowIsNamed,
+    legendRowName: legendActions.legendRowName,
+    shownLegendName: legendActions.shownLegendName,
     askChoice,
     showNotice,
     revealSetting: settingsPaneActions.revealSetting
@@ -3506,7 +3508,6 @@ export const createAppSetup = () => {
         }
         featureActions.clearSpecificRulePatternDrafts();
         annotationImportNotice.value = '';
-        specificRuleNotice.value = '';
         recordSessionLifecycleEvent('history-baseline-end');
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
         closeLegendStrokeOptions();
@@ -3893,7 +3894,11 @@ export const createAppSetup = () => {
       domains,
       // The Legend is laid out without its own commit: the display commits
       // the Result once (S4).
-      afterApply: (_svg, reconciled) => { if (reconciled) legendActions.onLegendGeometryChanged({ commit: false }); }
+      afterApply: (_svg, reconciled) => {
+        if (!reconciled) return;
+        legendActions.readLegendRowNames();
+        legendActions.onLegendGeometryChanged({ commit: false });
+      }
     });
   };
   // The paint domains each edit kind shows, live and on Undo and Redo.
@@ -5509,11 +5514,17 @@ export const createAppSetup = () => {
   const downloadPDF = () => runExportAction('downloadPDF', 'export-pdf');
 
   // The list under the popup's Legend name: the color-rule Legend groups of
-  // the clicked feature's type, by name (PD-OI-061 revision 4).
+  // the clicked feature's type, by name (PD-OI-061 revision 4). Each is shown
+  // as the Legend shows its row: by the row's drawn name, and a group that
+  // draws no row by its name as written, never by a key.
   const popupLegendGroups = computed(() => {
     const type = clickedFeature.value?.feat?.type;
-    return type === undefined ? [] : colorRuleLegendGroups(state.activeDrawing().manualSpecificRules, String(type))
-      .sort((left, right) => left.name.localeCompare(right.name));
+    if (type === undefined) return [];
+    const drawing = state.activeDrawing();
+    const rowKeyOf = groupLegendRowKeys(displayedLegendRowContext(state, drawing));
+    return colorRuleLegendGroups(drawing.manualSpecificRules, String(type))
+      .map((group) => ({ group, shownName: legendActions.shownLegendName(rowKeyOf(group)) }))
+      .sort((left, right) => left.group.name.localeCompare(right.group.name) || left.shownName.localeCompare(right.shownName));
   });
 
   const featureVisibilityFeatureSuggestions = computed(() => {
@@ -5709,6 +5720,7 @@ export const createAppSetup = () => {
     computed,
     revealSetting: settingsPaneActions.revealSetting,
     readLegendEntryColor: legendEntryColor,
+    readShownLegendName: legendActions.shownLegendName,
     readLegendRowRules: (entry) => legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, state.activeDrawing())),
     countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
@@ -6559,7 +6571,6 @@ export const createAppSetup = () => {
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
     annotationImportNotice,
-    specificRuleNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
@@ -7178,6 +7189,7 @@ export const createAppSetup = () => {
     // A Legend row delete is one History step of the intent, which Undo and
     // Redo show through the port and lay out as Python does, canvas included
     // (OV-125). The deleted row's stroke leaves its features (OV-293).
+    shownLegendName: legendActions.shownLegendName,
     deleteLegendEntry: editEditorIntent('Delete legend item', deleteLegendEntry, { domains: [...LEGEND_STRUCTURE_DOMAINS, ...STROKE_DOMAINS] }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.

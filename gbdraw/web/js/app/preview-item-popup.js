@@ -65,6 +65,8 @@ import {
  * @property {RevealSetting} revealSetting
  * @property {(entry: LegendEntry) => string} readLegendEntryColor
  *   The color the Legend panel shows for a row.
+ * @property {(caption: string) => string} [readShownLegendName]
+ *   The name the Legend draws for the row that shows the key `caption` (never the key).
  * @property {(entry: LegendEntry) => readonly ColorRuleLike[]} readLegendRowRules
  *   The color rules that draw a row of the displayed Result.
  * @property {(caption: string) => number} countLegendCaptionFeatures
@@ -128,11 +130,10 @@ const colorRuleText = (rule) => {
 
 /**
  * The legend-entry popup view.
- * @param {{ entry: LegendEntry, index: number, color: string, rules: readonly ColorRuleLike[],
- *   featureCount: number | null, featureTypes: ReadonlySet<string> }} input
+ * @param {{ entry: LegendEntry, name: string, index: number, color: string, rules: readonly ColorRuleLike[],
+ *   featureCount: number | null, featureTypes: ReadonlySet<string> }} input `name`: the name the Legend draws.
  */
-const buildLegendEntryView = ({ entry, index, color, rules, featureCount, featureTypes }) => {
-  const caption = text(entry.caption);
+const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, featureTypes }) => {
   const key = text(legendEntryKey(entry));
   const ruleLines = rules.map(colorRuleText);
   const colorSource = ruleLines.length
@@ -143,11 +144,11 @@ const buildLegendEntryView = ({ entry, index, color, rules, featureCount, featur
   return {
     kind: /** @type {const} */ ('legend-entry'),
     identity: `legend:${key}`,
-    dialogLabel: `Legend item: ${caption}`,
+    dialogLabel: `Legend item: ${name}`,
     index,
-    caption,
+    name,
     color,
-    title: caption,
+    title: name,
     subtitle: featureCount == null
       ? 'Counting features…'
       : `${NUMBER.format(featureCount)} feature${featureCount === 1 ? '' : 's'}`,
@@ -268,7 +269,7 @@ const CIRCULAR_EDIT_HINTS = {
 
 /** @param {PreviewItemPopupOptions} options */
 export const createPreviewItemPopup = ({
-  state, computed, revealSetting, readLegendEntryColor, readLegendRowRules, countLegendCaptionFeatures,
+  state, computed, revealSetting, readLegendEntryColor, readShownLegendName = (caption) => caption, readLegendRowRules, countLegendCaptionFeatures,
   getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
   legendRenameSettled
 }) => {
@@ -292,7 +293,9 @@ export const createPreviewItemPopup = ({
       // The rule matches are still preparing: the popup shows the color alone.
     }
     const featureTypes = new Set(state.extractedFeatures.value.map((feature) => text(feature?.type)));
-    return buildLegendEntryView({ entry, index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes });
+    return buildLegendEntryView({
+      entry, name: readShownLegendName(text(entry.caption)), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes
+    });
   };
 
   /** @param {LinearSeq | null} sequence @returns {RecordDraft | null} */

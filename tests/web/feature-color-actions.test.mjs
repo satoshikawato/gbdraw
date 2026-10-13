@@ -167,7 +167,7 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [],
       const candidate = await preparation.prepareCandidate(rules);
       if (!candidate) return false;
       const drawn = new Set(extractedFeatures.value.map(feature => firstMatchingRule(feature, candidate.rules)));
-      const { intents } = buildLegendIntents(candidate.rules.filter(rule => drawn.has(rule)));
+      const { intents } = buildLegendIntents(candidate.rules, [], rule => drawn.has(rule));
       manualSpecificRules.splice(0,manualSpecificRules.length,...candidate.rules);
       legendEntries.value = intents.map(entry=>({...entry}));
       for (const feature of extractedFeatures.value) {
@@ -196,7 +196,9 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [],
     findMatchingRegexRule: () => matchingRegexRule,
     getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
     effectiveLegendCaptions: () => () => 'Core',
-    getLegendRowRules: (caption) => legendRowRules(caption, { rules: manualSpecificRules, pythonRows: new Map() }),
+    // The port's answer for this table, whose row `Core` holds every rule captioned `Core` (the key
+    // allocation, which gives one caption in several colors a row per color, has its own fixture).
+    getLegendRowRules: (caption) => manualSpecificRules.filter((rule) => rule.cap === caption),
     getIndividualFeatureLabel: (feature) => feature.product || '',
     // FE-09 (D-14): "This feature only" always writes the stable hash.
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureColorRuleHash(feature) }),
@@ -882,7 +884,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       querySelectorAll: () => []
     };
   };
-  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null }) => {
+  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null, legendRowIsNamed }) => {
     // Each derivation of the Legend row colors reads the displayed Result once.
     const derivations = { count: 0 };
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
@@ -897,7 +899,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const originalOrder = ref([...order]);
     const featureList = ref(features);
     const renameState = { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
-    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [],
+    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], legendRowIsNamed,
       state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
@@ -931,6 +933,24 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     });
     return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides, deleted, derivations };
   };
+
+  // A row's name field shows the name the Legend draws (`Shared (1)`), not the
+  // row's key: typing that, or the row's own name, is no rename (PD-OI-042
+  // scenario revision 2); another name renames the row.
+  const sharedRows = {
+    entries: [{ caption: 'Shared [#112233]', color: '#112233' }, { caption: 'Shared [#445566]', color: '#445566' }],
+    order: ['Shared [#112233]', 'Shared [#445566]'],
+    legendRowIsNamed: (caption, typed) => typed === caption || (caption === 'Shared [#112233]' && ['Shared', 'Shared (1)'].includes(typed))
+  };
+  for (const typed of ['Shared (1)', 'Shared', 'Shared [#112233]']) {
+    const own = build(sharedRows);
+    await own.renameActions.renameLegendEntry(0, typed);
+    assert.equal(own.stateLegendEntries.value[0].caption, 'Shared [#112233]', `"${typed}" is the row itself`);
+    assert.notEqual(own.legendRenameDialog.show, true, `"${typed}" asks nothing`);
+  }
+  const otherName = build(sharedRows);
+  await otherName.renameActions.renameLegendEntry(0, 'Packaging');
+  assert.equal(otherName.stateLegendEntries.value[0].caption, 'Packaging');
 
   // PV-02: a renamed renderer-generated row keeps its generated identity, so
   // Generate replays the rename.
@@ -1194,6 +1214,19 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const twinPick = ruleRows({ rules: twins });
   await twinPick.renameActions.joinLegendGroup(colorRuleLegendGroups(twins, 'tRNA')[1]);
   assert.deepEqual(committedFor(twinPick, 't1'), [['t1', 'Twin', '#222222']]);
+  // A typed name that two groups carry is the group in the renamed row's
+  // color (one name and one color share a Legend row), not the first group of
+  // the name: nothing to ask. In a third color it asks, with the first group.
+  const twinTyped = ruleRows({
+    rules: twins, entries: [{ caption: 'tRNA', color: '#222222', featureIds: ['t1'] }], order: ['tRNA'], features: [t1]
+  });
+  await twinTyped.renameActions.renameLegendEntry(0, 'Twin');
+  assert.notEqual(twinTyped.legendRenameDialog.show, true, 'the typed name and the row\'s color are a group\'s: nothing to ask');
+  assert.deepEqual(committedFor(twinTyped, 't1'), [['t1', 'Twin', '#222222']]);
+  const twinAsked = ruleRows({ rules: twins });
+  await twinAsked.renameActions.renameLegendEntry(0, 'Twin');
+  assert.deepEqual([twinAsked.legendRenameDialog.show, twinAsked.legendRenameDialog.targetColor, twinAsked.legendRenameDialog.targetRuleOnly],
+    [true, '#111111', true], 'in another color the first group of the name is the target');
   // Other features share the feature's row: the scope question stays, and
   // neither answer is followed by the conflict dialog.
   for (const [scope, ids] of [['single', ['t1']], ['group', ['t1', 't3']]]) {
@@ -1240,6 +1273,15 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.deepEqual([typed.legendRenameDialog.show, typed.legendRenameDialog.mergeAvailable], [true, false],
       `a typed rename onto ${name} offers no Merge`);
   }
+  // D-11 (OV-587): the two results above are told apart by where the name
+  // comes from, so the Legend name field suggests no group: a group's name is
+  // a typed rename only when the user types it, and the list under the field
+  // is the only place that offers a group.
+  const template = await readFile(join(repoRoot, 'gbdraw', 'web', 'index.html'), 'utf8');
+  const nameField = template.match(/<input\b[^>]*aria-label="Feature legend name"[^>]*>/)?.[0] || '';
+  assert.match(nameField, /@change="handleLegendNameCommit"/, 'the popup has its Legend name field');
+  assert.doesNotMatch(nameField, /\blist=/, 'the Legend name field suggests no group');
+  assert.doesNotMatch(template, /<datalist\b[^>]*legend-name/);
   const pickedDeleted = ruleRows({
     entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }],
     deleted: [{ caption: 'Special', originalCaption: 'Special', color: '#ff0000', featureIds: ['t2'] }]

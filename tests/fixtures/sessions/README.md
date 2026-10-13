@@ -199,3 +199,16 @@ request-only Session 42 and 44 files, and for inferring the index (OV-269). The 
 Session 40+ Result without composition metadata, which Load gives the legacy
 composition (OV-273); as a CLI Session it holds no manual positions (no
 `ui` offsets). Commands, inputs, and hashes are in each `.provenance.json`.
+
+`rule-captions-with-color-id.v46.gbdraw-session.json.gz` and
+`rule-captions-with-color-id.specific-colors.tsv` are the Session and the
+downloaded color-table TSV that the Web app of first-parent `main` commit
+`9839de8e` wrote for one caption in two colors (see their `.provenance.json`),
+bytes unchanged. That build saved the captions as `Complex IV [#ffe700]` and
+`Complex IV [#1f77b4]`, and the Session holds a Legend stroke stored under the
+first text. They are the positive fixtures of the reading that drops a
+caption's own color ID (PD-OI-042 scenario revision 2):
+`tests/test_specific_color_captions.py` reads both, and
+`feature-identity-overrides.playwright.spec.js` loads the Session. The
+Session's decompressed SHA-256 is
+`0e986cee60a78fab2dffa49b9ea0eebcff34039be512ec26aa5d2397a658ffab`.

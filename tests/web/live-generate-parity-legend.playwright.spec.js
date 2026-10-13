@@ -4,12 +4,14 @@
 // draws (OV-63, OV-80), and Legend renames (OV-62). The matrix of edit kinds is
 // in live-generate-parity.playwright.spec.js.
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { execFileSync } = require('node:child_process');
+const { readFileSync, writeFileSync } = require('node:fs');
+const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const {
   diffSemanticSnapshots, expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult
 } = require('./helpers/live-generate-parity.cjs');
-const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
+const { loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
 const {
   SINGLE_FIXTURE, open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history,
@@ -1320,4 +1322,378 @@ test('OV-293: a batch Result displayed after a stroked Legend row is deleted sho
   await showResult(page, 1);
   expect(rowStrokedFeatures(await semanticSnapshot(page)), 'Result 2 shows the delete').toEqual([]);
   await expectLiveEqualsGenerate(page, { label: 'a batch Result displayed after the delete of a stroked row' });
+});
+
+// One naming rule on every surface (PD-OI-042 scenario revision 2, PD-OI-095).
+// After the Legend operations of a pass the executor writes every shown row's
+// text from the Web mirror of the rule (services/legend-row-names.js over the
+// names and swatches the rows show), also on rows no operation touched. So on a
+// Result as Python drew it the mirror must answer what Python wrote: the same
+// texts, in the order the Legend draws its rows (the solid rows, then the
+// gradient rows). Each figure is drawn here by the repository's Python and read
+// in a browser DOM the way the executor reads a Result.
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const FORCED_TO_LOCTEST_BLAST = [['FORCEDLBL', 'LOCTEST', '85.0', '300', '0', '0', '101', '400', '301', '600', '1e-50', '200']];
+const RING_BLAST = [['RING', 'FORCEDLBL', '85.0', '300', '0', '0', '1', '300', '101', '400', '1e-50', '200']];
+const REGION_COLUMNS = ['set_id', 'id', 'mark', 'record', 'start', 'end', 'label', 'legend_label', 'fill', 'hatch_angle', 'hatch_spacing', 'hatch_color'];
+const region = (id, start, legendLabel, fill, hatch = ['', '', '']) => (
+  ['regions', id, 'band', 'FORCEDLBL', String(start), String(start + 500), id, legendLabel, fill, ...hatch]
+);
+const LINEAR_PAIR = [SINGLE_FIXTURE, 'tests/fixtures/feature_location_search.gb'];
+// `rows`: each row Python drew, in document order, as [key, data-legend-name (null: the key is the name), text].
+const PYTHON_NAMED_RESULTS = [{
+  name: 'a hatch row and a plain row of one name',
+  mode: 'circular',
+  inputs: [SINGLE_FIXTURE],
+  files: { 'regions.tsv': [REGION_COLUMNS, region('a', 100, 'Island', '#88aaff', ['45', '4', '#202020']), region('b', 1000, 'Island', '#88aaff'), region('c', 2000, 'Plain', '#ffaa88')] },
+  args: ['--annotation_table', 'regions.tsv'],
+  rows: [
+    ['CDS', null, 'CDS'], ['repeat_region', null, 'repeat_region'],
+    ['GC content', null, 'GC content'], ['GC skew (+)', null, 'GC skew (+)'], ['GC skew (-)', null, 'GC skew (-)'],
+    ['Island', null, 'Island (1)'], ['Island (2)', 'Island', 'Island (2)'], ['Plain', null, 'Plain']
+  ]
+}, {
+  name: 'a gradient row in the two copies of a Linear Legend',
+  mode: 'linear',
+  inputs: LINEAR_PAIR,
+  files: { 'pair.blast': FORCED_TO_LOCTEST_BLAST },
+  args: ['-b', 'pair.blast'],
+  rows: [['CDS', null, 'CDS'], ['repeat_region', null, 'repeat_region'], ['tRNA', null, 'tRNA'], ['Pairwise match identity', null, 'Pairwise match identity']]
+}, {
+  name: 'a solid row and a gradient row of one name (Linear, a region annotation)',
+  mode: 'linear',
+  inputs: LINEAR_PAIR,
+  files: { 'pair.blast': FORCED_TO_LOCTEST_BLAST, 'regions.tsv': [REGION_COLUMNS, region('a', 100, 'Pairwise match identity', '#88aaff')] },
+  args: ['-b', 'pair.blast', '--annotation_table', 'regions.tsv'],
+  // The table holds the gradient row first; the Legend draws it last.
+  rows: [
+    ['CDS', null, 'CDS'], ['repeat_region', null, 'repeat_region'], ['tRNA', null, 'tRNA'],
+    ['Pairwise match identity (2)', 'Pairwise match identity', 'Pairwise match identity (1)'],
+    ['Pairwise match identity', null, 'Pairwise match identity (2)']
+  ]
+}, {
+  name: 'a solid row and a gradient row of one name (Circular, a color rule)',
+  mode: 'circular',
+  inputs: [SINGLE_FIXTURE],
+  files: { 'ring.blast': RING_BLAST, 'rules.tsv': [['CDS', 'locus_tag', 'FL1', '#ff0000', 'Conservation identity']] },
+  args: ['--conservation_blast', 'ring.blast', '-t', 'rules.tsv'],
+  rows: [
+    ['Conservation identity', null, 'Conservation identity (1)'], ['other proteins', null, 'other proteins'], ['repeat_region', null, 'repeat_region'],
+    ['GC content', null, 'GC content'], ['GC skew (+)', null, 'GC skew (+)'], ['GC skew (-)', null, 'GC skew (-)'],
+    ['Conservation identity (2)', 'Conservation identity', 'Conservation identity (2)']
+  ]
+}, {
+  name: 'a caption in two colors in the two copies of a Linear Legend',
+  mode: 'linear',
+  inputs: LINEAR_PAIR,
+  files: {
+    'pair.blast': FORCED_TO_LOCTEST_BLAST,
+    'rules.tsv': [['CDS', 'locus_tag', 'FL1', '#ff0000', 'Group'], ['CDS', 'locus_tag', 'LOC_0001', '#00ff00', 'Group']]
+  },
+  args: ['-b', 'pair.blast', '-t', 'rules.tsv'],
+  rows: [
+    ['Group [#ff0000]', 'Group', 'Group (1)'], ['Group [#00ff00]', 'Group', 'Group (2)'], ['other proteins', null, 'other proteins'],
+    ['repeat_region', null, 'repeat_region'], ['tRNA', null, 'tRNA'], ['Pairwise match identity', null, 'Pairwise match identity']
+  ]
+}, {
+  name: 'a caption in two colors and a rule named like a feature type row',
+  mode: 'circular',
+  inputs: ['tests/fixtures/feature_location_search.gb'],
+  files: { 'rules.tsv': [
+    ['CDS', 'locus_tag', 'LOC_0001', '#ff0000', 'Group'], ['CDS', 'locus_tag', 'LOC_0002', '#00ff00', 'Group'],
+    ['CDS', 'locus_tag', 'LOC_0003', '#0000ff', 'tRNA']
+  ] },
+  args: ['-t', 'rules.tsv'],
+  rows: [
+    ['Group [#ff0000]', 'Group', 'Group (1)'], ['Group [#00ff00]', 'Group', 'Group (2)'],
+    ['tRNA [#0000ff]', 'tRNA', 'tRNA (1)'], ['tRNA', null, 'tRNA (2)'],
+    ['GC content', null, 'GC content'], ['GC skew (+)', null, 'GC skew (+)'], ['GC skew (-)', null, 'GC skew (-)']
+  ]
+}, {
+  name: 'tracks of one label in one color and in two, and a track named like a feature type row',
+  mode: 'circular',
+  inputs: [SINGLE_FIXTURE],
+  args: [
+    'features:features', 'gc_content:dinucleotide_content', 'gc_content_2:dinucleotide_content', 'gc_skew:dinucleotide_skew',
+    'gc_skew_2:dinucleotide_skew@positive_color=#00ff00', 'cds_named:dinucleotide_skew@legend_label=CDS,positive_color=#123456,negative_color=#123456'
+  ].flatMap((slot) => ['--circular_track_slot', slot]),
+  rows: [
+    ['CDS', null, 'CDS (1)'], ['repeat_region', null, 'repeat_region'], ['GC content', null, 'GC content'],
+    ['GC skew (+)', null, 'GC skew (+) (1)'], ['GC skew (-)', null, 'GC skew (-)'],
+    ['GC skew (+) (2)', 'GC skew (+)', 'GC skew (+) (2)'], ['CDS (2)', 'CDS', 'CDS (2)']
+  ]
+}];
+
+const drawWithPython = (testInfo, { mode, inputs, files = {}, args = [] }) => {
+  Object.entries(files).forEach(([name, rows]) => {
+    writeFileSync(testInfo.outputPath(name), `${rows.map((row) => row.join('\t')).join('\n')}\n`);
+  });
+  execFileSync(process.env.PYTHON || 'python', [
+    '-m', 'gbdraw.cli', mode, '--gbk', ...inputs.map((input) => path.resolve(REPO_ROOT, input)),
+    ...args.map((arg) => (arg in files ? testInfo.outputPath(arg) : arg)), '-o', testInfo.outputPath('figure'), '-f', 'svg'
+  ], { cwd: REPO_ROOT, stdio: 'pipe' });
+  return readFileSync(testInfo.outputPath('figure.svg'), 'utf8');
+};
+
+// A document of the app's origin with its sanitizer and without the app: the
+// executor is a module of DOM functions.
+const EXECUTOR_PAGE = '/gbdraw/web/legend-names-executor.html';
+const openExecutorPage = async (page) => {
+  await page.route(`**${EXECUTOR_PAGE}`, (route) => route.fulfill({
+    contentType: 'text/html', body: '<!doctype html><script src="/gbdraw/web/vendor/dompurify/purify.min.js"></script>'
+  }));
+  await page.goto(EXECUTOR_PAGE);
+};
+
+// The rows of each Legend of a Result (a Linear Result holds a horizontal and
+// a vertical copy) as Python wrote them, as the admitted Result holds them,
+// and after the executor's reconcile without an operation.
+const namedByExecutor = (page, content) => page.evaluate(async (svgText) => {
+  const { createEmptySvgMutationPlan, reconcileMountedResult } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
+  const { sanitizeSvgContent } = await import('/gbdraw/web/js/services/svg-sanitization.js');
+  const parse = (text) => new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+  const legends = (svg) => {
+    const copies = Array.from(svg.querySelectorAll('#legend_horizontal, #legend_vertical'));
+    return (copies.length ? copies : [svg.querySelector('#legend')]).map((legend) => (
+      Array.from(legend.querySelectorAll('g[data-legend-key]')).map((row) => [
+        row.getAttribute('data-legend-key'), row.getAttribute('data-legend-name'), row.querySelector('text').textContent
+      ])
+    ));
+  };
+  const result = parse(sanitizeSvgContent(svgText));
+  const admitted = legends(result);
+  const outcome = reconcileMountedResult(result, createEmptySvgMutationPlan(1).operationsByResult[0]);
+  return { python: legends(parse(svgText)), admitted, outcome, named: legends(result) };
+}, content);
+
+for (const figure of PYTHON_NAMED_RESULTS) {
+  test(`the naming pass keeps the names Python drew: ${figure.name} (${figure.mode})`, async ({ page }, testInfo) => {
+    const content = drawWithPython(testInfo, figure);
+    await openExecutorPage(page);
+    const { python, admitted, outcome, named } = await namedByExecutor(page, content);
+    expect(python, 'what Python drew').toEqual(Array(figure.mode === 'linear' ? 2 : 1).fill(figure.rows));
+    expect(admitted, 'the sanitized Result keeps each row\'s key, name, and text').toEqual(python);
+    expect(named, 'the naming pass rewrites no row').toEqual(python);
+    expect(outcome).toEqual({ changed: false, legendChanged: false });
+    expect(python.flat().filter(([, , text]) => text.includes(' [#')), 'no drawn name is a row key').toEqual([]);
+  });
+}
+
+// The same rule while the Result is edited: the names the live Result draws
+// are the names the next Generate draws, the Legend tab shows a row by its
+// drawn name, and a row key (`name [fill]`, `label (2)`) is never a name.
+// Rows are read from each Legend the Result holds, in document order, as
+// [key, data-legend-name, text].
+const legendNameFacts = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const svg = app.svgContainer.querySelector('svg');
+  const copies = [...svg.querySelectorAll('#legend_horizontal, #legend_vertical')];
+  return {
+    legends: (copies.length ? copies : [svg.querySelector('#legend')]).map((legend) => (
+      [...legend.querySelectorAll('g[data-legend-key]')].filter((row) => row.getAttribute('display') !== 'none').map((row) => [
+        row.getAttribute('data-legend-key'), row.getAttribute('data-legend-name'), row.querySelector('text').textContent
+      ])
+    )),
+    shown: app.legendEntries.map((entry) => app.shownLegendName(entry.caption))
+  };
+});
+const expectLegendNames = async (page, names, label) => {
+  const { legends, shown } = await legendNameFacts(page);
+  for (const rows of legends) expect(rows.map(([, , text]) => text), `${label}: the Legend draws`).toEqual(names);
+  expect(shown, `${label}: the Legend tab shows each row by its drawn name`).toEqual(names);
+  expect([...legends.flat().map(([, , text]) => text), ...shown].filter((name) => name.includes(' [#')), `${label}: no name is a row key`).toEqual([]);
+  return legends[0];
+};
+const expectNamesLiveAndGenerated = async (page, names, label) => {
+  await expectLegendNames(page, names, `${label}, live`);
+  const { generated } = await expectLiveEqualsGenerate(page, { label });
+  await expectLegendNames(page, names, `${label}, Generate`);
+  return generated;
+};
+const setRuleField = (page, index, field, value) => appAction(page, 'setSpecificRuleField', index, field, value);
+
+test('legend names: a color rule named like a feature type row is numbered with it, and shares its row in its color, live = Generate (circular)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openWithGenBank(page, LOCTEST_FIXTURE, () => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
+  await generate(page);
+  const tracks = ['GC content', 'GC skew (+)', 'GC skew (-)'];
+  const typeFill = (await semanticSnapshot(page)).legend.find(({ key }) => key === 'tRNA').fill;
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^LOC_0001$', color: '#0000ff', cap: 'tRNA' });
+  await expectNamesLiveAndGenerated(page, ['tRNA (1)', 'other proteins', 'tRNA (2)', ...tracks], 'a rule named tRNA in another color');
+  expect(await ruleTable(page), 'the caption stays as written').toEqual([['^LOC_0001$', 'tRNA', '#0000ff']]);
+  await setRuleField(page, 0, 'color', typeFill);
+  await expectNamesLiveAndGenerated(page, ['tRNA', 'other proteins', ...tracks], 'a rule named tRNA in the color of the tRNA row');
+});
+
+// A track of one color labelled `GC content`: a second source of the GC
+// content row's label, in its own color.
+const GC_CONTENT_LABELLED = { legend_label: 'GC content', positive_color: '#123456', negative_color: '#123456' };
+const addCircularSlot = (page, renderer, params = {}) => page.evaluate(({ kind, values }) => {
+  const app = window.__GBDRAW_APP__;
+  app.setCircularTrackSlotsEnabled(true);
+  const before = new Set(app.adv.circular_track_slots.map((slot) => slot.id));
+  app.addCircularTrackSlot(kind);
+  const slot = app.adv.circular_track_slots.find((entry) => !before.has(entry.id));
+  Object.assign(slot.params, values);
+  return slot.id;
+}, { kind: renderer, values: params });
+const legendKeys = async (page) => (await legendNameFacts(page)).legends[0].map(([key]) => key);
+
+test('legend names: tracks of one label share a row in one color and are numbered in two, live = Generate (circular)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const names = (...gcContent) => ['CDS', 'repeat_region', gcContent[0], 'GC skew (+)', 'GC skew (-)', ...gcContent.slice(1)];
+  // Two sources of one color: one row. A Legend edit of another row runs the naming pass on the live Result.
+  const second = await addCircularSlot(page, 'dinucleotide_content');
+  await generate(page);
+  await colorLegendRow(page, 'CDS', '#264653');
+  await expectNamesLiveAndGenerated(page, names('GC content'), 'two tracks of one label and one color');
+  // Three sources, two of one color: the third keeps its key and is drawn as the second row of the name.
+  await addCircularSlot(page, 'dinucleotide_skew', GC_CONTENT_LABELLED);
+  await generate(page);
+  expect(await legendKeys(page), 'a source that shares a row still takes its key').toEqual(names('GC content', 'GC content (3)'));
+  await colorLegendRow(page, 'CDS', '#2a9d8f');
+  await expectNamesLiveAndGenerated(page, names('GC content (1)', 'GC content (2)'), 'three sources of one label, two of one color');
+  // Two sources in two colors.
+  await page.evaluate((id) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularTrackSlotEnabled(app.adv.circular_track_slots.find((slot) => slot.id === id), false);
+  }, second);
+  await generate(page);
+  expect(await legendKeys(page)).toEqual(names('GC content', 'GC content (2)'));
+  await colorLegendRow(page, 'GC content (2)', '#7b2cbf');
+  await expectNamesLiveAndGenerated(page, names('GC content (1)', 'GC content (2)'), 'two tracks of one label in two colors');
+});
+
+// A color rule's caption written again in the rule list is kept as written
+// (the Legend editor's rename onto a taken name asks instead, PD-OI-061).
+test('legend names: a rule renamed onto the name of another rule numbers both rows, and renamed away leaves the bare name, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
+  const rest = ['other proteins', 'repeat_region'];
+  await expectLegendNames(page, ['alpha', 'beta', ...rest], 'two rules of two names');
+  await setRuleField(page, 1, 'cap', 'alpha');
+  await expectNamesLiveAndGenerated(page, ['alpha (1)', 'alpha (2)', ...rest], 'a rule renamed onto the name of another rule');
+  expect(await ruleTable(page), 'both captions stay as written').toEqual([['^FL1$', 'alpha', '#e63946'], ['^FL2$', 'alpha', '#2a9d8f']]);
+  await setRuleField(page, 1, 'cap', 'gamma');
+  await expectNamesLiveAndGenerated(page, ['alpha', 'gamma', ...rest], 'the rule renamed away');
+});
+
+// OV-645: the key of a rule's row changes when its name starts or stops being
+// written in several colors (`alpha` and `alpha [#e63946]`). The row is the
+// same row: it keeps its place when the Legend editor renames the other row of
+// its name, and, in an order the user set, when the rule list makes the name
+// shared and single again. A row the rule list renames is drawn anew, last.
+test('legend names: a rule row keeps its place when its key changes with the sharing of its name, also in a user order, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
+  await setRuleField(page, 1, 'cap', 'alpha');
+  await expectLegendNames(page, ['alpha (1)', 'alpha (2)', 'other proteins', 'repeat_region'], 'two rules of one name');
+  await renameAndSettle(page, 'alpha [#2a9d8f]', 'gamma');
+  await expectNamesLiveAndGenerated(page, ['alpha', 'gamma', 'other proteins', 'repeat_region'], 'the Legend editor renames one of two rows of a name');
+  expect(await ruleTable(page)).toEqual([['^FL1$', 'alpha', '#e63946'], ['^FL2$', 'gamma', '#2a9d8f']]);
+
+  await appAction(page, 'moveLegendEntry', 0, 2);
+  await expectLegendNames(page, ['gamma', 'other proteins', 'alpha', 'repeat_region'], 'the user moves the alpha row');
+  await setRuleField(page, 1, 'cap', 'alpha');
+  await expectNamesLiveAndGenerated(page, ['other proteins', 'alpha (1)', 'repeat_region', 'alpha (2)'], 'the name becomes shared in a user order');
+  await setRuleField(page, 1, 'cap', 'beta');
+  await expectNamesLiveAndGenerated(page, ['other proteins', 'alpha', 'repeat_region', 'beta'], 'the name stops being shared in a user order');
+});
+
+// OV-660: a stroke stored on a rule row follows the row when its key changes
+// with the sharing of its name (`alpha [#e63946]` to `alpha` and back), live
+// and at Generate.
+test('legend names: a stroke stored on a rule row follows the row when its key changes, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
+  await setRuleField(page, 1, 'cap', 'alpha');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.legendEntries.findIndex((entry) => entry.caption === 'alpha [#e63946]');
+    return app.updateLegendEntryStrokeColor(index, '#111111') && app.updateLegendEntryStrokeWidth(index, 3);
+  });
+  await settleLive(page);
+  const redRow = (snapshot) => snapshot.legend.filter(({ fill }) => fill.toLowerCase() === '#e63946')
+    .map(({ key, stroke }) => [key, stroke.toLowerCase()]);
+  const rest = ['other proteins', 'repeat_region'];
+  await setRuleField(page, 1, 'cap', 'gamma');
+  expect(redRow(await semanticSnapshot(page)), 'the other rule renamed away, live').toEqual([['alpha', '#111111']]);
+  expect(redRow(await expectNamesLiveAndGenerated(page, ['alpha', 'gamma', ...rest], 'the other rule renamed away')))
+    .toEqual([['alpha', '#111111']]);
+  await setRuleField(page, 1, 'cap', 'alpha');
+  expect(redRow(await semanticSnapshot(page)), 'the name shared again, live').toEqual([['alpha [#e63946]', '#111111']]);
+  expect(redRow(await expectNamesLiveAndGenerated(page, ['alpha (1)', 'alpha (2)', ...rest], 'the name shared again')))
+    .toEqual([['alpha [#e63946]', '#111111']]);
+});
+
+// A row key keeps the string 0.13.0 gave the second source of a label
+// (`GC content (2)`), so the edits a Session stores under it stay on that
+// track's row. Once both tracks have one swatch they share the first row, and
+// the edits of the second are not used (PD-OI-095, accepted residual risk).
+test('legend names: a color and a stroke stored under GC content (2) stay on the second track\'s row, and are not used once the tracks share a row (circular)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const names = (...gcContent) => ['CDS', 'repeat_region', gcContent[0], 'GC skew (+)', 'GC skew (-)', ...gcContent.slice(1)];
+  const labelled = await addCircularSlot(page, 'dinucleotide_skew', GC_CONTENT_LABELLED);
+  await generate(page);
+  const firstFill = (await semanticSnapshot(page)).legend.find(({ key }) => key === 'GC content').fill;
+  await colorLegendRow(page, 'GC content (2)', '#7b2cbf');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.legendEntries.findIndex((entry) => entry.caption === 'GC content (2)');
+    return app.updateLegendEntryStrokeColor(index, '#e63946') && app.updateLegendEntryStrokeWidth(index, 2);
+  });
+  await settleLive(page);
+  expect(await page.evaluate(async () => {
+    const drawing = (await import('/gbdraw/web/js/state.js')).state.activeDrawing();
+    return [Object.keys(drawing.legendColorOverrides), Object.keys(drawing.legendStrokeOverrides)];
+  }), 'the edits are stored under the row key').toEqual([['GC content (2)'], ['GC content (2)']]);
+  const generated = await expectNamesLiveAndGenerated(page, names('GC content (1)', 'GC content (2)'), 'edits on the second track\'s row');
+  const edited = (row) => [row.key, row.caption, row.fill.toLowerCase(), row.stroke.toLowerCase()];
+  expect(generated.legend.filter(({ key }) => key.startsWith('GC content')).map(edited), 'Generate keeps the edits on the second track\'s row').toEqual([
+    ['GC content', 'GC content (1)', firstFill.toLowerCase(), 'none'], ['GC content (2)', 'GC content (2)', '#7b2cbf', '#e63946']
+  ]);
+  // The second track in the color of the first: one row, drawn as Python draws the first.
+  await page.evaluate(({ id, color }) => {
+    const slot = window.__GBDRAW_APP__.adv.circular_track_slots.find((entry) => entry.id === id);
+    Object.assign(slot.params, { positive_color: color, negative_color: color });
+  }, { id: labelled, color: firstFill });
+  await generate(page);
+  await expectLegendNames(page, names('GC content'), 'both tracks in one color');
+  expect((await semanticSnapshot(page)).legend.filter(({ key }) => key.startsWith('GC content')).map(edited), 'the shared row has no edit of the second')
+    .toEqual([['GC content', 'GC content', firstFill.toLowerCase(), 'none']]);
+});
+
+// Undo and Redo of a color rule commit: the rule's row returns with its name
+// beside its key, and the Legend draws the same names.
+test('legend names: Undo and Redo of a color rule commit keep the name of the rule\'s row and the drawn names (circular)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const tracks = ['GC content', 'GC skew (+)', 'GC skew (-)'].map((name) => [name, null, name]);
+  const rows = async () => (await legendNameFacts(page)).legends[0];
+  const python = await rows();
+  expect(python).toEqual([['CDS', null, 'CDS'], ['repeat_region', null, 'repeat_region'], ...tracks]);
+  const one = [
+    ['repeat_region [#e63946]', 'repeat_region', 'repeat_region (1)'], ['other proteins', null, 'other proteins'],
+    ['repeat_region', null, 'repeat_region (2)'], ...tracks
+  ];
+  const two = [one[0], ['repeat_region [#2a9d8f]', 'repeat_region', 'repeat_region (2)'], one[1], ['repeat_region', null, 'repeat_region (3)'], ...tracks];
+  await addColorRule(page, { ...RULE_ROWS[0], cap: 'repeat_region' });
+  expect(await rows(), 'a rule named like the repeat_region row').toEqual(one);
+  await history(page, 'undo');
+  expect(await rows(), 'Undo of the commit').toEqual(python);
+  await history(page, 'redo');
+  expect(await rows(), 'Redo of the commit').toEqual(one);
+  await addColorRule(page, { ...RULE_ROWS[1], cap: 'repeat_region' });
+  expect(await rows(), 'a second rule of the name').toEqual(two);
+  await history(page, 'undo');
+  expect(await rows(), 'Undo of the second commit').toEqual(one);
+  await history(page, 'redo');
+  expect(await rows(), 'Redo of the second commit').toEqual(two);
+  await expectNamesLiveAndGenerated(page, two.map(([, , text]) => text), 'after Undo and Redo');
+  expect(await rows(), 'Generate writes the same keys and names').toEqual(two);
 });

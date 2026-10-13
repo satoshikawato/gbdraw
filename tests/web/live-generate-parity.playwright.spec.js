@@ -50,9 +50,12 @@ const renameLegendRow = async (page, caption, name) => {
   await settleLive(page);
 };
 
-// OV-484: custom track slots with two more skew slots, a GC skew slot (its rows
-// repeat the first slot's label: "GC skew (+) (2)") and an AT skew slot with
-// its own colors, then Generate.
+// OV-484: custom track slots with two more skew slots, a GC skew slot without
+// colors of its own and an AT skew slot with its own colors, then Generate.
+// The second GC skew slot has the first slot's label and swatches, so its rows
+// share the first slot's rows (Owner receipt legend.row-name-multiplicity:
+// one label and one swatch draw one row; tests/fixtures/legend_track_slot_rows.json, "two content
+// slots and two skew slots of one label and one swatch share their rows").
 const addSkewSlots = async (page) => {
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -72,7 +75,8 @@ const addSkewSlots = async (page) => {
   await generate(page);
   const rows = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => [entry.caption, entry.color]));
   expect(rows).toEqual(expect.arrayContaining([['AT skew (+)', '#deaf6e'], ['AT skew (-)', '#7294e3']]));
-  expect(rows.map(([caption]) => caption)).toEqual(expect.arrayContaining(['GC skew (+)', 'GC skew (+) (2)', 'GC skew (-) (2)']));
+  const captions = rows.map(([caption]) => caption);
+  expect(captions.filter((caption) => caption.startsWith('GC skew'))).toEqual(['GC skew (+)', 'GC skew (-)']);
 };
 
 // The edit kinds. Each appears at least once in the matrix.
@@ -512,8 +516,8 @@ const CASES = [
     run: (page) => switchPalette(page, 'alpine_retreat')
   },
   // OV-484: the Legend rows of a skew slot with its own colors keep them
-  // through a palette change, and the rows of a second slot of one label
-  // follow the palette as the first slot's do.
+  // through a palette change, and the rows a second slot of one label and
+  // one swatch shares with the first slot follow the palette.
   ...['circular', 'linear'].map((mode) => ({
     kind: 'palette',
     edit: 'Palette change with skew slots of their own colors and of one label',
@@ -1253,10 +1257,12 @@ const WORK_ALLOWLIST = [
     // The rule's caption CDS gets a second color, so Python splits the CDS
     // row in two and the automatic rerender draws the Result again (OV-43);
     // its compile is Generate's plan, and the commit's own compile shows the
-    // rows it adds. Requests: the commit's caption normalization and rule
-    // matches; the rerender's rules are Python's captions already (OV-238).
+    // rows it adds. Requests: the commit's rule matches and the rerender. A
+    // caption written in two colors stays as written (the Legend numbers the
+    // names it draws), so no caption normalization request precedes the
+    // matches.
     kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
-    requests: ['evaluateRules', 'evaluateRules', 'render'],
+    requests: ['evaluateRules', 'render'],
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0002$', color: '#2266aa', cap: 'CDS' })
   },
   {

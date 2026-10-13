@@ -1,5 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
+/** @import { LegendRowName } from '../../services/legend-row-names.js' */
+/** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /**
  * A Legend row record as the editor lists, restores, and compares it.
  * @typedef {{ caption?: string, originalCaption?: string, color?: string, featureIds?: unknown[], xPos?: number, yPos?: number }} EntryRecord
@@ -12,7 +14,9 @@ import {
   isLegendOrderEdited,
   legendEntryKey,
   recordedLegendOrder,
-  resultLegendRows
+  rekeyLegendRecords,
+  resultLegendRows,
+  shownLegendRowNames
 } from '../../services/legend-svg.js';
 import { diffLegendIntents, legendRowRules } from '../../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
@@ -57,6 +61,9 @@ const entriesInOrder = (entries, captions, { keepFollowed = false } = {}) => {
  * @property {import('../candidate-render.js').LegendRowColorOf} readShownLegendColor
  *   The color a listed row shows (`displayedLegendRowColors`, OV-282), read
  *   from the composition root's derivation the Legend panel shows.
+ * @property {{ value: ReadonlyMap<string, import('../../services/legend-svg.js').ShownLegendRowNames> }} [legendRowNames]
+ *   The root's reactive holder of the names the displayed Result shows for its rows;
+ *   this owner is its one writer.
  */
 
 // The Legend entry owner (U3a, R1): its writers edit the drawing's Legend
@@ -67,7 +74,8 @@ const entriesInOrder = (entries, captions, { keepFollowed = false } = {}) => {
 export const createLegendEntryActions = ({
   state,
   readActiveResultIdentity = null,
-  readShownLegendColor
+  readShownLegendColor,
+  legendRowNames = { value: new Map() }
 }) => {
   const {
     results,
@@ -89,6 +97,37 @@ export const createLegendEntryActions = ({
   const inventoryByResult = new Map();
   /** @type {Set<string>} */
   const replayedInventoryResults = new Set();
+
+  // The names the displayed Result shows for its Legend rows, by the key each
+  // row shows: read when the rows are listed and after the executor named
+  // them. A row's key (`caption`) is never shown; every surface shows
+  // `shownLegendName` of it.
+  const readLegendRowNames = () => {
+    legendRowNames.value = shownLegendRowNames(svgContainer.value?.querySelector?.('svg') || null);
+  };
+  // The name a caption stands for (D-15): the name of the row it is the key
+  // of, as the displayed Result shows it, else as the color rules that draw the
+  // row are captioned (a deleted or dormant row the Result does not hold),
+  // else the caption itself (a row whose key is its name, or a typed name).
+  // Every write of a caption that was read as a row takes this name (OV-640).
+  /** @param {unknown} caption @returns {LegendRowName} */
+  const legendRowName = (caption) => {
+    const key = String(caption ?? '');
+    return /** @type {LegendRowName} */ (legendRowNames.value.get(key)?.name
+      ?? legendRowRules(/** @type {PythonLegendKey} */ (key), displayedLegendRowContext(state, state.activeDrawing()))[0]?.cap
+      ?? key);
+  };
+  /** @param {unknown} caption The key a row shows. @returns {string} The name the Legend draws for it. */
+  const shownLegendName = (caption) => legendRowNames.value.get(String(caption ?? ''))?.drawnName ?? legendRowName(caption);
+  // Whether `typed` names the row that shows `caption`: its key, its name, or
+  // its drawn name. Typing one of them into the row's name field is no rename.
+  /** @param {unknown} caption @param {unknown} typed */
+  const legendRowIsNamed = (caption, typed) => {
+    const key = String(caption ?? '').trim();
+    const text = String(typed ?? '').trim();
+    const names = legendRowNames.value.get(key);
+    return text === key || (Boolean(names) && (text === names?.name || text === names?.drawnName));
+  };
 
   /** @param {(options?: { commit?: boolean }) => unknown} handler The root's refresh of the Legend geometry. */
   const setLegendGeometryChangedHandler = (handler) => {
@@ -183,13 +222,19 @@ export const createLegendEntryActions = ({
   // the rows into the intent, the row a rename draws in the place of the row
   // it renames (OV-158), and returns the rows the displayed Result shows at
   // once until Python draws them (gaps 1 and 2; null when the rows only change
-  // color). Resolves to false when the Result or the caller became stale.
+  // color). A row of `rekeyed` (old key to new key) is one rule row whose key
+  // the rule table change re-allocates (OV-645): the row the commit adds under
+  // the new key takes the place of the row it removes under the old one, in
+  // the list and in the generated inventory, so the order stays the default
+  // order or the user's. Resolves to false when the Result or the caller
+  // became stale.
   /**
-   * @param {EntryRecord[]} intents
-   * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean, placement?: { caption: string, at: string } | null }} [options]
+   * @param {(EntryRecord & { name?: string })[]} intents
+   * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean,
+   *   placement?: { caption: string, at: string } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
    */
   const prepareFileLegendEntries = async (intents, {
-    drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null
+    drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null, rekeyed = new Map()
   } = {}) => {
     const mountedSvg = svgContainer.value?.querySelector('svg');
     if (getAllFeatureLegendGroups(mountedSvg).length === 0) {
@@ -221,33 +266,90 @@ export const createLegendEntryActions = ({
       isCurrent: () => svgContainer.value?.querySelector('svg') === mountedSvg,
       apply: () => {
         const removed = new Set(diff.remove.map(({ caption }) => caption));
+        // An intent's `caption` is its row's key; its `name` is the rule's caption.
+        const names = new Map(intents.map((intent) => [legendCaption(intent), intent.name]));
         const colors = new Map(diff.update.map(({ caption, color }) => [caption, color]));
         const added = new Map(diff.add.map(({ caption, color }) => [caption, { caption, originalCaption: caption, color, featureIds: [] }]));
         /** @type {EntryRecord[]} */
         let entries = (drawing.legendEntries.value || []).map((/** @type {EntryRecord} */ entry) => (
           colors.has(legendCaption(entry)) ? { ...entry, color: colors.get(legendCaption(entry)) } : entry
         ));
+        // A re-keyed row (OV-645) is the row the commit removes, added under
+        // its new key: the row and every record stored under its key move to
+        // the new key in place (OV-660), so it keeps its place, its rank in
+        // the inventory, and its edits; the Result shows it before the row it
+        // replaces.
+        /** @type {Map<PythonLegendKey, PythonLegendKey>} */
+        const moves = new Map([...rekeyed].filter(([from, to]) => removed.has(from) && added.has(to)));
+        /** @type {Map<string, string>} A row the commit adds, and the row it is shown before. */
+        const before = new Map([...moves].map(([from, to]) => [to, from]));
+        if (moves.size > 0) {
+          entries = moveLegendRecords(drawing, entries, moves);
+          moves.forEach((to) => added.delete(to));
+        }
         // OV-158 (Owner decision 2026-10-07): the row a rename draws takes the
         // place of the row it renames, so the editor list records the edited
         // order Generate replays (PD-OI-063).
-        let before = '';
-        if (placement && intents.some((intent) => intent.caption === placement.caption)) {
-          const row = added.get(placement.caption) || entries.find((entry) => legendCaption(entry) === placement.caption);
-          const others = entries.filter((entry) => legendCaption(entry) !== placement.caption);
-          const at = others.findIndex((entry) => legendCaption(entry) === placement.at);
-          if (row && at >= 0) {
-            entries = [...others.slice(0, at), row, ...others.slice(at)];
-            if (added.delete(placement.caption)) before = placement.at;
-          }
+        const renamed = placement && intents.some((intent) => intent.caption === placement.caption) ? [placement] : [];
+        for (const { caption, at: key } of renamed) {
+          const row = added.get(caption) || entries.find((entry) => legendCaption(entry) === caption);
+          const others = entries.filter((entry) => legendCaption(entry) !== caption);
+          const at = others.findIndex((entry) => legendCaption(entry) === key);
+          if (!row || at < 0) continue;
+          entries = [...others.slice(0, at), row, ...others.slice(at)];
+          if (added.delete(caption)) before.set(caption, key);
         }
         drawing.legendEntries.value = [...entries.filter((entry) => !removed.has(legendCaption(entry))), ...added.values()];
         const rows = {
-          add: diff.add.map(({ caption, color }) => ({ caption, color, ...(before && caption === placement?.caption ? { before } : {}) })),
+          add: diff.add.map(({ caption, color }) => ({
+            caption, color, ...(names.get(caption) ? { name: names.get(caption) } : {}),
+            ...(before.has(caption) ? { before: before.get(caption) } : {})
+          })),
           retire: [...removed]
         };
         return rows.add.length > 0 || rows.retire.length > 0 ? rows : null;
       }
     };
+  };
+
+  // Moves the drawing's Legend records, the generated inventory and colors,
+  // and the open Stroke options of each re-keyed row to its new key
+  // (`rekeyLegendRecords`, OV-660); returns `entries`, the list being
+  // written, moved.
+  /**
+   * @param {DrawingState} drawing
+   * @param {EntryRecord[]} entries
+   * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} moves
+   * @returns {EntryRecord[]}
+   */
+  const moveLegendRecords = (drawing, entries, moves) => {
+    /** @type {Set<string>} */
+    const strokeOptionsOpen = state.legendStrokeOptionsOpen || new Set();
+    const moved = rekeyLegendRecords({
+      entries,
+      deletedEntries: /** @type {EntryRecord[]} */ (drawing.deletedLegendEntries.value || []),
+      dormantEntries: /** @type {EntryRecord[]} */ (drawing.dormantLegendEntries.value || []),
+      colorOverrides: { ...drawing.legendColorOverrides },
+      strokeOverrides: { ...drawing.legendStrokeOverrides },
+      addedCaptions: [...drawing.addedLegendCaptions.value],
+      originalOrder: /** @type {string[]} */ (originalLegendOrder.value),
+      originalColors: /** @type {Record<string, string>} */ (originalLegendColors.value),
+      strokeOptionsOpen: [...strokeOptionsOpen]
+    }, moves);
+    drawing.deletedLegendEntries.value = moved.deletedEntries;
+    drawing.dormantLegendEntries.value = moved.dormantEntries;
+    for (const [store, records] of /** @type {const} */ ([
+      [drawing.legendColorOverrides, moved.colorOverrides], [drawing.legendStrokeOverrides, moved.strokeOverrides]
+    ])) {
+      Object.keys(store).forEach((key) => { delete store[key]; });
+      Object.assign(store, records);
+    }
+    drawing.addedLegendCaptions.value = new Set(moved.addedCaptions);
+    originalLegendOrder.value = moved.originalOrder;
+    originalLegendColors.value = moved.originalColors;
+    strokeOptionsOpen.clear();
+    moved.strokeOptionsOpen.forEach((caption) => strokeOptionsOpen.add(caption));
+    return moved.entries;
   };
 
   // The drawing's Legend intent that names a Result's rows.
@@ -458,6 +560,7 @@ export const createLegendEntryActions = ({
   /** @param {{ replaceGeneratedInventory?: boolean, liveResultIdentities?: string[] }} [options] */
   const extractLegendEntries = ({ replaceGeneratedInventory = false, liveResultIdentities = [] } = {}) => {
     const drawing = state.activeDrawing();
+    readLegendRowNames();
     if (!svgContainer.value) {
       drawing.legendEntries.value = [];
       return;
@@ -610,11 +713,15 @@ export const createLegendEntryActions = ({
     captureResultInventory,
     deleteLegendEntry,
     extractLegendEntries,
+    legendRowIsNamed,
+    legendRowName,
     onLegendGeometryChanged,
     prepareFileLegendEntries,
+    readLegendRowNames,
     rememberResultInventory,
     restoreDeletedLegendEntries,
     setLegendGeometryChangedHandler,
+    shownLegendName,
     updateLegendEntryColor
   };
 };
