@@ -305,7 +305,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { LinearComparisonEdge, LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
-/** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { DiagnosticContext, UserFacingError } from '../utils/error-normalization.js' */
@@ -316,6 +316,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
+/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 
 /** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
 
@@ -388,8 +389,8 @@ const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && 
 
 /**
  * @template {UnvalidatedFields<string>} T
- * @param {T} colors A color map. A caller that passes a saved one passes it unvalidated, and the copy is then
- *   unvalidated too.
+ * @param {T} colors A color map. The checker gives the copy the type `{}` for every caller, so the copy does not
+ *   carry the type of `colors`: a copy of a saved, unvalidated map is still unvalidated.
  */
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
@@ -1246,14 +1247,17 @@ export const buildConfigData = (drawing) => ({
   linearRecordLayout: {
     enabled: Boolean(drawing.linearRecordLayoutEnabled.value),
     recordGap: Number(drawing.linearRecordGap.value) || 0,
-    rows: (drawing.linearRecordRows || []).map((entry) => ({
+    // A row of the Linear layout as state holds it: a Session load stores saved rows unchecked (OV-568), so it
+    // is read unvalidated. The casts: `Number.isInteger(entry?.canonicalColumn)` in the same expression proves
+    // the row object and that number; `canonicalRow` stays unvalidated.
+    rows: (drawing.linearRecordRows || []).map((/** @type {UnvalidatedFields<keyof LinearRecordRow>} */ entry) => ({
       uid: String(entry?.uid || ''),
       row: Number(entry?.row) || 1,
       ...(entry?.canonicalCardinality === 'exactly_one'
         ? { canonicalCardinality: 'exactly_one' } : {}),
       ...(Number(entry?.canonicalRow) === Number(entry?.row)
-        && Number.isInteger(entry?.canonicalColumn) && entry.canonicalColumn > 0
-        ? { canonicalRow: entry.canonicalRow, canonicalColumn: entry.canonicalColumn }
+        && Number.isInteger(entry?.canonicalColumn) && /** @type {number} */ (/** @type {NonNullable<typeof entry>} */ (entry).canonicalColumn) > 0
+        ? { canonicalRow: /** @type {NonNullable<typeof entry>} */ (entry).canonicalRow, canonicalColumn: /** @type {NonNullable<typeof entry>} */ (entry).canonicalColumn }
         : {})
     }))
   },
@@ -1392,6 +1396,12 @@ export const setUnmanagedConfigOverrideValidator = (validator) => {
     : null;
 };
 
+/**
+ * @param {{ mode: DiagramMode, config?: unknown, configOverrides?: unknown, requireUnmanagedOnly?: boolean }} options
+ *   `mode`: a slice's mode, or the mode of a Session's projection (the projection refuses another value; a
+ *   settings-only Session's is checked with its draft). `config` and `configOverrides` are saved values,
+ *   unvalidated: the validator service checks them.
+ */
 const validateUnmanagedConfigOverrides = async ({
   mode,
   config = null,
@@ -1402,7 +1412,8 @@ const validateUnmanagedConfigOverrides = async ({
   const overrides = isPlainObject(configOverrides)
     ? cloneJsonData(configOverrides)
     : configOverrides;
-  const overridePaths = isPlainObject(overrides) ? Object.keys(overrides) : [];
+  // The cast: `isPlainObject(overrides)` in the same expression.
+  const overridePaths = isPlainObject(overrides) ? Object.keys(/** @type {Record<string, unknown>} */ (overrides)) : [];
   if (
     config === null
     && overridePaths.length === 0
@@ -1851,10 +1862,17 @@ const shouldSuppressCircularMultiRecordDefaults = (drawing, incomingForm) => {
   return drawing.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
 };
 
+/**
+ * @param {unknown} stored Unvalidated; anything that is not a plain object counts as empty.
+ * @param {unknown} canonical As `stored`.
+ * @returns {Record<string, unknown>}
+ */
 const overlayCanonicalObject = (stored, canonical) => {
-  const merged = isPlainObject(stored) ? cloneJsonData(stored) : {};
+  // The casts: `isPlainObject` in the same expression (`stored`) and on the line above (`canonical`).
+  /** @type {Record<string, unknown>} */
+  const merged = isPlainObject(stored) ? cloneJsonData(/** @type {Record<string, unknown>} */ (stored)) : {};
   if (!isPlainObject(canonical)) return merged;
-  Object.entries(canonical).forEach(([key, value]) => {
+  Object.entries(/** @type {Record<string, unknown>} */ (canonical)).forEach(([key, value]) => {
     if (['__proto__', 'constructor', 'prototype'].includes(key)) return;
     merged[key] = isPlainObject(value)
       ? overlayCanonicalObject(merged[key], value)
@@ -3145,12 +3163,28 @@ const serializeFile = async (file) => {
   return cacheSerializedFileDescriptor(file, descriptor);
 };
 
+/**
+ * What `serializeFileValue` gives for a file slot's value: the descriptor Save stores, or the list of them.
+ * @typedef {RawSessionResourceDescriptor | null | SerializedFileValue[]} SerializedFileValue
+ */
+/**
+ * @param {DeserializedFile | undefined} value A file slot's value.
+ * @returns {Promise<SerializedFileValue>}
+ */
 const serializeFileValue = async (value) => (
   Array.isArray(value)
     ? Promise.all(value.map((item) => serializeFileValue(item)))
     : serializeFile(value)
 );
 
+/**
+ * What `deserializeFile` gives for a stored value: a file slot's value (`FileLike`: a `File` or a Session
+ * resource view) or `null`, or a list of them for a stored list.
+ * @typedef {FileLike | null | DeserializedFile[]} DeserializedFile
+ */
+// `entry` keeps its implicit type: a legacy `files` entry's `name`, `type` and `lastModified` go unconverted
+// into `new File(...)` below, which the true type (`unknown`) does not allow without a cast of those leaves.
+/** @returns {DeserializedFile} */
 const deserializeFile = (entry) => {
   if (Array.isArray(entry)) {
     return entry.map((item) => deserializeFile(item));
@@ -3226,9 +3260,20 @@ export const serializeResults = () => {
  * @property {number} [queryIndex]
  * @property {number} [subjectIndex]
  */
+/**
+ * The fields of a cache-info row that name a linear pair's comparison edge.
+ * @typedef {Omit<LosatCacheInfoEntry, 'key' | 'filename' | 'display'>} LosatCacheInfoIdentity
+ */
+/** @type {readonly ('edgeKey' | 'queryUid' | 'subjectUid')[]} */
 const LOSAT_CACHE_INFO_STRING_FIELDS = ['edgeKey', 'queryUid', 'subjectUid'];
+/** @type {readonly ('ordinal' | 'queryIndex' | 'subjectIndex')[]} */
 const LOSAT_CACHE_INFO_INTEGER_FIELDS = ['ordinal', 'queryIndex', 'subjectIndex'];
+/**
+ * @param {NonNullable<UnvalidatedFields<keyof LosatCacheInfoEntry>>} entry A cache-info row, or a saved cache
+ *   entry that carries the same fields: unvalidated, each field is tested here. Both callers pass an object.
+ */
 const losatCacheInfoIdentity = (entry) => {
+  /** @type {LosatCacheInfoIdentity} */
   const identity = {};
   LOSAT_CACHE_INFO_STRING_FIELDS.forEach((field) => {
     if (typeof entry?.[field] === 'string' && entry[field].trim()) {
@@ -3236,12 +3281,18 @@ const losatCacheInfoIdentity = (entry) => {
     }
   });
   LOSAT_CACHE_INFO_INTEGER_FIELDS.forEach((field) => {
-    if (Number.isInteger(entry?.[field])) identity[field] = entry[field];
+    // The cast: `Number.isInteger` in the same statement proves the number.
+    if (Number.isInteger(entry?.[field])) identity[field] = /** @type {number} */ (entry[field]);
   });
   return identity;
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {NonNullable<UnvalidatedFields<keyof LosatCacheInfoEntry | 'queryRecordInstanceKey'
+ *   | 'subjectRecordInstanceKey'>>} entry A saved cache entry that passed `isCurrentRawLosatCacheEntry`; the
+ *   fields read here are unvalidated.
+ */
 const restoredLosatCacheInfoIdentity = (drawing, entry) => {
   const identity = losatCacheInfoIdentity(entry);
   if (state.mode.value !== 'linear') return identity;
@@ -3458,12 +3509,17 @@ const pruneLosatDerivedCache = (map) => {
   }
 };
 
+/**
+ * @param {unknown} value Saved evidence, unvalidated. The casts below: `isPlainObject(value)`, first in the same
+ *   expression, proves the object; each entry is tested by the filter.
+ * @param {unknown[]} [fallbackEntries]
+ */
 const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
   schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   entries: [
     ...(
-      isPlainObject(value) && value.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA && Array.isArray(value.entries)
-        ? value.entries
+      isPlainObject(value) && /** @type {Record<string, unknown>} */ (value).schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA && Array.isArray(/** @type {Record<string, unknown>} */ (value).entries)
+        ? /** @type {unknown[]} */ (/** @type {Record<string, unknown>} */ (value).entries)
         : []
     ),
     ...fallbackEntries
@@ -3512,6 +3568,10 @@ const applyLosatDerivedCache = (
   );
 };
 
+/**
+ * @param {unknown} manifest Unvalidated: `validateProteinIdentityManifest` below admits it or it is dropped.
+ * @param {{ adoptCurrent?: boolean }} [options]
+ */
 const applyProteinIdentityManifest = (manifest, { adoptCurrent = false } = {}) => {
   if (!validateProteinIdentityManifest(manifest)) {
     state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
@@ -3731,9 +3791,10 @@ export const serializeActiveRenderFiles = async (
       })
     : null;
   const linearComparisons = resolvedComparisonPlan ? await Promise.all(
+    // The plan is a resolved one: the caller's snapshot of `resolveLinearComparisonPlan`, or the call above.
     resolvedComparisonPlan.edges
-      .filter((edge) => edge.source === 'upload' && edge.fileActive && edge.file)
-      .map(async (edge) => ({
+      .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'upload' && edge.fileActive && edge.file)
+      .map(async (/** @type {LinearComparisonResolvedEdge} */ edge) => ({
       id: String(edge.id || ''),
       file: await serializeFile(edge.file)
     }))
@@ -4075,7 +4136,8 @@ const applyFiles = (filesData, {
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
     targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...collapsed);
     if (resolveRecordInputs) {
-      const rowByUid = new Map(targetDrawing.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
+      // A saved row, unvalidated (OV-568): the lines below test each field they keep.
+      const rowByUid = new Map(targetDrawing.linearRecordRows.map((/** @type {UnvalidatedFields<keyof LinearRecordRow>} */ entry) => [String(entry?.uid || ''), entry]));
       targetDrawing.linearRecordRows.splice(
         0,
         targetDrawing.linearRecordRows.length,
@@ -4861,7 +4923,13 @@ const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load'
   return true;
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {{ status?: string, recoveredFeatureState?: SavedFeatureFields | null,
+ *   migratedEditorState?: Record<string, unknown> | null, warning?: string | null } | null | undefined} plan
+ *   What this reads of a feature recovery plan (`buildSessionFeatureRecoveryPlan`, or the failed plan Load builds).
+ * @param {{ generationId?: string }} [options]
+ */
 const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'session-feature-recovery' } = {}) => {
   state.featureExtractionPending.value = false;
 
@@ -4873,8 +4941,9 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
       status: 'summary-ready',
       generationId,
       error: plan.warning || null,
+      // The cast: `Array.isArray` on the line above; the elements stay unvalidated.
       summaryCount: Array.isArray(plan.recoveredFeatureState?.extractedFeatures)
-        ? plan.recoveredFeatureState.extractedFeatures.length
+        ? /** @type {unknown[]} */ (plan.recoveredFeatureState.extractedFeatures).length
         : state.extractedFeatures.value.length
     });
     return;
@@ -6323,7 +6392,17 @@ export const exportSession = (titleOverride = null, options = {}) => {
  * The Session file input's change event, or an object with its `target`.
  * @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput
  */
-/** @param {SessionFileInput} event */
+/**
+ * What the composition root passes to `importSession`: the Save and Load availability (as `SessionSaveOptions`
+ * has it) and a step to run before the Load starts, both read here; every other option is passed on to
+ * `importSessionDocument` unread.
+ * @typedef {Pick<SessionSaveOptions, 'availability'> & { beforeImport?: () => void | Promise<void> }
+ *   & Record<string, unknown>} SessionLoadOptions
+ */
+/**
+ * @param {SessionFileInput} event
+ * @param {SessionLoadOptions} [options]
+ */
 export const importSession = async (event, options = {}) => {
   const input = event?.target;
   const file = input?.files?.[0];

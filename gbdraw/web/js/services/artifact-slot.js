@@ -14,7 +14,7 @@
  * color rules, the file Legend captions, the Linear record orientations, the
  * pending palette, the LOSAT caches and manifests, the alignment plan and
  * record translations, and every editor intent (R2).
- * @type {Readonly<Record<string, (mode: 'circular' | 'linear', current: any) => any>>}
+ * @satisfies {Readonly<Record<string, (mode: 'circular' | 'linear', current: any) => any>>}
  */
 export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   results: () => [],
@@ -44,7 +44,8 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   originalLegendColors: () => ({}),
   originalSvgStroke: () => ({ color: null, width: null })
 });
-export const ARTIFACT_SLOT_KEYS = Object.freeze(Object.keys(ARTIFACT_SLOT_EMPTY));
+// The cast: `ARTIFACT_SLOT_EMPTY` is the frozen literal above, so its own keys are exactly the keys of its type.
+export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFACT_SLOT_EMPTY)[]} */ (Object.keys(ARTIFACT_SLOT_EMPTY)));
 
 /**
  * One mode's generated artifact, held by reference (no clone).
@@ -72,7 +73,8 @@ export const createArtifactSlot = ({
   mode, values, legendInventory = [], matchSequenceOwner = null, runtimeState = null,
   transportIdentity = null, retainedBytes = 0
 }) => {
-  const unknown = Object.keys(values).filter((key) => !ARTIFACT_SLOT_KEYS.includes(key));
+  // The cast widens the key list, so that a field of any name can be looked up in it.
+  const unknown = Object.keys(values).filter((key) => !(/** @type {readonly string[]} */ (ARTIFACT_SLOT_KEYS)).includes(key));
   if (unknown.length > 0) throw new Error(`Unknown artifact slot field(s): ${unknown.join(', ')}.`);
   const slotMode = mode === 'linear' ? 'linear' : 'circular';
   return Object.freeze({

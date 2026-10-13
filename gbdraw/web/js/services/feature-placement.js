@@ -23,19 +23,16 @@ import { cloneJsonData } from './json-clone.js';
  * @property {string} biologicalFeatureId
  */
 
-/** @import { CanonicalFeatureOverride, CanonicalFeaturePlacement } from '../contracts/request.generated.js' */
+/** @import { CanonicalCircularFeaturePlacement, CanonicalFeatureOverride, CanonicalLinearFeaturePlacement, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 /**
- * Where a feature is drawn: the main track, or one lane beside it.
- * @typedef {CanonicalFeaturePlacement['placement']} FeaturePlacementTarget
+ * A request row of `diagramOptions.featurePlacements`, of either mode.
+ * @typedef {CanonicalCircularFeaturePlacement | CanonicalLinearFeaturePlacement} FeaturePlacementRow
  */
 
 /**
- * A request row of `diagramOptions.featurePlacements`.
- * @typedef {object} FeaturePlacementRow
- * @property {string} recordKey
- * @property {string} biologicalFeatureId
- * @property {FeaturePlacementTarget} placement
+ * Where a feature is drawn: the main track, or one lane beside it. A lane has a side of its mode.
+ * @typedef {FeaturePlacementRow['placement']} FeaturePlacementTarget
  */
 
 /**
@@ -177,9 +174,11 @@ export const rowBelongsToRequest = (row, records = []) => recordKeyBelongsToRequ
  *   `canonicalIdentityRows` and the row check below go on to prove, row by row; a value that is neither a
  *   map nor rows gives no row or fails the first check.
  * @param {string | null} mode The mode of the request or drawing.
- * @returns {FeaturePlacementRow[]}
+ * @returns {CanonicalRenderRequest['diagramOptions']['featurePlacements']} The rows of a request of `mode`.
  */
-export const canonicalFeaturePlacements = (overrides, mode) => canonicalIdentityRows(/** @type {FeaturePlacementDraft | FeaturePlacementRow[] | null | undefined} */ (overrides), (row) => {
+// The cast on the result: the row check below passes a lane only with a side of the one `mode` (no lane for
+// another value of `mode`), and a main row is a row of either mode.
+export const canonicalFeaturePlacements = (overrides, mode) => /** @type {CanonicalRenderRequest['diagramOptions']['featurePlacements']} */ (canonicalIdentityRows(/** @type {FeaturePlacementDraft | FeaturePlacementRow[] | null | undefined} */ (overrides), (row) => {
   if (Object.keys(row).sort().join(',') !== 'biologicalFeatureId,placement,recordKey') throw invalidRow();
   const sides = SIDES[/** @type {FeatureMode} */ (mode)] || [];
   const target = row.placement;
@@ -194,13 +193,13 @@ export const canonicalFeaturePlacements = (overrides, mode) => canonicalIdentity
     biologicalFeatureId: row.biologicalFeatureId,
     placement: { ...target }
   };
-});
+}));
 
 /**
  * @param {FeaturePlacementDraft | null | undefined} overrides
  * @param {string} mode
  * @param {FeatureRequestRecord[]} [records]
- * @returns {FeaturePlacementRow[]}
+ * @returns {CanonicalRenderRequest['diagramOptions']['featurePlacements']} The rows of a request of `mode`.
  */
 export const requestFeaturePlacements = (overrides, mode, records = []) => canonicalFeaturePlacements(
   Object.fromEntries(Object.entries(overrides || {}).filter(([, row]) => rowBelongsToRequest(row, records))),

@@ -2349,6 +2349,7 @@ def test_linear_placements_overrides_slots_and_feature_identity_round_trip(
         options=CircularDiagramOptions(
             feature_placements=(
                 FeaturePlacementOverride("one", early, FeaturePlacementTarget("lane", "outward", 1)),
+                FeaturePlacementOverride("one", alpha, FeaturePlacementTarget("main")),
             ),
         ),
     )
@@ -2361,7 +2362,11 @@ def test_linear_placements_overrides_slots_and_feature_identity_round_trip(
     assert decoded.options.feature_placements == circular.options.feature_placements
     with pytest.raises(CanonicalRequestDecodingError, match="unsupported in circular mode"):
         payload = copy.deepcopy(encoded.payload)
-        payload["diagramOptions"]["featurePlacements"][0]["placement"]["side"] = "above"
+        next(
+            row["placement"]
+            for row in payload["diagramOptions"]["featurePlacements"]
+            if row["placement"]["kind"] == "lane"
+        )["side"] = "above"
         decode_canonical_request(
             payload,
             resource_paths=_materialize_resources(encoded, tmp_path / "placed-circular"),
