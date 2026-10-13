@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from enum import Enum
+import json
 import types
 from typing import Any, Callable, Literal, Mapping, Union, get_args, get_origin, get_type_hints
 
@@ -146,3 +147,69 @@ def typed_dict_shape(
         optional=sorted(optional),
         open=open,
     )
+
+
+_SCALAR_CHECKS: dict[str, Callable[[object], bool]] = {
+    "string": lambda value: isinstance(value, str),
+    "boolean": lambda value: isinstance(value, bool),
+    "integer": lambda value: isinstance(value, int) and not isinstance(value, bool),
+    "number": lambda value: isinstance(value, (int, float)) and not isinstance(value, bool),
+    "null": lambda value: value is None,
+}
+
+
+def violations(
+    value: object, shape: Mapping[str, Any], types: Mapping[str, Mapping[str, Any]], path: str
+) -> list[str]:
+    """Where a parsed JSON ``value`` leaves ``shape``, as ``"<path>: <reason>"``.
+
+    ``types`` holds the named shapes a ``ref`` points to. A reason never
+    repeats the value, which can be private text. Of a union's options, the
+    first one with the fewest violations is reported.
+    """
+
+    kind = shape["kind"]
+    if kind == "unknown":
+        return []
+    if kind == "ref":
+        return violations(value, types[shape["name"]], types, path)
+    if kind in _SCALAR_CHECKS:
+        return [] if _SCALAR_CHECKS[kind](value) else [f"{path}: expected {kind}"]
+    if kind == "literal":
+        allowed = any(value == item and type(value) is type(item) for item in shape["values"])
+        return [] if allowed else [f"{path}: expected one of {json.dumps(shape['values'], separators=(',', ':'))}"]
+    if kind == "union":
+        found = [violations(value, option, types, path) for option in shape["options"]]
+        return min(found, key=len) if all(found) else []
+    if kind in {"array", "tuple"}:
+        if not isinstance(value, list):
+            return [f"{path}: expected an array"]
+        if kind == "tuple" and len(value) != len(shape["items"]):
+            return [f"{path}: expected {len(shape['items'])} items"]
+        items = shape["items"] if kind == "tuple" else [shape["items"]] * len(value)
+        return [
+            problem
+            for index, (item, item_shape) in enumerate(zip(value, items))
+            for problem in violations(item, item_shape, types, f"{path}[{index}]")
+        ]
+    if not isinstance(value, dict):
+        return [f"{path}: expected an object"]
+    if kind == "record":
+        return [
+            problem
+            for key, item in value.items()
+            for problem in violations(item, shape["values"], types, f"{path}.{key}")
+        ]
+    if kind != "object":
+        raise ValueError(f"Unknown shape kind: {kind!r}")
+    fields = shape["fields"]
+    problems = [] if shape["open"] else [f"{path}.{key}: unknown field" for key in value if key not in fields]
+    problems += [
+        f"{path}.{key}: required field is absent"
+        for key in fields
+        if key not in value and key not in shape["optional"]
+    ]
+    for key, item in value.items():
+        if key in fields:
+            problems += violations(item, fields[key], types, f"{path}.{key}")
+    return problems

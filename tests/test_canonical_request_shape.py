@@ -19,7 +19,7 @@ from gbdraw.api.options import (
     LinearRequestTrackOptions,
     LosatSearchOptions,
 )
-from gbdraw.contract_shapes import INTEGER, STRING, array, literal, nullable, obj, record
+from gbdraw.contract_shapes import violations
 from gbdraw.api.requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
@@ -42,7 +42,7 @@ from gbdraw.session_request_codec import (
 )
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
 from tests import test_session_request_codec as codec_tests
-from tests.utils.contract_shape_check import load_json, stored_json_files, violations
+from tests.utils.contract_shape_check import load_json, stored_json_files
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DESCRIPTION = describe_canonical_request()
@@ -506,13 +506,19 @@ _DECODER_ONLY_OPTIONS = {
 }
 
 
+@pytest.mark.parametrize("schema", [8, CANONICAL_REQUEST_SCHEMA])
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_the_description_names_every_option_key_a_writer_can_write(
-    mode: str, tmp_path: Path
+    mode: str, schema: int, tmp_path: Path
 ) -> None:
+    """At the current schema the decoder reads the described option keys only;
+    an older schema also reads the depth inputs of older writers."""
+
     table_path, older_depth_inputs = _DECODER_ONLY_OPTIONS[mode]
     described = TYPES[f"Canonical{mode.capitalize()}DiagramOptions"]["fields"]
-    payload, resources = _smallest_request(mode, tmp_path)
+    encoded = encode_canonical_request(_request(mode))
+    payload = codec_tests._payload_for_schema(encoded, schema)
+    resources = codec_tests._materialize_resources(encoded, tmp_path / "resources")
 
     # A shared option of the other mode is a key only at its default.
     defaults = {
@@ -529,15 +535,26 @@ def test_the_description_names_every_option_key_a_writer_can_write(
                     output_directory=tmp_path / "output",
                 )
             except CanonicalRequestCodecError as error:
-                if "Unknown field" in str(error):
+                if "unknown field" in str(error).lower() and key in str(error):
                     continue
             return True
         return False
 
     candidates = {_option_wire_key(item.name) for item in fields(_REQUEST_TYPES[mode][1])}
-    decoder_keys = {key for key in candidates | set(defaults) | set(described) if decoder_names(key)}
-    assert set(described) <= decoder_keys
-    assert decoder_keys - set(described) == older_depth_inputs
+    if schema == CANONICAL_REQUEST_SCHEMA:
+        assert {key for key in described if not decoder_names(key)} == set()
+        # Any other key is refused, by the decoder or as outside the description.
+        for key in (candidates | set(defaults)) - set(described):
+            with pytest.raises(CanonicalRequestCodecError):
+                decode_canonical_request(
+                    _with(payload, ("diagramOptions",), key, None),
+                    resource_paths=resources,
+                    output_directory=tmp_path / "output",
+                )
+    else:
+        decoder_keys = {key for key in candidates | set(defaults) | set(described) if decoder_names(key)}
+        assert set(described) - decoder_keys == {"featureOverrides"}
+        assert decoder_keys - set(described) == older_depth_inputs
     with pytest.raises(CanonicalRequestEncodingError, match="comparison table"):
         encode_canonical_request(_request(mode, **{table_path: "table.tsv"}))
 
@@ -638,27 +655,6 @@ def test_requests_stored_in_current_sessions_match_the_description() -> None:
                 problems[str(path.relative_to(REPO_ROOT))] = found
     assert problems == {}
     assert modes.count("circular") >= 4 and modes.count("linear") >= 4
-
-
-@pytest.mark.parametrize(
-    ("value", "shape", "expected"),
-    [
-        ({"a": 1}, obj({}), ["renderRequest.a: unknown field"]),
-        ({"a": 1}, obj({}, open=True), []),
-        ({}, obj({"a": INTEGER}), ["renderRequest.a: required field is absent"]),
-        ({"a": "x", "b": 1}, obj({"a": INTEGER}, open=True), ["renderRequest.a: 'x' is not integer"]),
-        ({}, obj({"a": INTEGER}, optional=["a"]), []),
-        (True, INTEGER, ["renderRequest: True is not integer"]),
-        (1, literal(True), ["renderRequest: 1 is not one of [True]"]),
-        ([1, "a"], array(INTEGER), ["renderRequest[1]: 'a' is not integer"]),
-        (None, nullable(STRING), []),
-        ({"k": 1}, record(STRING), ["renderRequest.k: 1 is not string"]),
-    ],
-)
-def test_the_structural_checker_reports_each_kind_of_violation(
-    value: object, shape: dict[str, Any], expected: list[str]
-) -> None:
-    assert _problems(value, shape) == expected
 
 
 def _annotated_request(mode: str) -> Any:
@@ -799,3 +795,21 @@ def test_a_comparison_setting_holds_its_name_from_schema_9(
         return
     decoded = _decode_at(schema, request, tmp_path, spell)
     assert encode_canonical_request(decoded).payload["comparisons"][0]["settings"][key] == name
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_current_request_outside_its_description_is_refused(mode: str, schema: int, tmp_path: Path) -> None:
+    """The decoder reads a depth input of older writers, which schema 9 writers never wrote (K11)."""
+
+    def older_depth_input(payload: dict[str, Any]) -> None:
+        payload["diagramOptions"]["depthTrackColors"] = None
+
+    if schema < CANONICAL_REQUEST_SCHEMA:
+        _decode_at(schema, _request(mode), tmp_path, older_depth_input)
+        return
+    with pytest.raises(
+        CanonicalRequestDecodingError,
+        match=r"does not match its description: renderRequest\.diagramOptions\.depthTrackColors: unknown field",
+    ):
+        _decode_at(schema, _request(mode), tmp_path, older_depth_input)

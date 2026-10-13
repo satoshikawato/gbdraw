@@ -106,6 +106,7 @@ from .api.options import (
     LOSATP_MODE_WIRE,
     LosatRuntimeOptions,
     LosatSearchOptions,
+    _invalid_input,
     losatp_analysis_mode,
 )
 from .comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
@@ -534,7 +535,8 @@ _DEPTH_COMPATIBILITY_FIELDS = frozenset(
 _ALL_DEPTH_INPUT_FIELDS = _DEPTH_COMPATIBILITY_FIELDS | {"depth_tracks"}
 # A comparison table path: encode_canonical_request refuses it (call
 # resolve_request first) and no request of any schema holds it (OV-324).
-_REQUEST_FIELDS_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
+# A request field of the wrong kind or name.
+_REQUEST_FIELDS_INVALID = _invalid_input("schema", "FIELDS")
 _TABLE_PATH_FIELDS = frozenset({"conservation_table_file", "comparison_table_file"})
 # Options that hold a name. Their constructors read null (and an empty array)
 # as the default; every writer wrote a name (OV-528, OV-596).
@@ -749,10 +751,17 @@ def decode_canonical_request(
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
 ) -> DiagramRequest:
-    """Decode every supported canonical schema and normalize validation failures."""
+    """Decode every supported canonical schema and normalize validation failures.
+
+    A current-schema request must also match its description
+    (:func:`describe_canonical_request`): it is checked before the typed
+    constructors convert any value, and refused after the decoder's own
+    checks, whose messages are more specific.
+    """
 
     try:
-        return _decode_canonical_request(
+        problems = _undescribed_parts(payload)
+        request = _decode_canonical_request(
             payload,
             resource_paths=resource_paths,
             output_directory=output_directory,
@@ -763,6 +772,13 @@ def decode_canonical_request(
         raise CanonicalRequestDecodingError(
             f"Canonical request could not be converted: {exc}"
         ) from exc
+    if problems:
+        shown = "; ".join(problems[:5]) + (f"; and {len(problems) - 5} more" if len(problems) > 5 else "")
+        raise CanonicalRequestDecodingError(
+            f"The schema {CANONICAL_REQUEST_SCHEMA} request does not match its description: {shown}.",
+            diagnostic=_REQUEST_FIELDS_INVALID,
+        )
+    return request
 
 
 def _decode_canonical_request(
@@ -4861,7 +4877,7 @@ def _boolean(value: object, path: str) -> bool:
 
 def _string(value: object, path: str) -> str:
     if not isinstance(value, str):
-        raise CanonicalRequestDecodingError(f"{path} must be a string.")
+        raise CanonicalRequestDecodingError(f"{path} must be a string.", diagnostic=_REQUEST_FIELDS_INVALID)
     return value
 
 
@@ -4883,6 +4899,24 @@ def _check_singleton_kind(kind: str, seen: set[str], *, path: str) -> None:
             f"Duplicate singleton comparison kind at {path}: {kind}."
         )
     seen.add(kind)
+
+
+@lru_cache(maxsize=1)
+def _current_request_description() -> dict[str, Any]:
+    return describe_canonical_request()
+
+
+def _undescribed_parts(payload: object) -> list[str]:
+    """Where a current-schema request leaves its description (BA-D09); older
+    schemas are not described."""
+
+    from .contract_shapes import ref, violations
+
+    schema = payload.get("schema") if isinstance(payload, MappingABC) else None
+    if type(schema) is not int or schema != CANONICAL_REQUEST_SCHEMA:
+        return []
+    description = _current_request_description()
+    return violations(payload, ref(description["root"]), description["types"], "renderRequest")
 
 
 def describe_canonical_request() -> dict[str, Any]:
