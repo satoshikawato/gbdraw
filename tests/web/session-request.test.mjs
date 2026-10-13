@@ -742,6 +742,23 @@ assert.equal(
   30
 );
 state.adv.circular_definition_interval = null;
+// The diagram font is a managed setting: the draft list goes to the request as
+// typed, and the request projects back into the setting (custom-fonts PR-2).
+state.adv.font_family = "'DejaVu Serif', serif";
+const fontFamilyRequest = buildCanonicalRenderRequestRaw({ state, filesData });
+assert.equal(
+  fontFamilyRequest.renderRequest.diagramOptions.configOverrides['objects.text.font_family'],
+  "'DejaVu Serif', serif"
+);
+assert.equal(projectCanonicalSessionRequest(fontFamilyRequest).config.adv.font_family, "'DejaVu Serif', serif");
+state.adv.font_family = null;
+assert.equal(
+  Object.hasOwn(
+    buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.diagramOptions.configOverrides,
+    'objects.text.font_family'
+  ),
+  false
+);
 assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
 assert.equal(canonical.renderRequest.diagramOptions.evalue, 1e-5);
 assert.equal(canonical.renderRequest.diagramOptions.bitscore, 50);
@@ -3610,11 +3627,13 @@ pythonCircularConfigCanonical.renderRequest.diagramOptions.config = structuredCl
 );
 pythonCircularConfigCanonical.renderRequest.diagramOptions.config.objects.definition.circular.interval = 30;
 pythonCircularConfigCanonical.renderRequest.diagramOptions.config.canvas.show_labels = true;
+pythonCircularConfigCanonical.renderRequest.diagramOptions.config.objects.text = { font_family: "'Liberation Serif', serif" };
 const pythonCircularConfigProjection = projectCanonicalSessionRequest(pythonCircularConfigCanonical);
 assert.equal(pythonCircularConfigProjection.config.adv.axis_stroke_width, 3);
 assert.equal(pythonCircularConfigProjection.config.adv.axis_stroke_color, '#333333');
 assert.equal(pythonCircularConfigProjection.config.adv.def_font_size, 18);
 assert.equal(pythonCircularConfigProjection.config.adv.circular_definition_interval, 30);
+assert.equal(pythonCircularConfigProjection.config.adv.font_family, "'Liberation Serif', serif");
 assert.equal(pythonCircularConfigProjection.config.adv.plot_title_font_size, 30);
 assert.equal(pythonCircularConfigProjection.config.adv.label_font_size, 13);
 assert.equal(pythonCircularConfigProjection.config.adv.outer_label_x_offset, 0.9);

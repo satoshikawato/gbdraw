@@ -72,7 +72,7 @@ export const createDefaultForm = () => ({
  */
 export const createDefaultAdv = (mode = 'circular') => ({
   features: [...MODE_DEFAULT_FEATURE_TYPES], feature_shapes: createDefaultFeatureRenderings(), arrow_head_length_ratio: null,
-  arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, window_size: null, step_size: null, nt: 'GC', def_font_size: null,
+  arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, font_family: null, window_size: null, step_size: null, nt: 'GC', def_font_size: null,
   circular_definition_interval: null, label_font_size: null, circular_label_spacing: null, linear_label_spacing: null, label_rendering: 'auto',
   circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
   line_stroke_width: null, line_stroke_color: null, axis_stroke_width: null, axis_stroke_color: managedAdvStateForMode(mode).axis_stroke_color,

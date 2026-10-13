@@ -95,6 +95,7 @@ import {
 } from './match-sequences.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
+  adoptPromotedPreservedOverrides,
   buildCanonicalRenderRequest,
   canonicalLinearRecordLayout,
   draftFieldsForConfigValues,
@@ -1706,6 +1707,39 @@ const withoutLegacyNullCircularSlotSpacing = (configData) => {
   };
 };
 
+
+/**
+ * A Session's stored drafts (the flat `config` of a Session 27-44 and each
+ * Session 46 slice's `config`) with the preserved overrides that are now
+ * settings moved into them (`adoptPromotedPreservedOverrides`), read once
+ * before anything validates or splits the drafts.
+ * @param {Record<string, any>} data
+ * @returns {Record<string, any>}
+ */
+const adoptPromotedPreservedSettings = (data) => {
+  /** @type {Record<string, any>} */
+  let adopted = data;
+  if (isPlainObject(data.config)) {
+    const config = adoptPromotedPreservedOverrides(data.config);
+    if (config !== data.config) adopted = { ...adopted, config };
+  }
+  if (isPlainObject(data.modes)) {
+    /** @type {Record<string, any>} */
+    const modes = { ...data.modes };
+    let changed = false;
+    for (const mode of SLICE_MODES) {
+      const slice = modes[mode];
+      if (!isPlainObject(slice) || !isPlainObject(slice.config)) continue;
+      const config = adoptPromotedPreservedOverrides(slice.config);
+      if (config === slice.config) continue;
+      modes[mode] = { ...slice, config };
+      changed = true;
+    }
+    if (changed) adopted = { ...adopted, modes };
+  }
+  return adopted;
+};
+
 /**
  * @param {Record<string, any>} data An unvalidated Session 27-39.
  * @param {number} sourceSessionVersion
@@ -2023,9 +2057,9 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
   await validateSessionLosatArtifactsForImport(promotedData, sourceSessionVersion);
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
-  const data = currentSession
+  const data = adoptPromotedPreservedSettings(currentSession
     ? promotedData
-    : migrateSessionDataToCurrent(promotedData, sourceSessionVersion);
+    : migrateSessionDataToCurrent(promotedData, sourceSessionVersion));
   const comparisonClassification = classifyImportedComparisonIntent(/** @type {Record<string, any>} */ ({
     renderRequest: data.renderRequest,
     resources: data.resources

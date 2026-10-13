@@ -542,6 +542,20 @@ const importPayload = async (payload) => importSession({
   }
 });
 
+// A Session 46 slice that kept the diagram font as a preserved override
+// (PD-OI-009, before the Font setting) loads it into the setting, so no
+// preserved override names a path the GUI manages (custom-fonts PR-2).
+const preservedFontSession = structuredClone(divergentSession);
+const preservedFontSlice = preservedFontSession.modes.linear;
+preservedFontSlice.config ||= {};
+preservedFontSlice.config.adv ||= {};
+delete preservedFontSlice.config.adv.font_family;
+preservedFontSlice.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'DejaVu Serif', serif" };
+const preservedFontImport = await importPayload(preservedFontSession);
+assert.equal(preservedFontImport.status, 'ok', preservedFontImport.error?.message);
+assert.equal(state.drawings.linear.adv.font_family, "'DejaVu Serif', serif");
+assert.deepEqual({ ...state.drawings.linear.unmanagedConfigOverrides }, {});
+
 const decisionRequiredSession = structuredClone(divergentSession);
 decisionRequiredSession.renderRequest.comparisons = [{
   kind: 'nucleotideBlast',
