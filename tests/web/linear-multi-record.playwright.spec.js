@@ -5,7 +5,7 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -90,7 +90,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   test.setTimeout(120000);
   const wheelResponses = [];
   await page.context().route(/\/gbdraw-[^/]+\.whl(?:\?|$)/, async route => {
-    const response = await route.fetch();
+    const response = await fetchRoute(route);
     const body = await response.body();
     if (route.request().method() === 'GET') {
       wheelResponses.push({url: response.url(), sha256: createHash('sha256').update(body).digest('hex')});
@@ -4011,15 +4011,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
 
 test('@comparison-contract Total threads reallocates Auto runs and threads in real threaded LOSATP', async ({ page }) => {
   test.setTimeout(300000);
-  await page.context().route('**/*', async (route) => {
-    if (new URL(route.request().url()).hostname !== '127.0.0.1') return route.abort();
-    const response = await route.fetch();
-    return route.fulfill({ response, headers: {
-      ...response.headers(),
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp'
-    } });
-  });
+  await routeCrossOriginIsolated(page.context());
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 64 });
     window.__THREAD_DISPATCHES__ = [];

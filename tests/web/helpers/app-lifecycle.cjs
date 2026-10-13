@@ -607,6 +607,35 @@ const answerChoicePrompt = async (page, title, action, { timeout = 120_000 } = {
   await prompt.locator(`[data-choice-prompt-action="${action}"]`).click();
 };
 
+// The local static server can reset a connection under CI load (OV-713).
+// Browser tests fetch a routed request through this helper, which retries once
+// on a connection error and rethrows any other error unchanged.
+const CONNECTION_ERROR = /\b(?:ECONNRESET|ECONNREFUSED|ECONNABORTED|EPIPE)\b|socket hang up/i;
+const fetchRoute = async (route, options) => {
+  try {
+    return await route.fetch(options);
+  } catch (error) {
+    if (!CONNECTION_ERROR.test(String(error?.message || error))) throw error;
+    return route.fetch(options);
+  }
+};
+
+// Serves the app cross-origin isolated (threaded LOSAT needs
+// SharedArrayBuffer): every 127.0.0.1 request gets COOP/COEP headers and other
+// hosts are aborted. `stubs` maps a path to the fulfill options served instead.
+const CROSS_ORIGIN_ISOLATION_HEADERS = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp'
+};
+const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', async (route) => {
+  const url = new URL(route.request().url());
+  if (url.hostname !== '127.0.0.1') return route.abort();
+  const stub = stubs[url.pathname];
+  if (stub) return route.fulfill({ ...stub, headers: CROSS_ORIGIN_ISOLATION_HEADERS });
+  const response = await fetchRoute(route);
+  return route.fulfill({ response, headers: { ...response.headers(), ...CROSS_ORIGIN_ISOLATION_HEADERS } });
+});
+
 module.exports = {
   answerChoicePrompt,
   expectSessionLoadedWithoutWarnings,
@@ -622,12 +651,14 @@ module.exports = {
   diffUserOwnedState,
   evaluateWithRetainedPromise,
   expectNoSilentStateChange,
+  fetchRoute,
   generateAndWaitForResult,
   getDiagramWorkerActivity,
   observeNonEditOperation,
   openLinearFileCards,
   openApp,
   reveal,
+  routeCrossOriginIsolated,
   snapshotUserOwnedState,
   waitForAppShell
 };
