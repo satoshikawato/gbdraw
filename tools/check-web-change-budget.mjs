@@ -930,10 +930,16 @@ const designRuleAllowlistContractions = designRuleAllowlistChanges
 // design-rule.count-scope: a test that holds a registered count baseline
 // counts with its own code, so a change to that code can lower the count and
 // gain room under the ceiling. A diff with production code (as for co-change)
-// may change such a test only inside its registered literals (of any kind);
-// anything else in it, or its deletion, goes to a pull request without
-// production code.
+// may change such a test only inside its registered literals (of any kind),
+// which stay readable literals; anything else in it, or its deletion, goes to
+// a pull request without production code. The same holds for the counting
+// code those tests share outside their files.
 const COUNT_ALLOWLIST_KINDS = new Set(['count', 'count-map', 'py-count', 'py-count-map']);
+const COUNTING_CODE_PATHS = new Set([
+  'tests/web/helpers/count-baseline.mjs',
+  'tests/web/types/tsconfig.json',
+  'tools/report-web-owner-graph.mjs'
+]);
 const withoutAllowlistLiterals = (source, entries) => {
   const spans = [];
   for (const { symbol, kind } of entries) {
@@ -944,24 +950,56 @@ const withoutAllowlistLiterals = (source, entries) => {
   return spans.sort((left, right) => right.span[0] - left.span[0])
     .reduce((text, { symbol, span: [start, end] }) => `${text.slice(0, start)}<${symbol}>${text.slice(end)}`, source);
 };
+// A runtime move cannot be split from the test that names the moved file
+// (#927), so a quoted path that names the old path of a rename in this diff
+// may name the new path, in the same form: relative to the test, or the same
+// trailing path segments.
+let diffRenames = null;
+const renamesInDiff = () => {
+  diffRenames ||= parseDiffLines(runGit(repositoryRoot, [
+    'diff', '-M', '--diff-filter=R', '--name-status', ...diffRefs, '--'
+  ])).map(([, from, to]) => [from, to]);
+  return diffRenames;
+};
+const followsRename = (testPath, before, after) => renamesInDiff().some(([from, to]) => {
+  if (/^\.\.?\//.test(before)) {
+    const directory = posix.dirname(testPath);
+    return posix.join(directory, before) === from && posix.join(directory, after) === to;
+  }
+  if (from !== before && !from.endsWith(`/${before}`)) return false;
+  const prefix = from.slice(0, from.length - before.length);
+  return to.startsWith(prefix) && to.slice(prefix.length) === after;
+});
+const QUOTED_ON_ONE_LINE = /(['"`])([^'"`\n]*)\1/;
+const differsOnlyByRenamedPaths = (testPath, before, after) => {
+  const left = before.split(QUOTED_ON_ONE_LINE);
+  const right = after.split(QUOTED_ON_ONE_LINE);
+  return left.length === right.length && left.every((part, index) => (
+    part === right[index] || (index % 3 === 2 && followsRename(testPath, part, right[index]))
+  ));
+};
 const changedAllowlistEntriesByPath = new Map();
 (designRuleGuardRegistry?.rules || []).forEach((rule) => rule.allowlists.forEach((entry) => {
   if (!changed.has(entry.path) || entry.kind === 'json-entries') return;
   changedAllowlistEntriesByPath.set(entry.path, [...(changedAllowlistEntriesByPath.get(entry.path) || []), entry]);
 }));
-const countBaselineEntriesByPath = [...changedAllowlistEntriesByPath].filter(([, entries]) => entries.some(({ kind }) => (
-  COUNT_ALLOWLIST_KINDS.has(kind) && (productionPaths.length || (isPythonAllowlistKind(kind) && pythonPackageChanged))
-)));
-const designRuleCountScopeChanges = countBaselineEntriesByPath.flatMap(([path, entries]) => {
+const countScopeEntriesByPath = [
+  ...[...changedAllowlistEntriesByPath].filter(([, entries]) => entries.some(({ kind }) => (
+    COUNT_ALLOWLIST_KINDS.has(kind) && (productionPaths.length || (isPythonAllowlistKind(kind) && pythonPackageChanged))
+  ))),
+  ...(productionPaths.length ? [...COUNTING_CODE_PATHS].filter((path) => changed.has(path)).map((path) => [path, []]) : [])
+];
+const designRuleCountScopeChanges = countScopeEntriesByPath.flatMap(([path, entries]) => {
   const baseSource = readRevisionFile(base, path);
-  const headSource = readHeadFile(path);
   if (baseSource === null) return [];
   const before = withoutAllowlistLiterals(baseSource, entries);
-  // An unreadable literal is already a co-change expansion.
+  // A literal unreadable in the trusted base is already a co-change expansion.
   if (before === null) return [];
+  const headSource = readHeadFile(path);
   if (headSource === null) return [`${path} (deleted)`];
   const after = withoutAllowlistLiterals(headSource, entries);
-  return after === null || after === before ? [] : [path];
+  if (after === null) return [`${path} (registered literal missing or unreadable)`];
+  return differsOnlyByRenamedPaths(path, before, after) ? [] : [path];
 }).sort();
 const baseAcceptedViolationsSource = readRevisionFile(base, acceptedViolationsPath);
 const candidateAcceptedViolationsSource = readHeadFile(acceptedViolationsPath);
@@ -2115,7 +2153,7 @@ if (designRuleCoChangeExpansions.length) {
 }
 if (designRuleCountScopeChanges.length) {
   blockingViolations.push(
-    'design-rule.count-scope: a registered count-baseline test changed outside its registered literals '
+    'design-rule.count-scope: the test or counting code of a registered count baseline changed '
     + `alongside production runtime files (${designRuleCountScopeChanges.join(', ')})`
   );
 }

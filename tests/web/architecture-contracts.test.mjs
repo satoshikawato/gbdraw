@@ -5803,11 +5803,11 @@ const withDesignRuleGuardRepository = (runCase, {
   registry = DESIGN_RULE_REGISTRY,
   sources = { [DESIGN_RULE_GUARD_TEST_PATH]: designRuleGuardTestSource() }
 } = {}) => (
-  withChangeBudgetRepository(({ commit, execute, root, write }) => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     write(DESIGN_RULE_GUARD_REGISTRY_PATH, registry);
     Object.entries(sources).forEach(([path, content]) => write(path, content));
-    commit('register design-rule guards');
-    return runCase({ execute, root, write });
+    const base = commit('register design-rule guards');
+    return runCase({ base, commit, execute, git, root, write });
   })
 );
 const runtimeChange = (write) => {
@@ -6389,12 +6389,13 @@ test('the head-registry check resolves schema 2 guards, a rule\'s own rulesPath,
 // design-rule.count-scope (BA-OD40 (d), form B): a test that holds a count
 // baseline counts with its own code, so with production code it may change
 // only inside its registered literals.
+const countScope = (detail) => new RegExp(
+  'design-rule\\.count-scope: the test or counting code of a registered count baseline changed '
+  + `alongside production runtime files \\([^\\n]*${detail}`
+);
+const escaped = (path) => path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 test('a count-baseline test changes only inside its registered literals alongside runtime files', () => {
-  const countScope = (detail) => new RegExp(
-    'design-rule\\.count-scope: a registered count-baseline test changed outside its registered literals '
-    + `alongside production runtime files \\(${detail}\\)`
-  );
-  const escaped = (path) => path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // The counting code narrows (here: one more line of test code).
   const narrowed = `${designRuleGuardTestSource()}const COUNTED = (path) => path.startsWith('app/');\nvoid COUNTED;\n`;
   withDesignRuleGuardRepository(({ execute, write }) => {
@@ -6440,6 +6441,159 @@ test('a count-baseline test changes only inside its registered literals alongsid
     assert.equal(result.status, 1, result.output);
     assert.match(result.output, countScope(escaped(DESIGN_RULE_PYTHON_GUARD_PATH)));
     assert.doesNotMatch(result.output, /count-scope[^\n]*design-rule-guard-fixture\.test\.mjs/);
+  });
+});
+
+// F1: a registered literal that the head no longer holds as a readable
+// literal (a `let`, an indirection, a rename everywhere, a move into another
+// file) leaves the counting code free, so it is a count-scope change.
+test('a count-baseline test keeps its registered literals readable alongside runtime files', () => {
+  const missing = (path) => countScope(`${escaped(path)} \\(registered literal missing or unreadable\\)`);
+  const literal = '  const BASELINE = 46;';
+  const cases = {
+    let: (source) => source.replace(literal, '  let BASELINE = 99;'),
+    indirection: (source) => source.replace(literal, '  const BASELINE_NEXT = 99;\n  const BASELINE = BASELINE_NEXT;'),
+    renamed: (source) => source.replaceAll('BASELINE', 'CEILING').replace('const CEILING = 46;', 'const CEILING = 99;'),
+    moved: (source) => `import { BASELINE } from './count-literal.mjs';\n${source.replace(`${literal}\n`, '')}`
+  };
+  Object.entries(cases).forEach(([name, edit]) => withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, edit(designRuleGuardTestSource()));
+    if (name === 'moved') write('tests/web/count-literal.mjs', 'export const BASELINE = 99;\n');
+    const result = execute();
+    assert.equal(result.status, 1, `${name}: ${result.output}`);
+    assert.match(result.output, missing(DESIGN_RULE_GUARD_TEST_PATH), name);
+  }));
+  // Python: TYPE_DEBT_BASELINE renamed everywhere in the file.
+  withDesignRuleGuardRepository2(({ execute, write }) => {
+    pythonProductionChange(write);
+    const source = designRuleGuardSources2()[DESIGN_RULE_PYTHON_GUARD_PATH];
+    write(DESIGN_RULE_PYTHON_GUARD_PATH, source.replaceAll('TYPE_DEBT_BASELINE', 'TYPE_DEBT_CEILING'));
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, missing(DESIGN_RULE_PYTHON_GUARD_PATH));
+  });
+  // Without production code the same edits are test changes.
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    write(DESIGN_RULE_GUARD_TEST_PATH, cases.let(designRuleGuardTestSource()));
+    assert.doesNotMatch(execute().output, /design-rule\.count-scope/);
+  });
+});
+
+// F2: the code that counts for a registered count baseline outside its test
+// file (the shared comparison helper, the owner-graph report, the tsconfig the
+// type ratchets count with) does not change alongside production code either.
+const COUNTING_CODE_PATHS = Object.freeze([
+  'tests/web/helpers/count-baseline.mjs',
+  'tests/web/types/tsconfig.json',
+  'tools/report-web-owner-graph.mjs'
+]);
+test('the counting code of the count baselines does not change alongside runtime files', () => {
+  const source = (path) => (path.endsWith('.json')
+    ? '{ "include": ["../../../gbdraw/web/js/**/*.js"] }\n'
+    : 'export const compareCountBaseline = (row) => row.observed > row.recorded;\n');
+  const weakened = (path) => source(path)
+    .replace('"../../../gbdraw/web/js/**/*.js"', '"../../../gbdraw/web/js/app/*.js"')
+    .replace('row.observed > row.recorded', 'false');
+  COUNTING_CODE_PATHS.forEach((path) => {
+    withDesignRuleGuardRepository(({ execute, root, write }) => {
+      runtimeChange(write);
+      write(path, weakened(path));
+      const result = execute();
+      assert.equal(result.status, 1, `${path}: ${result.output}`);
+      assert.match(result.output, countScope(escaped(path)), path);
+      write(path, source(path));
+      rmSync(join(root, path));
+      const deleted = execute();
+      assert.equal(deleted.status, 1, `${path}: ${deleted.output}`);
+      assert.match(deleted.output, countScope(`${escaped(path)} \\(deleted\\)`), path);
+    }, {
+      sources: { [DESIGN_RULE_GUARD_TEST_PATH]: designRuleGuardTestSource(), [path]: source(path) }
+    });
+    withDesignRuleGuardRepository(({ execute, write }) => {
+      write(path, weakened(path));
+      assert.doesNotMatch(execute().output, /design-rule\.count-scope/, path);
+    }, {
+      sources: { [DESIGN_RULE_GUARD_TEST_PATH]: designRuleGuardTestSource(), [path]: source(path) }
+    });
+  });
+});
+
+test('every count-baseline test counts only with counting code or guard paths', () => {
+  const checker = readFileSync(CHANGE_BUDGET_CHECKER, 'utf8');
+  const pathSet = (name) => (checker.match(new RegExp(`const ${name} = new Set\\(\\[([\\s\\S]*?)\\]\\);`))?.[1] || '')
+    .split(',').map((item) => item.trim()).filter(Boolean)
+    .map((item) => item.match(/^'([^']+)'$/)?.[1] || checker.match(new RegExp(`const ${item} = '([^']+)';`))?.[1]);
+  assert.deepEqual(pathSet('COUNTING_CODE_PATHS').sort(), [...COUNTING_CODE_PATHS]);
+  const guards = new Set(pathSet('guardPaths'));
+  const registry = JSON.parse(readFileSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH), 'utf8'));
+  const countFiles = new Set(registry.rules.flatMap((rule) => rule.allowlists)
+    .filter(({ kind }) => /^(py-)?count(-map)?$/.test(kind))
+    .map(({ path }) => path));
+  // Every module a count-baseline test imports outside the package, directly
+  // or through such a module, can change the count: it is counting code or a
+  // guard path.
+  const pending = [...countFiles].filter((path) => path.endsWith('.mjs'));
+  const seen = new Set(pending);
+  while (pending.length) {
+    const path = pending.pop();
+    const source = readFileSync(join(REPOSITORY_ROOT, path), 'utf8');
+    for (const [, specifier] of source.matchAll(/^import [^;]*? from '(\.{1,2}\/[^']+)';$/gm)) {
+      const target = posix.join(posix.dirname(path), specifier);
+      if (target.startsWith('gbdraw/') || seen.has(target)) continue;
+      seen.add(target);
+      assert.ok(
+        COUNTING_CODE_PATHS.includes(target) || guards.has(target),
+        `${target} (imported by ${path}) counts for a registered count baseline but is neither counting code nor a guard path`
+      );
+      if (COUNTING_CODE_PATHS.includes(target)) pending.push(target);
+    }
+  }
+  assert.ok(seen.has('tests/web/helpers/count-baseline.mjs') && seen.has('tools/report-web-owner-graph.mjs'));
+});
+
+// F3 (remedy b): a runtime move that a count-baseline test follows by path
+// (#927 moved app/linear-comparisons.js to services/) cannot be split, so a
+// path string that names the old path of a rename in the same diff may name
+// the new path. Any other edit is still a count-scope change.
+test('a count-baseline test follows a runtime move by path alongside runtime files', () => {
+  const from = 'gbdraw/web/js/app/linear-comparisons.js';
+  const to = 'gbdraw/web/js/services/linear-comparisons.js';
+  const module = 'export const createDefaultLinearComparisonPlan = () => ({\n  comparisons: [],\n  thresholds: { identity: 0, length: 0 }\n});\n';
+  const withPaths = (specifier, source) => [
+    `import { createDefaultLinearComparisonPlan } from '${specifier}';`,
+    `const SOURCE = '${source}'; // read by path`,
+    'void createDefaultLinearComparisonPlan; void SOURCE;',
+    designRuleGuardTestSource()
+  ].join('\n');
+  const before = withPaths('../../gbdraw/web/js/app/linear-comparisons.js', 'app/linear-comparisons.js');
+  const after = withPaths('../../gbdraw/web/js/services/linear-comparisons.js', 'services/linear-comparisons.js');
+  const run = (edit, { rename = true } = {}) => withDesignRuleGuardRepository(({ base, commit, execute, root, write }) => {
+    runtimeChange(write);
+    if (rename) {
+      rmSync(join(root, from));
+      write(to, module);
+    } else {
+      write(from, 'export const createDefaultLinearComparisonPlan = () => null;\n');
+      write(to, 'export const other = 1;\n');
+    }
+    write(DESIGN_RULE_GUARD_TEST_PATH, edit);
+    return execute({ base, head: commit('move') });
+  }, { sources: { [DESIGN_RULE_GUARD_TEST_PATH]: before, [from]: module } });
+  const moved = run(after);
+  assert.doesNotMatch(moved.output, /design-rule\.count-scope/, moved.output);
+  // A lowered literal is still allowed with the move.
+  assert.doesNotMatch(run(after.replace('const BASELINE = 46;', 'const BASELINE = 45;')).output, /design-rule\.count-scope/);
+  const refused = {
+    'another path': after.replace("'services/linear-comparisons.js'", "'services/other.js'"),
+    'a path without a rename': after,
+    'another edit': after.replace('// read by path', '').replace('void SOURCE;', 'void SOURCE; void 0;'),
+    'a narrowed count': after.replace('test(\'baseline\'', 'test.skip(\'baseline\'')
+  };
+  Object.entries(refused).forEach(([name, edit]) => {
+    const result = run(edit, { rename: name !== 'a path without a rename' });
+    assert.equal(result.status, 1, `${name}: ${result.output}`);
+    assert.match(result.output, countScope(escaped(DESIGN_RULE_GUARD_TEST_PATH)), name);
   });
 });
 
