@@ -489,7 +489,10 @@ def _build_circular_dinucleotide_content_dataframes(
     step: int,
     nts: set[str],
 ) -> dict[str, DataFrame]:
-    return {nt: circular_dinucleotide_content_df(record, window, step, nt) for nt in sorted(nts)}
+    return {
+        nt: render_stage("gc_skew_data", circular_dinucleotide_content_df, record, window, step, nt)
+        for nt in sorted(nts)
+    }
 
 
 def _build_circular_dinucleotide_skew_dataframes(
@@ -499,7 +502,7 @@ def _build_circular_dinucleotide_skew_dataframes(
     step: int,
     nts: set[str],
 ) -> dict[str, DataFrame]:
-    return {nt: skew_df(record, window, step, nt) for nt in sorted(nts)}
+    return {nt: render_stage("gc_skew_data", skew_df, record, window, step, nt) for nt in sorted(nts)}
 
 
 def _has_conservation_inputs(

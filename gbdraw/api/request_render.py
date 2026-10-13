@@ -152,6 +152,7 @@ from .prepared import (
     prepared_resource_identity,
     prepared_resource_value_identity,
     register_prepared_resource_value,
+    register_prepared_value_identity,
 )
 from .record_planning import (
     ResolvedRecordCollection,
@@ -1383,14 +1384,36 @@ def _normalize_request_records(
         if any(isinstance(item.source, GffFastaInputSource) for item in request.records)
         else frozenset()
     )
+    gff_type_key = None if gff_types is None else tuple(sorted(gff_types))
+    input_keys = tuple(_record_input_preparation_key(item) for item in request.records)
+    collection_key = _record_collection_preparation_key(request.record_options)
     key = (
         "resolved-records-v1",
         tuple(source_key for source_key, _identities in typed_source_specs),
-        tuple(_record_input_preparation_key(item) for item in request.records),
-        _record_collection_preparation_key(request.record_options),
-        None if gff_types is None else tuple(sorted(gff_types)),
+        input_keys,
+        collection_key,
+        gff_type_key,
     )
-    return get_or_build_resolved_records(key, resource_identities, resolve)
+    collection = get_or_build_resolved_records(key, resource_identities, resolve)
+    # Per-record identity (design 2.1, M1): the elements of the key above that
+    # shape one record, so a record's render stages survive a change to another
+    # record while the collection options are the default.
+    default_collection = request.record_options == RecordCollectionOptions()
+    for record, provenance in zip(collection.records, collection.provenance, strict=True):
+        input_index = provenance.input_index
+        register_prepared_value_identity(
+            record,
+            (
+                "record-v1",
+                typed_source_specs[input_index][0],
+                input_keys[input_index],
+                input_index,
+                provenance.source_record_index,
+                gff_type_key if isinstance(request.records[input_index].source, GffFastaInputSource) else None,
+                None if default_collection else collection_key,
+            ),
+        )
+    return collection
 
 
 def _selector_preparation_key(value: Any) -> Hashable:

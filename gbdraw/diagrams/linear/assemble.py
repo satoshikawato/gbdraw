@@ -9,6 +9,7 @@ This module was extracted from `gbdraw.linear_diagram_components` to improve coh
 from __future__ import annotations
 
 from gbdraw.features.placement import FeaturePlacementSlot
+from gbdraw.render_stages import render_stage
 from ...layout.record_labels import source_ruler_ticks
 
 import copy
@@ -1687,7 +1688,7 @@ def _precalculate_gc_dataframes(
     """Build GC/skew data once per record and share it across linear groups."""
     if not enabled:
         return [None for _ in records]
-    return [skew_df(record, window, step, dinucleotide) for record in records]
+    return [render_stage("gc_skew_data", skew_df, record, window, step, dinucleotide) for record in records]
 
 
 
