@@ -236,7 +236,7 @@ test('every writer of a feature-slot input outside the stack editors is listed (
   const found = {};
   for (const path of sources(`${WEB}/js`)) {
     const file = relative(`${WEB}/js`, path);
-    if (file.includes('generated') || /^app\/(?:circular|linear)-track-slots\.js$/.test(file)) continue;
+    if (/^app\/(?:circular|linear)-track-slots\.js$/.test(file)) continue;
     const source = readFileSync(path, 'utf8');
     const lines = source.split('\n');
     for (const pattern of WRITES) {

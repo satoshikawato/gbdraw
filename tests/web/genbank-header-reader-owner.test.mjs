@@ -30,7 +30,7 @@ export const headerKeywordSites = (source) => stripComments(source).match(HEADER
 const listModules = (url, prefix = '') => readdirSync(url, { withFileTypes: true }).flatMap((entry) => {
   const path = `${prefix}${entry.name}`;
   if (entry.isDirectory()) return listModules(new URL(`${entry.name}/`, url), `${path}/`);
-  return entry.name.endsWith('.js') && !path.endsWith('.generated.js') ? [path] : [];
+  return entry.name.endsWith('.js') ? [path] : [];
 });
 
 // The files outside the owner with more header keyword sites than their entry.

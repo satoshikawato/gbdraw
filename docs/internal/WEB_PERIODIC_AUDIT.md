@@ -162,16 +162,17 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    baseline passes at or below its entry
    ([Design-rule co-change](WEB_CHANGE_POLICY.md#design-rule-co-change)), so
    an entry can stay higher than the code needs. On `dev`, run the guard tests
-   that hold one and collect their `may be lowered` lines:
+   that hold one and collect their `BASELINE may be lowered` lines:
 
    ```bash
    holders() { node -p "[...new Set(require('./tools/web-design-rule-guards.json').rules.flatMap((rule) => rule.allowlists).filter(({ kind, path }) => kind.includes('count') && path.endsWith('$1')).map(({ path }) => path))].join(' ')"; }
-   node --test $(holders .mjs) 2>&1 | grep 'may be lowered'
-   python -m pytest $(holders .py) -q 2>&1 | grep 'may be lowered'
+   node --test $(holders .mjs) 2>&1 | grep 'BASELINE may be lowered'
+   python -m pytest $(holders .py) -q 2>&1 | grep 'BASELINE may be lowered'
    ```
 
-   Each line names a baseline and the entries with their recorded and
-   observed counts. Lower those entries in one pull request before the
+   Each line names a baseline and its entries above the observed count, with
+   the recorded and observed counts (`NATIVE_TABLE_BASELINE` prints the
+   observed sizes only). Lower those entries in one pull request before the
    promotion; no line means there is nothing to lower.
 
 ## Carrying evidence forward
@@ -228,7 +229,7 @@ request and complete them.
   - [ ] Every P1 is fixed, or has an Owner waiver: <links>
   - [ ] Owner graph, `origin/main` against `origin/dev` (Procedure step 5): no frozen metric is higher on `dev`, or each one is recorded in the R13 baseline by an authority PR: <PR>
   - [ ] Random walk (Procedure step 6): seed <run ID>, 20 steps per fixture, no mismatch, or each mismatch is an OV-xx that is fixed or marked `test.fail` in the parity spec: <rows>
-  - [ ] Count baselines (Procedure step 7): no `may be lowered` line on `dev`, or the named entries were lowered: <PR or "none">
+  - [ ] Count baselines (Procedure step 7): no `BASELINE may be lowered` line on `dev`, or the named entries were lowered: <PR or "none">
   - [ ] Evidence carried from an ancestor: none, or E <sha>, the `classify --base <E> --head <H>` output, and the verdicts used
 ```
 

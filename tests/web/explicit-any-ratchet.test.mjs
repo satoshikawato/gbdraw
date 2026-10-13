@@ -13,9 +13,9 @@
 // as a typedef alias of `any`, so an alias does not hide it. A node inside a
 // counted node is not counted again; `Record<string, any>` counts once, for
 // its `any` argument. `unknown`, `object`, and `Function` do not count.
-// Generated modules (`*.generated.js`) are not counted. Workers are outside
-// the guard config; the checker resolves them in its inferred project, whose
-// `noImplicitAny` is off as well.
+// Every `.js` module is counted, generated modules included. Workers are
+// outside the guard config; the checker resolves them in its inferred
+// project, whose `noImplicitAny` is off as well.
 //
 // EXPLICIT_ANY_BASELINE is a registered design-rule allowlist
 // (tools/web-design-rule-guards.json, R14, kind `count-map`): adding an entry
@@ -136,7 +136,7 @@ const explicitAnyByModule = async () => {
   const { API, isTypeNode, SyntaxKind } = await typescriptApi();
   const paths = readdirSync(WEB_JS, { recursive: true })
     .map((path) => path.split(sep).join('/'))
-    .filter((path) => path.endsWith('.js') && !path.endsWith('.generated.js'))
+    .filter((path) => path.endsWith('.js'))
     .sort();
   const workers = paths.filter((path) => path.startsWith('workers/'));
   const api = new API({ cwd: REPOSITORY_ROOT });
