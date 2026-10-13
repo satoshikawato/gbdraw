@@ -2746,39 +2746,53 @@ test('the figure is fitted again whenever the room of the Result changes while R
   const before = await previewView(page);
   const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
   const undoAtOpen = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-  const fittedTo = async (state, room) => {
+  // The figure is fitted in the canvas as it is now, whose size differs from the one before.
+  let room = null;
+  const fittedAfterChange = async (state) => {
+    const last = String(room);
     await expect.poll(async () => {
       const found = await figureFit(page);
-      return found.fitted && found.inFrame && { room: found.room };
-    }, { message: `${state}: ${JSON.stringify(await figureFit(page))}` }).toEqual({ room });
-    return previewView(page);
+      return found.fitted && found.inFrame && String(found.room) !== last;
+    }, { message: `${state}: ${JSON.stringify(await figureFit(page))}` }).toBe(true);
+    room = (await figureFit(page)).room;
+    return { ...await previewView(page), room };
   };
-  const opened = await fittedTo('opened at 1600', [842, 650]);
+  const opened = await fittedAfterChange('opened');
   // The same room gives the same fit, whatever the view it replaces.
   const expectOpenedView = (view) => {
+    expect(view.room).toEqual(opened.room);
     expect(view.zoom).toBe(opened.zoom);
     expect(Math.abs(view.pan.x - opened.pan.x) + Math.abs(view.pan.y - opened.pan.y)).toBeLessThan(0.01);
   };
 
-  // The window: wider, narrower, and back.
+  // The window: wider, narrower, and back. The fit has landed once two frames are drawn, which
+  // is what the cases that expect no fit wait for.
   await page.setViewportSize({ width: 1900, height: 1000 });
-  const wider = await fittedTo('window 1900', [1142, 650]);
-  expect(wider.zoom).toBeGreaterThan(opened.zoom);
+  await roomSettled(page);
+  expect((await previewView(page)).zoom).toBeGreaterThan(opened.zoom);
+  const wider = await fittedAfterChange('window 1900');
+  expect(wider.room[0]).toBeGreaterThan(opened.room[0]);
   await page.setViewportSize({ width: 1340, height: 1000 });
-  const narrower = await fittedTo('window 1340', [582, 616]);
+  const narrower = await fittedAfterChange('window 1340');
+  expect(narrower.room[0]).toBeLessThan(opened.room[0]);
   expect(narrower.zoom).toBeLessThan(opened.zoom);
   await page.setViewportSize({ width: 1600, height: 1000 });
-  expectOpenedView(await fittedTo('window 1600 again', [842, 650]));
+  expectOpenedView(await fittedAfterChange('window 1600 again'));
 
   // The settings pane: the icon rail with a section, the rail alone, the stacked pane again.
   await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
-  expect((await fittedTo('rail with a section', [780, 650])).zoom).toBeLessThan(opened.zoom);
+  const railWithSection = await fittedAfterChange('rail with a section');
+  expect(railWithSection.room[0]).toBeLessThan(opened.room[0]);
+  expect(railWithSection.zoom).toBeLessThan(opened.zoom);
   await page.getByRole('button', { name: 'Close section', exact: true }).click();
-  expect((await fittedTo('rail alone', [1108, 650])).zoom).toBeGreaterThan(opened.zoom);
+  const railAlone = await fittedAfterChange('rail alone');
+  expect(railAlone.room[0]).toBeGreaterThan(opened.room[0]);
+  expect(railAlone.zoom).toBeGreaterThan(opened.zoom);
   await page.getByRole('button', { name: 'Expand settings', exact: true }).click();
-  expectOpenedView(await fittedTo('stacked again', [842, 650]));
+  expectOpenedView(await fittedAfterChange('stacked again'));
 
-  // A zoom and a pan made by hand stay while the room stays ...
+  // A zoom and a pan made by hand stay while the room stays: through a hover, and through the
+  // canvas hidden and shown again in the same room (the Run info tab) ...
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await page.evaluate(() => { window.__GBDRAW_APP__.canvasPan.y += 23; });
   const byHand = await previewView(page);
@@ -2786,13 +2800,25 @@ test('the figure is fitted again whenever the room of the Result changes while R
   await dialog.locator('[data-alignment-record-key]').first().hover();
   await roomSettled(page);
   expect(await previewView(page)).toEqual(byHand);
-  // ... and the fit replaces them when it changes: here the pane's width drag.
+  for (const tab of ['run-info', 'preview']) {
+    await page.evaluate((shown) => { window.__GBDRAW_APP__.resultPanelTab = shown; }, tab);
+    await roomSettled(page);
+  }
+  expect(await previewView(page)).toEqual(byHand);
+  // ... and the fit replaces them when it changes: here the pane's width drag, which follows
+  // the pointer from the first move (OV-620).
+  const paneWidth = () => page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth);
+  const paneBefore = await paneWidth();
   const handle = await page.locator('.resize-handle').first().boundingBox();
   await page.mouse.move(handle.x + handle.width / 2, handle.y + 200);
   await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 + 1, handle.y + 200);
+  expect(await paneWidth()).toBe(paneBefore + 1);
   await page.mouse.move(handle.x + handle.width / 2 + 100, handle.y + 200, { steps: 5 });
   await page.mouse.up();
-  const dragged = await fittedTo('pane 110 px wider', [732, 650]);
+  expect(await paneWidth()).toBe(paneBefore + 100);
+  const dragged = await fittedAfterChange('pane 100 px wider');
+  expect(dragged.room[0]).toBe(opened.room[0] - 100);
   expect(dragged.zoom).toBeLessThan(opened.zoom);
 
   // No fit is a History step, and a Session saved now holds the view from before the review.

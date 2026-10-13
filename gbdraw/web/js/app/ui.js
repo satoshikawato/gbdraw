@@ -290,7 +290,6 @@ export const createPanZoom = (state) => {
     const surface = svgContainer.value;
     const svg = surface?.querySelector?.('svg');
     if (!container || !svg) return;
-    fittedRoom = previewRoom(container);
     // Measure the current transform itself, not a frame of its transition.
     applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, true);
     const surfaceBox = surface.getBoundingClientRect();
@@ -300,6 +299,7 @@ export const createPanZoom = (state) => {
     const width = svgBox.width / zoom.value;
     const height = svgBox.height / zoom.value;
     if (!(width > 0 && height > 0)) return;
+    fittedRoom = previewRoom(container);
     const largest = Math.min(
       (frameWidth - 2 * FIT_MARGIN_PX) / width,
       (container.clientHeight - 2 * FIT_MARGIN_PX) / height
@@ -431,6 +431,7 @@ export const createPanZoom = (state) => {
   const heldPreviewViewport = () => held;
 
   const disposePanZoom = () => {
+    heldRoomObserver?.disconnect();
     cancelPreviewTransformInteraction({ reconcile: false });
     previewTransformInteractionListeners.clear();
   };
@@ -454,12 +455,14 @@ export const createPanZoom = (state) => {
 /** @param {Record<string, any>} state Shape owned by state.js. */
 export const createSidebarResize = (state) => {
   const { sidebarWidth, isResizing } = state;
+  // Where the pointer pressed the handle, as its distance from the pane's width: the pane
+  // follows the pointer from the first move (OV-620).
+  let grabOffset = 0;
 
   /** @param {MouseEvent} event */
   const doResize = (event) => {
     if (!isResizing.value) return;
-    const newWidth = event.clientX - 16;
-    sidebarWidth.value = Math.max(240, Math.min(500, newWidth));
+    sidebarWidth.value = Math.max(240, Math.min(500, event.clientX - grabOffset));
   };
 
   const stopResizing = () => {
@@ -468,9 +471,11 @@ export const createSidebarResize = (state) => {
     document.removeEventListener('mouseup', stopResizing);
   };
 
-  const startResizing = () => {
+  /** @param {MouseEvent} event The press on the handle. */
+  const startResizing = (event) => {
     // The press is default-prevented, so the field is blurred here.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    grabOffset = event.clientX - sidebarWidth.value;
     isResizing.value = true;
     document.addEventListener('mousemove', doResize);
     document.addEventListener('mouseup', stopResizing);
