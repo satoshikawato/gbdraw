@@ -38,7 +38,8 @@ write-up of a release.
     embedding is named in a warning and not embedded. `--no_font_embedding`,
     `embed_fonts=False`, and the web app's **Embed font in exported SVG** keep
     only the name. PNG, PDF, EPS, and PS from the command line and Python draw
-    the chosen font.
+    a `--font_file` font that is not installed where cairo uses fontconfig,
+    as on Linux.
   - Web app: a new **Font** section offers Liberation Sans, Serif, and Mono,
     **Load font file…**, and **Choose installed font…** (Chrome and Edge).
     SVG, Interactive SVG, and PNG exports use the embedded font; PDF export

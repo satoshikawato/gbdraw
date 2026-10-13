@@ -121,19 +121,17 @@ In the web app, SVG, Interactive SVG, and PNG exports use the embedding. With
 installed; a font loaded from a file is replaced with the browser's default
 font. PDF export embeds the TrueType outlines of each custom font whatever that
 setting, converting an OpenType CFF font. If the license forbids it or the
-conversion fails, the PDF draws that text in the nearest Liberation font, and
-the notice after the export names both fonts:
+conversion fails, the PDF draws that text in the nearest Liberation font. A
+notice after the export names each font that its license keeps out of an SVG
+or PNG, and each font the PDF replaced together with its replacement. Exports
+are not Undo steps.
 
-- "Font X is not embedded: its license (OS/2 fsType) does not allow embedding.
-  The SVG shows it only where X is installed."
-- "... The PNG draws its text with a substitute font unless X is installed."
-- "Font X is not embedded in the PDF: its license (OS/2 fsType) does not allow
-  embedding. Its text is drawn in S."
-- "Font X could not be prepared for the PDF. Its text is drawn in S."
-
-Exports are not Undo steps. PNG, PDF, EPS, and PS from the command line and
-Python go through CairoSVG and draw the chosen font, including a `--font_file`
-font that is not installed.
+PNG, PDF, EPS, and PS from the command line and Python go through CairoSVG.
+gbdraw adds each `--font_file` font to fontconfig's application fonts, so these
+formats draw it even when it is not installed where cairo finds fonts through
+fontconfig, as on Linux. Elsewhere they draw an installed font of that name or
+a substitute; install the font or export SVG. gbdraw warns when it cannot add
+the file.
 
 ## Raw results and FASTA downloads
 
