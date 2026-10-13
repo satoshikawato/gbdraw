@@ -1883,6 +1883,12 @@ Retired names and their replacements are listed under
   **Save** after **Load** of a CLI-written Circular Session that gives two records of
   one file a display start no longer fails, and the Linear comparison **Result filters**
   say they apply on Generate (OV-325, OV-332, #977).
+- Performance (web app, CLI, Python): each render request serializes the SVG once
+  instead of twice, the web app checks the records it keeps between Generates feature
+  by feature once instead of twice, and a Linear plan projects its comparison rows once
+  instead of twice. SVG, PNG, and PDF bytes are unchanged. A Linear request with an
+  invalid comparison binding and also an invalid annotation selector or alignment plan
+  now reports the annotation or alignment error first (#1045).
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
