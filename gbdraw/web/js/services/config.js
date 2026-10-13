@@ -5630,6 +5630,10 @@ const importSessionDocument = async (e, options = {}) => {
       catalog: currentSchemaSession ? validatedSessionCatalog : null,
       renderRequest: data.renderRequest
     });
+    // OV-712: listed, and reported as `degradedRecovery`.
+    if (currentRecoveryError) {
+      repairs.push(loadRepair({ code: 'match-sequences-unrestored', path: currentSchemaSession ? 'resources' : 'files', effect: 'dropped' }));
+    }
 
     recordSessionLifecycleEvent('session-candidate-sequences-end');
     // A saved Result is laid out at its committed legend and title sides.
@@ -5744,19 +5748,25 @@ const importSessionDocument = async (e, options = {}) => {
     /** @param {'circular' | 'linear'} mode @returns {ReadonlyMap<PythonLegendKey, PythonLegendKey>} */
     const legendRekeysOf = (mode) => ((mode === committedDraftMode ? committedSavedEdits : mode === otherSetMode ? otherSavedEdits : null)
       ?.legendRekeys ?? savedLegendRekeys(draftConfigOf(mode)?.rules, { originalOrder: [], originalColors: {} }));
-    const otherArtifactSlot = otherModeResult && otherModeCatalogAdmitted
+    const otherSequenceSources = otherModeResult && otherModeCatalogAdmitted
+      ? await restoreLoadedSetSequenceSources({
+          ...setSequenceSourceOptions,
+          mode: otherSetMode,
+          catalog: otherModeCatalogAdmitted,
+          renderRequest: otherModeResult.renderRequest
+        })
+      : null;
+    if (otherSequenceSources?.error) {
+      repairs.push(loadRepair({ code: 'match-sequences-unrestored', path: 'resources', effect: 'dropped' }));
+    }
+    const otherArtifactSlot = otherModeResult && otherModeCatalogAdmitted && otherSequenceSources
       ? buildLoadedArtifactSlot(otherModeResult, {
           ...slotOptions,
           featureCatalog: otherModeCatalogAdmitted,
           savedEdits: otherSavedEdits,
           legacy: loadedResultNormalization(otherSetMode, null),
           repairs,
-          restoredSequenceSources: (await restoreLoadedSetSequenceSources({
-            ...setSequenceSourceOptions,
-            mode: otherSetMode,
-            catalog: otherModeCatalogAdmitted,
-            renderRequest: otherModeResult.renderRequest
-          })).restored,
+          restoredSequenceSources: otherSequenceSources.restored,
           retainedBytes: otherSetCharacters * 2
         })
       : null;
@@ -5786,6 +5796,10 @@ const importSessionDocument = async (e, options = {}) => {
         }));
       } catch (error) {
         legacyFeatureRecoveryPlan = { status: 'failed', warning: normalizeCaughtError(error).summary };
+      }
+      // The Features card says why after the Load (`applySessionFeatureRecoveryPlan`).
+      if (legacyFeatureRecoveryPlan?.status === 'unrecoverable' || legacyFeatureRecoveryPlan?.status === 'failed') {
+        repairs.push(loadRepair({ code: 'feature-recovery-failed', path: 'features', effect: 'dropped' }));
       }
     }
     // Session 46 keys per-feature edits by source identity: an older Session's

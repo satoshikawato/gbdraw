@@ -22,6 +22,8 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  *   | 'legend-edit-overwritten-session46'
  *   | 'legend-edit-rekey-dropped'
  *   | 'record-display-drafts-dropped'
+ *   | 'feature-recovery-failed'
+ *   | 'match-sequences-unrestored'
  * } LoadRepairCode
  */
 /**
@@ -177,6 +179,14 @@ const WORDING = {
     `${table}: ${lines} lacked a required column and ${wasWere(count)} dropped.`)),
   'table-row-invalid': (repairs) => tableLines(repairs, (table, lines, count) => (
     `${table}: ${lines} had a color the table does not accept and ${wasWere(count)} dropped.`)),
+  'feature-recovery-failed': () => [
+    'Features: the feature information of the saved diagram could not be restored from this file;'
+    + ' the SVG preview stays, and the next Generate restores it.'
+  ],
+  'match-sequences-unrestored': () => [
+    'Comparisons: the sequences of the saved comparison matches could not be read again from the input files;'
+    + ' the SVG preview stays, and the next Generate reads them.'
+  ],
   'record-display-drafts-dropped': () => [
     'Record display (recordDisplayDrafts): the stored record display settings could not be read and were dropped.'
   ]

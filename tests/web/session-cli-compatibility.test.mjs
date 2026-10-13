@@ -1,4 +1,4 @@
-import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -76,7 +76,7 @@ const fileRecordKeys = request => [...new Set(request.records.map(
 ))];
 const load = bytes => importSession({ target: {
   files: [new File([bytes], 'current.json', { type: 'application/json' })], value: 'selected'
-} }, { transformLegacyResultSvg });
+} }, { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow });
 const DEFAULT_PLAN = { mode: 'none', defaultSource: 'losat', edges: [] };
 // B15: a read-only CLI comparison (-b) is not a Web draft. The replacement draft
 // is the Web default (No comparison), so Replace with current controls

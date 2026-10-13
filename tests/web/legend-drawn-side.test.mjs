@@ -67,7 +67,10 @@ const load = async (session) => {
   const outcome = await importSession({
     target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
   }, { transformLegacyResultSvg: port, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
-  return { outcome, transformed, dialogs };
+  // The Legend rows: a Session 30 also lists its feature recovery, which
+  // needs the diagram Worker that this node test does not run (B50).
+  const legendRows = dialogs.map((items) => items.filter((line) => line.startsWith('Legend'))).filter((items) => items.length > 0);
+  return { outcome, transformed, dialogs: legendRows };
 };
 
 // A valid, a cased and spaced, an empty, and an outside value in each mode.

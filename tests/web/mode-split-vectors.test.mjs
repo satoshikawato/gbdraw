@@ -9,7 +9,7 @@
 // must equal). The split writes only migrated values; `loadDefaults` lists the
 // values Session 46 Load fills for the pointers the split leaves absent, and
 // this test checks them on the drawings Load installs.
-import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -94,7 +94,7 @@ const readFixture = (path) => {
 const load = async (session) => {
   const outcome = await importSession({
     target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  }, { transformLegacyResultSvg });
+  }, { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow });
   assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
 };
 // The drawings as Save writes them (complete slices).

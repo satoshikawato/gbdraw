@@ -24,6 +24,8 @@ globalThis.alert = () => {};
 installSessionImportWorker();
 
 const { importSession } = await import('../../gbdraw/web/js/services/config.js');
+// A Session older than 40 has its Results transformed through the composition root's port.
+const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 
@@ -270,4 +272,38 @@ test('a Legend entry that repeats an earlier one is dropped and listed, by capti
   const read47 = await loadAnswering(session47);
   assert.deepEqual(read47.items, ['Legend: entry "Q" repeats an earlier entry of its list and was dropped.']);
   assert.deepEqual(state.drawings.circular.legendEntries.value.filter(({ caption }) => caption === 'tRNA').length, 2);
+});
+
+// Inventory B50: an older Session whose feature information cannot be
+// restored (here: no embedded GenBank input) lists it; the Features card
+// still says so after the Load.
+test('an older Session whose feature information cannot be restored lists it (B50)', async () => {
+  const session = fixture('hash-color-rule-linear-rc.v30.gbdraw-session.json.gz');
+  session.features.extractedFeatures = [];
+  Object.keys(session.files).forEach((key) => { session.files[key] = null; });
+  const dialogs = [];
+  const loaded = await importSession(input(session), {
+    transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; }
+  });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(dialogs, [['Features: the feature information of the saved diagram could not be restored from this file;'
+    + ' the SVG preview stays, and the next Generate restores it.']]);
+  assert.match(state.featureExtractionError.value.summary, /does not include embedded GenBank inputs/);
+});
+
+// OV-712: the sequences of the saved comparison matches that cannot be read
+// again (here: a malformed GenBank input) are listed, not only reported as
+// `degradedRecovery`.
+test('an older Session whose match sequences cannot be read again lists it (OV-712)', async () => {
+  const session = fixture('scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz');
+  session.files.linearSeqs[0].gb.data = Buffer.from('LOCUS broken\nORIGIN\n 1 zzzz\n').toString('base64');
+  const dialogs = [];
+  const loaded = await importSession(input(session), {
+    transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; }
+  });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.equal(loaded.degradedRecovery, true);
+  assert.ok(dialogs.flat().includes('Comparisons: the sequences of the saved comparison matches could not be read again from the'
+    + ' input files; the SVG preview stays, and the next Generate reads them.'), JSON.stringify(dialogs));
+  assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'match-sequences-unrestored').map(({ path }) => path), ['files']);
 });
