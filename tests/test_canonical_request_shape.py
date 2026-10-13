@@ -758,3 +758,38 @@ def test_the_encoder_writes_a_boolean_where_a_coordinate_span_wraps_the_origin(t
         written.append(payload["diagramOptions"]["annotations"]["sets"][0]["annotations"][0]["target"]["wrapsOrigin"])
         decode_canonical_request(payload, resource_paths=resources, output_directory=tmp_path / "output")
     assert written == [False, True, False, True]
+
+
+# Another spelling of a comparison setting and the name the normalizers read
+# it as. Python stores a setting normalized, and the Web writes the name from
+# schema 6 (OV-651).
+_SETTING_SPELLINGS: dict[str, tuple[tuple[str, str], ...]] = {
+    "collinearityUnitMode": ((" LOCUS ", "locus"), ("", "auto")),
+    "collinearityAnchorMode": (("Reciprocal-Best", "rbh"), ("top_n", "all"), ("", "rbh")),
+    "collinearitySearchScope": (("ALL", "all"), ("", "adjacent")),
+    "collinearityColorMode": (("identity", "average_identity"), ("Orientation-Identity", "orientation_identity")),
+    "orthogroupMembershipMode": (("rbh", "anchor_core_v1"), ("family_merge", "anchor_core_v1"), ("", "anchor_core_v1")),
+}
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+@pytest.mark.parametrize(
+    ("key", "spelling", "name"),
+    [(key, spelling, name) for key, found in _SETTING_SPELLINGS.items() for spelling, name in found],
+)
+def test_a_comparison_setting_holds_its_name_from_schema_9(
+    key: str, spelling: str, name: str, schema: int, tmp_path: Path
+) -> None:
+    """Older schemas keep reading a spelling; schema 9 reads the name only."""
+
+    request = _request("linear", losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear"))
+
+    def spell(payload: dict[str, Any]) -> None:
+        payload["comparisons"][0]["settings"][key] = spelling
+
+    if schema >= 9:
+        with pytest.raises(CanonicalRequestDecodingError, match=key):
+            _decode_at(schema, request, tmp_path, spell)
+        return
+    decoded = _decode_at(schema, request, tmp_path, spell)
+    assert encode_canonical_request(decoded).payload["comparisons"][0]["settings"][key] == name

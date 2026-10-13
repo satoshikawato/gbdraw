@@ -449,6 +449,9 @@ _PROTEIN_SETTINGS_WIRE: tuple[tuple[str, str, str], ...] = (
         "collinear_max_paralog_links_per_orthogroup",
     ),
 )
+# From this schema a comparison mode setting holds one of its names; older
+# schemas hold any spelling the option's normalizer reads (OV-651).
+_SETTING_NAMES_SCHEMA = 9
 # Schemas 1-7 also stored the retired alignment target in the settings.
 _LEGACY_ALIGNMENT_SETTING = "alignOrthogroupFeature"
 _OPTIONAL_PROTEIN_SETTINGS = frozenset({"collinearInferOrthogroups"})
@@ -529,6 +532,7 @@ _DEPTH_COMPATIBILITY_FIELDS = frozenset(
 _ALL_DEPTH_INPUT_FIELDS = _DEPTH_COMPATIBILITY_FIELDS | {"depth_tracks"}
 # A comparison table path: encode_canonical_request refuses it (call
 # resolve_request first) and no request of any schema holds it (OV-324).
+_REQUEST_FIELDS_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 _TABLE_PATH_FIELDS = frozenset({"conservation_table_file", "comparison_table_file"})
 # Options that hold a name. Their constructors read null (and an empty array)
 # as the default; every writer wrote a name (OV-528, OV-596).
@@ -4107,6 +4111,12 @@ def _decode_pipeline(
                 source_schema=schema,
             )
             continue
+        names = _setting_names(name)
+        if names and schema >= _SETTING_NAMES_SCHEMA and raw not in names:
+            raise CanonicalRequestDecodingError(
+                f"{path}.settings.{key} must be one of: {', '.join(names)}.",
+                diagnostic=_REQUEST_FIELDS_INVALID,
+            )
         if name == "collinearity_params":
             decoded, legacy_max_paralog_links = _decode_collinearity_params(
                 raw,
@@ -4133,6 +4143,17 @@ def _decode_pipeline(
             legacy_max_paralog_links
         )
     return result
+
+
+def _setting_names(name: str) -> tuple[str, ...]:
+    """The names a LinearDiagramOptions setting stores: the Literal part of its type."""
+
+    return tuple(
+        value
+        for branch in get_args(_class_type_hints(LinearDiagramOptions)[name]) or ()
+        if get_origin(branch) is Literal
+        for value in get_args(branch)
+    )
 
 
 def _decode_collinearity_params(
