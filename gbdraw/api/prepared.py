@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -64,7 +66,7 @@ class _PreparedCacheEntry:
 # is a constant: the layer decides that, not the shape of the value.
 _RENDER_STAGE_LAYER = "render_stage"
 _RENDER_STAGE_STAMP = ("render-stage",)
-_LAYERS = ("decoded", "parsed", "resolved", "interactive", _RENDER_STAGE_LAYER)
+_LAYERS = ("decoded", "parsed", "resolved", _RENDER_STAGE_LAYER)
 
 
 class _NoIdentity:
@@ -99,9 +101,6 @@ class _PreparedCacheTransaction:
     # per-record identity, a render-stage result or a direct field of one to
     # the stage key (NO_IDENTITY when the result was not stored).
     value_identities: dict[int, tuple[object, Hashable]] = field(default_factory=dict)
-    resolved_record_membership: dict[int, tuple[Hashable, int]] = field(
-        default_factory=dict
-    )
 
 
 _ACTIVE_PREPARED_TRANSACTION: ContextVar[_PreparedCacheTransaction | None] = (
@@ -118,9 +117,6 @@ _CACHE_METRICS = (
     "resolvedRecordCacheHitCount",
     "resolvedRecordCacheMissCount",
     "resolvedRecordBuildCount",
-    "interactiveContextCacheHitCount",
-    "interactiveContextCacheMissCount",
-    "interactiveContextBuildCount",
     "interactiveFeatureTraversalCount",
     "preparedInputCacheEvictionCount",
     "preparedInputCacheRetainedBytes",
@@ -146,11 +142,6 @@ _LAYER_METRICS = {
         "resolvedRecordCacheHitCount",
         "resolvedRecordCacheMissCount",
         "resolvedRecordBuildCount",
-    ),
-    "interactive": (
-        "interactiveContextCacheHitCount",
-        "interactiveContextCacheMissCount",
-        "interactiveContextBuildCount",
     ),
 }
 
@@ -229,6 +220,17 @@ def register_prepared_resource_value(value: Any, source: str | Path) -> Any:
     identity = prepared_resource_identity(source)
     if identity is not None:
         register_prepared_value_identity(value, identity)
+        # The fields of a decoded dataclass (an orthogroup or collinearity
+        # result) come from the same resource, so a stage keys them by it
+        # instead of walking them.
+        if dataclasses.is_dataclass(value) and not isinstance(value, type):
+            for item in dataclasses.fields(value):
+                child = getattr(value, item.name)
+                if child is None or isinstance(child, (bool, int, float, str, bytes, Enum)) or (
+                    type(child) in (tuple, frozenset) and not child
+                ):
+                    continue
+                register_prepared_value_identity(child, ("field", identity, item.name))
     return value
 
 
@@ -353,32 +355,6 @@ def _owner_stamp(value: Any, *, walk_features: bool) -> Hashable:
                 for record in records
             ),
             _shallow_value_stamp(provenance),
-        )
-    if all(
-        hasattr(value, field_name)
-        for field_name in (
-            "features",
-            "biological_features",
-            "orthogroups",
-            "annotations",
-            "sequence_sources",
-            "record_keys",
-        )
-    ):
-        return (
-            "interactive-context",
-            tuple(
-                (field_name, _shallow_value_stamp(getattr(value, field_name)))
-                for field_name in (
-                    "features",
-                    "biological_features",
-                    "orthogroups",
-                    "annotations",
-                    "sequence_sources",
-                    "record_keys",
-                    "collinearity_search_scope",
-                )
-            ),
         )
     return (type(value).__name__, id(value))
 
@@ -515,40 +491,25 @@ def _retained_bytes(value: Any) -> int:
                                for key, values in entry.qualifiers)
                          for entry in catalog)
         return total
-    if all(
-        hasattr(value, field_name)
-        for field_name in ("features", "biological_features", "sequence_sources")
-    ):
-        total = 0
-        for field_name in (
-            "features",
-            "biological_features",
-            "orthogroups",
-            "annotations",
-        ):
-            total += len(getattr(value, field_name, ()) or ()) * 512
-        for source in getattr(value, "sequence_sources", ()) or ():
-            if isinstance(source, Mapping):
-                total += len(str(source.get("sequence") or "")) + 256
-        return total
     return 0
 
 
 class PreparedBiologicalInputCache:
-    """One-project Worker cache for parsed, resolved, and interactive inputs.
+    """One-project Worker cache for decoded, parsed and resolved inputs and render stages.
 
     The Pyodide Worker owns one instance. Keys contain resource ID, cache token,
     byte size, and the semantic fields for the corresponding preparation layer.
-    Values are parsed source records, one resolved record collection, and the
-    interactive contexts used by the current request, including batch items.
+    Values are decoded resources, parsed source records, one resolved record
+    collection, and the render-stage results used by the current request,
+    including batch items.
     Publication waits until SVG generation and catalog construction succeed.
 
     A successful transaction is the one-project bound: it discards entries that
     the request did not use. A changed semantic key rebuilds its dependent layer;
     a changed or removed resource identity evicts every entry that refers to it.
     The retained-byte diagnostic estimates source bytes, sequence lengths,
-    feature counts, qualifier counts, and interactive-context payloads without
-    serializing them. Worker termination releases the cache with the Python
+    feature counts and qualifier counts without serializing them; render-stage
+    results are not counted. Worker termination releases the cache with the Python
     runtime.
 
     Ownership guard (D-05): a reused entry is checked by structure when it is
@@ -761,14 +722,6 @@ class PreparedBiologicalInputCache:
         )
         transaction.used[_RENDER_STAGE_LAYER].add(key)
 
-    def register_resolved_records(self, key: Hashable, value: Any) -> None:
-        transaction = _ACTIVE_PREPARED_TRANSACTION.get()
-        records = _records_from_value(value)
-        if transaction is None or records is None:
-            return
-        for index, record in enumerate(records):
-            transaction.resolved_record_membership[id(record)] = (key, index)
-
     def _commit(self, transaction: _PreparedCacheTransaction) -> None:
         replacements: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = {}
         for layer in self._layers:
@@ -897,43 +850,7 @@ def get_or_build_resolved_records(
         resource_identities,
         builder,
     )
-    transaction.cache.register_resolved_records(key, value)
     return value
-
-
-def get_or_build_interactive_context(
-    key: Hashable,
-    resource_identities: frozenset[PreparedResourceIdentity],
-    builder: Callable[[], Any],
-) -> Any:
-    """Get or transactionally stage one interactive metadata context."""
-
-    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
-    if transaction is None:
-        return builder()
-    return transaction.cache.get_or_build(
-        "interactive",
-        key,
-        resource_identities,
-        builder,
-    )
-
-
-def prepared_record_membership(
-    records: tuple[SeqRecord, ...],
-) -> tuple[tuple[Hashable, int], ...] | None:
-    """Return cached resolved-record membership without inspecting records."""
-
-    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
-    if transaction is None:
-        return None
-    membership: list[tuple[Hashable, int]] = []
-    for record in records:
-        item = transaction.resolved_record_membership.get(id(record))
-        if item is None:
-            return None
-        membership.append(item)
-    return tuple(membership)
 
 
 __all__ = ["ResolvedFeatureInputs"]

@@ -489,14 +489,12 @@ const generationPhaseAttribution = (outcome, probe) => {
       resolvedRecordBuildCount: Number(
         pythonMetrics.resolvedRecordBuildCount || 0
       ),
-      interactiveContextCacheHitCount: Number(
-        pythonMetrics.interactiveContextCacheHitCount || 0
+      // The interactive context is the render stage interactive_context.
+      interactiveContextStageHitCount: Number(
+        pythonMetrics['renderStageHit:interactive_context'] || 0
       ),
-      interactiveContextCacheMissCount: Number(
-        pythonMetrics.interactiveContextCacheMissCount || 0
-      ),
-      interactiveContextBuildCount: Number(
-        pythonMetrics.interactiveContextBuildCount || 0
+      interactiveContextStageBuildCount: Number(
+        pythonMetrics['renderStageBuild:interactive_context'] || 0
       ),
       interactiveFeatureTraversalCount: Number(
         pythonMetrics.interactiveFeatureTraversalCount || 0
@@ -1266,9 +1264,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     resolvedRecordCacheHitCount: 0,
     resolvedRecordCacheMissCount: 1,
     resolvedRecordBuildCount: 1,
-    interactiveContextCacheHitCount: 0,
-    interactiveContextCacheMissCount: 1,
-    interactiveContextBuildCount: 1,
+    interactiveContextStageHitCount: 0,
+    interactiveContextStageBuildCount: 1,
     interactiveFeatureTraversalCount: 1,
     preparedInputCacheMutationViolationCount: 0
   });
@@ -1284,8 +1281,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   // digits of a few floating-point scores (browser Python versus the CLI), so
   // the second run decodes it and rebuilds the interactive context once.
   // OV-279: these second-run counters (decoded resource miss 1, interactive
-  // context build 1, feature traversal 1) pin the rebuild and flip to the
-  // reuse values (hits 1, builds 0) when OV-279 is fixed.
+  // context stage build 1, feature traversal 1) pin the rebuild and flip to
+  // the reuse values (hits 1, builds 0) when OV-279 is fixed.
   expect(secondPhaseAttribution.preparedInputCacheStructural).toMatchObject({
     decodedResourceCacheHitCount: 0,
     decodedResourceCacheMissCount: 1,
@@ -1295,9 +1292,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     resolvedRecordCacheHitCount: 1,
     resolvedRecordCacheMissCount: 0,
     resolvedRecordBuildCount: 0,
-    interactiveContextCacheHitCount: 0,
-    interactiveContextCacheMissCount: 1,
-    interactiveContextBuildCount: 1,
+    interactiveContextStageHitCount: 0,
+    interactiveContextStageBuildCount: 1,
     interactiveFeatureTraversalCount: 1,
     preparedInputCacheMutationViolationCount: 0
   });

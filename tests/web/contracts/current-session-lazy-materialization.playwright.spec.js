@@ -1309,8 +1309,7 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     parsedSourceParseCount: 1,
     resolvedRecordCacheMissCount: 1,
     resolvedRecordBuildCount: 1,
-    interactiveContextCacheMissCount: 1,
-    interactiveContextBuildCount: 1,
+    'renderStageBuild:interactive_context': 1,
     interactiveFeatureTraversalCount: 1,
     preparedInputCacheMutationViolationCount: 0
   });
@@ -1319,8 +1318,7 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     parsedSourceParseCount: 0,
     resolvedRecordCacheHitCount: 1,
     resolvedRecordBuildCount: 0,
-    interactiveContextCacheHitCount: 1,
-    interactiveContextBuildCount: 0,
+    'renderStageHit:interactive_context': 1,
     interactiveFeatureTraversalCount: 0,
     preparedInputCacheMutationViolationCount: 0,
     featureCatalogSvgParseCount: 1,
@@ -1495,9 +1493,7 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
     resolvedRecordCacheHitCount: 0,
     resolvedRecordCacheMissCount: 1,
     resolvedRecordBuildCount: 1,
-    interactiveContextCacheHitCount: 0,
-    interactiveContextCacheMissCount: 1,
-    interactiveContextBuildCount: 1
+    'renderStageBuild:interactive_context': 1
   });
   const afterRetryWorker = await getDiagramWorkerActivity(page);
   expect(afterRetryWorker.constructions).toBe(2);

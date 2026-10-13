@@ -58,7 +58,6 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.annotations import (
     AnnotationOptions,
-    CoordinateSpan,
     FeatureIdentitySpan,
     ResolutionWarning,
     ResolvedAnnotationBundle,
@@ -146,13 +145,10 @@ from .prepared import (
     ParsedRecordInputs,
     PreparedResourceIdentity,
     ResolvedFeatureInputs,
-    get_or_build_interactive_context,
     get_or_build_parsed_source,
     get_or_build_resolved_records,
     prepared_input_cache_active,
-    prepared_record_membership,
     prepared_resource_identity,
-    prepared_resource_value_identity,
     register_prepared_resource_value,
     register_prepared_value_identity,
 )
@@ -191,8 +187,6 @@ from .requests import (
 )
 
 if TYPE_CHECKING:
-    from gbdraw.annotations import RegionAnnotationStyle
-    from gbdraw.annotations.models import RegionTarget
     from gbdraw.linear_comparison import LinearComparison
 
     from .requests import CircularBatchOutputPolicy
@@ -2901,8 +2895,10 @@ def build_prepared_interactive_context(
             collinearity_search_scope = str(
                 options.collinearity_search_scope
             )
-        return build_interactive_svg_context(
-            prepared.records,
+        return render_stage(
+            "interactive_context",
+            build_interactive_svg_context,
+            tuple(prepared.records),
             selected_features_set=options.selected_features_set,
             feature_visibility_rules=inputs.features.feature_visibility_rules,
             record_features=inputs.record_features,
@@ -2911,7 +2907,7 @@ def build_prepared_interactive_context(
             linear_rendered_feature_ids=prepared.mode == "linear",
             annotations=prepared.resolved_annotations,
             mode=prepared.mode,
-            comparison_sequence_records=comparison_sequence_records,
+            comparison_sequence_records=tuple(tuple(items) for items in comparison_sequence_records),
             collinearity_search_scope=collinearity_search_scope,
             record_transforms=prepared.transforms or None,
         )
@@ -2930,233 +2926,6 @@ def _prepared_orthogroups(prepared: PreparedDiagramRequest) -> object | None:
     return computed
 
 
-def _prepared_key_resource_identities(
-    value: object,
-) -> frozenset[PreparedResourceIdentity]:
-    identities: set[PreparedResourceIdentity] = set()
-
-    def collect(item: object) -> None:
-        if isinstance(item, PreparedResourceIdentity):
-            identities.add(item)
-            return
-        if isinstance(item, (tuple, list, frozenset)):
-            for child in item:
-                collect(child)
-
-    collect(value)
-    return frozenset(identities)
-
-
-def _resource_backed_context_key(value: object) -> Hashable | None:
-    if value is None:
-        return ("none",)
-    identity = prepared_resource_value_identity(value)
-    if identity is None:
-        return None
-    return ("resource", identity)
-
-
-def _annotation_style_context_key(value: RegionAnnotationStyle | None) -> Hashable:
-    if value is None:
-        return None
-    hatch = getattr(value, "hatch", None)
-    hatch_key = None
-    if hatch is not None:
-        hatch_key = (
-            hatch.angle,
-            hatch.spacing,
-            hatch.color,
-            hatch.width,
-            hatch.cross,
-        )
-    return (
-        value.stroke,
-        value.stroke_width,
-        tuple(value.stroke_dasharray),
-        value.line_cap,
-        value.fill,
-        value.fill_opacity,
-        hatch_key,
-        value.label_color,
-        value.label_font_size,
-        value.label_orientation,
-        value.label_position,
-        value.label_offset,
-    )
-
-
-def _annotation_target_context_key(value: RegionTarget) -> Hashable:
-    if isinstance(value, FeatureIdentitySpan):
-        return (
-            "feature-identity",
-            value.record_key,
-            value.biological_feature_id,
-            value.envelope,
-            value.circular_path,
-        )
-    record = getattr(value, "record", None)
-    record_key = _selector_preparation_key(record)
-    # RegionAnnotation admits only these three target types.
-    if isinstance(value, CoordinateSpan):
-        return (
-            "coordinates",
-            record_key,
-            int(value.start),
-            int(value.end),
-            value.coordinate_space,
-            bool(value.wraps_origin),
-            value.out_of_bounds,
-        )
-    return (
-        "features",
-        record_key,
-        tuple((selector.key, selector.value) for selector in value.selectors),
-        value.envelope,
-        value.circular_path,
-    )
-
-
-def _annotation_context_key(value: AnnotationOptions | None) -> Hashable | None:
-    if value is None:
-        return ("none",)
-    identity = prepared_resource_value_identity(value)
-    if identity is not None:
-        return ("resource", identity)
-    if value.table is not None:
-        table_identity = prepared_resource_value_identity(value.table)
-        return (
-            None
-            if table_identity is None
-            else ("resource-table", table_identity)
-        )
-    if value.table_file is not None:
-        return None
-    return (
-        "inline-annotation-sets-v1",
-        tuple(
-            (
-                annotation_set.id,
-                annotation_set.legend_label,
-                _annotation_style_context_key(annotation_set.default_style),
-                tuple(
-                    (
-                        annotation.id,
-                        _annotation_target_context_key(annotation.target),
-                        annotation.label,
-                        annotation.mark,
-                        annotation.lane,
-                        _annotation_style_context_key(annotation.style),
-                        annotation.legend_label,
-                        tuple(sorted(annotation.metadata.items())),
-                    )
-                    for annotation in annotation_set.annotations
-                ),
-            )
-            for annotation_set in value.sets
-        ),
-    )
-
-
-def _interactive_context_cache_spec(
-    prepared: PreparedDiagramRequest,
-    *,
-    include_feature_catalog: bool,
-) -> tuple[Hashable, frozenset[PreparedResourceIdentity]] | None:
-    records = tuple(prepared.records)
-    membership = prepared_record_membership(records)
-    if membership is None:
-        return None
-    options = prepared.request.options
-    inputs = prepared.inputs
-    if inputs is None:
-        return None
-    visibility_key = _resource_backed_context_key(
-        inputs.features.feature_visibility_table
-    )
-    color_key = _resource_backed_context_key(inputs.features.color_table)
-    annotation_key = _annotation_context_key(options.annotations)
-    if None in {visibility_key, color_key, annotation_key}:
-        return None
-    orthogroups = _prepared_orthogroups(prepared)
-    orthogroup_key = _resource_backed_context_key(orthogroups)
-    if (
-        orthogroups is not None
-        and orthogroup_key is None
-        and prepared.linear_metadata is not None
-        and prepared.linear_metadata.collinearity_result is not None
-    ):
-        collinearity_key = _resource_backed_context_key(
-            prepared.linear_metadata.collinearity_result
-        )
-        if collinearity_key is not None:
-            orthogroup_key = ("collinearity", collinearity_key)
-    derived_keys = tuple(
-        (
-            str(entry.get("kind") or ""),
-            str(entry.get("key") or ""),
-            str(entry.get("mode") or ""),
-        )
-        for entry in prepared.losat_derived_cache_entries
-        if str(entry.get("key") or "")
-    )
-    if orthogroups is not None and orthogroup_key is None:
-        if not derived_keys:
-            return None
-        orthogroup_key = ("derived-artifacts", derived_keys)
-    comparison_keys: list[Hashable] = []
-    if inputs.comparison_sequences is not None:
-        for path, spec in zip(
-            inputs.comparison_sequences.paths,
-            inputs.comparison_sequences.cache_specs(),
-            strict=True,
-        ):
-            if path is None:
-                comparison_keys.append(("none",))
-            elif spec is None:
-                return None
-            else:
-                comparison_keys.append(spec[0])
-    record_keys = tuple(
-        str(
-            (getattr(record, "annotations", {}) or {}).get(
-                "gbdraw_record_key",
-                f"record-{index + 1}",
-            )
-        )
-        for index, record in enumerate(records)
-    )
-    collinearity_scope = None
-    if (
-        isinstance(options, LinearDiagramOptions)
-        and prepared.linear_metadata is not None
-        and prepared.linear_metadata.collinearity_result is not None
-        and prepared.linear_metadata.collinearity_result.orthogroups is not None
-    ):
-        collinearity_scope = str(options.collinearity_search_scope)
-    popup_policy = (
-        str(prepared.request.output.interactive_metadata_policy),
-        bool(include_feature_catalog),
-    )
-    key = (
-        "interactive-context-v1",
-        prepared.mode,
-        membership,
-        tuple(options.selected_features_set or DEFAULT_SELECTED_FEATURES),
-        visibility_key,
-        options.feature_overrides,
-        color_key,
-        annotation_key,
-        orthogroup_key,
-        derived_keys,
-        tuple(comparison_keys),
-        record_keys,
-        collinearity_scope,
-        popup_policy,
-        tuple((transform.is_circular, transform.start_coordinate is not None) for transform in prepared.transforms),
-    )
-    return key, _prepared_key_resource_identities(key)
-
-
 def _interactive_context(
     prepared: PreparedDiagramRequest,
     *,
@@ -3170,21 +2939,11 @@ def _interactive_context(
     )
     if not needs_interactive_metadata and not include_feature_catalog:
         return None
-    cache_spec = _interactive_context_cache_spec(
+    # The render stage ``interactive_context`` reuses the context by its arguments.
+    return build_prepared_interactive_context(
         prepared,
-        include_feature_catalog=include_feature_catalog,
+        comparison_sequence_records=comparison_sequence_records,
     )
-
-    def build() -> InteractiveSvgContext:
-        return build_prepared_interactive_context(
-            prepared,
-            comparison_sequence_records=comparison_sequence_records,
-        )
-
-    if cache_spec is None:
-        return build()
-    key, identities = cache_spec
-    return get_or_build_interactive_context(key, identities, build)
 
 
 def render_request(

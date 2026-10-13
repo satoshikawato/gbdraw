@@ -5,13 +5,14 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, MutableMapping, Sequence
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 import re
 from types import MappingProxyType
 import xml.etree.ElementTree as ET
 from typing import Any, Iterable, TypeVar, cast
 
+from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import disambiguate_feature_ids
 from gbdraw.render.interactive_svg import (
@@ -2110,10 +2111,20 @@ def build_feature_catalog_item(
     )
 
     record_keys = _record_keys(context)
-    biological_features, indexed_features = _normalized_biological_features(
+    stored_features, stored_index = render_stage(
+        "catalog_normalization",
+        _normalized_biological_features,
         context,
-        record_keys,
+        tuple(record_keys),
     )
+    # Per-request copies (M11): this request changes the feature dicts
+    # (``_reference_reconstructible_nucleotide_sequences``); the stored ones
+    # stay as built.
+    biological_features = [dict(feature) for feature in stored_features]
+    indexed_features = [
+        replace(item, normalized=feature)
+        for item, feature in zip(stored_index, biological_features, strict=True)
+    ]
     biological_index = _BiologicalFeatureIndex(indexed_features)
     (
         rendered_features,
