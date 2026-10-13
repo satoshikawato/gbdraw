@@ -483,3 +483,44 @@ def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() ->
         label_fit_row(failing(ValidationError("Depth file does not exist: gone.tsv")), "smaller_font")
     row = label_fit_row(failing(LabelLayoutError("radial label packing did not converge")), "smaller_font")
     assert row is not None and row.status == "not_found"
+
+
+def test_a_failed_render_keeps_the_shown_results_rows_computable() -> None:
+    """OV-737: a failure of a mode keeps its last drawn figure; a newer drawn render releases both."""
+
+    from gbdraw.api.diagram import build_circular_diagram
+
+    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    options = CircularDiagramOptions(
+        config_overrides={
+            "labels.circular.scope": "outer",
+            "labels.rendering": "external_only",
+            "labels.font_size.short": 14.0,
+            "labels.font_size.long": 14.0,
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
+    searches = LabelFitRowSearches()
+    (drawn,) = searches.retain("circular", [drawing])
+    failure = LabelsDoNotFitError("labels overlap", report=_report(drawn=False), row_search=_Rows())
+    failed = searches.retain_failure("circular", failure)
+    assert drawn is not None and failed is not None
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert searches.row(drawn, "outward_vertical")["status"] != "not_computed"
+    assert searches.row(failed, "combination")["status"] == "found"
+    # A failure without rows to compute keeps the drawn figure too.
+    done = LabelsDoNotFitError("labels overlap", report=LabelFitReport(records=(), rows=(), drawn=False))
+    assert searches.retain_failure("circular", done) is None
+    assert searches.row(failed, "combination")["status"] == "not_computed"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert searches.row(drawn, "outward_vertical")["status"] != "not_computed"
+        # A newer drawn render of the mode releases the older figure and any failure.
+        searches.retain_failure("circular", failure)
+        searches.retain("circular", [])
+    assert searches.row(drawn, "outward_vertical")["status"] == "not_computed"
+    assert searches.failure_payload(failure, "circular")["rowToken"] is None

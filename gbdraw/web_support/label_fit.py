@@ -11,7 +11,7 @@ of each mode so the Web can compute one row through :func:`label_fit_row`.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Literal, TypeAlias, TypedDict, cast, get_args
 
 from svgwrite import Drawing
@@ -226,23 +226,37 @@ def _has_rows_to_compute(report: LabelFitReport) -> bool:
     return any(row.status == "not_computed" for row in report.rows)
 
 
-class LabelFitRowSearches:
-    """The last render of each mode whose report has rows to compute.
+_Kept: TypeAlias = tuple[int, dict[int, Drawing | LabelsDoNotFitError]]
 
-    Bounded: one render per mode, its drawn figures or the failure that drew
-    nothing. A newer render of a mode releases the older one, and its tokens
-    then answer with a ``not_computed`` row.
+
+class LabelFitRowSearches:
+    """The renders of each mode whose report has rows to compute.
+
+    Bounded: at most two per mode, the last drawn figures (the shown Result)
+    and the last failure that drew nothing. A newer drawn render of a mode
+    releases both, a newer failure only the older failure (the shown Result
+    stays), and released tokens answer with a ``not_computed`` row.
     """
 
     def __init__(self) -> None:
         self._generation = 0
-        self._renders: dict[LabelFitMode, tuple[int, dict[int, Drawing | LabelsDoNotFitError]]] = {}
+        self._drawn: dict[LabelFitMode, _Kept] = {}
+        self._failed: dict[LabelFitMode, _Kept] = {}
 
-    def _keep(self, mode: LabelFitMode, sources: Sequence[Drawing | LabelsDoNotFitError | None]) -> list[str | None]:
+    def _keep(
+        self,
+        kept_by_mode: dict[LabelFitMode, _Kept],
+        mode: LabelFitMode,
+        sources: Sequence[Drawing | LabelsDoNotFitError | None],
+    ) -> list[str | None]:
         self._generation += 1
         kept = {index: source for index, source in enumerate(sources) if source is not None}
-        self._renders[mode] = (self._generation, kept)
+        kept_by_mode[mode] = (self._generation, kept)
         return [f"{mode}:{self._generation}:{index}" if index in kept else None for index in range(len(sources))]
+
+    def _kept(self) -> Iterator[tuple[LabelFitMode, _Kept]]:
+        yield from self._drawn.items()
+        yield from self._failed.items()
 
     def retain(self, mode: LabelFitMode, drawings: Sequence[Drawing]) -> list[str | None]:
         """Keep the drawings whose report has a row not computed; one token per drawing."""
@@ -251,13 +265,14 @@ class LabelFitRowSearches:
             report = label_fit_report(drawing)
             return drawing if report is not None and _has_rows_to_compute(report) else None
 
-        return self._keep(mode, [computable(drawing) for drawing in drawings])
+        self._failed.pop(mode, None)
+        return self._keep(self._drawn, mode, [computable(drawing) for drawing in drawings])
 
     def retain_failure(self, mode: LabelFitMode, error: LabelsDoNotFitError) -> str | None:
         """Keep a failure whose report has a row not computed; its token."""
 
         computable = error.row_search is not None and _has_rows_to_compute(error.report)
-        return self._keep(mode, [error if computable else None])[0]
+        return self._keep(self._failed, mode, [error if computable else None])[0]
 
     def failure_payload(self, error: LabelsDoNotFitError, mode: LabelFitMode) -> LabelFitFailurePayload:
         """The failure's report and the token of its kept rows (by identity), if kept."""
@@ -265,7 +280,7 @@ class LabelFitRowSearches:
         token = next(
             (
                 f"{kept_mode}:{generation}:{index}"
-                for kept_mode, (generation, kept) in self._renders.items()
+                for kept_mode, (generation, kept) in self._kept()
                 for index, source in kept.items()
                 if source is error
             ),
@@ -282,13 +297,16 @@ class LabelFitRowSearches:
         mode_text, _, rest = token.partition(":")
         mode = label_fit_mode(mode_text)
         generation_text, _, index_text = rest.partition(":")
-        render = self._renders.get(mode)
         source = (
-            render[1].get(int(index_text))
-            if render is not None
-            and generation_text.isdigit()
-            and index_text.isdigit()
-            and render[0] == int(generation_text)
+            next(
+                (
+                    kept.get(int(index_text))
+                    for kept_mode, (generation, kept) in self._kept()
+                    if kept_mode == mode and generation == int(generation_text)
+                ),
+                None,
+            )
+            if generation_text.isdigit() and index_text.isdigit()
             else None
         )
         row = label_fit_row(source, row_kind) if source is not None else None
