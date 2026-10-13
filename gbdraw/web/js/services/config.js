@@ -313,38 +313,30 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
-/** @import { FeatureOverrideDraft } from './feature-placement.js' */
 
+/** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
+
+// A saved `ui` or `features` object (a Session's, a mode slice's, a History
+// snapshot's) has one unvalidated view, declared with History's fallback
+// readers (services/history-snapshot.js); these name the parts read here.
 /**
- * A saved offset or pan as it is read: unvalidated.
- * @typedef {UnvalidatedFields<'x' | 'y'>} SavedPointFields
- */
-/**
- * The saved palette values of a `ui` object (a Session's, a mode slice's, a
- * History snapshot's) as they are read: unvalidated.
- * @typedef {NonNullable<UnvalidatedFields<'appliedPaletteName' | 'appliedPaletteColors' | 'pendingPaletteName'
- *   | 'pendingPaletteColors'>>} SavedPaletteFields
+ * The saved palette values of a `ui` object as they are read: unvalidated.
+ * @typedef {Pick<FallbackUiData, 'appliedPaletteName' | 'appliedPaletteColors' | 'pendingPaletteName'
+ *   | 'pendingPaletteColors'>} SavedPaletteFields
  */
 /**
  * A saved `ui` object as `applyUiStateData` reads it: every leaf is
  * unvalidated until the line that reads it converts or matches it.
- * @typedef {SavedPaletteFields
- *   & NonNullable<UnvalidatedFields<'title' | 'cInputType' | 'lInputType' | 'losatProgram' | 'downloadDpi'
- *     | 'autoLabelReflow' | 'linearTypographyLinked' | 'paletteInstantPreviewEnabled' | 'losatExecution'
- *     | 'richFeaturePopup' | 'featurePanelTab' | 'generatedMode' | 'generatedLegendPosition'
- *     | 'generatedMultiRecordCanvas' | 'generatedCircularPlotTitlePosition' | 'circularPlotTitlePosition'
- *     | 'zoom'>>
- *   & NonNullable<UnvalidatedFields<'legendCurrentOffset' | 'diagramOffset' | 'lengthBarUserOffset'
- *     | 'plotTitleUserOffset' | 'canvasPan', SavedPointFields>>
- *   & NonNullable<UnvalidatedFields<'canvasPadding', UnvalidatedFields<'top' | 'right' | 'bottom' | 'left'>>>
- * } SavedUiFields
+ * @typedef {Omit<FallbackUiData, 'selectedResultIndex' | 'layoutPreferences'> & {
+ *   losatExecution?: unknown, richFeaturePopup?: unknown, featurePanelTab?: unknown,
+ *   circularPlotTitlePosition?: unknown, zoom?: unknown, canvasPan?: OffsetData | null
+ * }} SavedUiFields
  */
 /**
  * Saved feature state (a Session's `features`, a mode slice's, a History
  * checkpoint's) as it is read: unvalidated.
- * @typedef {NonNullable<UnvalidatedFields<'extractedFeatures' | 'biologicalFeatures' | 'featureRecordIds'
- *   | 'selectedFeatureRecordIdx' | 'featureColorOverrides' | 'featureVisibilityManualRules' | 'featureOverrides'
- *   | 'labelOverrideRows' | 'labelTextBulkOverrides'>>} SavedFeatureFields
+ * @typedef {FeatureEditsData & { extractedFeatures?: unknown, biologicalFeatures?: unknown,
+ *   featureRecordIds?: unknown, labelOverrideRows?: unknown }} SavedFeatureFields
  */
 
 /**
@@ -391,7 +383,11 @@ const recognizedCauseOr = (error, fallback) => {
 /** @param {unknown} value */
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-/** @param {Record<string, string> | null | undefined} colors */
+/**
+ * @template {UnvalidatedFields<string>} T
+ * @param {T} colors A color map. A caller that passes a saved one passes it unvalidated, and the copy is then
+ *   unvalidated too.
+ */
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
 /** @param {unknown} colors */
@@ -458,8 +454,7 @@ const splitLegacyFeatureVisibilityRules = (features = {}) => {
 // checked as the request rows are (services/feature-placement.js).
 /** @param {unknown} value */
 const featureOverridesForState = (value) => featureDraftMap(
-  // The cast: the callee is the check of these rows; its parameter declares them checked (T2).
-  canonicalFeatureOverrides(/** @type {FeatureOverrideDraft} */ (isPlainObject(value) ? value : {}))
+  canonicalFeatureOverrides(isPlainObject(value) ? value : {})
 );
 
 /**
@@ -565,7 +560,7 @@ const safeDeepMerge = (target, source) => {
     // 4. For arrays, intentionally overwrite (replacing lists of settings is natural)
     if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
       // The casts: `targetValue` is `target[key]`, an array.
-      /** @type {unknown[]} */ (target[key]).splice(0, /** @type {unknown[]} */ (target[key]).length, ...sourceValue);
+      /** @type {unknown[]} */ (target[key]).splice(0, /** @type {unknown[]} */ (target[key]).length, .../** @type {unknown[]} */ (sourceValue));
       return;
     }
 
@@ -4722,16 +4717,17 @@ export const buildFeatureStateData = (drawing) => ({
 // The catalog features of the shown Result (artifact values).
 /** @param {SavedFeatureFields} [features] */
 const applyFeatureArtifactData = (features = {}) => {
+  // The casts: `Array.isArray` proves an array, not its elements.
   state.extractedFeatures.value = Array.isArray(features.extractedFeatures)
-    ? features.extractedFeatures
+    ? /** @type {unknown[]} */ (features.extractedFeatures)
     : [];
   if (state.biologicalFeatures) {
     state.biologicalFeatures.value = Array.isArray(features.biologicalFeatures)
-      ? features.biologicalFeatures
+      ? /** @type {unknown[]} */ (features.biologicalFeatures)
       : [];
   }
   state.featureRecordIds.value = Array.isArray(features.featureRecordIds)
-    ? features.featureRecordIds
+    ? /** @type {unknown[]} */ (features.featureRecordIds)
     : [];
 };
 
@@ -4762,7 +4758,7 @@ const applyDrawingFeatureData = (drawing, features = {}) => {
   );
   replacePlainObject(drawing.featureOverrides, featureOverridesForState(features.featureOverrides));
   drawing.canonicalLabelOverrideRows.value = Array.isArray(features.labelOverrideRows)
-    ? cloneJsonData(features.labelOverrideRows)
+    ? cloneJsonData(/** @type {unknown[]} */ (features.labelOverrideRows))
     : [];
   replacePlainObject(drawing.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
 };

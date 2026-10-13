@@ -5770,7 +5770,7 @@ export const createRunAnalysis = ({
       const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
         ? candidateCommit.featureState.orthogroups
         : [];
-      // Align and Reset set `alignmentResetBefore` on a Linear Session with a plan, so `canonical` holds the plan and the translations.
+      // Only Align sets `alignmentResetBefore`, and it projects its plan onto `canonical`, so `canonical` holds the plan and the translations.
       const receipt = alignmentResetBefore
         ? await buildSimilarityAlignmentResetReceipt({before:alignmentResetBefore, after:/** @type {AlignmentResetPlannedCanonical} */ (canonical)})
         : alignmentResetReceipt === undefined ? state.similarityAlignmentResetReceipt?.value

@@ -28,7 +28,6 @@ import {
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
 /** @import { SessionEnvelope, SessionInput, SessionResult } from '../contracts/session.generated.js' */
-/** @import { FeatureOverrideDraft } from './feature-placement.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 
 /**
@@ -482,12 +481,11 @@ const validateSettingsOnlyFlatDraft = (data) => {
       featurePlacementOverrides: migrateSessionFeaturePlacements(storedConfig.featurePlacementOverrides)
     };
   }
-  // T-request: `validateCurrentWriterActiveConfig` is the check of `mode` and of the
-  // configuration, but its parameter declares them already checked.
-  validateCurrentWriterActiveConfig(/** @type {{ mode: string, storedConfig: Record<string, unknown>, scopedDrafts: boolean, sessionVersion: number }} */ ({
+  // `validateCurrentWriterActiveConfig` is the check of `mode` and of the configuration.
+  validateCurrentWriterActiveConfig({
     mode: /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode, storedConfig, scopedDrafts: true,
     sessionVersion: data.version
-  }));
+  });
 };
 
 // One committed Result set: the top-level fields, or `otherModeResult`, whose
@@ -658,7 +656,7 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
     sessionData.modes
   )?.linear?.config?.recordsOff;
   if (Number(version) >= MODE_SCOPED_SESSION_VERSION && Array.isArray(linearRecordsOff)) {
-    const boundUids = new Set((Array.isArray(bindings?.linearSeqs) ? bindings.linearSeqs : []).map((/** @type {UnvalidatedFields<'uid'>} */ sequence) => sequence?.uid));
+    const boundUids = new Set(/** @type {unknown[]} */ (Array.isArray(bindings?.linearSeqs) ? bindings.linearSeqs : []).map((sequence) => /** @type {UnvalidatedFields<'uid'>} */ (sequence)?.uid));
     if (/** @type {unknown[]} */ (linearRecordsOff).some((uid) => !boundUids.has(uid))) {
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     }
@@ -709,8 +707,7 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
         if (!isPlainObject(sliceFeatures.featureOverrides)) {
           throw new Error(`Session modes.${mode}.features.featureOverrides must be an object.`);
         }
-        // T-request: `canonicalFeatureOverrides` is the check of the draft rows, but its parameter declares them checked.
-        canonicalFeatureOverrides(/** @type {FeatureOverrideDraft} */ (sliceFeatures.featureOverrides));
+        canonicalFeatureOverrides(sliceFeatures.featureOverrides);
       });
     }
     if (
@@ -739,8 +736,8 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   const runMetadata = /** @type {UnvalidatedFields<'annotationWarnings' | 'featureIdentityNotices' | 'comparisonWarnings'>} */ (
     sessionData.runMetadata
   );
-  // T-request: a Session 31-39 reaches these checks with `results` unvalidated, but their parameter declares an array.
-  const results = /** @type {ReadonlyArray<{ name?: unknown }> | null | undefined} */ (sessionData.results);
+  // A Session 31-39 reaches these checks with `results` unvalidated: they read it by index only.
+  const results = /** @type {UnvalidatedFields<string, UnvalidatedFields<'name'>>} */ (sessionData.results);
   validateAnnotationWarnings(runMetadata?.annotationWarnings, results);
   validateFeatureIdentityNotices(runMetadata?.featureIdentityNotices, results);
   validateComparisonWarnings(runMetadata?.comparisonWarnings, results);

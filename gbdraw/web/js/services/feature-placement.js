@@ -173,12 +173,13 @@ export const rowBelongsToRequest = (row, records = []) => recordKeyBelongsToRequ
 // Placement validation shared by the codec and editable drafts: a row takes the
 // lane sides of its request's or drawing's mode.
 /**
- * @param {FeaturePlacementDraft | FeaturePlacementRow[] | null | undefined} overrides
- *   An editor draft map, or request rows.
+ * @param {unknown} overrides An editor draft map, or request rows: unvalidated. The cast names what
+ *   `canonicalIdentityRows` and the row check below go on to prove, row by row; a value that is neither a
+ *   map nor rows gives no row or fails the first check.
  * @param {string | null} mode The mode of the request or drawing.
  * @returns {FeaturePlacementRow[]}
  */
-export const canonicalFeaturePlacements = (overrides, mode) => canonicalIdentityRows(overrides, (row) => {
+export const canonicalFeaturePlacements = (overrides, mode) => canonicalIdentityRows(/** @type {FeaturePlacementDraft | FeaturePlacementRow[] | null | undefined} */ (overrides), (row) => {
   if (Object.keys(row).sort().join(',') !== 'biologicalFeatureId,placement,recordKey') throw invalidRow();
   const sides = SIDES[/** @type {FeatureMode} */ (mode)] || [];
   const target = row.placement;
@@ -269,11 +270,14 @@ const checkedOverrideRow = (row, draft) => {
 
 // Validates request `featureOverrides` rows (an array) or the editor draft map.
 /**
- * @param {FeatureOverrideDraft | CanonicalFeatureOverride[] | null | undefined} overrides
- *   An editor draft map, or request rows.
+ * @param {unknown} overrides An editor draft map, or request rows: unvalidated.
  * @returns {Array<CanonicalFeatureOverride | FeatureOverrideDraftRow>}
  */
-export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(overrides, checkedOverrideRow);
+// The cast names what the two row checks go on to prove, row by row; a value that is neither a map nor
+// rows gives no row or fails the first check.
+export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(
+  /** @type {FeatureOverrideDraft | CanonicalFeatureOverride[] | null | undefined} */ (overrides), checkedOverrideRow
+);
 
 // The request rows of the current request's records: the draft's edits, and
 // the label text that a bulk label edit gives a feature without its own

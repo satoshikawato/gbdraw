@@ -18,7 +18,7 @@
 
 /**
  * @param {unknown} warnings
- * @param {ReadonlyArray<{ name?: unknown }> | null | undefined} results
+ * @param {{ readonly [index: number]: { readonly name?: unknown } | null | undefined } | null | undefined} results Read by index: an unvalidated value too.
  * @returns {ComparisonWarning[]}
  */
 export const validateComparisonWarnings = (warnings, results) => {

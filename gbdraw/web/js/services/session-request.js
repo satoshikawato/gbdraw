@@ -4483,7 +4483,7 @@ const canonicalOutputPrefixes = (renderRequest, grouping, recordCount) => {
   if (
     !Array.isArray(outputs) ||
     outputs.length !== (grouping === 'batch' ? recordCount : 1) ||
-    outputs.some((output) => !output || typeof output !== 'object' || Array.isArray(output))
+    outputs.some((/** @type {unknown} */ output) => !output || typeof output !== 'object' || Array.isArray(output))
   ) {
     throw new Error(
       grouping === 'batch'

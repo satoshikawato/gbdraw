@@ -19,6 +19,7 @@ import { DISPLAY_PLACEMENT_SCHEMA, FEATURE_OVERRIDE_SCHEMA } from '../contracts/
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalDepthTrack, CanonicalFeatureOverride, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
+/** @import { LosatCacheInfoEntry } from '../services/config.js' */
 
 /**
  * @typedef {{ path?: unknown, name?: unknown, kind?: unknown, slot?: unknown }} FileMetadataInput One file's metadata as a caller supplies it.
@@ -2104,8 +2105,9 @@ export const formatLosatRuntime = ({ program, kind, version, source, path }) => 
 // The distinct runtimes of the displayed raw LOSAT entries of a run, Web or
 // CLI made. Entries saved before runtimes were recorded show "not recorded".
 /**
- * @param {readonly ({ key?: string, display?: boolean } | null | undefined)[] | null | undefined} cacheInfo
- * @param {{ get(key: string): RawLosatCacheEntry | undefined } | null | undefined} cacheMap
+ * @param {readonly (Partial<Pick<LosatCacheInfoEntry, 'key' | 'display'>> | null | undefined)[] | null | undefined} cacheInfo
+ *   The cache info rows; a row a Session load stored holds the saved key unchecked.
+ * @param {{ get(key: unknown): RawLosatCacheEntry | undefined } | null | undefined} cacheMap
  */
 export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
   const runtimes = new Map();
