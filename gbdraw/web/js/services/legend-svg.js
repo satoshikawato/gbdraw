@@ -1,7 +1,8 @@
 // @ts-check
 import { parseTransform } from './svg-transform.js';
 import { isAutoFeatureUnderlay } from './feature-dom.js';
-import { sameLegendLine } from './legend-row-names.js';
+import { legendSwatch, sameLegendLine } from './legend-row-names.js';
+/** @import { DrawnLegendName, LegendRowName, LegendSwatchIdentity } from './legend-row-names.js' */
 import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 
 export { parseTransform };
@@ -338,6 +339,40 @@ export const pythonLegendRows = (svg) => {
   return rows;
 };
 
+// The three facts of a Legend row the naming rule reads and writes (D-09,
+// legend-row-names.js), each read from the row at one place. Its name is what
+// the user or Python wrote: the key a rename shows, else `data-legend-name`,
+// which Python and a rule row's addition write where the name is not the key,
+// else the key. Its swatch is what the row shows. Its drawn name is its text,
+// which the executor writes (services/svg-result-ingestion.js).
+/** @param {Element} row @returns {LegendRowName} */
+export const legendRowName = (row) => /** @type {LegendRowName} */ (
+  (row.hasAttribute(resultBaseAttribute('data-legend-key')) ? null : row.getAttribute('data-legend-name'))
+    ?? String(row.getAttribute('data-legend-key') || '')
+);
+/** @param {Element} row @returns {LegendSwatchIdentity} */
+export const legendRowSwatch = (row) => {
+  const stops = Array.from(row.querySelectorAll('stop'));
+  if (stops.length > 1) {
+    return legendSwatch({ type: 'gradient', minColor: stops[0].getAttribute('stop-color'), maxColor: stops[stops.length - 1].getAttribute('stop-color') });
+  }
+  const swatch = getLegendEntrySwatch(row) || row.querySelector('path');
+  return legendSwatch({ fill: swatch?.getAttribute('fill'), stroke: swatch?.getAttribute('stroke'), width: swatch?.getAttribute('stroke-width') });
+};
+/** @param {Element} row @returns {DrawnLegendName} */
+export const drawnLegendRowName = (row) => /** @type {DrawnLegendName} */ (String(row.querySelector('text')?.textContent ?? ''));
+
+// The Legends a Result names its rows in: one, or the horizontal and the
+// vertical copy of a Result that holds both. The rows of one are named
+// together, in document order, as Python names the rows of its Legend table.
+/** @param {{ querySelector: (selector: string) => Element | null } | null | undefined} svg @returns {Element[]} */
+export const namedLegends = (svg) => {
+  const legend = svg?.querySelector('#legend');
+  if (!legend) return [];
+  const copies = [legend.querySelector('#legend_horizontal'), legend.querySelector('#legend_vertical')];
+  return copies[0] && copies[1] ? [copies[0], copies[1]] : [legend];
+};
+
 /**
  * What the editor intent says of the features a stroked Legend row reaches in
  * one Result; Python's row gives the rest (`legendRowFeatureIds`).
@@ -395,6 +430,8 @@ export const legendEntryAnchor = (entryGroup) => {
  * A row of a Result's shown feature Legend group, as the Result holds it.
  * @typedef {object} ResultLegendRow
  * @property {ShownLegendKey} shownKey The key the row shows.
+ * @property {LegendRowName} name The row's name (`legendRowName`).
+ * @property {DrawnLegendName} drawnName The name the Legend draws for it.
  * @property {PythonLegendKey | null} recordedKey Python's key that a rename keeps as a record; null without one.
  * @property {boolean} editor A row the Legend editor added.
  * @property {boolean} pythonShown Python drew it shown: a row a rule commit retired is not.
@@ -418,6 +455,8 @@ export const resultLegendRows = (svg) => {
     const recordedKey = row.getAttribute(resultBaseAttribute('data-legend-key'));
     return [{
       shownKey,
+      name: legendRowName(row),
+      drawnName: drawnLegendRowName(row),
       recordedKey: recordedKey === null ? null : /** @type {PythonLegendKey} */ (recordedKey),
       editor: row.getAttribute('data-legend-owner') === 'direct-editor',
       pythonShown: pythonDrawnAttribute(row, 'display') !== 'none',

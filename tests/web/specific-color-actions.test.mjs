@@ -328,7 +328,8 @@ test('a rule captioned like a generated row commits, and is edited through, its 
   s.setLegendPreparation(async (next) => { intents = next; });
   const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
   assert.equal(await s.actions.commitSpecificRules(() => [rule]), true);
-  assert.deepEqual(intents, [{ caption: 'CDS [#ff0000]', color: '#ff0000' }]);
+  // The row's key is never drawn: the row is named by the rule's caption.
+  assert.deepEqual(intents, [{ caption: 'CDS [#ff0000]', color: '#ff0000', name: 'CDS' }]);
   assert.deepEqual(s.state.manualSpecificRules.map((row) => row.cap), ['CDS'], 'the rule keeps its caption');
 
   // The Result Generate drew: the generated CDS row and the rule's row.
@@ -345,7 +346,7 @@ test('a rule captioned like a generated row commits, and is edited through, its 
   // Recoloring the rule retires the drawn row and adds the row for the new color.
   assert.equal(await s.actions.commitSpecificRules(() => [{ ...rule, color: '#00ff00' }]), true);
   assert.deepEqual(s.previousIntents(), [{ caption: 'CDS [#ff0000]', color: '#ff0000' }]);
-  assert.deepEqual(intents, [{ caption: 'CDS [#00ff00]', color: '#00ff00' }]);
+  assert.deepEqual(intents, [{ caption: 'CDS [#00ff00]', color: '#00ff00', name: 'CDS' }]);
 });
 
 // OV-308 (OV-306 on the commit path): Python draws no row for a feature type

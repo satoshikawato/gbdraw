@@ -16,6 +16,10 @@ import {
   getAllFeatureLegendGroups,
   getLegendEntrySwatch as legendSwatch,
   legendRowFeatureIds,
+  legendRowName,
+  legendRowShown,
+  legendRowSwatch,
+  namedLegends,
   moveLegendEntryToAnchor,
   orderLegendEntries,
   pythonLegendKey,
@@ -25,6 +29,7 @@ import {
 } from './legend-svg.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { drawnLegendNames } from './legend-row-names.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
 import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -658,17 +663,41 @@ const paintElementKind = (element) => {
   return 'feature';
 };
 
-/** @param {Element} entry @param {string} caption */
-const updateLegendCaption = (entry, caption) => {
-  entry.setAttribute('data-legend-key', caption);
-  const label = entry.querySelector('text');
-  if (label) label.textContent = caption;
+// THE writer of the names a Result's Legend draws (D-09, PD-OI-042 scenario
+// revision 2): after the Legend operations of a pass, each shown row's text is
+// the naming rule's answer (legend-row-names.js) for the rows the Legend shows,
+// by their names and the swatches they show. No operation writes a row's text;
+// Python's own texts are this rule's answer for the rows it drew. Returns
+// whether a text changed.
+/** @param {Parameters<typeof namedLegends>[0]} svg */
+const nameLegendRows = (svg) => {
+  let changed = false;
+  namedLegends(svg).forEach((legend) => {
+    const rows = Array.from(legend.querySelectorAll('g[data-legend-key]')).filter(legendRowShown);
+    const drawn = drawnLegendNames(rows.map((row) => ({ name: legendRowName(row), swatch: legendRowSwatch(row) })));
+    rows.forEach((row, at) => {
+      const label = row.querySelector('text');
+      if (!label || label.textContent === drawn[at]) return;
+      label.textContent = drawn[at];
+      changed = true;
+    });
+  });
+  return changed;
+};
+
+// An added row's key and name: `data-legend-name` only where the name is not
+// the key, as Python writes it (a rule's row, whose name is the rule's caption).
+/** @param {Element} row @param {string} key @param {string | undefined} name */
+const setAddedRowIdentity = (row, key, name) => {
+  row.setAttribute('data-legend-key', key);
+  if (name && name !== key) row.setAttribute('data-legend-name', name);
+  else row.removeAttribute('data-legend-name');
 };
 
 /**
  * Return every attribute the executor changed in `domains` and no operation
- * of this pass set to the value Python drew (a Legend row's key with its
- * text). Returns whether an attribute returned, and whether a Legend row did.
+ * of this pass set to the value Python drew (a Legend row's key; its text
+ * follows in `nameLegendRows`). Returns whether an attribute returned, and whether a Legend row did.
  * @param {Element} root
  * @param {readonly string[]} domains
  * @param {Map<Element, Set<string>>} painted
@@ -693,7 +722,6 @@ const restorePaintBases = (root, domains, painted) => {
       const value = element.getAttribute(base);
       if (value === null) return;
       if (value === '') element.removeAttribute(name);
-      else if (name === 'data-legend-key') updateLegendCaption(element, value);
       else element.setAttribute(name, value);
       element.removeAttribute(base);
       changed = true;
@@ -880,7 +908,7 @@ const applyLegendOperations = (index, operations, {
   // the Result has stays as it is, shown again if a commit retired it.
   // An editor row goes before the rows of the later additions, as Generate
   // appends them in order, so a renamed editor row keeps its place among them.
-  operations.legendAdds.forEach(({ caption, color, xPos, yPos, ifAbsent = false, before = '' }, addIndex) => {
+  operations.legendAdds.forEach(({ caption, name, color, xPos, yPos, ifAbsent = false, before = '' }, addIndex) => {
     const { entries, groups } = index.legends();
     const existingEntries = entries.get(caption) || [];
     if (ifAbsent && existingEntries.length > 0) {
@@ -896,6 +924,7 @@ const applyLegendOperations = (index, operations, {
         // The editor row's own color is its drawn fill; Python drew none.
         const recolored = setAttributeIfDifferent(swatch, 'fill', color);
         const unrecorded = removeAttributeIfPresent(swatch, resultBaseAttribute('fill'));
+        setAddedRowIdentity(entry, caption, name);
         if (setAttributeIfDifferent(entry, 'data-legend-owner', 'direct-editor') || recolored || unrecorded) index.changed = true;
         changed = moveLegendEntryToAnchor(entry, xPos, yPos) || changed;
       });
@@ -913,7 +942,7 @@ const applyLegendOperations = (index, operations, {
       // Python draws no hidden row.
       restorePaintBases(row, RESULT_PAINT_DOMAINS, new Map());
       row.removeAttribute('display');
-      updateLegendCaption(row, caption);
+      setAddedRowIdentity(row, caption, name);
       const swatch = legendSwatch(row);
       if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
       swatch.setAttribute('fill', color);
@@ -958,9 +987,7 @@ const applyLegendOperations = (index, operations, {
   // layout then places every row in the Legend's order, as Python does (OV-156).
   operations.legendRenames.forEach(({ from, to, allowMissing }) => {
     requireLegendEntries(index, from, { allowMissing }, mayBeAbsent).forEach((entry) => {
-      if (!setPaintAttribute(index, entry, 'data-legend-key', to)) return;
-      updateLegendCaption(entry, to);
-      changed = true;
+      changed = setPaintAttribute(index, entry, 'data-legend-key', to) || changed;
     });
   });
   // A delete hides the row and keeps it with Python's key, so a reconcile
@@ -1084,9 +1111,10 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
     legendChanged = restoreLegendStructure(index, operations, domains) || legendChanged;
   }
   const restored = restorePaintBases(svg, domains, index.painted);
+  const named = nameLegendRows(svg);
   return {
-    changed: index.changed || legendChanged || restored.changed,
-    legendChanged: restored.rowsChanged || legendChanged
+    changed: index.changed || legendChanged || restored.changed || named,
+    legendChanged: restored.rowsChanged || legendChanged || named
   };
 };
 
@@ -1413,9 +1441,9 @@ const admitCurrentResult = (
   recordStructuralMetric('applicationSvgParseCount', 1, { phase, resultIndex });
   const index = createLazyMutationIndex(svg, { phase, resultIndex });
   applyFeatureOperations(index, operations);
-  const rowsChanged = applyLegendOperations(index, operations, {
+  const rowsChanged = [applyLegendOperations(index, operations, {
     mayBeAbsent: (caption) => legendRowMayBeAbsent(legendRows, resultIndex, caption)
-  });
+  }), nameLegendRows(svg)].includes(true);
   // Every transform runs; one that returns false changed nothing.
   const transformed = operations.callerTransforms
     .map((transform) => transform(svg, { result, resultIndex }) !== false).includes(true);

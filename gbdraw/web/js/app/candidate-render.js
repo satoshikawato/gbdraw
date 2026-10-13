@@ -84,7 +84,7 @@ import {
 /**
  * The Legend rows of a rule commit until Python draws them (`prepareFileLegendEntries`):
  * the rows its rules add, each before the row it replaces, and the rows they retire.
- * @typedef {{ add: Array<{ caption: string, color: string, before?: string }>, retire: string[] }} RuleLegendRows
+ * @typedef {{ add: Array<{ caption: string, name?: string, color: string, before?: string }>, retire: string[] }} RuleLegendRows
  */
 
 /**
@@ -140,7 +140,8 @@ const normalizeStrokeWidth = (value) => {
  * @typedef {{ caption: PythonLegendKey, color: string, allowMissing: boolean }} LegendFillOperation
  * @typedef {{ from: string, to: string, allowMissing: boolean }} LegendRenameOperation
  * @typedef {{ caption: string, allowMissing: boolean, retire?: boolean }} LegendDeleteOperation
- * @typedef {{ caption: string, color: string, xPos: number | null, yPos: number | null, ifAbsent?: boolean, before?: string }} LegendAddOperation
+ * @typedef {{ caption: string, name?: string, color: string, xPos: number | null, yPos: number | null, ifAbsent?: boolean, before?: string }} LegendAddOperation
+ *   `caption`: the row's key. `name`: its name where that is not the key (a rule's row: the rule's caption).
  * @typedef {{ captions: readonly string[] }} LegendOrderOperation
  */
 
@@ -727,10 +728,10 @@ const compilePlanBundle = ({
     // it, before the row it replaces, and the retired row of a removed or
     // renamed rule. Generate compiles neither: Python draws the rules' rows.
     const ruleRows = livePreview?.ruleRows;
-    (ruleRows?.add || []).forEach(({ caption, color, before = '' }) => {
+    (ruleRows?.add || []).forEach(({ caption, name, color, before = '' }) => {
       const paint = normalizePaint(color, 'rule legend color');
       if (caption && paint) addToResults(operationsByResult, allResultIndexes, 'legendAdds', {
-        caption, color: paint, xPos: null, yPos: null, ifAbsent: true, before
+        caption, ...(name ? { name } : {}), color: paint, xPos: null, yPos: null, ifAbsent: true, before
       });
     });
     (ruleRows?.retire || []).forEach((caption) => {

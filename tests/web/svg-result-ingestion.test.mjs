@@ -579,6 +579,37 @@ test('the mounted executor is idempotent', () => {
   assert.equal(serializeNode(mounted), once);
 });
 
+// PD-OI-042 scenario revision 2 (D-09): the executor names the rows the Legend
+// shows by the naming rule, from each row's name and the swatch it shows. A
+// row's key (`data-legend-key`, here `Shared [#112233]`) is never its text.
+test('the executor draws Legend names by the naming rule and never a row key', () => {
+  const texts = (root) => root.querySelectorAll('g[data-legend-key]')
+    .filter((row) => row.getAttribute('display') !== 'none').map((row) => row.querySelector('text').textContent);
+  const operations = (legend) => ({ ...createEmptySvgMutationPlan(1).operationsByResult[0], ...legend });
+  const rule = (color) => ({ caption: `Shared [${color}]`, name: 'Shared', color, xPos: null, yPos: null, ifAbsent: true });
+  const mounted = buildSvgRoot();
+  // One caption in two colors: two rows, numbered in legend order.
+  const two = operations({ legendAdds: [rule('#112233'), rule('#445566')] });
+  assert.deepEqual(reconcileMountedResult(mounted, two), { changed: true, legendChanged: true });
+  assert.deepEqual(texts(mounted), ['CDS', 'Shared (1)', 'Shared (2)']);
+  assert.deepEqual(mounted.querySelectorAll('g[data-legend-key]').map((row) => row.getAttribute('data-legend-name')), [null, 'Shared', 'Shared']);
+  assert.deepEqual(reconcileMountedResult(mounted, two), { changed: false, legendChanged: false }, 'named once');
+  // A rename onto the shared name joins the numbering; its own key stays its record.
+  const renamed = operations({ ...two, legendRenames: [{ from: 'CDS', to: 'Shared', allowMissing: false }] });
+  reconcileMountedResult(mounted, renamed);
+  assert.deepEqual(texts(mounted), ['Shared (1)', 'Shared (2)', 'Shared (3)']);
+  // A literal `Shared (1)` keeps its text, and the numbers of the two rows skip it.
+  reconcileMountedResult(mounted, operations({
+    ...two, legendRenames: [{ from: 'CDS', to: 'Shared (1)', allowMissing: false }]
+  }));
+  assert.deepEqual(texts(mounted), ['Shared (1)', 'Shared (2)', 'Shared (3)']);
+  // A name left with one row has no number again.
+  reconcileMountedResult(mounted, operations({
+    ...two, legendDeletes: [{ caption: 'Shared [#445566]', allowMissing: true, retire: true }]
+  }));
+  assert.deepEqual(texts(mounted), ['CDS', 'Shared']);
+});
+
 // OV-345: a reconcile says whether it changed the Result, so a display,
 // History restore, or Reset that changes nothing keeps the Result's bytes.
 test('a reconcile reports whether it changed the Result and whether the Legend rows changed', () => {
@@ -630,7 +661,10 @@ test('a mounted batch Result skips the features and Legend rows it does not draw
   }).operationsByResult[0];
   [mountedPaint(admission), renamed].forEach((operations) => {
     const mounted = buildSvgRoot({ missingFeature: true });
-    mounted.querySelector('g[data-legend-key]').setAttribute('data-legend-key', 'tRNA');
+    // The Result's one row is another category's, drawn with its own name.
+    const row = mounted.querySelector('g[data-legend-key]');
+    row.setAttribute('data-legend-key', 'tRNA');
+    row.querySelector('text').textContent = 'tRNA';
     const drawn = serializeNode(mounted);
     reconcileMountedResult(mounted, operations);
     assert.equal(serializeNode(mounted), drawn);

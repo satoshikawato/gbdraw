@@ -424,13 +424,15 @@ export const ruleLegendCaptions = (context) => {
  */
 export const buildLegendIntents = (rules, rendererRows = []) => {
   const legendCaption = createRuleLegendCaptions(rules, rendererRows);
-  /** @type {Map<PythonLegendKey, { caption: PythonLegendKey, color: string }>} */
+  // An intent is a rule's Legend row: its key (`caption`), its color, and its
+  // name (the rule's caption) where that is not the key, as `data-legend-name`.
+  /** @type {Map<PythonLegendKey, { caption: PythonLegendKey, name?: string, color: string }>} */
   const byCaption = new Map();
   for (const rule of rules || []) {
     const normalized = normalizeSpecificRule(rule);
     const caption = legendCaption(normalized);
     if (caption && !byCaption.has(caption)) {
-      byCaption.set(caption, { caption, color: normalized.color });
+      byCaption.set(caption, { caption, color: normalized.color, ...(normalized.cap === caption ? {} : { name: normalized.cap }) });
     }
   }
   return { intents: [...byCaption.values()] };

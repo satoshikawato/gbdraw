@@ -185,7 +185,7 @@ export const createLegendEntryActions = ({
   // once until Python draws them (gaps 1 and 2; null when the rows only change
   // color). Resolves to false when the Result or the caller became stale.
   /**
-   * @param {EntryRecord[]} intents
+   * @param {(EntryRecord & { name?: string })[]} intents
    * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean, placement?: { caption: string, at: string } | null }} [options]
    */
   const prepareFileLegendEntries = async (intents, {
@@ -221,6 +221,8 @@ export const createLegendEntryActions = ({
       isCurrent: () => svgContainer.value?.querySelector('svg') === mountedSvg,
       apply: () => {
         const removed = new Set(diff.remove.map(({ caption }) => caption));
+        // An intent's `caption` is its row's key; its `name` is the rule's caption.
+        const names = new Map(intents.map((intent) => [legendCaption(intent), intent.name]));
         const colors = new Map(diff.update.map(({ caption, color }) => [caption, color]));
         const added = new Map(diff.add.map(({ caption, color }) => [caption, { caption, originalCaption: caption, color, featureIds: [] }]));
         /** @type {EntryRecord[]} */
@@ -242,7 +244,10 @@ export const createLegendEntryActions = ({
         }
         drawing.legendEntries.value = [...entries.filter((entry) => !removed.has(legendCaption(entry))), ...added.values()];
         const rows = {
-          add: diff.add.map(({ caption, color }) => ({ caption, color, ...(before && caption === placement?.caption ? { before } : {}) })),
+          add: diff.add.map(({ caption, color }) => ({
+            caption, color, ...(names.get(caption) ? { name: names.get(caption) } : {}),
+            ...(before && caption === placement?.caption ? { before } : {})
+          })),
           retire: [...removed]
         };
         return rows.add.length > 0 || rows.retire.length > 0 ? rows : null;
