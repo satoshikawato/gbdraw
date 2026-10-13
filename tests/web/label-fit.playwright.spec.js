@@ -6,7 +6,7 @@
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { test, expect } = require('@playwright/test');
-const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 
 const ROW_KINDS = ['outward_both', 'outward_vertical', 'outward_horizontal', 'smaller_font', 'tighter_rows', 'combination'];
 const SCREENSHOTS = process.env.GBDRAW_LABEL_FIT_SCREENSHOTS || '';
@@ -39,15 +39,13 @@ const shot = async (locator, name) => {
   if (SCREENSHOTS) await locator.screenshot({ path: join(SCREENSHOTS, name) });
 };
 
-// LP-D52 (E-ROW): SARS-CoV-2 with labels Out overprints two embedded labels;
-// with Separate Strands off only "separate overlapping features" fits it. (With
-// the Web's Separate Strands on, its outer leaders still cross after that fix,
-// so no row fits: OV-724.)
+// LP-D52 (E-ROW): SARS-CoV-2 with labels Out overprints two embedded labels.
+// With the Web's default Separate Strands, "separate overlapping features"
+// removes the overlap but its outer leaders still cross: the row is offered,
+// says so, and draws with the notice bar (LP-D57, OV-724).
 test('overlapping labels: the dialog shows every row; Cancel writes nothing; Apply is one step that draws; Undo restores', async ({ page }) => {
   test.setTimeout(600000);
   await openWithOuterLabels(page, { name: 'SARS-CoV-2.gbk', text: SARS() });
-  await reveal(page.locator('#circular-track-preset'));
-  await page.getByRole('checkbox', { name: 'Separate Strands', exact: true }).uncheck();
   await generateAndWaitForResult(page, { expectedStatus: 'error', requireCommittedResult: false });
   const dialog = page.locator('[data-label-fit-dialog]');
   await expect(dialog).toBeVisible();
@@ -56,17 +54,17 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   // Python searched every row before the dialog opened, in its order.
   const statuses = await rowStatuses(dialog);
   expect(statuses.map(([kind]) => kind)).toEqual([...ROW_KINDS, 'radial', 'separate_features']);
-  expect(statuses.filter(([, status]) => status === 'found').map(([kind]) => kind)).toEqual(['separate_features']);
-  expect(statuses.every(([, status]) => status === 'found' || status === 'not_found')).toBe(true);
+  expect(statuses.filter(([, status]) => status !== 'not_found')).toEqual([['separate_features', 'found_with_notice']]);
   for (const [kind, status] of statuses) {
     await expect(dialog.locator(`[data-label-fit-row="${kind}"] input[type="radio"]`))
-      .toBeEnabled({ enabled: status === 'found' });
+      .toBeEnabled({ enabled: status === 'found_with_notice' });
   }
   const separate = dialog.locator('[data-label-fit-row="separate_features"]');
   await expect(separate).toContainText('separate overlapping features');
   await expect(separate).toContainText('Resolve Overlaps On');
   await expect(separate).toContainText(/\d+ × \d+ px/);
-  await shot(dialog.getByRole('dialog'), 'label-fit-dialog-separate-features.png');
+  await expect(separate.locator('[data-label-fit-note]')).toHaveText('14 leader pairs still cross');
+  await shot(dialog.getByRole('dialog'), 'label-fit-dialog-crossing-row.png');
 
   const before = { undo: await undoCount(page), settings: await labelSettings(page) };
   expect(before.settings.resolveOverlaps).toBe(false);
@@ -88,8 +86,11 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
     return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
   }), { timeout: 300000 }).toEqual({ key: key + 1, processing: false, error: null });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
-  // It fits: no overlap, no crossing, so no notice.
-  await expect(page.getByTestId('label-fit-notice')).toBeHidden();
+  // No overlap; the leaders the row said still cross show the notice bar.
+  const notice = page.getByTestId('label-fit-notice');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('Leader lines cross (14 pairs).');
+  await shot(notice, 'label-fit-notice-after-crossing-row.png');
   // The row's settings are one step (PD-OI-088); the Generate that follows is its own.
   expect(await undoCount(page)).toBe(before.undo + 2);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Generate diagram');

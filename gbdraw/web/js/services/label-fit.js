@@ -7,7 +7,12 @@
 // computed is computed by the Worker (`computeLabelFitRow`, OD-F14).
 import { diagnosticError } from '../utils/error-normalization.js';
 
-/** @typedef {'found' | 'not_found' | 'not_computed'} LabelFitRowStatus */
+/**
+ * @typedef {'found' | 'found_with_notice' | 'not_found' | 'not_computed'} LabelFitRowStatus
+ * `found_with_notice`: the row leaves no overlapping labels but leaves crossing
+ * leaders or labels over the definition text, so the figure draws with the
+ * notice bar (LP-D57); its `note` says what it leaves.
+ */
 /** @typedef {string & { readonly labelFitRowKind: unique symbol }} LabelFitRowKind A Python row kind, such as `outward_vertical`. */
 /** @typedef {string & { readonly configPath: unique symbol }} ConfigPath A dotted config path, such as `labels.spacing.circular`. */
 /** @typedef {string & { readonly labelFitRowToken: unique symbol }} LabelFitRowToken Names the drawn figure whose rows the Worker computes. */
@@ -23,10 +28,11 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {LabelFitRowKind} kind
  * @property {string} title
  * @property {LabelFitRowStatus} status
- * @property {Readonly<Record<ConfigPath, LabelFitValue>> | null} values The settings to write, by config path; set when `found`.
+ * @property {Readonly<Record<ConfigPath, LabelFitValue>> | null} values The settings to write, by config path; set when offered.
  * @property {readonly LabelFitSetting[]} settings
  * @property {{ width: number, height: number } | null} canvasSize
  * @property {string | null} reason
+ * @property {string | null} note What a `found_with_notice` row leaves, in Python's words.
  */
 /**
  * @typedef {object} LabelFitRecord
@@ -63,7 +69,15 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {LabelFitRowToken | null} rowToken Names the failure whose rows the Worker computes.
  */
 
-const ROW_STATUSES = new Set(['found', 'not_found', 'not_computed']);
+const ROW_STATUSES = new Set(['found', 'found_with_notice', 'not_found', 'not_computed']);
+const OFFERED_STATUSES = new Set(['found', 'found_with_notice']);
+
+/**
+ * Whether a row's status offers its settings to Apply.
+ * @param {string} status
+ * @returns {boolean}
+ */
+export const labelFitRowOffered = (status) => OFFERED_STATUSES.has(status);
 
 const invalid = () => diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
 
@@ -91,16 +105,17 @@ export const normalizeLabelFitRow = (value) => {
   if (!isObject(value) || typeof value.kind !== 'string' || !value.kind
     || typeof value.title !== 'string' || typeof value.status !== 'string'
     || !ROW_STATUSES.has(value.status) || !Array.isArray(value.settings)
-    || !isOptionalText(value.reason)) throw invalid();
+    || !isOptionalText(value.reason) || !isOptionalText(value.note)) throw invalid();
   const status = /** @type {LabelFitRowStatus} */ (value.status);
+  const offered = labelFitRowOffered(status);
   /** @type {Record<ConfigPath, LabelFitValue> | null} */
   let values = null;
-  if (status === 'found') {
+  if (offered) {
     if (!isObject(value.values) || !Object.values(value.values).every(isValue)) throw invalid();
     values = /** @type {Record<ConfigPath, LabelFitValue>} */ ({ ...value.values });
   }
   const size = value.canvasSize;
-  if (status === 'found' && !(isObject(size) && isNumber(size.width) && isNumber(size.height))) throw invalid();
+  if (offered && !(isObject(size) && isNumber(size.width) && isNumber(size.height))) throw invalid();
   const settings = value.settings.map((setting) => {
     if (!isObject(setting) || typeof setting.name !== 'string' || typeof setting.unit !== 'string'
       || !isShown(setting.value)) throw invalid();
@@ -112,9 +127,10 @@ export const normalizeLabelFitRow = (value) => {
     status,
     values: values && Object.freeze(values),
     settings: Object.freeze(settings),
-    canvasSize: status === 'found' && isObject(size)
+    canvasSize: offered && isObject(size)
       ? Object.freeze({ width: Number(size.width), height: Number(size.height) }) : null,
-    reason: typeof value.reason === 'string' ? value.reason : null
+    reason: typeof value.reason === 'string' ? value.reason : null,
+    note: typeof value.note === 'string' ? value.note : null
   });
 };
 

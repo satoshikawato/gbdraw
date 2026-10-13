@@ -45,6 +45,7 @@ from gbdraw.labels.fit import (
     label_fits_by_kind,
     overlapping_pairs,
     polyline_crossing_count,
+    row_note,
 )
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
@@ -94,7 +95,7 @@ def _verifier(*layouts_fits: Callable[[float, float, float, float], bool]):
         calls.append(dict(values))
         settings = _settings(values)
         return LabelFitVerification(
-            fits=all(fits(*settings) for fits in layouts_fits),
+            outcome="fits" if all(fits(*settings) for fits in layouts_fits) else "stop",
             canvas_size=(1000.0 * settings[0], 1000.0 * settings[1]),
         )
 
@@ -340,8 +341,8 @@ def _assembly(fits: Callable[[Mapping[str, object]], bool]):
     def verify(values: Mapping[str, object]) -> LabelFitVerification:
         calls.append(dict(values))
         if fits(values):
-            return LabelFitVerification(True, (1000.0, 900.0))
-        return LabelFitVerification(False, None, LabelFit(1, 0))
+            return LabelFitVerification("fits", (1000.0, 900.0))
+        return LabelFitVerification("stop", None, LabelFit(1, 0))
 
     return verify, calls
 
@@ -475,6 +476,120 @@ def test_overlapping_embedded_labels_offer_to_separate_the_features() -> None:
     assert "separate_features" not in {row.kind for row in raised.value.report.rows}
 
 
+def _fit_assembly(fit_for: Callable[[Mapping[str, object]], LabelFit]):
+    """A full assembly whose labels' fit depends on the row's settings."""
+
+    calls: list[dict[str, object]] = []
+
+    def verify(values: Mapping[str, object]) -> LabelFitVerification:
+        calls.append(dict(values))
+        fit = fit_for(values)
+        return LabelFitVerification(label_fit_outcome([fit]), (1000.0, 900.0), fit)
+
+    return verify, calls
+
+
+def _embedded_overlap_layout() -> CircularLabelLayout:
+    return dataclasses.replace(
+        _inner_layout(inner=0),
+        label_counts={"circular_outer": 80, "circular_embedded": 3},
+        kind_fits={"circular_embedded": LabelFit(1, 0)},
+    )
+
+
+def test_a_row_that_leaves_only_crossings_is_offered_after_the_rows_that_fit() -> None:
+    """LP-D57 (OV-724): a row that removes every overlap but leaves crossing leaders is
+    offered, says what remains, and comes after the rows that fit."""
+
+    def fit_for(values: Mapping[str, object]) -> LabelFit:
+        if values.get(SEPARATE_FEATURES_PATH) is True:
+            return LabelFit(0, 14)
+        font = values.get(FONT_SIZE_PATHS[0])
+        return FITS if isinstance(font, float) and font <= 12.0 else LabelFit(1, 14)
+
+    verify, _calls = _fit_assembly(fit_for)
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_embedded_overlap_layout()], verify)
+
+    rows = raised.value.report.rows
+    assert [(row.kind, row.status) for row in rows] == [
+        ("smaller_font", "found"),
+        ("radial", "not_found"),
+        ("separate_features", "found_with_notice"),
+    ]
+    separate = rows[2]
+    assert separate.values == {SEPARATE_FEATURES_PATH: True}
+    assert separate.canvas_size == (1000.0, 900.0)
+    assert separate.remaining == LabelFit(0, 14)
+    assert row_note(separate) == "14 leader pairs still cross"
+    assert row_note(rows[0]) is None
+    assert str(raised.value).splitlines()[1:4] == [
+        "Run again with one of:",
+        "  --label_font_size 12   (smaller font)",
+        "  --resolve_overlaps     (separate overlapping features; 14 leader pairs still cross)",
+    ]
+
+
+def test_the_notice_row_words_crossings_and_the_definition_text() -> None:
+    def row(remaining: LabelFit) -> LabelFitRow:
+        return LabelFitRow("radial", "found_with_notice", {PLACEMENT_PATH: "radial"}, (1.0, 1.0), remaining=remaining)
+
+    assert row_note(row(LabelFit(0, 1))) == "1 leader pair still crosses"
+    assert row_note(row(LabelFit(0, 0, 2))) == "2 labels still cover the definition text"
+    assert row_note(row(LabelFit(0, 3, 1))) == "3 leader pairs still cross and 1 label still covers the definition text"
+
+
+def test_each_lever_offers_a_value_that_leaves_only_crossings_when_none_fits() -> None:
+    """LP-D57: every row kind, the font scan and the outer levers too; a value that fits
+    stays preferred, and a value that leaves overlaps is still not found."""
+
+    def inner_fit(values: Mapping[str, object]) -> LabelFit:
+        font = values.get(FONT_SIZE_PATHS[0])
+        if values.get(PLACEMENT_PATH) == "radial":
+            return LabelFit(2, 0)
+        return LabelFit(0, 0, 1) if isinstance(font, float) and font <= 13.0 else LabelFit(1, 0)
+
+    verify, _calls = _fit_assembly(inner_fit)
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_inner_layout()], verify)
+    rows = {row.kind: row for row in raised.value.report.rows}
+    assert rows["smaller_font"].status == "found_with_notice"
+    assert rows["smaller_font"].values == {path: 13.0 for path in FONT_SIZE_PATHS}
+    assert rows["smaller_font"].remaining == LabelFit(0, 0, 1)
+    assert rows["radial"].status == "not_found"
+
+    def outer_fit(values: Mapping[str, object]) -> LabelFit:
+        y_offset = values.get(Y_OFFSET_PATH, 1.0)
+        return LabelFit(0, 2) if isinstance(y_offset, float) and y_offset >= 1.3 - 1e-9 else OVERLAPS
+
+    layout = dataclasses.replace(_layout("P1", _p1_like), probe=lambda values: outer_fit(values))
+    verify, _calls = _fit_assembly(outer_fit)
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([layout], verify)
+    rows = {row.kind: row for row in raised.value.report.rows}
+    assert rows["outward_vertical"].status == "found_with_notice"
+    assert rows["outward_vertical"].values == {Y_OFFSET_PATH: 1.3}
+    assert rows["outward_vertical"].remaining == LabelFit(0, 2)
+    assert rows["outward_horizontal"].status == "not_found"
+    assert rows["outward_horizontal"].reason == "Does not fit up to X offset 2"
+    statuses = [row.status for row in raised.value.report.rows]
+    assert statuses == sorted(statuses, key=lambda status: status == "found_with_notice")
+
+
+def test_a_drawn_figure_offers_only_rows_that_fit() -> None:
+    """A figure drawn with crossings already has the notice: a row that leaves crossings is no fix."""
+
+    layout = dataclasses.replace(_inner_layout(), kind_fits={"circular_inner": LabelFit(0, 2)})
+    verify, _calls = _fit_assembly(lambda values: LabelFit(0, 1))
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([layout], verify, warn_search_seconds=60.0)
+    assert checked is not None
+    rows = {row.kind: row for row in checked[0].rows}
+    assert rows["labels_out"].status == "not_found"
+    assert rows["labels_out"].reason == "Labels still do not fit (0 label pairs overlap, 1 leader pair crosses)"
+    assert checked[1].row("labels_out").status == "not_found"
+
+
 def test_labels_count_once_by_kind_and_leaders_count_against_the_definition_text() -> None:
     def box(min_x: float, min_y: float, max_x: float, max_y: float) -> tuple[tuple[float, float], ...]:
         return ((min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y))
@@ -511,7 +626,7 @@ def test_linear_labels_on_stacked_features_stop_with_the_separate_features_row()
 
     def verify(values: Mapping[str, object]) -> LabelFitVerification:
         calls.append(dict(values))
-        return LabelFitVerification(True, (500.0, 200.0))
+        return LabelFitVerification("fits", (500.0, 200.0))
 
     with pytest.raises(LabelsDoNotFitError) as raised:
         check_linear_label_fit(label_fit, verify, features_separated=False)
@@ -520,6 +635,17 @@ def test_linear_labels_on_stacked_features_stop_with_the_separate_features_row()
     (row,) = raised.value.report.rows
     assert (row.kind, row.status, row.values) == ("separate_features", "found", {SEPARATE_FEATURES_PATH: True})
     assert calls == [{SEPARATE_FEATURES_PATH: True}]
+
+    # LP-D57: separated features whose leaders then cross are offered with the notice.
+    def crossing(values: Mapping[str, object]) -> LabelFitVerification:
+        return LabelFitVerification("warn", (500.0, 200.0), LabelFit(0, 2))
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_linear_label_fit(label_fit, crossing, features_separated=False)
+    (row,) = raised.value.report.rows
+    assert (row.status, row.values, row.remaining) == (
+        "found_with_notice", {SEPARATE_FEATURES_PATH: True}, LabelFit(0, 2)
+    )
 
     with pytest.raises(LabelsDoNotFitError) as raised:
         check_linear_label_fit(label_fit, verify, features_separated=True)

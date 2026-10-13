@@ -20,6 +20,8 @@ also get the switch that puts overlapping features on separate tracks
 drawn, the switches and the font scan of inner and radial labels share
 ``SWITCH_SEARCH_SECONDS`` (OD-F15), and outer-only rows are all computed. A
 row not reached is computed later with :meth:`CircularLabelFitSearch.row`.
+When nothing is drawn and a lever has no value that fits, its mildest value
+that leaves no overlapping labels is offered with what it leaves (LP-D57).
 """
 
 from __future__ import annotations
@@ -48,12 +50,14 @@ from .fit import (
     LabelFitReport,
     LabelFitRow,
     LabelFitRowKind,
+    LabelFitOutcome,
     LabelFitValue,
     LabelFitVerification,
     LabelKind,
     label_fit_outcome,
     raise_or_warn,
     switch_row,
+    verified_row,
 )
 
 OFFSET_STEP = 0.025
@@ -160,6 +164,14 @@ class CircularLabelLayout:
 
 
 CircularLabelFitVerifier: TypeAlias = Callable[[Mapping[str, LabelFitValue]], LabelFitVerification]
+
+
+def circular_label_outcome(layouts: Sequence[CircularLabelLayout]) -> LabelFitOutcome:
+    """The decision point over a figure's records; refused radial labels stop."""
+
+    return label_fit_outcome(
+        [layout.fit for layout in layouts], refused=any(layout.refused for layout in layouts)
+    )
 
 
 class _SearchStopped(Exception):
@@ -319,7 +331,9 @@ class CircularLabelFitSearch:
     When only horizontal outer labels fail, each row is the mildest grid value
     that every failing record's probe accepts (the strongest of their
     answers), verified with the full assembly and stepped one grid value
-    stronger until verification fits. Otherwise the switches are one full
+    stronger until verification fits. With ``offer_notice_rows`` (nothing
+    was drawn), a lever without a value that fits searches again for the
+    mildest value that leaves no overlap (LP-D57). Otherwise the switches are one full
     assembly each, the font is scanned down with the full assembly (the first
     value that fits), and the outer levers have no value. Probe and
     verification answers are kept, so rows share them and a row asked for
@@ -331,9 +345,11 @@ class CircularLabelFitSearch:
         layouts: Sequence[CircularLabelLayout],
         verify: CircularLabelFitVerifier,
         *,
+        offer_notice_rows: bool,
         assembly_seconds: float = 0.0,
     ) -> None:
         self.layouts = tuple(layouts)
+        self._offer_notice_rows = offer_notice_rows
         self.row_kinds = _applicable_rows(self.layouts)
         self._outer_only = all(layout.outer_only for layout in self.layouts)
         self._verify_assembly = verify
@@ -344,7 +360,7 @@ class CircularLabelFitSearch:
         self._y_offset = max(layout.y_radius_offset for layout in self.layouts)
         self._font_size = min(layout.font_size for layout in self.layouts)
         self._spacing = min(layout.label_spacing for layout in self.layouts)
-        self._probe_answers: list[dict[tuple[tuple[str, LabelFitValue], ...], bool]] = [
+        self._probe_answers: list[dict[tuple[tuple[str, LabelFitValue], ...], LabelFit]] = [
             {} for _ in self.layouts
         ]
         self._verifications: dict[
@@ -371,14 +387,19 @@ class CircularLabelFitSearch:
         return self._outer_only
 
     def rows(self, *, deadline: float | None = None) -> tuple[LabelFitRow, ...]:
-        """The rows that apply, in the dialog order, searched until ``deadline``."""
+        """The rows that apply, in the dialog order, searched until ``deadline``.
+
+        Rows that leave crossings or labels over the definition text come
+        after the others (LP-D57).
+        """
 
         found: dict[LabelFitRowKind, LabelFitRow] = {}
         order = _SEARCH_ORDER if self._outer_only else _SWITCHES_FIRST_ORDER
         for kind in order:
             if kind in self.row_kinds:
                 found[kind] = self.row(kind, deadline=deadline)
-        return tuple(found[kind] for kind in ROW_KINDS if kind in found)
+        rows = [found[kind] for kind in ROW_KINDS if kind in found]
+        return tuple(sorted(rows, key=lambda row: row.status == "found_with_notice"))
 
     # --- probes ---
 
@@ -386,7 +407,7 @@ class CircularLabelFitSearch:
         if self._deadline is not None and time.monotonic() + expected_seconds >= self._deadline:
             raise _SearchStopped
 
-    def _probe_fits(self, index: int, values: Mapping[str, LabelFitValue]) -> bool:
+    def _probe_fit(self, index: int, values: Mapping[str, LabelFitValue]) -> LabelFit:
         answers = self._probe_answers[index]
         key = _settings_key(values)
         if key not in answers:
@@ -394,7 +415,7 @@ class CircularLabelFitSearch:
             probe = self.layouts[index].probe
             if probe is None:  # pragma: no cover - outer rows search only records with a probe
                 raise ValueError("an outer row searched a record without a probe")
-            answers[key] = probe(values).fits
+            answers[key] = probe(values)
         return answers[key]
 
     def _verify(self, values: Mapping[str, LabelFitValue]) -> LabelFitVerification:
@@ -424,16 +445,23 @@ class CircularLabelFitSearch:
 
     def _switch(self, kind: LabelFitRowKind) -> LabelFitRow:
         values = _SWITCH_VALUES[kind]
-        return switch_row(kind, values, self._verify(values))
+        return switch_row(kind, values, self._verify(values), offer_notice=self._offer_notice_rows)
 
     def _font_scan(self) -> tuple[LabelFitRow, float | None]:
-        """The largest smaller font that fits, trying each step down (fit is not monotone)."""
+        """The largest smaller font that fits, trying each step down (fit is not monotone).
 
+        Without one, the largest that leaves no overlap, when such rows are offered.
+        """
+
+        notice: LabelFitRow | None = None
         for value in _font_grid(self._font_size):
             values = _font_values(value)
-            verification = self._verify(values)
-            if verification.fits:
-                return LabelFitRow("smaller_font", "found", values, verification.canvas_size), value
+            row = verified_row("smaller_font", values, self._verify(values), offer_notice=self._offer_notice_rows)
+            if row is not None and row.status == "found":
+                return row, value
+            notice = notice or row
+        if notice is not None:
+            return notice, None
         return LabelFitRow(
             "smaller_font", "not_found", reason=f"Does not fit down to {FONT_LIMIT_PT:g} pt"
         ), None
@@ -494,9 +522,31 @@ class CircularLabelFitSearch:
         )
 
     def _search(self, kind: LabelFitRowKind, lever: _Lever) -> tuple[LabelFitRow, float | None]:
-        """The row and its grid value (None without a value)."""
+        """The row and its grid value (None without a value that fits).
 
-        not_found = (LabelFitRow(kind, "not_found", reason=lever.reason), None)
+        The mildest value that fits; without one, when such rows are offered,
+        the mildest value that leaves no overlap (LP-D57).
+        """
+
+        for offer_notice in (False, True) if self._offer_notice_rows else (False,):
+            found = self._mildest_row(kind, lever, offer_notice=offer_notice)
+            if found is not None:
+                row, value = found
+                # Only a value that fits bounds the rows that start from this one.
+                return row, value if row.status == "found" else None
+        return LabelFitRow(kind, "not_found", reason=lever.reason), None
+
+    def _mildest_row(
+        self, kind: LabelFitRowKind, lever: _Lever, *, offer_notice: bool
+    ) -> tuple[LabelFitRow, float] | None:
+        """The mildest value every record's probe accepts, stepped stronger until verified.
+
+        Probes accept a fit, or with ``offer_notice`` a layout without overlaps.
+        """
+
+        def accepts(fit: LabelFit) -> bool:
+            return label_fit_outcome([fit]) != "stop" if offer_notice else fit.fits
+
         grid = lever.grid
         bound_index = (
             next((index for index, value in enumerate(grid) if value >= lever.bound - 1e-9), None)
@@ -507,7 +557,7 @@ class CircularLabelFitSearch:
         for index in range(len(self.layouts)):
 
             def record_fits(value: float, index: int = index) -> bool:
-                return self._probe_fits(index, lever.values_for(value))
+                return accepts(self._probe_fit(index, lever.values_for(value)))
 
             mildest = _mildest_fitting_index(
                 grid,
@@ -517,15 +567,14 @@ class CircularLabelFitSearch:
                 downward=lever.downward,
             )
             if mildest is None:
-                return not_found
+                return None
             strongest = max(strongest, mildest)
-        for verified_index in range(strongest, len(grid)):
-            values = lever.values_for(grid[verified_index])
-            verification = self._verify(values)
-            if verification.fits:
-                row = LabelFitRow(kind, "found", values, verification.canvas_size)
-                return row, grid[verified_index]
-        return not_found
+        for value in grid[strongest:]:
+            values = lever.values_for(value)
+            row = verified_row(kind, values, self._verify(values), offer_notice=offer_notice)
+            if row is not None:
+                return row, value
+        return None
 
 
 def _fit_records(layouts: Sequence[CircularLabelLayout]) -> tuple[LabelFitRecord, ...]:
@@ -564,14 +613,14 @@ def check_circular_label_fit(
     that would overrun a deadline is not started.
     """
 
-    outcome = label_fit_outcome(
-        [layout.fit for layout in layouts], refused=any(layout.refused for layout in layouts)
-    )
+    outcome = circular_label_outcome(layouts)
     if outcome == "fits":
         return None
     failing = tuple(layout for layout in layouts if not layout.fits)
-    search = CircularLabelFitSearch(failing, verify, assembly_seconds=assembly_seconds)
     drawn = outcome == "warn"
+    search = CircularLabelFitSearch(
+        failing, verify, offer_notice_rows=not drawn, assembly_seconds=assembly_seconds
+    )
     if drawn:
         deadline: float | None = time.monotonic() + warn_search_seconds
     elif search.outer_only:
@@ -593,4 +642,5 @@ __all__ = [
     "CircularLabelLayout",
     "CircularLabelPlacement",
     "check_circular_label_fit",
+    "circular_label_outcome",
 ]

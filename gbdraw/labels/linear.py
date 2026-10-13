@@ -39,6 +39,7 @@ from .fit import (
     LabelFitRecord,
     LabelFitReport,
     LabelFitRow,
+    LabelFitOutcome,
     LabelFitVerification,
     LabelFitValue,
     LabelShape,
@@ -809,8 +810,8 @@ class LinearLabelFit:
         return sum((record.fit for record in self.records), FITS)
 
     @property
-    def fits(self) -> bool:
-        return self.fit.fits
+    def outcome(self) -> LabelFitOutcome:
+        return label_fit_outcome([record.fit for record in self.records])
 
 
 def linear_label_fit(
@@ -848,13 +849,13 @@ def check_linear_label_fit(
     features on separate tracks (LP-D52 ``E-ROW``), verified with ``verify``.
     """
 
-    outcome = label_fit_outcome([record.fit for record in label_fit.records])
+    outcome = label_fit.outcome
     if outcome == "fits":
         return
     rows: tuple[LabelFitRow, ...] = ()
     if outcome == "stop" and label_fit.embedded_overlap and not features_separated:
         values = SEPARATE_FEATURES_VALUES
-        rows = (switch_row("separate_features", values, verify(values)),)
+        rows = (switch_row("separate_features", values, verify(values), offer_notice=True),)
     raise_or_warn(LabelFitReport(label_fit.records, rows=rows, drawn=outcome == "warn"))
 
 

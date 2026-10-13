@@ -1,13 +1,14 @@
 // @ts-check
 // The "Labels do not fit" dialog (LP-D43, LP-D45 SHOW-ALL, LP-D48
 // WARN-NOTICE): the rows of Python's label fit report in its order, each with
-// the settings it changes and the canvas size, or disabled with its reason.
+// the settings it changes and the canvas size, or disabled with its reason. A
+// row that leaves crossing leaders says so and draws with the notice (LP-D57).
 // A Generate that drew nothing opens it; crossing leaders or labels over the
 // definition text open it from the notice bar over the drawn figure. Rows a
 // bounded search did not reach are computed here, one after another, by the
 // Worker (OD-F14, the font scan bound). Apply writes the row's settings as one History step
 // (PD-OI-088) and runs Generate; Cancel writes nothing.
-import { normalizeLabelFitRow } from '../services/label-fit.js';
+import { labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
 /** @import { LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitRowToken, ConfigPath, LabelFitSetting, LabelFitValue } from '../services/label-fit.js' */
@@ -16,10 +17,12 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @typedef {object} LabelFitDialogRow What a row of the dialog shows.
  * @property {LabelFitRowKind} kind
  * @property {string} title
- * @property {'found' | 'not_found' | 'not_computed' | 'computing' | 'failed'} status
+ * @property {'found' | 'found_with_notice' | 'not_found' | 'not_computed' | 'computing' | 'failed'} status
+ * @property {boolean} offered Apply can choose it (`found`, or `found_with_notice`).
  * @property {readonly LabelFitSetting[]} settings
  * @property {{ width: number, height: number } | null} canvasSize
  * @property {string | null} reason
+ * @property {string | null} note What the row leaves (crossing leaders, labels over the definition text).
  */
 /**
  * @typedef {object} LabelFitDialogState
@@ -54,9 +57,11 @@ const displayRow = (row) => ({
   kind: row.kind,
   title: row.title,
   status: row.status,
+  offered: labelFitRowOffered(row.status),
   settings: row.settings,
   canvasSize: row.canvasSize,
-  reason: row.reason
+  reason: row.reason,
+  note: row.note
 });
 
 /** @param {LabelFitDialogPorts} ports */
@@ -79,9 +84,11 @@ export const createLabelFitDialog = ({
     const index = dialog.rows.findIndex((row) => row.kind === kind);
     if (index >= 0) dialog.rows[index] = { ...dialog.rows[index], ...update };
   };
-  const selectFirstFound = () => {
-    if (rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind))?.status === 'found') return;
-    dialog.selectedKind = dialog.rows.find((row) => row.status === 'found')?.kind || '';
+  // Python orders the rows that fit before those that draw with the notice.
+  const selectFirstOffered = () => {
+    const selected = rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind));
+    if (selected && labelFitRowOffered(selected.status)) return;
+    dialog.selectedKind = dialog.rows.find((row) => row.offered)?.kind || '';
   };
 
   /**
@@ -101,7 +108,7 @@ export const createLabelFitDialog = ({
         if (computed.kind !== row.kind) throw diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
         rowsByKind.set(row.kind, computed);
         updateRow(row.kind, displayRow(computed));
-        selectFirstFound();
+        selectFirstOffered();
       } catch (error) {
         if (opened !== openCount) return;
         updateRow(row.kind, { status: 'failed', reason: errorSummary(error) });
@@ -130,7 +137,7 @@ export const createLabelFitDialog = ({
     }));
     dialog.rows = report.rows.map(displayRow);
     dialog.selectedKind = '';
-    selectFirstFound();
+    selectFirstOffered();
     dialog.show = true;
     return computeMissingRows(opened, rowToken);
   };
@@ -139,7 +146,7 @@ export const createLabelFitDialog = ({
     () => `Fit labels: ${rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind))?.title || ''}`,
     () => {
       const row = rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind));
-      if (!row || row.status !== 'found' || !row.values) return false;
+      if (!row || !labelFitRowOffered(row.status) || !row.values) return false;
       writeRowSettings(row.values, dialogMode);
       closeAfterChoice(close);
       return true;

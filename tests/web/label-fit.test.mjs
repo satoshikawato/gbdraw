@@ -23,7 +23,8 @@ const { createLabelFitDialog } = await import('../../gbdraw/web/js/app/label-fit
 
 const Y_OFFSET = 'labels.unified_adjustment.outer_labels.y_radius_offset';
 const row = (kind, status, extra = {}) => ({
-  kind, title: kind.replace(/_/g, ' '), status, values: null, settings: [], canvasSize: null, reason: null, ...extra
+  kind, title: kind.replace(/_/g, ' '), status, values: null, settings: [], canvasSize: null, reason: null, note: null,
+  ...extra
 });
 const foundRow = (kind, value) => row(kind, 'found', {
   values: { [Y_OFFSET]: value }, settings: [{ name: 'Outer Y Offset', unit: '', value }],
@@ -60,6 +61,23 @@ test('the failure reader keeps Python\'s rows in order, the record counts, and t
   assert.equal(parsed.rows[1].reason, 'No fit');
   assert.equal(normalizeLabelFitFailure(undefined), null);
   assert.ok(Object.isFrozen(parsed.rows[0].values));
+});
+
+const noticeRow = () => row('separate_features', 'found_with_notice', { values: { 'canvas.resolve_overlaps': true },
+  settings: [{ name: 'Resolve Overlaps', unit: '', value: 'On' }], canvasSize: { width: 1045, height: 873 },
+  note: '14 leader pairs still cross' });
+
+test('a row that leaves crossing leaders carries its settings and Python\'s note (LP-D57)', () => {
+  const parsed = normalizeLabelFitRow(noticeRow());
+  assert.equal(parsed.status, 'found_with_notice');
+  assert.deepEqual(parsed.values, { 'canvas.resolve_overlaps': true });
+  assert.deepEqual(parsed.canvasSize, { width: 1045, height: 873 });
+  assert.equal(parsed.note, '14 leader pairs still cross');
+  assert.equal(normalizeLabelFitRow(row('x', 'not_found')).note, null);
+  const invalid = (error) => error.code === 'RESULT_INVALID';
+  // Offered like a found row: it has values and a canvas size.
+  assert.throws(() => normalizeLabelFitRow(row('x', 'found_with_notice')), invalid);
+  assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), note: 14 }), invalid);
 });
 
 test('a malformed report or row is RESULT_INVALID', () => {
@@ -148,6 +166,26 @@ test('Apply writes the chosen row as one History step, closes, and Generates; Ca
   assert.equal(writes.length, 1);
   assert.equal(generates.length, 1);
   assert.equal(dialog.labelFitDialog.show, false);
+});
+
+test('a row that leaves crossing leaders is offered after the rows that fit, and Apply writes it', async () => {
+  const { dialog, steps, writes, generates } = dialogHarness();
+  await dialog.openLabelFitDialog(normalizeReport(report([row('radial', 'not_found', { reason: 'No fit' }), noticeRow()])),
+    { mode: 'circular' });
+  const rows = dialog.labelFitDialog.rows;
+  assert.deepEqual(rows.map((item) => [item.kind, item.offered]), [['radial', false], ['separate_features', true]]);
+  assert.equal(rows[1].note, '14 leader pairs still cross');
+  // The only offered row is preselected.
+  assert.equal(dialog.labelFitDialog.selectedKind, 'separate_features');
+  await dialog.resolveLabelFitChoice('apply');
+  assert.deepEqual(steps, ['Fit labels: separate features']);
+  assert.deepEqual(writes, [{ values: { 'canvas.resolve_overlaps': true }, mode: 'circular' }]);
+  assert.equal(generates.length, 1);
+
+  // A row that fits comes first in Python's order and is preselected.
+  await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2), noticeRow()])),
+    { mode: 'circular' });
+  assert.equal(dialog.labelFitDialog.selectedKind, 'smaller_font');
 });
 
 test('rows Generate did not search are computed one after another when the dialog opens', async () => {

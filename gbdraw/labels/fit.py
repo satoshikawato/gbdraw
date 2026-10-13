@@ -33,9 +33,12 @@ LabelFitRowKind: TypeAlias = Literal[
     "radial",
     "separate_features",
 ]
-# ``found``: ``values`` fit; ``not_found``: no value within the lever's limit
-# (``reason`` says which); ``not_computed``: the bounded search stopped first.
-LabelFitRowStatus: TypeAlias = Literal["found", "not_found", "not_computed"]
+# ``found``: ``values`` fit; ``found_with_notice``: ``values`` leave no
+# overlapping labels but leave crossing leaders or labels over the definition
+# text, so the figure draws with the notice (LP-D57; offered only when nothing
+# was drawn); ``not_found``: no value within the lever's limit (``reason`` says
+# which); ``not_computed``: the bounded search stopped first.
+LabelFitRowStatus: TypeAlias = Literal["found", "found_with_notice", "not_found", "not_computed"]
 # A row sets numbers (offsets, font size, spacing), words (label scope,
 # placement) and switches (separate overlapping features).
 LabelFitValue: TypeAlias = bool | float | str
@@ -299,7 +302,9 @@ class LabelFitRow:
 
     ``values`` maps config paths to the values to set and ``canvas_size`` is
     the (width, height) of the verified figure; both are set only when
-    ``status`` is ``found``.
+    ``status`` is ``found`` or ``found_with_notice``. ``remaining`` is what a
+    ``found_with_notice`` row leaves: crossing leaders and labels over the
+    definition text.
     """
 
     kind: LabelFitRowKind
@@ -307,29 +312,60 @@ class LabelFitRow:
     values: Mapping[str, LabelFitValue] | None = None
     canvas_size: tuple[float, float] | None = None
     reason: str | None = None
+    remaining: LabelFit | None = None
 
 
 @dataclass(frozen=True)
 class LabelFitVerification:
     """The full assembly with a row's settings.
 
-    ``fits`` when every record fits (no overlaps, crossings or covered
-    definition text); ``canvas_size`` is the figure's size, ``fit`` its
+    ``outcome`` is :func:`label_fit_outcome` over every record (an assembly
+    that raised stops); ``canvas_size`` is the figure's size, ``fit`` its
     labels' fit over every record, and ``reason`` why the assembly failed
     when it raised.
     """
 
-    fits: bool
+    outcome: LabelFitOutcome
     canvas_size: tuple[float, float] | None
     fit: LabelFit | None = None
     reason: str | None = None
 
+    @property
+    def fits(self) -> bool:
+        return self.outcome == "fits"
 
-def switch_row(kind: LabelFitRowKind, values: Mapping[str, LabelFitValue], verification: LabelFitVerification) -> LabelFitRow:
+
+def verified_row(
+    kind: LabelFitRowKind,
+    values: Mapping[str, LabelFitValue],
+    verification: LabelFitVerification,
+    *,
+    offer_notice: bool,
+) -> LabelFitRow | None:
+    """The row a verified value gives: ``found`` when it fits; with ``offer_notice``,
+    ``found_with_notice`` when it only warns (LP-D57); otherwise None."""
+
+    if verification.outcome == "fits":
+        return LabelFitRow(kind, "found", values, verification.canvas_size)
+    if offer_notice and verification.outcome == "warn":
+        return LabelFitRow(
+            kind, "found_with_notice", values, verification.canvas_size, remaining=verification.fit
+        )
+    return None
+
+
+def switch_row(
+    kind: LabelFitRowKind,
+    values: Mapping[str, LabelFitValue],
+    verification: LabelFitVerification,
+    *,
+    offer_notice: bool,
+) -> LabelFitRow:
     """A row with one setting to turn on, from its full assembly."""
 
-    if verification.fits:
-        return LabelFitRow(kind, "found", values, verification.canvas_size)
+    row = verified_row(kind, values, verification, offer_notice=offer_notice)
+    if row is not None:
+        return row
     if verification.reason is not None:
         reason = verification.reason
     elif verification.fit is not None and not verification.fit.fits:
@@ -429,6 +465,23 @@ def fit_counts(fit: LabelFit) -> str:
     return counts
 
 
+def row_note(row: LabelFitRow) -> str | None:
+    """What a ``found_with_notice`` row leaves, in the counts' words (LP-D57)."""
+
+    remaining = row.remaining
+    if row.status != "found_with_notice" or remaining is None:
+        return None
+    notes: list[str] = []
+    if remaining.crossing_pairs:
+        notes.append(_counted(remaining.crossing_pairs, "leader pair still crosses", "leader pairs still cross"))
+    if remaining.definition_overlaps:
+        notes.append(
+            _counted(remaining.definition_overlaps, "label still covers", "labels still cover")
+            + " the definition text"
+        )
+    return " and ".join(notes) or None
+
+
 def label_fit_record_counts(record: LabelFitRecord) -> str:
     """A record's counts as the report states them, or why radial labels were refused."""
 
@@ -503,7 +556,7 @@ def format_label_fit_report(report: LabelFitReport) -> str:
         width = max(len(argument) for argument in arguments) + 3
         lines.append("Run again with one of:")
         lines.extend(
-            f"  {argument:<{width}}({ROW_TITLES[row.kind]})"
+            f"  {argument:<{width}}({'; '.join(filter(None, (ROW_TITLES[row.kind], row_note(row))))})"
             for argument, (row, _) in zip(arguments, fitting)
         )
     missing = [row.kind for row in report.rows if row.status == "not_found"]
@@ -571,5 +624,7 @@ __all__ = [
     "overlapping_pairs",
     "polyline_crossing_count",
     "raise_or_warn",
+    "row_note",
     "switch_row",
+    "verified_row",
 ]

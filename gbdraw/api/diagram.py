@@ -112,6 +112,7 @@ from gbdraw.labels.circular_fit import (
     CircularLabelFitSearch,
     CircularLabelLayout,
     check_circular_label_fit,
+    circular_label_outcome,
 )
 from gbdraw.labels.linear import (
     LINEAR_LABEL_FIT_ATTR,
@@ -3266,10 +3267,10 @@ def _checked_circular_drawing(
             verified = assemble(overrides)
         except GbdrawError as error:
             # A setting the engine cannot draw (for example a radial layout error) does not fit.
-            return LabelFitVerification(fits=False, canvas_size=None, reason=str(error))
+            return LabelFitVerification(outcome="stop", canvas_size=None, reason=str(error))
         layouts = _circular_label_layouts(verified)
         return LabelFitVerification(
-            fits=all(layout.fits for layout in layouts),
+            outcome=circular_label_outcome(layouts),
             canvas_size=_drawing_size(verified),
             fit=sum((layout.fit for layout in layouts), FITS),
         )
@@ -3555,9 +3556,9 @@ def _checked_linear_build(
         try:
             verified = _linear_drawing(assemble(overrides))
         except GbdrawError as error:
-            return LabelFitVerification(fits=False, canvas_size=None, reason=str(error))
+            return LabelFitVerification(outcome="stop", canvas_size=None, reason=str(error))
         label_fit = _linear_label_fit(verified)
-        return LabelFitVerification(label_fit.fits, _drawing_size(verified), label_fit.fit)
+        return LabelFitVerification(label_fit.outcome, _drawing_size(verified), label_fit.fit)
 
     check_linear_label_fit(
         _linear_label_fit(_linear_drawing(result)), verify, features_separated=features_separated

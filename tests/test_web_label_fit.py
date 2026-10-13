@@ -71,7 +71,7 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
         "kind": "outward_vertical", "title": "outward, vertical only", "status": "found",
         "values": {Y_OFFSET_PATH: 1.15},
         "settings": [{"name": "Outer Y Offset", "unit": "", "value": 1.15}],
-        "canvasSize": {"width": 1708.0, "height": 1130.0}, "reason": None,
+        "canvasSize": {"width": 1708.0, "height": 1130.0}, "reason": None, "note": None,
     }
     # One control sets both font size classes: one setting, both config paths.
     assert font["values"] == {path: 12.0 for path in FONT_SIZE_PATHS}
@@ -243,6 +243,31 @@ def test_overprinted_embedded_labels_offer_only_the_resolve_overlaps_control(tmp
 
     fitted = _web_render(_sars_request({SEPARATE_FEATURES_PATH: True}), tmp_path / "fitted")
     assert fitted["metadata"]["labelFitReports"] == []
+
+
+def test_with_separate_strands_the_resolve_overlaps_row_leaves_crossings_and_draws_with_the_notice(tmp_path) -> None:
+    """LP-D57 (OV-724): with the Web's Separate Strands on, Resolve Overlaps removes the
+    overlap but leaders still cross; the row is offered, says so, and draws with the notice."""
+
+    strands = {"canvas.strandedness": True}
+    searches = LabelFitRowSearches()
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        _web_render(_sars_request(strands), tmp_path, searches)
+    rows = searches.failure_payload(raised.value, "circular")["report"]["rows"]
+    offered = [row for row in rows if row["values"] is not None]
+    assert [(row["kind"], row["status"]) for row in offered] == [("separate_features", "found_with_notice")]
+    (separate,) = offered
+    assert separate["values"] == {SEPARATE_FEATURES_PATH: True}
+    assert separate["settings"] == [{"name": "Resolve Overlaps", "unit": "", "value": "On"}]
+    assert separate["canvasSize"] is not None
+    assert separate["note"] == "14 leader pairs still cross"
+    assert {row["note"] for row in rows if row is not separate} == {None}
+    assert "  --resolve_overlaps   (separate overlapping features; 14 leader pairs still cross)\n" in str(raised.value)
+
+    drawn = _web_render(_sars_request({**strands, SEPARATE_FEATURES_PATH: True}), tmp_path / "drawn")
+    (entry,) = drawn["metadata"]["labelFitReports"]
+    assert entry["report"]["drawn"] is True
+    assert (entry["report"]["overlapPairs"], entry["report"]["crossingPairs"]) == (0, 14)
 
 
 def test_web_render_draws_crossing_leaders_with_counts_only_and_computes_rows_later(tmp_path) -> None:

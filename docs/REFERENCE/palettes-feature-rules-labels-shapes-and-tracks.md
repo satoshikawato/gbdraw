@@ -292,7 +292,11 @@ drawing the whole figure again. The rows depend on which labels do not fit:
 | separate overlapping features | `--resolve_overlaps` | labels drawn on features that are drawn on top of each other, Circular and Linear |
 
 Each row gives the mildest value that fits, or says that none fits within its
-limit. With several records, one value must fit every record. The outer-label
+limit. When nothing was drawn and a row has no value that fits, it gives the
+mildest value that leaves no overlapping labels, if there is one, and says how
+many leader pairs still cross or labels still cover the definition text. Such
+a row comes after the others; running again with it draws the figure with the
+warning. With several records, one value must fit every record. The outer-label
 rows do not move inner, embedded, or radial labels. For inner, embedded, or radial
 labels, the switches are tried first; the smaller font is then the first
 font size, going down from the current one, at which the whole figure fits, so
@@ -314,7 +318,9 @@ hold a `LabelFitReport`: the records that do not fit, by label kind
 (`circular_outer`, `circular_inner`, `circular_embedded`, or `linear`), with
 their label counts, font sizes, and counts, and `refused` for radial labels
 without room; and the rows. A row's `values` maps config paths to the values
-that fit, and its `status` is `found`, `not_found`, or `not_computed`.
+that fit, and its `status` is `found`, `found_with_notice` (the figure then
+draws with the warning; `remaining` holds what is left), `not_found`, or
+`not_computed`.
 `RequestRenderResult.label_fit_report` returns the report of a figure drawn
 anyway.
 

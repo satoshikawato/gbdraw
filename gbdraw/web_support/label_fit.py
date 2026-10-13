@@ -38,6 +38,7 @@ from gbdraw.labels.fit import (
     LabelKind,
     label_fit_record_counts,
     label_kind_words,
+    row_note,
 )
 
 LABEL_FIT_PAYLOAD_SCHEMA: Literal[1] = 1
@@ -92,6 +93,7 @@ class LabelFitRowPayload(TypedDict):
     settings: list[LabelFitSettingPayload]
     canvasSize: LabelFitCanvasSizePayload | None
     reason: str | None
+    note: str | None
 
 
 class LabelFitRecordPayload(TypedDict):
@@ -172,6 +174,8 @@ def label_fit_row_payload(row: LabelFitRow, mode: LabelFitMode) -> LabelFitRowPa
             else None
         ),
         "reason": row.reason,
+        # What a row that draws with the notice leaves (LP-D57).
+        "note": row_note(row),
     }
 
 
