@@ -432,7 +432,7 @@ test('a Session that saved rule captions with their color IDs loads without them
   });
   await settle(page);
   expect((await shown()).tab['Complex I']).toBeUndefined();
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   await expectNumberedNames('after a Legend edit and its Undo');
   await generateAndWaitForResult(page);
