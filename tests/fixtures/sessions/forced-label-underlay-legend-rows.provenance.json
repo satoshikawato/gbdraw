@@ -12,8 +12,8 @@
     "forced-label-underlay-legend-rows.v44.gbdraw-session.json.gz": {
       "wheel": "gbdraw-0.14.0-py3-none-any.whl",
       "sessionVersion": 44,
-      "records": "tests/fixtures/forced_label_underlay.gb (sha256 a9e11770edd5736d727d466fac3131b88ddb991486391db543e6ba091b559ea7), Circular, labels out, one Result",
-      "recordsNote": "On 2026-10-14 (#1053) the repository file was shortened: its two CDS at one location (dup alpha, dup beta) now span 2851..2900 instead of 2701..2900, so their labels no longer overlap. The Session embeds the original bytes (the sha256 above).",
+      "records": "tests/fixtures/forced_label_underlay.gb (sha256 aa5c441b8a03f97c8d6c1cebfe5111af2e40b811392da6efdcef8ef9545e645b), Circular, labels out, one Result",
+      "recorded": "2026-10-14",
       "steps": [
         "Generate",
         "Legend editor: rename GC content to GC %",
@@ -40,8 +40,8 @@
           "Added"
         ]
       },
-      "sha256": "795cff177783c53620df0f3c6f263b72e00e60403f29cd8fe00c6ce94a751d77",
-      "decompressedSha256": "552d5a96639c3a556dbc4fa45bfb064e50054ab4f786a6aabbde159175b5e3c7"
+      "sha256": "b2b42ec92efd0492f0e289bb6e1f893e09d6c0b5051a9b362221a429ed0c5ce5",
+      "decompressedSha256": "79491741d22e906e21ebfe7fd557e5d3ac43c251216a773b8cc09d3567fffca2"
     }
   }
 }
