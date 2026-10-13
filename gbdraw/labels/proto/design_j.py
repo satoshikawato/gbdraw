@@ -246,8 +246,10 @@ def _ink(text: str, fs: float, mirror: bool) -> _Ink:
 
 class _Par:
     def __init__(self, ctx: Ctx):
-        self.gap = float(ctx.gap) + 0.05                 # between two label boxes
-        self.clear = ctx.opt("clear", ctx.gap)           # label box to every other object
+        self.rowem = ctx.opt("rowem", 0.0)               # LP-D30: ink gap of stacked rows as a fraction of the font size (0: off); the configured gap is the floor
+        gap0 = max(float(ctx.gap), self.rowem * float(ctx.font_size) - 0.1) if self.rowem else float(ctx.gap)   # the ink gap comes out 0.1 px above this distance (scripts/row_gap_em.py)
+        self.gap = gap0 + 0.05                           # between two label boxes
+        self.clear = ctx.opt("clear", gap0)              # label box to every other object (follows the row distance: with 3 px next to 4.3 px rows tRNA-Gln / tRNA-Met of HmmtDNA_ATskew stand 9.6 px apart)
         self.cone = ctx.opt("cone", 70.0)                # largest turn of a leader at the ring edge (degrees)
         self.cone_cos = math.cos(math.radians(self.cone))
         self.lgap = ctx.opt("lgap", 2.5)                 # leader end to its own text box
@@ -294,7 +296,7 @@ class _Par:
         self.arcw = ctx.opt("arcw", 4.0)                 # P round 4 (R8): px of cost per px that the leader ends of two neighbours differ in distance from the centre beyond `arcstep`
         self.arcstep = ctx.opt("arcstep", 2.0)           # P round 4: the step of scripts/arc_fit.py
         self.loosew = ctx.opt("loosew", 1.0)             # P round 4: px of cost per px that two neighbours are apart beyond `rowgap` when one of them is bent (at most `loosemax` px counted)
-        self.rowgap = ctx.opt("rowgap", 3.6)
+        self.rowgap = ctx.opt("rowgap", gap0 + 0.6)
         self.loosemax = ctx.opt("loosemax", 16.0)
         self.tsq = ctx.opt("tsq", 0.01)                  # P round 4: px of cost per square degree of a bend (shares a displacement between both ends of a cluster)
         self.seats = int(ctx.opt("seats", 2))             # P round 4: seats kept per label of a chain for each row of 3 px (the cheapest, bent and straight apart)
