@@ -183,6 +183,15 @@ write-up of a release.
   browser remembers the choice for the site address; it is not part of a Session.
   Phone-width windows always show the full panel. **Edit pattern** on a color
   rule error now opens the **Colors** section when it is closed (OV-538).
+- Web app Linear File cards: a card folds to its header line (File N, the file
+  name, the move buttons); click the line, or press Enter or Space on it, to open
+  the card. After **Load Session** or **Load example**, the cards that hold their
+  files start folded; a card you add, or one with a file still missing, stays
+  open. A folded line still shows a file that could not be read, a missing file
+  of a GFF3 + FASTA pair, and Gencode required. With five files, the file list is
+  218 px high instead of 1,778 px. The fold is not saved in a Session, and Undo
+  does not change it. A file name wider than the upload box now ends with an
+  ellipsis and keeps its icon, instead of being cut at both ends (OV-600).
 - Web app (Linear): a name typed on an empty File card is kept when its file is
   chosen. For a file with several records it becomes the File-level name
   (OV-486).

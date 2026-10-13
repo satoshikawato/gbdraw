@@ -1277,6 +1277,12 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
         session_path = resolve_gallery_reference(session_ref)
         if session_path is not None and session_path.exists():
             load_web_app_session(page, session_path)
+            # A loaded Session folds its Linear File cards. A tutorial reader uploaded
+            # the files, so every capture shows the cards open.
+            page.evaluate(
+                "() => document.querySelectorAll('[data-linear-source-fold]')"
+                ".forEach((fold) => { fold.open = true; })"
+            )
         replay_through = capture.get("replayThrough")
         if isinstance(replay_through, int):
             replay_tutorial_steps(page, sample, replay_through)

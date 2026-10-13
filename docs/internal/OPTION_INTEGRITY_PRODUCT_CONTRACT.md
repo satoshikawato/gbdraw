@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `44`
+- Contract revision: `46`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -38,7 +38,7 @@ Status: active Product authority
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
-  `PD-OI-092`, and `PD-OI-093`
+  `PD-OI-092`, `PD-OI-093`, and `PD-OI-094`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -740,6 +740,87 @@ Status: active Product authority
     as 22 × 26 px; this record's Accepted residual risk states that the
     Linear ones become 21.2 px wide (20.5 px in a browser that always shows
     its scrollbar) to make room for the switch button.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 45 change: `PD-OI-061` is replaced for scenario revision `4`
+  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`, extended to the names of color rules
+  and to the list under the feature popup's **Legend name**). It comes from
+  the Product Decision Owner `satoshikawato`'s replies of `2026-10-13` on a
+  user report (OV-580, OV-581, OV-582): in the feature popup of the Web app,
+  choosing another color rule's name from the list under **Legend name** kept
+  the feature's own color, so one Legend name had two colors and both rows
+  were drawn as `<name> [#<hex>]`; renaming a color rule's row onto another
+  color rule's row ended the same way without asking. Each quotation below is
+  the part of a reply that carries the answer.
+  - Reply 1, on the reported Legend:
+    「凡例に色のIDがつくのは許されないので直して。Ownership couplingとか境界型付けの問題でもあると思う。」
+  - Reply 2, on the list under **Legend name**:
+    「Select legend listがまずバグってる気がする」
+  - Reply 3, on merging a whole Legend item into another one:
+    「前は普通にマージできたんだよ全部Transcription regulationに。」
+    Release `0.13.0` asked the Legend Name Conflict dialog for every rename
+    onto an existing name of another color. The scenario-1 receipt
+    (`2026-09-30`) preserved the `PD-OI-042` naming for a target that is a
+    color rule's caption, the scenario-2 receipt kept that term, and the
+    runtime has carried it since commit `4b7b8825` (`2026-10-02`).
+  - Reply 4, to the request to confirm the ready-to-copy `PRODUCT_DECISION`
+    response for this concern and scenario revision, prepared with the
+    decision pack for the report:
+    「Web の操作(PD-OI-061 改訂 4): それでいいです」
+  - The receipt below is that response, byte for byte.
+  - The decision pack described the same outcome in English, with one phrase
+    the receipt does not repeat: a typed rename onto a color rule's name asks
+    the dialog "also when the target is a color rule's name, listed in the
+    legend or not". That phrase is the pack's description, not a receipt
+    field. The receipt's 「衝突先が色ルールの名前でも」 names a color rule's name
+    without a condition on a drawn row, and its Accepted residual risk names
+    a color rule that the figure does not draw.
+  - Reply 5, after the review of the implementation, to the question
+    「全 feature type 向けのルール(`*`)の扱い」 asked with the recommended fix
+    「一覧に出る項目は必ず入れる。`*` のルールはどの type の一覧にも出す」:
+    「全 feature type 向けのルール(*)の扱い: 推奨通りなおしましょう」
+    No field of the receipt differs from the text Reply 4 confirmed.
+  - Scope: scenario revision `4` keeps the outcome
+    `B / MERGE-SAME-FEATURE-TYPE-ONLY` of scenario revision `2` and the
+    choice names of scenario revision `3`. It retires one preservation term
+    of the scenario-2 receipt, 「衝突先が色ルールの caption のときの PD-OI-042 の区別」,
+    and adds the outcome of a pick from the popup's list. The scenario-2 and
+    scenario-3 receipts keep their text and their SHA-256.
+  - `PD-OI-042` is unchanged. One Legend name written with several colors in
+    a color table, by **Add rule**, or on the command line is still drawn as
+    `<name> [#<hex>]` rows; the Owner's decision on that concern is not part
+    of this revision. `PD-OI-088` and `OIC-028` are unchanged.
+  - This change is a static Product Contract co-change: the runtime and tests
+    that implement it are in the same pull request, and the Review is
+    `REQUIRED`.
+- Revision 46 changes: `PD-OI-094` is added
+  (`A / FOLDABLE-FILE-CARD, FOLDED-AFTER-LOAD`, concern
+  `web.linear.file-card-fold`). It comes from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-12` and `2026-10-13` on folding the
+  File cards of Linear mode in the Web app to one line each. Each quotation
+  below is the part of a reply that carries the answer.
+  - Reply 1 (`2026-10-12`), to mock images of the settings pane in which the
+    five File cards of a Linear Session are one line each.
+    「ファイルのカードを畳む案を入れる。」
+  - Reply 2 (`2026-10-13`), to a page of Before/After images of the built
+    cards that asked for one choice: `A`, a card that holds its files is
+    folded after **Load Session** or **Load example** (recommended, built), or
+    `B`, no card folds by itself. 「PR-B: 推奨通り。」
+  - Reply 3 (`2026-10-13`), to the request to approve the receipt text of
+    that page as written or to name what to change.
+    「PR-B の文面の承認: 承認します。」
+    The page showed the nine fields of the receipt as recorded below, the
+    Must preserve text as a list whose `〔…〕` headings were set in bold
+    without the brackets, and the decision date as the day of the approval.
+    The receipt is recorded byte for byte.
+  - `PD-OI-018`, `PD-OI-025`, and `PD-OI-067` keep their text. They describe
+    the contents of a File card, which the receipt below leaves as they are
+    in an open card (`〔畳んでも変わらないもの〕`). A folded card shows its
+    header line only; the Accepted residual risk below states what is then
+    out of sight until the card is opened, the common Depth TSV assignment
+    of `PD-OI-025` included.
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
@@ -3275,20 +3356,29 @@ Decision date: 2026-09-30
 ### PD-OI-061: Legend rename collisions for every entry
 
 - Concern key: `web.legend.rename-collision`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-061`, scenario revision `2`
-  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`), only by renaming the two choices of
-  the Legend Name Conflict dialog; every scenario-2 term stays in force.
-  Scenario revision `2` superseded scenario revision `1`
+- Scenario revision: `4`
+- Supersedes: `PD-OI-061`, scenario revision `3`. Scenario revision `4`
+  keeps the outcome `B / MERGE-SAME-FEATURE-TYPE-ONLY` and the choice names,
+  retires the scenario-2 preservation term
+  「衝突先が色ルールの caption のときの PD-OI-042 の区別」, and adds the outcome of a
+  pick from the list under the feature popup's **Legend name**. Scenario
+  revision `3` superseded scenario revision `2` only by renaming the two
+  choices of the Legend Name Conflict dialog. Scenario revision `2`
+  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`) superseded scenario revision `1`
   (`A / DIALOG-FOR-ALL-ENTRIES`).
 - Status: `ACCEPTED`
 - Selected outcomes: `B / MERGE-SAME-FEATURE-TYPE-ONLY` (scenario revision
-  `2`) and the label change of scenario revision `3`, whose receipt names no
-  choice code
-- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
-  their nine-field JSON representations below, read together. Where the
-  scenario-2 receipt names **Suffix** and **Merge**, it means the choices now
-  labelled `Keep both: name it "<name 2>"` and `Merge into "<name>"`.
+  `2`, and scenario revision `4` with the names of color rules and the
+  popup's list), and the label change of scenario revision `3`, whose receipt
+  names no choice code
+- Normative outcome: exactly the three approved `PRODUCT_DECISION` receipts
+  and their nine-field JSON representations below, read together. Where the
+  scenario-4 receipt differs from an earlier receipt, the scenario-4 receipt
+  governs: a rename onto the name of a color rule asks the same dialog as a
+  rename onto any other name, and the scenario-2 preservation of the
+  `PD-OI-042` naming for such a target is retired. Where the scenario-2
+  receipt names **Suffix** and **Merge**, it means the choices now labelled
+  `Keep both: name it "<name 2>"` and `Merge into "<name>"`.
 - Decision source (scenario revision `2`): the Owner replies of `2026-10-06`
   quoted verbatim in the Revision 32 entry above. The Owner approved the
   receipt text below as written ("OKです"). Dependent runtime (OV-62) is
@@ -3303,6 +3393,14 @@ Decision date: 2026-09-30
   Contract co-change).
 - Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
   `eb19efb8436cfee30d6955f19fc9b50433c24b5112ef20a7088d4a988a3f5da2`.
+- Decision source (scenario revision `4`): the Owner replies of `2026-10-13`
+  quoted verbatim in the Revision 45 entry above. The third receipt and JSON
+  below reproduce all nine supplied fields without translation or additional
+  terms. The runtime and tests that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `4`; UTF-8, excluding the final newline):
+  `3f96ff5e0e94f2689233e2bde57b17ff945130e3ad92f04070eced277d80bf74`.
 - Acceptance contracts: `OIC-006`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -3360,6 +3458,35 @@ Decision date: 2026-10-11
   "acceptedResidualRisk": "older docs/videos show the old labels.",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-11"
+}
+```
+
+Scenario revision `4` receipt, confirmed by `satoshikawato` on `2026-10-13`:
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.rename-collision
+Scenario revision: 4
+Choice: B / MERGE-SAME-FEATURE-TYPE-ONLY。色ルールの名前も同じ扱いにする。Feature のポップアップの一覧（Choose from color rules…）から選んだ項目には、名前と色の両方を引き継いで入る。
+Rationale: 凡例の名前に色の ID を付けない。一覧から既存の項目を選ぶのは「その項目に入れる」操作なので、色も引き継いで 1 つの項目にまとめる。名前を入力して既存の名前に変えたときは、衝突先が色ルールの名前でも、ほかの項目と同じ選択のダイアログ（Merge into "<name>" / Keep both: name it "<name> (1)" / Cancel）を示す。
+Must preserve: 衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと、Merge は同じ track の同じ feature type の項目どうしだけ、This feature only / All N の範囲の選択、Undo/Redo、Generate と Session での保持。
+May retire: 衝突先が色ルールの caption のときに確認なしで名前だけを変え、PD-OI-042 の色 ID で区別する動作。一覧に別の feature type の色ルールを示すこと。
+Accepted residual risk: 一覧から選ぶと feature の色が変わる（Undo で戻せる）。図に描かれていない色ルール（例: Connector）を選んだときも、そのルールの色になる。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.legend.rename-collision",
+  "scenarioRevision": 4,
+  "choice": "B / MERGE-SAME-FEATURE-TYPE-ONLY。色ルールの名前も同じ扱いにする。Feature のポップアップの一覧（Choose from color rules…）から選んだ項目には、名前と色の両方を引き継いで入る。",
+  "rationale": "凡例の名前に色の ID を付けない。一覧から既存の項目を選ぶのは「その項目に入れる」操作なので、色も引き継いで 1 つの項目にまとめる。名前を入力して既存の名前に変えたときは、衝突先が色ルールの名前でも、ほかの項目と同じ選択のダイアログ（Merge into \"<name>\" / Keep both: name it \"<name> (1)\" / Cancel）を示す。",
+  "mustPreserve": "衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと、Merge は同じ track の同じ feature type の項目どうしだけ、This feature only / All N の範囲の選択、Undo/Redo、Generate と Session での保持。",
+  "mayRetire": "衝突先が色ルールの caption のときに確認なしで名前だけを変え、PD-OI-042 の色 ID で区別する動作。一覧に別の feature type の色ルールを示すこと。",
+  "acceptedResidualRisk": "一覧から選ぶと feature の色が変わる（Undo で戻せる）。図に描かれていない色ルール（例: Connector）を選んだときも、そのルールの色になる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
 }
 ```
 
@@ -4945,6 +5072,50 @@ Decision date: 2026-10-12
   "acceptedResidualRisk": "Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-12"
+}
+```
+
+### PD-OI-094: Linear File cards fold to one line
+
+- Concern key: `web.linear.file-card-fold`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / FOLDABLE-FILE-CARD, FOLDED-AFTER-LOAD`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 46 entry
+  above. The Owner approved the receipt text below as written. The receipt
+  reproduces its fields without translation or additional terms. Dependent
+  runtime requires this authority merged into its base, or merged together
+  with it through the reviewed static Product Contract co-change route; this
+  record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `633f30bac2795b4df63eca6f2fc82fedf3a199af14f9eaf4bd7f94bde8f93026`.
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.file-card-fold
+Scenario revision: 1
+Choice: A / FOLDABLE-FILE-CARD, FOLDED-AFTER-LOAD
+Rationale: Linear の File カードは 1 枚が長く、ファイルが増えると Comparison や下の section までのスクロールが長くなる（ファイル 5 つのとき、ファイルの一覧は 1,778 px、Comparison は 1,972 px 下）。カードを 1 行に畳めるようにして、ファイルの一覧を 1 画面で見渡せるようにする（畳むと一覧は 218 px、Comparison は 412 px 下）。
+Must preserve: 〔畳む・開く〕各 File カードの見出しの行を押すとカードを 1 行に畳み、もう一度押すと開く。上下の移動ボタンを押したときは畳まれない。畳んだ行には File の番号、ファイル名、上下の移動ボタンが出る。〔最初の状態〕Session または example を読み込んだとき、ファイルがそろっているカードは畳んだ状態で出る。ファイルのないカードと、GFF3 + FASTA の片方だけのカードは開いている。自分で追加したカードは開いている。ファイルを選んでもカードは畳まれない。〔畳んでも変わらないもの〕カードの中身（ファイル、名前、Depth TSV の割り当て、Record options、レコードの一覧）と設定の値。開いたカードの中身は今と同じ（入力欄からはみ出す長いファイル名だけは、両端で切れる代わりに末尾を「…」で省略する）。畳んだ状態は Session に保存せず、Undo の履歴と図にも入らない。カードを上下に移動すると、畳んだ状態も一緒に動く。〔問題の表示〕畳んだカードに直すべき問題（読み取れなかったファイル、足りないファイル、Gencode required）があるときは、畳んだ行にも出る。設定へ案内する操作（レコードのポップアップの Show in settings）は、行き先のカードを開く。
+May retire: none
+Accepted residual risk: 畳んだカードでは、名前、Depth TSV の割り当て（付いているかどうかを含む）、Record options、レコードの一覧は、開くまで見えない（1 回押す手間が増える）。Session や example を読み込んだ直後はカードが畳まれている。一番狭い設定ペイン（240 px）では、畳んだ行のファイル名は数文字まで省略される。File カードが写っている Gallery と docs の capture は、撮り直すまで見出しの行に開閉の印がない。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.linear.file-card-fold",
+  "scenarioRevision": 1,
+  "choice": "A / FOLDABLE-FILE-CARD, FOLDED-AFTER-LOAD",
+  "rationale": "Linear の File カードは 1 枚が長く、ファイルが増えると Comparison や下の section までのスクロールが長くなる（ファイル 5 つのとき、ファイルの一覧は 1,778 px、Comparison は 1,972 px 下）。カードを 1 行に畳めるようにして、ファイルの一覧を 1 画面で見渡せるようにする（畳むと一覧は 218 px、Comparison は 412 px 下）。",
+  "mustPreserve": "〔畳む・開く〕各 File カードの見出しの行を押すとカードを 1 行に畳み、もう一度押すと開く。上下の移動ボタンを押したときは畳まれない。畳んだ行には File の番号、ファイル名、上下の移動ボタンが出る。〔最初の状態〕Session または example を読み込んだとき、ファイルがそろっているカードは畳んだ状態で出る。ファイルのないカードと、GFF3 + FASTA の片方だけのカードは開いている。自分で追加したカードは開いている。ファイルを選んでもカードは畳まれない。〔畳んでも変わらないもの〕カードの中身（ファイル、名前、Depth TSV の割り当て、Record options、レコードの一覧）と設定の値。開いたカードの中身は今と同じ（入力欄からはみ出す長いファイル名だけは、両端で切れる代わりに末尾を「…」で省略する）。畳んだ状態は Session に保存せず、Undo の履歴と図にも入らない。カードを上下に移動すると、畳んだ状態も一緒に動く。〔問題の表示〕畳んだカードに直すべき問題（読み取れなかったファイル、足りないファイル、Gencode required）があるときは、畳んだ行にも出る。設定へ案内する操作（レコードのポップアップの Show in settings）は、行き先のカードを開く。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "畳んだカードでは、名前、Depth TSV の割り当て（付いているかどうかを含む）、Record options、レコードの一覧は、開くまで見えない（1 回押す手間が増える）。Session や example を読み込んだ直後はカードが畳まれている。一番狭い設定ペイン（240 px）では、畳んだ行のファイル名は数文字まで省略される。File カードが写っている Gallery と docs の capture は、撮り直すまで見出しの行に開閉の印がない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
 }
 ```
 

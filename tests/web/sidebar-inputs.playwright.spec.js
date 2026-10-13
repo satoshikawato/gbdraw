@@ -2,7 +2,7 @@
 // after the source records are inspected.
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
-const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp, openLinearFileCards, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
 
 const loadSession = async (page, name) => {
   page.on('dialog', (dialog) => dialog.accept());
@@ -169,6 +169,7 @@ const saveAndReloadSession = async (page) => {
   await page.locator('input[accept^=".json,"]').first().setInputFiles(saved);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
+  await openLinearFileCards(page);
 };
 
 const drawnDefinitionLines = (page) => page.evaluate(() => {
@@ -193,7 +194,7 @@ test('a one-record File shows its record names on the File card', async ({ page 
   await openLinearWithFile(page, 'one.gb', namedGenbank('ONE_REC', 'Aeromonas hydrophila'), 1);
   const inferred = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].inferred_definition);
   await expect(recordOptions).not.toHaveAttribute('open', '');
-  await expect(card.locator(':scope > [data-linear-record-names]')).toHaveCount(1);
+  await expect(card.locator(':scope > details > [data-linear-record-names]')).toHaveCount(1);
   await expect(recordOptions.locator('[data-linear-record-names]')).toHaveCount(0);
   await expect(definition).toBeVisible();
   await expect(subtitle).toBeVisible();
@@ -264,7 +265,7 @@ test('a one-record File that holds a File names value keeps the File names block
   const card = page.locator('[data-linear-source-card]').first();
   const fileNames = card.locator('[data-linear-source-defaults]');
   const fileDefinition = page.getByLabel('Default definition for file 1', { exact: true });
-  const cardNames = card.locator(':scope > [data-linear-record-names]');
+  const cardNames = card.locator(':scope > details > [data-linear-record-names]');
   const names = card.locator('[data-linear-record-options] [data-linear-record-names]');
   const definition = page.getByLabel('Definition for sequence 1', { exact: true });
   await expect(fileNames).toBeVisible();
@@ -407,7 +408,7 @@ test('a File with two records keeps its File names block and per-record names', 
   const fileDefinition = page.getByLabel('Default definition for file 1', { exact: true });
   const expectTwoRecordCard = async () => {
     await expect(fileNames).toBeVisible();
-    await expect(card.locator(':scope > [data-linear-record-names]')).toHaveCount(0);
+    await expect(card.locator(':scope > details > [data-linear-record-names]')).toHaveCount(0);
     await expect(card.locator('[data-linear-record-options]').getByLabel(/^Definition for sequence [12]$/)).toHaveCount(2);
     await expect(page.getByLabel('Definition for sequence 1', { exact: true })).toBeHidden();
   };

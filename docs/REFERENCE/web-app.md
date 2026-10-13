@@ -97,6 +97,21 @@ comparison endpoints, and source-derived state as one undoable change. The only
 File cannot be deleted. Removing an empty final File is immediate; removing a
 populated final File asks for confirmation. Cancel and Escape change nothing.
 
+The header line of a Linear File card, which starts with **File N**, folds the
+card to that one line and opens it again: click the line, or focus it and press
+Enter or Space. A press on a move button moves the card and does not fold it. A
+folded card shows its file name after **File N** (both names for GFF3 + FASTA,
+"No file" for an empty card). When one file of a GFF3 + FASTA pair is missing,
+the line names it, for example "genome.gff3 + no FASTA", without the green
+check. A file that could not be read is shown in red with a warning icon, and
+**Gencode required** is shown when a record needs a translation table. After
+**Load Session** or **Load example** the cards that hold their file, or both
+files of a pair, are folded; a card with a file still missing stays open, a card
+you add stays open, and choosing a file does not fold it. Which cards are folded
+is not saved in a Session and is not an Undo step: Undo and Redo leave every
+card as it is, and a File that Undo brings back after **Remove file** returns
+folded if it was folded.
+
 Replacing a File with one that holds several records expands it into one row
 per record. The new rows keep only File-level values (the File, its Depth TSV,
 and the file defaults); the crop, reverse complement, **Definition**, and
@@ -1005,8 +1020,11 @@ split location are separated by `; `.
 **Edit** has three groups. **Appearance** changes the current Result, as its
 heading says (**Updates the current Result**):
 **Fill Color**, **Stroke**, the **Label** row (label text, **Label visibility**,
-and **Apply Label** on one line), **Feature visibility**, and **Legend name**,
-which can also be chosen from the legend captions of the color rules. When the
+and **Apply Label** on one line), **Feature visibility**, and **Legend name**.
+The list under it (**Choose from color rules…**) names the color rules for the
+feature's type and those for every feature type (`*` in a color table), each
+once; choosing one puts the feature into that group with its name and its
+color. When the
 feature has no label, one line names the reason, for example `No label shown (Show Labels = None).
 Choose On to show it.` The **Similarity group** section follows when the
 feature belongs to one: one line with the group ID, its name, and **N genes in
@@ -1079,8 +1097,9 @@ Ctrl-click selects features for bulk color, legend-caption, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the caption of another
 entry of a different color asks you to choose **Merge into "<name>"**, **Keep
-both** (the dialog shows the numbered name the renamed entry gets), or **Cancel**. If a specific color rule already uses the caption, the entries are
-told apart as that rule describes instead. In the color scope, legend name, and
+both** (the dialog shows the numbered name the renamed entry gets), or **Cancel**. The name of a specific color rule asks the same way, also when
+the rule draws no legend entry, and **Merge** takes the color of the name you
+merge into. In the color scope, legend name, and
 **Reset fill color** dialogs, whether a fill color in the popup or the Features
 list, a popup stroke edit, or a legend rename opens them, each choice is one
 History step and **Cancel** records none. After a choice the dialog stays open with its buttons

@@ -37,7 +37,7 @@ import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup } from './preview-item-popup.js';
-import { legendRowRules } from '../services/specific-color-rules.js';
+import { colorRuleLegendGroups, legendRowRules } from '../services/specific-color-rules.js';
 import { drawnTracks, loadedTracks } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
@@ -88,6 +88,8 @@ import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import {
   groupLinearSourceRecords,
+  linearCardFileFields,
+  linearCardInputComplete,
   linearRecordNames,
   linearFileCardRecord,
   isPristineLinearSource,
@@ -95,6 +97,7 @@ import {
   linearSourceDepthStatus,
   moveLinearSourceGroup,
   planLinearSourceRemoval,
+  setLinearSourceFolded,
   getLinearSourceDefaultDefinition,
   inferredDefinitionForRecord,
   setLinearSourceDefaultDefinition,
@@ -451,6 +454,7 @@ export const createAppSetup = () => {
     showRightDrawer,
     rightDrawerTab,
     linearReorderNotice,
+    linearFoldedSources,
     circularRecordList,
     paletteDefinitions,
     paletteNames,
@@ -792,17 +796,41 @@ export const createAppSetup = () => {
     linearSourceGroups.value.find((source) => source.uid === linearSourceRemovalDialog.sourceUid) || null
   ));
   const linearSourceRemovalCanDelete = computed(() => linearSourceGroups.value.length > 1);
+  /** @param {{ name?: string }} file */
+  const chosenFileName = (file) => String(file.name || 'Unnamed file');
   /**
-   * The file names of a Linear File, as its dialogs name it.
+   * The file names of a Linear File, as its dialogs name it: every file the
+   * row holds, which a removal takes, also one of the other input type.
    * @param {LinearSourceGroup} source
    */
   const linearSourceFileName = (source) => {
-    const sequence = source.sequence || source.records?.[0]?.sequence || {};
-    const names = [sequence.gb, sequence.gff, sequence.fasta]
-      .filter(Boolean)
-      .map((file) => String(file?.name || 'Unnamed file'));
+    const names = [source.sequence.gb, source.sequence.gff, source.sequence.fasta].filter(Boolean).map(chosenFileName);
     return names.length ? names.join(' + ') : `File ${linearSourceGroups.value.indexOf(source) + 1}`;
   };
+  const LINEAR_FILE_SLOT_NAMES = { gb: 'GenBank', gff: 'GFF3', fasta: 'FASTA' };
+  /**
+   * What a File card's header line says of the slots the card shows: each
+   * file's name, "no FASTA" for a slot still empty, "No file" for none.
+   * @param {LinearSourceGroup} source
+   */
+  const linearCardFileLine = (source) => {
+    const fields = linearCardFileFields(lInputType.value);
+    if (!fields.some((field) => source.sequence[field])) return 'No file';
+    return fields.map((field) => (
+      source.sequence[field] ? chosenFileName(source.sequence[field]) : `no ${LINEAR_FILE_SLOT_NAMES[field]}`
+    )).join(' + ');
+  };
+  /** @param {LinearSourceGroup} source */
+  const linearCardHoldsInput = (source) => linearCardInputComplete(source, lInputType.value);
+  // A File card folds to its header line. The disclosure reports every change
+  // of its own state: the user's press, and a path that opened the card to
+  // show a setting inside it.
+  /** @param {LinearSourceGroup} source */
+  const isLinearSourceFolded = (source) => linearFoldedSources.has(source.uid);
+  /** @param {LinearSourceGroup} source @param {Event} event */
+  const syncLinearSourceFold = (source, event) => setLinearSourceFolded(
+    linearFoldedSources, source.uid, !(/** @type {HTMLDetailsElement} */ (event.currentTarget)).open
+  );
   const linearSourceRemovalTargetName = computed(() => {
     const source = linearSourceRemovalTarget.value;
     return source ? linearSourceFileName(source) : 'Unavailable File';
@@ -2177,6 +2205,19 @@ export const createAppSetup = () => {
     if (attachedCount === 0) return 'No depth track attached';
     return `${attachedCount} depth track${attachedCount === 1 ? '' : 's'} attached`;
   };
+  // The problems a File card marks, for the open card and its folded line:
+  // a file whose inspection failed, and a record that TLOSATX cannot search
+  // without a translation table.
+  /** @param {LinearSourceGroup} source */
+  const linearSourceInspectionFailed = (source) => Boolean(linearRecordSelector.errorFor(source.sequence));
+  /** @param {LinearSeq} seq */
+  const linearRecordGencodeRequired = (seq) => {
+    const drawing = state.drawings.linear;
+    return drawing.hasActiveLinearLosatIntent.value && drawing.losatProgram.value === 'tblastx'
+      && !(Number(seq.losat_gencode) >= 1);
+  };
+  /** @param {LinearSourceGroup} source */
+  const linearSourceGencodeRequired = (source) => source.records.some(({ sequence }) => linearRecordGencodeRequired(sequence));
   const depthTrackRows = computed(() => {
     const drawing = state.activeDrawing();
     return rowsForDepthTrackCount(drawing, activeDepthTrackCount());
@@ -3573,7 +3614,7 @@ export const createAppSetup = () => {
     handleFeatureStyleScopeChoice,
     handleLegendNameCommit,
     handleLegendRenameChoice,
-    selectLegendNameOption,
+    joinLegendGroup,
     renameLegendEntry,
     handleResetColorChoice,
     resetClickedFeatureFillColor,
@@ -4225,6 +4266,7 @@ export const createAppSetup = () => {
     };
   });
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
+  const joinLegendGroupWithHistory = undoableAction('Rename legend item', joinLegendGroup);
   // The Legend tab's grip reorders a row by drag or by the Up and Down arrow
   // keys; neither is a click, so each move records its own History step.
   const moveLegendEntryWithHistory = undoableAction('Move legend item', moveLegendEntry);
@@ -5466,27 +5508,12 @@ export const createAppSetup = () => {
   const downloadPNG = () => runExportAction('downloadPNG', 'export-png');
   const downloadPDF = () => runExportAction('downloadPDF', 'export-pdf');
 
-  const specificRuleLegendOptions = computed(() => {
-    const drawing = state.activeDrawing();
-    const byCaption = new Map();
-    for (const rule of drawing.manualSpecificRules) {
-      if (!rule) continue;
-      const caption = String(rule.cap || '').trim();
-      if (!caption) continue;
-      const key = caption.toLowerCase();
-      const isHashRule = String(rule.qual || '').toLowerCase() === 'hash';
-      const existing = byCaption.get(key);
-      if (!existing || (existing.isHashRule && !isHashRule)) {
-        byCaption.set(key, {
-          caption,
-          color: String(rule.color || '').trim(),
-          isHashRule
-        });
-      }
-    }
-    return Array.from(byCaption.values())
-      .sort((a, b) => a.caption.localeCompare(b.caption))
-      .map(({ caption, color }) => ({ caption, color }));
+  // The list under the popup's Legend name: the color-rule Legend groups of
+  // the clicked feature's type, by name (PD-OI-061 revision 4).
+  const popupLegendGroups = computed(() => {
+    const type = clickedFeature.value?.feat?.type;
+    return type === undefined ? [] : colorRuleLegendGroups(state.activeDrawing().manualSpecificRules, String(type))
+      .sort((left, right) => left.name.localeCompare(right.name));
   });
 
   const featureVisibilityFeatureSuggestions = computed(() => {
@@ -6015,13 +6042,15 @@ export const createAppSetup = () => {
       first.focus();
     }
   };
+  // A folded card takes the focus on its header line and stays folded.
   /** @param {number} sourceIndex */
   const focusLinearSourceAfterRemoval = async (sourceIndex) => {
     await nextTick();
     const cards = document.querySelectorAll('[data-linear-source-card]');
     const targetIndex = Math.max(0, Math.min(Number(sourceIndex) || 0, cards.length - 1));
-    const target = /** @type {HTMLElement | null} */ (cards[targetIndex]?.querySelector('.upload-zone[tabindex="0"]')
-      || document.querySelector('[data-linear-file-add]'));
+    const target = /** @type {HTMLElement | null} */ (cards[targetIndex]?.querySelector(
+      '[data-linear-source-fold]:not([open]) > summary, .upload-zone[tabindex="0"]'
+    ) || document.querySelector('[data-linear-file-add]'));
     if (typeof target?.focus === 'function') target.focus();
   };
   /** @param {LinearSourceGroup} source @param {string} origin @param {EventTarget | null} [returnFocus] */
@@ -6588,6 +6617,13 @@ export const createAppSetup = () => {
     clearLinearSourceDepthFile,
     linearSeqs,
     linearSourceGroups,
+    linearCardFileLine,
+    linearCardHoldsInput,
+    isLinearSourceFolded,
+    syncLinearSourceFold,
+    linearSourceInspectionFailed,
+    linearRecordGencodeRequired,
+    linearSourceGencodeRequired,
     linearRecordLayoutEnabled: drawingMember('linearRecordLayoutEnabled'),
     linearRecordGap: drawingMember('linearRecordGap'),
     linearRecordRows: drawingMember('linearRecordRows'),
@@ -7087,12 +7123,12 @@ export const createAppSetup = () => {
     highlightClickedOrthogroup,
     clearOrthogroupHighlight,
     openClickedOrthogroupInEditor,
-    specificRuleLegendOptions,
+    popupLegendGroups,
     updateClickedFeatureColor: updateClickedFeatureColorWithHistory,
     updateClickedFeatureVisibility: updateClickedFeatureVisibilityWithHistory,
     handleFeatureVisibilityScopeChoice: handleFeatureVisibilityScopeChoiceWithHistory,
     handleLegendNameCommit: handleLegendNameCommitWithHistory,
-    selectLegendNameOption,
+    joinLegendGroup: joinLegendGroupWithHistory,
     resetClickedFeatureFillColor: resetClickedFeatureFillColorWithHistory,
     updateClickedFeatureStroke: updateClickedFeatureStrokeWithHistory,
     getFeatureStrokeColorValue,

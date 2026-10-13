@@ -1,11 +1,12 @@
 const { test, expect } = require('@playwright/test');
 const { load, generate } = require('./helpers/mode-transition.cjs');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 
 test('comparison off has its own Undo step after a record definition edit', async ({ browser }) => {
   test.setTimeout(300000);
   const page = await load(browser, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
   try {
+    await openLinearFileCards(page);
     await generate(page);
     const baseline = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
     await page.getByRole('button', { name: 'Record options for sequence 2', exact: true }).click();

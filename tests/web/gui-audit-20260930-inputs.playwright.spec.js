@@ -3,7 +3,7 @@
 // a current defect; the PR that fixes the audit ID removes the mark.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 const {
   BATCH_FIXTURE,
   HMMT,
@@ -406,6 +406,7 @@ test('Reset Settings clears Linear per-record display text and the alignment pla
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.sessionSaveAvailable, null, { timeout: 300_000 });
   await settle(page);
+  await openLinearFileCards(page);
   // The Gallery Session names each cluster in its record's own fields, which
   // the card of a one-record File shows; type other text into the first one.
   await page.getByLabel('Definition for sequence 1', { exact: true }).fill('<i>Streptomyces lividus</i>');

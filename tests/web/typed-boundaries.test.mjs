@@ -8,7 +8,9 @@
 //      factories, and no JSDoc outside a composition root names another
 //      owner's factory result (`ReturnType<typeof createX>`);
 //   4. no `@ts-ignore`, `@ts-expect-error`, or `@ts-nocheck`;
-//   5. type imports resolve to a module and follow the R13 layers.
+//   5. type imports resolve to a module and follow the R13 layers;
+//   6. no other module declares a typedef or a constant that a generated
+//      contract module (contracts/*.generated.js) declares.
 //
 // UNCHECKED_MODULES is a registered design-rule allowlist
 // (tools/web-design-rule-guards.json, R14, kind `set`): a pull request that
@@ -180,6 +182,15 @@ const typeImports = (comments) => [
 ].map((match) => ({ specifier: match[2], index: match.index }));
 const isLowerLayer = (path) => path === 'state.js' || path.startsWith('services/') || path.startsWith('utils/');
 
+// The type names a comment text declares: `@typedef {…} Name`, `@callback Name`.
+const declaredTypes = (comments) => [...comments.matchAll(/@(?:typedef|callback)\b[ \t]*/g)].flatMap((match) => {
+  let index = match.index + match[0].length;
+  if (comments[index] === '{') index = closingBracket(comments, index) + 1;
+  const name = index > 0 ? comments.slice(index).match(/^[\s*]*([A-Za-z_$][\w$]*)/)?.[1] : null;
+  return name ? [{ name, index: match.index }] : [];
+});
+const isGeneratedContract = (path) => /^contracts\/[^/]+\.generated\.js$/.test(path);
+
 test('R14: every module is checked or listed in UNCHECKED_MODULES, never both', () => {
   const failures = [];
   MODULES.forEach((path) => {
@@ -281,6 +292,27 @@ test('R14: type imports resolve to a module and follow the R13 layers', () => {
         failures.push(`${where}: only a composition root imports types from a composition root`);
       }
     });
+  });
+  assert.deepEqual(failures, []);
+});
+
+test('R14: no other module declares a typedef or a constant of a generated contract module', () => {
+  const owners = new Map();
+  [...SOURCES.keys()].filter(isGeneratedContract).forEach((path) => {
+    declaredTypes(COMMENTS.get(path)).forEach(({ name }) => owners.set(name, path));
+    for (const [, name] of maskJavaScript(SOURCES.get(path)).matchAll(/^export\s+const\s+([A-Za-z_$][\w$]*)/gm)) owners.set(name, path);
+  });
+  assert.ok(owners.size, 'contracts/ holds no generated module that declares a typedef or a constant');
+  const failures = [];
+  SOURCES.forEach((source, path) => {
+    const report = (name, text, index) => {
+      if (owners.has(name) && owners.get(name) !== path) {
+        failures.push(`${path}:${lineOf(text, index)}: ${name} is declared in ${owners.get(name)}; import it from there`);
+      }
+    };
+    declaredTypes(COMMENTS.get(path)).forEach(({ name, index }) => report(name, COMMENTS.get(path), index));
+    const code = maskJavaScript(source);
+    for (const match of code.matchAll(/\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) report(match[1], code, match.index);
   });
   assert.deepEqual(failures, []);
 });

@@ -3,7 +3,7 @@ const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 
 const importSession = async (page, bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
   const file = new File([new Uint8Array(bytes)], name);
@@ -1543,6 +1543,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await expect.poll(recordState).toEqual(applied);
 
   await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
+  await openLinearFileCards(page);
   await page.getByRole('button', { name: 'Record options for sequence 2', exact: true }).click();
   const reverse = page.getByRole('checkbox', { name: 'Reverse complement for sequence 2', exact: true });
   await expect(reverse).toBeChecked();

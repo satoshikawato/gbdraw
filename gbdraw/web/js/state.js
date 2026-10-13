@@ -299,6 +299,11 @@ const orthogroupSortMode = ref('id');
 const showRightDrawer = ref(false);
 const rightDrawerTab = ref('features'); // 'legend' | 'features' | 'orthogroups'
 const linearReorderNotice = ref('');
+// The Linear File cards folded to their header line, by source uid: app-level
+// view state. Its transitions are in services/linear-sources.js.
+/** @import { FoldedLinearSources } from './services/linear-sources.js' */
+/** @type {FoldedLinearSources} */
+const linearFoldedSources = reactive(new Set());
 const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
 /** @import { CircularRecordDiscovery } from './services/record-discovery.js' */
 /** @type {CircularRecordDiscovery} */
@@ -543,6 +548,9 @@ const legendRenameDialog = reactive({
   // R15-3 (OV-285): the Python key of the deleted row the new caption names;
   // '' when the target is listed. Its Merge restores that row first.
   deletedTargetKey: /** @type {PythonLegendKey | ''} */ (''),
+  // PD-OI-061 revision 4: the new caption is the name of a color rule that no
+  // Legend row shows.
+  targetRuleOnly: false,
   suffixCaption: '', // the name "Keep both" gives the renamed row
   pendingRequest: null
 });
@@ -1132,6 +1140,7 @@ export const state = {
   showRightDrawer,
   rightDrawerTab,
   linearReorderNotice,
+  linearFoldedSources,
   circularRecordList,
   circularRecordDiscovery,
   paletteDefinitions,
