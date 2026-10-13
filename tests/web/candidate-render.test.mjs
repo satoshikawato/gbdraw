@@ -357,6 +357,34 @@ test('a Legend style on a row of a caption written in two colors knows the row\'
   }
 });
 
+// OV-643: a listed row is a rule's row by its key, never by the rule's name.
+// The rows of a caption written in two colors are keyed "<caption> [<color>]"
+// and Python draws them, so the compile adds neither, also when neither the
+// generated order nor the renderer-drawn set holds them. Added, a row would be
+// drawn by its key.
+test('a listed row of a caption written in two colors is its rule\'s row by its key', () => {
+  const options = {
+    catalogAdmission: admission(),
+    manualSpecificRules: [
+      { feat: 'CDS', qual: 'gene', val: '^a$', color: '#112233', cap: 'Shared' },
+      { feat: 'CDS', qual: 'gene', val: '^b$', color: '#445566', cap: 'Shared' }
+    ],
+    legendEntries: [
+      { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
+      { caption: 'Shared [#112233]', originalCaption: 'Shared [#112233]', color: '#112233' },
+      { caption: 'Shared [#445566]', originalCaption: 'Shared [#445566]', color: '#445566' },
+      { caption: 'Mine', originalCaption: 'Mine', color: '#778899' }
+    ],
+    originalLegendOrder: ['CDS']
+  };
+  const live = { drawnTracks: [], domains: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'], paletteColors: {}, drawnContext: null };
+  for (const livePreview of [null, live]) {
+    const { legendAdds } = compileDirectEditorMutationPlan({ ...options, livePreview }).operationsByResult[0];
+    assert.deepEqual(legendAdds.map(({ caption, name }) => [caption, name]), [['Mine', undefined]],
+      `${livePreview ? 'live' : 'at Generate'}: only the editor row is added`);
+  }
+});
+
 // OV-46, OV-63: a Legend row with no known features is required by the plan in each
 // Result. Admission lets Python's Legend row facts excuse the absence (suppressed by
 // the draft, or drawn by another Result), so the plan carries no guess of its own.

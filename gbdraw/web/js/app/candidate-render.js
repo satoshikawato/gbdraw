@@ -648,11 +648,6 @@ const compilePlanBundle = ({
 
   const legendRows = draftLegendRows({ legendEntries, deletedLegendEntries, dormantLegendEntries, originalLegendOrder });
   const { currentEntries, originalCaptions, deletedCaptions, dormantEntries } = legendRows;
-  const manualCaptions = new Set(
-    (Array.isArray(manualSpecificRules) ? manualSpecificRules : [])
-      .map((rule) => text(rule?.cap))
-      .filter(Boolean)
-  );
   const rendererDerivedCaptions = new Set(
     Array.from(addedLegendCaptions || []).map(text).filter(Boolean)
   );
@@ -663,7 +658,30 @@ const compilePlanBundle = ({
   const unrequestedDepth = new Set(Array.from(unrequestedDepthCaptions || []).map(text).filter(Boolean));
   const allResultIndexes = operationsByResult.map((_, index) => index);
 
+  // Live only: at Generate Python's row has the color (OV-288).
+  const draftRowColors = livePreview && draftLegendRowColors({
+    rules,
+    pythonRows: livePreview.pythonRows,
+    features: livePreview.features,
+    originalLegendOrder: [...originalCaptions],
+    paletteColors: livePreview.paletteColors,
+    drawnTracks: livePreview.drawnTracks
+  });
+  /** @param {PythonLegendKey} key */
+  const draftRowColor = (key) => (draftRowColors ? draftRowColors.colorOf(key) : null);
+  // The key of the row a rule is drawn in: the live draft's, else (Generate
+  // compiles before it reads Python's rows) the key the rule table alone
+  // allocates, which is the key of every caption written in several colors.
+  const ruleRowOf = draftRowColors?.rowOf
+    || ruleLegendCaptions({ rules: [...rules], pythonRows: new Map(), features: [], originalLegendOrder: [...originalCaptions] });
+
   runStage('legend', () => {
+    // A listed row is a rule's row by the key it shows, never by the rule's
+    // name: a caption written in several colors is the key of none of its rows (OV-643).
+    /** @type {Set<PythonLegendKey>} */
+    const ruleRowKeys = new Set(rules.filter((rule) => text(rule?.cap)).map(ruleRowOf));
+    /** @param {NormalizedLegendEntry} entry */
+    const isRuleRow = (entry) => ruleRowKeys.has(/** @type {PythonLegendKey} */ (entry.caption));
     // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's
     // slots. The renderer places generated entries in their generated order and
     // direct additions after them; only a different order emits an operation.
@@ -688,18 +706,18 @@ const compilePlanBundle = ({
         isOriginal
         && entry.caption !== entry.originalCaption
       ) {
-        // A rename onto a color rule's caption is explicit and wins (PV-02). A
+        // A rename onto the key of a color rule's row is explicit and wins (PV-02). A
         // rule that replaced the source row leaves nothing to rename.
         addToResults(operationsByResult, allResultIndexes, 'legendRenames', {
           from: entry.originalCaption,
           to: entry.caption,
-          allowMissing: sourceReplaced || manualCaptions.has(entry.caption) || unrequestedDepth.has(entry.originalCaption)
+          allowMissing: sourceReplaced || isRuleRow(entry) || unrequestedDepth.has(entry.originalCaption)
         });
       }
       if (
         originalCaptions.size > 0
         && !isOriginal
-        && !manualCaptions.has(entry.caption)
+        && !isRuleRow(entry)
         && !rendererDerivedCaptions.has(entry.caption)
       ) {
         const color = normalizePaint(entry.color, 'added legend color');
@@ -740,23 +758,6 @@ const compilePlanBundle = ({
       addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true, retire: true });
     });
   });
-
-  // Live only: at Generate Python's row has the color (OV-288).
-  const draftRowColors = livePreview && draftLegendRowColors({
-    rules,
-    pythonRows: livePreview.pythonRows,
-    features: livePreview.features,
-    originalLegendOrder: [...originalCaptions],
-    paletteColors: livePreview.paletteColors,
-    drawnTracks: livePreview.drawnTracks
-  });
-  /** @param {PythonLegendKey} key */
-  const draftRowColor = (key) => (draftRowColors ? draftRowColors.colorOf(key) : null);
-  // The key of the row a rule is drawn in: the live draft's, else (Generate
-  // compiles before it reads Python's rows) the key the rule table alone
-  // allocates, which is the key of every caption written in several colors.
-  const ruleRowOf = draftRowColors?.rowOf
-    || ruleLegendCaptions({ rules: [...rules], pythonRows: new Map(), features: [], originalLegendOrder: [...originalCaptions] });
 
   // Category style preferences outlive the current generated entry projection.
   // Apply a returning category's preference without synthesizing a manual row.
