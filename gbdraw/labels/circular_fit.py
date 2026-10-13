@@ -139,30 +139,58 @@ def _round_half_pt(value: float) -> float:
     return math.floor(value / FONT_STEP_PT + 0.5) * FONT_STEP_PT
 
 
+def _bisect(fits: Callable[[float], bool], grid: Sequence[float], low: int, high: int) -> int:
+    """Smallest fitting index in [low, high]; ``grid[high]`` fits."""
+
+    while low < high:
+        middle = (low + high) // 2
+        if fits(grid[middle]):
+            high = middle
+        else:
+            low = middle + 1
+    return high
+
+
 def _mildest_fitting_index(
     grid: Sequence[float],
     fits: Callable[[float], bool],
     bound: int | None = None,
+    *,
+    limit_first: bool = True,
+    downward: bool = False,
 ) -> int | None:
     """Smallest index whose value fits, assuming fit is monotone along the grid.
 
-    The upper end is probed first: ``bound`` (an index another row suggests),
-    else the limit, so a row without a value costs one probe. Then an
-    exponential search from the mildest value brackets the answer and a
-    bisection inside the bracket finds it. Probes that do not fit stop early on
-    overlaps, so the search spends them near the mild end.
+    ``bound`` is an index another row suggests; when it fits, the answer lies at
+    or below it. ``downward`` then gallops down from it (for a row whose value
+    is usually the bound's), else an exponential search runs up from the
+    mildest value. Without a fitting bound, ``limit_first`` probes the limit
+    first, so a row that rarely has a value costs one probe; otherwise the
+    limit is probed only when nothing milder fits. A bisection inside the
+    bracket finds the answer. Probes that do not fit stop early on overlaps, so
+    the search spends them near the mild end.
     """
 
     if not grid:
         return None
     last = len(grid) - 1
+    high: int | None = None
     if bound is not None and bound < last and fits(grid[bound]):
-        last = bound
-    elif not fits(grid[last]):
-        return None
+        last = high = bound
+        if downward:
+            step = 1
+            while high - step >= 0:
+                if not fits(grid[high - step]):
+                    return _bisect(fits, grid, high - step + 1, high)
+                high -= step
+                step *= 2
+            return _bisect(fits, grid, 0, high)
+    elif limit_first:
+        if not fits(grid[last]):
+            return None
+        high = last
     low = 0
     span = 1
-    high = last
     while True:
         probe_index = low + span - 1
         if probe_index >= last:
@@ -172,13 +200,11 @@ def _mildest_fitting_index(
             break
         low = probe_index + 1
         span *= 2
-    while low < high:
-        middle = (low + high) // 2
-        if fits(grid[middle]):
-            high = middle
-        else:
-            low = middle + 1
-    return high
+    if high is None:
+        if not fits(grid[last]):
+            return None
+        high = last
+    return _bisect(fits, grid, low, high)
 
 
 def _settings_key(values: Mapping[str, float]) -> tuple[tuple[str, float], ...]:
@@ -191,6 +217,8 @@ class _Lever:
     values_for: Callable[[float], dict[str, float]]
     reason: str
     bound: float | None = None
+    limit_first: bool = True
+    downward: bool = False
 
 
 class CircularLabelFitSearch:
@@ -274,6 +302,7 @@ class CircularLabelFitSearch:
                 _offset_grid(y_offset),
                 lambda value: {Y_OFFSET_PATH: value},
                 f"Does not fit up to Y offset {OFFSET_LIMIT:g}",
+                limit_first=False,
             )
         if kind == "outward_both":
             return _Lever(
@@ -281,6 +310,7 @@ class CircularLabelFitSearch:
                 lambda value: {X_OFFSET_PATH: value, Y_OFFSET_PATH: value},
                 f"Does not fit up to X and Y offset {OFFSET_LIMIT:g}",
                 bound=self._row("outward_vertical")[1],
+                downward=True,
             )
         if kind == "outward_horizontal":
             return _Lever(
@@ -293,6 +323,7 @@ class CircularLabelFitSearch:
                 _font_grid(self._font_size),
                 _font_values,
                 f"Does not fit down to {FONT_LIMIT_PT:g} pt",
+                limit_first=False,
             )
         if kind == "tighter_rows":
             return _Lever(
@@ -335,7 +366,13 @@ class CircularLabelFitSearch:
             def record_fits(value: float, index: int = index) -> bool:
                 return self._probe_fits(index, lever.values_for(value))
 
-            mildest = _mildest_fitting_index(grid, record_fits, bound_index)
+            mildest = _mildest_fitting_index(
+                grid,
+                record_fits,
+                bound_index,
+                limit_first=lever.limit_first,
+                downward=lever.downward,
+            )
             if mildest is None:
                 return not_found
             strongest = max(strongest, mildest)

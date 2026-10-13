@@ -114,6 +114,24 @@ def test_fit_counts_take_plain_boxes_and_polylines() -> None:
     assert polyline_crossing_count(touching) == 0
 
 
+@pytest.mark.parametrize("limit_first", [True, False])
+@pytest.mark.parametrize("downward", [True, False])
+def test_every_search_start_finds_the_mildest_fitting_value(limit_first: bool, downward: bool) -> None:
+    for size in range(1, 12):
+        grid = [float(index) for index in range(size)]
+        for threshold in range(size + 1):
+            expected = threshold if threshold < size else None
+            for bound in (None, *range(size)):
+                found = circular_fit_module._mildest_fitting_index(
+                    grid,
+                    lambda value: value >= threshold,
+                    bound,
+                    limit_first=limit_first,
+                    downward=downward,
+                )
+                assert found == expected, (size, threshold, bound)
+
+
 def test_fitting_records_pass_without_a_search() -> None:
     probes: list[Mapping[str, float]] = []
     verify, calls = _verifier(_p1_like)
