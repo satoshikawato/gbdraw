@@ -4165,6 +4165,7 @@ def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> Non
         blast_config,
         records,
         record_offsets_x={1: -300.0},
+        align_center=canvas_config.align_center,
     ).get_group()
 
     path = group.elements[0]

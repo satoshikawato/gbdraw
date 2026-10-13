@@ -540,6 +540,7 @@ def test_pairwise_match_group_draws_smaller_high_identity_hits_above_broad_hits(
         1,
         blast_config,
         [_build_record(), _build_record()],
+        align_center=canvas_config.align_center,
     ).get_group()
 
     drawing = Drawing(debug=False)

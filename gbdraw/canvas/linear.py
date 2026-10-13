@@ -90,7 +90,6 @@ class LinearCanvasGeometry:
     cds_height: float
     arrow_length: float
     track_axis_gap: float | None
-    align_center: bool
     normalize_length: bool
 
 
@@ -387,7 +386,6 @@ class LinearCanvasConfigurator:
             cds_height=self.cds_height,
             arrow_length=self.arrow_length,
             track_axis_gap=self.track_axis_gap,
-            align_center=self.align_center,
             normalize_length=self.normalize_length,
         )
 

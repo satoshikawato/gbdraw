@@ -28,7 +28,7 @@ from ...features.factory import (
     create_feature_layers,
 )
 from ...features.objects import FeatureObject
-from ...render.groups.linear import DefinitionGroup
+from ...render.groups.linear import DefinitionGroup, LinearDefinitionStyle
 from ...labels.filtering import label_filter_maps
 from ...render_stages import render_stage
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
@@ -84,6 +84,7 @@ def _precalculate_definition_metrics(
     if not records:
         return 0.0, definition_widths, definition_heights
 
+    style = LinearDefinitionStyle.of(cfg)
     if line_kinds_by_record is not None and len(line_kinds_by_record) != len(records):
         raise ValueError("line_kinds_by_record must match the number of records")
     for index, record in enumerate(records):
@@ -94,8 +95,8 @@ def _precalculate_definition_metrics(
         )
         def_group = DefinitionGroup(
             record,
-            canvas_config,
-            cfg=cfg,
+            str(canvas_config.length_param),
+            style=style,
             line_kinds=line_kinds,
             record_transform=(record_transforms[index] if record_transforms is not None else None),
             record_presentation=(record_presentations[index] if record_presentations is not None else None),

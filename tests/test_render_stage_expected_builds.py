@@ -130,8 +130,21 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     **dict.fromkeys(("plot_title", "plot_title_font_size"), _TITLE),
 }
 
+# The options a Linear record content (axis, ruler, features, labels) reads.
+_RECORD_CONTENT_OPTIONS = (
+    "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_color", "axis_stroke_width",
+    "line_stroke_width", "feature_height", "feature_overlap_tolerance_bp", "feature_override_table",
+    "feature_placement_table", "feature_visibility_table", "label_table", "label_whitelist", "label_blacklist",
+    "qualifier_priority", "label_font_size", "label_placement", "label_rendering", "linear_label_spacing",
+    "show_labels", "separate_strands", "resolve_overlaps", "track_axis_gap", "track_layout",
+    # The axis ruler draws with the scale settings.
+    "hide_scale", "scale_interval", "scale_style", "scale_stroke_color", "scale_stroke_width",
+    "scale_font_size", "ruler_label_font_size", "ruler_label_color",
+)
+
 # The group contents an option changes, besides the stages above.
 CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
+    "annotation_table": frozenset({"annotation_content"}),
     **dict.fromkeys(
         (
             "gc_content_mode", "gc_content_min_percent", "gc_content_max_percent",
@@ -147,6 +160,13 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
         ),
         frozenset({"length_bar_content"}),
     ),
+    **dict.fromkeys(
+        (
+            "definition_font_size", "keep_definition_left_aligned", "definition_line_style", "record_label",
+            "record_subtitle", "show_replicon", "hide_accession", "hide_length",
+        ),
+        frozenset({"definition_content"}),
+    ),
 }
 
 
@@ -154,6 +174,7 @@ def allowed_builds(option_id: str) -> frozenset[str]:
     return (
         EXPECTED_BUILDS.get(option_id, frozenset())
         | CONTENT_BUILDS.get(option_id, frozenset())
+        | (frozenset({"record_content"}) if option_id in _RECORD_CONTENT_OPTIONS else frozenset())
         | _COMPOSITION
     )
 

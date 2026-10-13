@@ -93,18 +93,30 @@ def _childless(element: BaseElement) -> BaseElement:
     return bare
 
 
+@dataclass(frozen=True)
+class DefinitionMeasurement:
+    """What a record definition measured besides its group (design 2.4, M6)."""
+
+    width: float
+    height: float
+    text_anchor: str
+    line_count: int
+
+
 @dataclass(frozen=True, eq=False)
 class GroupContent:
     """The attributes, children and definitions one group class built.
 
     ``local_bounds`` is the extent the group class measured around its own
-    origin, when the caller places or composes by it.
+    origin, when the caller places or composes by it; ``definition`` is the
+    measurement of a record definition, which the caller places by.
     """
 
     attributes: Mapping[str, object]
     children: tuple[BaseElement, ...]
     definitions: tuple[BaseElement, ...] = ()
     local_bounds: Aabb | None = None
+    definition: DefinitionMeasurement | None = None
     # svgwrite's per-element parameter (debug flag, profile) of the built group.
     parameter: Parameter | None = field(default=None, repr=False)
 
@@ -115,6 +127,7 @@ class GroupContent:
         definitions: tuple[BaseElement, ...] = (),
         *,
         local_bounds: Aabb | None = None,
+        definition: DefinitionMeasurement | None = None,
     ) -> GroupContent:
         """The content of a group a group class has just built."""
 
@@ -125,6 +138,7 @@ class GroupContent:
             children=tuple(group.elements),
             definitions=tuple(definitions),
             local_bounds=local_bounds,
+            definition=definition,
             parameter=getattr(group, "_parameter", None),
         )
 
@@ -179,13 +193,17 @@ def build_group_content(
     """A render-stage function: build one group with ``group_class`` and keep its content.
 
     The group class is keyed by its qualified name, its arguments as the
-    stage's arguments. A ``local_bounds`` the instance measured is kept.
+    stage's arguments. A ``local_bounds`` or a ``definition_measurement`` the
+    instance measured is kept.
     """
 
     built = group_class(*args, **kwargs)
     bounds = getattr(built, "local_bounds", None)
+    definition = getattr(built, "definition_measurement", None)
     return GroupContent.of(
-        built.get_group(), local_bounds=bounds if isinstance(bounds, Aabb) else None
+        built.get_group(),
+        local_bounds=bounds if isinstance(bounds, Aabb) else None,
+        definition=definition if isinstance(definition, DefinitionMeasurement) else None,
     )
 
 
@@ -249,6 +267,7 @@ def group_manifest(drawing: Drawing) -> tuple[RenderedGroup, ...]:
 __all__ = [
     "CANVAS_SCOPE",
     "ContentGroup",
+    "DefinitionMeasurement",
     "GroupContent",
     "GroupKey",
     "GroupKind",

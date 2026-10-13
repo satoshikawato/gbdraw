@@ -74,7 +74,7 @@ from ...render.groups.linear.length_bar import (
     RULER_TICK_LENGTH,
     format_linear_tick_label,
 )
-from ...io.comparisons import filter_comparison_dataframe, load_comparisons
+from ...io.comparisons import filter_comparison_dataframe, read_comparison_table
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     ComparisonLegendSource,
@@ -126,7 +126,9 @@ from ...layout.similarity_alignment import (
     AlignmentDecisionStatus,
     SimilarityAlignmentPlan,
 )
+from ...mode_profiles import ComparisonThresholds
 from ...linear_comparison import (
+    ComparisonRecordIdWarning,
     LinearComparison,
     merge_linear_comparisons,
     project_search_frame_comparisons,
@@ -162,7 +164,7 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
-from ...render.drawers.linear.annotations import draw_linear_annotation_track
+from ...render.drawers.linear.annotations import linear_annotation_track_content
 from ...render.groups.linear import build_linear_feature_dom_index
 from ...render.composition import apply_composition_plan
 
@@ -640,38 +642,83 @@ def _content_bounds(content: GroupContent) -> Aabb:
     return content.local_bounds
 
 
-def _load_linear_comparison_dataframes(
-    blast_files,
-    comparison_dataframes: list[DataFrame] | None,
-    blast_config,
-) -> list[DataFrame]:
-    if not (blast_files or comparison_dataframes):
-        return []
+def _read_comparison_files(blast_files: Sequence[str] | None) -> tuple[DataFrame, ...]:
+    """Read each comparison file of the request.
 
-    comparison_sources: list[list[DataFrame]] = []
-    if blast_files:
-        comparison_sources.append(load_comparisons(blast_files, blast_config))
-    if comparison_dataframes:
-        comparison_sources.append(
-            [
-                filter_comparison_dataframe(comparison, blast_config)
-                for comparison in comparison_dataframes
-            ]
+    A file the request staged as a resource gives its table that resource's
+    identity, so the ``comparison_rows`` stage that filters it can be reused.
+    """
+
+    # gbdraw.api imports this module, so its prepared-input owner is imported here.
+    from gbdraw.api.prepared import register_prepared_resource_value
+
+    tables: list[DataFrame] = []
+    for comparison_file in blast_files or ():
+        logger.info("INFO: Loading {}".format(comparison_file))
+        tables.append(
+            register_prepared_resource_value(read_comparison_table(comparison_file), comparison_file)
         )
+    return tuple(tables)
 
-    comparisons: list[DataFrame] = []
-    max_source_len = max((len(source) for source in comparison_sources), default=0)
-    for index in range(max_source_len):
-        frames = [
-            source[index]
-            for source in comparison_sources
-            if index < len(source)
-        ]
-        if len(frames) == 1:
-            comparisons.append(frames[0])
-        elif frames:
-            comparisons.append(pd.concat(frames, ignore_index=True))
-    return comparisons
+
+@dataclass(frozen=True)
+class LinearComparisonRows:
+    """The comparisons a Linear diagram draws and the record-ID warnings they raise."""
+
+    comparisons: tuple[LinearComparison, ...]
+    record_id_warnings: tuple[ComparisonRecordIdWarning, ...]
+
+
+def linear_comparison_rows(
+    blast_tables: tuple[DataFrame, ...],
+    comparison_dataframes: tuple[DataFrame, ...],
+    linear_comparisons: tuple[LinearComparison, ...],
+    thresholds: ComparisonThresholds,
+    records: tuple[SeqRecord, ...],
+    rows_by_record: tuple[int, ...],
+    multi_record_enabled: bool,
+) -> LinearComparisonRows:
+    """Filter, merge, validate and project the comparisons (render stage ``comparison_rows``).
+
+    The ordered tables (comparison files, then protein comparisons) pair
+    record ``i`` with ``i + 1``; explicit comparisons name their records.
+    """
+
+    sources = [
+        [filter_comparison_dataframe(table, thresholds) for table in source]
+        for source in (blast_tables, comparison_dataframes)
+        if source
+    ]
+    ordered_frames: list[DataFrame] = []
+    for index in range(max((len(source) for source in sources), default=0)):
+        frames = [source[index] for source in sources if index < len(source)]
+        ordered_frames.append(frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True))
+    normalized = [
+        LinearComparison(
+            item.query_record_index,
+            item.subject_record_index,
+            filter_comparison_dataframe(item.matches, thresholds),
+        )
+        for item in linear_comparisons
+    ]
+    if ordered_frames:
+        if multi_record_enabled:
+            raise ValidationError(
+                "Ordered BLAST/protein comparison inputs are ambiguous when a Linear row "
+                "contains multiple records; provide explicit LinearComparison endpoints."
+            )
+        normalized.extend(
+            LinearComparison(index, index + 1, frame)
+            for index, frame in enumerate(ordered_frames)
+            if index + 1 < len(records)
+        )
+    normalized = list(merge_linear_comparisons(normalized))
+    validate_linear_comparison_topology(normalized, rows_by_record)
+    warnings = validate_linear_comparison_record_ids(normalized, records)
+    return LinearComparisonRows(
+        comparisons=tuple(project_search_frame_comparisons(normalized, records)),
+        record_id_warnings=tuple(warnings),
+    )
 
 
 def _gc_config_matching_linear_depth_axis_font_size(
@@ -1945,38 +1992,24 @@ def assemble_linear_diagram(
             dpi=int(cfg.canvas.dpi),
         )
 
-    legacy_comparison_frames = _load_linear_comparison_dataframes(
-        blast_files,
-        comparison_dataframes,
-        blast_config,
+    comparison_rows = render_stage(
+        "comparison_rows",
+        linear_comparison_rows,
+        _read_comparison_files(blast_files),
+        tuple(comparison_dataframes or ()),
+        tuple(linear_comparisons or ()),
+        ComparisonThresholds(
+            evalue=blast_config.evalue,
+            bitscore=blast_config.bitscore,
+            identity=blast_config.identity,
+            alignment_length=blast_config.alignment_length,
+        ),
+        tuple(records),
+        tuple(rows_by_record),
+        bool(multi_record_enabled),
     )
-    normalized_comparisons: list[LinearComparison] = []
-    if linear_comparisons:
-        normalized_comparisons.extend(
-            LinearComparison(
-                item.query_record_index,
-                item.subject_record_index,
-                filter_comparison_dataframe(item.matches, blast_config),
-            )
-            for item in linear_comparisons
-        )
-    if legacy_comparison_frames:
-        if multi_record_enabled:
-            raise ValidationError(
-                "Ordered BLAST/protein comparison inputs are ambiguous when a Linear row "
-                "contains multiple records; provide explicit LinearComparison endpoints."
-            )
-        normalized_comparisons.extend(
-            LinearComparison(index, index + 1, frame)
-            for index, frame in enumerate(legacy_comparison_frames)
-            if index + 1 < len(records)
-        )
-    normalized_comparisons = list(merge_linear_comparisons(normalized_comparisons))
-    validate_linear_comparison_topology(normalized_comparisons, rows_by_record)
-    comparison_record_id_warnings = validate_linear_comparison_record_ids(
-        normalized_comparisons, records
-    )
-    normalized_comparisons = list(project_search_frame_comparisons(normalized_comparisons, records))
+    normalized_comparisons = list(comparison_rows.comparisons)
+    comparison_record_id_warnings = comparison_rows.record_id_warnings
     comparisons = [item.matches for item in normalized_comparisons]
     has_blast = bool(normalized_comparisons)
 
@@ -2721,13 +2754,14 @@ def assemble_linear_diagram(
     if has_blast and comparison_placements is not None:
         canvas = add_explicit_comparisons_on_linear_canvas(
             canvas,
-            normalized_comparisons,
+            comparison_rows.comparisons,
             canvas_config,
             blast_config,
             records,
             comparison_placements,
             feature_dom_index=feature_dom_index,
             record_transforms=record_transforms,
+            record_keys=record_keys,
         )
 
     label_font_size = _resolve_linear_diagram_label_font_size(
@@ -2819,6 +2853,7 @@ def assemble_linear_diagram(
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                         record_translation_x=final_translations[record_index][0],
                         record_translation_y=final_translations[record_index][1],
+                        group_key=GroupKey(str(record_keys[record_index]), GroupKind.FEATURES, str(slot.id)),
                     )
                     feature_rendered = True
                     continue
@@ -2851,8 +2886,9 @@ def assemble_linear_diagram(
                             else len(record.seq) / max(1, canvas_config.longest_genome)
                         )
                     )
-                    annotation_group = draw_linear_annotation_track(
-                        canvas,
+                    annotation_content = render_stage(
+                        "annotation_content",
+                        linear_annotation_track_content,
                         annotation_layout,
                         record_id=str(record.id),
                         record_index=record_index,
@@ -2867,6 +2903,11 @@ def assemble_linear_diagram(
                         semantic_slot_id=(
                             str(slot.id) if slot_group_id is not None else None
                         ),
+                    )
+                    annotation_group = place_content(
+                        canvas,
+                        annotation_content,
+                        GroupKey(str(record_keys[record_index]), GroupKind.ANNOTATIONS, str(slot.id)),
                     )
                     annotation_group.translate(
                         offset_x + canvas_config.horizontal_offset,
@@ -3010,6 +3051,7 @@ def assemble_linear_diagram(
                     record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                     record_translation_x=final_translations[record_index][0],
                     record_translation_y=final_translations[record_index][1],
+                    group_key=GroupKey(str(record_keys[record_index]), GroupKind.AXIS),
                 )
             add_record_definition_group(
                 canvas,
@@ -3050,6 +3092,7 @@ def assemble_linear_diagram(
                 record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                 record_presentation=presentations[record_index],
                 definition_column_left=definition_column_left,
+                record_key=str(record_keys[record_index]),
             )
             continue
 

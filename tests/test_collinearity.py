@@ -3433,10 +3433,10 @@ def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(mon
         ]
     )
 
-    def fake_load_comparisons(_blast_files, _blast_config):
-        return [frame]
+    def fake_read_comparison_table(_blast_file):
+        return frame
 
-    monkeypatch.setattr(linear_assemble_module, "load_comparisons", fake_load_comparisons)
+    monkeypatch.setattr(linear_assemble_module, "read_comparison_table", fake_read_comparison_table)
 
     svg_text = assemble_linear_diagram_from_records(
         [_record("record_a", []), _record("record_b", [])],
@@ -3700,6 +3700,7 @@ def test_collinearity_match_group_draws_inversions_above_plus_blocks() -> None:
         1,
         blast_config,
         [_record("record_a", []), _record("record_b", [])],
+        align_center=canvas_config.align_center,
     ).get_group()
 
     drawing = Drawing(debug=False)

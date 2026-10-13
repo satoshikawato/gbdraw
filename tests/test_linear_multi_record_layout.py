@@ -42,7 +42,7 @@ from gbdraw.diagrams.linear.assemble import (
     _split_definition_line_kinds,
 )
 from gbdraw.layout.linear import CollisionBand
-from gbdraw.render.groups.linear.definition import DefinitionGroup
+from gbdraw.render.groups.linear.definition import DefinitionGroup, LinearDefinitionStyle
 from gbdraw.layout.record_placement import parse_record_row_position
 
 
@@ -621,7 +621,10 @@ def test_row_definition_split_covers_every_definition_line_kind() -> None:
     drawable_kinds = {
         line.kind
         for line in DefinitionGroup(
-            record, canvas_config, cfg=cfg, record_presentation=presentation
+        record,
+        (canvas_config).length_param,
+        style=LinearDefinitionStyle.of(cfg),
+        record_presentation=presentation
         ).definition_lines
     }
     assert drawable_kinds == (

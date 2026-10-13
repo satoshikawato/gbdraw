@@ -31,7 +31,7 @@ from gbdraw.definition_line_styles import (
     parse_definition_line_style_overrides,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.render.groups.linear import DefinitionGroup
+from gbdraw.render.groups.linear import DefinitionGroup, LinearDefinitionStyle
 
 
 def _record(record_id: str = "record_a") -> SeqRecord:
@@ -112,8 +112,8 @@ def test_replicon_switch_preserves_explicit_subtitle_and_line_styles(
     )
     group = DefinitionGroup(
         record,
-        _canvas_config(),
-        cfg=GbdrawConfig.from_dict(config),
+        (_canvas_config()).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config)),
         record_presentation=RecordPresentation(subtitle=subtitle),
     )
     root = ET.fromstring(group.get_group().tostring())
@@ -351,8 +351,8 @@ def test_definition_group_emits_line_specific_styles_and_data_attrs() -> None:
 
     definition_group = DefinitionGroup(
         record,
-        _canvas_config(),
-        cfg=GbdrawConfig.from_dict(config_dict),
+        (_canvas_config()).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
         record_presentation=RecordPresentation(
             label="Alpha <i>Beta</i>", subtitle="A <i>neo</i> cluster"
         ),
@@ -397,8 +397,8 @@ def test_definition_line_specific_font_size_affects_layout(monkeypatch: pytest.M
 
     definition_group = DefinitionGroup(
         _record("BBBB"),
-        _canvas_config(),
-        cfg=GbdrawConfig.from_dict(config_dict),
+        (_canvas_config()).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
         record_presentation=RecordPresentation(label="AA"),
     )
 

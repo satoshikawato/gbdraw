@@ -1,6 +1,6 @@
 """Linear layout SVG object group builders (internal)."""
 
-from .definition import DefinitionGroup
+from .definition import DefinitionGroup, LinearDefinitionStyle
 from .length_bar import LengthBarGroup
 from .depth import DepthGroup
 from .gc_content import GcContentGroup
@@ -21,6 +21,7 @@ __all__ = [
     "GcSkewGroup",
     "LegendGroup",
     "LengthBarGroup",
+    "LinearDefinitionStyle",
     "LinearFeatureDomIndex",
     "PairWiseMatchGroup",
     "SeqRecordGroup",

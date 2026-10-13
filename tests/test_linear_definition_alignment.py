@@ -22,7 +22,7 @@ from gbdraw.core import fonts as fonts_module
 from gbdraw.diagrams.linear import precalc as linear_precalc
 from gbdraw.diagrams.linear import assemble as linear_assemble
 from gbdraw.diagrams.linear.builders import add_record_definition_group
-from gbdraw.render.groups.linear import DefinitionGroup
+from gbdraw.render.groups.linear import DefinitionGroup, LinearDefinitionStyle
 
 
 def _record(record_id: str = "record_a") -> SeqRecord:
@@ -86,8 +86,8 @@ def _definition_width(
 ) -> float:
     return DefinitionGroup(
         record,
-        canvas_config,
-        cfg=GbdrawConfig.from_dict(config_dict),
+        (canvas_config).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
         record_presentation=presentation,
     ).definition_bounding_box_width
 
@@ -193,6 +193,7 @@ def test_linear_definition_group_follows_record_offset_by_default() -> None:
         record_offset_x=0,
         canvas_config=_canvas_config(keep_definition_left_aligned=False),
         max_def_width=0,
+        record_key="record-0",
     )
     add_record_definition_group(
         canvas_b,
@@ -202,6 +203,7 @@ def test_linear_definition_group_follows_record_offset_by_default() -> None:
         record_offset_x=30,
         canvas_config=_canvas_config(keep_definition_left_aligned=False),
         max_def_width=0,
+        record_key="record-0",
     )
 
     assert _definition_translate_x(canvas_b) == pytest.approx(_definition_translate_x(canvas_a) + 30)
@@ -435,6 +437,7 @@ def test_linear_definition_group_can_stay_in_left_column() -> None:
         record_offset_x=0,
         canvas_config=canvas_config,
         max_def_width=max_def_width,
+        record_key="record-0",
     )
     add_record_definition_group(
         canvas_b,
@@ -444,6 +447,7 @@ def test_linear_definition_group_can_stay_in_left_column() -> None:
         record_offset_x=45,
         canvas_config=canvas_config,
         max_def_width=max_def_width,
+        record_key="record-0",
     )
 
     assert _definition_translate_x(canvas_a) == pytest.approx(_definition_translate_x(canvas_b))
@@ -483,6 +487,7 @@ def test_locked_linear_definition_column_uses_rendered_svg_text_width(
         record_offset_x=0,
         canvas_config=canvas_config,
         max_def_width=definition_width,
+        record_key="record-0",
     )
 
     definition_x = _definition_translate_x(canvas)
@@ -521,6 +526,7 @@ def test_locked_linear_definition_column_uses_configured_definition_gap(
         record_offset_x=0,
         canvas_config=canvas_config,
         max_def_width=definition_width,
+        record_key="record-0",
     )
 
     definition_x = _definition_translate_x(canvas)
@@ -547,6 +553,7 @@ def test_locked_linear_definition_column_follows_global_horizontal_shift() -> No
         record_offset_x=0,
         canvas_config=base_config,
         max_def_width=definition_width,
+        record_key="record-0",
     )
     add_record_definition_group(
         canvas_b,
@@ -556,6 +563,7 @@ def test_locked_linear_definition_column_follows_global_horizontal_shift() -> No
         record_offset_x=0,
         canvas_config=shifted_config,
         max_def_width=definition_width,
+        record_key="record-0",
     )
 
     assert _definition_translate_x(canvas_b) == pytest.approx(_definition_translate_x(canvas_a) + 30)
@@ -581,6 +589,7 @@ def test_locked_linear_definition_column_gap_uses_records_column_left() -> None:
         record_offset_x=0,
         canvas_config=canvas_config,
         max_def_width=definition_width - leftmost_record_offset_x,
+        record_key="record-0",
     )
 
     records_column_left = canvas_config.horizontal_offset + leftmost_record_offset_x
@@ -656,8 +665,8 @@ def test_linear_definition_band_matches_resolved_feature_center(
     )
     definition_height = DefinitionGroup(
         record,
-        canvas_config,
-        cfg=cfg,
+        (canvas_config).length_param,
+        style=LinearDefinitionStyle.of(cfg),
         record_presentation=presentation,
     ).definition_bounding_box_height
 
@@ -748,11 +757,11 @@ def test_definition_plain_lines_use_definition_font_weight(
 
     DefinitionGroup(
         _record(),
-        _canvas_config(
+        (_canvas_config(
             keep_definition_left_aligned=True,
             config_dict=config_dict,
-        ),
-        cfg=GbdrawConfig.from_dict(config_dict),
+        )).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
         record_presentation=_label(""),
     )
 
@@ -787,11 +796,11 @@ def test_definition_mixed_content_width_sums_style_aware_parts(
 
     definition_group = DefinitionGroup(
         _record(),
-        _canvas_config(
+        (_canvas_config(
             keep_definition_left_aligned=True,
             config_dict=config_dict,
-        ),
-        cfg=GbdrawConfig.from_dict(config_dict),
+        )).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
         record_presentation=_label("Alpha <i>Beta</i> Gamma"),
     )
 

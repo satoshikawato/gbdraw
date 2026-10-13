@@ -11,7 +11,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Protocol
 
 import numpy as np
 import pandas as pd
@@ -347,8 +347,24 @@ def read_comparison_table(
         ) from None
 
 
+class ComparisonFilter(Protocol):
+    """The thresholds a comparison table is filtered by."""
+
+    @property
+    def evalue(self) -> float: ...
+
+    @property
+    def bitscore(self) -> float: ...
+
+    @property
+    def identity(self) -> float: ...
+
+    @property
+    def alignment_length(self) -> int: ...
+
+
 def filter_comparison_dataframe(
-    df: DataFrame, blast_config: BlastMatchConfigurator
+    df: DataFrame, blast_config: ComparisonFilter
 ) -> DataFrame:
     """Apply pairwise match thresholds to a comparison DataFrame."""
 
@@ -394,6 +410,7 @@ def load_comparisons(
 
 __all__ = [
     "COMPARISON_COLUMNS",
+    "ComparisonFilter",
     "filter_comparison_dataframe",
     "load_comparisons",
     "normalize_comparison_dataframe",
