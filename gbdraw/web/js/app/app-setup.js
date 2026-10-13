@@ -5305,7 +5305,8 @@ export const createAppSetup = () => {
   watch(clickedPairwiseMatch, () => placeRenderedPopup(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value, '.pairwise-match-popup-body'), { flush: 'post' });
 
   // A press on the handle of an open popup drags it; every popup of the Result moves this way.
-  // A drag keeps the popup inside the popup bounds (OV-384: below the header).
+  // A drag keeps the popup inside the popup bounds (OV-384: below the header), and a window that
+  // changed size moves an open popup the least distance back inside them (OV-626).
   /**
    * @param {object} popup
    * @param {{ active: boolean, offsetX: number, offsetY: number }} popup.drag
@@ -5341,7 +5342,14 @@ export const createAppSetup = () => {
       document.addEventListener('mouseup', end);
       event.preventDefault();
     };
-    return { start, end };
+    const keepInWindow = () => {
+      const popup = element();
+      if (!popup || !isOpen()) return;
+      const { left: x, top: y } = popup.getBoundingClientRect();
+      const within = placePopupWithin({ x, y, width: popup.offsetWidth, height: popup.offsetHeight, bounds: popupViewportBounds() });
+      if (within.x !== x || within.y !== y) moveTo(within);
+    };
+    return { start, end, keepInWindow };
   };
   const featurePopupDragging = createPopupDrag({
     drag: featurePopupDrag,
@@ -5369,6 +5377,9 @@ export const createAppSetup = () => {
     element: () => document.getElementById('settings-popup'),
     isHandle: isSettingsPopupHeading
   });
+  const keepPopupsInWindow = () => [featurePopupDragging, pairwiseMatchPopupDragging, settingsPopupDrag].forEach((popup) => popup.keepInWindow());
+  onMounted(() => window.addEventListener('resize', keepPopupsInWindow));
+  onUnmounted(() => window.removeEventListener('resize', keepPopupsInWindow));
   /** @param {MouseEvent & { target: Element }} event A click in the popup; its target is an element. */
   const keepSettingsPopupSectionOpen = (event) => {
     if (isSettingsPopupHeading(event.target)) event.preventDefault();

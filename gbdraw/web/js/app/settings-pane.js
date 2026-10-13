@@ -13,7 +13,7 @@ import {
   returnSettingsSection, showSettingsRail, showSettingsStacked
 } from '../services/settings-pane-state.js';
 import { settingsEntryIn, settingsScrollOwner, settingsSectionElement, settingsView } from '../services/settings-sections.js';
-import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
+import { placePopupNearPoint } from '../utils/popup-bounds.js';
 
 /** @import { DiagramMode, SettingsPaneDisplay, SettingsPaneRefs } from '../services/settings-pane-state.js' */
 /** @import { DrawnElementSectionKey, SettingsSectionKey } from '../services/settings-sections.js' */
@@ -87,19 +87,6 @@ export const createSettingsPaneController = ({ state }) => {
   const readLayout = () => {
     const area = settingsArea();
     phoneLayout.value = Boolean(area && settingsScrollOwner(area) !== area);
-  };
-  // A window that changed size leaves the popup where it is while it lies
-  // inside what a drag allows, and else moves it the least distance back there.
-  const keepPopupInWindow = () => {
-    const popup = popupElement();
-    const at = state.settingsPopup.value;
-    if (!popup || !at) return;
-    const within = placePopupWithin({ x: at.x, y: at.y, width: popup.offsetWidth, height: popup.offsetHeight, bounds: popupViewportBounds() });
-    if (within.x !== at.x || within.y !== at.y) moveSettingsPopup(state, within);
-  };
-  const onResize = () => {
-    readLayout();
-    keepPopupInWindow();
   };
 
   // A page that opens in the remembered rail docks the first entry.
@@ -234,9 +221,9 @@ export const createSettingsPaneController = ({ state }) => {
   }, { flush: 'sync' });
   onMounted(() => {
     readLayout();
-    window.addEventListener('resize', onResize);
+    window.addEventListener('resize', readLayout);
   });
-  onUnmounted(() => window.removeEventListener('resize', onResize));
+  onUnmounted(() => window.removeEventListener('resize', readLayout));
 
   return {
     settingsPane, showSettingsPaneRail, showSettingsPaneStacked, closeDockedSettings, revealSetting, revealSettingsSection,

@@ -1128,9 +1128,9 @@ this item". The popup holds the section itself, with the same controls and
 and the section returns to the pane, open or closed as it was, when the popup
 closes. The popup opens clear of the clicked element where the preview has room
 beside, below, or above it. Drag the popup by its heading; when the window
-changes size, the popup moves back inside it. It stays open through
-**Generate**, and a click on another of these elements shows that element's
-section in it.
+changes size, the popup moves back inside it, as the feature, match, Legend
+row, and record definition popups do. It stays open through **Generate**, and
+a click on another of these elements shows that element's section in it.
 
 The popup closes with its **Close section** button, Escape, a click on the
 figure's background, another popup of the Result (a feature, a match, a Legend
