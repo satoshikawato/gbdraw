@@ -674,7 +674,8 @@ const paintElementKind = (element) => {
 // by their names and the swatches they show. No operation writes a row's text;
 // Python's own texts are this rule's answer for the rows it drew. Rows of one
 // name and one swatch are one row (D-28): the later of them is hidden under
-// `LEGEND_MERGED_ROW`, and shows again on the pass that finds its name or
+// `LEGEND_MERGED_ROW`, which holds the key of the earlier row (D-35,
+// `legendRowKeys`), and shows again on the pass that finds its name or
 // swatch different (a delete or a retirement of a merged row first shows it,
 // `unmergeLegendRow`). Returns whether a text or a merge changed.
 /** @param {Parameters<typeof namedLegends>[0]} svg */
@@ -683,19 +684,22 @@ const nameLegendRows = (svg) => {
   const displayRecord = resultBaseAttribute('display');
   namedLegends(svg).forEach((legend) => {
     const all = Array.from(legend.querySelectorAll('g[data-legend-key]'));
-    const merged = new Set(all.filter((row) => row.hasAttribute(LEGEND_MERGED_ROW)));
-    merged.forEach((row) => {
+    const merged = new Map(all.filter((row) => row.hasAttribute(LEGEND_MERGED_ROW))
+      .map((row) => [row, row.getAttribute(LEGEND_MERGED_ROW)]));
+    merged.forEach((_, row) => {
       row.removeAttribute(LEGEND_MERGED_ROW);
       if (!row.hasAttribute(displayRecord)) row.removeAttribute('display');
     });
-    /** @type {Set<string>} */
-    const seen = new Set();
+    /** @type {Map<string, string>} A name and swatch, and the key of the row that draws them. */
+    const seen = new Map();
     const rows = all.filter(legendRowShown).filter((row) => {
       const identity = JSON.stringify([legendRowName(row), legendRowSwatch(row)]);
-      if (!seen.has(identity)) return seen.add(identity);
+      const into = seen.get(identity);
+      if (into === undefined) return Boolean(seen.set(identity, pythonLegendKey(row)));
       row.setAttribute('display', 'none');
-      row.setAttribute(LEGEND_MERGED_ROW, '');
-      if (!merged.delete(row)) changed = true;
+      row.setAttribute(LEGEND_MERGED_ROW, into);
+      if (merged.get(row) !== into) changed = true;
+      merged.delete(row);
       return false;
     });
     if (merged.size > 0) changed = true;

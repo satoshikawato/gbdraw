@@ -63,7 +63,8 @@ write-up of a release.
     Typing a numbered name the legend shows, such as `CDS (2)`, opens the
     dialog for that row, and **Keep both** keeps the text as written. Rows of
     one name and one swatch are one row, also in the live preview, so
-    **Keep both** with an equal swatch gives one row. Features renamed off a
+    **Keep both** with an equal swatch gives one row; a color or line edit of
+    that row changes every row it stands for. Features renamed off a
     row get their new row right after the row of the name (PD-OI-061).
   - Sessions: the Web app now saves Session 47. A Legend row's color and line
     edits are kept under the row's key instead of the name it shows, so a

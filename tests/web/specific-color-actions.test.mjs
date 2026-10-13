@@ -273,7 +273,7 @@ const resultSvg = (rows) => {
     querySelector: () => null,
     querySelectorAll: () => children
   });
-  const legend = element({}, rows.map(([key, fill]) => element({ 'data-legend-key': key }, [element({ fill })])));
+  const legend = element({}, rows.map(([key, fill, attributes = {}]) => element({ 'data-legend-key': key, ...attributes }, [element({ fill })])));
   return { getElementById: (id) => (id === 'legend' ? legend : null) };
 };
 const mounted = (rows) => {
@@ -515,6 +515,37 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   assert.equal(legend.updateLegendEntryColor(0, '#123456'), true, 'the generated CDS row is no rule row');
   assert.equal(committed.length, 1);
   assert.deepEqual(state.legendColorOverrides, { CDS: '#123456' }, 'a Legend-only color');
+});
+
+// D-35: a Legend color edit of a row that merges a rule's row (one name, one
+// swatch, D-28) revises that rule and writes the Legend color of the other
+// keys in the rule commit's one step, so the row stays one row.
+test('the Legend editor recolors every row a merged row stands for, a rule row through its rule, in one step (D-35)', () => {
+  const ref = (value) => ({ value });
+  const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
+  const state = {
+    manualSpecificRules: [rule],
+    // Python drew CDS in its palette color; its Legend color makes it the rule's swatch.
+    svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000', { display: 'none', 'data-legend-merged': 'CDS' }]]),
+    results: ref([]), selectedResultIndex: ref(0),
+    legendEntries: ref([
+      { caption: 'CDS', originalCaption: 'CDS', color: '#ff0000' },
+      { caption: 'CDS [#ff0000]', originalCaption: 'CDS [#ff0000]', color: '#ff0000' }
+    ]),
+    originalLegendOrder: ref(['CDS', 'CDS [#ff0000]']), deletedLegendEntries: ref([]), originalLegendColors: ref({}),
+    legendStrokeOverrides: {}, legendColorOverrides: { CDS: '#ff0000' }, adv: {}
+  };
+  const committed = [];
+  const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: (build, label, options) => {
+    committed.push({ rules: build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch })), label });
+    options?.afterCommit?.([]);
+    return true;
+  }, readShownLegendColor: (entry) => entry?.color });
+  assert.equal(legend.legendRowHasRules(0), true, 'the shown row stands for a rule row');
+  assert.equal(legend.updateLegendEntryColor(0, '#00ff00'), true);
+  assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
+  assert.deepEqual(state.legendColorOverrides, { CDS: '#00ff00' }, 'the other key\'s Legend color, in the rule commit');
+  assert.equal(state.legendEntries.value[0].color, '#00ff00');
 });
 
 test('a color action prepares the color matches of its rules without the caption evaluation, and a prepared table answers at once', async () => {

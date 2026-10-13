@@ -968,6 +968,11 @@ Status: active Product authority
   - Reply 5, to the question
     「P-10（feature を 1 つだけ切り出して Keep both にしたときの新しい行の位置）: 推奨は、同じ名前の行のすぐ後ろに置くことです。こうすると、ダイアログに出る (2) が凡例の表示と一致します。」
     「P-10:　推奨通り」
+  - Reply 6 (`2026-10-14`), to the question
+    「残る制限（D-33）: 同じ名前・同じ色の 2 グループは 1 行にまとめて描きます。その行の色を変えると、変わるのは見えている方のグループだけです。もう一方は元の色のまま別の行として戻り、凡例は「名前 (1)」「名前 (2)」の 2 行になります。また、Generate の後にこれが起きると、戻った行が凡例タブの一覧に出るのは次の描画のときです。どうしますか？」
+    the selected option and its description:
+    「PR 3 の中で直す (Recommended)」
+    「まとめた行の色を変えると、その行にまとめたすべてのグループの色が変わり、1 行のまま残る。凡例タブもすぐ更新される。PR 3 のマージは半日ほど遅れますが、0.14.0 は boundary-audit を待つので、リリース日は変わりません。」
   - Scope: scenario revision `5` keeps the outcome
     `B / MERGE-SAME-FEATURE-TYPE-ONLY`, the choices of the dialog, and the
     conditions of **Merge**. The scenario-2, scenario-3, and scenario-4
@@ -3541,7 +3546,7 @@ Decision date: 2026-09-30
   `3` and `5` name no choice code
 - Normative outcome: exactly the four approved `PRODUCT_DECISION` receipts
   and their nine-field JSON representations below, read together, and the
-  Owner's Replies 4 and 5 of the Revision 49 entry with their questions.
+  Owner's Replies 4, 5, and 6 of the Revision 49 entry with their questions.
   Where the scenario-5 receipt differs from an earlier receipt, the
   scenario-5 receipt governs: **Keep both** keeps the typed name, and every
   row of that name is numbered in legend order. Where the scenario-4 receipt

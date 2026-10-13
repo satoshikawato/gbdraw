@@ -16,6 +16,7 @@ import {
   getAllFeatureLegendGroups,
   isLegendOrderEdited,
   legendEntryKey,
+  legendRowKeys,
   recordedLegendOrder,
   rekeyLegendRecords,
   resultLegendRows,
@@ -701,10 +702,23 @@ export const createLegendEntryActions = ({
     }
   };
 
+  // The Legend color of the rows of `keys`: the drawing's override of each key
+  // and the color of each listed row of them (D-35: the keys a merged row
+  // stands for, `legendRowKeys`).
+  /** @param {readonly PythonLegendKey[]} keys @param {string} color */
+  const writeLegendRowColor = (keys, color) => {
+    const drawing = state.activeDrawing();
+    const recolored = new Set(keys);
+    /** @type {EntryRecord[]} */ (drawing.legendEntries.value).forEach((entry) => {
+      if (recolored.has(legendEntryKey(entry))) entry.color = color;
+    });
+    keys.forEach((key) => { drawing.legendColorOverrides[key] = color; });
+  };
+
   // A Legend row color writes the editor intent only; the composition root
   // shows it on the Result through the executor (`editEditorIntent`). A color
   // the row already shows is no edit (OV-282: the palette's, for a row the
-  // palette colors).
+  // palette colors). It colors every row the shown row stands for (D-35).
   /** @param {number} idx @param {string} newColor */
   const updateLegendEntryColor = (idx, newColor) => {
     const drawing = state.activeDrawing();
@@ -713,8 +727,7 @@ export const createLegendEntryActions = ({
     const entry = drawing.legendEntries.value[idx];
     if (!entry?.caption) return false;
     if (normalizedColor(readShownLegendColor(entry)) === normalizedColor(newColor)) return false;
-    entry.color = newColor;
-    drawing.legendColorOverrides[legendEntryKey(entry)] = newColor;
+    writeLegendRowColor(legendRowKeys(svgContainer.value?.querySelector?.('svg'), legendEntryKey(entry)), newColor);
     return true;
   };
 
@@ -801,6 +814,7 @@ export const createLegendEntryActions = ({
     setLegendGeometryChangedHandler,
     shownLegendEntryName,
     shownLegendName,
-    updateLegendEntryColor
+    updateLegendEntryColor,
+    writeLegendRowColor
   };
 };

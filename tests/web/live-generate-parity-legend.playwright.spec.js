@@ -614,8 +614,9 @@ test('a Legend rename onto a deleted GC skew row asks with Keep both and Cancel 
 
 // PR 3 (D-25, D-28): two rows of one name keep their own Legend colors under
 // their keys; once their swatches match they are one row, live and at
-// Generate. The dialog said the names Keep both draws.
-test('two rows of one name keep their own colors, and one swatch draws one row, live = Generate (D-28)', async ({ page }) => {
+// Generate. The dialog said the names Keep both draws. D-35: an edit of that
+// one row edits both.
+test('two rows of one name keep their own colors, and one swatch draws one row that edits as one, live = Generate (D-28, D-35)', async ({ page }) => {
   test.setTimeout(180_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
   const colorRow = async (key, color) => {
@@ -637,8 +638,32 @@ test('two rows of one name keep their own colors, and one swatch draws one row, 
   await expectLiveEqualsGenerate(page, { label: 'two rows of one name, each colored' });
   await colorRow('GC skew (-)', '#e63946');
   expect(await drawn(), 'one name and one swatch: one row').toEqual([['GC skew (+)', '#e63946']]);
-  await expectLiveEqualsGenerate(page, { label: 'two rows of one name and one swatch' });
-  expect(await drawn(), 'one row after Generate').toEqual([['GC skew (+)', '#e63946']]);
+  // D-35: a color or stroke edit of the one row edits every row it merges:
+  // it stays one row, and the Legend tab lists one row, live and after Generate.
+  const tabRows = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.legendEntries.filter((entry) => !app.legendEntryMerged(entry)).map((entry) => app.shownLegendEntryName(entry))
+      .filter((name) => name.startsWith('GC skew'));
+  });
+  const listedKeys = () => page.evaluate(() => window.__GBDRAW_APP__.legendEntries
+    .map((entry) => entry.originalCaption || entry.caption).filter((key) => key.startsWith('GC skew')));
+  await colorRow('GC skew (+)', '#f4a261');
+  expect(await drawn(), 'the recolored row stays one row').toEqual([['GC skew (+)', '#f4a261']]);
+  expect(await tabRows(), 'the Legend tab lists one row').toEqual(['GC skew (+)']);
+  await expectLiveEqualsGenerate(page, { label: 'two rows of one name and one swatch, recolored as one' });
+  expect(await drawn(), 'one row after Generate').toEqual([['GC skew (+)', '#f4a261']]);
+  expect(await listedKeys(), 'after Generate the merged row stays listed, not dormant').toEqual(['GC skew (+)', 'GC skew (-)']);
+  expect(await tabRows(), 'the Legend tab lists one row after Generate').toEqual(['GC skew (+)']);
+  await colorRow('GC skew (+)', '#264653');
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLegendEntryStrokeColorValue(app.legendEntries.findIndex((entry) => (entry.originalCaption || entry.caption) === 'GC skew (+)'), '#1d3557');
+  });
+  await settleLive(page);
+  expect(await drawn(), 'recolored and stroked after Generate: one row').toEqual([['GC skew (+)', '#264653']]);
+  expect(await tabRows(), 'the Legend tab still lists one row').toEqual(['GC skew (+)']);
+  await expectLiveEqualsGenerate(page, { label: 'the one row recolored and stroked after Generate' });
+  expect(await drawn(), 'one row after the next Generate').toEqual([['GC skew (+)', '#264653']]);
 });
 
 const RULE_ROWS = [

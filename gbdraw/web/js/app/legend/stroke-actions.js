@@ -1,5 +1,5 @@
 // @ts-check
-import { drawnLegendRowStroke, legendEntryKey } from '../../services/legend-svg.js';
+import { drawnLegendRowStroke, legendEntryKey, legendRowKeys } from '../../services/legend-svg.js';
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /** @typedef {{ caption?: unknown, originalCaption?: unknown }} StrokedLegendEntry A listed Legend row. */
 
@@ -13,7 +13,8 @@ import { drawnLegendRowStroke, legendEntryKey } from '../../services/legend-svg.
 // (`editEditorIntent` in app/app-setup.js), which records Python's strokes,
 // so a reset returns each feature part and swatch to the stroke Python drew.
 // A row's stroke and its open Stroke options are stored under the row's key
-// (`legendEntryKey`), so two rows of one name keep their own.
+// (`legendEntryKey`), so two rows of one name keep their own; an edit of a row
+// that the Legend draws for merged rows writes each of their keys (D-35).
 /** @param {LegendStrokeActionsOptions} options */
 export const createLegendStrokeActions = ({ state }) => {
   const {
@@ -36,75 +37,65 @@ export const createLegendStrokeActions = ({ state }) => {
   /** @param {PythonLegendKey} key */
   const drawnSwatchStroke = (key) => drawnLegendRowStroke(svgContainer.value?.querySelector?.('svg'), key);
 
-  /** @param {number} idx */
-  const getLegendEntryStrokeColor = (idx) => {
-    const drawing = state.activeDrawing();
-    const entry = drawing.legendEntries.value[idx];
-    if (!entry) return '';
-    const override = drawing.legendStrokeOverrides[legendEntryKey(entry)];
-    if (override && override.strokeColor !== undefined) return override.strokeColor;
-    return '';
+  // The listed row at `idx`, and the keys of the rows it stands for (D-35:
+  // a merged row's edit reaches every row it merges, `legendRowKeys`).
+  /** @param {number} idx @returns {{ entry: StrokedLegendEntry, keys: PythonLegendKey[] } | null} */
+  const rowAt = (idx) => {
+    const entry = state.activeDrawing().legendEntries.value[idx];
+    return entry ? { entry, keys: legendRowKeys(svgContainer.value?.querySelector?.('svg'), legendEntryKey(entry)) } : null;
   };
 
+  /** @param {number} idx @param {'strokeColor' | 'strokeWidth'} field */
+  const strokeFieldAt = (idx, field) => {
+    const entry = state.activeDrawing().legendEntries.value[idx];
+    const override = entry ? state.activeDrawing().legendStrokeOverrides[legendEntryKey(entry)] : undefined;
+    return override && override[field] !== undefined ? override[field] : '';
+  };
   /** @param {number} idx */
-  const getLegendEntryStrokeWidth = (idx) => {
+  const getLegendEntryStrokeColor = (idx) => strokeFieldAt(idx, 'strokeColor');
+  /** @param {number} idx */
+  const getLegendEntryStrokeWidth = (idx) => strokeFieldAt(idx, 'strokeWidth');
+
+  // Writes `field` of the stroke of every row `idx` stands for; a row without
+  // its own override starts from the stroke Python drew on its swatch. No edit
+  // when every row has the value.
+  /**
+   * @param {number} idx
+   * @param {'strokeColor' | 'strokeWidth'} field
+   * @param {string | number} value
+   * @param {(current: unknown) => boolean} same
+   */
+  const writeStrokeField = (idx, field, value, same) => {
     const drawing = state.activeDrawing();
-    const entry = drawing.legendEntries.value[idx];
-    if (!entry) return '';
-    const override = drawing.legendStrokeOverrides[legendEntryKey(entry)];
-    if (override && override.strokeWidth !== undefined) return override.strokeWidth;
-    return '';
+    const row = rowAt(idx);
+    if (!row) return false;
+    if (row.keys.every((key) => same(drawing.legendStrokeOverrides[key]?.[field]))) return false;
+    row.keys.forEach((key) => {
+      // A key is free text: only an own entry is an override (OV-532).
+      const existing = Object.hasOwn(drawing.legendStrokeOverrides, key) ? drawing.legendStrokeOverrides[key] : undefined;
+      drawing.legendStrokeOverrides[key] = {
+        ...(existing || { ...drawnSwatchStroke(key), strokeColor: '', strokeWidth: '' }),
+        [field]: value
+      };
+    });
+    return true;
   };
 
   /** @param {number} idx @param {string} color */
   const updateLegendEntryStrokeColor = (idx, color) => {
-    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const entry = drawing.legendEntries.value[idx];
-    if (!entry) return false;
     const normalized = String(color || '').trim();
-    const key = legendEntryKey(entry);
-    if (String(drawing.legendStrokeOverrides[key]?.strokeColor || '').trim() === normalized) {
-      return false;
-    }
-    // A key is free text: only an own entry is an override (OV-532).
-    const existing = Object.hasOwn(drawing.legendStrokeOverrides, key)
-      ? drawing.legendStrokeOverrides[key]
-      : undefined;
-    drawing.legendStrokeOverrides[key] = {
-      ...(existing || {
-        ...drawnSwatchStroke(key),
-        strokeWidth: getLegendEntryStrokeWidth(idx)
-      }),
-      strokeColor: normalized
-    };
-    return true;
+    return writeStrokeField(idx, 'strokeColor', normalized, (current) => String(current || '').trim() === normalized);
   };
 
   /** @param {number} idx @param {string | number} width */
   const updateLegendEntryStrokeWidth = (idx, width) => {
-    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const entry = drawing.legendEntries.value[idx];
-    if (!entry) return false;
     const widthVal = parseFloat(String(width));
     if (isNaN(widthVal)) return false;
-    const key = legendEntryKey(entry);
-    if (Number(drawing.legendStrokeOverrides[key]?.strokeWidth) === widthVal) return false;
-    // A key is free text: only an own entry is an override (OV-532).
-    const existing = Object.hasOwn(drawing.legendStrokeOverrides, key)
-      ? drawing.legendStrokeOverrides[key]
-      : undefined;
-    drawing.legendStrokeOverrides[key] = {
-      ...(existing || {
-        ...drawnSwatchStroke(key),
-        strokeColor: getLegendEntryStrokeColor(idx)
-      }),
-      strokeWidth: widthVal
-    };
-    return true;
+    return writeStrokeField(idx, 'strokeWidth', widthVal, (current) => Number(current) === widthVal);
   };
 
   /** @param {number} idx @param {string | null} value null removes the row's stroke color. */
@@ -112,17 +103,16 @@ export const createLegendStrokeActions = ({ state }) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const entry = drawing.legendEntries.value[idx];
-    if (!entry) return false;
+    const row = rowAt(idx);
+    if (!row) return false;
     if (value !== null) return updateLegendEntryStrokeColor(idx, String(value || '').trim());
-    const key = legendEntryKey(entry);
-    const override = drawing.legendStrokeOverrides[key];
-    if (!override || !Object.prototype.hasOwnProperty.call(override, 'strokeColor')) return false;
-    delete override.strokeColor;
-    if (override.strokeWidth === undefined || override.strokeWidth === '') {
-      delete drawing.legendStrokeOverrides[key];
-    }
-    return true;
+    const stroked = row.keys.filter((key) => Object.hasOwn(drawing.legendStrokeOverrides[key] || {}, 'strokeColor'));
+    stroked.forEach((key) => {
+      const override = drawing.legendStrokeOverrides[key];
+      delete override.strokeColor;
+      if (override.strokeWidth === undefined || override.strokeWidth === '') delete drawing.legendStrokeOverrides[key];
+    });
+    return stroked.length > 0;
   };
 
   /** @param {number} idx */
@@ -130,10 +120,9 @@ export const createLegendStrokeActions = ({ state }) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const entry = drawing.legendEntries.value[idx];
-    if (!entry || !Object.prototype.hasOwnProperty.call(drawing.legendStrokeOverrides, legendEntryKey(entry))) return false;
-    delete drawing.legendStrokeOverrides[legendEntryKey(entry)];
-    return true;
+    const stroked = (rowAt(idx)?.keys || []).filter((key) => Object.hasOwn(drawing.legendStrokeOverrides, key));
+    stroked.forEach((key) => { delete drawing.legendStrokeOverrides[key]; });
+    return stroked.length > 0;
   };
 
   const resetAllStrokes = () => {

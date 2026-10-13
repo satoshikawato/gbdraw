@@ -86,7 +86,8 @@ export const getAllFeatureLegendGroups = (svg) => {
 // (the executor's `ifAbsent` addition); the rules own it, not the editor.
 export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
 // D-28: the marker of a Legend row the naming pass hides because an earlier
-// row has its name and its swatch (svg-result-ingestion.js `nameLegendRows`).
+// row has its name and its swatch (svg-result-ingestion.js `nameLegendRows`);
+// its value is the key of that earlier row, which the Legend draws for both.
 export const LEGEND_MERGED_ROW = 'data-legend-merged';
 
 // The one absence predicate of a Legend row: a row is absent when the Result
@@ -94,6 +95,16 @@ export const LEGEND_MERGED_ROW = 'data-legend-merged';
 // Python's, hidden, so a reconcile without the delete shows it again).
 /** @param {Element | null | undefined} row */
 export const legendRowShown = (row) => Boolean(row) && row?.getAttribute('display') !== 'none';
+
+// D-35: the keys of the rows a Legend row of a Result stands for: its own key,
+// then the keys of the rows the naming pass merged into it. A Legend color or
+// stroke edit of the row edits each of them, so it stays one row.
+/** @param {SVGSVGElement | null | undefined} svg @param {PythonLegendKey} key @returns {PythonLegendKey[]} */
+export const legendRowKeys = (svg, key) => [...new Set([key, ...getAllFeatureLegendGroups(svg).flatMap((group) => (
+  Array.from(group.querySelectorAll('g[data-legend-key]'))
+    .filter((row) => row.getAttribute(LEGEND_MERGED_ROW) === key)
+    .map((row) => /** @type {PythonLegendKey} */ (pythonLegendKey(row)))
+))])];
 
 // The keys of the feature Legend rows a Result shows (a renamed row's key,
 // not the name it shows).
@@ -239,8 +250,9 @@ export const getLegendEntrySwatch = (entryGroup) => Array.from(
   return fill && fill !== 'none' && !fill.startsWith('url(');
 }) || null;
 
-// The stroke Python drew on the swatch of the Legend row of `key`, which a
-// row stroke edit keeps as `originalStroke*`.
+// The stroke Python drew on the swatch of the Legend row of `key`, shown or
+// merged into a shown row (D-35), which a row stroke edit keeps as
+// `originalStroke*`.
 /**
  * @param {SVGSVGElement | null | undefined} svg
  * @param {string} key
@@ -249,7 +261,7 @@ export const getLegendEntrySwatch = (entryGroup) => Array.from(
 export const drawnLegendRowStroke = (svg, key) => {
   const swatch = getAllFeatureLegendGroups(svg)
     .map((group) => getLegendEntrySwatch(Array.from(group.querySelectorAll('g[data-legend-key]'))
-      .find((entry) => pythonLegendKey(entry) === key && legendRowShown(entry)) || null))
+      .find((entry) => pythonLegendKey(entry) === key && (legendRowShown(entry) || entry.hasAttribute(LEGEND_MERGED_ROW))) || null))
     .find(Boolean) || null;
   const width = Number.parseFloat(String(pythonDrawnAttribute(swatch, 'stroke-width') ?? ''));
   return {
@@ -510,7 +522,7 @@ export const legendEntryAnchor = (entryGroup) => {
  * @property {LegendSwatchIdentity} swatch The swatch it shows (`legendRowSwatch`).
  * @property {PythonLegendKey | null} recordedKey Python's key that a rename keeps as a record; null without one.
  * @property {boolean} editor A row the Legend editor added.
- * @property {boolean} pythonShown Python drew it shown: a row a rule commit retired is not.
+ * @property {boolean} pythonShown Python drew it shown, merged or not: a row a rule commit retired is not.
  * @property {boolean} shown The row shows.
  * @property {boolean} merged The naming pass hides it: an earlier row has its name and its swatch (D-28).
  * @property {SwatchColor} color The fill its swatch shows.
@@ -538,7 +550,8 @@ export const resultLegendRows = (svg) => {
       drawnName: drawnLegendRowName(row),
       recordedKey: recordedKey === null ? null : /** @type {PythonLegendKey} */ (recordedKey),
       editor: row.getAttribute('data-legend-owner') === 'direct-editor',
-      pythonShown: pythonDrawnAttribute(row, 'display') !== 'none',
+      // A merged row is Python's shown row the naming pass hides (D-35).
+      pythonShown: row.hasAttribute(LEGEND_MERGED_ROW) || pythonDrawnAttribute(row, 'display') !== 'none',
       shown: legendRowShown(row),
       merged: row.hasAttribute(LEGEND_MERGED_ROW),
       color: /** @type {SwatchColor} */ (getLegendEntrySwatch(row)?.getAttribute('fill') || '#cccccc'),

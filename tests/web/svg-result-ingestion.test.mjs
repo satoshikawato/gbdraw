@@ -30,7 +30,7 @@ import {
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
 import { LEGEND_ORDER_RECORD, stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-paint-bases.js';
 import {
-  getLegendEntrySwatch as legendSwatch, legendRowTakesPlace, shownPythonLegendRow
+  getLegendEntrySwatch as legendSwatch, legendRowKeys, legendRowTakesPlace, shownPythonLegendRow
 } from '../../gbdraw/web/js/services/legend-svg.js';
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { displayedFeatureAddressing, featureOverrideKey } from '../../gbdraw/web/js/services/feature-override-identity.js';
@@ -1844,6 +1844,10 @@ test('rows of one name and one swatch are one row: the later row is hidden until
   // A hidden row keeps the text it last showed.
   assert.deepEqual(legendRows(svg), [['CDS', 'CDS', null], ['CDS', 'tRNA', 'none'], ['rRNA', 'rRNA', null]]);
   assert.deepEqual(merged(), ['tRNA']);
+  // D-35: the merged row records the key of the row it is drawn as, so an
+  // edit of that row reaches both keys.
+  assert.deepEqual(legendRowKeys(svg, 'CDS'), ['CDS', 'tRNA']);
+  assert.deepEqual([legendRowKeys(svg, 'tRNA'), legendRowKeys(svg, 'rRNA')], [['tRNA'], ['rRNA']]);
   assert.deepEqual(reconcileMountedResult(svg, renamed), { changed: false, legendChanged: false }, 'merged once');
   const recolored = legendOperations({ ...renamed, legendFills: [{ caption: 'tRNA', color: '#ff0000' }] });
   reconcileMountedResult(svg, recolored);
@@ -1851,6 +1855,7 @@ test('rows of one name and one swatch are one row: the later row is hidden until
   assert.deepEqual(merged(), []);
   reconcileMountedResult(svg, renamed);
   assert.deepEqual(merged(), ['tRNA'], 'one swatch again: one row');
+  assert.deepEqual(legendRowKeys(svg, 'CDS'), ['CDS', 'tRNA']);
   reconcileMountedResult(svg, legendOperations({ ...renamed, legendDeletes: [{ caption: 'tRNA', allowMissing: false }] }));
   assert.deepEqual([legendRows(svg)[1][2], merged()], ['none', []], 'a deleted merged row stays hidden as deleted');
   reconcileMountedResult(svg, renamed);

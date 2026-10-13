@@ -1065,3 +1065,71 @@ const mockLegendEntry = (caption, color, x) => {
     }
   }
 }
+
+// D-35 (Owner, 2026-10-14): rows of one name and one swatch draw as one row
+// (D-28). A color or stroke edit of that row edits every row it merges, by
+// their keys, so it stays one row; a draw lists the merged row's entry, so the
+// Legend tab has it at once when it shows again.
+{
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  featureLegend.appendChild(mockLegendEntry('Alpha', '#112233', 0));
+  const merged = mockLegendEntry('Alpha', '#112233', 70);
+  merged.setAttribute('data-gbdraw-base-data-legend-key', 'Beta');
+  merged.setAttribute('display', 'none');
+  merged.setAttribute('data-legend-merged', 'Alpha');
+  featureLegend.appendChild(merged);
+  featureLegend.appendChild(mockLegendEntry('Gamma', '#445566', 140));
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  merged.children.forEach((child) => child.setAttribute('stroke', '#999999'));
+  featureLegend.children[0].querySelector('path').setAttribute('stroke', '#999999');
+  const entries = () => [
+    { caption: 'Alpha', originalCaption: 'Alpha', color: '#112233', featureIds: [] },
+    { caption: 'Alpha', originalCaption: 'Beta', color: '#112233', featureIds: [] },
+    { caption: 'Gamma', originalCaption: 'Gamma', color: '#445566', featureIds: [] }
+  ];
+  const state = {
+    results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref(entries()),
+    deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
+    originalLegendOrder: ref(['Alpha', 'Beta', 'Gamma']),
+    originalLegendColors: ref({}),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    featureStrokeOverrides: {},
+    extractedFeatures: ref([]),
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({ state: withDrawings(state), readShownLegendColor: (entry) => entry?.color });
+  const strokeActions = createLegendStrokeActions({ state: withDrawings(state) });
+  assert.equal(actions.updateLegendEntryColor(0, '#ff0000'), true);
+  assert.deepEqual(state.legendColorOverrides, { Alpha: '#ff0000', Beta: '#ff0000' }, 'the color reaches both keys');
+  assert.deepEqual(state.legendEntries.value.map((entry) => entry.color), ['#ff0000', '#ff0000', '#445566']);
+  assert.equal(actions.updateLegendEntryColor(2, '#00ff00'), true);
+  assert.deepEqual(state.legendColorOverrides, { Alpha: '#ff0000', Beta: '#ff0000', Gamma: '#00ff00' }, 'a row that merges none: its key');
+  assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), true);
+  assert.equal(strokeActions.updateLegendEntryStrokeWidth(0, 3), true);
+  assert.deepEqual(Object.keys(state.legendStrokeOverrides), ['Alpha', 'Beta'], 'the stroke reaches both keys');
+  assert.deepEqual(state.legendStrokeOverrides.Beta, state.legendStrokeOverrides.Alpha);
+  assert.deepEqual([state.legendStrokeOverrides.Alpha.strokeColor, state.legendStrokeOverrides.Alpha.strokeWidth], ['#222222', 3]);
+  assert.equal(strokeActions.setLegendEntryStrokeColorValue(0, null), true);
+  assert.deepEqual([state.legendStrokeOverrides.Alpha.strokeColor, state.legendStrokeOverrides.Beta.strokeColor], [undefined, undefined]);
+  assert.equal(strokeActions.resetLegendEntryStroke(0), true);
+  assert.deepEqual(state.legendStrokeOverrides, {}, 'Reset stroke resets both keys');
+
+  // After a draw, the merged row's entry stays listed (the Legend tab leaves
+  // it out while it is merged), never a dormant rename.
+  state.legendEntries.value = entries();
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
+  assert.deepEqual(state.legendEntries.value.map((entry) => [entry.originalCaption, entry.caption]),
+    [['Alpha', 'Alpha'], ['Beta', 'Alpha'], ['Gamma', 'Gamma']]);
+  assert.deepEqual(state.dormantLegendEntries.value, []);
+}
