@@ -72,6 +72,7 @@ def _plot(
             primary_targets=(primary_target,),
             legend_target=legend_target,
             track_slot_geometry={"slots": ()},
+            outer_label_layout=None,
         ),
         primary_target,
     )
