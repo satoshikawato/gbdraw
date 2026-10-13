@@ -596,6 +596,14 @@ GC-content and Depth axes and ticks are unaffected. User-explicit
 remains visible and causes a warning when combined with `--hide_scale`; omit or
 disable that slot to hide the scale.
 
+If Circular outer labels would overlap, `gbdraw circular` draws nothing, prints
+settings that fit (`--outer_label_x_radius_offset`,
+`--outer_label_y_radius_offset`, `--label_font_size`, or
+`--circular_label_spacing`), and exits with status 1. If only their leader
+lines cross, it draws the figure, prints the same settings as a warning, and
+exits with status 0. See [Circular outer labels that do not
+fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#circular-outer-labels-that-do-not-fit).
+
 For fresh Circular input, output names are derived from record IDs when
 `--output` is omitted. An ID used this way must be one filename component of
 at most 200 bytes in UTF-8: directory separators, absolute paths, `.` or `..`,
