@@ -996,7 +996,7 @@ Status: active Product authority
   - Reply 3 (scenario revision 3): 「CROSS-WARN、っていうか引き出し線が交差しているってどういうこと？」
     「owner-seen-fit-def_crossing_n4-20261013.png これはダメだね。WSSVは問題ないけどこれはダメ。これは警告入りしていい」
   - Reply 4 (scenario revision 4): the selected options 「開いてよい (推奨)」, 「通知の帯 (推奨)」,
-    「時間を区切る (推奨)」, 「全部この PR に」, and 「まあええよ」.
+    「時間を区切る (推奨)」 and 「全部この PR に」, and the reply 「まあええよ」.
   - Reply 5 (scenario revision 5): 「全部推奨」
   - Reply 6 (scenario revision 6, `2026-10-13`): 「E-ROW（推奨）」
   - Reply 7 (`2026-10-14`), to four questions on the receipt fields, each
