@@ -16,7 +16,7 @@ import { countGenBankRecords } from '../services/genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 import { DISPLAY_PLACEMENT_SCHEMA, FEATURE_OVERRIDE_SCHEMA } from '../contracts/schema.generated.js';
-/** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalDepthTrack, CanonicalFeatureOverride, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
 /** @import { LosatCacheInfoEntry } from '../services/config.js' */
@@ -1357,7 +1357,7 @@ const appendDepthOptions = (args, options, files) => {
   });
   /**
    * @param {string} option
-   * @param {Exclude<keyof CanonicalDepthTrack, 'source'>} field
+   * @param {Exclude<keyof CanonicalLinearDepthTrack, 'source'>} field The depth track of each mode has these fields.
    */
   const appendTrackValues = (option, field) => {
     if (tracks.length === 0) return;
