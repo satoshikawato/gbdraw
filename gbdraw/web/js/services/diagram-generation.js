@@ -220,11 +220,12 @@ export const normalizeGenerationResponse = (payload) => {
     });
   }
   if (payload.error) {
+    const labelFit = normalizeLabelFitReport(payload.labelFit);
     return markCurrentWorkerGenerationResponse({
       results: payload,
       metadata: {},
       artifactIdentity: null,
-      labelFit: normalizeLabelFitReport(payload.labelFit)
+      ...(labelFit ? { labelFit } : {})
     });
   }
   const results = Array.isArray(payload.results)

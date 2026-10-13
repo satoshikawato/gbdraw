@@ -8377,8 +8377,8 @@
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
             <h2 id="label-fit-title" class="text-base font-bold text-slate-800">{{ labelFitDialog.drawn ? 'Leader lines cross' : 'Labels do not fit' }}</h2>
             <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                <template v-if="labelFitDialog.drawn">{{ labelFitDialog.crossingPairs }} {{ labelFitDialog.crossingPairs === 1 ? 'pair' : 'pairs' }} of leader lines cross. The figure is drawn; choose a fix to Generate again, or Cancel to keep it.</template>
-                <template v-else>{{ labelFitDialog.overlapPairs }} {{ labelFitDialog.overlapPairs === 1 ? 'pair' : 'pairs' }} of labels overlap, so nothing was drawn. Choose a fix to Generate again.</template>
+                <template v-if="labelFitDialog.drawn">{{ labelFitDialog.crossingPairs }} {{ labelFitDialog.crossingPairs === 1 ? 'pair of leader lines crosses' : 'pairs of leader lines cross' }}. The figure is drawn; choose a fix to Generate again, or Cancel to keep it.</template>
+                <template v-else>{{ labelFitDialog.overlapPairs }} {{ labelFitDialog.overlapPairs === 1 ? 'pair of labels overlaps' : 'pairs of labels overlap' }}, so nothing was drawn. Choose a fix to Generate again.</template>
             </p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
                 <li v-for="record in labelFitDialog.records" :key="`${record.recordId}:${record.labelKindTitle}`">

@@ -76,7 +76,7 @@ import {
   serializeResults,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
-  applyConfigValues,
+  applyLabelFitValues,
   setHeldPreviewViewportReader
 } from '../services/config.js';
 import {
@@ -4718,7 +4718,7 @@ export const createAppSetup = () => {
     computeRow: async (rowToken, kind) => (await runDiagramHelperOperation(
       DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW, { rowToken, kind }
     )).result,
-    writeRowSettings: (values, rowMode) => applyConfigValues(state.drawings[rowMode], values, rowMode),
+    writeRowSettings: (values, rowMode) => applyLabelFitValues(state.drawings[rowMode], values, rowMode),
     withHistory: dialogChoice.withHistory,
     closeAfterChoice: dialogChoice.closeAfterChoice,
     choicePending: () => dialogChoice.pending.value,

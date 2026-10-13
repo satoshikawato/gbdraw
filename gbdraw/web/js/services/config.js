@@ -2562,16 +2562,34 @@ const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) =
   }));
 };
 
-// Settings given by config path (a label fit row, LP-D43) go into the drawing's
+// The draft fields a label fit row may write: label settings only, never a
+// feature-slot input (R10).
+/** @type {Readonly<Record<string, (adv: Record<string, unknown>, value: number) => void>>} */
+const LABEL_FIT_FIELD_WRITERS = Object.freeze({
+  outer_label_x_offset: (adv, value) => { adv.outer_label_x_offset = value; },
+  outer_label_y_offset: (adv, value) => { adv.outer_label_y_offset = value; },
+  inner_label_x_offset: (adv, value) => { adv.inner_label_x_offset = value; },
+  inner_label_y_offset: (adv, value) => { adv.inner_label_y_offset = value; },
+  label_font_size: (adv, value) => { adv.label_font_size = value; },
+  circular_label_spacing: (adv, value) => { adv.circular_label_spacing = value; },
+  linear_label_spacing: (adv, value) => { adv.linear_label_spacing = value; }
+});
+
+// Settings a label fit row gives by config path (LP-D43) go into the drawing's
 // draft through the request mapping, so the next Generate sends exactly them.
-// A path the mode does not manage is an UNKNOWN_CONFIG_PATH error.
+// A path the mode does not manage, or one that is not a label setting, is an
+// UNKNOWN_CONFIG_PATH error and writes nothing.
 /**
  * @param {DrawingState} drawing
  * @param {Readonly<Record<string, number>>} values
  * @param {'circular' | 'linear'} mode
  */
-export const applyConfigValues = (drawing, values, mode) => {
-  Object.assign(drawing.adv, draftFieldsForConfigValues(values, mode, drawing.adv));
+export const applyLabelFitValues = (drawing, values, mode) => {
+  const fields = Object.entries(draftFieldsForConfigValues(values, mode, drawing.adv));
+  if (!fields.every(([field]) => Object.hasOwn(LABEL_FIT_FIELD_WRITERS, field))) {
+    throw diagnosticError('INPUT_INVALID', { field: 'configOverrides', reason: 'UNKNOWN_CONFIG_PATH' });
+  }
+  fields.forEach(([field, value]) => LABEL_FIT_FIELD_WRITERS[field](drawing.adv, value));
 };
 
 // Captured or stored settings (History Undo and Redo, the failed Session Load

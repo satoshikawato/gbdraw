@@ -101,10 +101,13 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
     return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
   }), { timeout: 300000 }).toEqual({ key: key + 1, processing: false, error: null });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
-  expect(await undoCount(page)).toBe(before.undo + 1);
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Fit labels: outward, vertical only');
+  // The row's settings are one step (PD-OI-088); the Generate that follows is its own.
+  expect(await undoCount(page)).toBe(before.undo + 2);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Generate diagram');
   expect((await labelSettings(page)).y).toBe(offset);
 
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Fit labels: outward, vertical only');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   expect(await labelSettings(page)).toEqual(before.settings);
 });
