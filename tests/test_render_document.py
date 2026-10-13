@@ -30,6 +30,17 @@ from gbdraw.api.diagram import (
 from gbdraw.circular import circular_main
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.render.document import SvgDocument, write_svg_document
+from gbdraw.render.group_content import (
+    ContentGroup,
+    GroupContent,
+    GroupKey,
+    GroupKind,
+    group_manifest,
+    place_content,
+)
+from gbdraw.render.patterns import ensure_hatch_pattern
+from gbdraw.svg.elements import ClipPath, Group, Rect, Text
+from gbdraw.svg.elements import Path as SvgPath
 from gbdraw.render.export import has_cairosvg
 
 INPUTS = Path(__file__).parent / "test_inputs"
@@ -235,3 +246,130 @@ def test_render_to_bytes_serializes_once_without_a_declaration(
     assert rendered.startswith(b"<svg")
     if fmt == "svg":
         assert rendered == expected.encode("utf-8")
+
+
+# Placed group contents (design 2.4, 2.5, F13).
+
+
+class _CountingPath(SvgPath):
+    serializations = 0
+
+    def get_xml(self):
+        type(self).serializations += 1
+        return super().get_xml()
+
+
+def _built_group(group_id: str, *, children: int = 2) -> Group:
+    group = Group(id=group_id, transform="translate(3,4)")
+    group.attribs["data-kind"] = "test & <quoted>"
+    for index in range(children):
+        group.add(_CountingPath(d=f"M{index},0 L10,{index}", fill="#ff0000"))
+    if children:
+        group.add(Text("label & <text>", insert=(1.5, 2.25)))
+    return group
+
+
+def _hatch_definition(drawing: Drawing, hatch: HatchStyle) -> object:
+    ensure_hatch_pattern(drawing, hatch)
+    return drawing.defs.elements[-1]
+
+
+def _clip_path(clip_id: str) -> ClipPath:
+    clip = ClipPath(id=clip_id)
+    clip.add(Rect(insert=(0, 0), size=(10, 5)))
+    return clip
+
+
+def _drawing() -> tuple[Drawing, list[ContentGroup]]:
+    """Contents with children, an empty content (F13), a plain empty group, defs."""
+
+    scratch = Drawing(debug=False)
+    hatch = _hatch_definition(scratch, HatchStyle(angle=45, spacing=4, color="#000", width=1))
+    drawing = Drawing(debug=False, size=("100px", "50px"))
+    drawing.add(Group(id="plain_empty"))
+    contents = (
+        GroupContent.of(_built_group("first"), definitions=(hatch, _clip_path("clip-1"))),
+        # The same hatch again is not added twice; a clip path always is.
+        GroupContent.of(_built_group("second"), definitions=(hatch, _clip_path("clip-1"))),
+        GroupContent.of(_built_group("empty_content", children=0)),
+    )
+    placed = []
+    for index, content in enumerate(contents):
+        group = place_content(drawing, content, GroupKey("record-1", GroupKind.FEATURES, index))
+        group.translate(5, 6)
+        group.attribs["data-request"] = str(index)
+        drawing.add(group)
+        placed.append(group)
+    drawing.add(_built_group("plain_full"))
+    return drawing, placed
+
+
+def _svgwrite_file_text(drawing: Drawing) -> str:
+    handle = io.StringIO()
+    drawing.write(handle)
+    return handle.getvalue()
+
+
+def test_the_writer_gives_svgwrites_bytes_for_contents_definitions_and_empty_groups() -> None:
+    drawing, _placed = _drawing()
+    document = write_svg_document(drawing)
+
+    assert document.body == drawing.tostring()
+    assert document.prolog + document.body == _svgwrite_file_text(drawing)
+    assert 'data-request="2" id="empty_content" transform="translate(3,4) translate(5,6)" />' in (
+        document.body
+    )
+    assert '<g id="plain_empty" />' in document.body
+    definition_ids = [item.attribs["id"] for item in drawing.defs.elements]
+    assert definition_ids.count("clip-1") == 2
+    assert len([i for i in definition_ids if i.startswith("gbdraw-hatch-")]) == 1
+
+
+def test_a_placed_content_is_not_serialized_again() -> None:
+    drawing, placed = _drawing()
+    for group in placed:
+        _ = group.content.children_text
+    _CountingPath.serializations = 0
+    first = write_svg_document(drawing)
+    # A second request places the same contents in new groups.
+    again = Drawing(debug=False, size=("100px", "50px"))
+    for group in placed:
+        fresh = place_content(again, group.content, group.key)
+        fresh.translate(5, 6)
+        again.add(fresh)
+    second = write_svg_document(again)
+
+    # Only "plain_full" (two paths) is serialized, once per write of the first drawing.
+    assert _CountingPath.serializations == 2
+    assert second.body == again.tostring()
+    assert first.body.count("label &amp; &lt;text&gt;") == 3
+
+
+def test_a_group_whose_children_changed_is_written_by_svgwrite() -> None:
+    drawing, placed = _drawing()
+    _ = placed[0].content.children_text
+    placed[0].add(Rect(insert=(1, 1), size=(2, 2), id="added"))
+
+    assert not placed[0].holds_content_children()
+    assert write_svg_document(drawing).body == drawing.tostring()
+    assert 'id="added"' in write_svg_document(drawing).body
+
+
+def test_the_manifest_lists_placed_groups_in_document_order() -> None:
+    drawing, placed = _drawing()
+    manifest = group_manifest(drawing)
+
+    assert [entry.key for entry in manifest] == [group.key for group in placed]
+    assert [entry.dom_id for entry in manifest] == ["first", "second", "empty_content"]
+    assert manifest[0].position == "translate(3,4) translate(5,6)"
+    assert manifest[0].definition_ids == ("gbdraw-hatch-" + manifest[0].definition_ids[0][13:], "clip-1")
+    assert manifest[0].content.revision == manifest[1].content.revision
+    assert manifest[0].content.revision != manifest[2].content.revision
+
+
+def test_an_empty_drawing_is_written_as_svgwrite_writes_it() -> None:
+    drawing = Drawing(debug=False)
+    drawing.elements.clear()
+    document = write_svg_document(drawing)
+
+    assert document.prolog + document.body == _svgwrite_file_text(drawing)
