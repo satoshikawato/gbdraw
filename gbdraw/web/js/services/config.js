@@ -3182,9 +3182,20 @@ export const serializeResults = () => {
  * @property {number} [queryIndex]
  * @property {number} [subjectIndex]
  */
+/**
+ * The fields of a cache-info row that name a linear pair's comparison edge.
+ * @typedef {Omit<LosatCacheInfoEntry, 'key' | 'filename' | 'display'>} LosatCacheInfoIdentity
+ */
+/** @type {readonly ('edgeKey' | 'queryUid' | 'subjectUid')[]} */
 const LOSAT_CACHE_INFO_STRING_FIELDS = ['edgeKey', 'queryUid', 'subjectUid'];
+/** @type {readonly ('ordinal' | 'queryIndex' | 'subjectIndex')[]} */
 const LOSAT_CACHE_INFO_INTEGER_FIELDS = ['ordinal', 'queryIndex', 'subjectIndex'];
+/**
+ * @param {NonNullable<UnvalidatedFields<keyof LosatCacheInfoEntry>>} entry A cache-info row, or a saved cache
+ *   entry that carries the same fields: unvalidated, each field is tested here. Both callers pass an object.
+ */
 const losatCacheInfoIdentity = (entry) => {
+  /** @type {LosatCacheInfoIdentity} */
   const identity = {};
   LOSAT_CACHE_INFO_STRING_FIELDS.forEach((field) => {
     if (typeof entry?.[field] === 'string' && entry[field].trim()) {
@@ -3192,12 +3203,18 @@ const losatCacheInfoIdentity = (entry) => {
     }
   });
   LOSAT_CACHE_INFO_INTEGER_FIELDS.forEach((field) => {
-    if (Number.isInteger(entry?.[field])) identity[field] = entry[field];
+    // The cast: `Number.isInteger` in the same statement proves the number.
+    if (Number.isInteger(entry?.[field])) identity[field] = /** @type {number} */ (entry[field]);
   });
   return identity;
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {NonNullable<UnvalidatedFields<keyof LosatCacheInfoEntry | 'queryRecordInstanceKey'
+ *   | 'subjectRecordInstanceKey'>>} entry A saved cache entry that passed `isCurrentRawLosatCacheEntry`; the
+ *   fields read here are unvalidated.
+ */
 const restoredLosatCacheInfoIdentity = (drawing, entry) => {
   const identity = losatCacheInfoIdentity(entry);
   if (state.mode.value !== 'linear') return identity;
