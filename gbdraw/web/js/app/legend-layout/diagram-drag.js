@@ -263,16 +263,20 @@ export const createDiagramDragActions = ({
     applyPlotTitleTransform(nextPlotTitleGroup);
   };
 
+  // Whether a press drags one record (a Multi-Record Canvas) or the whole diagram.
+  const dragsOneRecord = () => isMultiRecordCanvasSvg(svgContainer.value?.querySelector('svg'));
+
   // What a press on `target` drags: its record on a Multi-Record Canvas, else
   // every bound primary group; null when the press drags nothing.
   /**
    * @param {Element} target
+   * @param {boolean} [oneRecord] `dragsOneRecord()`, read once by a caller that asks for many targets.
    * @returns {{ mode: 'record' | 'group', targets: SVGGraphicsElement[] } | null}
    */
-  const diagramDragOf = (target) => {
-    if (isMultiRecordCanvasSvg(svgContainer.value?.querySelector('svg'))) {
+  const diagramDragOf = (target, oneRecord = dragsOneRecord()) => {
+    if (oneRecord) {
       const record = closestRecordGroup(target);
-      // Record groups are `g` elements (isRecordGroup).
+      // `closestRecordGroup` returns a `g` element.
       return record ? { mode: 'record', targets: [/** @type {SVGGraphicsElement} */ (record)] } : null;
     }
     const group = target.closest('g[id]');
@@ -289,9 +293,10 @@ export const createDiagramDragActions = ({
     const enabled = isLayoutRepositionModeEnabled();
     /** @type {SVGGraphicsElement[]} */
     const elements = Array.isArray(diagramElements.value) ? diagramElements.value : [];
+    const oneRecord = enabled && dragsOneRecord();
 
     elements.forEach((el) => {
-      setElementCursor(el, !enabled ? '' : diagramDragOf(el)?.targets.includes(el) ? 'grab' : 'default');
+      setElementCursor(el, !enabled ? '' : diagramDragOf(el, oneRecord)?.targets.includes(el) ? 'grab' : 'default');
     });
 
     [lengthBarElement.value, plotTitleElement.value].forEach((element) => {
