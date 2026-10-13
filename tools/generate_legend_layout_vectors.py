@@ -40,7 +40,8 @@ from gbdraw.configurators.legend import (  # noqa: E402
     _circular_legend_local_bounds,
     _linear_legend_local_bounds,
 )
-from gbdraw.core.text import _resolve_font_path, calculate_bbox_dimensions  # noqa: E402
+from gbdraw.core.fonts import resolve_font_face  # noqa: E402
+from gbdraw.core.text import calculate_bbox_dimensions  # noqa: E402
 from gbdraw.layout.composition import (  # noqa: E402
     OVERLAY_CANDIDATE_SCORE_ORDER,
     OVERLAY_CANVAS_GROWTH_CANDIDATE_ORDER,
@@ -86,10 +87,10 @@ MEASUREMENT_FAMILIES = (
 # ---- inputs ----
 
 def _font_file(family: str) -> str:
-    path = _resolve_font_path(family)
-    if not path:
+    face = resolve_font_face(family)
+    if face is None:
         raise SystemExit(f"No bundled font for {family!r}")
-    return Path(path).stem
+    return face.measurement_name
 
 
 def _translation(element: ET.Element | None) -> list[float]:

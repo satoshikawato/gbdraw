@@ -440,6 +440,22 @@ def _add_legend_size_args(parser: argparse.ArgumentParser) -> None:
         type=float)
 
 
+def _add_font_family_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        '--font_family',
+        help=(
+            'Font for all diagram text: one font family name (for example "DejaVu Sans"), '
+            'which gets its generic family appended, or a CSS font-family list. Text is '
+            'measured with the font file of the first family that is a bundled Liberation '
+            'font or alias, that fontconfig (fc-match) finds, or, without fontconfig, that '
+            'is installed in the system font folders. A family found nowhere is replaced with '
+            'the nearest Liberation font, with a warning. A Session saves the font name, not '
+            "the font file (optional; default: 'Liberation Sans', 'Arial', 'Helvetica', "
+            "'Nimbus Sans L', sans-serif)."
+        ),
+        type=str)
+
+
 def add_color_args(parser: argparse.ArgumentParser) -> None:
     """Add color-related arguments (-p, -t, -d)."""
     parser.add_argument(

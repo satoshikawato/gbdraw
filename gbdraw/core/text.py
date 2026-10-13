@@ -3,40 +3,18 @@
 
 import functools
 import logging
-import os
 import re
-import shutil
-import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from importlib import resources
-from typing import Dict, List, Mapping, Optional, Union
+from typing import Dict, List, Mapping, Optional, TypedDict, Union
 
+from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont
+
+from gbdraw.core.fonts import FontFace, FontWeight, load_font, resolve_font_face
 from gbdraw.svg.elements import Text
 
 logger = logging.getLogger(__name__)
-
-# Global caches for font objects to avoid repeated file loading
-_font_cache: Dict[str, TTFont] = {}
-_font_path_cache: Dict[str, Optional[str]] = {}
-
-_BUNDLED_FONT_FAMILY_ALIASES = {
-    "liberationsans": "LiberationSans",
-    "arial": "LiberationSans",
-    "helvetica": "LiberationSans",
-    "nimbussansl": "LiberationSans",
-    "sans-serif": "LiberationSans",
-    "sansserif": "LiberationSans",
-    "liberationserif": "LiberationSerif",
-    "timesnewroman": "LiberationSerif",
-    "times": "LiberationSerif",
-    "serif": "LiberationSerif",
-    "liberationmono": "LiberationMono",
-    "couriernew": "LiberationMono",
-    "courier": "LiberationMono",
-    "monospace": "LiberationMono",
-}
 
 
 # ------------------------------------------------------------------
@@ -257,204 +235,6 @@ def font_pair_kerning_table(font) -> Dict[tuple[str, str], int]:
 
 
 # ------------------------------------------------------------------
-#  Font Loading with Caching
-# ------------------------------------------------------------------
-def _get_cached_font(font_path: str) -> Optional[TTFont]:
-    """Load a font file with caching to avoid repeated disk I/O."""
-    if font_path in _font_cache:
-        return _font_cache[font_path]
-
-    try:
-        font = TTFont(font_path)
-        _font_cache[font_path] = font
-        return font
-    except Exception as e:
-        logger.warning(f"Failed to load font file {font_path}: {e}")
-        return None
-
-
-def _normalize_font_family_candidate(value: str) -> str:
-    return value.strip().strip("\"'").strip()
-
-
-def _comparable_font_name(value: str) -> str:
-    return _normalize_font_family_candidate(value).lower().replace(" ", "")
-
-
-def _normalize_font_weight(font_weight: str | int | float | None) -> str:
-    value = "normal" if font_weight is None else str(font_weight).strip().lower()
-    if value in {"bold", "bolder"}:
-        return "bold"
-    try:
-        return "bold" if int(float(value)) >= 600 else "normal"
-    except (TypeError, ValueError):
-        return "normal"
-
-
-def _normalize_font_style(font_style: str | None) -> str:
-    value = "normal" if font_style is None else str(font_style).strip().lower()
-    return "italic" if value in {"italic", "oblique"} else "normal"
-
-
-def _font_style_suffix(font_weight: str | int | float | None, font_style: str | None) -> str:
-    weight = _normalize_font_weight(font_weight)
-    style = _normalize_font_style(font_style)
-    if weight == "bold" and style == "italic":
-        return "BoldItalic"
-    if weight == "bold":
-        return "Bold"
-    if style == "italic":
-        return "Italic"
-    return "Regular"
-
-
-def _bundled_font_dirs():
-    data_dir = resources.files("gbdraw.data")
-    return (data_dir.joinpath("fonts"), data_dir)
-
-
-def _available_bundled_fonts():
-    available_fonts = []
-    seen = set()
-    for font_dir in _bundled_font_dirs():
-        try:
-            if not font_dir.is_dir():
-                continue
-            for font_file in font_dir.iterdir():
-                if not font_file.name.lower().endswith((".ttf", ".otf")):
-                    continue
-                font_path = str(font_file)
-                if font_path in seen:
-                    continue
-                seen.add(font_path)
-                available_fonts.append(font_file)
-        except Exception as e:
-            logger.debug(f"Bundled font directory lookup failed for {font_dir!s}: {e}")
-    return available_fonts
-
-
-def _font_family_prefix(family: str) -> str | None:
-    comparable_family = _comparable_font_name(family)
-    return _BUNDLED_FONT_FAMILY_ALIASES.get(comparable_family)
-
-
-def _select_bundled_font_variant(
-    available_fonts,
-    *,
-    prefix: str,
-    font_weight: str | int | float | None,
-    font_style: str | None,
-) -> Optional[str]:
-    desired_suffix = _font_style_suffix(font_weight, font_style)
-    desired_stem = f"{prefix}-{desired_suffix}".lower()
-    regular_stem = f"{prefix}-Regular".lower()
-
-    by_stem = {os.path.splitext(font_file.name)[0].lower(): font_file for font_file in available_fonts}
-    if desired_stem in by_stem:
-        return str(by_stem[desired_stem])
-    if regular_stem in by_stem:
-        logger.debug(
-            "Bundled font variant %s was not found; falling back to %s-Regular.",
-            desired_stem,
-            prefix,
-        )
-        return str(by_stem[regular_stem])
-    return None
-
-
-def _resolve_font_path(
-    font_family: str,
-    *,
-    allow_system: bool = False,
-    font_weight: str | int | float | None = "normal",
-    font_style: str | None = "normal",
-) -> Optional[str]:
-    """Resolve font family name to a font file path with caching."""
-    cache_key = (
-        f"{font_family}\0system={int(allow_system)}"
-        f"\0weight={_normalize_font_weight(font_weight)}"
-        f"\0style={_normalize_font_style(font_style)}"
-    )
-    if cache_key in _font_path_cache:
-        return _font_path_cache[cache_key]
-
-    families = [
-        family
-        for family in (_normalize_font_family_candidate(part) for part in str(font_family).split(","))
-        if family
-    ]
-    target_font_path = None
-    try:
-        available_fonts = _available_bundled_fonts()
-
-        if available_fonts:
-            for family in families:
-                prefix = _font_family_prefix(family)
-                if prefix is None:
-                    continue
-                target_font_path = _select_bundled_font_variant(
-                    available_fonts,
-                    prefix=prefix,
-                    font_weight=font_weight,
-                    font_style=font_style,
-                )
-                if target_font_path:
-                    break
-
-            requested_names = [_comparable_font_name(family) for family in families]
-
-            if target_font_path is None:
-                for requested in requested_names:
-                    for f in available_fonts:
-                        if requested in _comparable_font_name(f.name):
-                            prefix = os.path.splitext(f.name)[0].split("-", 1)[0]
-                            target_font_path = _select_bundled_font_variant(
-                                available_fonts,
-                                prefix=prefix,
-                                font_weight=font_weight,
-                                font_style=font_style,
-                            ) or str(f)
-                            break
-                    if target_font_path:
-                        break
-
-            if not target_font_path:
-                target_font_path = _select_bundled_font_variant(
-                    available_fonts,
-                    prefix="LiberationSans",
-                    font_weight=font_weight,
-                    font_style=font_style,
-                ) or str(available_fonts[0])
-    except Exception as e:
-        logger.debug(f"Font path resolution failed ({e}).")
-
-    if allow_system and target_font_path is None:
-        fc_match = shutil.which("fc-match")
-        if fc_match:
-            for family in families:
-                if _comparable_font_name(family) in {"sans-serif", "serif", "monospace", "cursive", "fantasy"}:
-                    continue
-                try:
-                    result = subprocess.run(
-                        [fc_match, "-f", "%{file}", family],
-                        check=False,
-                        capture_output=True,
-                        text=True,
-                        timeout=2,
-                    )
-                except Exception as e:
-                    logger.debug(f"Fontconfig lookup failed for {family!r}: {e}")
-                    continue
-                candidate = result.stdout.strip()
-                if result.returncode == 0 and candidate and os.path.exists(candidate):
-                    target_font_path = candidate
-                    break
-
-    _font_path_cache[cache_key] = target_font_path
-    return target_font_path
-
-
-# ------------------------------------------------------------------
 #  Logic ported from find_font_files.py to remove dependency
 # ------------------------------------------------------------------
 _SVG_SPACE_RUN = re.compile(" +")
@@ -475,7 +255,7 @@ def collapse_svg_white_space(text: str) -> str:
 def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: bool = False):
     """
     Directly parses the font file using fontTools to calculate text dimensions.
-    This logic was originally in find_font_files.py.
+    This logic was originally in find_font_files.py. See ``_face_text_box``.
 
     The width calculation accounts for pair kerning: the GPOS ``kern`` feature
     when the font has one, else the legacy ``kern`` table (see
@@ -497,18 +277,110 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
                 including kerning adjustments.
             text_height_pixels (float): The calculated height of the text in pixels.
     """
-    font = _get_cached_font(font_path)
+    return _face_text_box(FontFace(str(font_path)), text, font_size, dpi, svg_units)
+
+
+def _glyph_bounds(font: TTFont, glyph_name: str) -> tuple[float, float, float]:
+    """``(yMax, yMin, xMax)`` of a glyph; from the outline for CFF fonts."""
+    if "glyf" in font:
+        glyph = font["glyf"][glyph_name]
+        return (
+            getattr(glyph, "yMax", 0),
+            getattr(glyph, "yMin", 0),
+            getattr(glyph, "xMax", 0),
+        )
+    glyph_set = font.getGlyphSet()
+    pen = BoundsPen(glyph_set)
+    glyph_set[glyph_name].draw(pen)
+    if pen.bounds is None:
+        return 0, 0, 0
+    _x_min, y_min, x_max, y_max = pen.bounds
+    return y_max, y_min, x_max
+
+
+def _measured_cmap(font: TTFont) -> Mapping[int, str]:
+    """The Windows BMP cmap; the best available one for a font without it."""
+    bmp_cmap = font["cmap"].getcmap(3, 1)
+    return bmp_cmap.cmap if bmp_cmap is not None else (font.getBestCmap() or {})
+
+
+class FontMetricsTable(TypedDict):
+    """The facts text measurement reads from one face, in font units.
+
+    The Web's port of the Legend layout (gbdraw/web/js/services/legend-layout.js)
+    measures with them: ``cmap`` is [code point, glyph index, ...] in ascending
+    code points, ``glyphs`` is [advance, lsb, xMax, yMax, yMin, ...] by glyph
+    index, ``kerning`` is [left glyph, right glyph, value, ...] for the pairs
+    ``font_pair_kerning_table`` applies between glyphs a character reaches, and
+    ``ascent``/``descent`` (hhea) bound a character the face lacks.
+    """
+
+    unitsPerEm: int
+    ascent: int
+    descent: int
+    cmap: list[int]
+    glyphs: list[float]
+    kerning: list[int]
+
+
+def _font_unit(value: float) -> float:
+    return value if isinstance(value, float) and not value.is_integer() else int(value)
+
+
+def _glyph_facts(font: TTFont, glyph_name: str) -> list[float]:
+    # The expressions of _face_text_box, read once per glyph.
+    try:
+        ymax, ymin, xmax = _glyph_bounds(font, glyph_name)
+    except Exception:
+        ymax, ymin, xmax = 0, 0, 0
+    try:
+        advance, lsb = font["hmtx"][glyph_name]
+    except KeyError:
+        advance, lsb = font["head"].unitsPerEm, 0
+    return [_font_unit(value) for value in (advance, lsb, xmax, ymax, ymin)]
+
+
+def font_metrics_table(face: FontFace) -> FontMetricsTable:
+    """The measurement facts of one face (``FontMetricsTable``).
+
+    tools/generate_legend_font_metrics.py writes them for the bundled faces;
+    the Web builds them for a registered font (``FontFace.measurement_name``
+    names the face, as a Result's ``legendReflow.fontFile`` does).
+    """
+    font = load_font(face)
+    if font is None:
+        raise ValueError(f"Cannot read font file {face.path}")
+    order = font.getGlyphOrder()
+    index = {glyph: position for position, glyph in enumerate(order)}
+    cmap = _measured_cmap(font)
+    mapped = set(cmap.values())
+    kerning: list[int] = []
+    for (left, right), value in font_pair_kerning_table(font).items():
+        if value and left in mapped and right in mapped:
+            kerning.extend([index[left], index[right], int(value)])
+    return {
+        "unitsPerEm": int(font["head"].unitsPerEm),
+        "ascent": int(font["hhea"].ascent),
+        "descent": int(font["hhea"].descent),
+        "cmap": [value for code_point in sorted(cmap) for value in (code_point, index[cmap[code_point]])],
+        "glyphs": [value for glyph in order for value in _glyph_facts(font, glyph)],
+        "kerning": kerning,
+    }
+
+
+@functools.lru_cache(maxsize=8192)
+def _face_text_box(face: FontFace, text, font_size, dpi, svg_units: bool):
+    """The text box of ``text`` in one face (``get_text_bbox_size_pixels``)."""
+    font = load_font(face)
     if font is None:
         # Fallback approximation
         return len(str(text)) * float(font_size) * 0.6, float(font_size)
 
     hmtx = font["hmtx"]
-    cmap = font["cmap"]
     head = font["head"]
     units_per_em = head.unitsPerEm
 
-    # Get cmap (Format 4 or 12 preferred)
-    t = cmap.getcmap(3, 1).cmap
+    t = _measured_cmap(font)
 
     total_width = 0
     total_advance_width = 0
@@ -520,32 +392,19 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
         return 0.0, 0.0
 
     rsb_previous = 0
-    previous_glyph_index = None
+    previous_glyph_name: Optional[str] = None
 
     for i, char in enumerate(text_str):
-        char_code = ord(char)
-        if char_code in t:
-            glyph_index = t[char_code]
-        else:
-            glyph_index = 0
+        # None for a character the face lacks.
+        glyph_name = t.get(ord(char))
 
-        if glyph_index == 0:
+        if glyph_name is None:
             # The face lacks the character, so a renderer draws it from a
             # fallback font, typically one em wide (CJK): an em box.
             ymax, ymin, xmax = font["hhea"].ascent, font["hhea"].descent, units_per_em
         else:
             try:
-                # Try to get vertical metrics from glyf table if available
-                if "glyf" in font:
-                    g = font["glyf"][glyph_index]
-                    ymax = g.yMax if hasattr(g, "yMax") else 0
-                    ymin = g.yMin if hasattr(g, "yMin") else 0
-                    xmax = g.xMax if hasattr(g, "xMax") else 0
-                else:
-                    # Fallback for OTF/CFF fonts without glyf table
-                    ymax = head.yMax
-                    ymin = head.yMin
-                    xmax = 0
+                ymax, ymin, xmax = _glyph_bounds(font, glyph_name)
             except Exception:
                 ymax, ymin, xmax = 0, 0, 0
 
@@ -553,17 +412,17 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
         ymins.append(ymin)
 
         # Apply kerning adjustment between consecutive glyphs
-        if previous_glyph_index is not None:
-            kerning_value = _get_kerning_value(font, previous_glyph_index, glyph_index)
+        if previous_glyph_name is not None:
+            kerning_value = _get_kerning_value(font, previous_glyph_name, glyph_name)
             total_width += kerning_value
             total_advance_width += kerning_value
 
         # Calculate horizontal advance
-        if glyph_index == 0:
+        if glyph_name is None:
             advance_width, lsb = units_per_em, 0
         else:
             try:
-                advance_width, lsb = hmtx[glyph_index]
+                advance_width, lsb = hmtx[glyph_name]
             except KeyError:
                 advance_width, lsb = units_per_em, 0
 
@@ -589,7 +448,7 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
             total_width += lsb
 
         rsb_previous = rsb
-        previous_glyph_index = glyph_index
+        previous_glyph_name = glyph_name
 
     if svg_units:
         # SVG font-size values are user units (CSS px in the generated SVG),
@@ -614,28 +473,22 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
 # ------------------------------------------------------------------
 #  Main BBox Calculation Function
 # ------------------------------------------------------------------
-@functools.lru_cache(maxsize=4096)
 def calculate_bbox_dimensions(
     text,
     font_family,
     font_size,
     dpi,
-    font_weight: str | int | float | None = "normal",
+    font_weight: FontWeight = "normal",
     font_style: str | None = "normal",
 ):
     """
-    Calculates bounding box dimensions using bundled font files in gbdraw package.
-    Uses bundled fonts for reproducible measurement across native and browser runtimes.
+    Calculates bounding box dimensions with the font ``font_family`` resolves
+    to (``gbdraw.core.fonts.resolve_font_face``): a bundled Liberation face, a
+    registered font file, or the file fontconfig finds for the family.
     """
-    target_font_path = _resolve_font_path(
-        font_family,
-        font_weight=font_weight,
-        font_style=font_style,
-    )
-
-    if target_font_path:
-        # Calculate using fontTools (font object is cached internally)
-        return get_text_bbox_size_pixels(target_font_path, text, font_size, dpi)
+    face = resolve_font_face(font_family, font_weight, font_style)
+    if face is not None:
+        return _face_text_box(face, text, font_size, dpi, False)
 
     # Fallback Approximation
     try:
@@ -647,31 +500,25 @@ def calculate_bbox_dimensions(
 
 def measurement_font_file(
     font_family: str,
-    font_weight: str | int | float | None = "normal",
+    font_weight: FontWeight = "normal",
     font_style: str | None = "normal",
 ) -> Optional[str]:
-    """Return the file stem of the font ``calculate_bbox_dimensions`` measures with.
+    """Return the name of the face ``calculate_bbox_dimensions`` measures with.
 
-    For example ``"LiberationSans-Regular"``; None when no bundled font exists
-    and the measurement falls back to its approximation.
+    For example ``"LiberationSans-Regular"``, or ``user-<hash>-<style>`` for a
+    registered font (``FontFace.measurement_name``); None when no bundled font
+    exists and the measurement falls back to its approximation.
     """
-    target_font_path = _resolve_font_path(
-        font_family,
-        font_weight=font_weight,
-        font_style=font_style,
-    )
-    if not target_font_path:
-        return None
-    return os.path.splitext(os.path.basename(target_font_path))[0]
+    face = resolve_font_face(font_family, font_weight, font_style)
+    return face.measurement_name if face is not None else None
 
 
-@functools.lru_cache(maxsize=4096)
 def calculate_svg_bbox_dimensions(
     text,
     font_family,
     font_size,
     dpi,
-    font_weight: str | int | float | None = "normal",
+    font_weight: FontWeight = "normal",
     font_style: str | None = "normal",
 ):
     """
@@ -680,22 +527,11 @@ def calculate_svg_bbox_dimensions(
     This is separate from ``calculate_bbox_dimensions`` because older layout
     reserves rely on its point-style sizing. Linear definition columns need the
     actual rendered SVG width so their right edge can sit close to the record
-    axis.
+    axis. Both resolve the font the same way.
     """
-    target_font_path = _resolve_font_path(
-        font_family,
-        allow_system=True,
-        font_weight=font_weight,
-        font_style=font_style,
-    )
-    if target_font_path:
-        return get_text_bbox_size_pixels(
-            target_font_path,
-            text,
-            font_size,
-            dpi,
-            svg_units=True,
-        )
+    face = resolve_font_face(font_family, font_weight, font_style)
+    if face is not None:
+        return _face_text_box(face, text, font_size, dpi, True)
 
     try:
         f_size = float(font_size)
@@ -728,10 +564,9 @@ class FontVerticalMetrics:
     x_height: float
 
 
-@functools.lru_cache(maxsize=64)
 def get_font_vertical_metrics(
     font_family: str,
-    font_weight: str | int | float | None = "normal",
+    font_weight: FontWeight = "normal",
     font_style: str | None = "normal",
 ) -> Optional[FontVerticalMetrics]:
     """Return the ascent, descent, and x-height of the font used for layout.
@@ -740,12 +575,13 @@ def get_font_vertical_metrics(
     descent follow FreeType, which browsers on Linux use: the OS/2 typo
     metrics when USE_TYPO_METRICS is set, otherwise the hhea metrics.
     """
-    font_path = _resolve_font_path(
-        font_family,
-        font_weight=font_weight,
-        font_style=font_style,
-    )
-    font = _get_cached_font(font_path) if font_path else None
+    face = resolve_font_face(font_family, font_weight, font_style)
+    return _face_vertical_metrics(face) if face is not None else None
+
+
+@functools.lru_cache(maxsize=64)
+def _face_vertical_metrics(face: FontFace) -> Optional[FontVerticalMetrics]:
+    font = load_font(face)
     if font is None:
         return None
     units_per_em = float(font["head"].unitsPerEm)
@@ -760,10 +596,10 @@ def get_font_vertical_metrics(
     else:
         ascent, descent = font["head"].yMax, -font["head"].yMin
     x_height = float(getattr(os2, "sxHeight", 0) or 0)
-    if x_height <= 0 and "glyf" in font:
-        glyph_name = font.getBestCmap().get(ord("x"))
+    if x_height <= 0:
+        glyph_name = (font.getBestCmap() or {}).get(ord("x"))
         if glyph_name is not None:
-            x_height = float(getattr(font["glyf"][glyph_name], "yMax", 0) or 0)
+            x_height = float(_glyph_bounds(font, glyph_name)[0] or 0)
     if x_height <= 0:
         x_height = ascent / 2.0
     return FontVerticalMetrics(
@@ -851,12 +687,14 @@ def parse_mixed_content_text(input_text: str) -> List[Dict[str, Union[str, bool,
 
 
 __all__ = [
+    "FontMetricsTable",
     "FontVerticalMetrics",
     "calculate_bbox_dimensions",
     "calculate_svg_bbox_dimensions",
     "collapse_svg_white_space",
     "create_text_element",
     "dominant_baseline_shift_em",
+    "font_metrics_table",
     "font_pair_kerning_table",
     "get_font_vertical_metrics",
     "get_text_bbox_size_pixels",

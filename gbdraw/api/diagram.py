@@ -119,6 +119,7 @@ from gbdraw.configurators import (
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
+from gbdraw.core.fonts import resolve_font_family
 from gbdraw.core.sequence import create_dict_for_sequence_lengths
 from gbdraw.core.numeric import compensated_sum
 from gbdraw.diagrams.circular.assemble import (
@@ -267,12 +268,37 @@ def _resolve_optional_table(
     return False, None
 
 
+# Requested font-family lists already warned about in this process.
+_warned_font_families: set[str] = set()
+
+
+def _with_available_font_family(cfg: GbdrawConfig) -> GbdrawConfig:
+    """Draw and measure text only with font families that resolve.
+
+    A family that is not available is replaced with the nearest one
+    (``resolve_font_family``), with one warning per requested list and
+    process naming both.
+    """
+
+    resolution = resolve_font_family(cfg.objects.text.font_family)
+    if not resolution.substituted:
+        return cfg
+    if resolution.requested not in _warned_font_families:
+        _warned_font_families.add(resolution.requested)
+        logger.warning(resolution.message)
+    text = replace(cfg.objects.text, font_family=resolution.effective)
+    return replace(cfg, objects=replace(cfg.objects, text=text))
+
+
 def _resolve_diagram_options_config(
     options: CircularDiagramOptions | LinearDiagramOptions,
 ) -> GbdrawConfig:
-    """Resolve one typed config and losslessly attach explicit label tables."""
+    """Resolve one typed config with available fonts, and losslessly attach
+    explicit label tables."""
 
-    cfg = apply_config_overrides(options.config, options.config_overrides)
+    cfg = _with_available_font_family(
+        apply_config_overrides(options.config, options.config_overrides)
+    )
 
     whitelist_given, whitelist = _resolve_optional_table(
         name="label_whitelist",

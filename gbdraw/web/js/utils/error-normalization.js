@@ -131,6 +131,7 @@ const REASONS = Object.freeze({
   OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.',
   EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',
   FASTA_IN_GENBANK: 'This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.',
+  FONT_FILE: 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.',
   FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.'
 });
 /**
