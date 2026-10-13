@@ -114,6 +114,26 @@ test('the legacy migration takes the next source when a field holds a value outs
   ).linear.legend, 'top');
 });
 
+test('a legacy legend field outside its mode does not count as a stored layout of a canonical Session', () => {
+  const restore = (ui) => layout.restoredLayoutPreferences(ui, {
+    mode: 'linear', multiRecord: false,
+    projected: { linear: { legend: 'top', plotTitlePosition: 'top' } },
+    active: { legend: 'bottom', plotTitlePosition: 'bottom' }
+  });
+  const unset = restore({});
+  for (const ui of [
+    { legend: 'banana' }, { legend: 'Upper_Left' }, { legend: '' }, { linearLegendPosition: 'upper_left' },
+    { circularLegendPosition: 'banana' }, { circularMultiRecordLegendPosition: 'centre' }
+  ]) {
+    assert.deepEqual(restore(ui), unset, JSON.stringify(ui));
+  }
+  // A position of the field's mode is still a stored layout: it migrates.
+  assert.equal(restore({ legend: ' Left ' }).linear.legend, 'left');
+  assert.equal(restore({ circularSingleRecordLegendPosition: 'upper_right' }).circular.single.legend, 'upper_right');
+  // The plot title fields keep their presence check.
+  assert.notDeepEqual(restore({ linearPlotTitlePosition: 'top' }), unset);
+});
+
 test('a drawing never holds a position outside its mode: the Position control and a loaded slot', () => {
   const linear = state.drawings.linear;
   linear.form.legend = 'top';
