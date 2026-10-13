@@ -297,7 +297,10 @@ _NAMES_TYPED_STRING: tuple[str, ...] = (
 _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalAlignmentAnchorIdentity.recordKey": ("another string",),
     "CanonicalAlignmentRecordDecision.recordKey": ("another string",),
+    "CanonicalCircularDepthTrack.largeTickInterval": ("zero", "a negative number"),
+    "CanonicalCircularDepthTrack.smallTickInterval": ("zero", "a negative number"),
     "CanonicalCircularDepthTrack.source": ("an array",),
+    "CanonicalCircularDepthTrack.tickFontSize": ("zero", "a negative number"),
     "CanonicalCircularDiagramOptions.depthTracks": ("an array",),
     "CanonicalCircularDiagramOptions.dinucleotide": ("another string",),
     "CanonicalCircularFeaturePlacement.placement[lane].level": ("another integer",),
@@ -311,7 +314,11 @@ _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalGffFastaRecordSource.fastaResourceId": ("another string",),
     "CanonicalGffFastaRecordSource.gffResourceId": ("another string",),
     "CanonicalHatchStyle.color": ("another string",),
+    "CanonicalLinearDepthTrack.height": ("zero", "a negative number"),
+    "CanonicalLinearDepthTrack.largeTickInterval": ("zero", "a negative number"),
+    "CanonicalLinearDepthTrack.smallTickInterval": ("zero", "a negative number"),
     "CanonicalLinearDepthTrack.source": ("an array",),
+    "CanonicalLinearDepthTrack.tickFontSize": ("zero", "a negative number"),
     "CanonicalLinearDiagramOptions.depthTracks": ("an array",),
     "CanonicalLinearDiagramOptions.dinucleotide": ("another string",),
     "CanonicalLinearFeaturePlacement.placement[lane].level": ("another integer",),
@@ -350,6 +357,15 @@ _EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
 
 
 _UNNAMED = "valueTheDescriptionDoesNotName"
+# Numbers of the right kind outside the range the decoder checks: the
+# description types a depth track's height (Linear only; a Circular one holds
+# null), tick intervals and tick font size ``number``, and Python owns
+# "greater than 0" (U7, BA-OD73).
+_OUT_OF_RANGE: dict[str, tuple[tuple[str, object], ...]] = {
+    f"Canonical{mode}DepthTrack.{key}": (("zero", 0), ("a negative number", -1))
+    for mode, keys in (("Circular", ()), ("Linear", ("height",)))
+    for key in (*keys, "largeTickInterval", "smallTickInterval", "tickFontSize")
+}
 
 
 def _other_values(held: object) -> list[tuple[str, object]]:
@@ -421,7 +437,7 @@ def _differences(
                 ]
                 changes += [
                     (f"{label}.{key} = {name}", _problems(value, field) == [], (key, value))
-                    for name, value in _other_values(holder.get(key))
+                    for name, value in [*_other_values(holder.get(key)), *_OUT_OF_RANGE.get(f"{label}.{key}", ())]
                 ]
             for change, allowed, arguments in changes:
                 unchanged = len(arguments) == 2 and arguments[0] in holder and holder[arguments[0]] == arguments[1]
