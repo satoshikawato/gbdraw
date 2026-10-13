@@ -1055,8 +1055,11 @@ Status: active Product authority
     icon rail and the Linear index button width of its Accepted residual
     risk. Each replaces scenario revision `1` as a whole; Git history retains
     the former receipt.
-  - `PD-OI-098` does not supersede another decision. The font name already
-    stored in the Session keeps its format; the receipt adds no Session field.
+  - `PD-OI-098` does not supersede another decision. Sessions already kept
+    the font name as the preserved override `objects.text.font_family`; the
+    Web setting is saved as `modes.<mode>.config.adv.font_family` in Session
+    47 (see `docs/internal/SESSION_FORMAT_HISTORY.md`), and no Session stores
+    a font file.
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
