@@ -9,7 +9,7 @@ import {
 import { resultCatalogFeatures } from './services/feature-catalog.js';
 import {
   createDefaultLayoutPreferences,
-  legendPositionOfMode,
+  legendPositionOrDefault,
   normalizeCircularPlotTitlePosition,
   resolveActiveLayoutPreference,
   updateActiveLayoutPreference
@@ -646,7 +646,7 @@ const generatedMode = ref('circular');
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
 /** @param {unknown} value */
-const circularLegendPosition = (value) => legendPositionOfMode(value, 'circular') ?? 'left';
+const circularLegendPosition = (value) => legendPositionOrDefault(value, 'circular');
 const shouldDeferCircularPreviewUpdates = computed(() => {
   const { form, adv } = drawings.circular;
   return generatedMode.value === 'circular' &&

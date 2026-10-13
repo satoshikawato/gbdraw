@@ -10,7 +10,7 @@ import {
   parseWhitelistRules
 } from '../services/file-imports.js';
 import {
-  legendPositionOfMode,
+  legendPositionOrDefault,
   normalizeCircularPlotTitlePosition,
   resolveCircularLayoutPreference
 } from '../services/layout-preferences.js';
@@ -223,7 +223,7 @@ export const setupWatchers = ({
       if (enabled && !hasStoredCircularMultiRecordLayout(drawing)) {
         if (suppressCircularMultiRecordDefaults.value) {
           drawing.layoutPreferences.circular.multi.legend =
-            legendPositionOfMode(drawing.form.legend, 'circular') ?? 'left';
+            legendPositionOrDefault(drawing.form.legend, 'circular');
           drawing.layoutPreferences.circular.multi.plotTitlePosition =
             normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
         } else {

@@ -5,6 +5,8 @@ import {
   replaceLeadingTranslate
 } from '../../services/svg-transform.js';
 import { planLegendComposition } from '../../services/legend-layout.js';
+import { legendPositionOrDefault } from '../../services/layout-preferences.js';
+import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
 /** @import { LayoutBox, CompositionSpacingPx, CompositionOverlayPolicy } from '../../services/legend-layout.js' */
 
 /**
@@ -108,11 +110,10 @@ const ROLE_SELECTORS = Object.freeze({
   legend: '[data-gbdraw-composition-role="legend"]',
   title: '[data-gbdraw-composition-role="title"]'
 });
+// The legend sides of every mode. A loaded Result's side is one of its own
+// mode's (`normalizeStoredLegendSide`); the checks below hold no mode.
 /** @type {Set<unknown>} */
-const LEGEND_SIDES = new Set([
-  'left', 'right', 'top', 'bottom',
-  'upper_left', 'upper_right', 'lower_left', 'lower_right', 'none'
-]);
+const LEGEND_SIDES = new Set([...LEGEND_POSITIONS.circular, ...LEGEND_POSITIONS.linear]);
 /** @type {Set<unknown>} */
 const TITLE_SIDES = new Set(['top', 'bottom', 'center', 'none']);
 /** @type {Set<unknown>} */
@@ -506,6 +507,65 @@ export const parseCompositionMetadata = (svg) => {
   };
   if (source.legacyNormalized === true) metadata.legacyNormalized = true;
   return metadata;
+};
+
+/**
+ * Gives a loaded Result's stored composition metadata a legend side of the
+ * Result's mode: a side outside the mode's positions reads as the mode's
+ * default legend position, and case and outer spaces read as the position
+ * (OV-672, BA-D26). Metadata that is not a JSON object stays for
+ * `parseCompositionMetadata` to refuse. Returns whether it rewrote the side.
+ * @param {Element} svg The root SVG element of a loaded Result.
+ * @param {'circular' | 'linear'} mode The Result's mode.
+ * @returns {boolean}
+ */
+export const normalizeStoredLegendSide = (svg, mode) => {
+  const raw = svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE);
+  /** @type {unknown} */
+  let source = null;
+  try {
+    source = raw === null ? null : JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (!isPlainObject(source)) return false;
+  const legendSide = legendPositionOrDefault(source.legendSide, mode);
+  if (source.legendSide === legendSide) return false;
+  svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify({ ...source, legendSide }));
+  return true;
+};
+
+const STORED_METADATA_ATTRIBUTE = new RegExp(`\\s${COMPOSITION_METADATA_ATTRIBUTE}=(["'])(.*?)\\1`, 's');
+/** @type {Record<string, string>} */
+const XML_ENTITIES = { quot: '"', apos: "'", amp: '&', lt: '<', gt: '>' };
+/** @param {string} text An attribute value as written in XML. */
+const decodeAttributeText = (text) => text.replace(
+  /&(?:#x([0-9a-f]+)|#([0-9]+)|(quot|apos|amp|lt|gt));/gi,
+  (_entity, hex, decimal, name) => (hex !== undefined
+    ? String.fromCodePoint(parseInt(hex, 16))
+    : decimal !== undefined ? String.fromCodePoint(Number(decimal)) : XML_ENTITIES[name.toLowerCase()])
+);
+
+/**
+ * Whether the root tag of a Result's text stores composition metadata whose
+ * legend side is, as written, one of `mode`'s positions: a Result for which it
+ * is false and that has metadata is parsed at Load for
+ * `normalizeStoredLegendSide`.
+ * @param {string} rootTag The `<svg ...>` tag of a Result's text.
+ * @param {'circular' | 'linear'} mode The Result's mode.
+ * @returns {boolean}
+ */
+export const storedLegendSideIsOfMode = (rootTag, mode) => {
+  const value = STORED_METADATA_ATTRIBUTE.exec(rootTag)?.[2];
+  if (value === undefined) return false;
+  try {
+    /** @type {unknown} */
+    const source = JSON.parse(decodeAttributeText(value));
+    return isPlainObject(source) && typeof source.legendSide === 'string'
+      && LEGEND_POSITIONS[mode].includes(source.legendSide);
+  } catch {
+    return false;
+  }
 };
 
 /**

@@ -137,7 +137,9 @@ import { createLegendLayout } from './legend-layout.js';
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE,
-  normalizeLegacyComposition
+  normalizeLegacyComposition,
+  normalizeStoredLegendSide,
+  storedLegendSideIsOfMode
 } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
@@ -378,23 +380,28 @@ export const createSessionImportRollbackState = ({
 
 // A Result's root tag names the composition metadata attributes.
 const COMPOSITION_ROOT_ATTRIBUTE = new RegExp(`\\s(?:${COMPOSITION_SCHEMA_ATTRIBUTE}|${COMPOSITION_METADATA_ATTRIBUTE})=`);
-// The transform services/config.js applies to each Result of an older Session
+// The transform services/config.js applies to each loaded Result of a Session
 // before it commits (R13 port): a Result without composition metadata gets the
-// legacy composition. The saved bytes carry the saved edits. A Session 40+
-// Result takes it only when `appliesToContent` (OV-273).
+// legacy composition when its set has one, and a Result with metadata a legend
+// side of its mode (OV-672). The saved bytes carry the saved edits. A Session
+// 40+ Result takes it only when `appliesToContent` (OV-273).
 /** @type {LegacyResultSvgTransform} */
-export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement} */ svg, /** @type {LegacyResultSvgData} */ { composition }) => {
+export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement} */ svg, /** @type {LegacyResultSvgData} */ { composition, mode }) => {
   if (
     svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
     && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
   ) {
+    if (!composition) return false;
     normalizeLegacyComposition(svg, composition);
     return true;
   }
-  return false;
+  return normalizeStoredLegendSide(svg, mode);
 }, {
-  /** @param {unknown} content */
-  appliesToContent: (content) => !COMPOSITION_ROOT_ATTRIBUTE.test(/<svg\b[^>]*>/i.exec(String(content ?? ''))?.[0] || '')
+  /** @param {unknown} content @param {'circular' | 'linear'} mode @param {boolean} composes */
+  appliesToContent: (content, mode, composes) => {
+    const rootTag = /<svg\b[^>]*>/i.exec(String(content ?? ''))?.[0] || '';
+    return COMPOSITION_ROOT_ATTRIBUTE.test(rootTag) ? !storedLegendSideIsOfMode(rootTag, mode) : composes;
+  }
 });
 
 const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: 'Undo or Redo in progress. Retry after it finishes.' });

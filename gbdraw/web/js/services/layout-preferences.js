@@ -58,6 +58,29 @@ export const legendPositionOfMode = (value, mode) => {
  */
 const storedText = (value) => typeof value === 'string' && value.trim() !== '';
 
+/**
+ * The legend position of a mode, or the mode's default legend position for a
+ * value outside the mode's positions (OV-652, OV-671).
+ * @param {unknown} value
+ * @param {string} mode 'linear'; any other mode reads the Circular positions.
+ * @returns {string}
+ */
+export const legendPositionOrDefault = (value, mode) => (
+  legendPositionOfMode(value, mode) ?? WEB_UX_PROFILE[mode === 'linear' ? 'linear' : 'circular'].legend
+);
+
+/**
+ * The side a Result saved without composition metadata (Session 27 to 30) is
+ * laid out with: `none` when its Session stored no side, otherwise the stored
+ * position of the Result's mode or the mode's default (OV-671, BA-D26).
+ * @param {unknown} value The Session's `config.form.legend`.
+ * @param {string} mode The Result's mode.
+ * @returns {string}
+ */
+export const drawnLegendSideOfMode = (value, mode) => (
+  storedText(value) ? legendPositionOrDefault(value, mode) : 'none'
+);
+
 /** @returns {LayoutPreferences} */
 export const createDefaultLayoutPreferences = () => ({
   circular: {
@@ -85,7 +108,7 @@ export const resolveCircularLayoutPreference = (preferences, useMultiRecord = fa
   const defaults = createDefaultLayoutPreferences();
   const circular = preferences?.circular || defaults.circular;
   const single = {
-    legend: legendPositionOfMode(circular.single?.legend, 'circular') ?? WEB_UX_PROFILE.circular.legend,
+    legend: legendPositionOrDefault(circular.single?.legend, 'circular'),
     plotTitlePosition: normalizeCircularPlotTitlePosition(
       circular.single?.plotTitlePosition
     )
@@ -112,7 +135,7 @@ export const resolveActiveLayoutPreference = (
 ) => {
   if (mode === 'linear') {
     return {
-      legend: legendPositionOfMode(preferences?.linear?.legend, 'linear') ?? WEB_UX_PROFILE.linear.legend,
+      legend: legendPositionOrDefault(preferences?.linear?.legend, 'linear'),
       plotTitlePosition: normalizeLinearPlotTitlePosition(
         preferences?.linear?.plotTitlePosition
       )
@@ -135,7 +158,7 @@ export const updateActiveLayoutPreference = (
 ) => {
   if (mode === 'linear') {
     if (Object.prototype.hasOwnProperty.call(patch, 'legend')) {
-      preferences.linear.legend = legendPositionOfMode(patch.legend, 'linear') ?? WEB_UX_PROFILE.linear.legend;
+      preferences.linear.legend = legendPositionOrDefault(patch.legend, 'linear');
     }
     if (Object.prototype.hasOwnProperty.call(patch, 'plotTitlePosition')) {
       preferences.linear.plotTitlePosition = normalizeLinearPlotTitlePosition(
@@ -147,8 +170,7 @@ export const updateActiveLayoutPreference = (
 
   const key = useMultiRecord ? 'multi' : 'single';
   if (Object.prototype.hasOwnProperty.call(patch, 'legend')) {
-    preferences.circular[key].legend = legendPositionOfMode(patch.legend, 'circular')
-      ?? WEB_UX_PROFILE.circular.legend;
+    preferences.circular[key].legend = legendPositionOrDefault(patch.legend, 'circular');
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'plotTitlePosition')) {
     preferences.circular[key].plotTitlePosition = normalizeCircularPlotTitlePosition(

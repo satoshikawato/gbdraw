@@ -55,7 +55,8 @@ import {
 } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
-  legendPositionOfMode,
+  drawnLegendSideOfMode,
+  legendPositionOrDefault,
   normalizeCircularPlotTitlePosition,
   normalizeLayoutPreferences,
   replaceLayoutPreferences,
@@ -345,21 +346,25 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  */
 
 /**
- * What an older Session's Result needs from the Session: the committed legend
- * and title sides with the saved user offsets. Its saved bytes already show
- * its strokes.
+ * What a loaded Result needs from the Session: its mode and, for the Result
+ * set an older Session's legacy composition applies to, the committed legend
+ * and title sides with the saved user offsets (null for another set). Its
+ * saved bytes already show its strokes.
  * @typedef {object} LegacyResultSvgData
- * @property {{ legendSide: string, titleSide: string, userDeltas: Record<string, number[] | null> }} composition
+ * @property {{ legendSide: string, titleSide: string, userDeltas: Record<string, number[] | null> } | null} composition
+ * @property {'circular' | 'linear'} mode
  */
 
 /**
- * The composition root's transform of an older Session's Result (R13 port):
- * it gives a Result without composition metadata the legacy composition.
- * Returns whether the SVG changed. `appliesToContent` tells from a Result's
- * text whether it lacks composition metadata, so a Session 40+ Result is
- * parsed only when it does (OV-273).
+ * The composition root's transform of a loaded Result (R13 port): it gives a
+ * Result without composition metadata the legacy composition, and a Result
+ * with metadata a legend side of its mode (OV-672). Returns whether the SVG
+ * changed. `appliesToContent` tells from a Result's text whether it lacks
+ * composition metadata (and `composes`, its set has a legacy composition) or
+ * stores a side outside `mode`'s positions, so a Session 40+ Result is parsed
+ * only when it does (OV-273).
  * @typedef {((svg: SVGSVGElement, data: LegacyResultSvgData) => boolean)
- *   & { appliesToContent: (content: unknown) => boolean }} LegacyResultSvgTransform
+ *   & { appliesToContent: (content: unknown, mode: 'circular' | 'linear', composes: boolean) => boolean }} LegacyResultSvgTransform
  */
 export { SESSION_VERSION };
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
@@ -652,16 +657,6 @@ const buildSessionFilename = (title) => {
   const safe = makeSafeFilename(base);
   return `${safe}.gbdraw-session.json.gz`;
 };
-
-/**
- * The legend side of a stored Result of `mode`; a value outside the mode's
- * positions reads as the side an unset one had.
- * @param {unknown} value
- * @param {string} mode
- */
-const storedGeneratedLegendPosition = (value, mode) => (
-  legendPositionOfMode(value, mode) ?? (mode === 'linear' ? 'bottom' : 'left')
-);
 
 /** @param {unknown} value */
 const normalizeLabelRendering = (value) => {
@@ -2485,13 +2480,14 @@ const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedF
  * @param {{ renderRequest: Record<string, any>, results: Record<string, any>[], editorState?: unknown,
  *   ui?: unknown, runMetadata?: unknown }} set
  * @param {{ featureCatalog: FeatureCatalog, admittedResults?: Record<string, any>[] | null,
- *   savedEdits?: SavedResultEdits | null, restoredSequenceSources: Record<string, any>[], resources: Record<string, any>,
+ *   savedEdits?: SavedResultEdits | null, legacy?: LegacyResultNormalization | null,
+ *   restoredSequenceSources: Record<string, any>[], resources: Record<string, any>,
  *   resourceTable: any, webFiles: any, retainedBytes: number,
  *   droppedLegendColors: { list: string, caption: string }[] }} options
  */
 const buildLoadedArtifactSlot = (set, {
-  featureCatalog, admittedResults = null, savedEdits = null, restoredSequenceSources, resources, resourceTable, webFiles,
-  retainedBytes, droppedLegendColors
+  featureCatalog, admittedResults = null, savedEdits = null, legacy = null, restoredSequenceSources, resources, resourceTable,
+  webFiles, retainedBytes, droppedLegendColors
 }) => {
   const mode = set.renderRequest.mode === 'linear' ? 'linear' : 'circular';
   const results = admittedResults || admitLoadedSetResults(normalizeLogicalResults(set.results.map(
@@ -2499,7 +2495,7 @@ const buildLoadedArtifactSlot = (set, {
       name: result?.name || `Result ${index + 1}`,
       content: result?.content || ''
     })
-  )), { featureCatalog, mode, selectedFeatureTypes: set.renderRequest.diagramOptions?.selectedFeaturesSet, savedEdits });
+  )), { featureCatalog, mode, selectedFeatureTypes: set.renderRequest.diagramOptions?.selectedFeaturesSet, savedEdits, legacy });
   const features = featureStateFromCatalog(featureCatalog, { mode });
   const editorState = normalizeEditorStateData(
     isPlainObject(set.editorState) ? /** @type {Record<string, any>} */ (set.editorState) : {},
@@ -2526,7 +2522,7 @@ const buildLoadedArtifactSlot = (set, {
       annotationWarnings: cloneJsonData(runMetadata.annotationWarnings || []),
       featureIdentityNotices: cloneJsonData(runMetadata.featureIdentityNotices || []),
       comparisonWarnings: cloneJsonData(runMetadata.comparisonWarnings || []),
-      generatedLegendPosition: storedGeneratedLegendPosition(ui.generatedLegendPosition, mode),
+      generatedLegendPosition: legendPositionOrDefault(ui.generatedLegendPosition, mode),
       generatedMode: mode,
       generatedMultiRecordCanvas: Boolean(ui.generatedMultiRecordCanvas),
       generatedCircularPlotTitlePosition: hasStoredLayoutValue(ui.generatedCircularPlotTitlePosition)
@@ -4720,7 +4716,7 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
 
   if (ui.generatedMode) state.generatedMode.value = ui.generatedMode === 'linear' ? 'linear' : 'circular';
   if (ui.generatedLegendPosition) {
-    state.generatedLegendPosition.value = storedGeneratedLegendPosition(
+    state.generatedLegendPosition.value = legendPositionOrDefault(
       ui.generatedLegendPosition, state.generatedMode.value
     );
   }
@@ -5564,29 +5560,42 @@ const importSessionDocument = async (e, options = {}) => {
     // through the composition root's port (R13); this module passes data only.
     /** @type {LegacyResultSvgTransform} */
     const transformLegacyResultSvg = options.transformLegacyResultSvg;
-    const transformRestoredSessionSvg = (svg) => {
-      const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
-      const legacyResultChanged = transformLegacyResultSvg(svg, {
-        composition: {
-          legendSide: committedLayout?.legend || restoredConfig?.form?.legend || 'none',
-          titleSide: committedLayout?.plotTitlePosition
-            || restoredConfig?.adv?.plot_title_position || 'none',
-          userDeltas: {
-            primary: ui.diagramOffset ? [ui.diagramOffset.x, ui.diagramOffset.y] : null,
-            legend: ui.legendCurrentOffset
-              ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
-              : null,
-            lengthBar: ui.lengthBarUserOffset
-              ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
-              : null,
-            title: ui.plotTitleUserOffset
-              ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
-              : null
-          }
-        }
-      });
+    // A Result of `mode`; `composition` is the legacy composition of the
+    // committed set (null for the other set, which has none).
+    /** @param {'circular' | 'linear'} mode @param {LegacyResultSvgData['composition']} composition */
+    const loadedResultTransform = (mode, composition) => (/** @type {SVGSVGElement} */ svg) => {
+      const legendGroupsChanged = composition ? normalizeLegacyLegendEntryGroups(svg) : false;
+      const legacyResultChanged = transformLegacyResultSvg(svg, { composition, mode });
       return legendGroupsChanged || legacyResultChanged;
     };
+    /** @param {'circular' | 'linear'} mode @param {LegacyResultSvgData['composition']} composition @returns {LegacyResultNormalization | null} */
+    const loadedResultNormalization = (mode, composition) => (transformLegacyResultSvg
+      ? {
+          transform: loadedResultTransform(mode, composition),
+          applies: (content) => transformLegacyResultSvg.appliesToContent(content, mode, Boolean(composition))
+        }
+      : null);
+    /** @type {LegacyResultSvgData['composition']} */
+    const committedLegacyComposition = {
+      // The side a Session 31+ stored for the mode, or that a Session 27-30
+      // stored in its form, read through the Result's mode (OV-671).
+      legendSide: committedLayout?.legend ?? drawnLegendSideOfMode(restoredConfig?.form?.legend, committedDraftMode),
+      titleSide: committedLayout?.plotTitlePosition
+        || restoredConfig?.adv?.plot_title_position || 'none',
+      userDeltas: {
+        primary: ui.diagramOffset ? [ui.diagramOffset.x, ui.diagramOffset.y] : null,
+        legend: ui.legendCurrentOffset
+          ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
+          : null,
+        lengthBar: ui.lengthBarUserOffset
+          ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
+          : null,
+        title: ui.plotTitleUserOffset
+          ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
+          : null
+      }
+    };
+    const transformRestoredSessionSvg = loadedResultTransform(committedDraftMode, committedLegacyComposition);
 
     recordSessionLifecycleEvent('svg-admission-start');
     // The loaded Results carry the feature types of the request that becomes
@@ -5603,9 +5612,7 @@ const importSessionDocument = async (e, options = {}) => {
       ? admitLoadedSetResults(logicalImportedResults, {
           featureCatalog: validatedSessionCatalog, mode: committedMode, selectedFeatureTypes,
           savedEdits: committedSavedEdits,
-          legacy: transformLegacyResultSvg
-            ? { transform: transformRestoredSessionSvg, applies: transformLegacyResultSvg.appliesToContent }
-            : null
+          legacy: loadedResultNormalization(committedDraftMode, committedLegacyComposition)
         })
       : admitLegacyImportedResults(
           createLegacyImportResultSource(logicalImportedResults),
@@ -5652,6 +5659,7 @@ const importSessionDocument = async (e, options = {}) => {
           ...slotOptions,
           featureCatalog: otherModeCatalogAdmitted,
           savedEdits: otherSavedEdits,
+          legacy: loadedResultNormalization(otherSetMode, null),
           restoredSequenceSources: (await restoreLoadedSetSequenceSources({
             ...setSequenceSourceOptions,
             mode: otherSetMode,
@@ -5894,7 +5902,7 @@ const importSessionDocument = async (e, options = {}) => {
     }
     state.generatedMode.value = (committedMode || ui.mode) === 'linear' ? 'linear' : 'circular';
     if (ui.generatedLegendPosition) {
-      state.generatedLegendPosition.value = storedGeneratedLegendPosition(
+      state.generatedLegendPosition.value = legendPositionOrDefault(
         ui.generatedLegendPosition, state.generatedMode.value
       );
     }
