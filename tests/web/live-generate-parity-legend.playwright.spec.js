@@ -11,7 +11,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./hel
 const {
   diffSemanticSnapshots, expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult
 } = require('./helpers/live-generate-parity.cjs');
-const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
+const { loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
 const {
   SINGLE_FIXTURE, open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history,
@@ -1478,3 +1478,142 @@ for (const figure of PYTHON_NAMED_RESULTS) {
     expect(python.flat().filter(([, , text]) => text.includes(' [#')), 'no drawn name is a row key').toEqual([]);
   });
 }
+
+// The same rule while the Result is edited: the names the live Result draws
+// are the names the next Generate draws, the Legend tab shows a row by its
+// drawn name, and a row key (`name [fill]`, `label (2)`) is never a name.
+// Rows are read from each Legend the Result holds, in document order, as
+// [key, data-legend-name, text].
+const legendNameFacts = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const svg = app.svgContainer.querySelector('svg');
+  const copies = [...svg.querySelectorAll('#legend_horizontal, #legend_vertical')];
+  return {
+    legends: (copies.length ? copies : [svg.querySelector('#legend')]).map((legend) => (
+      [...legend.querySelectorAll('g[data-legend-key]')].filter((row) => row.getAttribute('display') !== 'none').map((row) => [
+        row.getAttribute('data-legend-key'), row.getAttribute('data-legend-name'), row.querySelector('text').textContent
+      ])
+    )),
+    shown: app.legendEntries.map((entry) => app.shownLegendName(entry.caption))
+  };
+});
+const expectLegendNames = async (page, names, label) => {
+  const { legends, shown } = await legendNameFacts(page);
+  for (const rows of legends) expect(rows.map(([, , text]) => text), `${label}: the Legend draws`).toEqual(names);
+  expect(shown, `${label}: the Legend tab shows each row by its drawn name`).toEqual(names);
+  expect([...legends.flat().map(([, , text]) => text), ...shown].filter((name) => name.includes(' [#')), `${label}: no name is a row key`).toEqual([]);
+  return legends[0];
+};
+const expectNamesLiveAndGenerated = async (page, names, label) => {
+  await expectLegendNames(page, names, `${label}, live`);
+  const { generated } = await expectLiveEqualsGenerate(page, { label });
+  await expectLegendNames(page, names, `${label}, Generate`);
+  return generated;
+};
+const setRuleField = (page, index, field, value) => appAction(page, 'setSpecificRuleField', index, field, value);
+
+test('legend names: a color rule named like a feature type row is numbered with it, and shares its row in its color, live = Generate (circular)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openWithGenBank(page, LOCTEST_FIXTURE, () => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
+  await generate(page);
+  const tracks = ['GC content', 'GC skew (+)', 'GC skew (-)'];
+  const typeFill = (await semanticSnapshot(page)).legend.find(({ key }) => key === 'tRNA').fill;
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^LOC_0001$', color: '#0000ff', cap: 'tRNA' });
+  await expectNamesLiveAndGenerated(page, ['tRNA (1)', 'other proteins', 'tRNA (2)', ...tracks], 'a rule named tRNA in another color');
+  expect(await ruleTable(page), 'the caption stays as written').toEqual([['^LOC_0001$', 'tRNA', '#0000ff']]);
+  await setRuleField(page, 0, 'color', typeFill);
+  await expectNamesLiveAndGenerated(page, ['tRNA', 'other proteins', ...tracks], 'a rule named tRNA in the color of the tRNA row');
+});
+
+// A track of one color labelled `GC content`: a second source of the GC
+// content row's label, in its own color.
+const GC_CONTENT_LABELLED = { legend_label: 'GC content', positive_color: '#123456', negative_color: '#123456' };
+const addCircularSlot = (page, renderer, params = {}) => page.evaluate(({ kind, values }) => {
+  const app = window.__GBDRAW_APP__;
+  app.setCircularTrackSlotsEnabled(true);
+  const before = new Set(app.adv.circular_track_slots.map((slot) => slot.id));
+  app.addCircularTrackSlot(kind);
+  const slot = app.adv.circular_track_slots.find((entry) => !before.has(entry.id));
+  Object.assign(slot.params, values);
+  return slot.id;
+}, { kind: renderer, values: params });
+const legendKeys = async (page) => (await legendNameFacts(page)).legends[0].map(([key]) => key);
+
+test('legend names: tracks of one label share a row in one color and are numbered in two, live = Generate (circular)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const names = (...gcContent) => ['CDS', 'repeat_region', gcContent[0], 'GC skew (+)', 'GC skew (-)', ...gcContent.slice(1)];
+  // Two sources of one color: one row. A Legend edit of another row runs the naming pass on the live Result.
+  const second = await addCircularSlot(page, 'dinucleotide_content');
+  await generate(page);
+  await colorLegendRow(page, 'CDS', '#264653');
+  await expectNamesLiveAndGenerated(page, names('GC content'), 'two tracks of one label and one color');
+  // Three sources, two of one color: the third keeps its key and is drawn as the second row of the name.
+  await addCircularSlot(page, 'dinucleotide_skew', GC_CONTENT_LABELLED);
+  await generate(page);
+  expect(await legendKeys(page), 'a source that shares a row still takes its key').toEqual(names('GC content', 'GC content (3)'));
+  await colorLegendRow(page, 'CDS', '#2a9d8f');
+  await expectNamesLiveAndGenerated(page, names('GC content (1)', 'GC content (2)'), 'three sources of one label, two of one color');
+  // Two sources in two colors.
+  await page.evaluate((id) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularTrackSlotEnabled(app.adv.circular_track_slots.find((slot) => slot.id === id), false);
+  }, second);
+  await generate(page);
+  expect(await legendKeys(page)).toEqual(names('GC content', 'GC content (2)'));
+  await colorLegendRow(page, 'GC content (2)', '#7b2cbf');
+  await expectNamesLiveAndGenerated(page, names('GC content (1)', 'GC content (2)'), 'two tracks of one label in two colors');
+});
+
+// A color rule's caption written again in the rule list is kept as written
+// (the Legend editor's rename onto a taken name asks instead, PD-OI-061).
+test('legend names: a rule renamed onto the name of another rule numbers both rows, and renamed away leaves the bare name, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
+  const rest = ['other proteins', 'repeat_region'];
+  await expectLegendNames(page, ['alpha', 'beta', ...rest], 'two rules of two names');
+  await setRuleField(page, 1, 'cap', 'alpha');
+  await expectNamesLiveAndGenerated(page, ['alpha (1)', 'alpha (2)', ...rest], 'a rule renamed onto the name of another rule');
+  expect(await ruleTable(page), 'both captions stay as written').toEqual([['^FL1$', 'alpha', '#e63946'], ['^FL2$', 'alpha', '#2a9d8f']]);
+  await setRuleField(page, 1, 'cap', 'gamma');
+  await expectNamesLiveAndGenerated(page, ['alpha', 'gamma', ...rest], 'the rule renamed away');
+});
+
+// A row key keeps the string 0.13.0 gave the second source of a label
+// (`GC content (2)`), so the edits a Session stores under it stay on that
+// track's row. Once both tracks have one swatch they share the first row, and
+// the edits of the second are not used (PD-OI-095, accepted residual risk).
+test('legend names: a color and a stroke stored under GC content (2) stay on the second track\'s row, and are not used once the tracks share a row (circular)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const names = (...gcContent) => ['CDS', 'repeat_region', gcContent[0], 'GC skew (+)', 'GC skew (-)', ...gcContent.slice(1)];
+  const labelled = await addCircularSlot(page, 'dinucleotide_skew', GC_CONTENT_LABELLED);
+  await generate(page);
+  const firstFill = (await semanticSnapshot(page)).legend.find(({ key }) => key === 'GC content').fill;
+  await colorLegendRow(page, 'GC content (2)', '#7b2cbf');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.legendEntries.findIndex((entry) => entry.caption === 'GC content (2)');
+    return app.updateLegendEntryStrokeColor(index, '#e63946') && app.updateLegendEntryStrokeWidth(index, 2);
+  });
+  await settleLive(page);
+  expect(await page.evaluate(async () => {
+    const drawing = (await import('/gbdraw/web/js/state.js')).state.activeDrawing();
+    return [Object.keys(drawing.legendColorOverrides), Object.keys(drawing.legendStrokeOverrides)];
+  }), 'the edits are stored under the row key').toEqual([['GC content (2)'], ['GC content (2)']]);
+  const generated = await expectNamesLiveAndGenerated(page, names('GC content (1)', 'GC content (2)'), 'edits on the second track\'s row');
+  const edited = (row) => [row.key, row.caption, row.fill.toLowerCase(), row.stroke.toLowerCase()];
+  expect(generated.legend.filter(({ key }) => key.startsWith('GC content')).map(edited), 'Generate keeps the edits on the second track\'s row').toEqual([
+    ['GC content', 'GC content (1)', firstFill.toLowerCase(), 'none'], ['GC content (2)', 'GC content (2)', '#7b2cbf', '#e63946']
+  ]);
+  // The second track in the color of the first: one row, drawn as Python draws the first.
+  await page.evaluate(({ id, color }) => {
+    const slot = window.__GBDRAW_APP__.adv.circular_track_slots.find((entry) => entry.id === id);
+    Object.assign(slot.params, { positive_color: color, negative_color: color });
+  }, { id: labelled, color: firstFill });
+  await generate(page);
+  await expectLegendNames(page, names('GC content'), 'both tracks in one color');
+  expect((await semanticSnapshot(page)).legend.filter(({ key }) => key.startsWith('GC content')).map(edited), 'the shared row has no edit of the second')
+    .toEqual([['GC content', 'GC content', firstFill.toLowerCase(), 'none']]);
+});
