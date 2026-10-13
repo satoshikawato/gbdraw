@@ -15,8 +15,9 @@ const SESSION = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdr
 const FAMILY = 'Gbdraw Test Serif';
 const FONT_LIST = `'${FAMILY}', serif`;
 
-// A bundled Liberation Serif face renamed, so the test needs no system font.
-const renamedFont = (target) => {
+// A bundled Liberation Serif face renamed, so the test needs no system font;
+// `fsType` is its OS/2 embedding license.
+const renamedFont = (target, family = FAMILY, fsType = 0) => {
   execFileSync('python', ['-c', `
 import sys
 from fontTools.ttLib import TTFont
@@ -25,8 +26,9 @@ names = font["name"]
 names.names = [record for record in names.names if record.nameID not in {1, 2, 4, 6, 16, 17}]
 for name_id, value in ((1, sys.argv[1]), (2, "Regular"), (4, sys.argv[1] + " Regular"), (6, sys.argv[1].replace(" ", "")), (16, sys.argv[1])):
     names.setName(value, name_id, 3, 1, 0x409)
+font["OS/2"].fsType = int(sys.argv[3])
 font.save(sys.argv[2])
-`, FAMILY, target], { cwd: resolve('.'), stdio: 'pipe' });
+`, family, target, String(fsType)], { cwd: resolve('.'), stdio: 'pipe' });
   return target;
 };
 
@@ -217,10 +219,11 @@ test('a Session with a font that is not available asks first, and Load with the 
   ]);
 });
 
-// Receipt 〔書き出し〕 (D-05): SVG export carries a subset of the chosen font,
-// which a page without the font shows; PNG export draws with it; with Embed
-// font in exported SVG off, both keep the name only.
-test('SVG and PNG exports carry the chosen font, and the checkbox turns it off', async ({ page, browser }, testInfo) => {
+// Receipt 〔書き出し〕 (D-05, D-13): SVG and Interactive SVG exports carry a
+// subset of the chosen font, which a page without the font shows; PNG export
+// draws with it. Embed font in exported SVG off leaves the font name only in
+// the SVG; the PNG still draws the font (OV-741).
+test('SVG, Interactive SVG and PNG exports carry the chosen font, and the checkbox turns it off for SVG only', async ({ page, browser }, testInfo) => {
   test.setTimeout(300_000);
   const BOX = 'Gbdraw Box Serif';
   await generateWithFontFile(page, builtFont(testInfo.outputPath('box.ttf'), BOX, 'box'), BOX);
@@ -254,12 +257,23 @@ test('SVG and PNG exports carry the chosen font, and the checkbox turns it off',
   const embeddedPng = await exported(page, 'downloadPNG');
   expect(embeddedPng.outcome).toMatchObject({ fontWarnings: [] });
 
+  // Interactive SVG carries the same block, first in the root, beside its own script.
+  const interactive = await exported(page, 'downloadInteractiveSVG');
+  expect(interactive.outcome).toMatchObject({ fontWarnings: [] });
+  const interactiveText = interactive.bytes.toString('utf8');
+  expect(interactiveText).toMatch(/^<svg[^>]*><defs id="gbdraw-embedded-fonts"><style type="text\/css">@font-face \{ font-family: 'Gbdraw Box Serif';/);
+  expect(interactiveText).toContain('<script');
+  expect(interactiveText.match(/gbdraw-embedded-fonts/g)).toHaveLength(1);
+
   await embed.uncheck();
   const plainSvg = await exported(page, 'downloadSVG');
   expect(plainSvg.bytes.toString('utf8')).not.toContain('gbdraw-embedded-fonts');
+  const plainInteractive = await exported(page, 'downloadInteractiveSVG');
+  expect(plainInteractive.bytes.toString('utf8')).not.toContain('gbdraw-embedded-fonts');
+  // OV-741: the PNG draws the chosen font whatever the checkbox.
   const plainPng = await exported(page, 'downloadPNG');
-  // Box glyphs ink far more than the browser's substitute serif.
-  expect(await ink(embeddedPng.bytes)).toBeGreaterThan(1.5 * await ink(plainPng.bytes));
+  const embeddedInk = await ink(embeddedPng.bytes);
+  expect(Math.abs(await ink(plainPng.bytes) - embeddedInk)).toBeLessThanOrEqual(embeddedInk * 0.01);
   // The checkbox is page state and records no History step: Undo leaves it off.
   await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
@@ -292,4 +306,77 @@ test('PDF export embeds a custom TrueType face and a converted OpenType CFF face
   expect(cffText).toContain(pdfFontName(cffFile));
   expect(cffText).toContain('/FontFile2');
   await expect(page.locator('[data-app-notice]', { hasText: 'Exported' })).toHaveCount(0);
+});
+
+// D-13: a font whose license forbids embedding is named in the export notice:
+// an SVG keeps only its name, a PDF draws it in the nearest Liberation font, and
+// a PNG draws it (rasterizing is not embedding; OV-741).
+test('a font whose license forbids embedding is named in the SVG and PDF notices and drawn in the PNG', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const LOCKED = 'Gbdraw Locked Serif';
+  await generateWithFontFile(page, renamedFont(testInfo.outputPath('locked.ttf'), LOCKED, 0x0002), LOCKED);
+  const notice = page.locator('[data-app-notice]');
+
+  const svg = await exported(page, 'downloadSVG');
+  const svgWarning = `Font ${LOCKED} is not embedded: its license (OS/2 fsType) does not allow embedding. The SVG shows it only where ${LOCKED} is installed.`;
+  expect(svg.outcome.fontWarnings).toEqual([svgWarning]);
+  expect(svg.bytes.toString('utf8')).not.toContain('gbdraw-embedded-fonts');
+  await expect(notice).toContainText(`Exported ${svg.outcome.filename}`);
+  await expect(notice.locator('li')).toHaveText([svgWarning]);
+
+  const pdf = await exported(page, 'downloadPDF');
+  const pdfWarning = `Font ${LOCKED} is not embedded in the PDF: its license (OS/2 fsType) does not allow embedding. Its text is drawn in Liberation Serif.`;
+  expect(pdf.outcome.fontWarnings).toEqual([pdfWarning]);
+  const pdfText = pdf.bytes.toString('latin1');
+  expect(pdfText).toMatch(/\/BaseFont \/LiberationSerif/);
+  expect(pdfText).not.toMatch(/\/BaseFont \/user-/);
+  await expect(notice.locator('li')).toHaveText([pdfWarning]);
+
+  const png = await exported(page, 'downloadPNG');
+  expect(png.outcome.fontWarnings).toEqual([]);
+});
+
+// Choose installed font… (B, Local Font Access) with `queryLocalFonts`
+// stubbed before the app loads: the picker lists the families, searches them,
+// and loads the chosen family's faces; a refused permission is named.
+test('Choose installed font… lists, searches, and loads an installed family, and names a refused permission', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const INSTALLED = 'Gbdraw Installed Serif';
+  const base64 = readFileSync(renamedFont(testInfo.outputPath('installed.ttf'), INSTALLED)).toString('base64');
+  await page.addInitScript(({ family, data }) => {
+    const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+    window.__gbdrawLocalFontsDenied = false;
+    window.queryLocalFonts = async () => {
+      if (window.__gbdrawLocalFontsDenied) throw new DOMException('Permission denied', 'NotAllowedError');
+      return [
+        { family, fullName: `${family} Regular`, style: 'Regular', blob: async () => new Blob([bytes]) },
+        { family: 'Other Installed Sans', fullName: 'Other Installed Sans Regular', style: 'Regular', blob: async () => new Blob([bytes]) }
+      ];
+    };
+  }, { family: INSTALLED, data: base64 });
+  await openApp(page);
+  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(SESSION);
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
+  const select = page.locator('[data-font-select]');
+  await reveal(select);
+  await expect(page.locator('[data-font-installed-unavailable]')).toHaveCount(0);
+  const picker = page.locator('[data-font-installed-picker]');
+
+  await select.selectOption('installed');
+  await expect(picker.getByRole('heading', { name: 'Choose installed font' })).toBeVisible();
+  const families = picker.getByRole('list', { name: 'Installed font families' }).getByRole('button');
+  await expect(families).toHaveText([`${INSTALLED} (1)`, 'Other Installed Sans (1)']);
+  await picker.getByRole('searchbox', { name: 'Search installed fonts' }).fill('serif');
+  await expect(families).toHaveText([`${INSTALLED} (1)`]);
+  await families.first().click();
+  await expect(picker).toHaveCount(0);
+  await expect(select).toHaveValue(`'${INSTALLED}', serif`, { timeout: 180_000 });
+  await expect(page.locator('[data-font-custom-note]')).toBeVisible();
+
+  await page.evaluate(() => { window.__gbdrawLocalFontsDenied = true; });
+  await select.selectOption('installed');
+  await expect(picker.getByRole('alert')).toHaveText('Installed fonts are not available: the browser did not allow access to local fonts.');
+  await picker.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(select).toHaveValue(`'${INSTALLED}', serif`);
 });
