@@ -76,6 +76,24 @@ def _calculate_linear_plot_track_visual_bottom(
     )
 
 
+@dataclass(frozen=True)
+class LinearCanvasGeometry:
+    """The canvas values the Linear group classes read (design 2.1 rule 1).
+
+    It holds no position and no canvas size, so a group content keyed by it
+    survives a change that only moves groups.
+    """
+
+    alignment_width: float
+    longest_genome: int
+    length_param: str
+    cds_height: float
+    arrow_length: float
+    track_axis_gap: float | None
+    align_center: bool
+    normalize_length: bool
+
+
 class LinearCanvasConfigurator:
     """
     Configures the settings for a linear canvas used for genomic data visualization.
@@ -358,6 +376,19 @@ class LinearCanvasConfigurator:
                 + self.plot_tracks_height
             )
             * (self.num_of_entries - 1)
+        )
+
+    def geometry(self) -> LinearCanvasGeometry:
+        # The values as the configurator holds them: a type change would change the SVG text.
+        return LinearCanvasGeometry(
+            alignment_width=self.alignment_width,
+            longest_genome=self.longest_genome,
+            length_param=self.length_param,
+            cds_height=self.cds_height,
+            arrow_length=self.arrow_length,
+            track_axis_gap=self.track_axis_gap,
+            align_center=self.align_center,
+            normalize_length=self.normalize_length,
         )
 
     def configure_plot_width(self, definition_reserve_width: float) -> None:

@@ -56,10 +56,16 @@ from ...configurators import (
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...core.text import calculate_bbox_dimensions
-from ...render.group_content import CANVAS_SCOPE, GroupKey, GroupKind, place_content
+from ...render.group_content import (
+    CANVAS_SCOPE,
+    GroupContent,
+    GroupKey,
+    GroupKind,
+    build_group_content,
+    place_content,
+)
 from ...render.groups.linear import (
     LengthBarGroup,
-    PlotTitleContent,
     linear_legend_content,
     plot_title_content,
 )
@@ -624,6 +630,14 @@ def _serialize_linear_track_slot_geometry(
             for boundary, resolution in enumerate(boundary_gap_resolutions)
         ],
     }
+
+
+def _content_bounds(content: GroupContent) -> Aabb:
+    """The measured bounds of a content whose group class measures them."""
+
+    if content.local_bounds is None:  # pragma: no cover - the group classes measure them
+        raise ValueError("this group content has no measured bounds")
+    return content.local_bounds
 
 
 def _load_linear_comparison_dataframes(
@@ -1514,7 +1528,7 @@ def _collect_linear_primary_bounds(
     render_context: LinearRecordRenderContext,
     cfg: GbdrawConfig,
     multi_record_enabled: bool,
-    length_bar_group: LengthBarGroup | None,
+    length_bar_group: GroupContent | None,
     length_bar_offset_x: float,
     length_bar_offset_y: float,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
@@ -1674,9 +1688,9 @@ def _collect_linear_primary_bounds(
             )
         )
 
-    if length_bar_group is not None and length_bar_group.local_bounds.width > 0.0:
+    if length_bar_group is not None and _content_bounds(length_bar_group).width > 0.0:
         bounds.append(
-            length_bar_group.local_bounds.translated(
+            _content_bounds(length_bar_group).translated(
                 horizontal_offset + float(length_bar_offset_x),
                 float(length_bar_offset_y),
             )
@@ -1920,7 +1934,7 @@ def assemble_linear_diagram(
     if normalized_plot_title_position not in {"center", "top", "bottom"}:
         raise ValueError("plot_title_position must be one of: center, top, bottom")
 
-    title_content: PlotTitleContent | None = None
+    title_content: GroupContent | None = None
     if normalized_plot_title:
         title_content = render_stage(
             "plot_title_content",
@@ -2502,7 +2516,7 @@ def assemble_linear_diagram(
             current_y += resolution.axis_gap
         current_y = max(record_offsets, default=current_y)
 
-    length_bar_group: LengthBarGroup | None = None
+    length_bar_group: GroupContent | None = None
     length_bar_offset_x = 0.0
     draw_length_bar = (
         cfg.objects.scale.show
@@ -2672,16 +2686,20 @@ def assemble_linear_diagram(
             for placement in record_placements.values()
         )
         length_bar_offset_x = min_record_x
-        length_bar_group = LengthBarGroup(
-            canvas_config.fig_width,
+        length_bar_group = render_stage(
+            "length_bar_content",
+            build_group_content,
+            LengthBarGroup,
             canvas_config.alignment_width,
             canvas_config.longest_genome,
-            canvas_config,
-            cfg=cfg,
+            canvas_config.length_param,
+            scale=cfg.objects.scale,
+            font_family=cfg.objects.text.font_family,
+            dpi=cfg.canvas.dpi,
             ruler_width=max_record_x - min_record_x,
         )
-        length_bar_bottom = (
-            length_bar_offset_y + float(length_bar_group.local_bounds.max_y)
+        length_bar_bottom = length_bar_offset_y + float(
+            _content_bounds(length_bar_group).max_y
         )
         canvas_config.total_height = max(
             1.0,
@@ -2890,6 +2908,7 @@ def assemble_linear_diagram(
                         track_offset_y=track_offset_y,
                         sequence_width=sequence_width,
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                        group_key=GroupKey(str(record_keys[record_index]), GroupKind.DEPTH, str(slot.id)),
                     )
                     continue
 
@@ -2934,6 +2953,7 @@ def assemble_linear_diagram(
                         slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                        group_key=GroupKey(str(record_keys[record_index]), GroupKind.GC_CONTENT, str(slot.id)),
                     )
                     continue
 
@@ -2961,6 +2981,7 @@ def assemble_linear_diagram(
                         slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                        group_key=GroupKey(str(record_keys[record_index]), GroupKind.GC_SKEW, str(slot.id)),
                     )
 
             if not feature_rendered:
@@ -3083,7 +3104,7 @@ def assemble_linear_diagram(
             canvas.add(legend_target)
 
     title_target = (
-        place_content(canvas, title_content.content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE))
+        place_content(canvas, title_content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE))
         if title_content is not None
         else None
     )
@@ -3108,7 +3129,9 @@ def assemble_linear_diagram(
             ),
             title=(
                 CompositionItem("title", title_content.local_bounds)
-                if title_target is not None and title_content is not None
+                if title_target is not None
+                and title_content is not None
+                and title_content.local_bounds is not None
                 else None
             ),
             legend_placement=legend_placement,

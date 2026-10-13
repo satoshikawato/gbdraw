@@ -19,13 +19,17 @@ from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
 from types import MappingProxyType
-from typing import Mapping
+from typing import Callable, Mapping, ParamSpec, Protocol
 
 from svgwrite import Drawing
 from svgwrite.base import BaseElement
 from svgwrite.container import Group
 from svgwrite.etree import etree
 from svgwrite.params import Parameter
+
+from gbdraw.layout.spatial import Aabb
+
+P = ParamSpec("P")
 
 
 class GroupKind(str, Enum):
@@ -91,16 +95,27 @@ def _childless(element: BaseElement) -> BaseElement:
 
 @dataclass(frozen=True, eq=False)
 class GroupContent:
-    """The attributes, children and definitions one group class built."""
+    """The attributes, children and definitions one group class built.
+
+    ``local_bounds`` is the extent the group class measured around its own
+    origin, when the caller places or composes by it.
+    """
 
     attributes: Mapping[str, object]
     children: tuple[BaseElement, ...]
     definitions: tuple[BaseElement, ...] = ()
+    local_bounds: Aabb | None = None
     # svgwrite's per-element parameter (debug flag, profile) of the built group.
     parameter: Parameter | None = field(default=None, repr=False)
 
     @classmethod
-    def of(cls, group: Group, definitions: tuple[BaseElement, ...] = ()) -> GroupContent:
+    def of(
+        cls,
+        group: Group,
+        definitions: tuple[BaseElement, ...] = (),
+        *,
+        local_bounds: Aabb | None = None,
+    ) -> GroupContent:
         """The content of a group a group class has just built."""
 
         if group.elementname != "g":
@@ -109,6 +124,7 @@ class GroupContent:
             attributes=MappingProxyType(dict(group.attribs)),
             children=tuple(group.elements),
             definitions=tuple(definitions),
+            local_bounds=local_bounds,
             parameter=getattr(group, "_parameter", None),
         )
 
@@ -148,6 +164,29 @@ class ContentGroup(Group):
         return len(self.elements) == len(children) and all(
             element is child for element, child in zip(self.elements, children)
         )
+
+
+class _BuildsGroup(Protocol):
+    def get_group(self) -> Group: ...
+
+
+def build_group_content(
+    group_class: Callable[P, _BuildsGroup],
+    /,
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> GroupContent:
+    """A render-stage function: build one group with ``group_class`` and keep its content.
+
+    The group class is keyed by its qualified name, its arguments as the
+    stage's arguments. A ``local_bounds`` the instance measured is kept.
+    """
+
+    built = group_class(*args, **kwargs)
+    bounds = getattr(built, "local_bounds", None)
+    return GroupContent.of(
+        built.get_group(), local_bounds=bounds if isinstance(bounds, Aabb) else None
+    )
 
 
 def add_content_definitions(drawing: Drawing, content: GroupContent) -> None:
@@ -215,6 +254,7 @@ __all__ = [
     "GroupKind",
     "RenderedGroup",
     "add_content_definitions",
+    "build_group_content",
     "element_text",
     "group_manifest",
     "place_content",

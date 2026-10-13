@@ -12,7 +12,7 @@ from .feature_identity import (
 )
 from .pairwise_match import PairWiseMatchGroup
 from .legend import LegendGroup, linear_legend_content
-from .plot_title import PlotTitleContent, plot_title_content
+from .plot_title import plot_title_content
 
 __all__ = [
     "DefinitionGroup",
@@ -23,7 +23,6 @@ __all__ = [
     "LengthBarGroup",
     "LinearFeatureDomIndex",
     "PairWiseMatchGroup",
-    "PlotTitleContent",
     "SeqRecordGroup",
     "build_linear_feature_dom_index",
     "linear_legend_content",

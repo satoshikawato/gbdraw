@@ -86,7 +86,7 @@ _COMPOSITION = frozenset({"composition_plan"})
 _FEATURE_PLACEMENT = frozenset({"feature_layers", "feature_dom_index"})
 _LABEL_FILTER = _FEATURE_PLACEMENT | {"label_filter_maps"}
 _FEATURE_EDIT = _FEATURE_PLACEMENT | _LEGEND | {"catalog_normalization", "interactive_context"}
-_DEPTH_DATA = frozenset({"depth_track_data"})
+_DEPTH_DATA = frozenset({"depth_track_data", "depth_content"})
 _DEPTH_FRAME = _DEPTH_DATA | {"depth_frame"}
 
 # The stages that hold the content each option changes. An option not named builds nothing.
@@ -130,8 +130,32 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     **dict.fromkeys(("plot_title", "plot_title_font_size"), _TITLE),
 }
 
+# The group contents an option changes, besides the stages above.
+CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
+    **dict.fromkeys(
+        (
+            "gc_content_mode", "gc_content_min_percent", "gc_content_max_percent",
+            "gc_content_large_tick_interval", "gc_content_small_tick_interval", "gc_content_tick_font_size",
+            "show_gc_content_axis", "show_gc_content_ticks",
+        ),
+        frozenset({"gc_content_content"}),
+    ),
+    **dict.fromkeys(
+        (
+            "scale_interval", "scale_style", "scale_stroke_color", "scale_stroke_width", "scale_font_size",
+            "ruler_label_font_size", "ruler_label_color", "hide_scale",
+        ),
+        frozenset({"length_bar_content"}),
+    ),
+}
+
+
 def allowed_builds(option_id: str) -> frozenset[str]:
-    return EXPECTED_BUILDS.get(option_id, frozenset()) | _COMPOSITION
+    return (
+        EXPECTED_BUILDS.get(option_id, frozenset())
+        | CONTENT_BUILDS.get(option_id, frozenset())
+        | _COMPOSITION
+    )
 
 
 def p1_p2_variants(case_id: str, *, include_slow: bool) -> list[tuple[OptionSpec, Variant]]:

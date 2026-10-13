@@ -33,6 +33,15 @@ from ...render.groups.linear import (
     PairWiseMatchGroup,
     SeqRecordGroup,
 )
+from ...render.group_content import (
+    CANVAS_SCOPE,
+    GroupContent,
+    GroupKey,
+    GroupKind,
+    build_group_content,
+    place_content,
+)
+from ...render_stages import render_stage
 from .positioning import (
     position_linear_track_group,
     position_record_group,
@@ -138,21 +147,26 @@ def add_gc_content_group(
     slot_renderer: str | None = None,
     sequence_width: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
-    ) -> Drawing:
+    *,
+    group_key: GroupKey,
+) -> Drawing:
     """Adds a GC content group to the linear canvas."""
-    cfg = canvas_config.profile.config
-    gc_content_group: Group = GcContentGroup(
+    content = render_stage(
+        "gc_content_content",
+        build_group_content,
+        GcContentGroup,
         gb_record=record,
         alignment_width=canvas_config.alignment_width,
         longest_record_len=canvas_config.longest_genome,
         track_height=canvas_config.gc_height if track_height is None else float(track_height),
         gc_config=gc_config,
-        cfg=cfg,
+        normalize_length=canvas_config.normalize_length,
         gc_df=gc_df,
         group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
-    ).get_group()
+    )
+    gc_content_group = place_content(canvas, content, group_key)
     if slot_id:
         gc_content_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
     if slot_renderer:
@@ -180,22 +194,27 @@ def add_depth_group(
     track_height: float | None = None,
     sequence_width: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    *,
+    group_key: GroupKey,
 ) -> Drawing:
     """Adds a depth coverage group to the linear canvas."""
-    cfg = canvas_config.profile.config
-    depth_group: Group = DepthGroup(
+    content = render_stage(
+        "depth_content",
+        build_group_content,
+        DepthGroup,
         gb_record=record,
         alignment_width=canvas_config.alignment_width,
         longest_record_len=canvas_config.longest_genome,
         track_height=canvas_config.depth_height if track_height is None else float(track_height),
         depth_config=depth_config,
-        cfg=cfg,
+        normalize_length=canvas_config.normalize_length,
         depth_df=depth_df,
         group_id=dom_group_id or group_id,
         axis_group_id=dom_axis_group_id or axis_group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
-    ).get_group()
+    )
+    depth_group = place_content(canvas, content, group_key)
     if slot_id:
         depth_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
     if slot_renderer:
@@ -221,21 +240,26 @@ def add_gc_skew_group(
     slot_renderer: str | None = None,
     sequence_width: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    *,
+    group_key: GroupKey,
 ) -> Drawing:
     """Adds a GC skew group to the linear canvas."""
-    cfg = canvas_config.profile.config
-    gc_skew_group: Group = GcSkewGroup(
+    content = render_stage(
+        "gc_skew_content",
+        build_group_content,
+        GcSkewGroup,
         gb_record=record,
         alignment_width=canvas_config.alignment_width,
         longest_record_len=canvas_config.longest_genome,
         track_height=canvas_config.skew_height if track_height is None else float(track_height),
         skew_config=skew_config,
-        cfg=cfg,
+        normalize_length=canvas_config.normalize_length,
         gc_df=gc_df,
         group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
-    ).get_group()
+    )
+    gc_skew_group = place_content(canvas, content, group_key)
     if slot_id:
         gc_skew_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
     if slot_renderer:
@@ -445,15 +469,12 @@ def add_explicit_comparisons_on_linear_canvas(
 def add_length_bar_on_linear_canvas(
     canvas: Drawing,
     canvas_config: LinearCanvasConfigurator,
-    scale_group,
+    content: GroupContent,
     offset_x: float = 0.0,
 ) -> Drawing:
     """Adds a length bar to the linear canvas."""
-    if canvas_config.legend_position == "bottom" or canvas_config.legend_position == "top":
-        offset_for_length_bar = canvas_config.height_below_final_record
-    else:
-        offset_for_length_bar = canvas_config.height_below_final_record
-    scale_group = scale_group.get_group()
+    offset_for_length_bar = canvas_config.height_below_final_record
+    scale_group = place_content(canvas, content, GroupKey(CANVAS_SCOPE, GroupKind.LENGTH_BAR))
     scale_group.translate(canvas_config.horizontal_offset + offset_x, offset_for_length_bar)
     canvas.add(scale_group)
     return canvas

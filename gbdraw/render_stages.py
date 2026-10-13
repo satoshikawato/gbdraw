@@ -9,7 +9,7 @@ earlier successful transaction (the fifth layer of
 
 Keys follow a closed table (``_key``): plain values (with tuples, lists,
 sets, dicts and read-only dict views of them) by value; a frozen dataclass by
-its fields; a ``GbdrawConfig`` by the leaves of the sections the
+its fields; a module-level class by its qualified name; a ``GbdrawConfig`` by the leaves of the sections the
 stage declares in ``RENDER_STAGE_SETTINGS``; a configurator by its attributes;
 a record, a decoded table or another stage's result by the identity registered
 for it in the transaction. Anything else makes the call uncacheable for that
@@ -57,6 +57,10 @@ RenderStageName = Literal[
     "legend_content",
     "plot_title_content",
     "composition_plan",
+    "gc_content_content",
+    "gc_skew_content",
+    "depth_content",
+    "length_bar_content",
     "interactive_context",
     "catalog_normalization",
     "comparison_rows",
@@ -83,6 +87,10 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "legend_content": frozenset(),
     "plot_title_content": frozenset(),
     "composition_plan": frozenset(),
+    "gc_content_content": frozenset(),
+    "gc_skew_content": frozenset(),
+    "depth_content": frozenset(),
+    "length_bar_content": frozenset(),
     "interactive_context": frozenset(),
     "catalog_normalization": frozenset(),
     "comparison_rows": frozenset(),
@@ -405,6 +413,9 @@ def _key(
         return (type(value).__name__, value.hex())
     if isinstance(value, _PLAIN_TYPES):
         return (type(value).__name__, value)
+    if isinstance(value, type) and _is_keyable_function(value):
+        # A module-level class a stage builds with, keyed like the stage function.
+        return ("class", f"{value.__module__}.{value.__qualname__}")
     state = _flag_state(value)
     if state is not None:
         # A section of a view passed on by value: keying it reads it, so the
