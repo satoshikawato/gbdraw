@@ -504,6 +504,9 @@ Some older figures can change:
   instead of `GC content` and `GC content (2)`. Legend row edits of a 0.13.0
   Session stay on the rows of the same tracks; edits saved for a second row
   that now shares the first row are not used.
+  In the web app, **Keep both** in the **Legend Name Conflict** dialog keeps
+  the name you typed and numbers every row of that name, for example
+  `CDS (1)` and `CDS (2)`, instead of giving only the renamed row a number.
 - Label, Legend, and title widths use the font's kerning, so text measures as
   browsers draw it. PNG, PDF, EPS, and PS export place circular tick labels and
   mixed italic and roman captions where browsers do. Web PDF pages are 75% of

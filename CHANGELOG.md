@@ -54,6 +54,33 @@ write-up of a release.
     The feature popup's **Legend name** field no longer offers suggestions;
     the list under it is the only place that offers an existing group
     (OV-583, OV-584, OV-585, OV-587; PD-OI-042, PD-OI-095).
+  - Web app: **Keep both** in the **Legend Name Conflict** dialog keeps the
+    name you typed, and every row of that name is numbered in legend order.
+    Before, the renamed row alone got a numbered name and the other row kept
+    its name. The button shows the name the renamed row is drawn with
+    (**Keep both: name it "CDS (2)"**), and a sentence names the other row's
+    new name when it changes (`The existing "CDS" becomes "CDS (1)".`).
+    Typing a numbered name the legend shows, such as `CDS (2)`, opens the
+    dialog for that row, and **Keep both** keeps the text as written. Rows of
+    one name and one swatch are one row, also in the live preview, so
+    **Keep both** with an equal swatch gives one row. Features renamed off a
+    row get their new row right after the row of the name (PD-OI-061).
+  - Sessions: the Web app now saves Session 47. A Legend row's color and line
+    edits are kept under the row's key instead of the name it shows, so a
+    renamed row keeps its edits and two rows of one name keep their own
+    colors through Generate, **Save Session**, and **Load Session**. A
+    Session 46 is read by moving each edit saved under a renamed row's shown
+    name to that row; the CLI and Python re-save and upgrade it the same way.
+  - Fixed (web app): a color rule that would draw a Legend item that already
+    exists in another color was refused with "The operation failed without
+    recognized diagnostic information." and a **Retry** that failed again. It
+    now says "A color rule would draw a Legend item that already exists in
+    another color. Change the rule's Legend name or color, or rename that
+    Legend item." (OV-644).
+  - Fixed (web app): the color scope dialog hid or offered the **Label** and
+    **Source label** scopes by comparing the label text with the Legend row's
+    key. It now offers a label scope only when it selects other features than
+    the **Legend item** scope (OV-648).
 - Region annotations (CLI, Python, Session): an overlay annotation slot can
   span several tracks. With `to_slot=<slot id>` next to `anchor_slot`, the
   overlay runs from one slot's band to the other's in Circular and Linear, for
