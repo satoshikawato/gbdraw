@@ -312,7 +312,7 @@ test('the Deleted items list shows the palette color of a deleted palette row', 
 
 // OV-309: the default track rows take the palette color Python draws them
 // in, under the request's dinucleotide and as one row or two
-// (`_generated_legend_fills`); Depth and a row of another dinucleotide, which
+// (`_generated_legend_rows`); Depth and a row of another dinucleotide, which
 // the request draws no track for, take no palette color (OV-484).
 test('the compile gives every track row Python draws its palette color', async () => {
   const { draftLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');

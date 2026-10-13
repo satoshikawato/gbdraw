@@ -125,7 +125,9 @@ class LegendTable(Mapping[str, LegendEntry]):
 
     def __init__(self, rows: Mapping[object, LegendEntry] | None = None) -> None:
         self._rows: dict[str, _LegendRow] = {}
+        self._sources: dict[str, int] = {}
         self._shared_keys: list[str] = []
+        self._default_tracks: dict[str, str] = {}
         for key, entry in (rows or {}).items():
             self.add(str(key), entry)
 
@@ -144,16 +146,36 @@ class LegendTable(Mapping[str, LegendEntry]):
 
         self._add(name, entry, _unique_legend_key([*self._rows, *self._shared_keys], name))
 
-    def _add(self, name: str, entry: LegendEntry, key: str) -> None:
-        swatch = legend_swatch(entry)
-        if any(row.name == name and row.swatch == swatch for row in self._rows.values()):
-            if key not in self._rows:
-                self._shared_keys.append(key)
-            return
-        self._rows[key] = _LegendRow(name, swatch, entry)
+    def add_default_track(self, key: str, entry: LegendEntry) -> None:
+        """Add the renderer's own row of a numeric track, which explicit slots replace (``discard_default_track``)."""
 
-    def discard(self, key: str) -> None:
-        self._rows.pop(key, None)
+        self._default_tracks[key] = self._add(key, entry, key)
+
+    def discard_default_track(self, key: str) -> None:
+        """Take a default track's row back; a row another source shares stays for that source (OV-588)."""
+
+        row_key = self._default_tracks.pop(key, None)
+        if row_key is None:
+            return
+        self._sources[row_key] -= 1
+        if not self._sources[row_key]:
+            del self._rows[row_key], self._sources[row_key]
+        if key in self._shared_keys:
+            self._shared_keys.remove(key)
+
+    def _add(self, name: str, entry: LegendEntry, key: str) -> str:
+        """Add a source's row and return the key of the row that draws it."""
+
+        swatch = legend_swatch(entry)
+        for row_key, row in self._rows.items():
+            if row.name == name and row.swatch == swatch:
+                self._sources[row_key] += 1
+                if key not in self._rows:
+                    self._shared_keys.append(key)
+                return row_key
+        self._rows[key] = _LegendRow(name, swatch, entry)
+        self._sources[key] = 1
+        return key
 
     @property
     def shared_keys(self) -> tuple[str, ...]:
@@ -196,15 +218,18 @@ def write_legend_row_names(
 ) -> Callable[[MutableMapping[str, object], str], str]:
     """The legend drawers' one writer of a row's key, name, and drawn name.
 
-    The returned function writes ``data-legend-key`` and ``data-legend-name``
-    on a row group's attributes and returns the name the legend draws.
+    The returned function writes ``data-legend-key`` on a row group's
+    attributes, and ``data-legend-name`` where the row's name is not its key (a
+    reader takes the key as the name of a row without it, so a drawing whose
+    names are its keys keeps its bytes), and returns the name the legend draws.
     """
 
     names = legend_row_names(legend_table or {})
 
     def write(attribs: MutableMapping[str, object], key: str) -> str:
         attribs["data-legend-key"] = key
-        attribs["data-legend-name"] = names[key].name
+        if names[key].name != key:
+            attribs["data-legend-name"] = names[key].name
         return names[key].drawn
 
     return write
@@ -212,12 +237,14 @@ def write_legend_row_names(
 
 def rule_legend_keys(
     rules: Iterable[tuple[object, object]],
-    renderer_fills: Mapping[str, str],
+    renderer_swatches: Mapping[str, tuple[object, ...]],
+    rule_swatch: Callable[[str], tuple[object, ...]],
 ) -> dict[tuple[str, str], str]:
     """Row keys for the captions of the color table, by caption and fill identity.
 
     A rule row's key is its caption. A caption written with several colors in
-    the table, or naming a renderer row of another color (``renderer_fills``),
+    the table, or naming a renderer row of another swatch (``renderer_swatches``
+    against ``rule_swatch``, the swatch a rule row of a fill is drawn with),
     takes ``caption [fill]`` instead, made unique against every caption and
     renderer row. The allocation reads the whole table, never its row order.
     The key is an identity only: the legend draws the caption
@@ -228,12 +255,12 @@ def rule_legend_keys(
     for caption, color in rules:
         if str(caption or "").strip():
             fills.setdefault(str(caption), set()).add(_legend_fill_identity(color))
-    reserved = {*renderer_fills, *fills}
+    reserved = {*renderer_swatches, *fills}
     keys: dict[tuple[str, str], str] = {}
     for caption in sorted(fills):
-        renderer_fill = renderer_fills.get(caption)
+        renderer_swatch = renderer_swatches.get(caption)
         for fill in sorted(fills[caption]):
-            if len(fills[caption]) > 1 or renderer_fill not in (None, fill):
+            if len(fills[caption]) > 1 or renderer_swatch not in (None, rule_swatch(fill)):
                 key = _unique_legend_key(reserved, f"{caption} [{fill}]")
                 reserved.add(key)
             else:
@@ -349,7 +376,11 @@ def _resolve_legend_feature_color(default_colors: DataFrame, feature_type: str) 
     return "#d3d3d3"
 
 
-def _generated_legend_fills(
+def _solid_legend_entry(fill: object, stroke: object, width: object) -> dict[str, object]:
+    return {"type": "solid", "fill": fill, "stroke": stroke, "width": width}
+
+
+def _generated_legend_rows(
     feature_specific_colors: dict,
     features_present: Sequence[str],
     default_colors: DataFrame,
@@ -362,39 +393,46 @@ def _generated_legend_fills(
     show_gc: bool,
     show_skew: bool,
     show_depth: bool,
-) -> dict[str, str]:
-    """Return the renderer-generated legend rows and their fill identities."""
+    block_stroke: tuple[object, object] = ("none", 0),
+) -> dict[str, dict[str, object]]:
+    """The renderer's own legend rows by key, as drawn: feature types, "other ...", and numeric tracks."""
 
-    fills: dict[str, str] = {}
+    rows: dict[str, dict[str, object]] = {}
     for feature_type in features_present:
-        feature_color = _legend_fill_identity(
-            _resolve_legend_feature_color(default_colors, feature_type)
-        )
-        if feature_type not in feature_specific_colors:
-            fills[feature_type] = feature_color
-        elif used_color_rules is None:
-            fills[_other_feature_legend_key(feature_type)] = feature_color
-        elif any(
-            (caption, color) in used_color_rules
-            for caption, color in feature_specific_colors[feature_type]
+        captioned = [
+            (caption, color)
+            for caption, color in feature_specific_colors.get(feature_type, ())
             if str(caption or "").strip()
-        ):
-            if feature_type in default_used_features:
-                fills[_other_feature_legend_key(feature_type)] = feature_color
+        ]
+        if feature_type not in feature_specific_colors:
+            key: str | None = feature_type
+        elif used_color_rules is None:
+            key = _other_feature_legend_key(feature_type)
+        elif any(rule in used_color_rules for rule in captioned):
+            key = _other_feature_legend_key(feature_type) if feature_type in default_used_features else None
         else:
-            fills[feature_type] = feature_color
+            key = feature_type
+        if key is not None:
+            rows[key] = _solid_legend_entry(
+                _resolve_legend_feature_color(default_colors, feature_type), *block_stroke
+            )
     dinucleotide = gc_config.dinucleotide
     if show_depth and depth_config is not None:
-        fills["Depth"] = _legend_fill_identity(depth_config.fill_color)
+        rows["Depth"] = _solid_legend_entry(
+            depth_config.fill_color,
+            getattr(depth_config, "stroke_color", "none"),
+            getattr(depth_config, "stroke_width", 0),
+        )
     for show, config, name in ((show_gc, gc_config, "content"), (show_skew, skew_config, "skew")):
         if not show:
             continue
+        stroke = (getattr(config, "stroke_color", "none"), getattr(config, "stroke_width", 0))
         if config.high_fill_color == config.low_fill_color:
-            fills[f"{dinucleotide} {name}"] = _legend_fill_identity(config.high_fill_color)
+            rows[f"{dinucleotide} {name}"] = _solid_legend_entry(config.high_fill_color, *stroke)
         else:
-            fills[f"{dinucleotide} {name} (+)"] = _legend_fill_identity(config.high_fill_color)
-            fills[f"{dinucleotide} {name} (-)"] = _legend_fill_identity(config.low_fill_color)
-    return fills
+            rows[f"{dinucleotide} {name} (+)"] = _solid_legend_entry(config.high_fill_color, *stroke)
+            rows[f"{dinucleotide} {name} (-)"] = _solid_legend_entry(config.low_fill_color, *stroke)
+    return rows
 
 
 def prepare_legend_table(
@@ -426,160 +464,49 @@ def prepare_legend_table(
     """
     legend_table = LegendTable()
     color_table: Optional[DataFrame] = feature_config.color_table
-    default_colors: DataFrame = feature_config.default_colors
-    block_stroke_color: str = feature_config.block_stroke_color
-    block_stroke_width: float = feature_config.block_stroke_width
-    gc_stroke_color: str = gc_config.stroke_color
-    gc_stroke_width: float = gc_config.stroke_width
-    gc_high_fill_color: str = gc_config.high_fill_color
-    gc_low_fill_color: str = gc_config.low_fill_color
-    skew_high_fill_color: str = skew_config.high_fill_color
-    skew_low_fill_color: str = skew_config.low_fill_color
-    skew_stroke_color: str = skew_config.stroke_color
-    skew_stroke_width: float = skew_config.stroke_width
-    dinucleotide = gc_config.dinucleotide
+    block_stroke = (feature_config.block_stroke_color, feature_config.block_stroke_width)
     feature_specific_colors: dict[str, list[tuple[str, str]]] = {}
-    default_used_features = default_used_features or set()
     if color_table is not None and not color_table.empty:
         for _, row in color_table.iterrows():
-            feature_type = row["feature_type"]
-            if feature_type not in feature_specific_colors:
-                feature_specific_colors[feature_type] = []
-            feature_specific_colors[feature_type].append((row["caption"], row["color"]))
+            feature_specific_colors.setdefault(row["feature_type"], []).append((row["caption"], row["color"]))
     # The renderer's own rows (feature types, "other ..." and numeric tracks)
     # keep their keys; a rule row takes its key from the whole color table and
     # these rows (``rule_legend_keys``). The legend draws names, never keys.
-    generated_fills = _generated_legend_fills(
+    generated = _generated_legend_rows(
         feature_specific_colors,
         features_present,
-        default_colors,
+        feature_config.default_colors,
         used_color_rules=used_color_rules,
-        default_used_features=default_used_features,
+        default_used_features=default_used_features or set(),
         gc_config=gc_config,
         skew_config=skew_config,
         depth_config=depth_config,
         show_gc=show_gc,
         show_skew=show_skew,
         show_depth=show_depth,
+        block_stroke=block_stroke,
     )
     rule_keys = rule_legend_keys(
         (entry for entries in feature_specific_colors.values() for entry in entries),
-        generated_fills,
+        {key: legend_swatch(entry) for key, entry in generated.items()},
+        lambda fill: legend_swatch(_solid_legend_entry(fill, *block_stroke)),
     )
     for selected_feature in features_present:
-        if selected_feature in feature_specific_colors.keys():
-            has_matching_rules = False
-            for entry in feature_specific_colors[selected_feature]:
-                specific_caption = entry[0]
-                if not str(specific_caption or "").strip():
-                    continue
-                specific_fill_color = entry[1]
-                # Only add to legend if this rule was actually used (or if used_color_rules not provided)
-                if used_color_rules is None or (specific_caption, specific_fill_color) in used_color_rules:
-                    has_matching_rules = True
-                    legend_table.add(
-                        str(specific_caption),
-                        {
-                            "type": "solid",
-                            "fill": specific_fill_color,
-                            "stroke": block_stroke_color,
-                            "width": block_stroke_width,
-                        },
-                        key=rule_keys[str(specific_caption), _legend_fill_identity(specific_fill_color)],
-                    )
-            # Only add "other X" entry if at least one specific rule was used
-            if has_matching_rules:
-                allow_other_entry = False
-                if used_color_rules is None:
-                    allow_other_entry = True
-                elif selected_feature in default_used_features:
-                    allow_other_entry = True
-                new_selected_key_name = _other_feature_legend_key(selected_feature)
-                if allow_other_entry:
-                    feature_fill_color = _resolve_legend_feature_color(default_colors, selected_feature)
-                    legend_table.add(new_selected_key_name, {
-                        "type": "solid",
-                        "fill": feature_fill_color,
-                        "stroke": block_stroke_color,
-                        "width": block_stroke_width,
-                    })
-            elif used_color_rules is None:
-                # Legacy behavior: add "other X" even if no rules matched
-                new_selected_key_name = _other_feature_legend_key(selected_feature)
-                feature_fill_color = _resolve_legend_feature_color(default_colors, selected_feature)
-                legend_table.add(new_selected_key_name, {
-                    "type": "solid",
-                    "fill": feature_fill_color,
-                    "stroke": block_stroke_color,
-                    "width": block_stroke_width,
-                })
-            else:
-                # used_color_rules is provided but no specific rules matched
-                # Just add the feature type with default color
-                feature_fill_color = _resolve_legend_feature_color(default_colors, selected_feature)
-                legend_table.add(selected_feature, {
-                    "type": "solid",
-                    "fill": feature_fill_color,
-                    "stroke": block_stroke_color,
-                    "width": block_stroke_width,
-                })
-        else:
-            feature_fill_color = _resolve_legend_feature_color(default_colors, selected_feature)
-            legend_table.add(selected_feature, {
-                "type": "solid",
-                "fill": feature_fill_color,
-                "stroke": block_stroke_color,
-                "width": block_stroke_width,
-            })
-    if show_depth:
-        legend_table.add("Depth", {
-            "type": "solid",
-            "fill": depth_config.fill_color,
-            "stroke": depth_config.stroke_color,
-            "width": depth_config.stroke_width,
-        })
-    if show_gc:
-        if gc_high_fill_color == gc_low_fill_color:
-            legend_table.add(f"{dinucleotide} content", {
-                "type": "solid",
-                "fill": gc_high_fill_color,
-                "stroke": gc_stroke_color,
-                "width": gc_stroke_width,
-            })
-        else:
-            legend_table.add(f"{dinucleotide} content (+)", {
-                "type": "solid",
-                "fill": gc_high_fill_color,
-                "stroke": gc_stroke_color,
-                "width": gc_stroke_width,
-            })
-            legend_table.add(f"{dinucleotide} content (-)", {
-                "type": "solid",
-                "fill": gc_low_fill_color,
-                "stroke": gc_stroke_color,
-                "width": gc_stroke_width,
-            })
-    if show_skew:
-        if skew_high_fill_color == skew_low_fill_color:
-            legend_table.add(f"{dinucleotide} skew", {
-                "type": "solid",
-                "fill": skew_high_fill_color,
-                "stroke": skew_stroke_color,
-                "width": skew_stroke_width,
-            })
-        else:
-            legend_table.add(f"{dinucleotide} skew (+)", {
-                "type": "solid",
-                "fill": skew_high_fill_color,
-                "stroke": skew_stroke_color,
-                "width": skew_stroke_width,
-            })
-            legend_table.add(f"{dinucleotide} skew (-)", {
-                "type": "solid",
-                "fill": skew_low_fill_color,
-                "stroke": skew_stroke_color,
-                "width": skew_stroke_width,
-            })
+        for specific_caption, specific_fill_color in feature_specific_colors.get(selected_feature, ()):
+            if not str(specific_caption or "").strip():
+                continue
+            # Only a rule a feature took has a row (every rule when the used rules are not given).
+            if used_color_rules is None or (specific_caption, specific_fill_color) in used_color_rules:
+                legend_table.add(
+                    str(specific_caption),
+                    _solid_legend_entry(specific_fill_color, *block_stroke),
+                    key=rule_keys[str(specific_caption), _legend_fill_identity(specific_fill_color)],
+                )
+        for key in (selected_feature, _other_feature_legend_key(selected_feature)):
+            if key in generated:
+                legend_table.add(key, generated.pop(key))
+    for key, entry in generated.items():
+        legend_table.add_default_track(key, entry)
     if has_blast and blast_config and not bool(getattr(blast_config, "hide_pairwise_identity_legend", False)):
         identity_legend_entries = getattr(blast_config, "pairwise_identity_legend_entries", None)
         if identity_legend_entries:

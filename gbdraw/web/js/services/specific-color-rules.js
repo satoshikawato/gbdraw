@@ -137,7 +137,7 @@ const drawsRow = (row, rule) => row.color === fillIdentity(rule.color)
  *   (feature-visibility.js `displayedDrawnFeatures`), with their known rule matches (`rowsLeftOut`).
  */
 
-// Python's own Legend rows (gbdraw/legend/table.py::_generated_legend_fills),
+// Python's own Legend rows (gbdraw/legend/table.py::_generated_legend_rows),
 // read from a key: a default track's row ("<NT> content" and "<NT> skew", each
 // also as "(+)" and "(-)", and "Depth"), else the row of the feature type it
 // names, the type's own row or its "other" row, which the type's palette key
@@ -161,7 +161,7 @@ export const generatedLegendRow = (key) => {
 // features and their known rule matches (a match not known yet colors no
 // feature), only when a captioned rule may need them:
 // - OV-306: Python draws no row under a feature type's name once a captioned
-//   rule of that type colors a feature (`_generated_legend_fills`: the type
+//   rule of that type colors a feature (`_generated_legend_rows`: the type
 //   has a rule whose caption and color a feature took).
 // - OV-307: a row Python drew for a rule is no row of the renderer, also when
 //   a live edit of the rule's color leaves the row in the color Python drew it

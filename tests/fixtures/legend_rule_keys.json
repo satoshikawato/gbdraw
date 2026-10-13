@@ -1,5 +1,5 @@
 {
-  "description": "The key of the Legend row a color rule draws, for a rule table and the renderer's own rows (key and fill identity) of the Result: the rule's caption, or `caption [fill]` when the caption is written with several colors in the table or names a renderer row of another color, made unique against every caption and renderer row; a blank caption has no row (''). The key is an identity only (`data-legend-key`, stored Legend edits); the Legend draws the caption, numbered by the naming rule (tests/fixtures/legend_names.json), and nothing shows the key. Python's answer is gbdraw/legend/table.py::rule_legend_keys (tests/test_specific_color_captions.py); the Web app's is services/specific-color-rules.js::createRuleLegendCaptions (tests/web/specific-color-actions.test.mjs). Captions are as the Web app holds them (trimmed).",
+  "description": "The key of the Legend row a color rule draws, for a rule table and the renderer's own rows of the Result (key and fill, then the stroke color and width where the row has a line) and the line a rule row is drawn with (`rule_stroke`: color and width; no line when absent): the rule's caption, or `caption [fill]` when the caption is written with several colors in the table or names a renderer row of another swatch (fill and line, as tests/fixtures/legend_names.json compares them), made unique against every caption and renderer row; a blank caption has no row (''). The key is an identity only (`data-legend-key`, stored Legend edits); the Legend draws the caption, numbered by the naming rule (tests/fixtures/legend_names.json), and nothing shows the key. Python's answer is gbdraw/legend/table.py::rule_legend_keys (tests/test_specific_color_captions.py); the Web app's is services/specific-color-rules.js::createRuleLegendCaptions (tests/web/specific-color-actions.test.mjs). Captions are as the Web app holds them (trimmed).",
   "cases": [
     { "name": "one captioned rule",
       "rules": [
@@ -116,6 +116,27 @@
         {"feat": "CDS", "qual": "product", "val": "x", "color": "#ff0000", "cap": "tRNA"}
       ],
       "renderer_rows": [["tRNA", "#debc74"], ["tRNA [#ff0000]", "#000000"]],
-      "keys": ["tRNA [#ff0000] (2)"] }
+      "keys": ["tRNA [#ff0000] (2)"] },
+    { "name": "a caption naming a track row of its fill and another line",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#808080", "cap": "GC content"}
+      ],
+      "renderer_rows": [["GC content", "#808080"]],
+      "rule_stroke": ["gray", 1],
+      "keys": ["GC content [#808080]"] },
+    { "name": "a caption naming a track row of its fill, neither with a visible line",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#808080", "cap": "GC content"}
+      ],
+      "renderer_rows": [["GC content", "gray", "black", 0]],
+      "rule_stroke": ["gray", 0],
+      "keys": ["GC content"] },
+    { "name": "a caption naming a feature type's row of its fill and line",
+      "rules": [
+        {"feat": "tRNA", "qual": "product", "val": "x", "color": "#debc74", "cap": "tRNA"}
+      ],
+      "renderer_rows": [["tRNA", "#debc74", "gray", 1]],
+      "rule_stroke": ["#808080", 1],
+      "keys": ["tRNA"] }
   ]
 }

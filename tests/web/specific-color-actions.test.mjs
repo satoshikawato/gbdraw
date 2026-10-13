@@ -436,7 +436,7 @@ test('a rule commit draws no row for a rule that only features the displayed Res
 });
 
 // L1: a rule captioned with a track's row (Python's own rows,
-// `_generated_legend_fills`) is no rule of that row, also in the track's
+// `_generated_legend_rows`) is no rule of that row, also in the track's
 // color: Python draws it in "<caption> [<hex>]" and keeps the track's row.
 test('a rule captioned with a track row draws its own row, and the commit leaves the track row alone', () => {
   const rows = (entries) => new Map(entries.map(([key, color]) => [key, { key, color }]));

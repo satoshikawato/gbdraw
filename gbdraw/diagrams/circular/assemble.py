@@ -1424,7 +1424,7 @@ def _sync_legend_table_for_circular_slots(
         f"{default_nt} skew (-)",
     }
     for key in removable:
-        out.discard(key)
+        out.discard_default_track(key)
 
     depth_by_index = index_depth_track_row(depth_tracks or ())
     for slot in circular_track_slots:

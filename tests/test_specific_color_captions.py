@@ -13,6 +13,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api.options import (
     CircularDiagramOptions,
+    CircularTrackOptions,
     LinearDiagramOptions,
     CircularMultiRecordOptions,
     ColorOptions,
@@ -28,7 +29,7 @@ from gbdraw.api.requests import (
     RenderOutputRequest,
 )
 from gbdraw.features.colors import get_color_with_info
-from gbdraw.legend.table import _legend_fill_identity, rule_legend_keys
+from gbdraw.legend.table import _legend_fill_identity, legend_swatch, rule_legend_keys
 
 
 def table(rows):
@@ -56,19 +57,29 @@ def legend_rows(svg_path):
             (child.get("fill") for child in node.iter() if child.tag.endswith("path")),
             None,
         )
-        rows[key] = (node.get("data-legend-name"), text, fill)
+        # A row without a name attribute is named by its key.
+        rows[key] = (node.get("data-legend-name", key), text, fill)
     return rows
 
 
 @pytest.mark.parametrize("case", RULE_KEYS, ids=[case["name"] for case in RULE_KEYS])
 def test_rule_row_keys_answer_the_shared_fixture(case):
     """The Web app allocates the same keys (tests/web/specific-color-actions.test.mjs)."""
+    def swatch(fill, stroke="none", width=0):
+        return legend_swatch({"type": "solid", "fill": fill, "stroke": stroke, "width": width})
+
     rules = [(rule["cap"], rule["color"]) for rule in case["rules"]]
-    keys = rule_legend_keys(rules, dict(case["renderer_rows"]))
+    renderer = {row[0]: swatch(*row[1:]) for row in case["renderer_rows"]}
+    rule_stroke = case.get("rule_stroke", [])
+
+    def allocate(table):
+        return rule_legend_keys(table, renderer, lambda fill: swatch(fill, *rule_stroke))
+
+    keys = allocate(rules)
     assert [
         keys.get((caption, _legend_fill_identity(color)), "") for caption, color in rules
     ] == case["keys"]
-    assert rule_legend_keys(rules[::-1], dict(case["renderer_rows"])) == keys
+    assert allocate(rules[::-1]) == keys
 
 
 @pytest.mark.parametrize("mode", ["circular", "grid", "batch", "linear"])
@@ -274,3 +285,86 @@ def test_rule_caption_equal_to_a_default_type_with_the_same_color_shares_one_row
 
     assert list(legend) == ["rRNA"]
     assert legend.names()["rRNA"] == ("rRNA", "rRNA")
+
+
+@pytest.mark.parametrize(
+    ("block_stroke_width", "expected"),
+    [
+        # D-13: a swatch is its fill and its line, so the track's fill with the block line is another row.
+        (1.0, {"GC content [#a1a1a1]": ("GC content", "GC content (1)"), "GC content": ("GC content", "GC content (2)")}),
+        # With no visible line on either swatch the rule and the track share the track's row.
+        (0.0, {"GC content": ("GC content", "GC content")}),
+    ],
+)
+def test_a_rule_named_like_a_track_row_with_its_fill_is_another_row_only_with_another_line(
+    block_stroke_width, expected, tmp_path
+):
+    record = SeqRecord(
+        Seq("ATGC" * 250), id="record", annotations={"molecule_type": "DNA", "topology": "circular"}
+    )
+    # #a1a1a1 is the GC content track's default fill.
+    record.features = [
+        SeqFeature(SimpleLocation(10, 160, strand=1), type="CDS", qualifiers={"gene": ["a"]})
+    ]
+    path = tmp_path / "rules.tsv"
+    table([["CDS", "gene", "^a$", "#a1a1a1", "GC content"]]).to_csv(
+        path, sep="\t", index=False, header=False
+    )
+    result = render_request(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(
+                colors=ColorOptions(color_table_file=str(path)),
+                config_overrides={
+                    "objects.features.block_stroke_width.short": block_stroke_width,
+                    "objects.features.block_stroke_color": "black",
+                },
+            ),
+            output=RenderOutputRequest(
+                formats=("interactive_svg",), output_directory=tmp_path, output_prefix="track"
+            ),
+        )
+    )
+    rows = legend_rows(result.output_paths[0])
+    assert {
+        key: names[:2] for key, names in rows.items() if names[0] == "GC content"
+    } == expected
+
+
+@pytest.mark.parametrize(
+    "slots",
+    [
+        # No slot draws the GC content track.
+        ["features:features", "gc_skew:dinucleotide_skew"],
+        # The GC content slot has its own label, so no slot re-adds the default row.
+        ["features:features", "gc_content:dinucleotide_content@legend_label=Composition"],
+    ],
+)
+def test_a_rule_row_that_shares_a_default_track_row_survives_explicit_track_slots(slots, tmp_path):
+    """OV-588: the slot sync removes the default track's row, not the rule row that shared it."""
+    record = SeqRecord(
+        Seq("ATGC" * 250), id="record", annotations={"molecule_type": "DNA", "topology": "circular"}
+    )
+    record.features = [
+        SeqFeature(SimpleLocation(10, 160, strand=1), type="CDS", qualifiers={"gene": ["a"]})
+    ]
+    path = tmp_path / "rules.tsv"
+    # #a1a1a1 is the GC content track's default fill; with no block line the two swatches are equal.
+    table([["CDS", "gene", "^a$", "#a1a1a1", "GC content"]]).to_csv(
+        path, sep="\t", index=False, header=False
+    )
+    result = render_request(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(
+                colors=ColorOptions(color_table_file=str(path)),
+                tracks=CircularTrackOptions(circular_track_slots=slots),
+                config_overrides={"objects.features.block_stroke_width.short": 0.0},
+            ),
+            output=RenderOutputRequest(
+                formats=("interactive_svg",), output_directory=tmp_path, output_prefix="slots"
+            ),
+        )
+    )
+    rows = legend_rows(result.output_paths[0])
+    assert rows["GC content"][:2] == ("GC content", "GC content")

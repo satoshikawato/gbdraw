@@ -36,7 +36,7 @@ from gbdraw.api.request_render import render_request
 from gbdraw.legend.row_facts import collect_legend_row_facts
 from gbdraw.diagrams.circular.assemble import _sync_legend_table_for_circular_slots
 from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
-from gbdraw.legend.table import LegendTable, _generated_legend_fills
+from gbdraw.legend.table import LegendTable, _generated_legend_rows
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, _decode_track_slots
 from gbdraw.tracks.circular import parse_circular_track_slots
 from gbdraw.tracks.linear import parse_linear_track_slots
@@ -130,7 +130,8 @@ def test_a_track_whose_row_another_track_draws_reports_its_key_suppressed(tmp_pa
     assert not set(facts["drawn"]) & set(facts["suppressed"])
     svg = (tmp_path / "facts.svg").read_text(encoding="utf-8")
     names = dict(re.findall(r'data-legend-key="([^"]*)" data-legend-name="([^"]*)"', svg))
-    assert names["GC skew (+) (2)"] == "GC skew (+)"
+    # Only a row whose name is not its key carries the name.
+    assert names == {"GC skew (+) (2)": "GC skew (+)"}
     for text in ["GC content", "GC skew (+) (1)", "GC skew (+) (2)", "GC skew (-)"]:
         assert f">{text}</text>" in svg
     assert ">GC content (1)</text>" not in svg and ">GC skew (-) (1)</text>" not in svg
@@ -302,7 +303,7 @@ def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
             ("CDS", "#54bcf8"), ("tRNA", "#e8b441"), ("repeat_region", "#d3d3d3"), ("default", "#d3d3d3")
         )]
     )
-    fills = _generated_legend_fills(
+    fills = _generated_legend_rows(
         {key: [tuple(row) for row in rows] for key, rows in case["feature_specific_colors"].items()},
         case["features_present"],
         default_colors,
@@ -320,9 +321,10 @@ def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
 
 def test_generated_legend_rows_take_no_input_the_web_pin_lacks():
     """A new kind of generated row arrives as a new input; add it to the fixture and the Web reader."""
-    assert list(inspect.signature(_generated_legend_fills).parameters) == [
+    assert list(inspect.signature(_generated_legend_rows).parameters) == [
         "feature_specific_colors", "features_present", "default_colors", "used_color_rules",
         "default_used_features", "gc_config", "skew_config", "depth_config", "show_gc", "show_skew", "show_depth",
+        "block_stroke",
     ]
 
 
@@ -352,13 +354,13 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
             depth_config=None, depth_df=None, cfg=SimpleNamespace(),
         )
     else:
-        defaults = _generated_legend_fills(
+        defaults = _generated_legend_rows(
             {}, [], pd.DataFrame(columns=["feature_type", "color"]), used_color_rules=None, default_used_features=set(),
             gc_config=gc_config, skew_config=skew_config, depth_config=None,
             show_gc=True, show_skew=True, show_depth=False,
         )
-        for key, fill in defaults.items():
-            table.add(key, {"fill": fill})
+        for key, entry in defaults.items():
+            table.add_default_track(key, {"fill": entry["fill"]})
         table = _sync_legend_table_for_linear_slots(
             table, linear_track_slots=parse_linear_track_slots(entries), skew_config=skew_config, depth_tracks=None,
         )

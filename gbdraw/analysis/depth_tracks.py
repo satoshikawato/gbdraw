@@ -688,7 +688,7 @@ def sync_depth_track_legend_entries(
 
     if not depth_tracks:
         return out
-    out.discard("Depth")
+    out.discard_default_track("Depth")
     track_count = depth_track_data_count([depth_tracks])
     selected: list[tuple[DepthTrackData, object | None]]
     if slots is None:

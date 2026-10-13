@@ -132,6 +132,12 @@
         {"name": "Alpha", "swatch": {"type": "solid", "fill": "#112233", "stroke": "gray", "width": 1}},
         {"name": "alpha", "swatch": {"type": "solid", "fill": "#445566", "stroke": "gray", "width": 1}}
       ],
-      "drawn": ["Alpha", "alpha"] }
+      "drawn": ["Alpha", "alpha"] },
+    { "name": "a rule named like a track row, with the track's fill and another line",
+      "rows": [
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#808080", "stroke": "gray", "width": 1}},
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#808080", "stroke": "none", "width": 0}}
+      ],
+      "drawn": ["GC content (1)", "GC content (2)"] }
   ]
 }

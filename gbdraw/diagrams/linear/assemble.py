@@ -458,7 +458,7 @@ def _sync_legend_table_for_linear_slots(
         f"{default_nt} skew (+)",
         f"{default_nt} skew (-)",
     ):
-        out.discard(key)
+        out.discard_default_track(key)
 
     for slot in linear_track_slots:
         if not getattr(slot, "enabled", True):

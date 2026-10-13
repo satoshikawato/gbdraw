@@ -55,8 +55,27 @@ def test_sources_of_one_label_keep_their_keys_and_share_or_number_their_rows():
         "GC content (3)": ("GC content", "GC content (2)"),
     }
 
-    table.discard("GC content (3)")
-    assert table.names()["GC content"] == ("GC content", "GC content")
+    # A name that returns to one row is drawn as written: explicit slots take a default track's row back.
+    table.add_default_track("Depth", solid("#111111"))
+    table.add_source("Depth", solid("#222222"))
+    assert table.names()["Depth (2)"] == ("Depth", "Depth (2)")
+    table.discard_default_track("Depth")
+    assert "Depth" not in table
+    assert table.names()["Depth (2)"] == ("Depth", "Depth")
+
+
+def test_a_default_track_row_another_source_shares_stays_for_that_source():
+    """OV-588: a color rule named like a default track, with its swatch, keeps its row under explicit slots."""
+    table = LegendTable()
+    table.add("GC content", solid("#a1a1a1"))
+    table.add_default_track("GC content", solid("#a1a1a1"))
+    table.add_default_track("GC skew", solid("#333333"))
+    for key in ("GC content", "GC skew", "Depth"):
+        table.discard_default_track(key)
+    assert list(table) == ["GC content"]
+    # A row no default track drew is not a default track's row.
+    table.discard_default_track("GC content")
+    assert list(table) == ["GC content"]
 
 
 def test_a_plain_mapping_is_read_as_rows_named_by_their_keys():

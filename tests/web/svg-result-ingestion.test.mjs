@@ -1278,7 +1278,7 @@ test('a Legend fill reconcile shows the rule or palette color of a row whose own
 });
 
 // OV-306: Python draws no row under a feature type's name once a captioned
-// rule of that type colors a feature (`_generated_legend_fills`), so a rule
+// rule of that type colors a feature (`_generated_legend_rows`), so a rule
 // captioned with its type's name that colors a feature draws that row in its
 // color, whatever color Python drew the row in before the rule.
 test('a rule captioned with its type that colors a feature draws the type row', () => {
