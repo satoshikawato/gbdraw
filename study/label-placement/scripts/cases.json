@@ -1,0 +1,19 @@
+{
+ "_doc": "Standard study cases. args are gbdraw circular arguments (no -o/-f). TI=tests/test_inputs of the study worktree, EX=len100k extra-inputs (NCBI records, not tracked: 'extra'), IN=work/inputs (single records extracted from tracked multi-record files).",
+ "common": ["--separate_strands", "--track_type", "tuckin", "--labels", "out", "--legend", "right"],
+ "cases": {
+  "p1_f14":      {"gbk": "EX/NC_005856.1.gb", "font": 14, "record": "Enterobacteria phage P1 NC_005856.1 (extra)", "length": 94800},
+  "p1_f12":      {"gbk": "EX/NC_005856.1.gb", "font": 12, "record": "Enterobacteria phage P1 NC_005856.1 (extra)", "length": 94800},
+  "p1_f10":      {"gbk": "EX/NC_005856.1.gb", "font": 10, "record": "Enterobacteria phage P1 NC_005856.1 (extra)", "length": 94800},
+  "p1_f8":       {"gbk": "EX/NC_005856.1.gb", "font": 8,  "record": "Enterobacteria phage P1 NC_005856.1 (extra)", "length": 94800},
+  "t5_f8":       {"gbk": "EX/NC_005859.1.gb", "font": 8,  "record": "Enterobacteria phage T5 NC_005859.1 (extra)", "length": 121750},
+  "t5_f14":      {"gbk": "EX/NC_005859.1.gb", "font": 14, "record": "Enterobacteria phage T5 NC_005859.1 (extra)", "length": 121750},
+  "n4_f14":      {"gbk": "EX/NC_008720.1.gb", "font": 14, "record": "Enterobacteria phage N4 NC_008720.1 (extra)", "length": 70153},
+  "tobacco_f8":  {"gbk": "TI/NC_001879.gbk",  "font": 8,  "record": "Nicotiana tabacum plastid NC_001879.2", "length": 155943},
+  "tobacco_f14": {"gbk": "TI/NC_001879.gbk",  "font": 14, "record": "Nicotiana tabacum plastid NC_001879.2", "length": 155943},
+  "mito_f14":    {"gbk": "TI/HmmtDNA.gbk",    "font": 14, "record": "Homo sapiens mitochondrion NC_012920.1", "length": 16569},
+  "plasmid37_f14":  {"gbk": "IN/NZ_AP024092.1.gb", "font": 14, "record": "Vibrio plasmid NZ_AP024092.1 (from tracked GCF_015097735.1)", "length": 37131},
+  "plasmid153_f8":  {"gbk": "IN/NZ_CP125877.1.gb", "font": 8,  "record": "plasmid NZ_CP125877.1 (from tracked GCF_030060435.1)", "length": 153407},
+  "plasmid153_f14": {"gbk": "IN/NZ_CP125877.1.gb", "font": 14, "record": "plasmid NZ_CP125877.1 (from tracked GCF_030060435.1)", "length": 153407}
+ }
+}

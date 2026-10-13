@@ -1,0 +1,258 @@
+{
+ "title": "Circular Label Placement Options",
+ "eyebrow": "",
+ "heading": "",
+ "intro": "",
+ "questions": [],
+ "findings": [],
+ "render_dirs": [
+  "/home/kawato/gbdraw-baselines/label-placement-20261011/page/renders",
+  "/home/kawato/gbdraw-baselines/label-placement-20261011/work/A"
+ ],
+ "designs": [
+  {
+   "key": "cur",
+   "label": "Current",
+   "name": "",
+   "en": "today"
+  },
+  {
+   "key": "A",
+   "label": "A",
+   "name": "",
+   "en": "font and band together"
+  },
+  {
+   "key": "A1",
+   "label": "A1",
+   "name": "",
+   "en": "shrink font only"
+  },
+  {
+   "key": "A2",
+   "label": "A2",
+   "name": "",
+   "en": "widen band only"
+  },
+  {
+   "key": "A3",
+   "label": "A3",
+   "name": "",
+   "en": "drop labels only"
+  }
+ ],
+ "metric_columns": [
+  [
+   "labels_external",
+   "置いたラベル"
+  ],
+  [
+   "dropped",
+   "省いたラベル"
+  ],
+  [
+   "font_size",
+   "文字 pt"
+  ],
+  [
+   "text_overprint_pairs",
+   "文字の重なり"
+  ],
+  [
+   "leader_crossing_pairs",
+   "線の交差"
+  ],
+  [
+   "leader_through_text",
+   "文字を横切る線"
+  ],
+  [
+   "leader_len_mean",
+   "線の平均長 px"
+  ],
+  [
+   "leader_len_max",
+   "線の最大長 px"
+  ],
+  [
+   "canvas_px",
+   "キャンバス px"
+  ]
+ ],
+ "zero_is_good": [
+  "text_overprint_pairs",
+  "dropped",
+  "leader_crossing_pairs",
+  "leader_through_text"
+ ],
+ "hero": {
+  "case": "p1_f14",
+  "crop": 1,
+  "title": ""
+ },
+ "figure_cell_px": 1150,
+ "cases": [
+  {
+   "id": "p1_f14",
+   "title": "ファージ P1 · 94,800 bp · ラベル 111 個 · 14 pt",
+   "en": "Phage P1 94.8 kb, 111 labels, 14 pt",
+   "short": "P1 14 pt",
+   "crops": [
+    {}
+   ]
+  },
+  {
+   "id": "pbr322_f14",
+   "title": "pBR322 · 4,361 bp · 制限酵素サイト 33 か所 · 14 pt",
+   "en": "pBR322 4.4 kb + 33 restriction sites, 14 pt",
+   "short": "pBR322 14 pt",
+   "crops": [
+    {}
+   ]
+  },
+  {
+   "id": "mito_f14",
+   "title": "ヒトミトコンドリア · 16,569 bp · ラベル 33 個 · 14 pt",
+   "en": "Human mtDNA 16.6 kb, 33 labels, 14 pt",
+   "short": "mtDNA 14 pt",
+   "crops": [
+    {}
+   ]
+  },
+  {
+   "id": "mg1655_rna_f8",
+   "title": "大腸菌 MG1655 · 4.64 Mb · tRNA と rRNA のラベル 108 個 · 8 pt",
+   "en": "E. coli MG1655 4.64 Mb, 108 tRNA/rRNA labels, 8 pt",
+   "short": "MG1655 RNA",
+   "crops": [
+    {}
+   ]
+  },
+  {
+   "id": "tobacco_f14",
+   "title": "タバコ葉緑体 · 155,943 bp · ラベル 140 個 · 14 pt",
+   "en": "Tobacco plastid 155.9 kb, 140 labels, 14 pt",
+   "short": "葉緑体 14 pt",
+   "crops": [
+    {}
+   ]
+  },
+  {
+   "id": "t5_f14",
+   "title": "ファージ T5 · 121,750 bp · ラベル 195 個 · 14 pt",
+   "en": "Phage T5 121.8 kb, 195 labels, 14 pt",
+   "short": "T5 14 pt",
+   "crops": [
+    {}
+   ]
+  },
+  {
+   "id": "t5_f8",
+   "title": "ファージ T5 · 121,750 bp · ラベル 194 個 · 8 pt（既定）",
+   "en": "Phage T5 121.8 kb, 194 labels, 8 pt (Auto)",
+   "short": "T5 8 pt",
+   "crops": [
+    {}
+   ]
+  },
+  {
+   "id": "plasmid153_f14",
+   "title": "プラスミド p1 · 153,407 bp · ラベル 179 個 · 14 pt",
+   "en": "Plasmid p1 153.4 kb, 179 labels, 14 pt",
+   "short": "153 kb 14 pt",
+   "crops": [
+    {}
+   ]
+  },
+  {
+   "id": "plasmid153_f8",
+   "title": "プラスミド p1 · 153,407 bp · ラベル 179 個 · 8 pt（既定）",
+   "en": "Plasmid p1 153.4 kb, 179 labels, 8 pt (Auto)",
+   "short": "153 kb 8 pt"
+  },
+  {
+   "id": "lambda_f14",
+   "title": "ファージ λ · 48,502 bp · ラベル 71 個 · 14 pt（既定）",
+   "en": "Phage lambda 48.5 kb, 71 labels, 14 pt (Auto)",
+   "short": "λ 14 pt"
+  },
+  {
+   "id": "n4_f14",
+   "title": "ファージ N4 · 70,153 bp · ラベル 69 個 · 14 pt",
+   "en": "Phage N4 70.2 kb, 69 labels, 14 pt",
+   "short": "N4 14 pt"
+  },
+  {
+   "id": "epifagus_f14",
+   "title": "Epifagus 葉緑体 · 70,028 bp · ラベル 53 個 · 14 pt",
+   "en": "Epifagus plastid 70.0 kb, 53 labels, 14 pt",
+   "short": "Epifagus 14 pt"
+  },
+  {
+   "id": "plasmid37_f14",
+   "title": "プラスミド pVNTG4 · 37,131 bp · ラベル 45 個 · 14 pt（既定）",
+   "en": "Plasmid pVNTG4 37.1 kb, 45 labels, 14 pt (Auto)",
+   "short": "37 kb 14 pt"
+  },
+  {
+   "id": "p1_f8",
+   "title": "ファージ P1 · 94,800 bp · ラベル 107 個 · 8 pt（既定）",
+   "en": "Phage P1 94.8 kb, 107 labels, 8 pt (Auto)",
+   "short": "P1 8 pt"
+  },
+  {
+   "id": "tobacco_f8",
+   "title": "タバコ葉緑体 · 155,943 bp · ラベル 140 個 · 8 pt（既定）",
+   "en": "Tobacco plastid 155.9 kb, 140 labels, 8 pt (Auto)",
+   "short": "葉緑体 8 pt"
+  },
+  {
+   "id": "pbr322_f10",
+   "title": "pBR322 · 4,361 bp · 制限酵素サイト 33 か所 · 10 pt",
+   "en": "pBR322 4.4 kb + 33 restriction sites, 10 pt",
+   "short": "pBR322 10 pt"
+  },
+  {
+   "id": "gal_hmmt_basic",
+   "title": "Gallery: HmmtDNA_basic_circular（コマンドそのまま）",
+   "en": "Gallery HmmtDNA_basic_circular (command as published)",
+   "short": "Gallery mtDNA"
+  },
+  {
+   "id": "gal_hmmt_atskew",
+   "title": "Gallery: HmmtDNA_ATskew（コマンドそのまま、20 pt）",
+   "en": "Gallery HmmtDNA_ATskew (command as published, 20 pt)",
+   "short": "Gallery ATskew"
+  },
+  {
+   "id": "pbr322_open_f14",
+   "title": "pBR322 · 制限酵素サイト 33 か所 · 14 pt · 内側のトラックなし",
+   "en": "pBR322 + 33 sites, 14 pt, no inner tracks",
+   "short": "pBR322 内側空き"
+  },
+  {
+   "id": "lambda_open_f14",
+   "title": "ファージ λ · 48,502 bp · ラベル 71 個 · 14 pt · 内側のトラックなし",
+   "en": "Phage lambda, 71 labels, 14 pt, no inner tracks",
+   "short": "λ 内側空き"
+  },
+  {
+   "id": "p1_open_f14",
+   "title": "ファージ P1 · 94,800 bp · ラベル 111 個 · 14 pt · 内側のトラックなし",
+   "en": "Phage P1, 111 labels, 14 pt, no inner tracks",
+   "short": "P1 内側空き"
+  },
+  {
+   "id": "mito_open_f14",
+   "title": "ヒトミトコンドリア · ラベル 33 個 · 14 pt · 内側のトラックなし",
+   "en": "Human mtDNA, 33 labels, 14 pt, no inner tracks",
+   "short": "mtDNA 内側空き"
+  },
+  {
+   "id": "plasmid37_open_f14",
+   "title": "プラスミド pVNTG4 · 37,131 bp · ラベル 45 個 · 14 pt · 内側のトラックなし",
+   "en": "Plasmid pVNTG4, 45 labels, 14 pt, no inner tracks",
+   "short": "37 kb 内側空き"
+  }
+ ]
+}
