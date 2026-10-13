@@ -11,11 +11,8 @@ variant starts from a cache that holds the base: the harness renders the base
 again after each variant. The slow cases are split into chunks of variants,
 each from the case base, so each test fits the 300 s pytest timeout.
 
-Two gaps are listed apart, so removing them shrinks the lists:
+One gap is listed apart, so removing it shrinks the lists:
 
-- ``LEGEND_INPUT_GAP``: the legend table stages take whole configurators
-  (feature, GC, skew, depth track data), so any field of them rebuilds the
-  legend even when no legend row changes.
 - ``RECORD_PRESENTATION_GAP``: a record label or subtitle is written into the
   record, so it is part of the record identity and rebuilds every stage of
   the record.
@@ -102,16 +99,18 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
             "hide_accession", "hide_scale", "keep_definition_left_aligned", "ruler_label_font_size",
             "scale_font_size", "scale_style", "show_replicon", "align_center (rows)", "axis_stroke_width",
             "multi_record_column_gap_ratio", "multi_record_row_gap_ratio",
+            # The legend wraps at the content width, which a tick label or a
+            # line stroke changes.
+            "gc_content_tick_font_size", "line_stroke_width",
         ),
         _LEGEND_LAYOUT,
     ),
     **dict.fromkeys(
-        (
-            "separate_strands", "resolve_overlaps", "feature_overlap_tolerance_bp", "show_labels",
-            "track_layout", "track_layout (rows)", "track_axis_gap",
-        ),
+        ("separate_strands", "resolve_overlaps", "show_labels", "track_layout", "track_axis_gap"),
         _FEATURE_PLACEMENT,
     ),
+    # These also move the content bounds, at whose width the legend wraps.
+    **dict.fromkeys(("feature_overlap_tolerance_bp", "track_layout (rows)"), _FEATURE_PLACEMENT | _LEGEND_LAYOUT),
     **dict.fromkeys(("label_table", "label_whitelist", "label_blacklist", "qualifier_priority"), _LABEL_FILTER),
     # A placement row is a feature edit: the stages that read the edited features rebuild.
     **dict.fromkeys(("feature_override_table", "feature_placement_table"), _FEATURE_EDIT),
@@ -120,28 +119,18 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     **dict.fromkeys(("depth_window", "depth_step", "depth_min", "depth_max", "depth_log_scale"), _DEPTH_FRAME),
     **dict.fromkeys(
         (
-            "depth_track_large_tick_interval", "depth_track_small_tick_interval", "depth_track_tick_font_size",
-            "show_depth_axis", "show_depth_ticks", "depth_large_tick_interval", "depth_small_tick_interval",
-            "depth_tick_font_size", "share_depth_axis",
+            "depth_track_large_tick_interval", "depth_track_small_tick_interval", "show_depth_axis",
+            "show_depth_ticks", "depth_large_tick_interval", "depth_small_tick_interval", "share_depth_axis",
         ),
         _DEPTH_DATA,
     ),
+    **dict.fromkeys(("depth_track_tick_font_size", "depth_tick_font_size"), _DEPTH_DATA | _LEGEND_LAYOUT),
     "depth_track_label": _DEPTH_DATA | _LEGEND,
     "conservation_labels": _LEGEND,
     # The pairwise identity legend is computed from the filtered comparisons.
     **dict.fromkeys(("evalue", "bitscore", "alignment_length"), _LEGEND),
 }
 
-LEGEND_INPUT_GAP: frozenset[str] = frozenset({
-    "arrow_head_length_ratio", "arrow_shaft_width_ratio", "line_stroke_color", "line_stroke_width",
-    "gc_content_mode", "gc_content_min_percent", "gc_content_max_percent", "gc_content_large_tick_interval",
-    "gc_content_small_tick_interval", "gc_content_tick_font_size", "show_gc_content_axis",
-    "show_gc_content_ticks", "feature_overlap_tolerance_bp", "pairwise_match_style", "label_blacklist",
-    "track_layout", "track_layout (rows)", "track_axis_gap", "depth_window", "depth_step", "depth_min",
-    "depth_max", "depth_log_scale", "depth_track_large_tick_interval", "depth_track_small_tick_interval",
-    "depth_track_tick_font_size", "show_depth_axis", "show_depth_ticks", "depth_large_tick_interval",
-    "depth_small_tick_interval", "depth_tick_font_size", "share_depth_axis",
-})
 RECORD_PRESENTATION_GAP: Mapping[str, frozenset[str]] = dict.fromkeys(
     ("record_label", "record_subtitle"),
     _FEATURE_EDIT | _DEPTH_FRAME | {"gc_skew_data"},
@@ -150,8 +139,6 @@ RECORD_PRESENTATION_GAP: Mapping[str, frozenset[str]] = dict.fromkeys(
 
 def allowed_builds(option_id: str) -> frozenset[str]:
     allowed = EXPECTED_BUILDS.get(option_id, frozenset())
-    if option_id in LEGEND_INPUT_GAP:
-        allowed |= _LEGEND
     return allowed | RECORD_PRESENTATION_GAP.get(option_id, frozenset())
 
 

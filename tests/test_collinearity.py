@@ -18,6 +18,7 @@ import gbdraw.analysis.collinearity as collinearity_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
+from gbdraw.legend.sources import ComparisonLegendSource
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
@@ -3102,8 +3103,7 @@ def test_orientation_collinearity_suppresses_pairwise_identity_legend() -> None:
         skew_config,
         feature_config,
         [],
-        blast_config=blast_config,
-        has_blast=True,
+        comparison=ComparisonLegendSource.of(blast_config),
         show_gc=False,
         show_skew=False,
         show_depth=False,
@@ -3147,8 +3147,7 @@ def test_average_identity_collinearity_legend_uses_average_identity_label() -> N
         skew_config,
         feature_config,
         [],
-        blast_config=blast_config,
-        has_blast=True,
+        comparison=ComparisonLegendSource.of(blast_config),
         show_gc=False,
         show_skew=False,
         show_depth=False,
@@ -3193,8 +3192,7 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
         skew_config,
         feature_config,
         [],
-        blast_config=blast_config,
-        has_blast=True,
+        comparison=ComparisonLegendSource.of(blast_config),
         show_gc=False,
         show_skew=False,
         show_depth=False,

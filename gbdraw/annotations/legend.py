@@ -9,6 +9,7 @@ from gbdraw.annotations.models import (
     annotation_track_params_from_mapping,
     effective_annotation_style,
 )
+from gbdraw.legend.sources import LegendSlotSource
 from gbdraw.legend.table import LegendTable
 from gbdraw.render.patterns import hatch_pattern_paint
 
@@ -16,7 +17,7 @@ from gbdraw.render.patterns import hatch_pattern_paint
 def sync_annotation_legend_entries(
     out: LegendTable,
     bundle: ResolvedAnnotationBundle,
-    slots: Sequence[object] | None,
+    slots: Sequence[LegendSlotSource] | None,
 ) -> LegendTable:
     """Append explicit annotation legend labels, one source per caption and style."""
 
@@ -24,9 +25,9 @@ def sync_annotation_legend_entries(
         return out
     seen: set[tuple[object, ...]] = set()
     for slot in slots:
-        if not getattr(slot, "enabled", True) or str(getattr(slot, "renderer", "")) != "annotations":
+        if slot.renderer != "annotations":
             continue
-        params = annotation_track_params_from_mapping(getattr(slot, "params", {}) or {})
+        params = annotation_track_params_from_mapping(slot.params)
         for annotation in bundle.annotations:
             if (
                 annotation.set_id != params.set_id

@@ -123,7 +123,7 @@ from gbdraw.core.sequence import create_dict_for_sequence_lengths
 from gbdraw.diagrams.circular.assemble import (
     CircularAssemblyResult,
     _assemble_circular_diagram_result,
-    build_circular_legend_table,
+    circular_legend_table,
     plan_circular_annotation_slots,
 )
 from gbdraw.diagrams.circular.positioning import _parse_svg_number
@@ -168,6 +168,7 @@ from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.layout.spatial import Aabb
 from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
+from gbdraw.legend.sources import LegendSources
 from gbdraw.legend.table import (
     LegendTable,
     pairwise_identity_legend_from_comparisons,
@@ -3126,6 +3127,7 @@ def assemble_circular_diagram_from_records(
         canvas_config=legend_canvas_config,
         record_features=_resolved_record_features,
     )
+    legend_sources = LegendSources.of(feature_config, gc_config, skew_config)
     if legend_effective != "none":
         legend_slots, legend_annotations = plan_circular_annotation_slots(
             resolved_annotations,
@@ -3139,13 +3141,9 @@ def assemble_circular_diagram_from_records(
         )
         legend_depth_tracks = representative_depth_tracks(record_depth_track_data)
         legend_depth_track_zero = index_depth_track_row(legend_depth_tracks).get(0)
-        legend_table = render_stage(
-            "legend_table",
-            build_circular_legend_table,
+        legend_table = circular_legend_table(
             records,
-            feature_config=feature_config,
-            gc_config=gc_config,
-            skew_config=skew_config,
+            legend_sources,
             profile=profile,
             depth_config=depth_config,
             depth_df=(
@@ -3178,13 +3176,7 @@ def assemble_circular_diagram_from_records(
                 legend_table,
             ).get_group()
 
-    legend_row_facts = LegendRowFacts(
-        records=records,
-        feature_config=feature_config,
-        gc_config=gc_config,
-        skew_config=skew_config,
-        legend_table=legend_table,
-    )
+    legend_row_facts = LegendRowFacts(records=records, sources=legend_sources, legend_table=legend_table)
 
     merged_canvas = Drawing(
         filename=f"{output_prefix}.svg",

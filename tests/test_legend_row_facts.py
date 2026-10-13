@@ -10,7 +10,6 @@ import inspect
 import json
 import re
 from pathlib import Path
-from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -34,6 +33,7 @@ from gbdraw.api import (
 )
 from gbdraw.api.request_render import render_request
 from gbdraw.legend.row_facts import collect_legend_row_facts
+from gbdraw.legend.sources import DepthLegendSource, NumericLegendSource, legend_slot_sources
 from gbdraw.diagrams.circular.assemble import _sync_legend_table_for_circular_slots
 from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
 from gbdraw.legend.table import LegendTable, _generated_legend_rows
@@ -296,7 +296,7 @@ GENERATED_ROWS = json.loads(
 def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
     """The Web app reads these keys as Python's own rows (OV-307) and their palette keys (OV-309)."""
     def track(fills):
-        return SimpleNamespace(dinucleotide=case["dinucleotide"], high_fill_color=fills[0], low_fill_color=fills[1])
+        return NumericLegendSource(case["dinucleotide"], fills[0], fills[1], "none", 0)
 
     default_colors = pd.DataFrame(
         [{"feature_type": key, "color": color} for key, color in (
@@ -309,9 +309,9 @@ def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
         default_colors,
         used_color_rules={tuple(row) for row in case["used_color_rules"]},
         default_used_features=set(case["default_used_features"]),
-        gc_config=track(case["gc"]),
-        skew_config=track(case["skew"]),
-        depth_config=SimpleNamespace(fill_color=case["depth"]),
+        gc=track(case["gc"]),
+        skew=track(case["skew"]),
+        depth=DepthLegendSource("", case["depth"], "none", 0),
         show_gc=case["show_gc"],
         show_skew=case["show_skew"],
         show_depth=case["show_depth"],
@@ -323,7 +323,7 @@ def test_generated_legend_rows_take_no_input_the_web_pin_lacks():
     """A new kind of generated row arrives as a new input; add it to the fixture and the Web reader."""
     assert list(inspect.signature(_generated_legend_rows).parameters) == [
         "feature_specific_colors", "features_present", "default_colors", "used_color_rules",
-        "default_used_features", "gc_config", "skew_config", "depth_config", "show_gc", "show_skew", "show_depth",
+        "default_used_features", "gc", "skew", "depth", "show_gc", "show_skew", "show_depth",
         "block_stroke",
     ]
 
@@ -339,7 +339,7 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
     palette = case["palette"]
 
     def track(high, low):
-        return SimpleNamespace(
+        return NumericLegendSource(
             dinucleotide=case["dinucleotide"], high_fill_color=high, low_fill_color=low, stroke_color="none", stroke_width=0
         )
 
@@ -350,19 +350,19 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
     table = LegendTable({key: {"fill": fill} for key, fill in case.get("legend", [])})
     if case["mode"] == "circular":
         table = _sync_legend_table_for_circular_slots(
-            table, circular_track_slots=parse_circular_track_slots(entries), gc_config=gc_config, skew_config=skew_config,
-            depth_config=None, depth_df=None, cfg=SimpleNamespace(),
+            table, slots=legend_slot_sources(parse_circular_track_slots(entries)), gc=gc_config, skew=skew_config,
+            depth=None,
         )
     else:
         defaults = _generated_legend_rows(
             {}, [], pd.DataFrame(columns=["feature_type", "color"]), used_color_rules=None, default_used_features=set(),
-            gc_config=gc_config, skew_config=skew_config, depth_config=None,
+            gc=gc_config, skew=skew_config, depth=None,
             show_gc=True, show_skew=True, show_depth=False,
         )
         for key, entry in defaults.items():
             table.add_default_track(key, {"fill": entry["fill"]})
         table = _sync_legend_table_for_linear_slots(
-            table, linear_track_slots=parse_linear_track_slots(entries), skew_config=skew_config, depth_tracks=None,
+            table, slots=legend_slot_sources(parse_linear_track_slots(entries)), skew=skew_config, depth_tracks=None,
         )
     assert [[key, row["fill"]] for key, row in table.items()] == [[key, fill] for key, _, _, fill in case["rows"]]
     assert list(table.shared_keys) == case.get("shared", [])

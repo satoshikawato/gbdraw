@@ -46,7 +46,6 @@ from ...config.models import (
 )
 from ...exceptions import ValidationError
 from ...configurators import (
-    BlastMatchConfigurator,
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
@@ -57,7 +56,6 @@ from ...configurators import (
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...core.text import calculate_bbox_dimensions
-from ...core.sequence import check_feature_presence
 from ...render.groups.linear import LengthBarGroup, LegendGroup, PlotTitleGroup
 from ...render.groups.linear.length_bar import (
     RULER_LABEL_OFFSET,
@@ -66,6 +64,16 @@ from ...render.groups.linear.length_bar import (
 )
 from ...io.comparisons import filter_comparison_dataframe, load_comparisons
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
+from ...legend.sources import (
+    ComparisonLegendSource,
+    DepthLegendSource,
+    LegendSlotSource,
+    LegendSources,
+    NumericLegendSource,
+    depth_legend_sources,
+    feature_legend_presence,
+    legend_slot_sources,
+)
 from ...legend.table import (
     LegendTable,
     PairwiseIdentityLegend,
@@ -128,7 +136,6 @@ from ...tracks import (
     normalize_linear_track_slots_with_axis,
     parse_nonnegative_integer,
 )
-from ...tracks.linear import NormalizedLinearTrackSlot
 from ...tracks.parsing import slot_dinucleotide
 from ...annotations import (
     AnnotationOptions,
@@ -167,7 +174,6 @@ from .precalc import (
     _precalculate_label_dimensions,
     _resolve_linear_diagram_label_font_size,
 )
-from ...features.colors import precompute_used_color_rules
 from ...features.ids import make_linear_dom_id
 from ...svg.ids import (
     definition_group_svg_id,
@@ -434,9 +440,8 @@ def _clone_gc_config_with_dinucleotide(gc_config: GcContentConfigurator, dinucle
 
 
 
-def _slot_legend_label(slot, fallback: str) -> str:
-    params = getattr(slot, "params", {}) or {}
-    raw_label = params.get("legend_label", params.get("label"))
+def _slot_legend_label(slot: LegendSlotSource, fallback: str) -> str:
+    raw_label = slot.params.get("legend_label", slot.params.get("label"))
     label = str(raw_label).strip() if raw_label is not None else ""
     return label or fallback
 
@@ -444,20 +449,20 @@ def _slot_legend_label(slot, fallback: str) -> str:
 def _sync_legend_table_for_linear_slots(
     legend_table: LegendTable,
     *,
-    linear_track_slots: list | None,
-    skew_config: GcSkewConfigurator,
-    depth_tracks: list[DepthTrackData] | None,
+    slots: Sequence[LegendSlotSource] | None,
+    skew: NumericLegendSource,
+    depth_tracks: Sequence[DepthLegendSource] | None,
 ) -> LegendTable:
     """Replace singleton numeric legends with slot-authoritative entries."""
-    if linear_track_slots is None:
+    if slots is None:
         return legend_table
 
     out = sync_depth_track_legend_entries(
         legend_table,
         depth_tracks,
-        slots=linear_track_slots,
+        slots=slots,
     )
-    default_nt = str(getattr(skew_config, "dinucleotide", "GC")).upper()
+    default_nt = str(skew.dinucleotide).upper()
     for key in (
         f"{default_nt} skew",
         f"{default_nt} skew (+)",
@@ -465,33 +470,31 @@ def _sync_legend_table_for_linear_slots(
     ):
         out.discard_default_track(key)
 
-    for slot in linear_track_slots:
-        if not getattr(slot, "enabled", True):
-            continue
-        if str(getattr(slot, "renderer", "")) != "dinucleotide_skew":
+    for slot in slots:
+        if slot.renderer != "dinucleotide_skew":
             continue
         nt = slot_dinucleotide(slot.params, default_nt)
         label = _slot_legend_label(slot, f"{nt} skew")
-        slot_skew_config = _slot_skew_config(skew_config, slot, nt)
-        if slot_skew_config.high_fill_color == slot_skew_config.low_fill_color:
+        slot_skew = skew.for_skew_slot(slot, nt)
+        if slot_skew.high_fill_color == slot_skew.low_fill_color:
             out.add_source(label, {
                 "type": "solid",
-                "fill": slot_skew_config.high_fill_color,
-                "stroke": slot_skew_config.stroke_color,
-                "width": slot_skew_config.stroke_width,
+                "fill": slot_skew.high_fill_color,
+                "stroke": slot_skew.stroke_color,
+                "width": slot_skew.stroke_width,
             })
         else:
             out.add_source(f"{label} (+)", {
                 "type": "solid",
-                "fill": slot_skew_config.high_fill_color,
-                "stroke": slot_skew_config.stroke_color,
-                "width": slot_skew_config.stroke_width,
+                "fill": slot_skew.high_fill_color,
+                "stroke": slot_skew.stroke_color,
+                "width": slot_skew.stroke_width,
             })
             out.add_source(f"{label} (-)", {
                 "type": "solid",
-                "fill": slot_skew_config.low_fill_color,
-                "stroke": slot_skew_config.stroke_color,
-                "width": slot_skew_config.stroke_width,
+                "fill": slot_skew.low_fill_color,
+                "stroke": slot_skew.stroke_color,
+                "width": slot_skew.stroke_width,
             })
     return out
 
@@ -1769,58 +1772,45 @@ def _final_record_translations(
 def build_linear_legend_table(
     records: Sequence[SeqRecord],
     *,
-    feature_config: FeatureDrawingConfigurator,
-    gc_config: GcContentConfigurator,
-    skew_config: GcSkewConfigurator,
-    blast_config: BlastMatchConfigurator,
-    has_blast: bool,
+    sources: LegendSources,
+    comparison: ComparisonLegendSource | None,
     pairwise_identity_legend: PairwiseIdentityLegend,
-    depth_config: DepthConfigurator | None,
+    depth: DepthLegendSource | None,
     show_gc: bool,
     show_skew: bool,
-    linear_track_slots: list[NormalizedLinearTrackSlot],
-    depth_tracks: list[DepthTrackData] | None,
+    slots: tuple[LegendSlotSource, ...] | None,
+    depth_tracks: tuple[DepthLegendSource, ...] | None,
     annotations: ResolvedAnnotationBundle,
 ) -> LegendTable:
     """Build the Linear legend table (render stage ``legend_table``).
 
-    ``depth_config`` is given only when one depth track has a singleton row.
+    ``depth`` is given only when one depth track has a singleton row.
     """
 
-    color_map = feature_config.specific_color_rules
-    default_color_map = feature_config.default_color_map
-    features_present = check_feature_presence(
-        records,
-        feature_config.selected_features_set,
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-        specific_color_rules=color_map,
-        record_features=feature_config.record_features,
-    )
-    used_color_rules, default_used_features = precompute_used_color_rules(
-        records,
-        color_map,
-        default_color_map,
-        set(feature_config.selected_features_set),
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-        record_features=feature_config.record_features,
+    features_present, used_color_rules, default_used_features = feature_legend_presence(
+        records, sources.features
     )
     legend_table = prepare_legend_table(
-        gc_config, skew_config, feature_config, features_present, blast_config, has_blast,
+        sources.gc,
+        sources.skew,
+        sources.features,
+        features_present,
+        comparison=comparison,
         used_color_rules=used_color_rules,
         default_used_features=default_used_features,
-        depth_config=depth_config,
+        depth=depth,
         show_gc=show_gc,
         show_skew=show_skew,
-        show_depth=depth_config is not None,
+        show_depth=depth is not None,
         pairwise_identity_legend=pairwise_identity_legend,
     )
     legend_table = _sync_legend_table_for_linear_slots(
         legend_table,
-        linear_track_slots=linear_track_slots,
-        skew_config=skew_config,
+        slots=slots,
+        skew=sources.skew,
         depth_tracks=depth_tracks,
     )
-    return sync_annotation_legend_entries(legend_table, annotations, linear_track_slots)
+    return sync_annotation_legend_entries(legend_table, annotations, slots)
 
 
 def assemble_linear_diagram(
@@ -2178,6 +2168,7 @@ def assemble_linear_diagram(
         [None for _ in records],
     )
     # Prepare legend group
+    legend_sources = LegendSources.of(feature_config, gc_config, skew_config)
     legend_table = LegendTable()
     if canvas_config.legend_position != "none":
         singleton_depth = render_context.depth_enabled and depth_track_count(record_depth_tracks) == 1
@@ -2186,21 +2177,24 @@ def assemble_linear_diagram(
             "legend_table",
             build_linear_legend_table,
             records,
-            feature_config=feature_config,
-            gc_config=gc_config,
-            skew_config=skew_config,
-            blast_config=blast_config,
-            has_blast=has_blast,
+            sources=legend_sources,
+            comparison=ComparisonLegendSource.of(blast_config) if has_blast and blast_config else None,
             pairwise_identity_legend=(
                 comparison_identity_legend
                 or pairwise_identity_legend
                 or PairwiseIdentityLegend()
             ),
-            depth_config=depth_config if singleton_depth else None,
+            depth=(
+                DepthLegendSource.of_config(depth_config)
+                if singleton_depth and depth_config is not None
+                else None
+            ),
             show_gc=profile.show_gc,
             show_skew=profile.show_skew,
-            linear_track_slots=normalized_linear_track_slots,
-            depth_tracks=representative_depth_data if render_context.depth_enabled else None,
+            slots=legend_slot_sources(normalized_linear_track_slots),
+            depth_tracks=(
+                depth_legend_sources(representative_depth_data) if render_context.depth_enabled else None
+            ),
             annotations=resolved_annotations,
         )
     definition_reserve_width = (
@@ -3151,9 +3145,7 @@ def assemble_linear_diagram(
         canvas,
         LegendRowFacts(
             records=records,
-            feature_config=feature_config,
-            gc_config=gc_config,
-            skew_config=skew_config,
+            sources=legend_sources,
             legend_table=legend_table,
         ),
     )

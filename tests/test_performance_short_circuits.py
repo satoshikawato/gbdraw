@@ -166,8 +166,7 @@ def test_circular_legend_none_skips_legend_preparation(
     def unexpected_legend_work(*_args, **_kwargs):
         raise AssertionError("Legend preparation should be skipped when legend='none'.")
 
-    monkeypatch.setattr(circular_assemble_module, "check_feature_presence", unexpected_legend_work)
-    monkeypatch.setattr(circular_assemble_module, "precompute_used_color_rules", unexpected_legend_work)
+    monkeypatch.setattr(circular_assemble_module, "feature_legend_presence", unexpected_legend_work)
     monkeypatch.setattr(circular_assemble_module, "prepare_legend_table", unexpected_legend_work)
 
     assemble_circular_diagram_from_record(
@@ -190,8 +189,7 @@ def test_linear_legend_none_skips_legend_preparation(
     def unexpected_legend_work(*_args, **_kwargs):
         raise AssertionError("Legend preparation should be skipped when legend='none'.")
 
-    monkeypatch.setattr(linear_assemble_module, "check_feature_presence", unexpected_legend_work)
-    monkeypatch.setattr(linear_assemble_module, "precompute_used_color_rules", unexpected_legend_work)
+    monkeypatch.setattr(linear_assemble_module, "feature_legend_presence", unexpected_legend_work)
     monkeypatch.setattr(linear_assemble_module, "prepare_legend_table", unexpected_legend_work)
 
     assemble_linear_diagram_from_records(

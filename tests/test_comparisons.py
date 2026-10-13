@@ -15,6 +15,7 @@ from svgwrite import Drawing
 import gbdraw.api.diagram as api_diagram_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.linear as linear_cli_module
+from gbdraw.legend.sources import ComparisonLegendSource
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import LinearDiagramOptions
@@ -384,8 +385,7 @@ def test_identity_100_legend_is_a_safe_zero_span_at_the_maximum_color() -> None:
         hidden_track,
         feature_config,
         [],
-        blast_config=blast_config,
-        has_blast=True,
+        comparison=ComparisonLegendSource.of(blast_config),
         show_gc=False,
         show_skew=False,
         show_depth=False,

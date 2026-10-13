@@ -14,6 +14,12 @@ from gbdraw.core.color import (
     normalize_hex_color,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.legend.sources import (
+    ComparisonLegendSource,
+    DepthLegendSource,
+    FeatureLegendSource,
+    NumericLegendSource,
+)
 
 
 LegendEntry = Mapping[str, object]
@@ -453,9 +459,9 @@ def _generated_legend_rows(
     *,
     used_color_rules: Optional[Set[Tuple[str, str]]],
     default_used_features: Set[str],
-    gc_config,
-    skew_config,
-    depth_config,
+    gc: NumericLegendSource,
+    skew: NumericLegendSource,
+    depth: DepthLegendSource | None,
     show_gc: bool,
     show_skew: bool,
     show_depth: bool,
@@ -482,36 +488,31 @@ def _generated_legend_rows(
             rows[key] = _solid_legend_entry(
                 _resolve_legend_feature_color(default_colors, feature_type), *block_stroke
             )
-    dinucleotide = gc_config.dinucleotide
-    if show_depth and depth_config is not None:
-        rows["Depth"] = _solid_legend_entry(
-            depth_config.fill_color,
-            getattr(depth_config, "stroke_color", "none"),
-            getattr(depth_config, "stroke_width", 0),
-        )
-    for show, config, name in ((show_gc, gc_config, "content"), (show_skew, skew_config, "skew")):
+    dinucleotide = gc.dinucleotide
+    if show_depth and depth is not None:
+        rows["Depth"] = _solid_legend_entry(depth.fill_color, depth.stroke_color, depth.stroke_width)
+    for show, source, name in ((show_gc, gc, "content"), (show_skew, skew, "skew")):
         if not show:
             continue
-        stroke = (getattr(config, "stroke_color", "none"), getattr(config, "stroke_width", 0))
-        if config.high_fill_color == config.low_fill_color:
-            rows[f"{dinucleotide} {name}"] = _solid_legend_entry(config.high_fill_color, *stroke)
+        stroke = (source.stroke_color, source.stroke_width)
+        if source.high_fill_color == source.low_fill_color:
+            rows[f"{dinucleotide} {name}"] = _solid_legend_entry(source.high_fill_color, *stroke)
         else:
-            rows[f"{dinucleotide} {name} (+)"] = _solid_legend_entry(config.high_fill_color, *stroke)
-            rows[f"{dinucleotide} {name} (-)"] = _solid_legend_entry(config.low_fill_color, *stroke)
+            rows[f"{dinucleotide} {name} (+)"] = _solid_legend_entry(source.high_fill_color, *stroke)
+            rows[f"{dinucleotide} {name} (-)"] = _solid_legend_entry(source.low_fill_color, *stroke)
     return rows
 
 
 def prepare_legend_table(
-    gc_config,
-    skew_config,
-    feature_config,
+    gc: NumericLegendSource,
+    skew: NumericLegendSource,
+    features: FeatureLegendSource,
     features_present: List[str],
-    blast_config=None,
-    has_blast: bool = False,
+    *,
+    comparison: ComparisonLegendSource | None = None,
     used_color_rules: Optional[Set[Tuple[str, str]]] = None,
     default_used_features: Optional[Set[str]] = None,
-    depth_config=None,
-    *,
+    depth: DepthLegendSource | None = None,
     show_gc: bool,
     show_skew: bool,
     show_depth: bool,
@@ -521,6 +522,7 @@ def prepare_legend_table(
     Prepare the legend table for the diagram.
 
     Args:
+        comparison: The pairwise identity gradient; ``None`` without comparisons.
         used_color_rules: Optional set of (caption, color) tuples that were actually
             matched during feature creation. If provided, only these rules will be
             included in the legend. If None, all rules for present feature types
@@ -530,8 +532,8 @@ def prepare_legend_table(
             when specific rules exist.
     """
     legend_table = LegendTable()
-    color_table: Optional[DataFrame] = feature_config.color_table
-    block_stroke = (feature_config.block_stroke_color, feature_config.block_stroke_width)
+    color_table: Optional[DataFrame] = features.color_table
+    block_stroke = (features.block_stroke_color, features.block_stroke_width)
     feature_specific_colors: dict[str, list[tuple[str, str]]] = {}
     if color_table is not None and not color_table.empty:
         for _, row in color_table.iterrows():
@@ -542,12 +544,12 @@ def prepare_legend_table(
     generated = _generated_legend_rows(
         feature_specific_colors,
         features_present,
-        feature_config.default_colors,
+        features.default_colors,
         used_color_rules=used_color_rules,
         default_used_features=default_used_features or set(),
-        gc_config=gc_config,
-        skew_config=skew_config,
-        depth_config=depth_config,
+        gc=gc,
+        skew=skew,
+        depth=depth,
         show_gc=show_gc,
         show_skew=show_skew,
         show_depth=show_depth,
@@ -574,24 +576,24 @@ def prepare_legend_table(
                 legend_table.add(key, generated.pop(key))
     for key, entry in generated.items():
         legend_table.add_default_track(key, entry)
-    if has_blast and blast_config and not pairwise_identity_legend.hidden:
+    if comparison is not None and not pairwise_identity_legend.hidden:
         gradients = pairwise_identity_legend.gradients or (
             PairwiseIdentityGradient(
                 pairwise_identity_legend.label,
-                blast_config.min_color,
-                blast_config.max_color,
+                comparison.min_color,
+                comparison.max_color,
             ),
         )
         for gradient in gradients:
             legend_table.add(gradient.label, {
                 "type": "gradient",
                 "min_color": (
-                    gradient.max_color if float(blast_config.identity) >= 100 else gradient.min_color
+                    gradient.max_color if float(comparison.identity) >= 100 else gradient.min_color
                 ),
                 "max_color": gradient.max_color,
                 "stroke": "none",
                 "width": 0,
-                "min_value": blast_config.identity,
+                "min_value": comparison.identity,
             })
     return legend_table
 

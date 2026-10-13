@@ -6,26 +6,17 @@ import copy
 from pandas import DataFrame
 
 from gbdraw.config.models import RenderProfile
-from gbdraw.io.colors import resolve_color_to_hex
-
-
-def _slot_param_text(slot, *names: str) -> str | None:
-    params = getattr(slot, "params", {}) or {}
-    for name in names:
-        value = params.get(name)
-        text = str(value).strip() if value is not None else ""
-        if text:
-            return text
-    return None
+from gbdraw.tracks.parsing import slot_skew_colors
 
 
 def _slot_skew_config(skew_config, slot, dinucleotide: str):
     cloned = copy.copy(skew_config)
     cloned.dinucleotide = str(dinucleotide).upper()
-    if positive_color := _slot_param_text(slot, "positive_color", "high_color"):
-        cloned.high_fill_color = resolve_color_to_hex(positive_color)
-    if negative_color := _slot_param_text(slot, "negative_color", "low_color"):
-        cloned.low_fill_color = resolve_color_to_hex(negative_color)
+    high_fill_color, low_fill_color = slot_skew_colors(slot)
+    if high_fill_color:
+        cloned.high_fill_color = high_fill_color
+    if low_fill_color:
+        cloned.low_fill_color = low_fill_color
     return cloned
 
 
