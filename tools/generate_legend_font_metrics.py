@@ -11,7 +11,7 @@ registered font.
 It also writes the data of Python's font-family rules
 (``gbdraw.core.fonts.font_family_rules``) for the Web port of
 ``resolve_font_family`` (``gbdraw/web/js/services/font-families.js``), and the
-vectors that pin that port to Python
+vectors that pin that port and the Legend's face resolution to Python
 (``tests/fixtures/font_family_resolution_vectors.json``).
 """
 
@@ -195,6 +195,43 @@ def render_font_family_rules_module() -> str:
     )
 
 
+# Requested lists and the families registered in the page: the face Python
+# measures the normal weight and style with (``resolve_font_face`` without
+# fontconfig), which the Web Legend layout ports
+# (services/legend-layout.js ``resolveLegendFontFace``). A registered family
+# wins over the bundled alias of its name (review R2).
+FACE_RESOLUTION_CASES = (
+    ("'Times New Roman', serif", ()),
+    ("'Times New Roman', serif", ("Times New Roman",)),
+    ("Arial, sans-serif", ("arial",)),
+    ("'Liberation Serif', serif", ("Liberation Serif",)),
+    ("'Gone A', 'Courier New', monospace", ()),
+    ("'Gone A', 'Font B', 'Courier New'", ("Font B",)),
+    ("serif, 'Font B'", ("Font B",)),
+    ("sans-serif", ("sans-serif",)),
+    ("'Gone A'", ()),
+    ("", ()),
+)
+
+
+def _face_resolution(requested: str, registered: tuple[str, ...]) -> str:
+    """A bundled face's measurement name, or ``registered:<family>``."""
+    names = {gbdraw_fonts._comparable_name(family) for family in registered}
+
+    def registered_face(family: str, _weight: int, _italic: bool) -> gbdraw_fonts.FontFace | None:
+        name = gbdraw_fonts._comparable_name(family)
+        return gbdraw_fonts.FontFace(path=f"registered:{family}", content_id=name) if name in names else None
+
+    family, face = gbdraw_fonts._first_resolving_family(
+        requested,
+        lambda name: gbdraw_fonts._registered_or_bundled_face(name, 400, False, registered_face),
+    )
+    if face is None:
+        face = gbdraw_fonts.resolve_font_face("")
+    assert face is not None
+    return f"registered:{family}" if face.content_id else face.measurement_name
+
+
 def render_resolution_vectors() -> str:
     vectors = []
     for requested, registered in RESOLUTION_CASES:
@@ -217,8 +254,14 @@ def render_resolution_vectors() -> str:
             "faces": [{"weight": weight, "italic": italic} for weight, italic in faces],
             "normal": next(index for index, candidate in enumerate(candidates) if candidate[2] == chosen),
         })
+    face_resolution = [
+        {"requested": requested, "registered": list(registered), "face": _face_resolution(requested, registered)}
+        for requested, registered in FACE_RESOLUTION_CASES
+    ]
     return json.dumps(
-        {"schema": 1, "vectors": vectors, "faceMatch": face_match}, indent=2, ensure_ascii=False
+        {"schema": 1, "vectors": vectors, "faceMatch": face_match, "faceResolution": face_resolution},
+        indent=2,
+        ensure_ascii=False,
     ) + "\n"
 
 

@@ -575,6 +575,7 @@ def _drawing_output_request(
     output_prefix: str | None,
     formats: str | tuple[str, ...] | None,
     overwrite: bool | None,
+    embed_fonts: bool | None = None,
 ) -> DiagramRequest:
     """Apply the output overrides; several drawings get ``<base>_<id>``."""
 
@@ -598,6 +599,7 @@ def _drawing_output_request(
         output_prefix=output_prefix,
         formats=formats,
         overwrite=overwrite,
+        embed_fonts=embed_fonts,
     )
 
 
@@ -608,6 +610,7 @@ def _plan_session_drawings(
     output_prefix: str | None = None,
     formats: str | tuple[str, ...] | None = None,
     overwrite: bool | None = None,
+    embed_fonts: bool | None = None,
 ) -> tuple[_SessionDrawingRender, ...]:
     """Select drawings, decode their requests and name their outputs.
 
@@ -664,6 +667,7 @@ def _plan_session_drawings(
                 output_prefix=output_prefix,
                 formats=formats,
                 overwrite=overwrite,
+                embed_fonts=embed_fonts,
             ),
         )
         for drawing in selected
@@ -1294,10 +1298,25 @@ def with_request_output(
     output_directory: str | Path | None = None,
     formats: str | tuple[str, ...] | None = None,
     overwrite: bool | None = None,
+    embed_fonts: bool | None = None,
 ) -> DiagramRequest:
     """Return a request with caller-owned replay output overrides."""
 
     from gbdraw.api.requests import CircularBatchRequest, RenderOutputRequest
+
+    def updated(current: RenderOutputRequest, prefix: str) -> RenderOutputRequest:
+        return replace(
+            current,
+            output_prefix=prefix,
+            output_directory=(
+                output_directory
+                if output_directory is not None
+                else current.output_directory
+            ),
+            formats=formats if formats is not None else current.formats,
+            overwrite=current.overwrite if overwrite is None else overwrite,
+            embed_fonts=current.embed_fonts if embed_fonts is None else embed_fonts,
+        )
 
     if isinstance(request, CircularBatchRequest):
         item_count = len(request.outputs)
@@ -1311,17 +1330,7 @@ def with_request_output(
                 for index in range(1, item_count + 1)
             )
         outputs = tuple(
-            RenderOutputRequest(
-                output_prefix=prefix,
-                output_directory=(
-                    output_directory
-                    if output_directory is not None
-                    else current.output_directory
-                ),
-                formats=formats if formats is not None else current.formats,
-                overwrite=current.overwrite if overwrite is None else overwrite,
-                interactive_metadata_policy=current.interactive_metadata_policy,
-            )
+            updated(current, prefix)
             for prefix, current in zip(
                 prefixes,
                 request.outputs,
@@ -1330,19 +1339,10 @@ def with_request_output(
         )
         return replace(request, outputs=outputs)
 
-    current = request.output
-    updated = RenderOutputRequest(
-        output_prefix=output_prefix or current.output_prefix,
-        output_directory=(
-            output_directory
-            if output_directory is not None
-            else current.output_directory
-        ),
-        formats=formats if formats is not None else current.formats,
-        overwrite=current.overwrite if overwrite is None else overwrite,
-        interactive_metadata_policy=current.interactive_metadata_policy,
+    return replace(
+        request,
+        output=updated(request.output, output_prefix or request.output.output_prefix),
     )
-    return replace(request, output=updated)
 
 
 def _validate_document(data: Mapping[str, Any]) -> None:

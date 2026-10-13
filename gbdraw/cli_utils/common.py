@@ -13,6 +13,7 @@ import math
 import sys
 from dataclasses import replace
 
+from gbdraw.core.fonts import complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
 from gbdraw.api.requests import RecordCardinality, RecordDisplayOptions
@@ -440,20 +441,53 @@ def _add_legend_size_args(parser: argparse.ArgumentParser) -> None:
         type=float)
 
 
-def _add_font_family_arg(parser: argparse.ArgumentParser) -> None:
+def _add_font_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--font_family',
         help=(
             'Font for all diagram text: one font family name (for example "DejaVu Sans"), '
             'which gets its generic family appended, or a CSS font-family list. Text is '
-            'measured with the font file of the first family that is a bundled Liberation '
-            'font or alias, that fontconfig (fc-match) finds, or, without fontconfig, that '
-            'is installed in the system font folders. A family found nowhere is replaced with '
-            'the nearest Liberation font, with a warning. A Session saves the font name, not '
-            "the font file (optional; default: 'Liberation Sans', 'Arial', 'Helvetica', "
-            "'Nimbus Sans L', sans-serif)."
+            'measured with the font file of the first family that is a --font_file font, '
+            'a bundled Liberation font or alias, that fontconfig (fc-match) finds, or, without '
+            'fontconfig, that is installed in the system font folders. A family found nowhere '
+            'is replaced with the nearest Liberation font, with a warning. A Session saves the '
+            "font name, not the font file (optional; default: 'Liberation Sans', 'Arial', "
+            "'Helvetica', 'Nimbus Sans L', sans-serif; with --font_file, the family of the "
+            "first file)."
         ),
         type=str)
+    parser.add_argument(
+        '--font_file',
+        metavar='PATH',
+        action='append',
+        default=[],
+        help=(
+            'A TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) whose family '
+            '--font_family can name; every face of a collection is used. Repeatable. '
+            'Works with --session. A Session does not store the file (optional).'
+        ),
+        type=str)
+    parser.add_argument(
+        '--no_font_embedding',
+        dest='embed_fonts',
+        action='store_false',
+        help=(
+            'Do not embed fonts in SVG and interactive SVG output. By default, each font '
+            'the SVG uses that gbdraw does not bundle is embedded as a subset of the '
+            'characters it draws, unless its license (OS/2 fsType) forbids embedding.'
+        ))
+
+
+def cli_font_family(args: argparse.Namespace) -> str | None:
+    """Register each ``--font_file`` and return the ``font_family`` override:
+    ``--font_family`` completed with its generic family, else the family of
+    the first file's first face, else None (the configured default)."""
+    registered = [face for path in args.font_file for face in register_font_file_faces(path)]
+    if args.font_family:
+        return complete_font_family(args.font_family)
+    if registered:
+        return font_family_list_for(registered[0].family, registered[0].generic)
+    return None
 
 
 def add_color_args(parser: argparse.ArgumentParser) -> None:

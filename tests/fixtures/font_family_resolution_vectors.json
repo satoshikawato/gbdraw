@@ -440,5 +440,69 @@
       ],
       "normal": 0
     }
+  ],
+  "faceResolution": [
+    {
+      "requested": "'Times New Roman', serif",
+      "registered": [],
+      "face": "LiberationSerif-Regular"
+    },
+    {
+      "requested": "'Times New Roman', serif",
+      "registered": [
+        "Times New Roman"
+      ],
+      "face": "registered:Times New Roman"
+    },
+    {
+      "requested": "Arial, sans-serif",
+      "registered": [
+        "arial"
+      ],
+      "face": "registered:Arial"
+    },
+    {
+      "requested": "'Liberation Serif', serif",
+      "registered": [
+        "Liberation Serif"
+      ],
+      "face": "registered:Liberation Serif"
+    },
+    {
+      "requested": "'Gone A', 'Courier New', monospace",
+      "registered": [],
+      "face": "LiberationMono-Regular"
+    },
+    {
+      "requested": "'Gone A', 'Font B', 'Courier New'",
+      "registered": [
+        "Font B"
+      ],
+      "face": "registered:Font B"
+    },
+    {
+      "requested": "serif, 'Font B'",
+      "registered": [
+        "Font B"
+      ],
+      "face": "LiberationSerif-Regular"
+    },
+    {
+      "requested": "sans-serif",
+      "registered": [
+        "sans-serif"
+      ],
+      "face": "LiberationSans-Regular"
+    },
+    {
+      "requested": "'Gone A'",
+      "registered": [],
+      "face": "LiberationSans-Regular"
+    },
+    {
+      "requested": "",
+      "registered": [],
+      "face": "LiberationSans-Regular"
+    }
   ]
 }

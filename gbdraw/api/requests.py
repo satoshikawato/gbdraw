@@ -358,7 +358,12 @@ _OUTPUT_PREFIX_MAX_BYTES = 200
 
 @dataclass(frozen=True)
 class RenderOutputRequest:
-    """Output destination and format policy for a typed render request."""
+    """Output destination and format policy for a typed render request.
+
+    ``embed_fonts``: the SVG and interactive SVG outputs carry a subset of each
+    font they use that gbdraw does not bundle. Like ``overwrite``, it belongs
+    to the caller and a Session does not store it.
+    """
 
     output_prefix: str = "out"
     output_directory: str | Path | None = None
@@ -366,6 +371,7 @@ class RenderOutputRequest:
     overwrite: bool = False
     interactive_metadata_policy: Literal["auto", "required", "omit"] = "auto"
     resolve_prefix_from_first_record: bool = False
+    embed_fonts: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.output_prefix, str):
@@ -418,6 +424,11 @@ class RenderOutputRequest:
 
         if not isinstance(self.overwrite, bool):
             raise ValidationError("overwrite must be a boolean.")
+        if not isinstance(self.embed_fonts, bool):
+            raise ValidationError(
+                "embed_fonts must be a boolean.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "BOOLEAN"},
+            )
         if not isinstance(self.resolve_prefix_from_first_record, bool):
             raise ValidationError(
                 "resolve_prefix_from_first_record must be a boolean."
@@ -436,6 +447,7 @@ class CircularBatchOutputPolicy:
     formats: Sequence[str] | str = ("svg",)
     overwrite: bool = False
     interactive_metadata_policy: Literal["auto", "required", "omit"] = "auto"
+    embed_fonts: bool = True
 
     def __post_init__(self) -> None:
         if self.output_prefix is not None:
@@ -463,6 +475,11 @@ class CircularBatchOutputPolicy:
         object.__setattr__(self, "formats", normalized_formats)
         if not isinstance(self.overwrite, bool):
             raise ValidationError("overwrite must be a boolean.")
+        if not isinstance(self.embed_fonts, bool):
+            raise ValidationError(
+                "embed_fonts must be a boolean.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "BOOLEAN"},
+            )
         _validate_interactive_metadata_policy(
             self.interactive_metadata_policy,
             normalized_formats,

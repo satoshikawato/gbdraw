@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
-from gbdraw.core.fonts import custom_font_families
+from gbdraw.core.fonts import custom_font_families, register_font_file_faces
+from gbdraw.render.font_embedding import remove_embedded_font_css
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import (
     read_circular_track_table,
@@ -89,6 +90,8 @@ class SessionCliRequest:
     session_output: str | None
     drawings: tuple[str, ...] = ()
     list_drawings: bool = False
+    font_files: tuple[str, ...] = ()
+    embed_fonts: bool = True
 
 
 def add_session_args(parser: argparse.ArgumentParser) -> None:
@@ -158,6 +161,8 @@ def parse_session_pre_args(
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--save_session", action="store_true")
     parser.add_argument("--session_output")
+    parser.add_argument("--font_file", action="append", default=[])
+    parser.add_argument("--no_font_embedding", dest="embed_fonts", action="store_false")
     namespace, unknown = parser.parse_known_args(list(cmd_args))
     if unknown:
         parser.error(
@@ -176,6 +181,8 @@ def parse_session_pre_args(
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
         drawings=tuple(namespace.drawing or ()),
+        font_files=tuple(namespace.font_file),
+        embed_fonts=bool(namespace.embed_fonts),
     )
 
 
@@ -559,14 +566,21 @@ def render_canonical_session_if_present(
     session_output: str | None,
     overwrite: bool = False,
     drawing: str | None = None,
+    embed_fonts: bool = True,
+    font_files: Sequence[str] = (),
 ) -> bool:
     """Render one drawing of ``mode`` from a canonical Session.
 
     ``drawing`` names it by ID or name; without it the Session must have one
     drawing of ``mode``. Sessions 27-30 return ``False`` for legacy replay.
+    Each of ``font_files`` is registered first (both routes), so a Session
+    that names its family draws with it instead of a substitute.
     """
 
     from gbdraw.session import load_session_document
+
+    for font_file in font_files:
+        register_font_file_faces(font_file)
     from gbdraw.session_io import CANONICAL_SESSION_MIN_VERSION
 
     document = load_session_document(session)
@@ -582,6 +596,7 @@ def render_canonical_session_if_present(
         save_session=save_session,
         session_output=session_output,
         overwrite=overwrite,
+        embed_fonts=embed_fonts,
     )
     return True
 
@@ -650,7 +665,7 @@ def _rendered_drawing_build(
         protein_id_map=getattr(rendered, "protein_id_map", None),
     )
     svg_results = [
-        {"name": output.stem, "content": output.read_text(encoding="utf-8")}
+        {"name": output.stem, "content": remove_embedded_font_css(output.read_text(encoding="utf-8"))}
         for output in rendered.output_paths
         if output.suffix.lower() == ".svg"
         and output.is_file()
@@ -715,6 +730,7 @@ def render_session_drawings_cli(
     save_session: bool,
     session_output: str | None,
     overwrite: bool = False,
+    embed_fonts: bool = True,
 ) -> None:
     """Render drawings of a canonical Session and optionally save it again.
 
@@ -757,6 +773,7 @@ def render_session_drawings_cli(
             output_prefix=output_path.name if output_path is not None else None,
             formats=format_override,
             overwrite=overwrite,
+            embed_fonts=embed_fonts,
         )
         sidecar: tuple[Path, str] | None = None
         if save:
@@ -816,6 +833,8 @@ def render_session_drawings_cli(
             ),
             overwrite=overwrite,
         )
+        for plan in plans:
+            _warn_custom_fonts_saved_by_name(plan.request)
 
 
 def _legacy_session_replay(mode: str) -> Any:
@@ -873,22 +892,24 @@ def render_main(cmd_args: Sequence[str]) -> None:
 
 
 def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:
-    """Remove sidecar controls and overwrite permission from saved CLI arguments."""
+    """Remove sidecar controls, overwrite permission and the font options
+    from saved CLI arguments.
+
+    A Session stores neither a font file nor its path (D-02); font embedding
+    is the caller's export choice, like ``--overwrite``.
+    """
 
     result: list[str] = []
     index = 0
     while index < len(cmd_args):
         token = str(cmd_args[index])
-        if token == "--save_session":
+        if token in {"--save_session", "--overwrite", "--no_font_embedding"}:
             index += 1
             continue
-        if token == "--overwrite":
+        if token.startswith(("--session_output=", "--font_file=")):
             index += 1
             continue
-        if token.startswith("--session_output="):
-            index += 1
-            continue
-        if token == "--session_output":
+        if token in {"--session_output", "--font_file"}:
             index += 2
             continue
         result.append(token)
@@ -1114,7 +1135,8 @@ def _read_svg_results(outputs: Sequence[RenderedSvg]) -> list[tuple[str, str]]:
     results: list[tuple[str, str]] = []
     for output in outputs:
         try:
-            content = output.svg_path.read_text(encoding="utf-8")
+            # D-02: a Session's preview never carries font data.
+            content = remove_embedded_font_css(output.svg_path.read_text(encoding="utf-8"))
         except OSError as exc:
             raise ValidationError(
                 f"Session sidecar output cannot read generated static SVG: {output.svg_path}"

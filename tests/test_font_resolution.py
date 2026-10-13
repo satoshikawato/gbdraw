@@ -33,6 +33,7 @@ from gbdraw.core.text import (
     get_text_bbox_size_pixels,
     measurement_font_file,
 )
+from gbdraw.render.font_embedding import remove_embedded_font_css
 from gbdraw.session_io import session_to_cli_args
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "gbdraw" / "data"
@@ -115,6 +116,27 @@ def test_a_registered_font_is_measured_with_its_own_file(tmp_path: Path) -> None
         path, TEXT, 14, 96, svg_units=True
     )
     assert calculate_bbox_dimensions(TEXT, family, 14, 72) != calculate_bbox_dimensions(TEXT, "sans-serif", 14, 72)
+
+
+def test_a_registered_font_wins_over_the_bundled_alias_of_its_name(tmp_path: Path) -> None:
+    # Review R2: a registered "Times New Roman" is measured with its own bytes.
+    assert fonts.resolve_font_face("'Times New Roman', serif").measurement_name == "LiberationSerif-Regular"
+    assert fonts.custom_font_families("'Times New Roman', serif") == ()
+    path = _renamed_font("LiberationMono-Regular", "Times New Roman", tmp_path / "tnr.ttf")
+
+    registered = fonts.register_font_file(path)
+
+    assert fonts.resolve_font_face("'Times New Roman', serif") == registered.face
+    assert calculate_bbox_dimensions(TEXT, "'Times New Roman', serif", 14, 72) == get_text_bbox_size_pixels(
+        path, TEXT, 14, 72
+    )
+    # Generic keywords keep their Liberation face, and other aliases keep today's mapping.
+    assert fonts.resolve_font_face("serif").measurement_name == "LiberationSerif-Regular"
+    assert fonts.resolve_font_face("Arial").measurement_name == "LiberationSans-Regular"
+    # A Session elsewhere draws it with Liberation Serif, so it is a custom font (D-02).
+    assert fonts.custom_font_families("'Times New Roman', serif") == ("Times New Roman",)
+    fonts.unregister_font_file(path)
+    assert fonts.resolve_font_face("'Times New Roman', serif").measurement_name == "LiberationSerif-Regular"
 
 
 def test_replacing_the_bytes_of_a_family_changes_its_measurement(tmp_path: Path) -> None:
@@ -370,8 +392,8 @@ def _font_families(svg: Path) -> set[str]:
 
 
 def _without_font_names(svg: Path) -> str:
-    """The SVG without the font's names: font-family and the recorded face."""
-    text = re.sub(r'font-family="[^"]*"', 'font-family=""', svg.read_text())
+    """The SVG without the font: its embedded subset, font-family and the recorded face."""
+    text = re.sub(r'font-family="[^"]*"', 'font-family=""', remove_embedded_font_css(svg.read_text()))
     return re.sub(r"fontFile&quot;:&quot;[^&]*&quot;", "fontFile&quot;:&quot;&quot;", text)
 
 

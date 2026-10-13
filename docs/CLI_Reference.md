@@ -181,7 +181,8 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--gc_skew_radius GC_SKEW_RADIUS]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE]
-              [--font_family FONT_FAMILY] [--session SESSION] [--drawing ID]
+              [--font_family FONT_FAMILY] [--font_file PATH]
+              [--no_font_embedding] [--session SESSION] [--drawing ID]
               [--save_session] [--session_output PATH]
 
 Generate genome diagrams in PNG/PDF/SVG/PS/EPS. By default, diagrams for
@@ -568,13 +569,25 @@ options:
                         example "DejaVu Sans"), which gets its generic family
                         appended, or a CSS font-family list. Text is measured
                         with the font file of the first family that is a
-                        bundled Liberation font or alias, that fontconfig (fc-
-                        match) finds, or, without fontconfig, that is
-                        installed in the system font folders. A family found
-                        nowhere is replaced with the nearest Liberation font,
-                        with a warning. A Session saves the font name, not the
-                        font file (optional; default: 'Liberation Sans',
-                        'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif).
+                        --font_file font, a bundled Liberation font or alias,
+                        that fontconfig (fc-match) finds, or, without
+                        fontconfig, that is installed in the system font
+                        folders. A family found nowhere is replaced with the
+                        nearest Liberation font, with a warning. A Session
+                        saves the font name, not the font file (optional;
+                        default: 'Liberation Sans', 'Arial', 'Helvetica',
+                        'Nimbus Sans L', sans-serif; with --font_file, the
+                        family of the first file).
+  --font_file PATH      A TrueType or OpenType font file (.ttf, .otf, .ttc,
+                        .otc) whose family --font_family can name; every face
+                        of a collection is used. Repeatable. Works with
+                        --session. A Session does not store the file
+                        (optional).
+  --no_font_embedding   Do not embed fonts in SVG and interactive SVG output.
+                        By default, each font the SVG uses that gbdraw does
+                        not bundle is embedded as a subset of the characters
+                        it draws, unless its license (OS/2 fsType) forbids
+                        embedding.
   --session SESSION     Regenerate a diagram from a plain or gzip-compressed
                         gbdraw GUI session JSON file.
   --drawing ID          With --session, the drawing to render, by ID or name
@@ -1020,8 +1033,9 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--scale_interval SCALE_INTERVAL]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE]
-              [--font_family FONT_FAMILY] [--normalize_length]
-              [--region REGION] [--record_id RECORD_ID]
+              [--font_family FONT_FAMILY] [--font_file PATH]
+              [--no_font_embedding] [--normalize_length] [--region REGION]
+              [--record_id RECORD_ID]
               [--reverse_complement REVERSE_COMPLEMENT] [--session SESSION]
               [--drawing ID] [--save_session] [--session_output PATH]
 
@@ -1447,13 +1461,25 @@ options:
                         example "DejaVu Sans"), which gets its generic family
                         appended, or a CSS font-family list. Text is measured
                         with the font file of the first family that is a
-                        bundled Liberation font or alias, that fontconfig (fc-
-                        match) finds, or, without fontconfig, that is
-                        installed in the system font folders. A family found
-                        nowhere is replaced with the nearest Liberation font,
-                        with a warning. A Session saves the font name, not the
-                        font file (optional; default: 'Liberation Sans',
-                        'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif).
+                        --font_file font, a bundled Liberation font or alias,
+                        that fontconfig (fc-match) finds, or, without
+                        fontconfig, that is installed in the system font
+                        folders. A family found nowhere is replaced with the
+                        nearest Liberation font, with a warning. A Session
+                        saves the font name, not the font file (optional;
+                        default: 'Liberation Sans', 'Arial', 'Helvetica',
+                        'Nimbus Sans L', sans-serif; with --font_file, the
+                        family of the first file).
+  --font_file PATH      A TrueType or OpenType font file (.ttf, .otf, .ttc,
+                        .otc) whose family --font_family can name; every face
+                        of a collection is used. Repeatable. Works with
+                        --session. A Session does not store the file
+                        (optional).
+  --no_font_embedding   Do not embed fonts in SVG and interactive SVG output.
+                        By default, each font the SVG uses that gbdraw does
+                        not bundle is embedded as a subset of the characters
+                        it draws, unless its license (OS/2 fsType) forbids
+                        embedding.
   --normalize_length    Normalize record length (experimental; default:
                         False).
   --region REGION       Crop a region (repeatable). Format: record_id:start-
