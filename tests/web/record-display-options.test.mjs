@@ -104,11 +104,21 @@ test('record display drafts use one exact transform and provenance contract', ()
     { ...draft, extra: true },
     { ...draft, scope: 'linear' },
     { ...draft, reverseComplementOverride: 'true' },
-    { ...draft, anchorIntent: { ...anchorIntent, schema: 2 } },
-    // OV-575: the selector is a string, as gbdraw/session_io.py requires.
-    { ...draft, selector: ['#1'] },
-    { ...draft, selector: 1 }
-  ]) assert.throws(() => validateRecordDisplayDrafts([invalid]), JSON.stringify(invalid.selector));
+    { ...draft, anchorIntent: { ...anchorIntent, schema: 2 } }
+  ]) assert.throws(() => validateRecordDisplayDrafts([invalid]), JSON.stringify(invalid));
+  // OV-575: a row's selector is text, as gbdraw/session_io.py:851-855 requires.
+  const refusedDraft = /^Error: Invalid record display draft; only source-bound requested intent is supported\.$/;
+  for (const selector of [['#1'], 1]) assert.throws(
+    () => validateRecordDisplayDrafts([{ ...draft, selector }]), refusedDraft, JSON.stringify(selector)
+  );
+  // A row of a Session Python does not check (Session 40) keeps the verdict it
+  // had: only the match of the selector against `#N` (OV-634 for the number).
+  const uncheckedRows = [{ scope: 'linear', ...draft, selector: ['#1'] }];
+  assert.equal(validateRecordDisplayDrafts(uncheckedRows, { scoped: true, textSelector: false }), uncheckedRows);
+  assert.throws(
+    () => validateRecordDisplayDrafts([{ ...draft, selector: 1 }], { textSelector: false }),
+    /^Error: Record display requires a source UID and exact record selector\.$/
+  );
 });
 
 test('complete orientation override has one owner while cropped reverse stays region-owned', () => {

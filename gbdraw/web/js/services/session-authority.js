@@ -484,8 +484,9 @@ const validateSettingsOnlyFlatDraft = (data) => {
   }
   // T-request: `validateCurrentWriterActiveConfig` is the check of `mode` and of the
   // configuration, but its parameter declares them already checked.
-  validateCurrentWriterActiveConfig(/** @type {{ mode: string, storedConfig: Record<string, unknown>, scopedDrafts: boolean }} */ ({
-    mode: /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode, storedConfig, scopedDrafts: true
+  validateCurrentWriterActiveConfig(/** @type {{ mode: string, storedConfig: Record<string, unknown>, scopedDrafts: boolean, sessionVersion: number }} */ ({
+    mode: /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode, storedConfig, scopedDrafts: true,
+    sessionVersion: data.version
   }));
 };
 

@@ -821,6 +821,9 @@
   },
   "web-44": {
    "fixture": "tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz"
+  },
+  "web-40": {
+   "fixture": "tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json"
   }
  },
  "vectors": [
@@ -850,6 +853,15 @@
    "python": "accept",
    "web": "accept",
    "note": "A tracked Web Session 44 with a Result."
+  },
+  {
+   "id": "control-web-40",
+   "finding": "control",
+   "base": "web-40",
+   "edits": [],
+   "python": "accept",
+   "web": "accept",
+   "note": "A tracked Web Session 40 with a Result."
   },
   {
    "id": "ov591-mode-config-empty",
@@ -1339,6 +1351,142 @@
    "web": "refuse",
    "note": "A number is no selector.",
    "pythonMessage": "require a source UID and exact selector"
+  },
+  {
+   "id": "ov575-session-44-display-draft",
+   "finding": "OV-575",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/config/recordDisplayDrafts",
+     "value": [
+      {
+       "scope": "circular",
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": null
+      }
+     ]
+    }
+   ],
+   "python": "accept",
+   "web": "accept",
+   "note": "Control: a Session 41-44 draft row, which also names its mode."
+  },
+  {
+   "id": "ov575-session-44-display-draft-selector-array",
+   "finding": "OV-575",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/config/recordDisplayDrafts",
+     "value": [
+      {
+       "scope": "circular",
+       "sourceUid": "circular",
+       "selector": [
+        "#1"
+       ],
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": null
+      }
+     ]
+    }
+   ],
+   "python": "refuse",
+   "web": "refuse",
+   "note": "The same rule in the flat draft of a Session 41-44.",
+   "pythonMessage": "require a source UID and exact selector"
+  },
+  {
+   "id": "ov575-session-40-display-draft",
+   "finding": "OV-575",
+   "base": "web-40",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/config/recordDisplayDrafts",
+     "value": [
+      {
+       "scope": "circular",
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": null
+      }
+     ]
+    }
+   ],
+   "python": "accept",
+   "web": "accept",
+   "note": "Control: the same row in a Session 40."
+  },
+  {
+   "id": "ov575-session-40-display-draft-selector-array",
+   "finding": "OV-575",
+   "base": "web-40",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/config/recordDisplayDrafts",
+     "value": [
+      {
+       "scope": "circular",
+       "sourceUid": "circular",
+       "selector": [
+        "#1"
+       ],
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": null
+      }
+     ]
+    }
+   ],
+   "python": "accept",
+   "web": "accept",
+   "note": "Python checks display drafts from Session 41; a Session 40 keeps the verdict it had."
+  },
+  {
+   "id": "ov634-session-40-display-draft-selector-number",
+   "finding": "OV-634",
+   "base": "web-40",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/config/recordDisplayDrafts",
+     "value": [
+      {
+       "scope": "circular",
+       "sourceUid": "circular",
+       "selector": 1,
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": null
+      }
+     ]
+    }
+   ],
+   "python": "accept",
+   "web": "refuse",
+   "note": "A number as the selector of a Session 40 row.",
+   "difference": "Python does not check a Session 40 display draft; the Web matches its selector against #N, which a number fails. Unchanged by OV-575. Open (OV-634)."
   },
   {
    "id": "ov611-display-draft-selector-unicode-digit",

@@ -1950,11 +1950,11 @@ export const restoreCurrentWriterActiveConfig = ({
   mode,
   projectedConfig,
   storedConfig
-}) => {
+}, sessionVersion = SESSION_VERSION) => {
   if (!isPlainObject(projectedConfig)) {
     throw new Error('Current session is missing its canonical configuration projection.');
   }
-  validateCurrentWriterActiveConfig({ mode, storedConfig, scopedDrafts: true });
+  validateCurrentWriterActiveConfig({ mode, storedConfig, scopedDrafts: true, sessionVersion });
   const restored = cloneJsonData(projectedConfig);
   /** @type {string[]} */
   const restoredDomains = [];
@@ -2216,7 +2216,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
       mode: canonicalProjection.mode,
       projectedConfig: canonicalProjection.config,
       storedConfig: runtimeStoredConfig
-    });
+    }, sourceSessionVersion);
     recordSessionLifecycleEvent('current-draft-validation-end');
   }
   // Session 46: each slice is a current-writer draft of its own mode; the

@@ -16,7 +16,7 @@ import { isRecordDrawKey } from './record-draw-selection.js';
 import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
-import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { ORTHOGROUP_INFERENCE_VERSION, SESSION_VERSION } from '../contracts/schema.generated.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 /**
@@ -223,14 +223,24 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
     supportedRenderers: LINEAR_TRACK_RENDERERS, supportedSides: ['above', 'below', 'overlay'],
     anchorlessRenderers: ['spacer'], depthTrackCount });
 };
+// Python checks the record display drafts of a Session from this version
+// (`validate_session`, gbdraw/session_io.py:659-660) and refuses a row whose
+// selector is not text (:851-855). A Session 40 draft is not checked there, so
+// here it keeps the verdict it had before OV-575.
+const DISPLAY_DRAFT_CHECK_SESSION_MIN_VERSION = 41;
 /**
  * Throws when `storedConfig` is not a current-writer active configuration:
  * a Session 46 slice of `mode`, or (`scopedDrafts`) the flat draft of a
- * Session 41-44, whose record display and placement rows name their mode.
- * @param {{ mode: string, storedConfig: Record<string, any> | null | undefined, scopedDrafts?: boolean }} input
+ * Session 40-44, whose record display and placement rows name their mode.
+ * `sessionVersion` is the version of the Session that holds the draft; the
+ * default, the current version, is for the writer's own draft and a slice.
+ * @param {{
+ *   mode: string, storedConfig: Record<string, any> | null | undefined, scopedDrafts?: boolean,
+ *   sessionVersion?: number
+ * }} input
  * @returns {void}
  */
-export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false }) => {
+export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false, sessionVersion = SESSION_VERSION }) => {
   if (!['circular', 'linear'].includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');
   assertSafeObjectKeys(config, 'Current session active configuration');
@@ -247,7 +257,9 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     || !config.recordsOff.every((/** @type {unknown} */ key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
-  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, { scoped: scopedDrafts });
+  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, {
+    scoped: scopedDrafts, textSelector: sessionVersion >= DISPLAY_DRAFT_CHECK_SESSION_MIN_VERSION
+  });
   if (has(config, 'featurePlacementOverrides')) {
     if (scopedDrafts) validateScopedFeaturePlacements(config.featurePlacementOverrides);
     else canonicalFeaturePlacements(config.featurePlacementOverrides, mode);

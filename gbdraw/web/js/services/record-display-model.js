@@ -190,12 +190,15 @@ export const migrateLegacyRecordDisplayDrafts = (drafts) => {
 };
 
 // A Session 41-44 draft also named each row's mode (`scoped`); the Session 46
-// split moves each row into its mode's drawing.
+// split moves each row into its mode's drawing. A row's selector is text
+// (OV-575); `textSelector: false` reads a row of a Session Python does not
+// check (`validateCurrentWriterActiveConfig` owns which), whose selector is
+// only matched against `#N` by `recordDisplayKey`.
 /**
  * @param {unknown} drafts
- * @param {{ scoped?: boolean }} [options]
+ * @param {{ scoped?: boolean, textSelector?: boolean }} [options]
  */
-export const validateRecordDisplayDrafts = (drafts, { scoped = false } = {}) => {
+export const validateRecordDisplayDrafts = (drafts, { scoped = false, textSelector = true } = {}) => {
   if (!Array.isArray(drafts)) throw new Error('Record display drafts must be an array.');
   const fields = scoped
     ? 'anchorIntent,recordId,reverseComplementOverride,scope,selector,sourceUid,startCoordinate,topologyOverride'
@@ -206,7 +209,7 @@ export const validateRecordDisplayDrafts = (drafts, { scoped = false } = {}) => 
       || (scoped && !['circular', 'linear'].includes(draft.scope))
       || typeof draft.recordId !== 'string' || draft.recordId.includes('\0')
       || typeof draft.sourceUid !== 'string' || draft.sourceUid.includes('\0')
-      || typeof draft.selector !== 'string'
+      || (textSelector && typeof draft.selector !== 'string')
       || (draft.topologyOverride !== null && typeof draft.topologyOverride !== 'boolean')
       || (draft.reverseComplementOverride !== null
         && typeof draft.reverseComplementOverride !== 'boolean')
