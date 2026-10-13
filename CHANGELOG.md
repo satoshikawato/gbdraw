@@ -1927,6 +1927,13 @@ Retired names and their replacements are listed under
   instead of twice. SVG, PNG, and PDF bytes are unchanged. A Linear request with an
   invalid comparison binding and also an invalid annotation selector or alignment plan
   now reports the annotation or alignment error first (#1045).
+- Performance (web app): a Generate after a small change reuses the parts of the render
+  whose inputs did not change (color, visibility and label-filter tables, GC, skew and depth
+  data, the legend table, the interactive context, the feature catalog, and Linear comparison
+  rows, protein extraction and feature layers). SVG, PNG, and PDF bytes are unchanged on
+  every surface. `gbdraw.api.apply_config_overrides` now shares `labels.filtering` with its
+  input when no override touches it. A collection region with a file selector no longer
+  reuses the crop of another file inside one cache (OV-700, #1055).
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
