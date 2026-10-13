@@ -10,6 +10,7 @@ import {
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
+import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
 import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
@@ -911,13 +912,6 @@ const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
   return normalized;
 };
 
-/** @param {unknown} value */
-const normalizeStrokeWidth = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
-};
-
 /**
  * @template T
  * @param {T[] | null | undefined} value An app-written list (a state value).
@@ -931,77 +925,6 @@ const cloneJsonArray = (value) => {
 const cloneJsonObject = (value) => {
   if (!isPlainObject(value)) return {};
   return cloneJsonValue(value, {});
-};
-
-/** @param {unknown} source */
-const normalizeLegendColorOverrides = (source) => {
-  /** @type {Record<string, string>} */
-  const normalized = {};
-  if (!isPlainObject(source)) return normalized;
-  // The cast: a plain object (the line above).
-  Object.entries(/** @type {Record<string, unknown>} */ (source)).forEach(([key, value]) => {
-    const caption = String(key || '').trim();
-    const color = normalizeOptionalHexColor(value);
-    if (!caption || !color) return;
-    normalized[caption] = color;
-  });
-  return normalized;
-};
-
-/**
- * A saved stroke override as it is read: unvalidated.
- * @typedef {NonNullable<UnvalidatedFields<'strokeColor' | 'strokeWidth' | 'originalStrokeColor'
- *   | 'originalStrokeWidth'>>} StrokeOverrideFields
- */
-/**
- * @param {unknown} source
- * @param {{ requireOverride?: boolean }} [options]
- */
-const normalizeStrokeOverride = (source, { requireOverride = false } = {}) => {
-  if (!isPlainObject(source)) return null;
-  const normalized = {};
-  // The casts below: `source` is a plain object (the first line).
-  const strokeColor = normalizeOptionalHexColor(/** @type {StrokeOverrideFields} */ (source).strokeColor);
-  const strokeWidth = normalizeStrokeWidth(/** @type {StrokeOverrideFields} */ (source).strokeWidth);
-  const originalStrokeColor = normalizeOptionalHexColor(/** @type {StrokeOverrideFields} */ (source).originalStrokeColor);
-  const originalStrokeWidth = normalizeStrokeWidth(/** @type {StrokeOverrideFields} */ (source).originalStrokeWidth);
-
-  if (strokeColor !== null) normalized.strokeColor = strokeColor;
-  if (strokeWidth !== null) normalized.strokeWidth = strokeWidth;
-  if (Object.prototype.hasOwnProperty.call(source, 'originalStrokeColor')) {
-    normalized.originalStrokeColor = originalStrokeColor;
-  }
-  if (Object.prototype.hasOwnProperty.call(source, 'originalStrokeWidth')) {
-    normalized.originalStrokeWidth = originalStrokeWidth;
-  }
-
-  if (
-    requireOverride &&
-    !Object.prototype.hasOwnProperty.call(normalized, 'strokeColor') &&
-    !Object.prototype.hasOwnProperty.call(normalized, 'strokeWidth')
-  ) {
-    return null;
-  }
-  return Object.keys(normalized).length > 0 ? normalized : null;
-};
-
-/**
- * @param {unknown} source
- * @param {{ requireOverride?: boolean }} [options]
- */
-const normalizeStrokeOverrideMap = (source, { requireOverride = false } = {}) => {
-  /** @type {Record<string, NonNullable<ReturnType<typeof normalizeStrokeOverride>>>} */
-  const normalized = {};
-  if (!isPlainObject(source)) return normalized;
-  // The cast: a plain object (the line above).
-  Object.entries(/** @type {Record<string, unknown>} */ (source)).forEach(([key, value]) => {
-    const normalizedKey = String(key || '').trim();
-    if (!normalizedKey) return;
-    const override = normalizeStrokeOverride(value, { requireOverride });
-    if (!override) return;
-    normalized[normalizedKey] = override;
-  });
-  return normalized;
 };
 
 /** @param {unknown} source */

@@ -564,10 +564,11 @@ def test_session_46_legend_edits_move_to_the_row_key(case: dict) -> None:
 LEGEND_RENAMED_ROWS_V46 = (
     Path(__file__).parent / "fixtures" / "sessions" / "legend-renamed-rows.v46.gbdraw-session.json.gz"
 )
+# The edits as Session 46 Load read them: the drawn stroke `none` is no color.
 ROW_KEYED_LEGEND_EDITS = {
     "colorOverrides": {"GC content": "#ff0000", "GC skew (-)": "#0000ff"},
     "strokeOverrides": {"GC skew (+)": {
-        "originalStrokeColor": "none", "originalStrokeWidth": 0, "strokeWidth": 2, "strokeColor": "#00aa00",
+        "originalStrokeColor": None, "originalStrokeWidth": 0, "strokeWidth": 2, "strokeColor": "#00aa00",
     }},
 }
 

@@ -12,7 +12,8 @@ import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 // `FLAT_DRAFT_TOP_LEVEL_FIELDS`: the top-level homes that Session 46 moved into `modes`.
 import { FLAT_DRAFT_TOP_LEVEL_FIELDS, ROW_KEYED_LEGEND_SESSION_VERSION } from '../contracts/schema.generated.js';
 import { legendEntryKey } from './legend-svg.js';
-import { normalizePaletteColors } from '../utils/color-utils.js';
+import { normalizeDefaultColor, normalizePaletteColors } from '../utils/color-utils.js';
+import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap } from './style-overrides.js';
 import { cloneJsonData } from './json-clone.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { featureIdentityKey } from './feature-placement.js';
@@ -416,79 +417,108 @@ export const splitDraftIntoModes = (draft, { committedMode, modeProfiles = undef
 
 /** @typedef {'colorOverrides' | 'strokeOverrides'} LegendEditStore */
 /**
- * One Session 46 Legend edit that did not stay under its key (`legendEditsByRowKey`):
- * `moved` to the row key, kept as `unmatched` (no entry shows or holds its key),
- * or dropped (`toKey: null`) as `unshown` (the key of a renamed row that no
- * entry shows) or as a `collision` with an edit that already landed on `rowKey`.
- * `slice`: the mode slice, or `draft` (`sessionLegendEditsByRowKey`).
- * @typedef {{ store: LegendEditStore, fromKey: string, toKey: string, outcome: 'moved' | 'unmatched', slice?: string }
- *   | { store: LegendEditStore, fromKey: string, toKey: null, outcome: 'unshown', slice?: string }
+ * One Session 46 Legend edit that did not stay as it was (`legendEditsByRowKey`):
+ * `moved` to the key of the row whose caption it was stored under; kept under
+ * its key as `unmatched` (no row shows or holds the key) or as `unshown` (the
+ * key of a renamed row that no row shows: Session 46 applied it to that row
+ * through Python's key); or dropped (`toKey: null`) as a `collision`: a later
+ * edit of the store reached the same row (`rowKey`) and Session 46 applied it
+ * over this one. `slice`: the mode slice, or `draft` (`sessionLegendEditsByRowKey`).
+ * @typedef {{ store: LegendEditStore, fromKey: string, toKey: string, outcome: 'moved' | 'unmatched' | 'unshown', slice?: string }
  *   | { store: LegendEditStore, fromKey: string, toKey: null, outcome: 'collision', rowKey: string, slice?: string }} LegendEditRekey
  */
-/** @type {readonly LegendEditStore[]} */
-const LEGEND_EDIT_STORES = Object.freeze(['colorOverrides', 'strokeOverrides']);
+
+// The rows a Session 46 Legend's edits reach (Session 46 Load,
+// `normalizeSessionLegendEntries` and `normalizeEditorStateData` at
+// 9839de8e: an entry with a caption and a usable color, the first of each
+// caption in its list), by the caption each row shows (`draftLegendRows` at
+// 9839de8e): a listed row before a dormant one (the later dormant entry of a
+// caption wins), and a deleted row as its Restore shows it. A dormant entry
+// that is not renamed, or whose key a listed or deleted row holds, is no row.
+// `renamedKeys`: the keys of the renamed rows.
+/** @param {Record<string, unknown>} legend */
+const session46LegendRows = (legend) => {
+  /** @param {string} list @returns {{ caption: string, key: string, dormant: boolean }[]} */
+  const loaded = (list) => {
+    const entries = legend[list];
+    /** @type {Set<string>} */
+    const captions = new Set();
+    return (Array.isArray(entries) ? entries : []).flatMap((/** @type {unknown} */ entry) => {
+      if (!isObject(entry)) return [];
+      const row = /** @type {{ caption?: unknown, originalCaption?: unknown, color?: unknown, dormant?: unknown }} */ (entry);
+      const caption = String(row.caption || '').trim();
+      if (!caption || !normalizeDefaultColor(row.color) || captions.has(caption)) return [];
+      captions.add(caption);
+      return [{ caption, key: legendEntryKey(row), dormant: row.dormant === true }];
+    });
+  };
+  const entries = loaded('entries');
+  const listed = entries.filter(({ dormant }) => !dormant);
+  const deleted = loaded('deletedEntries');
+  const listedKeys = new Set(listed.map(({ key }) => key));
+  const deletedKeys = new Set(deleted.map(({ key }) => key));
+  const dormant = [...loaded('dormantEntries'), ...entries.filter((entry) => entry.dormant)]
+    .filter(({ caption, key }) => caption !== key && !listedKeys.has(key) && !deletedKeys.has(key));
+  /** @type {Map<string, string>} */
+  const rowOf = new Map([...dormant, ...listed].map(({ caption, key }) => [caption, key]));
+  deleted.forEach(({ caption, key }) => { if (!rowOf.has(caption)) rowOf.set(caption, key); });
+  const renamedKeys = new Set([...listed, ...dormant, ...deleted].filter(({ caption, key }) => caption !== key).map(({ key }) => key));
+  return { rowOf, renamedKeys };
+};
 
 // A Session 46 Legend (a slice's, or a flat draft's, `editorState.legend`)
 // read as Session 47, and what the reading did to each edit that did not stay
-// under its key. Session 46 stored the Legend color and stroke edits under the
-// caption a row shows, Session 47 under the row key (`legendEntryKey`). The
-// first entry that shows a caption names its row, the listed (and dormant)
-// entries before the deleted ones, as Session 46 Load kept only that entry.
-// Each edit, in store order: under a caption an entry shows, it goes to that
-// entry's key (`moved` when the key differs), unless an earlier edit of the
-// store took that key (`collision`, dropped); under the key of a renamed row
-// that no entry shows, Session 46 applied it to no row (`unshown`, dropped);
-// under any other key it stays (`unmatched`). Other fields are kept as they
-// are. The outcomes are data for Load's repair report, computed before Load
-// commits; the twin is `legend_edits_by_row_key` (gbdraw/session_io.py).
+// as it was. Session 46 stored the Legend color and stroke edits under the
+// caption a row shows, Session 47 under the row key (`legendEntryKey`). Each
+// row key gets the value Session 46 applied to that row (`compileDirectEditorMutationPlan`
+// at 9839de8e, app/candidate-render.js): the stores as Session 46 Load read
+// them (style-overrides.js), each edit reaching the row whose caption it is
+// stored under, else the row of Python's key of that name; the color edits in
+// their order, then the strokes in the order of the color edits' keys and then
+// their own; a later edit painted over an earlier one, a stroke field by field
+// (`strokeColor`, `strokeWidth`). Other fields are kept as they are. The
+// outcomes are data for Load's repair report, computed before Load commits;
+// the twin is `legend_edits_by_row_key` (gbdraw/session_io.py).
 /**
  * @template {Record<string, unknown>} Legend
  * @param {Legend} legend
  * @returns {{ legend: Legend, outcomes: LegendEditRekey[] }}
  */
 export const legendEditsByRowKey = (legend) => {
-  /** @type {Map<string, string>} */
-  const rowOf = new Map();
-  /** @type {Set<string>} */
-  const renamedKeys = new Set();
-  for (const rows of ['entries', 'dormantEntries', 'deletedEntries']) {
-    const entries = legend[rows];
-    for (const entry of Array.isArray(entries) ? entries : []) {
-      if (!isObject(entry)) continue;
-      const caption = String(entry.caption || '').trim();
-      if (!caption) continue;
-      const key = legendEntryKey(entry);
-      if (key !== caption) renamedKeys.add(key);
-      if (!rowOf.has(caption)) rowOf.set(caption, key);
-    }
-  }
+  const { rowOf, renamedKeys } = session46LegendRows(legend);
+  /** @param {string} key */
+  const rowKeyOf = (key) => rowOf.get(key) || key;
+  const colors = normalizeLegendColorOverrides(legend.colorOverrides);
+  const strokes = normalizeStrokeOverrideMap(legend.strokeOverrides, { requireOverride: true });
   /** @type {Record<string, unknown>} */
   const read = { ...legend };
   /** @type {LegendEditRekey[]} */
   const outcomes = [];
-  for (const store of LEGEND_EDIT_STORES) {
-    const record = legend[store];
-    if (!isObject(record)) continue;
-    /** @type {Record<string, unknown>} */
+  /**
+   * @template T
+   * @param {LegendEditStore} store
+   * @param {Record<string, T>} edits
+   * @param {string[]} order
+   * @param {(earlier: T | undefined, later: T) => T} paint
+   */
+  const keyByRow = (store, edits, order, paint) => {
+    if (!isObject(legend[store])) return;
+    const lastOf = new Map(order.map((key) => [rowKeyOf(key), key]));
+    /** @type {Record<string, T>} */
     const keyed = {};
-    for (const [key, value] of Object.entries(/** @type {Record<string, unknown>} */ (record))) {
-      const rowKey = rowOf.get(key);
-      if (rowKey !== undefined) {
-        if (Object.hasOwn(keyed, rowKey)) {
-          outcomes.push({ store, fromKey: key, toKey: null, outcome: 'collision', rowKey });
-          continue;
-        }
-        keyed[rowKey] = value;
-        if (rowKey !== key) outcomes.push({ store, fromKey: key, toKey: rowKey, outcome: 'moved' });
-      } else if (renamedKeys.has(key)) {
-        outcomes.push({ store, fromKey: key, toKey: null, outcome: 'unshown' });
-      } else {
-        keyed[key] = value;
-        outcomes.push({ store, fromKey: key, toKey: key, outcome: 'unmatched' });
-      }
-    }
+    order.forEach((key) => {
+      const rowKey = rowKeyOf(key);
+      keyed[rowKey] = paint(keyed[rowKey], edits[key]);
+      if (lastOf.get(rowKey) !== key) outcomes.push({ store, fromKey: key, toKey: null, outcome: 'collision', rowKey });
+      else if (rowKey !== key) outcomes.push({ store, fromKey: key, toKey: rowKey, outcome: 'moved' });
+      else if (!rowOf.has(key)) outcomes.push({ store, fromKey: key, toKey: key, outcome: renamedKeys.has(key) ? 'unshown' : 'unmatched' });
+    });
     read[store] = keyed;
-  }
+  };
+  const colorKeys = Object.keys(colors);
+  keyByRow('colorOverrides', colors, colorKeys, (_earlier, later) => later);
+  keyByRow('strokeOverrides', strokes, [...new Set([...colorKeys, ...Object.keys(strokes)])].filter((key) => Object.hasOwn(strokes, key)),
+    (earlier, later) => ({ ...earlier, ...later }));
   return { legend: /** @type {Legend} */ (read), outcomes };
 };
 

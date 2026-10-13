@@ -36,7 +36,7 @@ from .analysis.protein_colinearity import (
 from .comparisons.losat_jobs import NUCLEOTIDE_LOSAT_CACHE_SCHEMA
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
-from .io.colors import named_color_hex
+from .io.colors import is_user_color, named_color_hex
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
@@ -3189,7 +3189,8 @@ def _stroke_override_map(source: object) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     if not isinstance(source, Mapping):
         return normalized
-    for key, value in source.items():
+    for key in _js_key_order(source):
+        value = source[key]
         name = _js_text(key)
         if not name or not isinstance(value, Mapping):
             continue
@@ -3216,7 +3217,8 @@ def _legend_color_overrides(source: object) -> dict[str, str]:
     normalized: dict[str, str] = {}
     if not isinstance(source, Mapping):
         return normalized
-    for key, value in source.items():
+    for key in _js_key_order(source):
+        value = source[key]
         caption = _js_text(key)
         color = _optional_hex_color(value)
         if caption and color:
@@ -3274,12 +3276,12 @@ def _with_normalized_editor_colors(draft: Mapping[str, Any]) -> Mapping[str, Any
 
 
 # How a Session 46 Legend edit is read in Session 47 (``legend_edits_by_row_key``):
-# ``moved`` to the row key, kept as ``unmatched`` (no entry shows or holds its
-# key), or dropped as ``unshown`` (the key of a renamed row that no entry shows)
-# or as a ``collision`` (another edit already landed on ``rowKey``).
+# ``moved`` to the key of the row whose caption it was stored under; kept under
+# its key as ``unmatched`` (no row shows or holds the key) or as ``unshown``
+# (the key of a renamed row that no row shows); or dropped as a ``collision``
+# (a later edit reached the same row, ``rowKey``).
 LegendEditRekeyOutcome = Literal["moved", "unmatched", "unshown", "collision"]
 LegendEditStore = Literal["colorOverrides", "strokeOverrides"]
-_LEGEND_EDIT_STORES: tuple[LegendEditStore, ...] = ("colorOverrides", "strokeOverrides")
 
 
 class _LegendEditRekeyRequired(TypedDict):
@@ -3290,31 +3292,93 @@ class _LegendEditRekeyRequired(TypedDict):
 
 
 class LegendEditRekey(_LegendEditRekeyRequired, total=False):
-    """One Session 46 Legend edit that did not stay under its key; ``toKey``
-    is ``None`` when it was dropped. ``rowKey``: the key a ``collision`` met;
+    """One Session 46 Legend edit that did not stay as it was; ``toKey`` is
+    ``None`` when it was dropped. ``rowKey``: the row a ``collision`` reached;
     ``slice``: the mode slice, or ``"draft"`` (``session_legend_edits_by_row_key``)."""
 
     rowKey: str
     slice: str
 
 
+_JS_ARRAY_INDEX = re.compile(r"0|[1-9][0-9]*")
+
+
+def _js_key_order(record: Mapping[Any, Any]) -> list[Any]:
+    """The keys of a JSON object in the order JavaScript lists them: array
+    indexes ascending, then the other keys in insertion order."""
+
+    def is_index(key: object) -> bool:
+        return isinstance(key, str) and _JS_ARRAY_INDEX.fullmatch(key) is not None and int(key) < 2**32 - 1
+
+    indexes = sorted((key for key in record if is_index(key)), key=int)
+    return indexes + [key for key in record if not is_index(key)]
+
+
+def _session_46_legend_rows(legend: Mapping[str, Any]) -> tuple[dict[str, str], set[str]]:
+    """The rows a Session 46 Legend's edits reach, by the caption each shows,
+    and the keys of the renamed rows; the twin of ``session46LegendRows`` in
+    the Web ``services/mode-scoped-migration.js``.
+
+    As Session 46 Load read the rows (an entry with a caption and a usable
+    color, the first of each caption in its list) and as its compile found
+    them (``draftLegendRows`` at 9839de8e): a listed row before a dormant one
+    (the later dormant entry of a caption wins), and a deleted row as its
+    Restore shows it. A dormant entry that is not renamed, or whose key a
+    listed or deleted row holds, is no row.
+    """
+
+    def loaded(rows: str) -> list[tuple[str, str, bool]]:
+        entries = legend.get(rows)
+        captions: set[str] = set()
+        found: list[tuple[str, str, bool]] = []
+        for entry in entries if isinstance(entries, list) else ():
+            if not isinstance(entry, Mapping):
+                continue
+            caption = _js_text(entry.get("caption") or "")
+            if not caption or not is_user_color(_js_text(entry.get("color"))) or caption in captions:
+                continue
+            captions.add(caption)
+            key = _js_text(entry.get("originalCaption") or entry.get("caption") or "")
+            found.append((caption, key, entry.get("dormant") is True))
+        return found
+
+    entries = loaded("entries")
+    listed = [row for row in entries if not row[2]]
+    deleted = loaded("deletedEntries")
+    listed_keys = {key for _caption, key, _dormant in listed}
+    deleted_keys = {key for _caption, key, _dormant in deleted}
+    dormant = [
+        row for row in [*loaded("dormantEntries"), *(row for row in entries if row[2])]
+        if row[0] != row[1] and row[1] not in listed_keys and row[1] not in deleted_keys
+    ]
+    row_of = {caption: key for caption, key, _dormant in [*dormant, *listed]}
+    for caption, key, _dormant in deleted:
+        row_of.setdefault(caption, key)
+    renamed_keys = {key for caption, key, _dormant in [*listed, *dormant, *deleted] if caption != key}
+    return row_of, renamed_keys
+
+
 def legend_edits_by_row_key(legend: Mapping[str, Any]) -> tuple[dict[str, Any], list[LegendEditRekey]]:
     """A Session 46 Legend (a slice's ``editorState.legend``) read as Session 47,
-    and what the reading did to each edit that did not stay under its key.
+    and what the reading did to each edit that did not stay as it was.
 
     Session 46 stored the Legend color and stroke edits (``colorOverrides``,
     ``strokeOverrides``) under the caption a row shows, Session 47 under the
-    row key (``originalCaption``, else the caption). The first entry that
-    shows a caption names its row, the listed (and dormant) entries before the
-    deleted ones, as Session 46 Load kept only that entry. Each edit, in store
-    order:
+    row key (``originalCaption``, else the caption). Each row key gets the
+    value Session 46 applied to that row (the Web compile at 9839de8e,
+    ``app/candidate-render.js``):
 
-    - under a caption an entry shows: stored under that entry's key
-      (``moved`` when the key differs); when an earlier edit of the store
-      already took that key, it is dropped (``collision``, ``rowKey``);
-    - under the key of a renamed row that no entry shows: Session 46 applied
-      it to no row, so it is dropped (``unshown``);
-    - under any other key: kept (``unmatched``).
+    - the stores are read as Session 46 Load read them
+      (:func:`_legend_color_overrides`, :func:`_stroke_override_map`);
+    - an edit reaches the row whose caption it is stored under
+      (:func:`_session_46_legend_rows`; ``moved`` when the key differs), else
+      the row of Python's key of that name: it stays under its key, as
+      ``unshown`` when that is the key of a renamed row that no row shows,
+      else as ``unmatched``;
+    - the color edits apply in their order, then the strokes in the order of
+      the color edits' keys and then their own; a later edit paints over an
+      earlier one on the same row (``collision``, ``rowKey``), a stroke field
+      by field (``strokeColor``, ``strokeWidth``).
 
     Each outcome is ``{store, fromKey, toKey, outcome}`` (``toKey`` is
     ``None`` when dropped). Other fields are kept as they are.
@@ -3324,43 +3388,35 @@ def legend_edits_by_row_key(legend: Mapping[str, Any]) -> tuple[dict[str, Any], 
     ``tests/fixtures/sessions/legend-row-key-vectors.json`` pins both.
     """
 
-    row_of: dict[str, str] = {}
-    renamed_keys: set[str] = set()
-    for rows in ("entries", "dormantEntries", "deletedEntries"):
-        entries = legend.get(rows)
-        for entry in entries if isinstance(entries, list) else ():
-            if not isinstance(entry, Mapping):
-                continue
-            caption = _js_text(entry.get("caption") or "")
-            if not caption:
-                continue
-            key = _js_text(entry.get("originalCaption") or entry.get("caption") or "")
-            if key != caption:
-                renamed_keys.add(key)
-            row_of.setdefault(caption, key)
+    row_of, renamed_keys = _session_46_legend_rows(legend)
+    colors = _legend_color_overrides(legend.get("colorOverrides"))
+    strokes = _stroke_override_map(legend.get("strokeOverrides"))
     changed = dict(legend)
     outcomes: list[LegendEditRekey] = []
-    for store in _LEGEND_EDIT_STORES:
-        record = legend.get(store)
-        if not isinstance(record, Mapping):
-            continue
-        read: dict[str, Any] = {}
-        for key, value in record.items():
-            if key in row_of:
-                row_key = row_of[key]
-                if row_key in read:
-                    outcomes.append({"store": store, "fromKey": key, "toKey": None,
-                                     "outcome": "collision", "rowKey": row_key})
-                    continue
-                read[row_key] = value
-                if row_key != key:
-                    outcomes.append({"store": store, "fromKey": key, "toKey": row_key, "outcome": "moved"})
-            elif key in renamed_keys:
-                outcomes.append({"store": store, "fromKey": key, "toKey": None, "outcome": "unshown"})
-            else:
-                read[key] = value
-                outcomes.append({"store": store, "fromKey": key, "toKey": key, "outcome": "unmatched"})
-        changed[store] = read
+
+    def key_by_row(store: LegendEditStore, edits: Mapping[str, Any], order: list[str], strokes_paint: bool) -> None:
+        if not isinstance(legend.get(store), Mapping):
+            return
+        last_of = {row_of.get(key) or key: key for key in order}
+        keyed: dict[str, Any] = {}
+        for key in order:
+            row_key = row_of.get(key) or key
+            keyed[row_key] = {**keyed.get(row_key, {}), **edits[key]} if strokes_paint else edits[key]
+            if last_of[row_key] != key:
+                outcomes.append({"store": store, "fromKey": key, "toKey": None,
+                                 "outcome": "collision", "rowKey": row_key})
+            elif row_key != key:
+                outcomes.append({"store": store, "fromKey": key, "toKey": row_key, "outcome": "moved"})
+            elif key not in row_of:
+                outcomes.append({"store": store, "fromKey": key, "toKey": key,
+                                 "outcome": "unshown" if key in renamed_keys else "unmatched"})
+        changed[store] = keyed
+
+    color_keys = _js_key_order(colors)
+    key_by_row("colorOverrides", colors, color_keys, False)
+    stroke_keys = _js_key_order(strokes)
+    key_by_row("strokeOverrides", strokes,
+               [key for key in color_keys if key in strokes] + [key for key in stroke_keys if key not in colors], True)
     return changed, outcomes
 
 

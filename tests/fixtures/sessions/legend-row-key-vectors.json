@@ -3,7 +3,7 @@
   "readsSessionVersion": 46,
   "cases": [
     {
-      "name": "ambiguous chain: GC skew renamed Z, then GC content renamed GC skew and colored (DESIGN 1a)",
+      "name": "ambiguous chain: GC skew renamed Z, then GC content renamed GC skew (DESIGN 1a): an edit under the shown caption GC skew is the GC content row's",
       "legend": {
         "entries": [
           {
@@ -32,6 +32,10 @@
           "Z": {
             "strokeColor": "#00aa00",
             "strokeWidth": 2
+          },
+          "GC skew": {
+            "strokeColor": "#0000ff",
+            "strokeWidth": 1
           }
         },
         "addedCaptions": []
@@ -61,6 +65,10 @@
           "GC content": "#ff0000"
         },
         "strokeOverrides": {
+          "GC content": {
+            "strokeColor": "#0000ff",
+            "strokeWidth": 1
+          },
           "GC skew": {
             "strokeColor": "#00aa00",
             "strokeWidth": 2
@@ -71,6 +79,12 @@
       "outcomes": [
         {
           "store": "colorOverrides",
+          "fromKey": "GC skew",
+          "toKey": "GC content",
+          "outcome": "moved"
+        },
+        {
+          "store": "strokeOverrides",
           "fromKey": "GC skew",
           "toKey": "GC content",
           "outcome": "moved"
@@ -137,7 +151,7 @@
       ]
     },
     {
-      "name": "a deleted renamed row keeps its edits under its row key",
+      "name": "a deleted renamed row keeps its edits under its row key, where Restore in Session 46 applied them",
       "legend": {
         "entries": [
           {
@@ -419,7 +433,126 @@
       ]
     },
     {
-      "name": "an edit under the key of a renamed row that no row shows applied to no row in Session 46: dropped, reported unshown",
+      "name": "a dormant row whose key a listed row shows is not a row (Session 46 left it out): its caption's edit stays, unmatched",
+      "legend": {
+        "entries": [
+          {
+            "caption": "GC content",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0"
+          }
+        ],
+        "dormantEntries": [
+          {
+            "caption": "Y",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0"
+          }
+        ],
+        "colorOverrides": {
+          "Y": "#123456"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "GC content",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0"
+          }
+        ],
+        "dormantEntries": [
+          {
+            "caption": "Y",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0"
+          }
+        ],
+        "colorOverrides": {
+          "Y": "#123456"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "Y",
+          "toKey": "Y",
+          "outcome": "unmatched"
+        }
+      ]
+    },
+    {
+      "name": "an entry Session 46 Load left out (no usable color) shows no caption: its caption's edit stays, unmatched",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "bogus"
+          }
+        ],
+        "colorOverrides": {
+          "X": "#111111"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "bogus"
+          }
+        ],
+        "colorOverrides": {
+          "X": "#111111"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "X",
+          "toKey": "X",
+          "outcome": "unmatched"
+        }
+      ]
+    },
+    {
+      "name": "an edit under the key of a renamed row that no row shows paints that row, as Session 46 painted Python's key",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "K",
+          "toKey": "K",
+          "outcome": "unshown"
+        }
+      ]
+    },
+    {
+      "name": "two edits that reach one row: the later wins, as Session 46 painted it last; the earlier is a collision (caption first)",
       "legend": {
         "entries": [
           {
@@ -442,26 +575,27 @@
           }
         ],
         "colorOverrides": {
-          "K": "#111111"
+          "K": "#222222"
         }
       },
       "outcomes": [
         {
           "store": "colorOverrides",
           "fromKey": "X",
-          "toKey": "K",
-          "outcome": "moved"
+          "toKey": null,
+          "outcome": "collision",
+          "rowKey": "K"
         },
         {
           "store": "colorOverrides",
           "fromKey": "K",
-          "toKey": null,
+          "toKey": "K",
           "outcome": "unshown"
         }
       ]
     },
     {
-      "name": "two edits that land on one row key: the first stays, the other is dropped, reported as a collision",
+      "name": "two edits that reach one row: the later wins, as Session 46 painted it last; the earlier is a collision (key first)",
       "legend": {
         "entries": [
           {
@@ -470,16 +604,9 @@
             "color": "#aaaaaa"
           }
         ],
-        "deletedEntries": [
-          {
-            "caption": "Y",
-            "originalCaption": "K",
-            "color": "#bbbbbb"
-          }
-        ],
         "colorOverrides": {
-          "X": "#111111",
-          "Y": "#222222"
+          "K": "#222222",
+          "X": "#111111"
         }
       },
       "expected": {
@@ -490,15 +617,179 @@
             "color": "#aaaaaa"
           }
         ],
-        "deletedEntries": [
+        "colorOverrides": {
+          "K": "#111111"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "K",
+          "toKey": null,
+          "outcome": "collision",
+          "rowKey": "K"
+        },
+        {
+          "store": "colorOverrides",
+          "fromKey": "X",
+          "toKey": "K",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "two strokes that reach one row combine field by field: a field the later stroke lacks keeps the earlier value",
+      "legend": {
+        "entries": [
           {
-            "caption": "Y",
+            "caption": "X",
             "originalCaption": "K",
-            "color": "#bbbbbb"
+            "color": "#aaaaaa"
+          }
+        ],
+        "strokeOverrides": {
+          "X": {
+            "strokeColor": "#00aa00",
+            "strokeWidth": 2
+          },
+          "K": {
+            "strokeColor": "#333333"
+          }
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "strokeOverrides": {
+          "K": {
+            "strokeColor": "#333333",
+            "strokeWidth": 2
+          }
+        }
+      },
+      "outcomes": [
+        {
+          "store": "strokeOverrides",
+          "fromKey": "X",
+          "toKey": null,
+          "outcome": "collision",
+          "rowKey": "K"
+        },
+        {
+          "store": "strokeOverrides",
+          "fromKey": "K",
+          "toKey": "K",
+          "outcome": "unshown"
+        }
+      ]
+    },
+    {
+      "name": "strokes are applied in the order Session 46 walked them: keys with a color edit first, in the color edits' order",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
           }
         ],
         "colorOverrides": {
-          "K": "#111111"
+          "K": "#222222"
+        },
+        "strokeOverrides": {
+          "X": {
+            "strokeColor": "#00aa00",
+            "strokeWidth": 2
+          },
+          "K": {
+            "strokeWidth": 5
+          }
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222"
+        },
+        "strokeOverrides": {
+          "K": {
+            "strokeColor": "#00aa00",
+            "strokeWidth": 2
+          }
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "K",
+          "toKey": "K",
+          "outcome": "unshown"
+        },
+        {
+          "store": "strokeOverrides",
+          "fromKey": "K",
+          "toKey": null,
+          "outcome": "collision",
+          "rowKey": "K"
+        },
+        {
+          "store": "strokeOverrides",
+          "fromKey": "X",
+          "toKey": "K",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "edits are read as Session 46 Load read them: a color name resolved, a value without a usable color or width left out",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "X": "Red",
+          "K": "not a color"
+        },
+        "strokeOverrides": {
+          "X": {
+            "strokeColor": "",
+            "strokeWidth": 3
+          },
+          "K": {
+            "strokeColor": ""
+          }
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#ff0000"
+        },
+        "strokeOverrides": {
+          "K": {
+            "strokeWidth": 3
+          }
         }
       },
       "outcomes": [
@@ -509,11 +800,53 @@
           "outcome": "moved"
         },
         {
+          "store": "strokeOverrides",
+          "fromKey": "X",
+          "toKey": "K",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "edits are applied in JavaScript's key order: an integer-like caption comes first",
+      "legend": {
+        "entries": [
+          {
+            "caption": "1",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222",
+          "1": "#111111"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "1",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222"
+        }
+      },
+      "outcomes": [
+        {
           "store": "colorOverrides",
-          "fromKey": "Y",
+          "fromKey": "1",
           "toKey": null,
           "outcome": "collision",
           "rowKey": "K"
+        },
+        {
+          "store": "colorOverrides",
+          "fromKey": "K",
+          "toKey": "K",
+          "outcome": "unshown"
         }
       ]
     },
@@ -543,9 +876,9 @@
     }
   ],
   "outcomes": {
-    "moved": "stored under a renamed row's shown caption; now under the row key (lossless)",
-    "unmatched": "no entry shows or holds the key; kept under it, as before (lossless)",
-    "unshown": "the key of a renamed row that no entry shows: Session 46 applied the edit to no row; dropped",
-    "collision": "another edit of the store already landed on rowKey; dropped"
+    "moved": "stored under the caption a renamed row shows; now under that row's key (lossless)",
+    "unmatched": "no row shows or holds the key; kept under it, where Session 46 applied it to Python's row of that name, if any",
+    "unshown": "the key of a renamed row that no row shows; kept under it: Session 46 applied it to that row through Python's key",
+    "collision": "a later edit of the store reached the same row (rowKey) and Session 46 applied it over this one; dropped, except a stroke field (strokeColor, strokeWidth) that no later edit has, which stays in the kept value"
   }
 }
