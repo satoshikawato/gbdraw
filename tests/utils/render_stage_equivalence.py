@@ -430,6 +430,7 @@ class EquivalenceHarness:
         self.mode: Mode = mode
         self.output_directory = output_directory
         self.cache = PreparedBiologicalInputCache()
+        self.empty = True
         output_directory.mkdir(parents=True, exist_ok=True)
 
     def argv(self, arguments: Sequence[str]) -> list[str]:
@@ -446,7 +447,9 @@ class EquivalenceHarness:
     def warm(self, arguments: Sequence[str]) -> RenderOutcome:
         """Render on the shared cache (the state before is the previous render)."""
 
-        return render_captured(self.capture(arguments), self.cache)
+        outcome = render_captured(self.capture(arguments), self.cache)
+        self.empty = False
+        return outcome
 
     def cold(self, arguments: Sequence[str]) -> RenderOutcome:
         """Render on a new cache."""
@@ -972,6 +975,10 @@ def run_step(harness: EquivalenceHarness, label: str, arguments: Sequence[str]) 
     refused = _try_capture(harness, arguments)
     if refused is not None:
         return StepResult(label, tuple(arguments), None, None, refused)
+    if harness.empty:
+        # The first render of a chain is a cold render: it is not repeated.
+        cold = harness.warm(arguments)
+        return StepResult(label, tuple(arguments), cold, cold)
     return StepResult(label, tuple(arguments), harness.warm(arguments), harness.cold(arguments))
 
 
