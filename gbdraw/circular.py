@@ -80,6 +80,7 @@ from .cli_utils.common import (
     _add_retired_option_args,
     _add_gc_skew_toggle_args,
     _add_gc_content_axis_args,
+    _add_font_family_arg,
     _add_legend_size_args,
     add_analysis_args,
     add_color_args,
@@ -108,6 +109,7 @@ from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
 )
+from .core.fonts import complete_font_family
 from .session import SessionDocument, load_session_document
 from .session_io import session_to_cli_args
 
@@ -563,6 +565,7 @@ def _get_args(
         help='GC skew track center radius for circular mode (as a ratio of base radius; must be > 0).',
         type=float)
     _add_legend_size_args(parser)
+    _add_font_family_arg(parser)
 
     add_session_args(parser)
 
@@ -1116,6 +1119,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         else gc_content_tick_interval
     )
     override_candidates: dict[str, object | None] = {
+        "objects.text.font_family": complete_font_family(args.font_family) if args.font_family else None,
         "objects.features.block_stroke_color": block_stroke_color,
         "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
         "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,

@@ -14,12 +14,16 @@ bundled face loaded through ``@font-face``).
 
 from __future__ import annotations
 
+import os
+import uuid
 from pathlib import Path
 
 import pytest
 from fontTools.ttLib import TTFont
 
 from gbdraw.core.text import (
+    calculate_bbox_dimensions,
+    calculate_svg_bbox_dimensions,
     collapse_svg_white_space,
     font_pair_kerning_table,
     get_text_bbox_size_pixels,
@@ -122,3 +126,56 @@ CHROMIUM_TEXT_LENGTH = {
 )
 def test_svg_mode_matches_chromium_text_length(face: str, text: str) -> None:
     assert _svg_units(face, text) == CHROMIUM_TEXT_LENGTH[face][text]
+
+
+# OV-680: a family fontconfig finds is measured with its own file, even when a
+# bundled generic alias follows it in the list; fontconfig's fallback for a
+# family it does not have is not used.
+
+
+def _renamed_face(source: str, family: str, target: Path) -> str:
+    font = TTFont(_path(source))
+    name_table = font["name"]
+    name_table.names = [record for record in name_table.names if record.nameID not in {1, 4, 6, 16, 17}]
+    for name_id, value in ((1, family), (4, family), (6, family.replace(" ", "")), (16, family)):
+        name_table.setName(value, name_id, 3, 1, 0x409)
+    font.save(str(target))
+    return str(target)
+
+
+def _fake_fc_match(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, family: str, font_file: str) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = bin_dir / "fc-match"
+    script.write_text(f"#!/bin/sh\nprintf '%s\\t%s\\t0' '{family}' '{font_file}'\n")
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+
+def test_ov680_a_named_system_family_before_a_generic_is_measured_with_its_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    family = f"Gbdraw OV680 {uuid.uuid4().hex[:8]}"
+    font_file = _renamed_face("LiberationSerif-Regular", family, tmp_path / "ov680.ttf")
+    _fake_fc_match(tmp_path, monkeypatch, family, font_file)
+    text = "Hypothetical protein"
+
+    svg_width = calculate_svg_bbox_dimensions(text, f"'{family}', sans-serif", 14, 96)
+    point_width = calculate_bbox_dimensions(text, f"'{family}', sans-serif", 14, 72)
+
+    assert svg_width == get_text_bbox_size_pixels(font_file, text, 14, 96, svg_units=True)
+    assert point_width == get_text_bbox_size_pixels(font_file, text, 14, 72)
+    assert svg_width != get_text_bbox_size_pixels(_path("LiberationSans-Regular"), text, 14, 96, svg_units=True)
+
+
+def test_ov680_fontconfig_fallback_for_another_family_is_not_used(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    family = f"Gbdraw OV680 {uuid.uuid4().hex[:8]}"
+    font_file = _renamed_face("LiberationSerif-Regular", "Some Other Family", tmp_path / "other.ttf")
+    _fake_fc_match(tmp_path, monkeypatch, "Some Other Family", font_file)
+    text = "Hypothetical protein"
+
+    assert calculate_svg_bbox_dimensions(text, f"'{family}', serif", 14, 96) == get_text_bbox_size_pixels(
+        _path("LiberationSerif-Regular"), text, 14, 96, svg_units=True
+    )

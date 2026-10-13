@@ -31,13 +31,13 @@
     "contract_sha256": "2f23259fe4e479c768b9031d556604d8d3e45d5c53534508fb6c908dac2df74d"
   },
   "circular_cli": {
-    "actions_sha256": "a3f9b56ddaa5e0341bfea97fd236fecd880ef77679f2e9d6c9d195718df8665a",
-    "defaults_sha256": "3b9bd5f019ce167ac51ad2279166d621ddb9458fa3dda013434d44ef4d939a62",
-    "representative_sha256": "201d37aa094dc645132cd03175c4ec12b7daafadf498659519085d683b25658f"
+    "actions_sha256": "ea2ccf56134bf2a35f53927a6e5582b3cd24286ad4f184ec60e0b47177f829bb",
+    "defaults_sha256": "0402713eec5334df0305136ffae84eb6c36c247b2ddaefb26f482fcf055cd588",
+    "representative_sha256": "13538a0eaa2ad06e5e45d83a2c73eb452702f5b379a21bcc78e3d20cfe9de2b4"
   },
   "linear_cli": {
-    "actions_sha256": "4792659df219fca0fa7bfad3502be52f7d387eb12ceed8f463b59aa293c7b033",
-    "defaults_sha256": "4f146cf57c6c6fc2597efcb002971e41912fad04c2f45643cbc8ca563736a655",
-    "representative_sha256": "d7b91d50309610c2aaee40a6b0982dc1281768bdfe69cd7f34d12a3e0346518a"
+    "actions_sha256": "3e12d1ca325f3e63a276211daee18b8d832ffd144b6196b5937396703699b0a5",
+    "defaults_sha256": "6e0618a50cf1a76ee1b06285022fbb99b0748434fbfc9b88a38329a8d209e4c4",
+    "representative_sha256": "2f99c335947c13a122cb97b18e04307a3fc4a7a8e352914945d6f7e097753e89"
   }
 }
