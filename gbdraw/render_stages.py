@@ -683,6 +683,7 @@ def render_stage(
             "render-stage",
             name,
             f"{function.__module__}.{function.__qualname__}",
+            transaction.font_environment,
             tuple(
                 _key(arg, config_path=(index,), configs=configs, declared=declared)
                 for index, arg in enumerate(args)

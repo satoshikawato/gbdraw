@@ -8,6 +8,7 @@ from typing import Iterator
 
 import pandas as pd
 import pytest
+from fontTools.ttLib import TTFont
 
 import gbdraw.render_stages as stages_module
 from gbdraw.api.config import apply_config_overrides
@@ -17,6 +18,8 @@ from gbdraw.api.prepared import (
     register_prepared_resource_value,
 )
 from gbdraw.config.models.root import GbdrawConfig
+from gbdraw.core import fonts
+from gbdraw.core.text import measurement_font_file
 from gbdraw.render_stages import render_stage
 
 CALLS: list[str] = []
@@ -764,3 +767,39 @@ def test_a_linear_render_compiles_the_color_table_only_in_its_stage(
         ["--gbk", str(source), "-t", str(table), "-o", str(tmp_path / "out"), "--show_labels", "all", "-f", "svg"]
     )
     assert recompiles == []
+
+
+def measured_face(family: str) -> str | None:
+    CALLS.append("measured_face")
+    return measurement_font_file(family)
+
+
+def _font_named(family: str, target: Path, source: str = "LiberationSans-Regular") -> Path:
+    font = TTFont(str(Path(fonts.__file__).parents[1] / "data" / f"{source}.ttf"))
+    name_table = font["name"]
+    name_table.names = [record for record in name_table.names if record.nameID not in {1, 2, 4, 6, 16, 17}]
+    for name_id, value in ((1, family), (2, "Regular"), (4, family), (6, family.replace(" ", "")), (16, family)):
+        name_table.setName(value, name_id, 3, 1, 0x409)
+    font.save(str(target))
+    return target
+
+
+def test_a_font_registered_between_renders_rebuilds_every_stage(tmp_path: Path) -> None:
+    """D-11: the registered fonts are part of every stage key, so a cached measurement is not reused."""
+
+    cache = PreparedBiologicalInputCache()
+    family = "Render Stage Token Sans"
+    try:
+        with _transaction(cache):
+            before = render_stage("legend_measurement", measured_face, family)
+        fonts.register_font_file(_font_named(family, tmp_path / "token.ttf"))
+        with _transaction(cache):
+            after = render_stage("legend_measurement", measured_face, family)
+        fonts.register_font_file(_font_named(family, tmp_path / "token.ttf", "LiberationSerif-Regular"))
+        with _transaction(cache):
+            replaced = render_stage("legend_measurement", measured_face, family)
+    finally:
+        fonts.clear_registered_fonts()
+    assert CALLS == ["measured_face"] * 3
+    assert len({before, after, replaced}) == 3
+    assert after is not None and after.startswith("user-")

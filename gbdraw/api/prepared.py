@@ -15,6 +15,7 @@ from typing import Any, Callable, Hashable, Iterator, Mapping, MutableMapping
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+from gbdraw.core.fonts import registered_fonts
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureIdentity
 
@@ -101,6 +102,9 @@ class _PreparedCacheTransaction:
     # per-record identity, a render-stage result or a direct field of one to
     # the stage key (NO_IDENTITY when the result was not stored).
     value_identities: dict[int, tuple[object, Hashable]] = field(default_factory=dict)
+    # The fonts registered when the transaction starts (D-11): text measured
+    # inside a render stage depends on them, so every stage key includes them.
+    font_environment: tuple[tuple[str, int, bool, str, int], ...] = ()
 
 
 _ACTIVE_PREPARED_TRANSACTION: ContextVar[_PreparedCacheTransaction | None] = (
@@ -580,6 +584,12 @@ class PreparedBiologicalInputCache:
             resource_paths=normalized_paths,
             active_identities=frozenset(resource_paths.values()),
             diagnostics=diagnostics,
+            font_environment=tuple(
+                sorted(
+                    (font.family, font.weight, font.italic, font.face.content_id, font.face.index)
+                    for font in registered_fonts()
+                )
+            ),
         )
         if diagnostics is not None:
             metrics = diagnostics.setdefault("metrics", {})
