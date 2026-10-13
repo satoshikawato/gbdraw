@@ -98,7 +98,7 @@ class _PreparedCacheTransaction:
     # resource to its PreparedResourceIdentity, a resolved record to its
     # per-record identity, a render-stage result or a direct field of one to
     # the stage key (NO_IDENTITY when the result was not stored).
-    value_identities: dict[int, tuple[Any, Hashable]] = field(default_factory=dict)
+    value_identities: dict[int, tuple[object, Hashable]] = field(default_factory=dict)
     resolved_record_membership: dict[int, tuple[Hashable, int]] = field(
         default_factory=dict
     )

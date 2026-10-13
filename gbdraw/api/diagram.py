@@ -136,7 +136,8 @@ from gbdraw.features.visibility import (
 )
 from gbdraw.io.colors import (
     check_user_color,
-    load_default_colors,
+    merge_default_colors,
+    read_default_color_overrides,
     read_color_table,
     resolve_color_to_hex,
 )
@@ -1394,14 +1395,20 @@ def _check_caption_colors(color_table: DataFrame | None) -> None:
 
 def resolve_default_colors(
     default_colors: DataFrame | None,
+    overrides: DataFrame | None,
     palette: str,
     load_comparison: bool,
 ) -> tuple[DataFrame, dict[str, str]]:
-    """Return the default-color table (the packaged palette when none is given) and its map."""
+    """Return the default-color table and its map.
+
+    A given table is used as it is; otherwise the packaged palette with the
+    override rows applied. The ``default_colors`` render stage owns this, so
+    the table's key names the overrides, the palette and ``load_comparison``.
+    """
 
     if default_colors is None:
-        default_colors = load_default_colors(
-            user_defined_default_colors="",
+        default_colors = merge_default_colors(
+            overrides,
             palette=palette or "default",
             load_comparison=load_comparison,
         )
@@ -1413,26 +1420,29 @@ def resolve_feature_inputs(
     color_table: DataFrame | None,
     default_colors: DataFrame | None,
     feature_visibility_table: DataFrame | None,
+    default_color_overrides: DataFrame | None = None,
     default_colors_palette: str = "default",
     load_comparison_colors: bool = False,
 ) -> ResolvedFeatureInputs:
     """Compile already-loaded feature inputs into one reusable value.
 
-    Three render stages (design 2.6, M13): color rules from the color table,
-    default colors (loading the palette when no table is given), visibility
-    rules from the visibility table.
+    Three render stages (design 2.6, M13): default colors (the given table, or
+    the palette with the override rows), color rules from the color table,
+    visibility rules from the visibility table. Errors come in that order.
     """
 
-    _check_feature_colors(color_table, "color table", by_row=True)
     default_colors, default_color_map = render_stage(
         "default_colors",
         resolve_default_colors,
         default_colors,
+        default_color_overrides,
         default_colors_palette,
         load_comparison_colors,
     )
+    _check_feature_colors(color_table, "color table", by_row=True)
     _check_feature_colors(default_colors, "default colors", by_row=False)
     _check_caption_colors(color_table)
+    specific_color_rules = render_stage("color_rules", build_specific_color_rules, color_table)
     return ResolvedFeatureInputs(
         color_table=color_table,
         default_colors=default_colors,
@@ -1442,11 +1452,7 @@ def resolve_feature_inputs(
             compile_feature_visibility_rules,
             feature_visibility_table,
         ),
-        specific_color_rules=render_stage(
-            "color_rules",
-            build_specific_color_rules,
-            color_table,
-        ),
+        specific_color_rules=specific_color_rules,
         default_color_map=default_color_map,
     )
 
@@ -1480,16 +1486,15 @@ def _resolve_feature_render_inputs(
         feature_visibility_table = read_feature_visibility_file(
             feature_visibility_table_file
         )
-    if default_colors is None and default_colors_file:
-        default_colors = load_default_colors(
-            user_defined_default_colors=default_colors_file,
-            palette=default_colors_palette or "default",
-            load_comparison=load_comparison_colors,
-        )
     return resolve_feature_inputs(
         color_table=color_table,
         default_colors=default_colors,
         feature_visibility_table=feature_visibility_table,
+        default_color_overrides=(
+            read_default_color_overrides(default_colors_file)
+            if default_colors is None and default_colors_file
+            else None
+        ),
         default_colors_palette=default_colors_palette,
         load_comparison_colors=load_comparison_colors,
     )

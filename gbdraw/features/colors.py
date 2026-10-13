@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import re
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any, Mapping, Optional, Tuple, cast
 
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
@@ -11,32 +11,31 @@ from .ids import compute_feature_hash as compute_feature_hash
 from .selector_values import ColorRuleList, feature_matches_specific_color_rule, find_specific_color_rule
 
 
-def build_specific_color_rules(color_table: Optional[DataFrame]) -> dict:
+def build_specific_color_rules(color_table: Optional[DataFrame]) -> dict[str, dict[str, ColorRuleList]]:
     """Compile the rows of a color table into feature_type -> qualifier -> rules.
 
     Each rule is ``(pattern, color, caption)``; patterns match case-insensitively.
     """
 
-    color_map: dict = {}
+    rows: dict[str, dict[str, list[tuple[re.Pattern[str], str, str]]]] = {}
     if isinstance(color_table, DataFrame) and not color_table.empty:
         for row in color_table.itertuples(index=False):
             pattern = re.compile(row.value, re.IGNORECASE)
-            qualifier_rules = color_map.setdefault(row.feature_type, {})
+            qualifier_rules = rows.setdefault(row.feature_type, {})
             rule_list = qualifier_rules.setdefault(row.qualifier_key, [])
             # Include caption for legend tracking
             caption = getattr(row, 'caption', '') or ''
             rule_list.append((pattern, row.color, caption))
+    return {
+        feature_type: {key: ColorRuleList(rule_list) for key, rule_list in qualifier_rules.items()}
+        for feature_type, qualifier_rules in rows.items()
+    }
 
-    for qualifier_rules in color_map.values():
-        for key, rule_list in qualifier_rules.items():
-            qualifier_rules[key] = ColorRuleList(rule_list)
-    return color_map
 
-
-def build_default_color_map(default_colors: DataFrame) -> dict:
+def build_default_color_map(default_colors: DataFrame) -> dict[str, str]:
     """Map each feature type of the default colors to its color."""
 
-    return default_colors.set_index("feature_type")["color"].to_dict()
+    return cast("dict[str, str]", default_colors.set_index("feature_type")["color"].to_dict())
 
 
 def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -> tuple[dict, dict]:

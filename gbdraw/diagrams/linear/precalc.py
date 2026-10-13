@@ -171,12 +171,12 @@ def _precalculate_label_dimensions(
     all_labels_by_record: list[list[dict]] = []
     record_label_heights: list[float] = []
     normalize_length = cfg.canvas.linear.normalize_length
+    label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
     if precomputed_feature_dicts is None:
         color_table, default_colors = preprocess_color_tables(
             feature_config.color_table,
             feature_config.default_colors,
         )
-        label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
 
     for i, record in enumerate(records):
         if not profile.record_has_labels(i):
@@ -237,6 +237,7 @@ def _precalculate_label_dimensions(
                 else None
             ),
             record_transform=(record_transforms[i] if record_transforms is not None else None),
+            label_filtering=label_filtering,
         )
         all_labels_by_record.append(label_list)
 

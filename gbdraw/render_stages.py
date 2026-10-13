@@ -27,7 +27,9 @@ import dataclasses
 import inspect
 import logging
 import re
+import typing
 from contextvars import ContextVar
+from collections import defaultdict
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from enum import Enum
@@ -90,6 +92,26 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
 }
 
 _TOP_SECTIONS = ("canvas", "labels", "objects")
+
+
+def _validate_stage_settings(table: Mapping[RenderStageName, frozenset[str]]) -> None:
+    """Every stage is a ``RenderStageName`` and every section names a config node."""
+
+    stage_names = frozenset(typing.get_args(RenderStageName))
+    top_hints = typing.get_type_hints(GbdrawConfig)
+    for stage, sections in table.items():
+        if stage not in stage_names:
+            raise ValueError(f"Unknown render stage {stage!r} in RENDER_STAGE_SETTINGS.")
+        for section in sections:
+            top, _dot, child = section.partition(".")
+            node_type = top_hints.get(top) if top in _TOP_SECTIONS else None
+            if node_type is not None and child:
+                node_type = typing.get_type_hints(node_type).get(child)
+            if not (isinstance(node_type, type) and dataclasses.is_dataclass(node_type)) or "." in child:
+                raise ValueError(f"Render stage {stage!r} declares unknown section {section!r}.")
+
+
+_validate_stage_settings(RENDER_STAGE_SETTINGS)
 _PLAIN_TYPES = (bool, int, float, str, bytes)
 # ``gbdraw.api.prepared`` is imported inside the functions that use it (about
 # 0.2 us once loaded): feature, label, depth and legend modules call
@@ -132,6 +154,14 @@ class _FlagState:
     top: bool
     field_names: frozenset[str]
 
+    # A copy of a view (copy.copy, copy.deepcopy) keeps flagging the live
+    # frames of the stages that built the view.
+    def __copy__(self) -> _FlagState:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, object]) -> _FlagState:
+        return self
+
 
 def _flag_state(value: object) -> _FlagState | None:
     try:
@@ -165,7 +195,33 @@ def _flagging_class(cls: type, top: bool) -> type:
         _mark(state.frames, state.section)
         return value
 
-    sub = type(cls.__name__, (cls,), {"__getattribute__": __getattribute__})
+    def __eq__(self: object, other: object) -> bool:
+        # A comparison reads the section; it compares the sections themselves.
+        for value in (self, other):
+            state = _flag_state(value)
+            if state is not None:
+                _mark(state.frames, state.section)
+        return bool(_section_source(self) == _section_source(other))
+
+    def __ne__(self: object, other: object) -> bool:
+        return not __eq__(self, other)
+
+    def __hash__(self: object) -> int:
+        state = _flag_state(self)
+        if state is not None:
+            _mark(state.frames, state.section)
+        return hash(_section_source(self))
+
+    sub = type(
+        cls.__name__,
+        (cls,),
+        {
+            "__getattribute__": __getattribute__,
+            "__eq__": __eq__,
+            "__ne__": __ne__,
+            "__hash__": __hash__,
+        },
+    )
     _FLAGGING_CLASSES[(cls, top)] = sub
     return sub
 
@@ -292,7 +348,8 @@ def _config_key(config: GbdrawConfig, declared: frozenset[str]) -> Hashable:
 # --- keys -------------------------------------------------------------------
 
 
-_ConfigPaths = list[tuple[tuple[Any, ...], GbdrawConfig]]
+_ArgumentPath = tuple[int | str, ...]
+_ConfigPaths = list[tuple[_ArgumentPath, GbdrawConfig]]
 _CONFIGURATOR_TYPES: tuple[type, ...] | None = None
 
 
@@ -327,7 +384,7 @@ def _type_name(value: object) -> str:
 def _key(
     value: object,
     *,
-    config_path: tuple[Any, ...] | None,
+    config_path: _ArgumentPath | None,
     configs: _ConfigPaths | None = None,
     declared: frozenset[str] = frozenset(),
 ) -> Hashable:
@@ -341,8 +398,24 @@ def _key(
         return None
     if isinstance(value, Enum):
         return ("enum", _type_name(value), value.value)
+    if isinstance(value, float):
+        # hex() tells -0.0 from 0.0, which compare equal.
+        return (type(value).__name__, value.hex())
     if isinstance(value, _PLAIN_TYPES):
         return (type(value).__name__, value)
+    state = _flag_state(value)
+    if state is not None:
+        # A section of a view passed on by value: keying it reads it, so the
+        # stages whose view it is are marked, and the section itself is keyed.
+        _mark(state.frames, state.section)
+        value = state.source
+    if isinstance(value, GbdrawConfig):
+        # Before the identity lookup: a config is keyed by its declared
+        # sections only, whatever identity a stage result gave it.
+        if config_path is None or configs is None:
+            raise _Unkeyable("a GbdrawConfig outside an argument or a frozen dataclass field")
+        configs.append((config_path, value))
+        return _config_key(value, declared)
     from gbdraw.api import prepared
 
     identity = prepared.prepared_value_identity(value)
@@ -350,26 +423,23 @@ def _key(
         raise _Unkeyable(f"unstored stage result {_type_name(value)}")
     if identity is not None:
         return ("identity", identity)
-    if isinstance(value, GbdrawConfig):
-        if config_path is None or configs is None:
-            raise _Unkeyable("a GbdrawConfig outside an argument or a frozen dataclass field")
-        configs.append((config_path, value))
-        return _config_key(value, declared)
     if isinstance(value, SeqRecord):
         raise _Unkeyable("a record without a registered identity")
+    if isinstance(value, defaultdict):
+        raise _Unkeyable("a defaultdict (its default factory is state)")
     if isinstance(value, (tuple, list)):
         return (
-            type(value).__name__,
+            _type_name(value),
             tuple(_key(item, config_path=None) for item in value),
         )
     if isinstance(value, (set, frozenset)):
         return (
-            type(value).__name__,
+            _type_name(value),
             tuple(sorted((_key(item, config_path=None) for item in value), key=repr)),
         )
     if isinstance(value, (dict, MappingProxyType)):
         return (
-            "dict",
+            _type_name(value),
             tuple(
                 sorted(
                     (
@@ -415,8 +485,8 @@ def _key(
 
 def _with_views(
     value: object,
-    path: tuple[Any, ...],
-    views: Mapping[tuple[Any, ...], GbdrawConfig],
+    path: _ArgumentPath,
+    views: Mapping[_ArgumentPath, GbdrawConfig],
 ) -> object:
     """Rebuild one argument with each config at ``views`` replaced by its view."""
 
@@ -434,7 +504,7 @@ def _with_views(
 
 def _is_keyable_function(function: Callable[..., object]) -> bool:
     if isinstance(function, type):
-        return True
+        return function.__qualname__ == function.__name__
     return (
         inspect.isfunction(function)
         and function.__closure__ is None
@@ -455,17 +525,76 @@ def _direct_children(value: object) -> Iterable[tuple[Hashable, object]]:
     return ()
 
 
-def _argument_ids(args: tuple[object, ...], kwargs: Mapping[str, object]) -> set[int]:
+# Where a stored result's value came from among the stage's arguments: the
+# argument (position or keyword) and, for a direct child of it, the child name.
+_ArgumentLocator = tuple[int | str, Hashable | None]
+
+
+def _argument_locators(
+    args: tuple[object, ...],
+    kwargs: Mapping[str, object],
+) -> dict[int, _ArgumentLocator]:
     """The arguments and their direct children: a result may pass these through."""
 
-    ids: set[int] = set()
-    for arg in (*args, *kwargs.values()):
-        ids.add(id(arg))
-        ids.update(id(child) for _name, child in _direct_children(arg))
-    return ids
+    locators: dict[int, _ArgumentLocator] = {}
+    positions: list[tuple[int | str, object]] = [*enumerate(args), *kwargs.items()]
+    for position, arg in positions:
+        locators.setdefault(id(arg), (position, None))
+        for name, child in _direct_children(arg):
+            locators.setdefault(id(child), (position, name))
+    return locators
 
 
-def _register_result(value: object, identity: Hashable, passed: set[int]) -> None:
+def _locate(
+    locator: _ArgumentLocator,
+    args: tuple[object, ...],
+    kwargs: Mapping[str, object],
+) -> object:
+    position, name = locator
+    value = args[position] if isinstance(position, int) else kwargs[position]
+    if name is None:
+        return value
+    return dict(_direct_children(value))[name]
+
+
+@dataclass(frozen=True)
+class _StoredStage:
+    """A stored result and the parts of it that were arguments of its build.
+
+    ``passed_through`` maps ``None`` (the result itself) or a direct child name
+    to the argument it was. On a hit those parts take the identity of the
+    current request's argument, as they kept their argument's identity on the
+    build, so a consumer gets the same key on a build and on a hit.
+    """
+
+    result: object
+    passed_through: tuple[tuple[Hashable | None, _ArgumentLocator], ...]
+
+
+def _passed_through(
+    result: object,
+    locators: Mapping[int, _ArgumentLocator],
+) -> tuple[tuple[Hashable | None, _ArgumentLocator], ...]:
+    parts: list[tuple[Hashable | None, _ArgumentLocator]] = []
+    if id(result) in locators:
+        parts.append((None, locators[id(result)]))
+    for name, child in _direct_children(result):
+        if id(child) in locators:
+            parts.append((name, locators[id(child)]))
+    return tuple(parts)
+
+
+def _plain(value: object) -> bool:
+    """A value that needs no identity; empty tuples and frozensets are shared singletons."""
+
+    return (
+        value is None
+        or isinstance(value, (*_PLAIN_TYPES, Enum))
+        or (type(value) in (tuple, frozenset) and not value)
+    )
+
+
+def _register_result(value: object, identity: Hashable, passed: Mapping[int, object]) -> None:
     """Give a result and its direct fields the stage key, or NO_IDENTITY.
 
     A value the stage received (an argument or a direct child of one) keeps the
@@ -473,18 +602,59 @@ def _register_result(value: object, identity: Hashable, passed: set[int]) -> Non
     stage has returned it.
     """
 
-    if value is None or isinstance(value, (*_PLAIN_TYPES, Enum)) or id(value) in passed:
+    if _plain(value) or id(value) in passed:
         return
     from gbdraw.api import prepared
 
     prepared.register_prepared_value_identity(value, identity)
     for name, child in _direct_children(value):
-        if child is None or isinstance(child, (*_PLAIN_TYPES, Enum)) or id(child) in passed:
+        if _plain(child) or id(child) in passed:
             continue
         prepared.register_prepared_value_identity(
             child,
             prepared.NO_IDENTITY if identity is prepared.NO_IDENTITY else ("field", identity, name),
         )
+
+
+def _register_hit(
+    stored: _StoredStage,
+    key: Hashable,
+    args: tuple[object, ...],
+    kwargs: Mapping[str, object],
+) -> None:
+    """Register a hit's result as its build registered it (see ``_StoredStage``)."""
+
+    from gbdraw.api import prepared
+
+    passed = dict(stored.passed_through)
+
+    def register(value: object, part: Hashable | None, identity: Hashable) -> None:
+        if _plain(value):
+            return
+        if part in passed:
+            current = prepared.prepared_value_identity(_locate(passed[part], args, kwargs))
+            if current is not None:
+                prepared.register_prepared_value_identity(value, current)
+            return
+        prepared.register_prepared_value_identity(value, identity)
+
+    result = stored.result
+    register(result, None, key)
+    for name, child in _direct_children(result):
+        if None in passed and name not in passed:
+            continue
+        register(child, name, ("field", key, name))
+
+
+def _holds_settings(value: object) -> bool:
+    """A config, a view section, or a dataclass with a config field (a profile)."""
+
+    if isinstance(value, GbdrawConfig) or _flag_state(value) is not None:
+        return True
+    return _is_dataclass_value(value) and any(
+        isinstance(child, GbdrawConfig) or _flag_state(child) is not None
+        for child in _raw_fields(value).values()
+    )
 
 
 def _metric(kind: str, name: str) -> None:
@@ -537,7 +707,7 @@ def render_stage(
         logger.debug("render stage %s is not cached: %s", name, reason)
         _metric("Uncacheable", name)
         result = function(*args, **kwargs)
-        _register_result(result, prepared.NO_IDENTITY, _argument_ids(args, kwargs))
+        _register_result(result, prepared.NO_IDENTITY, _argument_locators(args, kwargs))
         return result
 
     enclosing = _FRAMES.get()
@@ -547,9 +717,9 @@ def render_stage(
         for frame in enclosing:
             frame.inner_keys.add(key)
             frame.inner_keys.update(entry.inner_keys)
-        result = cast(R, entry.value)
-        _register_result(result, key, _argument_ids(args, kwargs))
-        return result
+        stored = cast(_StoredStage, entry.value)
+        _register_hit(stored, key, args, kwargs)
+        return cast(R, stored.result)
 
     frame = _StageFrame(name)
     views = {path: _settings_view(config, declared, frame) for path, config in configs}
@@ -564,6 +734,12 @@ def render_stage(
         frame.active = False
         _FRAMES.reset(token)
     _metric("Build", name)
+    # The views and profile copies the function received count as arguments.
+    locators = {**_argument_locators(call_args, call_kwargs), **_argument_locators(args, kwargs)}
+    if _holds_settings(result) or any(
+        _holds_settings(child) for _name, child in _direct_children(result)
+    ):
+        frame.undeclared_sections.add("(a config in the result)")
     if frame.undeclared_sections:
         logger.debug(
             "render stage %s read undeclared sections %s",
@@ -571,13 +747,18 @@ def render_stage(
             sorted(frame.undeclared_sections),
         )
         _metric("UndeclaredRead", name)
-        _register_result(result, prepared.NO_IDENTITY, _argument_ids(args, kwargs))
+        _register_result(result, prepared.NO_IDENTITY, locators)
         return result
     for outer in enclosing:
         outer.inner_keys.add(key)
         outer.inner_keys.update(frame.inner_keys)
-    prepared.store_render_stage(transaction, key, result, frozenset(frame.inner_keys))
-    _register_result(result, key, _argument_ids(args, kwargs))
+    prepared.store_render_stage(
+        transaction,
+        key,
+        _StoredStage(result, _passed_through(result, _argument_locators(args, kwargs))),
+        frozenset(frame.inner_keys),
+    )
+    _register_result(result, key, locators)
     return result
 
 

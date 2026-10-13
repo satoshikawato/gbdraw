@@ -944,10 +944,10 @@ def test_prepared_request_resolves_feature_inputs_once_for_gff_and_metadata(
     }
     real_color_reader = request_render_module.read_color_table
     real_visibility_reader = request_render_module.read_feature_visibility_file
-    real_default_colors = request_render_module.load_default_colors
+    real_default_colors = diagram_module.merge_default_colors
     real_candidate_resolver = request_render_module.resolve_candidate_feature_types
-    real_visibility_compiler = prepared_module.compile_feature_visibility_rules
-    real_color_compiler = prepared_module.preprocess_color_tables
+    real_visibility_compiler = diagram_module.compile_feature_visibility_rules
+    real_color_compiler = diagram_module.build_specific_color_rules
 
     def count(name, function):
         def wrapped(*args, **kwargs):
@@ -970,8 +970,8 @@ def test_prepared_request_resolves_feature_inputs_once_for_gff_and_metadata(
         count("visibility_reader", real_visibility_reader),
     )
     monkeypatch.setattr(
-        request_render_module,
-        "load_default_colors",
+        diagram_module,
+        "merge_default_colors",
         count("default_colors", real_default_colors),
     )
     monkeypatch.setattr(
@@ -980,18 +980,18 @@ def test_prepared_request_resolves_feature_inputs_once_for_gff_and_metadata(
         count("candidate_resolver", real_candidate_resolver),
     )
     monkeypatch.setattr(
-        prepared_module,
+        diagram_module,
         "compile_feature_visibility_rules",
         count("visibility_compiler", real_visibility_compiler),
     )
     monkeypatch.setattr(
-        prepared_module,
-        "preprocess_color_tables",
+        diagram_module,
+        "build_specific_color_rules",
         count("color_compiler", real_color_compiler),
     )
     monkeypatch.setattr(diagram_module, "read_color_table", unexpected)
     monkeypatch.setattr(diagram_module, "read_feature_visibility_file", unexpected)
-    monkeypatch.setattr(diagram_module, "load_default_colors", unexpected)
+    monkeypatch.setattr(diagram_module, "read_default_color_overrides", unexpected)
     monkeypatch.setattr(
         feature_configurator_module,
         "compile_feature_visibility_rules",
@@ -1043,7 +1043,7 @@ def test_option_resolution_clears_shadowed_file_inputs_without_reading(
 
     for name in (
         "read_color_table",
-        "load_default_colors",
+        "read_default_color_overrides",
         "read_feature_visibility_file",
         "read_filter_list_file",
         "read_qualifier_priority_file",

@@ -89,7 +89,8 @@ from gbdraw.features.visibility import (
     read_feature_visibility_file,
     resolve_candidate_feature_types,
 )
-from gbdraw.io.colors import load_default_colors, read_color_table
+from gbdraw.io.colors import read_color_table, read_default_color_overrides
+from gbdraw.render_stages import render_stage
 from gbdraw.io.comparison_sequences import (
     ComparisonSequenceFile,
     read_comparison_sequence_file,
@@ -127,6 +128,7 @@ from .diagram import (
     build_circular_multi_diagram,
     build_linear_diagram_result,
     label_fit_report,
+    resolve_default_colors,
     resolve_feature_inputs,
 )
 from .io import load_gbks
@@ -257,6 +259,17 @@ def _artifact_text_characters(value: object) -> int:
     return 0
 
 
+def _default_color_overrides(colors: ColorOptions) -> DataFrame | None:
+    """The decoded override rows of the default-colors file, keyed by the file."""
+
+    if not colors.default_colors_file:
+        return None
+    return register_prepared_resource_value(
+        read_default_color_overrides(colors.default_colors_file),
+        colors.default_colors_file,
+    )
+
+
 def _resolve_request_option_tables(
     options: _OptionsT,
     *,
@@ -276,13 +289,14 @@ def _resolve_request_option_tables(
             )
         default_colors = colors.default_colors
         if default_colors is None and colors.default_colors_file is not None:
-            default_colors = register_prepared_resource_value(
-                load_default_colors(
-                    user_defined_default_colors=colors.default_colors_file,
-                    palette=colors.default_colors_palette,
-                    load_comparison=load_comparison_colors,
-                ),
-                colors.default_colors_file,
+            # The request keeps the merged table (a Session saves it).
+            default_colors, _default_color_map = render_stage(
+                "default_colors",
+                resolve_default_colors,
+                None,
+                _default_color_overrides(colors),
+                colors.default_colors_palette,
+                load_comparison_colors,
             )
         if colors.color_table_file is not None or colors.default_colors_file is not None:
             colors = replace(
@@ -1162,12 +1176,6 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
     default_colors = colors.default_colors if colors is not None else None
     palette = colors.default_colors_palette if colors is not None else "default"
     load_comparison = isinstance(request, LinearDiagramRequest) and _linear_request_uses_comparisons(request)
-    if default_colors is None and colors is not None and colors.default_colors_file:
-        default_colors = load_default_colors(
-            user_defined_default_colors=colors.default_colors_file,
-            palette=palette,
-            load_comparison=load_comparison,
-        )
     has_gff_source = any(
         isinstance(record_input.source, GffFastaInputSource)
         for record_input in request.records
@@ -1194,6 +1202,11 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
             color_table=color_table,
             default_colors=default_colors,
             feature_visibility_table=feature_visibility_table,
+            default_color_overrides=(
+                _default_color_overrides(colors)
+                if default_colors is None and colors is not None
+                else None
+            ),
             default_colors_palette=palette,
             load_comparison_colors=load_comparison,
         ),
@@ -1397,7 +1410,9 @@ def _normalize_request_records(
     collection = get_or_build_resolved_records(key, resource_identities, resolve)
     # Per-record identity (design 2.1, M1): the elements of the key above that
     # shape one record, so a record's render stages survive a change to another
-    # record while the collection options are the default.
+    # record. Collection regions, labels and subtitles apply by the place in
+    # the whole collection, which every input shapes, so with collection
+    # options a record has the whole key and its place.
     default_collection = request.record_options == RecordCollectionOptions()
     for record, provenance in zip(collection.records, collection.provenance, strict=True):
         input_index = provenance.input_index
@@ -1410,8 +1425,9 @@ def _normalize_request_records(
                 input_index,
                 provenance.source_record_index,
                 gff_type_key if isinstance(request.records[input_index].source, GffFastaInputSource) else None,
-                None if default_collection else collection_key,
-            ),
+            )
+            if default_collection
+            else ("record-v1", key, provenance.resolved_index),
         )
     return collection
 
@@ -1426,6 +1442,7 @@ def _region_preparation_key(value: Any) -> Hashable:
     if value is None:
         return None
     return (
+        value.file_selector,
         value.record_id,
         value.record_index,
         int(value.start),

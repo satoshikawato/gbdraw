@@ -284,7 +284,7 @@ def test_an_inner_stage_that_declares_more_marks_the_outer_stage(declared) -> No
     assert _metrics(metrics)["renderStageUndeclaredReadCount"] == 1
 
 
-def test_an_undeclared_read_in_an_inner_stage_marks_every_enclosing_stage(declared) -> None:
+def test_an_inner_read_declared_by_both_marks_neither(declared) -> None:
     declared(
         legend_table=frozenset({"labels.font_size"}),
         linear_labels=frozenset({"labels.font_size"}),
@@ -383,3 +383,350 @@ def test_label_filter_maps_leave_the_config_mapping_unchanged() -> None:
             label_filter_maps(dict(raw))
         assert _metrics(metrics)["renderStageHit:label_filter_maps"] >= 1
     assert raw == before
+
+
+# --- review fixes (REVIEW-PR2-MECHANISM.md) ----------------------------------
+
+
+def section_long(section: object) -> float:
+    CALLS.append("section_long")
+    return section.long  # type: ignore[attr-defined]
+
+
+def outer_section_long(config: GbdrawConfig) -> float:
+    return render_stage("linear_labels", section_long, config.labels.font_size)
+
+
+def test_a_section_passed_to_an_inner_stage_marks_the_outer_stage() -> None:
+    cache = PreparedBiologicalInputCache()
+    base = _config()
+    for _ in range(2):
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            assert render_stage("legend_table", outer_section_long, base) == base.labels.font_size.long
+        # The outer stage did not declare labels.font_size, on a build and on an inner hit.
+        assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
+    bigger = _config(**{"labels.font_size.long": base.labels.font_size.long + 5})
+    with _transaction(cache):
+        assert render_stage("legend_table", outer_section_long, bigger) == bigger.labels.font_size.long
+
+
+def test_a_section_passed_by_value_is_keyed_like_the_section(declared) -> None:
+    declared(legend_table=frozenset({"labels.font_size"}))
+    cache = PreparedBiologicalInputCache()
+    config = _config()
+    for _ in range(2):
+        with _transaction(cache):
+            render_stage("legend_table", outer_section_long, config)
+    # The inner stage is keyed by the section's value, not by the view's class.
+    with _transaction(cache):
+        assert render_stage("linear_labels", section_long, config.labels.font_size) == config.labels.font_size.long
+    assert CALLS == ["section_long"]
+
+
+@dataclasses.dataclass(frozen=True)
+class Holder:
+    config: GbdrawConfig
+
+
+def hold(config: GbdrawConfig) -> Holder:
+    return Holder(config)
+
+
+def read_held_show_gc(holder: Holder) -> bool:
+    return holder.config.canvas.show_gc
+
+
+def test_a_result_that_holds_a_config_is_never_stored() -> None:
+    cache = PreparedBiologicalInputCache()
+    for show_gc in (True, False):
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            holder = render_stage("legend_table", hold, _config(**{"canvas.show_gc": show_gc}))
+            assert render_stage("feature_dom_index", read_held_show_gc, holder) is show_gc
+        assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
+
+
+def compare_font_size(config: GbdrawConfig, other: object) -> bool:
+    return config.labels.font_size == other
+
+
+def deep_copied_font_size(config: GbdrawConfig) -> float:
+    import copy
+
+    return copy.deepcopy(config).labels.font_size.long
+
+
+def test_a_view_compares_like_its_section_and_the_comparison_is_a_read() -> None:
+    cache = PreparedBiologicalInputCache()
+    config = _config()
+    metrics: dict[str, object] = {}
+    with _transaction(cache, metrics):
+        assert render_stage("legend_table", compare_font_size, config, config.labels.font_size) is True
+    assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
+
+
+def test_a_deep_copy_of_a_view_still_flags_reads() -> None:
+    cache = PreparedBiologicalInputCache()
+    metrics: dict[str, object] = {}
+    with _transaction(cache, metrics):
+        render_stage("legend_table", deep_copied_font_size, _config())
+    assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
+
+
+def wrap_values(raw: dict[str, object]) -> dict[str, object]:
+    CALLS.append("wrap_values")
+    return {**raw, "compiled": True}
+
+
+def test_a_hit_keeps_the_keys_of_values_passed_through(tmp_path: Path) -> None:
+    path = tmp_path / "table.tsv"
+    path.write_text("x\n", encoding="utf-8")
+    identity = PreparedResourceIdentity("table", "token-1", 2)
+    cache = PreparedBiologicalInputCache()
+    for _ in range(2):
+        metrics: dict[str, object] = {}
+        with cache.transaction(resource_paths={path: identity}, diagnostics=metrics):
+            table = register_prepared_resource_value(pd.DataFrame({"a": [1, 2]}), path)
+            wrapped = render_stage("label_filter_maps", wrap_values, {"values": [1, 2], "table": table})
+            render_stage("feature_dom_index", count, wrapped["values"])
+            render_stage("legend_table", table_rows, wrapped["table"])
+    assert CALLS == ["wrap_values", "count", "table_rows"]
+    assert _metrics(metrics)["renderStageHitCount"] == 3
+
+
+def test_a_class_defined_in_a_function_is_not_cached() -> None:
+    @dataclasses.dataclass(frozen=True)
+    class Local:
+        value: int
+
+    cache = PreparedBiologicalInputCache()
+    metrics: dict[str, object] = {}
+    with _transaction(cache, metrics):
+        render_stage("gc_skew_data", Local, 1)
+    assert _metrics(metrics)["renderStageUncacheable:gc_skew_data"] == 1
+
+
+def test_container_subclasses_and_signed_zeros_have_their_own_keys() -> None:
+    import collections
+
+    Pair = collections.namedtuple("Pair", "a b")
+    cache = PreparedBiologicalInputCache()
+    with _transaction(cache):
+        render_stage("feature_dom_index", count, (1, 2))
+        render_stage("feature_dom_index", count, Pair(1, 2))
+        render_stage("gc_skew_data", double, 0.0)
+        render_stage("gc_skew_data", double, -0.0)
+    assert CALLS == ["count", "count", "double", "double"]
+
+
+def test_the_settings_table_names_only_existing_sections() -> None:
+    stages_module._validate_stage_settings(stages_module.RENDER_STAGE_SETTINGS)
+    with pytest.raises(ValueError):
+        stages_module._validate_stage_settings({"legend_table": frozenset({"labels.no_such_section"})})
+
+
+# --- record identities (design 2.1, M1) ---------------------------------------
+
+
+def _genbank(path: Path, *record_ids: str) -> Path:
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    records = []
+    for record_id in record_ids:
+        record = SeqRecord(Seq("ATGC" * 150), id=record_id, name=record_id, description=record_id)
+        record.annotations["molecule_type"] = "DNA"
+        records.append(record)
+    SeqIO.write(records, path, "genbank")
+    return path
+
+
+def _resolve(paths: tuple[Path, ...], *regions: str):
+    from gbdraw.api import CircularDiagramRequest, GenBankInputSource, RecordInput
+    from gbdraw.api.prepared import prepared_value_identity
+    from gbdraw.api.request_render import normalize_request_records
+    from gbdraw.api.requests import RecordCardinality, RecordCollectionOptions
+    from gbdraw.io.regions import parse_region_spec
+
+    request = CircularDiagramRequest(
+        records=tuple(
+            RecordInput(
+                source=GenBankInputSource(path),
+                cardinality=RecordCardinality.ALL,
+                record_key=f"record-{index}",
+            )
+            for index, path in enumerate(paths)
+        ),
+        record_options=RecordCollectionOptions(
+            regions=tuple(parse_region_spec(region) for region in regions)
+        ),
+    )
+    identities = {
+        path: PreparedResourceIdentity(path.name, path.name, path.stat().st_size) for path in paths
+    }
+    with PreparedBiologicalInputCache().transaction(resource_paths=identities, diagnostics=None):
+        records = normalize_request_records(request)
+        return [(record.id, len(record.seq), prepared_value_identity(record)) for record in records]
+
+
+def test_a_file_scoped_region_crops_the_record_of_the_named_file(tmp_path: Path) -> None:
+    """OV-700: the region key keeps its file selector."""
+
+    a = _genbank(tmp_path / "a.gb", "a1")
+    b = _genbank(tmp_path / "b.gb", "b1")
+    cache = PreparedBiologicalInputCache()
+    identities = {
+        path: PreparedResourceIdentity(path.name, path.name, path.stat().st_size) for path in (a, b)
+    }
+    from gbdraw.api import CircularDiagramRequest, GenBankInputSource, RecordInput
+    from gbdraw.api.request_render import normalize_request_records
+    from gbdraw.api.requests import RecordCollectionOptions
+    from gbdraw.io.regions import parse_region_spec
+
+    def lengths(region: str) -> dict[str, int]:
+        request = CircularDiagramRequest(
+            records=(
+                RecordInput(source=GenBankInputSource(a), record_key="a"),
+                RecordInput(source=GenBankInputSource(b), record_key="b"),
+            ),
+            record_options=RecordCollectionOptions(regions=(parse_region_spec(region),)),
+        )
+        with cache.transaction(resource_paths=identities, diagnostics=None):
+            return {record.id: len(record.seq) for record in normalize_request_records(request)}
+
+    assert lengths("a.gb:#1:1-100") == {"a1": 100, "b1": 600}
+    assert lengths("b.gb:#1:1-100") == {"a1": 600, "b1": 100}
+
+
+def test_a_collection_transform_gives_records_the_identity_of_their_place(tmp_path: Path) -> None:
+    """With collection options a record's identity depends on every input (review #4)."""
+
+    one = _genbank(tmp_path / "one.gb", "a1")
+    two = _genbank(tmp_path / "two.gb", "a1", "a2")
+    b = _genbank(tmp_path / "b.gb", "b1")
+    first = _resolve((one, b), "#2:1-100")
+    second = _resolve((two, b), "#2:1-100")
+    assert first[-1][:2] == ("b1", 100)
+    assert second[-1][:2] == ("b1", 600)
+    assert first[-1][2] != second[-1][2]
+
+
+def test_the_default_colors_key_names_the_palette_of_an_overrides_file(tmp_path: Path) -> None:
+    """The merged default colors depend on the palette, not only the file (review #6)."""
+
+    from gbdraw.api import CircularDiagramRequest, GenBankInputSource, RecordInput
+    from gbdraw.api.options import CircularDiagramOptions, ColorOptions
+    from gbdraw.api.prepared import prepared_value_identity
+    from gbdraw.api.request_render import plan_request
+
+    source = _genbank(tmp_path / "a.gb", "a1")
+    overrides = tmp_path / "default_colors.tsv"
+    overrides.write_text("tRNA\t#123456\n", encoding="utf-8")
+    identities = {
+        path: PreparedResourceIdentity(path.name, path.name, path.stat().st_size)
+        for path in (source, overrides)
+    }
+    cache = PreparedBiologicalInputCache()
+
+    def resolve(palette: str) -> tuple[dict[str, str], object]:
+        request = CircularDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source), record_key="a"),),
+            options=CircularDiagramOptions(
+                colors=ColorOptions(default_colors_file=str(overrides), default_colors_palette=palette)
+            ),
+        )
+        with cache.transaction(resource_paths=identities, diagnostics=None):
+            plan = plan_request(request)
+            assert plan.inputs is not None
+            features = plan.inputs.features
+            return dict(features.default_color_map), prepared_value_identity(features.default_colors)
+
+    default, default_identity = resolve("default")
+    mint, mint_identity = resolve("mint")
+    assert (default["CDS"], mint["CDS"], mint["tRNA"]) == ("#54bcf8", "#9cd9cf", "#123456")
+    # A stage that takes the table keys it by this identity.
+    assert default_identity is not None and mint_identity is not None
+    assert default_identity != mint_identity
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_render_without_a_cache_compiles_the_label_maps_once_per_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+) -> None:
+    """The label filter maps compile a fixed number of times, not once per record (review #13)."""
+
+    import gbdraw.circular
+    import gbdraw.labels.filtering as filtering
+    import gbdraw.linear
+    from Bio import SeqIO
+
+    compile_maps = filtering.preprocess_label_filtering
+    calls: list[int] = []
+
+    def counting(label_filtering):
+        calls.append(1)
+        return compile_maps(label_filtering)
+
+    monkeypatch.setattr(filtering, "preprocess_label_filtering", counting)
+
+    def compiles(record_count: int) -> int:
+        from Bio.Seq import Seq
+        from Bio.SeqFeature import FeatureLocation, SeqFeature
+        from Bio.SeqRecord import SeqRecord
+
+        paths = []
+        for index in range(record_count):
+            record = SeqRecord(Seq("ATGC" * 300), id=f"r{index}", name=f"r{index}", description="r")
+            record.annotations["molecule_type"] = "DNA"
+            record.features = [
+                SeqFeature(FeatureLocation(30, 300, strand=1), type="CDS", qualifiers={"product": ["p"]})
+            ]
+            path = tmp_path / f"{record_count}-{index}.gb"
+            SeqIO.write([record], path, "genbank")
+            paths.append(str(path))
+        calls.clear()
+        out = tmp_path / f"out-{len(list(tmp_path.iterdir()))}"
+        if mode == "linear":
+            gbdraw.linear.linear_main(["--gbk", *paths, "-o", str(out), "--show_labels", "all", "-f", "svg"])
+        else:
+            gbdraw.circular.circular_main(
+                ["--gbk", paths[0], "-o", str(out), "--labels", "out", "-f", "svg"]
+            )
+        return len(calls)
+
+    if mode == "circular":
+        assert compiles(1) == 1
+    else:
+        assert compiles(3) == compiles(1)
+
+
+def test_feature_inputs_report_the_color_table_error_before_the_visibility_error() -> None:
+    """The error order of 3d748b78: color rules before visibility rules (review #8)."""
+
+    import re
+
+    from gbdraw.api.diagram import resolve_feature_inputs
+    from gbdraw.exceptions import ValidationError
+
+    color_table = pd.DataFrame(
+        {"feature_type": ["CDS"], "qualifier_key": ["product"], "value": ["("], "color": ["red"], "caption": [""]}
+    )
+    visibility_table = pd.DataFrame(
+        {"record_id": [""], "feature_type": ["CDS"], "qualifier": ["product"], "value": ["x"], "action": ["show"]}
+    )
+    with pytest.raises(re.error):
+        resolve_feature_inputs(
+            color_table=color_table,
+            default_colors=None,
+            feature_visibility_table=visibility_table,
+        )
+    with pytest.raises(ValidationError, match="record_id"):
+        resolve_feature_inputs(
+            color_table=None,
+            default_colors=None,
+            feature_visibility_table=visibility_table,
+        )

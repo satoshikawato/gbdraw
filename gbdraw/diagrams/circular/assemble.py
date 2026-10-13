@@ -2309,6 +2309,7 @@ def add_record_on_circular_canvas(
             _candidate_cache=label_candidate_caches.setdefault(font_size, {}),
             record_transform=record_transform,
             probe=probe,
+            label_filtering=label_filtering,
         )
 
     if show_external_labels and precomputed_feature_dict is not None:
