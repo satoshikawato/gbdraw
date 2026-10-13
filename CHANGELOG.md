@@ -231,12 +231,14 @@ write-up of a release.
   `describe_canonical_request()`, other spellings of the comparison mode
   settings, and other spellings of `conservationReference`,
   `pairwiseMatchStyle` and `generatedProteinComparison.mode`. A fractional
-  annotation `lane`, `start` or `end` still reads as its integer part. A
-  Session whose stored request holds a value that earlier versions read and
-  this reader refuses still loads in the web app, and its Generate shows "An
-  input value is invalid". A record display selector with non-ASCII digits is
-  refused, as the web app already did (OV-324, OV-528, OV-596, OV-611, OV-631,
-  OV-632, OV-651).
+  annotation `lane`, `start` or `end` still reads as its integer part. The
+  encoder writes a track slot's `renderer` and `side` by their names, so a
+  slot built with an alias such as `gc_content` reads back as
+  `dinucleotide_content`. A Session whose stored request holds a value that
+  earlier versions read and this reader refuses still loads in the web app,
+  and its Generate shows "An input value is invalid". A record display
+  selector with non-ASCII digits is refused, as the web app already did
+  (OV-324, OV-528, OV-596, OV-611, OV-631, OV-632, OV-651, OV-653).
 - Fixed: the records of one multi-record File were named differently in
   **Record Layout**, **Selected pairs** and the **BLAST TSV missing** dialog
   (one by its definition, the next by its accession); each now shows the File's
