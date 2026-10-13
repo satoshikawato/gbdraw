@@ -247,7 +247,8 @@ def _ink(text: str, fs: float, mirror: bool) -> _Ink:
 class _Par:
     def __init__(self, ctx: Ctx):
         self.rowem = ctx.opt("rowem", 0.0)               # LP-D30: ink gap of stacked rows as a fraction of the font size (0: off); the configured gap is the floor
-        gap0 = max(float(ctx.gap), self.rowem * float(ctx.font_size) - 0.1) if self.rowem else float(ctx.gap)   # the ink gap comes out 0.1 px above this distance (scripts/row_gap_em.py)
+        self.rowmin = ctx.opt("rowmin", 0.0)             # LP-D31: floor of that distance in px (0: the configured gap alone)
+        gap0 = max(float(ctx.gap), self.rowmin, self.rowem * float(ctx.font_size) - 0.1 if self.rowem else 0.0)   # the ink gap comes out 0.1 px above this distance (scripts/row_gap_em.py)
         self.gap = gap0 + 0.05                           # between two label boxes
         self.clear = ctx.opt("clear", gap0)              # label box to every other object (follows the row distance: with 3 px next to 4.3 px rows tRNA-Gln / tRNA-Met of HmmtDNA_ATskew stand 9.6 px apart)
         self.cone = ctx.opt("cone", 70.0)                # largest turn of a leader at the ring edge (degrees)
