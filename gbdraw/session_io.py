@@ -145,6 +145,9 @@ JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _DEPTH_COLUMNS = ("reference_name", "position", "depth")
 _SLOT_PART_RE = re.compile(r"([^\[\]]+)|\[(\d+)\]")
+# A Circular source record ``#N`` (N from 1, ASCII digits as the Web reads it,
+# OV-611): a record display draft's selector and a slice's OFF record key.
+_SOURCE_RECORD_SELECTOR = re.compile(r"#[1-9][0-9]*")
 
 
 @dataclass(frozen=True)
@@ -858,7 +861,7 @@ def _validate_display_placement_draft_config(
         if (scoped and row["scope"] not in {"circular", "linear"}) or any(
             not isinstance(row[name], str) or "\0" in row[name]
             for name in ("sourceUid", "selector", "recordId")
-        ) or not row["sourceUid"] or not re.fullmatch(r"#[1-9]\d*", row["selector"]):
+        ) or not row["sourceUid"] or not _SOURCE_RECORD_SELECTOR.fullmatch(row["selector"]):
             raise ValidationError("Record display drafts require a source UID and exact selector.")
         RecordDisplayOptions(row["topologyOverride"], None)
         RecordDisplayOptions(None, row["startCoordinate"])
@@ -1104,7 +1107,7 @@ def _validate_records_off(records_off: object, mode: str, bound_uids: set[object
             isinstance(key, str)
             and key
             and key == key.strip()
-            and (key in bound_uids if mode == "linear" else re.fullmatch(r"#[1-9][0-9]*", key) is not None)
+            and (key in bound_uids if mode == "linear" else _SOURCE_RECORD_SELECTOR.fullmatch(key) is not None)
             for key in records_off
         )
     ):
