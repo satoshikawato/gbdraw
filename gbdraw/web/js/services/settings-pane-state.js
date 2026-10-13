@@ -4,7 +4,8 @@
 // sections of that entry beside the rail. Nothing is docked in the stacked
 // display, and a docked entry is always one the mode has. One section may
 // leave the pane for a popup beside the Result; a section is in one place, so
-// docking that section closes the popup, and so does a mode change.
+// docking that section closes the popup, and so does a mode change. The popup's
+// section and its place are written here alone.
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryIn } from './settings-sections.js';
 
 /** @import { PopupPlacement } from '../utils/popup-bounds.js' */
@@ -35,6 +36,16 @@ export const returnSettingsSection = (state) => {
  */
 export const floatSettingsSection = (state, section, placement) => {
   state.settingsPopup.value = { ...placement, section };
+};
+
+/**
+ * Moves the popup (a drag, its rendered size, a window that changed size); its
+ * section stays. Nothing moves while no section is in it.
+ * @param {SettingsPaneRefs} state
+ * @param {PopupPlacement} placement
+ */
+export const moveSettingsPopup = (state, placement) => {
+  if (state.settingsPopup.value) Object.assign(state.settingsPopup.value, placement);
 };
 
 /** @param {SettingsPaneRefs} state @param {SettingsSectionKey | null} docked The entry docked now. */

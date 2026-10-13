@@ -1126,14 +1126,18 @@ title and the Linear scale that line stands above "Turn on Layout edit to move
 this item". The popup holds the section itself, with the same controls and
 **Undo** steps: while it is open the settings pane does not list that section,
 and the section returns to the pane, open or closed as it was, when the popup
-closes. Drag the popup by its heading. It stays open through **Generate**, and
-a click on another of these elements shows that element's section in it.
+closes. The popup opens clear of the clicked element where the preview has room
+beside, below, or above it. Drag the popup by its heading; when the window
+changes size, the popup moves back inside it. It stays open through
+**Generate**, and a click on another of these elements shows that element's
+section in it.
 
 The popup closes with its **Close section** button, Escape, a click on the
 figure's background, another popup of the Result (a feature, a match, a Legend
 row, a record definition), **Layout edit**, **Review alignment**, a mode
-switch, a loaded Session, or **Reset Settings**, and when the section is opened
-in the pane with its icon button. In the icon rail, a click on the element of
+switch, a loaded Session, or **Reset Settings**, when the section is opened in
+the pane with its icon button, and when the Result is not shown (the **Run
+info** tab, an **Undo** to before the first **Generate**). In the icon rail, a click on the element of
 the section that is docked moves the focus to that section and opens no popup.
 The click changes no setting and adds no **Undo** step, and a press that pans
 the figure opens nothing. While **Review alignment** is open, these elements

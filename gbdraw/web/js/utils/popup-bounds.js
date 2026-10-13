@@ -73,6 +73,20 @@ const clamp = (/** @type {number} */ value, /** @type {number} */ min, /** @type
 );
 
 /**
+ * The placement nearest to (x, y) at which a popup of this size lies inside
+ * the bounds: where a drag may leave it (OV-384: below the header), and where
+ * a window that changed size leaves it. A popup larger than the bounds starts
+ * at their top left. Its height then follows the bounds (`maxHeight` 0).
+ * @param {{ x: number, y: number, width: number, height: number, bounds: PopupBounds, margin?: number }} request
+ * @returns {PopupPlacement}
+ */
+export const placePopupWithin = ({ x, y, width, height, bounds, margin = 12 }) => ({
+  x: clamp(x, bounds.left + margin, bounds.right - width - margin),
+  y: clamp(y, bounds.top + margin, bounds.bottom - height - margin),
+  maxHeight: 0
+});
+
+/**
  * OV-371: the placement of a popup opened at a clicked point. The popup lies
  * fully inside the bounds and beside the point (right, then left), else below
  * or above it, so it does not cover what was clicked. When no side has room

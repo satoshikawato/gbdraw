@@ -3,20 +3,21 @@
 // rail), the entry docked beside the rail, the section shown in a popup beside
 // the Result, the one way to bring a setting into view, the one way to open a
 // section by its key, and the display the browser remembers. Where a section
-// is shown (the pane, the dock, the popup) is decided here. The transitions
-// are in services/settings-pane-state.js; templates and other owners call the
+// is shown (the pane, the dock, the popup) is decided here, and so is how long
+// the popup stays: it belongs to the shown Result. The transitions are in
+// services/settings-pane-state.js; templates and other owners call the
 // functions returned here and never assign the three refs.
 import { readSettingsPaneDisplay, writeSettingsPaneDisplay } from '../services/browser-preferences.js';
 import {
-  closeDockedSettingsEntry, dockSettingsSection, floatSettingsSection, reconcileSettingsPaneState, returnSettingsSection,
-  showSettingsRail, showSettingsStacked
+  closeDockedSettingsEntry, dockSettingsSection, floatSettingsSection, moveSettingsPopup, reconcileSettingsPaneState,
+  returnSettingsSection, showSettingsRail, showSettingsStacked
 } from '../services/settings-pane-state.js';
 import { settingsEntryIn, settingsScrollOwner, settingsSectionElement, settingsView } from '../services/settings-sections.js';
-import { placePopupNearPoint } from '../utils/popup-bounds.js';
+import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
 
 /** @import { DiagramMode, SettingsPaneDisplay, SettingsPaneRefs } from '../services/settings-pane-state.js' */
-/** @import { SettingsSectionKey } from '../services/settings-sections.js' */
-/** @import { PopupAnchor, PopupBounds } from '../utils/popup-bounds.js' */
+/** @import { DrawnElementSectionKey, SettingsSectionKey } from '../services/settings-sections.js' */
+/** @import { PopupAnchor, PopupBounds, PopupPlacement } from '../utils/popup-bounds.js' */
 
 const { computed, nextTick, onMounted, onUnmounted, ref, watch } = window.Vue;
 
@@ -58,14 +59,21 @@ const POPUP_EXPECTED_HEIGHT = 360;
 /**
  * Shows the section of `key` (as `RevealSettingsSection` reads a key) beside
  * the point of the Result that was clicked: in the popup, placed inside
- * `bounds` beside `anchor` and, when there is room, beside the clicked item
- * (`anchor.avoid`), with the focus on its heading. The section docked beside
- * the rail stays there and takes the focus. Returns whether the shown mode
- * has the section.
- * @typedef {(key: SettingsSectionKey, anchor: PopupAnchor, bounds: PopupBounds) => boolean} ShowSettingsBesideResult
+ * `bounds` beside `anchor` and clear of the clicked item (`anchor.avoid`:
+ * beside it, else below or above it) when there is room, with the focus on
+ * its heading. The section docked beside the rail stays there and takes the
+ * focus. Returns whether the shown mode has the section.
+ * @typedef {(key: DrawnElementSectionKey, anchor: PopupAnchor, bounds: PopupBounds) => boolean} ShowSettingsBesideResult
  */
 
-/** @param {{ state: SettingsPaneRefs & { mode: { value: DiagramMode } } }} options */
+/**
+ * @typedef {object} SettingsPaneState The refs of `state.js` the pane reads and, through its transitions, writes.
+ * @property {{ value: DiagramMode }} mode
+ * @property {{ readonly value: unknown }} svgContent The shown Result; none before the first Generate.
+ * @property {{ value: string }} resultPanelTab The tab of the Result panel; `preview` shows the Result.
+ */
+
+/** @param {{ state: SettingsPaneRefs & SettingsPaneState }} options */
 export const createSettingsPaneController = ({ state }) => {
   // The phone layout is read from the layout itself (the settings do not
   // scroll there), so its breakpoint stays in the stylesheet.
@@ -79,6 +87,19 @@ export const createSettingsPaneController = ({ state }) => {
   const readLayout = () => {
     const area = settingsArea();
     phoneLayout.value = Boolean(area && settingsScrollOwner(area) !== area);
+  };
+  // A window that changed size leaves the popup where it is while it lies
+  // inside what a drag allows, and else moves it the least distance back there.
+  const keepPopupInWindow = () => {
+    const popup = popupElement();
+    const at = state.settingsPopup.value;
+    if (!popup || !at) return;
+    const within = placePopupWithin({ x: at.x, y: at.y, width: popup.offsetWidth, height: popup.offsetHeight, bounds: popupViewportBounds() });
+    if (within.x !== at.x || within.y !== at.y) moveSettingsPopup(state, within);
+  };
+  const onResize = () => {
+    readLayout();
+    keepPopupInWindow();
   };
 
   // A page that opens in the remembered rail docks the first entry.
@@ -114,7 +135,9 @@ export const createSettingsPaneController = ({ state }) => {
     returnSettingsSection(state);
     if (held) {
       void nextTick(() => {
-        if (document.activeElement === document.body && popupOpener instanceof HTMLElement && popupOpener.isConnected) {
+        // Nothing else took the focus: it is nowhere (its section left the popup), or still on the popup's hidden close button.
+        const active = document.activeElement;
+        if ((active === document.body || popupElement()?.contains(active)) && popupOpener instanceof HTMLElement && popupOpener.isConnected) {
           popupOpener.focus({ preventScroll: true });
         }
       });
@@ -177,13 +200,15 @@ export const createSettingsPaneController = ({ state }) => {
       void revealSettingsSection(entry);
       return true;
     }
-    // Beside the clicked item when the popup fits there, else beside the point.
+    // Clear of the clicked item when the popup fits beside, below, or above it; a placement
+    // that lies over the item (a ring fills the Result) gives way to one beside the point.
     /** @param {number} width @param {number} height */
     const place = (width, height) => {
       /** @param {PopupAnchor} point */
       const near = (point) => placePopupNearPoint({ point, width, height, bounds });
       const placed = near(anchor);
-      const over = anchor.avoid && placed.x < anchor.avoid.right && placed.x + width > anchor.avoid.left;
+      const over = anchor.avoid && placed.x < anchor.avoid.right && placed.x + width > anchor.avoid.left
+        && placed.y < anchor.avoid.bottom && placed.y + Math.min(height, placed.maxHeight) > anchor.avoid.top;
       return over ? near({ x: anchor.x, y: anchor.y }) : placed;
     };
     const active = document.activeElement;
@@ -194,7 +219,7 @@ export const createSettingsPaneController = ({ state }) => {
       const section = popup && settingsSectionElement(popup, entry);
       if (!popup || !section || state.settingsPopup.value?.section !== entry) return;
       // The content's own height: what the section holds, not what the popup shows of it.
-      Object.assign(state.settingsPopup.value, place(popup.offsetWidth, popup.offsetHeight + section.scrollHeight - section.clientHeight));
+      moveSettingsPopup(state, place(popup.offsetWidth, popup.offsetHeight + section.scrollHeight - section.clientHeight));
       headingOf(section)?.focus({ preventScroll: true });
     });
     return true;
@@ -202,14 +227,21 @@ export const createSettingsPaneController = ({ state }) => {
 
   // R10: a mode written by anything (the mode buttons, Undo, a loaded Session) reconciles the docked entry and closes the popup.
   watch(() => state.mode.value, (/** @type {DiagramMode} */ mode) => reconcileSettingsPaneState(state, mode), { flush: 'sync' });
+  // R10: the popup belongs to the shown Result. Whatever takes the Result away (another tab of the
+  // Result panel, an Undo to before the first Generate, a load) closes it.
+  watch(() => Boolean(state.svgContent.value) && state.resultPanelTab.value === 'preview', (/** @type {boolean} */ shown) => {
+    if (!shown) closeSettingsPopup();
+  }, { flush: 'sync' });
   onMounted(() => {
     readLayout();
-    window.addEventListener('resize', readLayout);
+    window.addEventListener('resize', onResize);
   });
-  onUnmounted(() => window.removeEventListener('resize', readLayout));
+  onUnmounted(() => window.removeEventListener('resize', onResize));
 
   return {
     settingsPane, showSettingsPaneRail, showSettingsPaneStacked, closeDockedSettings, revealSetting, revealSettingsSection,
-    showSettingsBesideResult, closeSettingsPopup
+    showSettingsBesideResult, closeSettingsPopup,
+    // A drag of the popup by its heading.
+    moveSettingsPopup: (/** @type {PopupPlacement} */ placement) => moveSettingsPopup(state, placement)
   };
 };
