@@ -725,6 +725,54 @@ const inferredResolvedProteinMode = (comparisons) => {
  */
 const sameNumber = (left, right) => Number(left) === Number(right);
 
+/**
+ * @typedef {object} ResolvedProteinReuseActive The settings of this Generate that the committed Session must match.
+ * @property {string} featureVisibility
+ * @property {unknown} featureOverrides
+ * @property {string} mode
+ * @property {string | number} [bitscore]
+ * @property {string | number} [evalue]
+ * @property {string | number} [identity]
+ * @property {string | number} [alignmentLength]
+ * @property {unknown} candidateLimit
+ * @property {number} maxHits
+ * @property {string} orthogroupMembershipMode
+ * @property {unknown} memberMaxHits
+ * @property {number} minAnchors
+ * @property {number} maxUnitGap
+ * @property {number} maxDiagonalDrift
+ * @property {number} maxConflicts
+ * @property {number} maxParalogLinks
+ * @property {string} colorMode
+ * @property {string} unitMode
+ * @property {string} anchorMode
+ * @property {string} mergeOrientation
+ * @property {boolean} inferOrthogroups
+ * @property {string} searchScope
+ */
+
+/**
+ * @typedef {object} ResolvedProteinComparison A committed or persisted comparison, as far as the reuse check reads it.
+ * @property {string} [kind]
+ * @property {string} [mode]
+ * @property {{
+ *   proteinBlastpCandidateLimit?: unknown, proteinBlastpMaxHits?: unknown,
+ *   orthogroupMembershipMode?: unknown, orthogroupMemberMaxHits?: unknown,
+ *   collinearityParams?: { parameters?: Record<string, unknown> },
+ *   collinearityUnitMode?: unknown, collinearityAnchorMode?: unknown, collinearityColorMode?: unknown,
+ *   collinearitySearchScope?: unknown, collinearInferOrthogroups?: unknown,
+ *   collinearMaxParalogLinksPerOrthogroup?: unknown
+ * }} [settings]
+ */
+
+/**
+ * @param {{
+ *   canonicalComparisons: unknown,
+ *   committedSession: NonNullable<ReturnType<NonNullable<RunAnalysisOptions['getCommittedCanonicalSession']>>> | null,
+ *   sequences: LinearSeq[],
+ *   active: ResolvedProteinReuseActive
+ * }} options
+ */
 const canReuseResolvedProteinArtifacts = ({
   canonicalComparisons,
   committedSession,
@@ -732,7 +780,9 @@ const canReuseResolvedProteinArtifacts = ({
   active
 }) => {
   const committedRequest = committedSession?.renderRequest || null;
+  /** @type {(ResolvedProteinComparison | null | undefined)[]} */
   const persisted = Array.isArray(canonicalComparisons) ? canonicalComparisons : [];
+  /** @type {ResolvedProteinComparison[]} */
   const committed = Array.isArray(committedRequest?.comparisons)
     ? committedRequest.comparisons
     : [];
@@ -1634,7 +1684,10 @@ export const createRunAnalysis = ({
   };
   // Show Depth off leaves the Depth sources out of the request, so Python cannot name
   // the Depth rows a Legend style may still address; the draft names them (OV-81).
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {Record<string, { mode?: string, diagramOptions?: { depthTracks?: unknown } }>} canonical the built or projected request, which `buildCanonicalRenderRequest` and `projectCommittedEditorIntent` return untyped
+   */
   const unrequestedDepthCaptions = (drawing, canonical) => (
     canonical.renderRequest.diagramOptions?.depthTracks
       ? []
