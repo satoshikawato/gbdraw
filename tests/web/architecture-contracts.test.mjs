@@ -6305,7 +6305,7 @@ test('the design-rule guard registry parser validates each schema 2 field and ke
   malformed((rules) => { rules[1].id = 'type-debt'; }, 'rules[1].id: expected R<n>, or an upper-case id with its own rulesPath');
   malformed((rules) => { rules[1].rulesPath = ''; }, 'rules[1].rulesPath: expected a path');
   malformed((rules) => { rules[1].id = 'R10'; }, 'rules[1].id: duplicate R10');
-  malformed((rules) => { rules[1].allowlists[0].kind = 'py-map'; }, 'rules[1].allowlists[0].kind: expected one of count, count-map, set, writer-map, set-map, json-entries, py-count, py-count-map, py-set');
+  malformed((rules) => { rules[1].allowlists[0].kind = 'py-map'; }, 'rules[1].allowlists[0].kind: expected one of count, count-map, set, writer-map, set-map, json-entries, json-ids, py-count, py-count-map, py-set');
   // Schema 1 reads as before: bare path guards, R<n> ids, and its four kinds.
   malformed((rules) => { rules.pop(); }, 'rules[0].guards: expected an array of paths', 1);
   malformed((rules) => {
@@ -6621,6 +6621,35 @@ test('a count-baseline test follows a runtime move by path alongside runtime fil
 
 // BA-D10: a rule's text is authority. The Gate checks the candidate registry
 // whenever it changes; an unchanged trusted registry is not re-checked.
+// json-ids (schema 2): the ids of a JSON list are a shrink-only set; a row's
+// other fields (owners, reason, retireWhen) change freely.
+test('a json-ids allowlist compares only the entry ids', () => {
+  const TWINS_PATH = 'tools/twins.json';
+  const row = (id, extra = {}) => ({ id, pythonOwner: ['gbdraw/a.py:f'], jsOwner: ['gbdraw/web/js/services/a.js:f'], reason: 'r', retireWhen: 'w', ...extra });
+  const twins = (rows) => `${JSON.stringify({ schemaVersion: 1, twins: rows }, null, 2)}\n`;
+  const rules = designRuleRules2();
+  rules[0].allowlists.push({ path: TWINS_PATH, symbol: 'twins', kind: 'json-ids' });
+  const subject = `R10 ${TWINS_PATH}#twins`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const base = [row('function:a'), row('function:b')];
+  const run = (rows) => withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(TWINS_PATH, twins(rows));
+    return execute();
+  }, {
+    registry: designRuleGuardRegistrySource(rules, 2),
+    sources: { ...designRuleGuardSources2(), [TWINS_PATH]: twins(base) }
+  });
+  const added = run([...base, row('function:c')]);
+  assert.equal(added.status, 1, added.output);
+  assert.match(added.output, new RegExp(`design-rule\\.co-change: [^\\n]*${subject} \\(expansion\\)`));
+  const removed = run([base[0]]);
+  assert.equal(removed.status, 0, removed.output);
+  assert.match(removed.output, new RegExp(`- contraction: ${subject}\\n`));
+  const edited = run([row('function:a', { jsOwner: ['gbdraw/web/js/services/b.js:f'], reason: 'moved', retireWhen: 'later' }), base[1]]);
+  assert.equal(edited.status, 0, edited.output);
+  assert.doesNotMatch(edited.output, new RegExp(subject));
+});
+
 test('a candidate guard registry names only authority paths as rule files', () => {
   const rulesPathError = /candidate design-rule guard registry: rules\[1\] TYPE-DEBT: rulesPath CLAUDE\.md is not an authority path/;
   withDesignRuleGuardRepository2(({ execute, write }) => {
@@ -6795,7 +6824,9 @@ const guardRegistryProblems = (registry, {
     return undefined;
   };
   registry.rules.forEach((rule) => {
-    const named = new Set(namedTestPaths(ruleSection(read(rule.rulesPath || registry.rulesPath), rule.heading)));
+    // A rule may also register a JSON allowlist under tools/ that it names.
+    const section = ruleSection(read(rule.rulesPath || registry.rulesPath), rule.heading);
+    const named = new Set([...namedTestPaths(section), ...(section.match(/\btools\/[\w.-]+\.json\b/g) || [])]);
     [...new Set(registeredPaths(rule))].filter((path) => !named.has(path)).forEach((path) => {
       problems.unnamed.push(`${rule.id} registers ${path}, which "${rule.heading}" does not name`);
     });
@@ -6841,6 +6872,15 @@ test('the guard registry check reports an unregistered path, an unnamed guard, a
   moved.rules.find(({ id }) => id === 'R8').guards.push(rule('R12').guards.find(({ path }) => path.endsWith('run-info.test.mjs')));
   assert.deepEqual(guardRegistryProblems(moved).unnamed, [
     'R8 registers tests/web/run-info.test.mjs, which "R8: The Multi-Record Canvas owns placement only" does not name'
+  ]);
+  // A rule may register a tools/*.json allowlist that its section names; an
+  // unnamed one is still reported.
+  const withTwins = structuredClone(registry);
+  withTwins.rules.find(({ id }) => id === 'R13').allowlists.push({ path: 'tools/twins.json', symbol: 'twins', kind: 'json-ids' });
+  const namingTwins = (path) => read(path).replace('### R13: Owner layering and ports\n', '$&\nTwins: `tools/twins.json`.\n');
+  assert.deepEqual(guardRegistryProblems(withTwins, { read: namingTwins }).unnamed, []);
+  assert.deepEqual(guardRegistryProblems(withTwins).unnamed, [
+    'R13 registers tools/twins.json, which "R13: Owner layering and ports" does not name'
   ]);
 
   // A node test no job selects, and the fixture that only that test reads.

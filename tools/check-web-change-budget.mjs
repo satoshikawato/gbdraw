@@ -486,17 +486,21 @@ const narrowAuthorityBundlePaths = new Set([
 // the kinds read from a path -> names map, a JSON file, or a Python module.
 const DESIGN_RULE_ALLOWLIST_KINDS = {
   1: ['count', 'count-map', 'set', 'writer-map'],
-  2: ['count', 'count-map', 'set', 'writer-map', 'set-map', 'json-entries', 'py-count', 'py-count-map', 'py-set']
+  2: ['count', 'count-map', 'set', 'writer-map', 'set-map', 'json-entries', 'json-ids', 'py-count', 'py-count-map', 'py-set']
 };
 // The schema 1 comparison that each later kind gets once its literal is read.
 const DESIGN_RULE_ALLOWLIST_COMPARISONS = {
   'set-map': 'writer-map',
   'json-entries': 'writer-map',
+  'json-ids': 'writer-map',
   'py-count': 'count',
   'py-count-map': 'count-map',
   'py-set': 'set'
 };
 const isPythonAllowlistKind = (kind) => kind.startsWith('py-');
+// A JSON list of entries with ids: `json-entries` compares each entry's text,
+// `json-ids` only the ids (a shrink-only id set whose rows may change).
+const JSON_ALLOWLIST_KINDS = new Set(['json-entries', 'json-ids']);
 const parseDesignRuleGuardRegistry = (source) => {
   const errors = [];
   if (source === null) return { registry: null, errors };
@@ -822,9 +826,10 @@ const mapObjectValues = (value, convert) => Object.fromEntries(
 const readAllowlistLiteral = (source, symbol, kind) => {
   if (source === null) return { status: 'absent', value: null };
   const read = isPythonAllowlistKind(kind) ? readPythonLiteral
-    : kind === 'json-entries' ? readJsonEntries : readJavaScriptLiteral;
+    : JSON_ALLOWLIST_KINDS.has(kind) ? readJsonEntries : readJavaScriptLiteral;
   const { status, value } = read(source, symbol);
   if (status !== 'ok') return { status, value: null };
+  if (kind === 'json-ids') return { status, value: mapObjectValues(value, (byId) => mapObjectValues(byId, () => '')) };
   if (kind === 'set-map') {
     if (!isPlainObject(value) || !Object.values(value).every(isStringList)) return UNREADABLE_ALLOWLIST;
     return { status, value: mapObjectValues(value, (names) => Object.fromEntries(names.map((name) => [name, '']))) };
@@ -981,7 +986,7 @@ const differsOnlyByRenamedPaths = (testPath, before, after) => {
 };
 const changedAllowlistEntriesByPath = new Map();
 (designRuleGuardRegistry?.rules || []).forEach((rule) => rule.allowlists.forEach((entry) => {
-  if (!changed.has(entry.path) || entry.kind === 'json-entries') return;
+  if (!changed.has(entry.path) || JSON_ALLOWLIST_KINDS.has(entry.kind)) return;
   changedAllowlistEntriesByPath.set(entry.path, [...(changedAllowlistEntriesByPath.get(entry.path) || []), entry]);
 }));
 const countScopeEntriesByPath = [
