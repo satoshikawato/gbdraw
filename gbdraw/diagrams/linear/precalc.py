@@ -30,6 +30,7 @@ from ...features.factory import (
 from ...features.objects import FeatureObject
 from ...render.groups.linear import DefinitionGroup
 from ...labels.filtering import label_filter_maps
+from ...render_stages import render_stage
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
@@ -117,7 +118,9 @@ def _precalculate_feature_layers(
     feature_layers: list[FeatureBuildResult] = []
     for i, record in enumerate(records):
         compute_label_text = profile.labels_in_scope(i)
-        result = create_feature_layers(
+        result = render_stage(
+            "feature_layers",
+            create_feature_layers,
             record,
             feature_config.specific_color_rules,
             feature_config.selected_features_set,

@@ -2001,7 +2001,9 @@ def assemble_linear_diagram(
     record_feature_dicts = [
         result.foreground_features for result in record_feature_layers
     ]
-    feature_dom_index = build_linear_feature_dom_index(record_feature_dicts)
+    feature_dom_index = render_stage(
+        "feature_dom_index", build_linear_feature_dom_index, tuple(record_feature_dicts)
+    )
     (
         linear_track_slots,
         resolved_annotations,
