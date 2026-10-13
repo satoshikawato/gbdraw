@@ -17,17 +17,19 @@ Functions:
 
 
 import sys
+import warnings
 import webbrowser
 import http.server
 import socketserver
 import socket
-from typing import TYPE_CHECKING, NoReturn
+from collections.abc import Callable
+from typing import TYPE_CHECKING, NoReturn, TextIO
 from importlib import resources
 from functools import partial
 
 from .circular import circular_main
 from .linear import linear_main
-from .exceptions import GbdrawError
+from .exceptions import LabelLeadersCrossWarning, GbdrawError
 from .version import __version_display__
 
 if TYPE_CHECKING:
@@ -130,6 +132,27 @@ def print_help_message() -> NoReturn:
     sys.exit(0)
 
 
+class _CliWarningPrinter:
+    """Print gbdraw's label fit warning like its errors; pass other warnings on."""
+
+    def __init__(self, show_other: Callable[..., None]) -> None:
+        self._show_other = show_other
+
+    def __call__(
+        self,
+        message: Warning | str,
+        category: type[Warning],
+        filename: str,
+        lineno: int,
+        file: TextIO | None = None,
+        line: str | None = None,
+    ) -> None:
+        if issubclass(category, LabelLeadersCrossWarning):
+            print(f"WARNING: {message}", file=sys.stderr)
+            return
+        self._show_other(message, category, filename, lineno, file, line)
+
+
 def main() -> None:
     """
     Parses command-line arguments and directs to the appropriate genome diagram generation function.
@@ -154,38 +177,42 @@ def main() -> None:
     command: str = sys.argv[1].lower()
     args: list[str] = sys.argv[2:]
 
-    try:
-        if command == "circular":
-            circular_main(args)
-        elif command == "linear":
-            linear_main(args)
-        elif command == "render":
-            from .cli_utils.session import render_main
-            render_main(args)
-        elif command == "setup-losat":
-            from .losat_setup import setup_main
-            setup_main(args)
-        elif command == "gui":
-            web_dir: Traversable | str
-            try:
-                # Python 3.9+
-                web_dir = resources.files('gbdraw').joinpath('web')
-            except AttributeError:
-                import os
-                web_dir = os.path.join(os.path.dirname(__file__), 'web')
+    with warnings.catch_warnings():
+        # Crossing outer leaders draw the figure and print their report (LP-D46).
+        warnings.simplefilter("always", LabelLeadersCrossWarning)
+        warnings.showwarning = _CliWarningPrinter(warnings.showwarning)
+        try:
+            if command == "circular":
+                circular_main(args)
+            elif command == "linear":
+                linear_main(args)
+            elif command == "render":
+                from .cli_utils.session import render_main
+                render_main(args)
+            elif command == "setup-losat":
+                from .losat_setup import setup_main
+                setup_main(args)
+            elif command == "gui":
+                web_dir: Traversable | str
+                try:
+                    # Python 3.9+
+                    web_dir = resources.files('gbdraw').joinpath('web')
+                except AttributeError:
+                    import os
+                    web_dir = os.path.join(os.path.dirname(__file__), 'web')
 
-            print("Launching gbdraw GUI (Local Mode)...")
-            start_local_server(str(web_dir))
-        else:
-            print(
-                f"Unknown command {sys.argv[1]!r}. Choose circular, linear, render, setup-losat, or gui; "
-                "run gbdraw --help for usage.",
-                file=sys.stderr,
-            )
+                print("Launching gbdraw GUI (Local Mode)...")
+                start_local_server(str(web_dir))
+            else:
+                print(
+                    f"Unknown command {sys.argv[1]!r}. Choose circular, linear, render, setup-losat, or gui; "
+                    "run gbdraw --help for usage.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        except GbdrawError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
             sys.exit(1)
-    except GbdrawError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        sys.exit(1)
 
 
 if __name__ == "__main__":

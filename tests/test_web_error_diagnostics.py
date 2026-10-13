@@ -534,3 +534,26 @@ def test_linear_record_region_beyond_the_record_keeps_its_region_diagnostic():
         gff_keep_all_features=False,
     )
     assert len(resolved.records[0]) == 31
+
+
+def test_circular_labels_that_do_not_fit_reach_the_web_as_label_layout():
+    from gbdraw.exceptions import LabelsDoNotFitError
+    from gbdraw.labels.fit import LabelFit, LabelFitRecord, LabelFitReport
+
+    report = LabelFitReport(
+        records=(
+            LabelFitRecord("PRIVATE_RECORD", "circular_outer", 111, 14.0, LabelFit(20, 21)),
+            LabelFitRecord("second", "circular_outer", 50, 14.0, LabelFit(0, 3)),
+        ),
+        rows=(),
+        drawn=False,
+    )
+
+    payload = _web(LabelsDoNotFitError("PRIVATE_MESSAGE", report=report))
+
+    assert payload == {
+        "code": "LABEL_LAYOUT",
+        "operation": "generate",
+        "stage": "render",
+        "context": {"crossingPairs": 24, "overlapPairs": 20},
+    }

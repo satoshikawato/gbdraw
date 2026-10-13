@@ -12,7 +12,6 @@ from gbdraw.svg.elements import Group, Line
 
 from ....canvas import CircularCanvasConfigurator
 from ....features.factory import FeatureBuildResult
-from ....labels.circular import prepare_label_list
 from ....layout.circular import CircularRecordRenderContext
 from ...drawers.circular.labels import LabelDrawer
 from ...label_binding import bind_label_part
@@ -62,32 +61,14 @@ class LabelsGroup:
         if not self.show_labels:
             return group
 
-        feature_dict = self.feature_layers.foreground_features
-
         record_length: int = len(self.gb_record.seq)
         feature_anchor_radius = (
             float(self.feature_anchor_radius_px)
             if self.feature_anchor_radius_px is not None
             else float(self.canvas_config.radius)
         )
-        if self.precalculated_labels is not None:
-            label_list = self.precalculated_labels
-        else:
-            label_list = prepare_label_list(
-                feature_dict,
-                record_length,
-                feature_anchor_radius,
-                self.canvas_config.track_ratio,
-                self.render_context.profile,
-                outer_arena=self.outer_arena,
-                feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
-                feature_layout=self.render_context.feature_layout,
-                radial_layout=self.render_context.radial_layout,
-                track_preset=self.render_context.track_preset,
-                feature_lane_direction=str(
-                    self.render_context.feature_lane_direction
-                ),
-            )
+        # The record assembly places every drawn label (and checks their fit) once.
+        label_list = self.precalculated_labels or []
 
         drawer = LabelDrawer(profile=self.render_context.profile)
         for label in label_list:

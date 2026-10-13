@@ -151,6 +151,8 @@ from gbdraw.web_support.capabilities import (
     WEB_RUNTIME_CAPABILITY_SCHEMA,
     get_web_runtime_capabilities,
 )
+from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
+from gbdraw.labels.fit import LabelFit, LabelFitRecord, LabelFitReport, LabelFitRow
 from gbdraw.session import (
     MaterializedSession,
     SessionConversionError,
@@ -347,6 +349,13 @@ __all__ = [
     "WEB_RENDER_PROTOCOL",
     "WEB_RUNTIME_CAPABILITY_SCHEMA",
     "get_web_runtime_capabilities",
+    # Label fit check
+    "LabelFit",
+    "LabelFitRecord",
+    "LabelFitReport",
+    "LabelFitRow",
+    "LabelLeadersCrossWarning",
+    "LabelsDoNotFitError",
     # canonical sessions
     "MaterializedSession",
     "SessionConversionError",

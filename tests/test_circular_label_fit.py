@@ -1,0 +1,419 @@
+"""Circular outer-label fit check: decision point, search, wording, CLI, and LP-D45 pins."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import sys
+import warnings
+from collections.abc import Callable, Mapping
+from pathlib import Path
+
+import pytest
+from Bio import SeqIO
+
+import gbdraw.diagrams.circular.assemble as circular_assemble_module
+from gbdraw.circular import circular_main
+from gbdraw.config.models import GbdrawConfig
+import gbdraw.labels.circular_fit as circular_fit_module
+from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
+from gbdraw.labels.circular_fit import (
+    FONT_SIZE_PATHS,
+    SPACING_PATH,
+    X_OFFSET_PATH,
+    Y_OFFSET_PATH,
+    CircularLabelVerification,
+    CircularOuterLabelLayout,
+    check_circular_label_fit,
+    format_circular_label_fit_report,
+)
+from gbdraw.labels.fit import (
+    LabelFit,
+    LabelFitRecord,
+    LabelFitReport,
+    LabelFitRow,
+    label_box_overlap_count,
+    label_fit_outcome,
+    polyline_crossing_count,
+)
+from gbdraw.layout.spatial import Aabb
+
+TEST_INPUTS = Path(__file__).parent / "test_inputs"
+FITS = LabelFit(0, 0)
+OVERLAPS = LabelFit(3, 2)
+CROSSES = LabelFit(0, 4)
+
+
+def _settings(values: Mapping[str, float], *, font: float = 14.0) -> tuple[float, float, float, float]:
+    return (
+        values.get(X_OFFSET_PATH, 1.0),
+        values.get(Y_OFFSET_PATH, 1.0),
+        values.get(FONT_SIZE_PATHS[0], font),
+        values.get(SPACING_PATH, 3.0),
+    )
+
+
+def _layout(
+    record_id: str,
+    fits: Callable[[float, float, float, float], bool],
+    *,
+    fit: LabelFit = OVERLAPS,
+    probes: list[Mapping[str, float]] | None = None,
+) -> CircularOuterLabelLayout:
+    def probe(values: Mapping[str, float]) -> LabelFit:
+        if probes is not None:
+            probes.append(dict(values))
+        return FITS if fits(*_settings(values)) else OVERLAPS
+
+    return CircularOuterLabelLayout(
+        record_id=record_id,
+        outer_label_count=111,
+        font_size=14.0,
+        x_radius_offset=1.0,
+        y_radius_offset=1.0,
+        label_spacing=3.0,
+        fit=fit,
+        probe=probe,
+    )
+
+
+def _verifier(*layouts_fits: Callable[[float, float, float, float], bool]):
+    calls: list[Mapping[str, float]] = []
+
+    def verify(values: Mapping[str, float]) -> CircularLabelVerification:
+        calls.append(dict(values))
+        settings = _settings(values)
+        return CircularLabelVerification(
+            fits=all(fits(*settings) for fits in layouts_fits),
+            canvas_size=(1000.0 * settings[0], 1000.0 * settings[1]),
+        )
+
+    return verify, calls
+
+
+def _p1_like(x: float, y: float, font: float, spacing: float) -> bool:
+    """Fits from Y 1.15, at 12 pt, or with 1.05 of Y per 0.5 pt removed; X and spacing never help."""
+
+    return (y - 1.0) / 0.025 + (14.0 - font) / 0.5 * 1.5 >= 6 - 1e-9
+
+
+def test_outcome_is_one_decision_point() -> None:
+    assert label_fit_outcome([FITS, FITS]) == "fits"
+    assert label_fit_outcome([FITS, CROSSES]) == "warn"
+    assert label_fit_outcome([CROSSES, OVERLAPS]) == "stop"
+
+
+def test_fit_counts_take_plain_boxes_and_polylines() -> None:
+    """Boxes that touch overlap (closed boxes); leaders that only touch do not cross."""
+
+    boxes = [Aabb(0, 0, 10, 5), Aabb(10, 5, 20, 9), Aabb(10.01, 9.5, 20, 12), Aabb(300, 300, 310, 305)]
+    assert label_box_overlap_count(boxes) == 1
+    crossing = [((0.0, 0.0), (5.0, 5.0), (10.0, 5.0)), ((0.0, 5.0), (5.0, 0.0))]
+    touching = [((0.0, 0.0), (5.0, 5.0)), ((5.0, 5.0), (10.0, 0.0))]
+    assert polyline_crossing_count(crossing) == 1
+    assert polyline_crossing_count(touching) == 0
+
+
+def test_fitting_records_pass_without_a_search() -> None:
+    probes: list[Mapping[str, float]] = []
+    verify, calls = _verifier(_p1_like)
+
+    assert check_circular_label_fit([_layout("r", _p1_like, fit=FITS, probes=probes)], verify) is None
+    assert probes == [] and calls == []
+
+
+def test_overlaps_raise_with_six_verified_rows() -> None:
+    verify, _calls = _verifier(_p1_like)
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_layout("P1", _p1_like)], verify)
+
+    rows = {row.kind: row for row in raised.value.report.rows}
+    assert [row.kind for row in raised.value.report.rows] == [
+        "outward_both",
+        "outward_vertical",
+        "outward_horizontal",
+        "smaller_font",
+        "tighter_rows",
+        "combination",
+    ]
+    assert rows["outward_vertical"].values == {Y_OFFSET_PATH: 1.15}
+    assert rows["outward_vertical"].canvas_size == (1000.0, 1150.0)
+    assert rows["outward_both"].values == {X_OFFSET_PATH: 1.15, Y_OFFSET_PATH: 1.15}
+    assert rows["outward_horizontal"].values is None
+    assert rows["outward_horizontal"].reason == "Does not fit up to X offset 2"
+    assert rows["smaller_font"].values == {path: 12.0 for path in FONT_SIZE_PATHS}
+    assert rows["tighter_rows"].reason == "Does not fit down to 0.1 px label spacing"
+    # OD-F7: half the font row's 2 pt drop, then the smallest Y offset at 13 pt.
+    assert rows["combination"].values == {
+        **{path: 13.0 for path in FONT_SIZE_PATHS},
+        Y_OFFSET_PATH: 1.075,
+    }
+    assert not raised.value.report.drawn
+
+
+def test_row_steps_stronger_until_the_full_assembly_fits() -> None:
+    def full_needs_more(x: float, y: float, font: float, spacing: float) -> bool:
+        return y >= 1.2 - 1e-9 or font <= 11.0
+
+    verify, calls = _verifier(full_needs_more)
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_layout("P1", _p1_like)], verify)
+
+    rows = {row.kind: row for row in raised.value.report.rows}
+    assert rows["outward_vertical"].values == {Y_OFFSET_PATH: 1.2}
+    assert {Y_OFFSET_PATH: 1.15} in calls and {Y_OFFSET_PATH: 1.175} in calls
+    assert rows["smaller_font"].values == {path: 11.0 for path in FONT_SIZE_PATHS}
+
+
+def test_multi_record_rows_take_the_strongest_value_and_fit_every_record() -> None:
+    def second(x: float, y: float, font: float, spacing: float) -> bool:
+        return y >= 1.25 - 1e-9 or font <= 10.0
+
+    verify, _calls = _verifier(_p1_like, second)
+    layouts = [_layout("first", _p1_like), _layout("second", second, fit=CROSSES)]
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit(layouts, verify)
+
+    report = raised.value.report
+    assert [record.record_id for record in report.records] == ["first", "second"]
+    rows = {row.kind: row for row in report.rows}
+    assert rows["outward_vertical"].values == {Y_OFFSET_PATH: 1.25}
+    assert rows["smaller_font"].values == {path: 10.0 for path in FONT_SIZE_PATHS}
+    assert str(raised.value).startswith(
+        "Outer labels do not fit in 2 records: first (111 labels at 14 pt: 3 label pairs overlap, "
+        "2 leader pairs cross); second (111 labels at 14 pt: 0 label pairs overlap, 4 leader pairs cross)."
+        " Nothing was drawn.\n"
+    )
+
+
+def test_crossing_leaders_alone_warn_and_return_the_report() -> None:
+    verify, _calls = _verifier(_p1_like)
+
+    with pytest.warns(LabelLeadersCrossWarning) as caught:
+        checked = check_circular_label_fit([_layout("lambda", _p1_like, fit=CROSSES)], verify)
+
+    assert checked is not None
+    report, _search = checked
+    assert report.drawn
+    assert [row.status for row in report.rows] == [
+        "found", "found", "not_found", "found", "not_found", "found"
+    ]
+    assert caught[0].message.report is report
+    assert str(caught[0].message).startswith(
+        "111 outer labels do not fit at 14 pt (0 label pairs overlap, 4 leader pairs cross). Drawn anyway.\n"
+    )
+
+
+def test_wording_lists_fitting_rows_and_names_the_others() -> None:
+    report = LabelFitReport(
+        records=(LabelFitRecord("P1", "circular_outer", 111, 14.0, LabelFit(20, 21)),),
+        rows=(
+            LabelFitRow("outward_both", "found", {X_OFFSET_PATH: 1.15, Y_OFFSET_PATH: 1.15}, (1.0, 1.0)),
+            LabelFitRow("outward_vertical", "found", {Y_OFFSET_PATH: 1.15}, (1.0, 1.0)),
+            LabelFitRow("outward_horizontal", "not_found", reason="Does not fit up to X offset 2"),
+            LabelFitRow("smaller_font", "found", {path: 12.0 for path in FONT_SIZE_PATHS}, (1.0, 1.0)),
+            LabelFitRow("tighter_rows", "not_found", reason="Does not fit down to 0.1 px label spacing"),
+            LabelFitRow(
+                "combination",
+                "found",
+                {**{path: 13.0 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.05},
+                (1.0, 1.0),
+            ),
+        ),
+        drawn=False,
+    )
+
+    assert format_circular_label_fit_report(report) == (
+        "111 outer labels do not fit at 14 pt (20 label pairs overlap, 21 leader pairs cross). "
+        "Nothing was drawn.\n"
+        "Run again with one of:\n"
+        "  --outer_label_x_radius_offset 1.15 --outer_label_y_radius_offset 1.15   (outward, both directions)\n"
+        "  --outer_label_y_radius_offset 1.15                                      (outward, vertical only)\n"
+        "  --label_font_size 12                                                    (smaller font)\n"
+        "  --outer_label_y_radius_offset 1.05 --label_font_size 13                 (combination)\n"
+        "Outward horizontal only and tighter rows do not fit this map."
+    )
+
+
+def test_warn_search_stops_at_its_time_limit_and_computes_a_row_later(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LP-D48 SEARCH-BOUNDED-5S: rows past the limit are named, and one row is computed on request."""
+
+    clock = [0.0]
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
+    verify, _calls = _verifier(_p1_like)
+
+    def slow(x: float, y: float, font: float, spacing: float) -> bool:
+        clock[0] += 0.5
+        return _p1_like(x, y, font, spacing)
+
+    with pytest.warns(LabelLeadersCrossWarning) as caught:
+        checked = check_circular_label_fit([_layout("lambda", slow, fit=CROSSES)], verify)
+
+    assert checked is not None
+    report, search = checked
+    statuses = {row.kind: row.status for row in report.rows}
+    assert statuses["outward_vertical"] == "found"
+    assert statuses["combination"] == "not_computed"
+    skipped = [row for row in report.rows if row.status == "not_computed"]
+    assert all(row.values is None and row.reason is None for row in skipped)
+    assert str(caught[0].message).splitlines()[-1].startswith("Not searched within 5 s: ")
+
+    combination = search.row("combination")
+    assert combination.status == "found"
+    assert combination.values == {**{path: 13.0 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.075}
+
+
+def test_overlaps_compute_every_row_without_a_time_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
+    verify, _calls = _verifier(_p1_like)
+
+    def slow(x: float, y: float, font: float, spacing: float) -> bool:
+        clock[0] += 0.5
+        return _p1_like(x, y, font, spacing)
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_layout("P1", slow)], verify)
+
+    assert "not_computed" not in {row.status for row in raised.value.report.rows}
+
+
+# --- engine and CLI -------------------------------------------------------------------------------
+
+LAMBDA_ARGS = [
+    "--gbk", str(TEST_INPUTS / "NC_001416.gb"),
+    "--separate_strands", "--track_type", "tuckin", "--labels", "out", "--legend", "right",
+]
+
+
+@pytest.mark.circular
+def test_cli_draws_crossing_leaders_and_prints_the_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """LP-D46 CROSS-WARN: lambda at 14 pt has 2 crossing leader pairs and no overlaps."""
+
+    from gbdraw import cli
+
+    output = tmp_path / "lambda"
+    monkeypatch.setattr(
+        sys, "argv", ["gbdraw", "circular", *LAMBDA_ARGS, "-o", str(output), "-f", "svg"]
+    )
+    cli.main()
+
+    assert output.with_suffix(".svg").is_file()
+    stderr = capsys.readouterr().err
+    assert stderr.startswith(
+        "WARNING: 71 outer labels do not fit at 14 pt (0 label pairs overlap, 2 leader pairs cross). "
+        "Drawn anyway.\nRun again with one of:\n"
+    )
+    assert "--outer_label_y_radius_offset 1.025" in stderr
+
+
+@pytest.mark.circular
+def test_drawing_with_crossing_leaders_carries_the_report_and_computes_rows() -> None:
+    """The Web reads the report from the success result and asks for one row at a time."""
+
+    from gbdraw.api.diagram import build_circular_diagram, label_fit_report, label_fit_row
+    from gbdraw.api.options import CircularDiagramOptions
+    from gbdraw.config.modify import with_config_overrides
+    from gbdraw.config.toml import load_config_toml
+
+    cfg = with_config_overrides(
+        GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
+        {
+            "labels.filtering.blacklist_keywords": [],
+            "labels.circular.scope": "outer",
+            "canvas.strandedness": True,
+            "canvas.circular.track_type": "tuckin",
+        },
+    )
+    record = SeqIO.read(str(TEST_INPUTS / "NC_001416.gb"), "genbank")
+
+    with pytest.warns(LabelLeadersCrossWarning):
+        drawing = build_circular_diagram(record, options=CircularDiagramOptions(config=cfg))
+
+    report = label_fit_report(drawing)
+    assert report is not None and report.drawn
+    assert report.records[0].label_kind == "circular_outer"
+    assert report.records[0].fit == LabelFit(0, 2)
+    vertical = label_fit_row(drawing, "outward_vertical")
+    assert vertical is not None and vertical.status == "found"
+    assert vertical.values == {Y_OFFSET_PATH: 1.025}
+
+
+def _drawn_label_digest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, args: list[str]) -> tuple[int, str]:
+    drawn: list[list[dict]] = []
+    original = circular_assemble_module.add_labels_group_on_canvas
+
+    def capture(canvas, *capture_args, **kwargs):
+        if kwargs.get("phase") == "leaders":
+            drawn.append(
+                [
+                    label
+                    for label in kwargs["precalculated_labels"]
+                    if not label.get("is_embedded") and not label.get("is_inner")
+                ]
+            )
+        return original(canvas, *capture_args, **kwargs)
+
+    monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", capture)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LabelLeadersCrossWarning)
+        circular_main([*args, "-o", str(tmp_path / "out"), "-f", "svg"])
+    keys = ("start_x", "start_y", "middle_x", "middle_y", "leader_start_x", "leader_start_y")
+    rows = [[label["label_text"], *(round(float(label.get(key, 0.0)), 4) for key in keys)] for label in drawn[-1]]
+    return len(rows), hashlib.sha256(json.dumps(rows).encode()).hexdigest()
+
+
+@pytest.mark.circular
+def test_dense_map_that_fits_with_legacy_rows_draws_as_before(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LP-D45: plasmid NZ_CP125877.1 at 8 pt overlaps with 3 px rows; it draws as on 0.13 (0.1 px rows)."""
+
+    records = SeqIO.parse(str(TEST_INPUTS / "GCF_030060435.1_ASM3006043v1_genomic.gbff"), "genbank")
+    record = next(record for record in records if record.id == "NZ_CP125877.1")
+    gbk = tmp_path / "NZ_CP125877.1.gb"
+    SeqIO.write(record, str(gbk), "genbank")
+
+    digest = _drawn_label_digest(
+        monkeypatch,
+        tmp_path,
+        [
+            "--gbk", str(gbk), "--separate_strands", "--track_type", "tuckin", "--labels", "out",
+            "--legend", "right", "--label_font_size", "8",
+        ],
+    )
+
+    # Digest of the same run on origin/dev 3d748b78 (before OV-479).
+    assert digest == (179, "0572c0627b4b8c86f078ddb1cb6f6d61aff7573ac48c985635ed074ffa71237b")
+
+
+@pytest.mark.circular
+def test_dense_map_whose_spaced_rows_cross_draws_as_before(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LP-D45: E. coli RNA labels at 8 pt fit with 3 px rows but 1 leader pair crosses; drawn as on 0.13."""
+
+    whitelist = tmp_path / "rna_whitelist.tsv"
+    whitelist.write_text("tRNA\tproduct\ttRNA\nrRNA\tproduct\tribosomal RNA\n")
+
+    digest = _drawn_label_digest(
+        monkeypatch,
+        tmp_path,
+        [
+            "--gbk", str(TEST_INPUTS / "MG1655.gbk"), "--separate_strands", "--track_type", "tuckin",
+            "--labels", "out", "--legend", "right", "--label_font_size", "8",
+            "--label_whitelist", str(whitelist),
+        ],
+    )
+
+    # Digest of the same run on origin/dev 3d748b78 (before OV-479).
+    assert digest == (108, "cf67ec842c42201cd9f796657db30a5acb65b37c1e30f826380ea837cf15cf83")

@@ -7,6 +7,7 @@ from typing import Mapping
 from gbdraw.config.modify import (
     _apply_validated_config_overrides,
     config_to_raw_dict,
+    with_config_overrides,
 )
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
@@ -33,9 +34,7 @@ def apply_config_overrides(
     if config is None:
         config_dict = load_default_config()
     elif isinstance(config, GbdrawConfig):
-        if not overrides:
-            return config
-        config_dict = config_to_raw_dict(config)
+        return with_config_overrides(config, overrides)
     else:
         try:
             base_config = GbdrawConfig.from_dict(config)

@@ -15,6 +15,7 @@ import logging
 import math
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Optional, Sequence, Mapping, Literal, cast
 
@@ -103,6 +104,15 @@ from gbdraw.config.models import (
     LinearRenderProfile,
 )
 from gbdraw.config.models.labels import LabelsFilteringConfig
+from gbdraw.config.modify import with_config_overrides
+from gbdraw.diagrams.circular.positioning import _parse_svg_number
+from gbdraw.labels.circular_fit import (
+    CircularLabelFitSearch,
+    CircularLabelVerification,
+    CircularOuterLabelLayout,
+    check_circular_label_fit,
+)
+from gbdraw.labels.fit import LabelFitReport, LabelFitRow, LabelFitRowKind
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.labels.filtering import (
     DERIVED_LABEL_FILTERING_KEYS,
@@ -2490,6 +2500,7 @@ def assemble_circular_diagram_from_record(
         title_bounds=title_bounds,
         title_placement=title_placement,
     )
+    _attach_circular_label_layouts(result.drawing, [result.outer_label_layout])
     return result.drawing
 
 
@@ -3174,6 +3185,9 @@ def assemble_circular_diagram_from_records(
         title_side=title_placement,
     )
 
+    _attach_circular_label_layouts(
+        merged_canvas, [result.outer_label_layout for result in record_results]
+    )
     if track_slot_geometry_records:
         setattr(
             merged_canvas,
@@ -3187,6 +3201,80 @@ def assemble_circular_diagram_from_records(
         )
 
     return merged_canvas
+
+
+_CIRCULAR_LABEL_LAYOUTS_ATTR = "_gbdraw_circular_label_layouts"
+_LABEL_FIT_ATTR = "_gbdraw_label_fit"
+
+
+def _attach_circular_label_layouts(
+    drawing: Drawing,
+    layouts: Sequence[CircularOuterLabelLayout | None],
+) -> None:
+    setattr(
+        drawing,
+        _CIRCULAR_LABEL_LAYOUTS_ATTR,
+        tuple(layout for layout in layouts if layout is not None),
+    )
+
+
+def _circular_label_layouts(drawing: Drawing) -> tuple[CircularOuterLabelLayout, ...]:
+    layouts = getattr(drawing, _CIRCULAR_LABEL_LAYOUTS_ATTR, ())
+    return tuple(layout for layout in layouts if isinstance(layout, CircularOuterLabelLayout))
+
+
+def _drawing_size(drawing: Drawing) -> tuple[float, float]:
+    return (
+        _parse_svg_number(drawing.attribs.get("width")),
+        _parse_svg_number(drawing.attribs.get("height")),
+    )
+
+
+def _checked_circular_drawing(assemble: Callable[[Mapping[str, float]], Drawing]) -> Drawing:
+    """Assemble a Circular figure and apply the outer-label fit check to it.
+
+    Overlapping labels raise ``LabelsDoNotFitError``; crossing leaders alone
+    keep the drawing, warn, and attach the report and its search to it.
+    """
+
+    drawing = assemble({})
+
+    def verify(overrides: Mapping[str, float]) -> CircularLabelVerification:
+        verified = assemble(overrides)
+        return CircularLabelVerification(
+            fits=all(layout.fit.fits for layout in _circular_label_layouts(verified)),
+            canvas_size=_drawing_size(verified),
+        )
+
+    checked = check_circular_label_fit(_circular_label_layouts(drawing), verify)
+    if checked is not None:
+        setattr(drawing, _LABEL_FIT_ATTR, checked)
+    return drawing
+
+
+def _label_fit(drawing: Drawing) -> tuple[LabelFitReport, CircularLabelFitSearch] | None:
+    report, search = getattr(drawing, _LABEL_FIT_ATTR, (None, None))
+    if isinstance(report, LabelFitReport) and isinstance(search, CircularLabelFitSearch):
+        return report, search
+    return None
+
+
+def label_fit_report(drawing: Drawing) -> LabelFitReport | None:
+    """The report of a figure drawn with crossing label leaders, if any."""
+
+    checked = _label_fit(drawing)
+    return checked[0] if checked is not None else None
+
+
+def label_fit_row(drawing: Drawing, kind: LabelFitRowKind) -> LabelFitRow | None:
+    """Compute one row of a drawn figure's report without a time limit.
+
+    Rows that the bounded search did not reach are ``not_computed`` in the
+    report; this returns the computed row (rows found earlier cost nothing).
+    """
+
+    checked = _label_fit(drawing)
+    return checked[1].row(kind) if checked is not None else None
 
 
 def _circular_builder_options(
@@ -3230,70 +3318,73 @@ def build_circular_diagram(
 
     cfg = _resolve_diagram_options_config(options)
 
-    return assemble_circular_diagram_from_record(
-        gb_record,
-        cfg=cfg,
-        color_table=colors.color_table if colors else None,
-        color_table_file=colors.color_table_file if colors else None,
-        default_colors=colors.default_colors if colors else None,
-        default_colors_palette=colors.default_colors_palette if colors else "default",
-        default_colors_file=colors.default_colors_file if colors else None,
-        selected_features_set=options.selected_features_set,
-        feature_visibility_table=options.feature_visibility_table,
-        feature_visibility_table_file=options.feature_visibility_table_file,
-        feature_shapes=options.feature_shapes,
-        output_prefix="out",
-        legend=output.legend if output else "right",
-        dinucleotide=options.dinucleotide,
-        window=options.window,
-        step=options.step,
-        depth_window=options.depth_window,
-        depth_step=options.depth_step,
-        depth_tracks=options.depth_tracks,
-        depth_table=depth_table,
-        depth_file=depth_file,
-        depth_track_tables=options.depth_track_tables,
-        depth_track_files=options.depth_track_files,
-        depth_track_labels=options.depth_track_labels,
-        depth_track_colors=options.depth_track_colors,
-        depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
-        depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
-        depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
-        conservation_blast_files=(
-            options.conservation_search_results or options.conservation_blast_files
-        ),
-        conservation_dataframes=options.conservation_dataframes,
-        conservation_reference=options.conservation_reference,
-        conservation_labels=options.conservation_labels,
-        conservation_colors=options.conservation_colors,
-        conservation_ring_width=options.conservation_ring_width,
-        conservation_ring_gap=options.conservation_ring_gap,
-        # The builder options resolved omitted thresholds from the mode profile.
-        evalue=cast(float, options.evalue),
-        bitscore=cast(float, options.bitscore),
-        identity=cast(float, options.identity),
-        alignment_length=cast(int, options.alignment_length),
-        species=options.species,
-        strain=options.strain,
-        plot_title=options.plot_title,
-        plot_title_position=(
-            output.plot_title_position
-            if output and output.plot_title_position is not None
-            else "none"
-        ),
-        plot_title_font_size=options.plot_title_font_size,
-        keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
-        center_reserved_radius=tracks.center_reserved_radius if tracks else None,
-        circular_track_slots=tracks.circular_track_slots if tracks else None,
-        circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
-        annotation_options=options.annotations,
-        _resolved_annotations=_resolved_annotations,
-        _precomputed_depth_track_specs=_precomputed_depth_track_specs,
-        _precomputed_depth_track_count=_precomputed_depth_track_count,
-        _resolved_feature_inputs=_resolved_feature_inputs,
-        _resolved_record_features=_resolved_record_features,
-        _record_transform=_record_transform,
-    )
+    def assemble(overrides: Mapping[str, float]) -> Drawing:
+        return assemble_circular_diagram_from_record(
+            gb_record,
+            cfg=with_config_overrides(cfg, overrides),
+            color_table=colors.color_table if colors else None,
+            color_table_file=colors.color_table_file if colors else None,
+            default_colors=colors.default_colors if colors else None,
+            default_colors_palette=colors.default_colors_palette if colors else "default",
+            default_colors_file=colors.default_colors_file if colors else None,
+            selected_features_set=options.selected_features_set,
+            feature_visibility_table=options.feature_visibility_table,
+            feature_visibility_table_file=options.feature_visibility_table_file,
+            feature_shapes=options.feature_shapes,
+            output_prefix="out",
+            legend=output.legend if output else "right",
+            dinucleotide=options.dinucleotide,
+            window=options.window,
+            step=options.step,
+            depth_window=options.depth_window,
+            depth_step=options.depth_step,
+            depth_tracks=options.depth_tracks,
+            depth_table=depth_table,
+            depth_file=depth_file,
+            depth_track_tables=options.depth_track_tables,
+            depth_track_files=options.depth_track_files,
+            depth_track_labels=options.depth_track_labels,
+            depth_track_colors=options.depth_track_colors,
+            depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
+            conservation_blast_files=(
+                options.conservation_search_results or options.conservation_blast_files
+            ),
+            conservation_dataframes=options.conservation_dataframes,
+            conservation_reference=options.conservation_reference,
+            conservation_labels=options.conservation_labels,
+            conservation_colors=options.conservation_colors,
+            conservation_ring_width=options.conservation_ring_width,
+            conservation_ring_gap=options.conservation_ring_gap,
+            # The builder options resolved omitted thresholds from the mode profile.
+            evalue=cast(float, options.evalue),
+            bitscore=cast(float, options.bitscore),
+            identity=cast(float, options.identity),
+            alignment_length=cast(int, options.alignment_length),
+            species=options.species,
+            strain=options.strain,
+            plot_title=options.plot_title,
+            plot_title_position=(
+                output.plot_title_position
+                if output and output.plot_title_position is not None
+                else "none"
+            ),
+            plot_title_font_size=options.plot_title_font_size,
+            keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
+            center_reserved_radius=tracks.center_reserved_radius if tracks else None,
+            circular_track_slots=tracks.circular_track_slots if tracks else None,
+            circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
+            annotation_options=options.annotations,
+            _resolved_annotations=_resolved_annotations,
+            _precomputed_depth_track_specs=_precomputed_depth_track_specs,
+            _precomputed_depth_track_count=_precomputed_depth_track_count,
+            _resolved_feature_inputs=_resolved_feature_inputs,
+            _resolved_record_features=_resolved_record_features,
+            _record_transform=_record_transform,
+        )
+
+    return _checked_circular_drawing(assemble)
 
 
 def _build_linear_diagram(
@@ -3487,75 +3578,78 @@ def build_circular_multi_diagram(
     tracks = options.tracks
     cfg = _resolve_diagram_options_config(options)
 
-    return assemble_circular_diagram_from_records(
-        records,
-        cfg=cfg,
-        conservation_blast_files=(
-            options.conservation_search_results or options.conservation_blast_files
-        ),
-        conservation_dataframes=options.conservation_dataframes,
-        conservation_reference=options.conservation_reference,
-        conservation_labels=options.conservation_labels,
-        conservation_colors=options.conservation_colors,
-        conservation_ring_width=options.conservation_ring_width,
-        conservation_ring_gap=options.conservation_ring_gap,
-        color_table=colors.color_table if colors else None,
-        color_table_file=colors.color_table_file if colors else None,
-        default_colors=colors.default_colors if colors else None,
-        default_colors_palette=colors.default_colors_palette if colors else "default",
-        default_colors_file=colors.default_colors_file if colors else None,
-        selected_features_set=options.selected_features_set,
-        feature_visibility_table=options.feature_visibility_table,
-        feature_visibility_table_file=options.feature_visibility_table_file,
-        feature_shapes=options.feature_shapes,
-        output_prefix="out",
-        legend=output.legend if output else "right",
-        dinucleotide=options.dinucleotide,
-        window=options.window,
-        step=options.step,
-        depth_window=options.depth_window,
-        depth_step=options.depth_step,
-        depth_tracks=options.depth_tracks,
-        depth_table=options.depth_table,
-        depth_file=options.depth_file,
-        depth_tables=options.depth_tables,
-        depth_files=options.depth_files,
-        depth_track_tables=options.depth_track_tables,
-        depth_track_files=options.depth_track_files,
-        depth_track_labels=options.depth_track_labels,
-        depth_track_colors=options.depth_track_colors,
-        depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
-        depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
-        depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
-        species=options.species,
-        strain=options.strain,
-        plot_title=options.plot_title,
-        plot_title_position=(
-            output.plot_title_position
-            if output and output.plot_title_position is not None
-            else "none"
-        ),
-        plot_title_font_size=options.plot_title_font_size,
-        keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
-        center_reserved_radius=tracks.center_reserved_radius if tracks else None,
-        multi_record_size_mode=layout.multi_record_size_mode,
-        multi_record_min_radius_ratio=layout.multi_record_min_radius_ratio,
-        multi_record_column_gap_ratio=layout.multi_record_column_gap_ratio,
-        multi_record_row_gap_ratio=layout.multi_record_row_gap_ratio,
-        multi_record_positions=layout.multi_record_positions,
-        circular_track_slots=tracks.circular_track_slots if tracks else None,
-        circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
-        annotation_options=options.annotations,
-        _resolved_annotations=_resolved_annotations,
-        # The builder options resolved omitted thresholds from the mode profile.
-        evalue=cast(float, options.evalue),
-        bitscore=cast(float, options.bitscore),
-        identity=cast(float, options.identity),
-        alignment_length=cast(int, options.alignment_length),
-        _resolved_feature_inputs=_resolved_feature_inputs,
-        _resolved_record_features=_resolved_record_features,
-        _record_transforms=_record_transforms,
-    )
+    def assemble(overrides: Mapping[str, float]) -> Drawing:
+        return assemble_circular_diagram_from_records(
+            records,
+            cfg=with_config_overrides(cfg, overrides),
+            conservation_blast_files=(
+                options.conservation_search_results or options.conservation_blast_files
+            ),
+            conservation_dataframes=options.conservation_dataframes,
+            conservation_reference=options.conservation_reference,
+            conservation_labels=options.conservation_labels,
+            conservation_colors=options.conservation_colors,
+            conservation_ring_width=options.conservation_ring_width,
+            conservation_ring_gap=options.conservation_ring_gap,
+            color_table=colors.color_table if colors else None,
+            color_table_file=colors.color_table_file if colors else None,
+            default_colors=colors.default_colors if colors else None,
+            default_colors_palette=colors.default_colors_palette if colors else "default",
+            default_colors_file=colors.default_colors_file if colors else None,
+            selected_features_set=options.selected_features_set,
+            feature_visibility_table=options.feature_visibility_table,
+            feature_visibility_table_file=options.feature_visibility_table_file,
+            feature_shapes=options.feature_shapes,
+            output_prefix="out",
+            legend=output.legend if output else "right",
+            dinucleotide=options.dinucleotide,
+            window=options.window,
+            step=options.step,
+            depth_window=options.depth_window,
+            depth_step=options.depth_step,
+            depth_tracks=options.depth_tracks,
+            depth_table=options.depth_table,
+            depth_file=options.depth_file,
+            depth_tables=options.depth_tables,
+            depth_files=options.depth_files,
+            depth_track_tables=options.depth_track_tables,
+            depth_track_files=options.depth_track_files,
+            depth_track_labels=options.depth_track_labels,
+            depth_track_colors=options.depth_track_colors,
+            depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
+            species=options.species,
+            strain=options.strain,
+            plot_title=options.plot_title,
+            plot_title_position=(
+                output.plot_title_position
+                if output and output.plot_title_position is not None
+                else "none"
+            ),
+            plot_title_font_size=options.plot_title_font_size,
+            keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
+            center_reserved_radius=tracks.center_reserved_radius if tracks else None,
+            multi_record_size_mode=layout.multi_record_size_mode,
+            multi_record_min_radius_ratio=layout.multi_record_min_radius_ratio,
+            multi_record_column_gap_ratio=layout.multi_record_column_gap_ratio,
+            multi_record_row_gap_ratio=layout.multi_record_row_gap_ratio,
+            multi_record_positions=layout.multi_record_positions,
+            circular_track_slots=tracks.circular_track_slots if tracks else None,
+            circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
+            annotation_options=options.annotations,
+            _resolved_annotations=_resolved_annotations,
+            # The builder options resolved omitted thresholds from the mode profile.
+            evalue=cast(float, options.evalue),
+            bitscore=cast(float, options.bitscore),
+            identity=cast(float, options.identity),
+            alignment_length=cast(int, options.alignment_length),
+            _resolved_feature_inputs=_resolved_feature_inputs,
+            _resolved_record_features=_resolved_record_features,
+            _record_transforms=_record_transforms,
+        )
+
+    return _checked_circular_drawing(assemble)
 
 
 __all__ = [

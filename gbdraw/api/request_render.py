@@ -80,6 +80,7 @@ from gbdraw.annotations import (
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors, read_color_table
+from gbdraw.labels.fit import LabelFitReport
 from gbdraw.labels.filtering import (
     read_filter_list_file,
     read_label_override_file,
@@ -100,6 +101,7 @@ from .diagram import (
     build_circular_diagram,
     build_circular_multi_diagram,
     build_linear_diagram_result,
+    label_fit_report,
 )
 from gbdraw.io.genome import parse_gff_fasta
 from .io import load_gbks
@@ -624,6 +626,11 @@ class PreparedDiagramRequest:
     def feature_identity_notices(self) -> tuple[FeatureIdentityNotice, ...]:
         return self.inputs.feature_identity_notices if self.inputs is not None else ()
 
+    @property
+    def label_fit_report(self) -> LabelFitReport | None:
+        """Crossing label leaders drawn anyway: the fit report."""
+        return label_fit_report(self.drawing)
+
 
 @dataclass(frozen=True)
 class RequestRenderResult:
@@ -641,6 +648,11 @@ class RequestRenderResult:
     protein_identity_manifest: Mapping[str, Any] | None = None
     annotation_warnings: tuple[ResolutionWarning, ...] = ()
     feature_identity_notices: tuple[FeatureIdentityNotice, ...] = ()
+
+    @property
+    def label_fit_report(self) -> LabelFitReport | None:
+        """Crossing label leaders drawn anyway: the fit report."""
+        return label_fit_report(self.drawing)
 
 
 @dataclass(frozen=True)
