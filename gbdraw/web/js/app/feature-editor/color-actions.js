@@ -14,6 +14,7 @@ import {
   drawnLegendRowStroke,
   legendEntryKey,
   legendRowFeatureIds,
+  legendRowKeys,
   setsFeatureStroke
 } from '../../services/legend-svg.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
@@ -129,8 +130,13 @@ import {
  * @property {FindLegendRowNamedPort} [findLegendRowNamed]
  * @property {KeepBothNamesPort} [keepBothNamesOf]
  * @property {LegendEntryNamePort} [legendEntryName]
+ * @property {WriteLegendRowColorPort} [writeLegendRowColor]
  */
 
+/**
+ * The Legend color of the rows of some keys (the Legend owner's `writeLegendRowColor`, D-35).
+ * @typedef {(keys: readonly PythonLegendKey[], color: string) => void} WriteLegendRowColorPort
+ */
 /**
  * Whether `typed` names the Legend row that shows the key `caption`: its key, its name, or the name
  * the Legend draws for it (the Legend owner's reading of the displayed Result). Typing one of them
@@ -196,7 +202,9 @@ export const createFeatureColorActions = ({
       (resolveColorToHex(String(entry.color || '')) || String(entry.color || '').trim().toLowerCase()) === wanted)) || named[0];
     return found ? legendEntryKey(found) : null;
   },
-  keepBothNamesOf = ({ name }) => ({ keepBothName: name, targetNameAfter: null, restores: false })
+  keepBothNamesOf = ({ name }) => ({ keepBothName: name, targetNameAfter: null, restores: false }),
+  // Without a Legend owner (a test of this owner), no Legend color is written.
+  writeLegendRowColor = () => {}
 }) => {
   const {
     extractedFeatures,
@@ -1212,9 +1220,14 @@ export const createFeatureColorActions = ({
       && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
   };
 
-  /** @param {DrawingState} drawing @param {PythonLegendKey} caption @param {string} color */
-  const applyColorToLegendSpecificRules = async (drawing, caption, color) => {
-    const rowRules = getLegendRowRules(caption);
+  // The rules of the rows of `keys` (a Legend row and the rows merged into it,
+  // `legendRowKeys`) take `color`; a key without rules takes it as its Legend
+  // color in the rule commit's step, so a merged row stays one row (D-35).
+  /** @param {DrawingState} drawing @param {readonly PythonLegendKey[]} keys @param {string} color */
+  const applyColorToLegendSpecificRules = async (drawing, keys, color) => {
+    const rows = keys.map((key) => ({ key, rules: getLegendRowRules(key) }));
+    const rowRules = rows.flatMap((row) => row.rules);
+    const legendOnly = rows.filter((row) => row.rules.length === 0).map((row) => row.key);
     const specificRules = rowRules.filter(rule => !isHashSpecificRule(rule));
     if (!specificRules.length) return false;
     const specificMatches = ruleMatcher(specificRules);
@@ -1223,7 +1236,8 @@ export const createFeatureColorActions = ({
     );
     const rowRuleSet = new Set(rowRules);
     return commitRuleWrite((current, revise) => current.filter(rule => !(rowRuleSet.has(rule) && coveredExactly(rule)))
-      .map(rule => (rowRuleSet.has(rule) ? revise(rule, { color }) : rule)), 'Change legend color', { drawing });
+      .map(rule => (rowRuleSet.has(rule) ? revise(rule, { color }) : rule)), 'Change legend color',
+    { drawing, afterCommit: () => { if (legendOnly.length) writeLegendRowColor(legendOnly, color); } });
   };
 
   /**
@@ -1427,13 +1441,17 @@ export const createFeatureColorActions = ({
         clearFeatureStyleScopeDialog();
         return;
       }
+      // The rows the Legend row stands for (D-35), so it stays one row.
+      const keys = legendRowKeys(getCurrentSvg(), /** @type {PythonLegendKey} */ (targetLegendName));
       // The choice does what the dialog showed: its default-color line, or rules.
       if (defaultColorType) {
         // The row's swatch follows the default color again (svg-styles.js).
         delete drawing.legendColorOverrides[defaultColorType];
         setDefaultColor(drawing, defaultColorType, color);
-      } else if (!(await applyColorToLegendSpecificRules(drawing, /** @type {PythonLegendKey} */ (targetLegendName), color))) {
-        const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
+        const merged = keys.filter((key) => key !== defaultColorType);
+        if (merged.length && !(await applyColorToLegendSpecificRules(drawing, merged, color))) writeLegendRowColor(merged, color);
+      } else if (!(await applyColorToLegendSpecificRules(drawing, keys, color))) {
+        const siblings = keys.flatMap((key) => findFeaturesWithSameLegendItem(feat, key));
         await applyColorToFeatureGroup(drawing, [feat, ...siblings], legendRowName(targetLegendName), color);
       }
     } else if (choice === 'displayLabel') {
@@ -1759,23 +1777,25 @@ export const createFeatureColorActions = ({
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (!normalizedStrokeColor && normalizedStrokeWidth === null) return false;
 
-    const overrideKey = legendEntryKey(targetLegendEntry);
-    const previousOverride = drawing.legendStrokeOverrides[overrideKey] || {};
-    const nextOverride = { ...previousOverride };
-    if (
-      !hasOwn(previousOverride, 'strokeColor')
-      && !hasOwn(previousOverride, 'strokeWidth')
-    ) {
-      Object.assign(nextOverride, drawnLegendRowStroke(svg, overrideKey));
-    }
-    if (normalizedStrokeColor) nextOverride.strokeColor = normalizedStrokeColor;
-    if (normalizedStrokeWidth !== null) nextOverride.strokeWidth = normalizedStrokeWidth;
-    const stateChanged =
-      !colorsMatch(previousOverride.strokeColor, nextOverride.strokeColor)
-      || normalizeStrokeWidthValue(previousOverride.strokeWidth)
-        !== normalizeStrokeWidthValue(nextOverride.strokeWidth);
-    if (stateChanged) drawing.legendStrokeOverrides[overrideKey] = nextOverride;
-    return stateChanged;
+    // Every row the Legend row stands for (D-35), so it stays one row.
+    return legendRowKeys(svg, legendEntryKey(targetLegendEntry)).map((overrideKey) => {
+      const previousOverride = drawing.legendStrokeOverrides[overrideKey] || {};
+      const nextOverride = { ...previousOverride };
+      if (
+        !hasOwn(previousOverride, 'strokeColor')
+        && !hasOwn(previousOverride, 'strokeWidth')
+      ) {
+        Object.assign(nextOverride, drawnLegendRowStroke(svg, overrideKey));
+      }
+      if (normalizedStrokeColor) nextOverride.strokeColor = normalizedStrokeColor;
+      if (normalizedStrokeWidth !== null) nextOverride.strokeWidth = normalizedStrokeWidth;
+      const stateChanged =
+        !colorsMatch(previousOverride.strokeColor, nextOverride.strokeColor)
+        || normalizeStrokeWidthValue(previousOverride.strokeWidth)
+          !== normalizeStrokeWidthValue(nextOverride.strokeWidth);
+      if (stateChanged) drawing.legendStrokeOverrides[overrideKey] = nextOverride;
+      return stateChanged;
+    }).some(Boolean);
   };
 
   /** @param {DrawingState} drawing @param {string} choice */
@@ -1804,7 +1824,7 @@ export const createFeatureColorActions = ({
       ));
       legendCaption = normalizeCaption(matchingRule.cap);
     } else if (choice === 'caption') {
-      targetFeatures = [feat, ...findFeaturesWithSameLegendItem(feat, legendName)];
+      targetFeatures = [feat, ...legendRowKeys(getCurrentSvg(), legendName).flatMap((key) => findFeaturesWithSameLegendItem(feat, key))];
       legendCaption = normalizeCaption(legendName);
     } else if (choice === 'displayLabel') {
       targetFeatures = [feat, ...findFeaturesWithSameDisplayedLabel(feat, displayLabel)];

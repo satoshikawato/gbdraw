@@ -421,11 +421,11 @@ export const splitDraftIntoModes = (draft, { committedMode, modeProfiles = undef
  * `moved` to the key of the row whose caption it was stored under; kept under
  * its key as `unmatched` (no row shows or holds the key) or as `unshown` (the
  * key of a renamed row that no row shows: Session 46 applied it to that row
- * through Python's key); or dropped (`toKey: null`) as a `collision`: a later
- * edit of the store reached the same row (`rowKey`) and Session 46 applied it
- * over this one. `slice`: the mode slice, or `draft` (`sessionLegendEditsByRowKey`).
+ * through Python's key); or a `collision`: a later edit of the store reached
+ * the same row (`rowKey`) and Session 46 applied it over this one, dropped
+ * (`toKey: null`) unless a stroke field of it is kept (`toKey`: `rowKey`). `slice`: the mode slice, or `draft` (`sessionLegendEditsByRowKey`).
  * @typedef {{ store: LegendEditStore, fromKey: string, toKey: string, outcome: 'moved' | 'unmatched' | 'unshown', slice?: string }
- *   | { store: LegendEditStore, fromKey: string, toKey: null, outcome: 'collision', rowKey: string, slice?: string }} LegendEditRekey
+ *   | { store: LegendEditStore, fromKey: string, toKey: string | null, outcome: 'collision', rowKey: string, slice?: string }} LegendEditRekey
  */
 
 // The rows a Session 46 Legend's edits reach (Session 46 Load,
@@ -500,25 +500,31 @@ export const legendEditsByRowKey = (legend) => {
    * @param {Record<string, T>} edits
    * @param {string[]} order
    * @param {(earlier: T | undefined, later: T) => T} paint
+   * @param {(edit: T) => string[]} fieldsOf The fields an edit sets; a row keeps each from its last edit that sets it.
    */
-  const keyByRow = (store, edits, order, paint) => {
+  const keyByRow = (store, edits, order, paint, fieldsOf) => {
     if (!isObject(legend[store])) return;
     const lastOf = new Map(order.map((key) => [rowKeyOf(key), key]));
+    /** @param {string} key @param {string} field */
+    const fieldOf = (key, field) => JSON.stringify([rowKeyOf(key), field]);
+    const fieldLastOf = new Map(order.flatMap((key) => fieldsOf(edits[key]).map((field) => [fieldOf(key, field), key])));
     /** @type {Record<string, T>} */
     const keyed = {};
     order.forEach((key) => {
       const rowKey = rowKeyOf(key);
       keyed[rowKey] = paint(keyed[rowKey], edits[key]);
-      if (lastOf.get(rowKey) !== key) outcomes.push({ store, fromKey: key, toKey: null, outcome: 'collision', rowKey });
-      else if (rowKey !== key) outcomes.push({ store, fromKey: key, toKey: rowKey, outcome: 'moved' });
+      if (lastOf.get(rowKey) !== key) {
+        const kept = fieldsOf(edits[key]).some((field) => fieldLastOf.get(fieldOf(key, field)) === key);
+        outcomes.push({ store, fromKey: key, toKey: kept ? rowKey : null, outcome: 'collision', rowKey });
+      } else if (rowKey !== key) outcomes.push({ store, fromKey: key, toKey: rowKey, outcome: 'moved' });
       else if (!rowOf.has(key)) outcomes.push({ store, fromKey: key, toKey: key, outcome: renamedKeys.has(key) ? 'unshown' : 'unmatched' });
     });
     read[store] = keyed;
   };
   const colorKeys = Object.keys(colors);
-  keyByRow('colorOverrides', colors, colorKeys, (_earlier, later) => later);
+  keyByRow('colorOverrides', colors, colorKeys, (_earlier, later) => later, () => ['color']);
   keyByRow('strokeOverrides', strokes, [...new Set([...colorKeys, ...Object.keys(strokes)])].filter((key) => Object.hasOwn(strokes, key)),
-    (earlier, later) => ({ ...earlier, ...later }));
+    (earlier, later) => ({ ...earlier, ...later }), (edit) => Object.keys(edit));
   return { legend: /** @type {Legend} */ (read), outcomes };
 };
 

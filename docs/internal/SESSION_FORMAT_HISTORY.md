@@ -38,7 +38,8 @@ that no row shows reached Python's row of that name and stays under its key:
 applied the color edits in their order, then the strokes in the order of the
 color edits' keys and then their own, so of several edits that reach one row
 the later wins and each earlier one is a `collision` (dropped); a stroke field
-(`strokeColor`, `strokeWidth`) that no later edit sets keeps the earlier value.
+(`strokeColor`, `strokeWidth`) that no later edit sets keeps the earlier value,
+whose `collision` then names the row's key as `toKey`.
 Each reader returns these outcomes as data (`{store, fromKey, toKey, outcome}`,
 `toKey` null when dropped); the Web Load computes them before it commits.
 The Web Load (`sessionLegendEditsByRowKey`

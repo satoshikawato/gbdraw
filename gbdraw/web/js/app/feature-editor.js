@@ -3,7 +3,7 @@
 /** @import { PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort, ShownLegendNamePort } from './feature-editor/svg-actions.js' */
-/** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
+/** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort, WriteLegendRowColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
@@ -67,6 +67,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {FindLegendRowNamedPort} [findLegendRowNamed]
  * @property {KeepBothNamesPort} [keepBothNamesOf]
  * @property {LegendEntryNamePort} [legendEntryName]
+ * @property {WriteLegendRowColorPort} [writeLegendRowColor]
  * @property {ShownLegendNamePort} [shownLegendName]
  * @property {AskChoice} askChoice The root's choice dialog.
  * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there.
@@ -107,6 +108,7 @@ export const createFeatureEditor = ({
   findLegendRowNamed,
   keepBothNamesOf,
   legendEntryName,
+  writeLegendRowColor,
   shownLegendName,
   askChoice,
   showNotice,
@@ -148,7 +150,8 @@ export const createFeatureEditor = ({
     legendRowName,
     findLegendRowNamed,
     keepBothNamesOf,
-    legendEntryName
+    legendEntryName,
+    writeLegendRowColor
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature

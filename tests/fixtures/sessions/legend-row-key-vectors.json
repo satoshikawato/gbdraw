@@ -638,7 +638,7 @@
       ]
     },
     {
-      "name": "two strokes that reach one row combine field by field: a field the later stroke lacks keeps the earlier value",
+      "name": "two strokes that reach one row combine field by field: a field the later stroke lacks keeps the earlier value, so its collision names the row (review L-5)",
       "legend": {
         "entries": [
           {
@@ -676,7 +676,7 @@
         {
           "store": "strokeOverrides",
           "fromKey": "X",
-          "toKey": null,
+          "toKey": "K",
           "outcome": "collision",
           "rowKey": "K"
         },

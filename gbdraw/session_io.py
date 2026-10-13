@@ -3293,7 +3293,7 @@ class _LegendEditRekeyRequired(TypedDict):
 
 class LegendEditRekey(_LegendEditRekeyRequired, total=False):
     """One Session 46 Legend edit that did not stay as it was; ``toKey`` is
-    ``None`` when it was dropped. ``rowKey``: the row a ``collision`` reached;
+    ``None`` when it was dropped (a ``collision`` that keeps no stroke field). ``rowKey``: the row a ``collision`` reached;
     ``slice``: the mode slice, or ``"draft"`` (``session_legend_edits_by_row_key``)."""
 
     rowKey: str
@@ -3398,12 +3398,18 @@ def legend_edits_by_row_key(legend: Mapping[str, Any]) -> tuple[dict[str, Any], 
         if not isinstance(legend.get(store), Mapping):
             return
         last_of = {row_of.get(key) or key: key for key in order}
+
+        def fields_of(key: str) -> list[str]:
+            return list(edits[key]) if strokes_paint else ["color"]
+
+        field_last_of = {(row_of.get(key) or key, field): key for key in order for field in fields_of(key)}
         keyed: dict[str, Any] = {}
         for key in order:
             row_key = row_of.get(key) or key
             keyed[row_key] = {**keyed.get(row_key, {}), **edits[key]} if strokes_paint else edits[key]
             if last_of[row_key] != key:
-                outcomes.append({"store": store, "fromKey": key, "toKey": None,
+                kept = any(field_last_of[(row_key, field)] == key for field in fields_of(key))
+                outcomes.append({"store": store, "fromKey": key, "toKey": row_key if kept else None,
                                  "outcome": "collision", "rowKey": row_key})
             elif row_key != key:
                 outcomes.append({"store": store, "fromKey": key, "toKey": row_key, "outcome": "moved"})

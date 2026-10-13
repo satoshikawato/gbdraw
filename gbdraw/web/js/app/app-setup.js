@@ -1876,6 +1876,7 @@ export const createAppSetup = () => {
     findLegendRowNamed: legendActions.findLegendRowNamed,
     keepBothNamesOf: legendActions.keepBothNamesOf,
     legendEntryName: legendActions.legendEntryName,
+    writeLegendRowColor: legendActions.writeLegendRowColor,
     shownLegendName: legendActions.shownLegendName,
     askChoice,
     showNotice,
