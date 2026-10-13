@@ -51,11 +51,16 @@ Typed helper operations, generation-time feature extraction, and diagram
 rendering share that runtime; Python must not return to the main thread.
 The Worker may retain a bounded cache of parsed biological sources, resolved
 records, and interactive metadata. Key it only by validated resource tokens and
-the semantic fields used to prepare those values. Every Generate still decodes
-and validates the request, builds the drawing, writes the SVG, and builds the
-feature catalog. Publish cache fills only after the full render succeeds, and
-release them with the Worker; never cache drawings, catalogs, SVG, or final
-results.
+the semantic fields used to prepare those values. The same cache may also hold
+the render-stage results that the last successful render used: derived data,
+group contents with their serialized text, and feature-catalog parts, including
+the catalog item of a Result. Key each of these by the complete inputs of the
+stage that built it: resource and record identities, the settings it declares,
+and every other argument. Every Generate still decodes and validates the
+request, runs the whole render path, writes a complete SVG document, and returns
+a complete feature catalog; it rebuilds every part whose inputs changed. Publish
+cache fills only after the full render succeeds, and release them with the
+Worker; never reuse a final reply.
 
 App-shell readiness means Vue is mounted and required local UI assets and
 palette definitions are available. It is independent of diagram-Worker
