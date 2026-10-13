@@ -202,3 +202,72 @@ test('no module outside utils/load-repairs.js words what Load could not restore 
   const owners = modules('').filter((path) => texts.some((text) => readFileSync(new URL(path, root), 'utf8').includes(text)));
   assert.deepEqual(owners, ['utils/load-repairs.js']);
 });
+
+/** Load `session`, answering [Load]; returns the result and the dialogs' items. */
+const loadAnswering = async (session) => {
+  const dialogs = [];
+  const loaded = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  return { loaded, items: dialogs.flat() };
+};
+const codes = (loaded) => loaded.repairs.map(({ code }) => code);
+
+// PLAN 12.7 (4), inventory B13 (#1051): a Session 27-44 Legend edit that a
+// later edit of the same row overwrites is listed; in a Session 46 the figure
+// showed the later edit, so it is dropped without a row (Q1).
+test('a Legend edit a later edit of its row overwrites is listed for a Session 27-44 and not for a Session 46', async () => {
+  const older = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+  older.editorState.legend = {
+    entries: [{ caption: 'X', originalCaption: 'K', color: '#aaaaaa' }], colorOverrides: { X: '#111111', K: '#222222' }
+  };
+  const { loaded, items } = await loadAnswering(older);
+  assert.deepEqual(items, ['Legend: the color edit stored under "X" (editorState.legend.colorOverrides) sets the row "K",'
+    + ' which a later edit also sets; the later edit is used and this one was dropped.']);
+  assert.deepEqual(state.drawings.linear.legendColorOverrides, { K: '#222222' });
+  assert.deepEqual(codes(loaded), ['legend-edit-overwritten']);
+
+  const session46 = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  // `GC skew (+)` is the caption of the row `GC content`: both edits set it.
+  session46.modes.circular.editorState.legend.colorOverrides['GC content'] = '#222222';
+  const quiet = await importSession(input(session46), { confirmLoadRepairs: async () => assert.fail('no row (Q1)') });
+  assert.equal(quiet.status, 'ok', JSON.stringify(quiet.error));
+  assert.deepEqual(codes(quiet), ['legend-edit-overwritten-session46']);
+});
+
+// Inventory B39: the re-key of a rule row whose saved caption is read without
+// its color ID (F2) keeps an edit the new key already has; the moved one is listed.
+test('a Legend edit the rule row re-key cannot move is listed (B39)', async () => {
+  const session = JSON.parse(JSON.stringify(fixture('rule-captions-with-color-id.v46.gbdraw-session.json.gz'))
+    .split('Complex IV [#1f77b4]').join('Complex III'));
+  session.modes.circular.editorState.legend.strokeOverrides['Complex IV'] = { strokeColor: '#123456', strokeWidth: 1 };
+  const { loaded, items } = await loadAnswering(session);
+  assert.deepEqual(items, ['Legend: the stroke edit stored under "Complex IV [#ffe700]"'
+    + ' (modes.circular.editorState.legend.strokeOverrides) moves to the row "Complex IV", which has an edit of its own;'
+    + ' that edit is used and this one was dropped.']);
+  assert.deepEqual(codes(loaded), ['legend-edit-rekey-dropped']);
+  assert.deepEqual(state.drawings.circular.legendStrokeOverrides['Complex IV'], { strokeColor: '#123456', strokeWidth: 1 });
+});
+
+// OV-719 (inventory B48): a Session 46 keeps the first Legend entry of a
+// caption, a Session 47 the first of a row key; the entry dropped is listed.
+test('a Legend entry that repeats an earlier one is dropped and listed, by caption up to Session 46 and by row key since 47 (OV-719)', async () => {
+  const session46 = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  session46.modes.circular.editorState.legend.entries.push(
+    { caption: 'tRNA', originalCaption: 'tRNA 2', color: '#111111' },
+    { caption: 'Q', originalCaption: 'CDS', color: '#222222' }
+  );
+  const read46 = await loadAnswering(session46);
+  assert.deepEqual(read46.items, ['Legend: entry "tRNA" repeats an earlier entry of its list and was dropped.']);
+  assert.deepEqual(state.drawings.circular.legendEntries.value.map(({ caption }) => caption).filter((caption) => ['tRNA', 'Q'].includes(caption)),
+    ['tRNA', 'Q']);
+
+  const session47 = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  session47.version = 47;
+  session47.modes.circular.editorState.legend.entries.push(
+    { caption: 'tRNA', originalCaption: 'tRNA 2', color: '#111111' },
+    { caption: 'Q', originalCaption: 'CDS', color: '#222222' }
+  );
+  const read47 = await loadAnswering(session47);
+  assert.deepEqual(read47.items, ['Legend: entry "Q" repeats an earlier entry of its list and was dropped.']);
+  assert.deepEqual(state.drawings.circular.legendEntries.value.filter(({ caption }) => caption === 'tRNA').length, 2);
+});

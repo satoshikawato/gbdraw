@@ -17,6 +17,10 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  *   | 'legend-position-defaulted'
  *   | 'legend-side-defaulted'
  *   | 'legend-color-dropped'
+ *   | 'legend-entry-duplicate'
+ *   | 'legend-edit-overwritten'
+ *   | 'legend-edit-overwritten-session46'
+ *   | 'legend-edit-rekey-dropped'
  *   | 'record-display-drafts-dropped'
  * } LoadRepairCode
  */
@@ -59,10 +63,11 @@ const LINE_LIMIT = 12;
 
 /**
  * Codes whose values had no effect on the figure: Load drops them without a
- * dialog row (Owner answer Q1 of the Load repair receipt).
+ * dialog row (Owner answer Q1 of the Load repair receipt). A Session 46 drew
+ * the later of two Legend edits of one row.
  * @type {ReadonlySet<LoadRepairCode>}
  */
-const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ ([]));
+const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ (['legend-edit-overwritten-session46']));
 
 /** @param {string} value @param {number} limit */
 const bounded = (value, limit) => (value.length > limit ? `${value.slice(0, limit - 1)}…` : value);
@@ -95,6 +100,15 @@ const total = (repairs) => repairs.reduce((sum, repair) => sum + (repair.count ?
 const LEGEND_LIST_MARKS = { entries: '', dormantEntries: ' (not drawn)', deletedEntries: ' (deleted)' };
 /** @param {LoadRepair} repair The list is the last part of the path. */
 const legendListMark = (repair) => LEGEND_LIST_MARKS[repair.path.split('.').pop() || ''] ?? '';
+
+/** @type {Readonly<Record<string, string>>} */
+const LEGEND_RECORD_KINDS = { colorOverrides: 'color edit', strokeOverrides: 'stroke edit' };
+/** @param {LoadRepair} repair The collection is the last part of the path. */
+const legendRecordKind = (repair) => LEGEND_RECORD_KINDS[repair.path.split('.').pop() || ''] ?? 'entry';
+/** @param {readonly LoadRepair[]} repairs */
+const overwrittenLegendEdits = (repairs) => repairs.map((repair) => (
+  `Legend: the ${legendRecordKind(repair)} stored under "${repair.label ?? ''}" (${repair.path}) sets the row "${repair.used ?? ''}",`
+  + ` which a later edit also sets; the later edit is used and this one was dropped.`));
 
 /**
  * One line per stored value (the same value at one path, once).
@@ -132,6 +146,18 @@ const WORDING = {
     const named = [...new Set(repairs.map((repair) => `"${repair.label ?? ''}"${legendListMark(repair)}`))];
     return [`Legend: ${cappedList('entry', 'entries', named)} had a color the app does not accept and ${wasWere(named.length)} dropped.`];
   },
+  'legend-entry-duplicate': (repairs) => {
+    const named = [...new Set(repairs.map((repair) => `"${repair.label ?? ''}"${legendListMark(repair)}`))];
+    return [`Legend: ${cappedList('entry', 'entries', named)} ${named.length === 1 ? 'repeats an earlier entry of its list and was'
+      : 'repeat an earlier entry of their list and were'} dropped.`];
+  },
+  'legend-edit-overwritten': overwrittenLegendEdits,
+  'legend-edit-overwritten-session46': overwrittenLegendEdits,
+  'legend-edit-rekey-dropped': (repairs) => repairs.map((repair) => {
+    const kind = legendRecordKind(repair);
+    return `Legend: the ${kind} stored under "${repair.label ?? ''}" (${repair.path}) moves to the row "${repair.used ?? ''}",`
+      + ` which has ${kind === 'entry' ? 'an entry' : 'an edit'} of its own; that ${kind === 'entry' ? 'entry' : 'edit'} is used and this one was dropped.`;
+  }),
   'feature-edit-unmatched': (repairs) => [
     `${total(repairs)} feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.`
   ],

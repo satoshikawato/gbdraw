@@ -249,6 +249,7 @@ import {
   LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
   MODE_SCOPED_SESSION_VERSION,
+  ROW_KEYED_LEGEND_SESSION_VERSION,
   SESSION_VERSION,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
@@ -304,7 +305,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { CanonicalLinearLayout, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
-/** @import { PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
+/** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
@@ -873,14 +874,19 @@ const normalizeHexColor = (value, fallback = '#4e79a7') => {
 // A stored entry color is read with the Default colors domain (D-41). An entry
 // whose color lies outside it is dropped and, when `repairs` is given, listed
 // there for the Load dialog (D-43) under `path`, the stored Legend. A list
-// holds one entry per row key (Session 47: two rows may show one name).
+// holds one entry per row key (Session 47: two rows may show one name); a
+// Session 46 or older kept the first entry of each caption (OV-719). A later
+// entry of one row is dropped and listed.
 /**
  * @param {unknown} entries
  * @param {'entries' | 'dormantEntries' | 'deletedEntries'} list
- * @param {{ repairs: LoadRepair[] | null, path: string }} load
+ * @param {{ repairs: LoadRepair[] | null, path: string, sessionVersion: number }} load
  */
-const normalizeSessionLegendEntries = (entries, list, { repairs, path }) => {
+const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVersion }) => {
   if (!Array.isArray(entries)) return [];
+  const rowOf = sessionVersion >= ROW_KEYED_LEGEND_SESSION_VERSION
+    ? (/** @type {Record<string, unknown>} */ entry) => legendEntryKey(entry)
+    : (/** @type {Record<string, unknown>} */ entry) => String(entry.caption || '').trim();
   /** @type {Record<string, unknown>[]} */
   const normalized = [];
   /** @type {Set<string>} */
@@ -890,10 +896,12 @@ const normalizeSessionLegendEntries = (entries, list, { repairs, path }) => {
   entries.forEach((entry) => {
     if (!isPlainObject(entry)) return;
     const caption = String(entry.caption || '').trim();
-    const key = legendEntryKey(entry);
+    const key = rowOf(entry);
     const color = normalizeDefaultColor(entry.color);
-    if (caption && !color && !keys.has(key)) {
-      dropped.push({ list: entry.dormant === true ? 'dormantEntries' : list, caption, key });
+    const from = entry.dormant === true ? 'dormantEntries' : list;
+    if (caption && !color && !keys.has(key)) dropped.push({ list: from, caption, key });
+    if (caption && color && keys.has(key)) {
+      repairs?.push(loadRepair({ code: 'legend-entry-duplicate', path: `${path}.${from}`, effect: 'dropped', label: caption }));
     }
     if (!caption || !color || keys.has(key)) return;
     keys.add(key);
@@ -1258,10 +1266,13 @@ export const buildEditorStateData = (drawing) => ({
 
 /**
  * @param {Record<string, any>} [editorState]
- * @param {{ featureCatalog?: unknown, repairs?: LoadRepair[] | null, path?: string }} [options]
- *   `repairs` collects what Load cannot restore of the editor state stored at `path`.
+ * @param {{ featureCatalog?: unknown, repairs?: LoadRepair[] | null, path?: string, sessionVersion?: number }} [options]
+ *   `repairs` collects what Load cannot restore of the editor state stored at `path`; `sessionVersion`: the
+ *   version of the Session it was read from.
  */
-const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined, repairs = null, path = 'editorState' } = {}) => {
+const normalizeEditorStateData = (editorState = {}, {
+  featureCatalog = undefined, repairs = null, path = 'editorState', sessionVersion = SESSION_VERSION
+} = {}) => {
   const defaults = defaultEditorStateData();
   const source = isPlainObject(editorState) ? editorState : {};
   const legend = isPlainObject(source.legend) ? source.legend : {};
@@ -1269,7 +1280,7 @@ const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined
   const originalSvgStroke = isPlainObject(source.originalSvgStroke) ? source.originalSvgStroke : {};
   // A Session 46 slice lists the renamed rows its Result does not draw
   // (OV-120) after the shown rows, marked `dormant`.
-  const legendLoad = { repairs, path: `${path}.legend` };
+  const legendLoad = { repairs, path: `${path}.legend`, sessionVersion };
   const entries = normalizeSessionLegendEntries(legend.entries, 'entries', legendLoad);
   const dormantEntries = [
     ...normalizeSessionLegendEntries(legend.dormantEntries, 'dormantEntries', legendLoad),
@@ -1506,22 +1517,20 @@ const overlayModeSliceConfig = (projectedConfig, sliceConfig) => {
 /**
  * @param {DrawingState} drawing
  * @param {'circular' | 'linear'} mode
- * @param {Record<string, any>} slice Its `editorState` is read already (`normalizeEditorStateData`).
- * @param {{ projectedConfig?: Record<string, any> | null, resolveTrackPlacements?: boolean, applyCanvasPadding?: boolean,
- *   legendRekeys?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
+ * @param {Record<string, any>} slice Its `editorState` is read already (`normalizeEditorStateData`, with the rule rows re-keyed).
+ * @param {{ projectedConfig?: Record<string, any> | null, resolveTrackPlacements?: boolean, applyCanvasPadding?: boolean }} [options]
  *   `applyCanvasPadding: false` leaves the padding to the caller (Load pads the shown Result after it mounts).
- *   `legendRekeys`: the rule rows whose key the reading of the saved captions changes (`savedLegendRekeys`, F2);
- *   their Legend records move to the new keys, and per-feature color edits are read as the rules are.
+ *   Per-feature color edits are read as the rules are (`savedFeatureColorEdits`).
  */
 const applyModeSliceData = (drawing, mode, slice, {
-  projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true, legendRekeys = new Map()
+  projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true
 } = {}) => {
   const config = overlayModeSliceConfig(projectedConfig, slice.config);
   if (Object.keys(config).length) applyConfigData(drawing, config, { resolveTrackPlacements });
   const features = isPlainObject(slice.features) ? slice.features : {};
   applyDrawingFeatureData(drawing, { ...features, featureColorOverrides: savedFeatureColorEdits(features.featureColorOverrides) });
   const editorState = slice.editorState;
-  applyDrawingEditorData(drawing, { ...editorState, legend: rekeyLegendRecords(editorState.legend, legendRekeys) });
+  applyDrawingEditorData(drawing, editorState);
   const ui = isPlainObject(slice.ui) ? slice.ui : {};
   if (isPlainObject(ui.layoutPreferences)) {
     replaceLayoutPreferences(drawing.layoutPreferences, {
@@ -1558,7 +1567,7 @@ const normalizeSessionData = (data, repairs) => {
 
   return {
     ...data,
-    editorState: normalizeEditorStateData(data.editorState, { repairs })
+    editorState: normalizeEditorStateData(data.editorState, { repairs, sessionVersion: version })
   };
 };
 
@@ -2025,9 +2034,21 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
 const preflightSessionImport = async (sessionData, repairs) => {
   const sourceSessionVersion = readSessionInput(sessionData).version;
   // A Session before 47 stored the Legend edits under the shown caption; every
-  // reader below reads them by row key (PD-OI-061 revision 5). What the reading
-  // moved or dropped is returned before Load commits (`legendEditRekeys`).
+  // reader below reads them by row key (PD-OI-061 revision 5). An edit a later
+  // edit of its row overwrote is dropped; a Session 46 drew the later edit, so
+  // its drop has a code the dialog does not list (Q1).
   const legendRead = sessionLegendEditsByRowKey(await convertMainSessionComparisonFrames(sessionData), sourceSessionVersion);
+  legendRead.outcomes.forEach((outcome) => {
+    if (outcome.outcome !== 'collision') return;
+    const draft = outcome.slice === 'draft';
+    repairs.push(loadRepair({
+      code: draft ? 'legend-edit-overwritten' : 'legend-edit-overwritten-session46',
+      path: `${draft ? '' : `modes.${outcome.slice}.`}editorState.legend.${outcome.store}`,
+      effect: outcome.toKey === null ? 'dropped' : 'changed',
+      label: outcome.fromKey,
+      used: outcome.rowKey
+    }));
+  });
   const rawData = legendRead.session;
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
@@ -2058,7 +2079,8 @@ const preflightSessionImport = async (sessionData, repairs) => {
     recordSessionLifecycleEvent('editor-state-normalization-start');
     normalizedEditorState = normalizeEditorStateData(rawData.editorState, {
       featureCatalog: validatedFeatureCatalog,
-      repairs
+      repairs,
+      sessionVersion: sourceSessionVersion
     });
     recordSessionLifecycleEvent('editor-state-normalization-end');
     recordSessionLifecycleEvent('resource-table-adoption-start');
@@ -2332,7 +2354,6 @@ const preflightSessionImport = async (sessionData, repairs) => {
   return {
     data,
     sourceSessionVersion,
-    legendEditRekeys: legendRead.outcomes,
     canonicalProjection,
     restoredConfig,
     projectionResult,
@@ -2494,7 +2515,7 @@ const buildLoadedArtifactSlot = (set, {
   const features = featureStateFromCatalog(featureCatalog, { mode });
   const editorState = normalizeEditorStateData(
     isPlainObject(set.editorState) ? /** @type {Record<string, any>} */ (set.editorState) : {},
-    { featureCatalog, repairs, path: 'otherModeResult.editorState' }
+    { featureCatalog }
   );
   // The set's generated inventory and colors under the keys its rows have after Load (F2).
   const keptLegend = rekeyLegendRecords(editorState.legend, savedEdits?.legendRekeys ?? new Map());
@@ -5932,9 +5953,21 @@ const importSessionDocument = async (e, options = {}) => {
     }
     for (const mode of SLICE_MODES) {
       const storedEditorState = modeSlices[mode].editorState;
-      modeEditorStates[mode] = normalizeEditorStateData(isPlainObject(storedEditorState) ? storedEditorState : {}, {
-        repairs, path: modeScopedSession ? `modes.${mode}.editorState` : 'editorState'
+      const editorPath = modeScopedSession ? `modes.${mode}.editorState` : 'editorState';
+      const editorState = normalizeEditorStateData(isPlainObject(storedEditorState) ? storedEditorState : {}, {
+        repairs, path: editorPath, sessionVersion: sourceSessionVersion
       });
+      // The rule rows whose key the reading of the saved captions changes
+      // take the Legend records stored under the old key (F2); an edit the
+      // new key already has is kept, and the moved one is listed (B39).
+      /** @type {DroppedLegendRecord[]} */
+      const droppedLegendRecords = [];
+      modeEditorStates[mode] = {
+        ...editorState, legend: rekeyLegendRecords(editorState.legend, legendRekeysOf(mode), droppedLegendRecords)
+      };
+      droppedLegendRecords.forEach(({ collection, from, to }) => repairs.push(loadRepair({
+        code: 'legend-edit-rekey-dropped', path: `${editorPath}.legend.${collection}`, effect: 'dropped', label: from, used: to
+      })));
       const committed = mode === committedDraftMode;
       modeConfigs[mode] = modeScopedSession
         ? (committed && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, modeSlices[mode].config))
@@ -6058,8 +6091,7 @@ const importSessionDocument = async (e, options = {}) => {
         ...modeSlices[mode], ...features, config: modeConfigs[mode], editorState: modeEditorStates[mode]
       }, {
         resolveTrackPlacements: !settingsOnly && !storedSlice,
-        applyCanvasPadding: mode !== displayMode,
-        legendRekeys: legendRekeysOf(mode)
+        applyCanvasPadding: mode !== displayMode
       });
     }
     // App-level settings: LOSAT execution (after the drafts, whose request
