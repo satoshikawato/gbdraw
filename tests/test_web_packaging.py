@@ -431,7 +431,7 @@ def test_web_config_pyodide_local_wheels_match_shared_manifest() -> None:
 
 def test_index_uses_title_logo_separately_from_icon_assets() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
-    assert "./assets/gbdraw-logo-title.png" in index_html
+    assert "./assets/gbdraw-logo-title-outlined.svg" in index_html
     assert (
         '<link rel="icon" href="./assets/gbdraw-logo.svg" type="image/svg+xml">'
         in index_html
@@ -1393,6 +1393,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo.svg",
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title.svg",
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title.png",
+        build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title-outlined.svg",
         build_root / "gbdraw" / "web" / verify_module._parse_wheel_name(),
         build_root / "gbdraw" / "web" / "vendor" / "vue" / "vue.global.js",
         build_root
