@@ -9,7 +9,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 
 test.use({ actionTimeout: 20_000 });
 
@@ -92,6 +92,11 @@ const clickInk = async (page, selector, modifier) => {
   if (modifier) await page.keyboard.up(modifier);
   return point;
 };
+// The box of the drawn element at a point of the window: what the popup of a click there keeps clear of.
+const inkBox = (page, point) => page.evaluate(({ x, y }) => {
+  const { left, top, right, bottom } = document.elementFromPoint(x, y).getBoundingClientRect();
+  return { left, top, right, bottom };
+}, point);
 const hover = async (page, selector) => {
   const point = await inkPoint(page, selector);
   await page.mouse.move(point.x, point.y);
@@ -605,8 +610,13 @@ test('Linear with several records: a GC content or GC skew track shows Dinucleot
   const tracks = await page.locator(`.gbdraw-preview-surface ${MARKER}`).evaluateAll((elements) => elements.map((element) => element.id));
   expect(tracks.filter((id) => /^gc_(content|skew)_record_\d+$/.test(id))).toHaveLength(10);
   for (const id of ['gc_content_record_2', 'gc_skew_record_4']) {
-    await clickInk(page, `[id="${id}"] *`);
-    await expectPopup(page, 'dinucleotide', DINUCLEOTIDE, id);
+    const point = await inkPoint(page, `[id="${id}"] *`);
+    const track = await inkBox(page, point);
+    await page.mouse.click(point.x, point.y);
+    const { box: [left, top, width, height] } = await expectPopup(page, 'dinucleotide', DINUCLEOTIDE, id);
+    // A track is as wide as the Result and flat: no room beside it, and room below or above it.
+    expect(left >= track.right || left + width <= track.left || top >= track.bottom || top + height <= track.top,
+      `${id}: the popup stands clear of the track`).toBe(true);
   }
 
   // Review alignment, opened from the drawer while the popup shows, closes it. The popup of the
@@ -617,6 +627,12 @@ test('Linear with several records: a GC content or GC skew track shows Dinucleot
   await page.locator('.feature-popup').getByRole('button', { name: 'Show in editor' }).click();
   await clickInk(page, '[id="gc_content_record_2"] *');
   await expectPopup(page, 'dinucleotide', DINUCLEOTIDE, 'beside the drawer');
+  // Escape closes the top layer alone: the popup goes, and the drawer stays open.
+  await page.keyboard.press('Escape');
+  await expectNoPopup(page, 'Escape beside the drawer');
+  await expect(page.locator('.right-drawer')).toBeVisible();
+  await clickInk(page, '[id="gc_content_record_2"] *');
+  await expectPopup(page, 'dinucleotide', DINUCLEOTIDE, 'beside the drawer again');
   await page.locator('[data-similarity-alignment-drawer-review]').click();
   const review = page.getByRole('dialog', { name: 'Review alignment' });
   await expect(review.locator('[data-alignment-record-key]')).toHaveCount(4, { timeout: 180000 });
@@ -633,6 +649,73 @@ test('Linear with several records: a GC content or GC skew track shows Dinucleot
   for (const selector of [SKEW_TRACK, '#length_bar text', '#plot_title text']) await clickInk(page, selector);
   await expectNoPopup(page, 'Review alignment open');
   await expect(review).toBeVisible();
+});
+
+test('Circular, a first Result: the popup gives the focus back, follows a window that changes size, and closes when the Result is not shown', async ({ page }) => {
+  test.setTimeout(420_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/HmmtDNA.gbk');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 }).toBeGreaterThan(0);
+  await generateAndWaitForResult(page);
+  await frames(page);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  const open = async (label) => {
+    await clickInk(page, TICKS);
+    return expectPopup(page, 'circular-axis', AXIS, label);
+  };
+  const inPane = () => page.locator('.settings-scroll [data-settings-section="circular-axis"]').count();
+
+  // The focus the popup took goes back to what had it before, here a control of the pane.
+  const generate = page.getByRole('button', { name: 'Generate Diagram', exact: true });
+  await generate.focus();
+  await open('from the Generate button');
+  await closePopup(page).click();
+  await expectNoPopup(page, 'the close button');
+  await expect(generate).toBeFocused();
+  // By the keyboard: the close button precedes the heading, so Shift+Tab reaches it from there.
+  await open('again');
+  await page.keyboard.press('Shift+Tab');
+  await expect(closePopup(page)).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expectNoPopup(page, 'Enter on the close button');
+  await expect(generate).toBeFocused();
+
+  // A window that gets smaller moves the popup the least distance back inside what a drag allows; it stays open.
+  await open('before the window changes');
+  const heading = popup(page).locator('[data-settings-section] > details > summary');
+  const grip = await heading.boundingBox();
+  await page.mouse.move(grip.x + 150, grip.y + 14);
+  await page.mouse.down();
+  await page.mouse.move(1590, 990, { steps: 6 });
+  await page.mouse.up();
+  const dragged = await popupState(page, 'circular-axis');
+  expect(dragged.box[0] + dragged.box[2]).toBe(1600 - 12);
+  await page.setViewportSize({ width: 1000, height: 640 });
+  await frames(page);
+  const bounds = await page.evaluate(async () => (await import('./js/utils/popup-bounds.js')).popupViewportBounds());
+  const moved = await popupState(page, 'circular-axis');
+  expect(moved).toMatchObject({ shown: true, held: ['circular-axis'], copies: 1, inPane: 0 });
+  const [left, top, width, height] = moved.box;
+  expect([left + width, top + height], 'at the right and bottom edges a drag allows').toEqual([1000 - 12, Math.round(bounds.bottom) - 12]);
+  expect(top).toBeGreaterThanOrEqual(Math.round(bounds.top) + 12);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await frames(page);
+  expect((await popupState(page, 'circular-axis')).box.slice(0, 2), 'a larger window moves nothing back').toEqual([left, top]);
+
+  // The popup belongs to the shown Result: another tab of the Result panel closes it, and its section is in the pane again.
+  await page.getByRole('button', { name: 'Run info', exact: true }).click();
+  await expectNoPopup(page, 'the Run info tab');
+  expect(await inPane()).toBe(1);
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  // So does an Undo back to before the first Generate, which leaves no Result.
+  await open('before the Undo');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(0);
+  await expect(popup(page), 'no Result').toBeHidden();
+  expect(await popup(page).locator('[data-settings-section]').count()).toBe(0);
+  expect(await inPane()).toBe(1);
 });
 
 test('phone width: a tick label shows Axis & Scale in a popup inside the Result', async ({ page }) => {

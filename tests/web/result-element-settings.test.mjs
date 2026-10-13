@@ -4,7 +4,7 @@
 // the section (the popup, or the dock that already shows it) and how the pane
 // takes it back; and the export, which keeps none of the preview's markers.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 
@@ -247,8 +247,16 @@ class FakeDetails {
 
   parentElement = null;
 }
+// The module reads Vue once: its watchers and the window's listeners are those of the pane made last.
+let watchers = [];
+const Vue = {
+  computed: (read) => ({ get value() { return read(); } }), nextTick: async (run) => run?.(),
+  onMounted: (run) => run(), onUnmounted() {}, ref: (value) => ({ value }), watch: (source, run) => watchers.push({ source, run })
+};
 const createPane = async (mode, display = 'stacked') => {
   const calls = [];
+  const listeners = new Map();
+  watchers = [];
   const sections = new Map();
   const sectionElement = (key) => {
     if (sections.has(key)) return sections.get(key);
@@ -290,18 +298,21 @@ const createPane = async (mode, display = 'stacked') => {
     scrollingElement: null, activeElement: null
   };
   globalThis.window = {
-    localStorage: null, addEventListener() {}, removeEventListener() {},
-    Vue: {
-      computed: (read) => ({ get value() { return read(); } }), nextTick: async (run) => run?.(),
-      onMounted() {}, onUnmounted() {}, ref: (value) => ({ value }), watch() {}
-    }
+    localStorage: null, innerWidth: 1600, innerHeight: 1000, Vue,
+    addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener() {}
   };
   const state = {
     mode: { value: mode }, settingsPaneDisplay: { value: display }, settingsPaneDocked: { value: display === 'rail' ? 'layout' : null },
-    settingsPopup: { value: null }
+    settingsPopup: { value: null }, svgContent: { value: '<svg/>' }, resultPanelTab: { value: 'preview' }
   };
   const { createSettingsPaneController } = await import('../../gbdraw/web/js/app/settings-pane.js');
-  return { pane: createSettingsPaneController({ state }), state, calls, sections };
+  const pane = createSettingsPaneController({ state });
+  // The window at a new size, as the browser tells the page.
+  const resize = (width, height) => {
+    Object.assign(globalThis.window, { innerWidth: width, innerHeight: height });
+    listeners.get('resize')();
+  };
+  return { pane, state, calls, sections, resize, watchers };
 };
 // The Result's viewport, and a click on an item 20 px wide at (700, 500).
 const RESULT = { top: 100, bottom: 900, left: 400, right: 1500 };
@@ -339,12 +350,68 @@ test('a clicked element\'s section is shown in the popup beside the clicked poin
   // An item as wide as the Result (a ring) leaves no room beside it: beside the point.
   pane.showSettingsBesideResult('dinucleotide', { ...CLICK, avoid: { left: 420, right: 1480, top: 150, bottom: 850 } }, RESULT);
   assert.equal(state.settingsPopup.value.x, 712);
-  // A key without a section in the shown mode shows nothing and leaves the popup as it is.
-  assert.equal(pane.showSettingsBesideResult('pairwise-comparisons', CLICK, RESULT), true);
-  assert.equal((await createPane('linear')).pane.showSettingsBesideResult('pairwise-comparisons', CLICK, RESULT), false);
   assert.equal(pane.closeSettingsPopup(), true);
   assert.equal(pane.closeSettingsPopup(), false, 'nothing was open');
   assert.equal(state.settingsPopup.value, null);
+});
+
+// M-1: "over" is an overlap on both axes. A ring is as wide and as high as the Result; a title or a
+// Linear track is wide and flat, and the popup has room below or above it.
+test('the popup stands below or above a wide, flat item, and beside the point when neither side holds it', async () => {
+  const { pane, state } = await createPane('linear');
+  const title = { left: 420, right: 1480, top: 120, bottom: 150 };
+  pane.showSettingsBesideResult('titles', { x: 950, y: 135, avoid: title }, RESULT);
+  assert.deepEqual(state.settingsPopup.value, { section: 'titles', x: 790, y: 162, maxHeight: 726 }, 'below the title, clear of it');
+  pane.showSettingsBesideResult('titles', { x: 950, y: 865, avoid: { ...title, top: 850, bottom: 880 } }, RESULT);
+  assert.deepEqual(state.settingsPopup.value, { section: 'titles', x: 790, y: 288, maxHeight: 550 }, 'above it, ending 12 px over it');
+  // A track in the middle of the Result: neither side holds two thirds of it.
+  pane.showSettingsBesideResult('dinucleotide', { x: 950, y: 495, avoid: { ...title, top: 480, bottom: 510 } }, RESULT);
+  assert.deepEqual([state.settingsPopup.value.x, state.settingsPopup.value.y], [962, 220], 'beside the point');
+});
+
+// S-1: the popup belongs to the Result that is shown.
+test('the popup closes when the Result panel shows another tab, and when no Result is shown', async () => {
+  for (const hide of [(state) => { state.resultPanelTab.value = 'run-info'; }, (state) => { state.svgContent.value = null; }]) {
+    const pane = await createPane('circular');
+    const shown = pane.watchers.find(({ source }) => source() === true);
+    pane.pane.showSettingsBesideResult('titles', CLICK, RESULT);
+    shown.run(shown.source());
+    assert.equal(pane.state.settingsPopup.value.section, 'titles', 'a Result that stays shown keeps it');
+    hide(pane.state);
+    shown.run(shown.source());
+    assert.equal(pane.state.settingsPopup.value, null);
+  }
+});
+
+// S-2: the popup is 320 x 300 here; a drag keeps it 12 px inside the window.
+test('a window that changed size moves the popup the least distance back inside it, and does not close it', async () => {
+  const { pane, state, resize } = await createPane('circular');
+  resize(900, 500);
+  assert.equal(state.settingsPopup.value, null, 'no popup, nothing to move');
+  pane.showSettingsBesideResult('dinucleotide', CLICK, RESULT);
+  const placed = { section: 'dinucleotide', x: 722, y: 225, maxHeight: 663 };
+  resize(1600, 1000);
+  assert.deepEqual(state.settingsPopup.value, placed, 'inside the window: where it was, as high as it was');
+  resize(900, 500);
+  assert.deepEqual(state.settingsPopup.value, { section: 'dinucleotide', x: 568, y: 188, maxHeight: 0 });
+  resize(1600, 1000);
+  assert.deepEqual(state.settingsPopup.value, { section: 'dinucleotide', x: 568, y: 188, maxHeight: 0 }, 'a larger window moves nothing back');
+  // A drag moves it through the same transition.
+  pane.moveSettingsPopup({ x: 40, y: 60, maxHeight: 0 });
+  assert.deepEqual(state.settingsPopup.value, { section: 'dinucleotide', x: 40, y: 60, maxHeight: 0 });
+});
+
+// The popup's place has one writer: the transitions of services/settings-pane-state.js.
+test('no module but the pane-state service writes the popup', () => {
+  const root = join(process.cwd(), 'gbdraw', 'web', 'js');
+  const modules = readdirSync(root, { recursive: true }).filter((file) => file.endsWith('.js') && !file.startsWith('vendor'));
+  const writers = modules.filter((file) => /settingsPopup\.value(?:\.\w+)?\s*=[^=]|Object\.assign\(\s*(?:state\.)?settingsPopup/.test(readFileSync(join(root, file), 'utf8')));
+  assert.deepEqual(writers.map((file) => file.replaceAll('\\', '/')), ['services/settings-pane-state.js']);
+  // A popup of the Result is dragged through a port that moves it; the drag holds no placement to write.
+  const setup = readFileSync(join(root, 'app', 'app-setup.js'), 'utf8');
+  assert.match(setup, /moveTo: settingsPaneActions\.moveSettingsPopup/);
+  // Only the four sections a drawn element opens can be shown beside the Result: the port takes no other key.
+  assert.match(readFileSync(join(root, 'app', 'settings-pane.js'), 'utf8'), /@typedef \{\(key: DrawnElementSectionKey, anchor: PopupAnchor, bounds: PopupBounds\) => boolean\} ShowSettingsBesideResult/);
 });
 
 test('the docked section takes the focus where it is, and a pane action takes a section back from the popup', async () => {

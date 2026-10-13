@@ -42,6 +42,7 @@ const {
   validateCurrentWriterActiveConfig
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { floatSettingsSection, returnSettingsSection } = await import('../../gbdraw/web/js/services/settings-pane-state.js');
 const {
   buildCanonicalRenderRequest,
   projectCanonicalSessionRequest
@@ -1081,6 +1082,8 @@ const clickedLabel = { key: 'keep-label' };
 state.clickedFeature.value = clickedFeature;
 state.clickedPairwiseMatch.value = clickedPairwiseMatch;
 state.clickedLabel.value = clickedLabel;
+// The popup of a settings section is a popup of the Result too: a failed load leaves it open where it was.
+floatSettingsSection(state, 'titles', { x: 31, y: 32, maxHeight: 0 });
 state.featureExtractionPending.value = true;
 state.featureExtractionError.value = { summary: 'keep extraction error' };
 Object.assign(state.featureEditorStatus, {
@@ -1203,6 +1206,7 @@ const rollbackState = () => ({
   clickedFeature: state.clickedFeature.value,
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
   clickedLabel: state.clickedLabel.value,
+  settingsPopup: structuredClone(state.settingsPopup.value),
   featureExtractionPending: state.featureExtractionPending.value,
   featureExtractionError: state.featureExtractionError.value,
   featureEditorStatus: structuredClone(state.featureEditorStatus),
@@ -1307,6 +1311,8 @@ try {
     {
       rollbackState: sessionImportRollbackState,
       afterLoad: async () => {
+        // The pane closes its popup while the load shows no Result.
+        returnSettingsSection(state);
         artifactSlots.linear = null;
         depthTrackUiCounts.circular = 5;
         state.featureListScrollTop.value = 0;

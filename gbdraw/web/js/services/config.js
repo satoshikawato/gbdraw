@@ -14,6 +14,7 @@ import {
   restoreRightDrawerState
 } from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
+import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
@@ -4412,6 +4413,7 @@ const captureSessionImportTransientState = () => ({
   clickedFeature: state.clickedFeature.value,
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
   clickedLabel: state.clickedLabel.value,
+  settingsPopup: state.settingsPopup.value && { ...state.settingsPopup.value },
   featureExtractionPending: Boolean(state.featureExtractionPending.value),
   featureExtractionError: state.featureExtractionError.value,
   featureEditorStatus: cloneJsonData(state.featureEditorStatus),
@@ -4471,6 +4473,9 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.clickedFeature.value = snapshot.clickedFeature;
   state.clickedPairwiseMatch.value = snapshot.clickedPairwiseMatch;
   state.clickedLabel.value = snapshot.clickedLabel;
+  // The popup of a settings section is open again where it was, as the popups above are.
+  if (snapshot.settingsPopup) floatSettingsSection(state, snapshot.settingsPopup.section, snapshot.settingsPopup);
+  else returnSettingsSection(state);
   state.featureExtractionPending.value = snapshot.featureExtractionPending;
   state.featureExtractionError.value = snapshot.featureExtractionError;
   Object.assign(state.featureEditorStatus, cloneJsonData(snapshot.featureEditorStatus));

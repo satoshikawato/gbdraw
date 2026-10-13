@@ -108,7 +108,12 @@ export const settingsSectionElement = (area, key) =>
 // the plot title. The groups are those of services/drawn-groups.js; a section
 // of one mode stands for the section of the same title in the other
 // (`settingsEntryIn`).
-/** @type {readonly { readonly selector: string, readonly section: SettingsSectionKey }[]} */
+/**
+ * The sections a drawn element opens. The template moves each of them into the
+ * popup beside the Result (index.html, `to="#settings-popup"`).
+ * @typedef {Extract<SettingsSectionKey, 'circular-axis' | 'linear-axis' | 'dinucleotide' | 'titles'>} DrawnElementSectionKey
+ */
+/** @type {readonly { readonly selector: string, readonly section: DrawnElementSectionKey }[]} */
 const DRAWN_ELEMENT_SECTIONS = Object.freeze([
   { selector: trackGroupSelector(TICK_GROUPS), section: 'circular-axis' },
   { selector: `#${LENGTH_BAR_ID}`, section: 'linear-axis' },
@@ -130,7 +135,7 @@ const FEATURE_SELECTOR = '[data-gbdraw-feature-id]';
  * Result reached: the element itself, or the group it is drawn in. A group of
  * a record has none, whatever its id.
  * @param {EventTarget | null} target
- * @returns {SettingsSectionKey | null}
+ * @returns {DrawnElementSectionKey | null}
  */
 export const drawnElementSection = (target) => {
   const element = target instanceof Element ? target.closest(DRAWN_ELEMENT_SELECTOR) : null;

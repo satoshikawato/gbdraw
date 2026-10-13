@@ -118,7 +118,7 @@ export {
  * The pane's way to show the settings section of a drawn element beside the
  * clicked point: in a popup placed inside `bounds`, beside `anchor` and clear
  * of the clicked item when there is room. Returns whether the section is shown.
- * @typedef {(section: import('../../services/settings-sections.js').SettingsSectionKey, anchor: PopupAnchor, bounds: PopupBounds) => boolean} ShowElementSettings
+ * @typedef {(section: import('../../services/settings-sections.js').DrawnElementSectionKey, anchor: PopupAnchor, bounds: PopupBounds) => boolean} ShowElementSettings
  */
 
 /**

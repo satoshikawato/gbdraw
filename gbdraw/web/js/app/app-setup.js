@@ -145,7 +145,7 @@ import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
-import { placePopupNearPoint, popupViewportBounds } from '../utils/popup-bounds.js';
+import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
 /** @import { PopupPlacement } from '../utils/popup-bounds.js' */
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
@@ -5325,33 +5325,25 @@ export const createAppSetup = () => {
   watch(clickedFeature, () => placeRenderedPopup(clickedFeaturePos, featurePopupRef.value, '.feature-popup-body'), { flush: 'post' });
   watch(clickedPairwiseMatch, () => placeRenderedPopup(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value, '.pairwise-match-popup-body'), { flush: 'post' });
 
-  // A drag keeps the popup inside the popup bounds (OV-384: below the header).
-  /**
-   * @param {PopupPlacement} pos
-   * @param {HTMLElement | null} element
-   * @param {number} x
-   * @param {number} y
-   */
-  const dragPopupTo = (pos, element, x, y) => {
-    const bounds = popupViewportBounds();
-    const margin = FEATURE_POPUP_MARGIN;
-    pos.x = clampNumber(x, margin, bounds.right - (element?.offsetWidth || 0) - margin);
-    pos.y = clampNumber(y, bounds.top + margin, bounds.bottom - (element?.offsetHeight || 0) - margin);
-    pos.maxHeight = 0;
-  };
   // A press on the handle of an open popup drags it; every popup of the Result moves this way.
+  // A drag keeps the popup inside the popup bounds (OV-384: below the header).
   /**
    * @param {object} popup
    * @param {{ active: boolean, offsetX: number, offsetY: number }} popup.drag
-   * @param {() => PopupPlacement | null} popup.position The placement of the popup while it is open.
+   * @param {() => boolean} popup.isOpen
+   * @param {(placement: PopupPlacement) => void} popup.moveTo The popup owner's move to a placement.
    * @param {() => HTMLElement | null} popup.element
    * @param {(target: Element) => boolean} popup.isHandle Whether a press on `target` drags the popup.
    */
-  const createPopupDrag = ({ drag, position, element, isHandle }) => {
+  const createPopupDrag = ({ drag, isOpen, moveTo, element, isHandle }) => {
     /** @param {MouseEvent} event */
     const move = (event) => {
-      const pos = position();
-      if (drag.active && pos) dragPopupTo(pos, element(), event.clientX - drag.offsetX, event.clientY - drag.offsetY);
+      const popup = element();
+      if (!drag.active || !isOpen()) return;
+      moveTo(placePopupWithin({
+        x: event.clientX - drag.offsetX, y: event.clientY - drag.offsetY,
+        width: popup?.offsetWidth || 0, height: popup?.offsetHeight || 0, bounds: popupViewportBounds()
+      }));
     };
     const end = () => {
       drag.active = false;
@@ -5361,7 +5353,7 @@ export const createAppSetup = () => {
     /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
     const start = (event) => {
       const popup = element();
-      if (event.button !== 0 || !popup || !position() || !isHandle(event.target)) return;
+      if (event.button !== 0 || !popup || !isOpen() || !isHandle(event.target)) return;
       const rect = popup.getBoundingClientRect();
       drag.active = true;
       drag.offsetX = event.clientX - rect.left;
@@ -5374,13 +5366,15 @@ export const createAppSetup = () => {
   };
   const featurePopupDragging = createPopupDrag({
     drag: featurePopupDrag,
-    position: () => (clickedFeature.value ? clickedFeaturePos : null),
+    isOpen: () => Boolean(clickedFeature.value),
+    moveTo: (placement) => { Object.assign(clickedFeaturePos, placement); },
     element: () => featurePopupRef.value,
     isHandle: (target) => !featurePopupResize.active && !isInteractiveTarget(target)
   });
   const pairwiseMatchPopupDragging = createPopupDrag({
     drag: pairwiseMatchPopupDrag,
-    position: () => (clickedPairwiseMatch.value ? clickedPairwiseMatchPos : null),
+    isOpen: () => Boolean(clickedPairwiseMatch.value),
+    moveTo: (placement) => { Object.assign(clickedPairwiseMatchPos, placement); },
     element: () => pairwiseMatchPopupRef.value,
     isHandle: (target) => !pairwiseMatchPopupResize.active && !isInteractiveTarget(target)
   });
@@ -5391,7 +5385,8 @@ export const createAppSetup = () => {
   const isSettingsPopupHeading = (target) => !isInteractiveTarget(target) && Boolean(target.closest(SETTINGS_POPUP_HEADING));
   const settingsPopupDrag = createPopupDrag({
     drag: { active: false, offsetX: 0, offsetY: 0 },
-    position: () => state.settingsPopup.value,
+    isOpen: () => Boolean(state.settingsPopup.value),
+    moveTo: settingsPaneActions.moveSettingsPopup,
     element: () => document.getElementById('settings-popup'),
     isHandle: isSettingsPopupHeading
   });

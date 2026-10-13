@@ -8,8 +8,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  SETTINGS_PANE_DISPLAYS, closeDockedSettingsEntry, dockSettingsSection, floatSettingsSection, reconcileSettingsPaneState,
-  returnSettingsSection, showSettingsRail, showSettingsStacked
+  SETTINGS_PANE_DISPLAYS, closeDockedSettingsEntry, dockSettingsSection, floatSettingsSection, moveSettingsPopup,
+  reconcileSettingsPaneState, returnSettingsSection, showSettingsRail, showSettingsStacked
 } from '../../gbdraw/web/js/services/settings-pane-state.js';
 
 const paneState = (display = 'stacked', docked = null) => ({
@@ -115,4 +115,14 @@ test('the popup holds one section until it returns, its entry is docked, or the 
   floatSettingsSection(state, 'titles', at);
   returnSettingsSection(state);
   assert.equal(state.settingsPopup.value, null);
+});
+
+// A drag, the placement by the popup's rendered size, and a window that changed size move the popup.
+test('moving the popup keeps its section, and moves nothing while no section is in it', () => {
+  const state = paneState();
+  moveSettingsPopup(state, { x: 10, y: 20, maxHeight: 0 });
+  assert.equal(state.settingsPopup.value, null);
+  floatSettingsSection(state, 'titles', { x: 500, y: 200, maxHeight: 600 });
+  moveSettingsPopup(state, { x: 10, y: 20, maxHeight: 0 });
+  assert.deepEqual(state.settingsPopup.value, { section: 'titles', x: 10, y: 20, maxHeight: 0 });
 });
