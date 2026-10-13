@@ -144,7 +144,7 @@ assert.throws(
 );
 // OV-636: a `resources` that holds no resource is a missing resource whatever it
 // is; `null` used to end in a TypeError. Python refuses each of them
-// (gbdraw/session_io.py:630-633).
+// (gbdraw/session_io.py:632-635).
 for (const resources of [null, undefined, [], 5, 'x']) assert.throws(
   () => validateSessionAuthorityInventory({ ...currentWebDraft, resources }, 40),
   /^Error: Missing canonical resource: comparison-resource$/,

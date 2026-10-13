@@ -106,7 +106,7 @@ test('record display drafts use one exact transform and provenance contract', ()
     { ...draft, reverseComplementOverride: 'true' },
     { ...draft, anchorIntent: { ...anchorIntent, schema: 2 } }
   ]) assert.throws(() => validateRecordDisplayDrafts([invalid]), JSON.stringify(invalid));
-  // OV-575: a row's selector is text, as gbdraw/session_io.py:851-855 requires.
+  // OV-575: a row's selector is text, as gbdraw/session_io.py:853-857 requires.
   const refusedDraft = /^Error: Invalid record display draft; only source-bound requested intent is supported\.$/;
   for (const selector of [['#1'], 1]) assert.throws(
     () => validateRecordDisplayDrafts([{ ...draft, selector }]), refusedDraft, JSON.stringify(selector)

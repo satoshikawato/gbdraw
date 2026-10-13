@@ -73,6 +73,8 @@ CURRENT_SESSION_VERSION = 46
 # ``modes`` (PD-OI-086) and keys per-feature edits by source identity.
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
+# From version 41 the record display and feature placement drafts of a flat draft are checked.
+DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
@@ -656,7 +658,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         _validate_other_mode_result(session, version)
     if version >= MODE_SCOPED_SESSION_MIN_VERSION:
         _validate_mode_slices(session)
-    elif version >= 41:
+    elif version >= DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION:
         _validate_display_placement_drafts(session)
     if is_settings_only_session(session):
         _validate_settings_only_session(session)

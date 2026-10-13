@@ -29,7 +29,7 @@ assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
   storedConfig
 }));
 // OV-575: a record display draft row's selector is text in the Sessions whose
-// drafts Python checks, 41 and newer (gbdraw/session_io.py:659-660, :851-855).
+// drafts Python checks, 41 and newer (gbdraw/session_io.py:661-662, :853-857).
 // A Session 40 draft keeps the verdict it had (OV-634 for the number).
 {
   const checkDraftSelector = (selector, sessionVersion) => validateCurrentWriterActiveConfig({
