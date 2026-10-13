@@ -64,6 +64,7 @@ from gbdraw.analysis.depth_tracks import (
 from gbdraw.analysis.gc import circular_dinucleotide_content_df
 from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
+    LosatpCacheState,
     OrthogroupGraphResult,
     OrthogroupMembershipMode,
     OrthogroupResult,
@@ -96,7 +97,7 @@ from gbdraw.auto_sizes import (
     sliding_window,
 )
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
-from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
+from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN, LosatCacheWrite
 from gbdraw.config.models import (
     CircularRenderProfile,
     GbdrawConfig,
@@ -1547,6 +1548,18 @@ def _linear_losat_cache_filenames(
     )
 
 
+@dataclass(frozen=True)
+class ProteinComparisonAnalysis:
+    """A protein analysis and the writes it made into a fork of the request's raw cache.
+
+    The caller replays ``cache_writes`` on its cache on a build and on a hit,
+    since ``session_entries()`` reads the display marks after the drawing.
+    """
+
+    result: ProteinBlastpResult | CollinearityResult
+    cache_writes: tuple[LosatCacheWrite, ...]
+
+
 def _invoke_protein_analysis_helper(
     mode: ProteinBlastpMode,
     records: Sequence[SeqRecord],
@@ -1569,16 +1582,20 @@ def _invoke_protein_analysis_helper(
     collinearity_search_scope: CollinearitySearchScope,
     collinear_infer_orthogroups: bool,
     collinearity_comparison_pairs: Sequence[tuple[int, int]] | None,
-    losatp_cache: LosatpCacheManager | None,
+    cache_state: LosatpCacheState | None,
     protein_extraction: ProteinExtractionResult | None,
     feature_visibility_rules: list[dict[str, object]] | None,
     cache_filenames: Sequence[str] | None,
     pairwise_pairs: Sequence[tuple[int, int]] | None = None,
-) -> ProteinBlastpResult | CollinearityResult:
-    """Translate resolved typed values into one real analysis-helper call."""
+) -> ProteinComparisonAnalysis:
+    """The ``protein_analysis`` stage: one analysis-helper call on a fork of the raw cache."""
 
+    losatp_cache = (
+        LosatpCacheManager.from_state(cache_state) if cache_state is not None else None
+    )
+    result: ProteinBlastpResult | CollinearityResult
     if mode == "pairwise":
-        return build_pairwise_protein_blastp_comparisons(
+        result = build_pairwise_protein_blastp_comparisons(
             records,
             pairs=pairwise_pairs,
             losatp_bin=losatp_bin,
@@ -1595,8 +1612,8 @@ def _invoke_protein_analysis_helper(
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
         )
-    if mode == "orthogroup":
-        return build_rbh_orthogroup_protein_blastp_comparisons(
+    elif mode == "orthogroup":
+        result = build_rbh_orthogroup_protein_blastp_comparisons(
             records,
             losatp_bin=losatp_bin,
             ncbi_blastp_bin=ncbi_blastp_bin,
@@ -1614,8 +1631,8 @@ def _invoke_protein_analysis_helper(
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
         )
-    if mode == "collinear":
-        return build_orthogroup_collinearity_blocks(
+    elif mode == "collinear":
+        result = build_orthogroup_collinearity_blocks(
             records,
             infer_orthogroups=collinear_infer_orthogroups,
             losatp_bin=losatp_bin,
@@ -1639,7 +1656,11 @@ def _invoke_protein_analysis_helper(
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
         )
-    raise ValidationError(f"Unsupported protein analysis mode: {mode!r}.")
+    else:
+        raise ValidationError(f"Unsupported protein analysis mode: {mode!r}.")
+    return ProteinComparisonAnalysis(
+        result, losatp_cache.writes if losatp_cache is not None else ()
+    )
 
 
 def _shows_identity_labels(record_features: Sequence[ResolvedRecordFeatureInputs]) -> bool:
@@ -1955,7 +1976,9 @@ def assemble_linear_diagram_from_records(
         analysis_cache_filenames: Sequence[str] | None = losat_cache_filenames,
         pairwise_pairs: Sequence[tuple[int, int]] | None = None,
     ) -> ProteinBlastpResult | CollinearityResult:
-        return _invoke_protein_analysis_helper(
+        analysis = render_stage(
+            "protein_analysis",
+            _invoke_protein_analysis_helper,
             mode,
             analysis_records,
             pairwise_pairs=pairwise_pairs,
@@ -1985,11 +2008,14 @@ def assemble_linear_diagram_from_records(
             collinearity_search_scope=normalized_collinearity_search_scope,
             collinear_infer_orthogroups=collinear_infer_orthogroups,
             collinearity_comparison_pairs=collinearity_comparison_pairs,
-            losatp_cache=losatp_cache,
+            cache_state=losatp_cache.state() if losatp_cache is not None else None,
             protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=analysis_cache_filenames,
         )
+        if losatp_cache is not None:
+            losatp_cache.apply_writes(analysis.cache_writes)
+        return analysis.result
 
     if protein_comparisons is not None:
         resolved_protein_comparisons = list(protein_comparisons)

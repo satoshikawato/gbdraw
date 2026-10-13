@@ -47,6 +47,7 @@ from gbdraw.comparisons.losat_jobs import (
     split_losat_batch_result,
 )
 from gbdraw.comparisons.losat_runtime import (
+    LosatCacheWrite,
     LosatRawCache,
     LosatRuntimeCallback,
     LosatSearchArgs,
@@ -2273,6 +2274,19 @@ def promote_legacy_protein_raw_cache_entries(
     )
 
 
+@dataclass(frozen=True)
+class LosatpCacheState:
+    """What a protein raw cache holds; the protein analysis is keyed by it."""
+
+    entries: tuple[tuple[str, Mapping[str, object]], ...]
+    display: tuple[tuple[str, str], ...]
+    legacy_entries: tuple[Mapping[str, object], ...]
+    identity_manifest: ProteinIdentityManifest | None
+    proteins_by_instance: tuple[tuple[str, tuple[CdsProtein, ...]], ...]
+    threads_per_job: str | int
+    runtime_compatibility: str
+
+
 class LosatpCacheManager(LosatRawCache):
     """Validated schema-4 protein raw-cache lookup and collection."""
 
@@ -2338,6 +2352,42 @@ class LosatpCacheManager(LosatRawCache):
             ):
                 continue
             self._add_loaded_entry(key, normalized, entry)
+
+    def state(self) -> LosatpCacheState:
+        entries, display = self._raw_state()
+        return LosatpCacheState(
+            entries=entries,
+            display=display,
+            legacy_entries=tuple(self._legacy_entries),
+            identity_manifest=self.identity_manifest,
+            proteins_by_instance=tuple(self._proteins_by_instance.items()),
+            threads_per_job=self.threads_per_job,
+            runtime_compatibility=self.runtime_compatibility,
+        )
+
+    @classmethod
+    def from_state(cls, state: LosatpCacheState) -> LosatpCacheManager:
+        """A cache in ``state`` whose writes do not reach the cache it came from."""
+
+        cache = cls(
+            threads_per_job=state.threads_per_job,
+            runtime_compatibility=state.runtime_compatibility,
+        )
+        cache.identity_manifest = state.identity_manifest
+        cache._restore_raw_state(state.entries, state.display)
+        cache._legacy_entries = [copy.deepcopy(dict(entry)) for entry in state.legacy_entries]
+        cache._proteins_by_instance = dict(state.proteins_by_instance)
+        return cache
+
+    def _apply_write(self, write: LosatCacheWrite) -> None:
+        if write.kind == "retire-legacy":
+            self._retire_legacy(write.index)
+        else:
+            super()._apply_write(write)
+
+    def _retire_legacy(self, index: int) -> None:
+        del self._legacy_entries[index]
+        self._writes.append(LosatCacheWrite("retire-legacy", index=index))
 
     @property
     def has_legacy_candidates(self) -> bool:
@@ -2535,7 +2585,7 @@ class LosatpCacheManager(LosatRawCache):
             return None
         promotion = scan.promotion
         self.add_promoted_entry(promotion.entry)
-        del self._legacy_entries[promotion.candidate_index]
+        self._retire_legacy(promotion.candidate_index)
         if display:
             self._mark_display(cache_key, filename)
         return promotion.rewritten_tsv
@@ -6550,6 +6600,7 @@ __all__ = [
     "LegacyProteinRawCachePromotionScan",
     "LegacyProteinRawCacheRejection",
     "LosatpCacheManager",
+    "LosatpCacheState",
     "ORTHOGROUP_INFERENCE_VERSION",
     "ORTHOGROUP_MEMBERSHIP_MODES",
     "PROTEIN_BLASTP_MODES",

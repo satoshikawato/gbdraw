@@ -27,7 +27,7 @@ import subprocess
 import sys
 import tempfile
 from types import MappingProxyType
-from typing import Callable, Literal, Mapping
+from typing import Callable, Literal, Mapping, Sequence, cast
 
 from gbdraw.exceptions import ValidationError
 
@@ -712,17 +712,79 @@ def run_losat_search(
 # Raw cache store.
 
 
+LosatCacheWriteKind = Literal["entry", "display", "retire-legacy"]
+
+
+@dataclass(frozen=True)
+class LosatCacheWrite:
+    """One write a lookup or a search made into a loaded raw cache.
+
+    ``entry`` stores ``entry`` under ``key``; ``display`` shows ``key`` under
+    ``filename``; ``retire-legacy`` drops legacy candidate ``index`` (protein
+    caches). Replayed in order on a cache in the same state, the writes give
+    the same Session entries (``LosatRawCache.apply_writes``).
+    """
+
+    kind: LosatCacheWriteKind
+    key: str = ""
+    entry: Mapping[str, object] | None = None
+    filename: str = ""
+    index: int = -1
+
+
 class LosatRawCache:
     """Raw LOSAT entries by raw key, kept in Session display order.
 
     Program identity owners derive keys and validate entries. This store keeps
     the entries, their display filenames, and the non-key ``runtime`` record.
+    Every write after loading is also kept in ``writes``.
     """
 
     def __init__(self) -> None:
         self._entries_by_key: dict[str, dict[str, object]] = {}
         self._display_order: list[str] = []
         self._display_info: dict[str, tuple[str, bool]] = {}
+        self._writes: list[LosatCacheWrite] = []
+
+    @property
+    def writes(self) -> tuple[LosatCacheWrite, ...]:
+        """The writes made since loading, in order."""
+
+        return tuple(self._writes)
+
+    def apply_writes(self, writes: Sequence[LosatCacheWrite]) -> None:
+        """Replay writes another cache in this cache's state made."""
+
+        for write in writes:
+            self._apply_write(write)
+
+    def _apply_write(self, write: LosatCacheWrite) -> None:
+        if write.kind == "entry" and write.entry is not None:
+            self._store_entry(write.key, dict(write.entry))
+        elif write.kind == "display":
+            self._mark_display(write.key, write.filename)
+        else:
+            raise ValueError(f"{type(self).__name__} cannot apply a {write.kind!r} write.")
+
+    def _raw_state(
+        self,
+    ) -> tuple[tuple[tuple[str, Mapping[str, object]], ...], tuple[tuple[str, str], ...]]:
+        """The stored entries and the displayed keys with their filenames, in order."""
+
+        return (
+            tuple(self._entries_by_key.items()),
+            tuple((key, self._display_info[key][0]) for key in self._display_order),
+        )
+
+    def _restore_raw_state(
+        self,
+        entries: Sequence[tuple[str, Mapping[str, object]]],
+        display: Sequence[tuple[str, str]],
+    ) -> None:
+        # Entries are shared, not copied: a write stores a new dict.
+        self._entries_by_key = {key: cast(dict, entry) for key, entry in entries}
+        self._display_order = [key for key, _filename in display]
+        self._display_info = {key: (filename, True) for key, filename in display}
 
     @property
     def has_entries(self) -> bool:
@@ -775,9 +837,13 @@ class LosatRawCache:
     ) -> None:
         if runtime is not None:
             entry["runtime"] = dict(runtime)
-        self._entries_by_key[key] = entry
+        self._store_entry(key, entry)
         if display:
             self._mark_display(key, filename)
+
+    def _store_entry(self, key: str, entry: dict[str, object]) -> None:
+        self._entries_by_key[key] = entry
+        self._writes.append(LosatCacheWrite("entry", key, entry=dict(entry)))
 
     def _retain_entries(self, keep: Callable[[dict[str, object]], bool]) -> None:
         self._entries_by_key = {
@@ -798,6 +864,7 @@ class LosatRawCache:
         if key not in self._display_info:
             self._display_order.append(key)
         self._display_info[key] = (str(filename or ""), True)
+        self._writes.append(LosatCacheWrite("display", key, filename=str(filename or "")))
 
     def session_entries(self) -> tuple[dict[str, object], ...]:
         result: list[dict[str, object]] = []
@@ -828,6 +895,8 @@ __all__ = [
     "LOSAT_OPTION_FLAGS",
     "LOSAT_PROGRAMS",
     "LosatCliDialect",
+    "LosatCacheWrite",
+    "LosatCacheWriteKind",
     "LosatProgram",
     "LosatRawCache",
     "LosatRuntime",
