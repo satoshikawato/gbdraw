@@ -3636,9 +3636,14 @@ def _neighbor_min_gap_overlap_count(
 def _inner_rebalance_metrics(
     labels: list[dict],
     total_length: int,
+    plain_overlap: int | None = None,
 ) -> tuple[int, int, int, float, int, int]:
-    """Return baseline/candidate quality metrics for strict-order inner rebalance."""
-    plain_overlap = _count_label_overlaps(labels, total_length, use_min_gap=False)
+    """Return baseline/candidate quality metrics for strict-order inner rebalance.
+
+    `plain_overlap`, when given, is the plain overlap count of these labels.
+    """
+    if plain_overlap is None:
+        plain_overlap = _count_label_overlaps(labels, total_length, use_min_gap=False)
     min_gap_overlap = _count_label_overlaps(labels, total_length, use_min_gap=True)
     mismatch_count, mismatch_weighted = _hemisphere_mismatch_metrics(labels, total_length)
     labels_with_leaders = _assign_leader_start_points([label.copy() for label in labels], total_length)
@@ -3740,7 +3745,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
         cache_key = _metrics_cache_key(label_list)
         cached = metrics_cache.get(cache_key)
         if cached is None:
-            cached = _inner_rebalance_metrics(label_list, total_length)
+            cached = _inner_rebalance_metrics(label_list, total_length, plain_overlap_cache.get(cache_key))
             metrics_cache[cache_key] = cached
         return cached
 

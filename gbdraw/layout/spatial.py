@@ -276,24 +276,16 @@ class AabbIndex:
                 self._buckets.setdefault((bucket_x, bucket_y), []).append(item_id)
 
     def query(self, bbox: Aabb, padding: float = 0.0) -> list[object]:
-        padding = _validate_padding(padding)
-        query_bbox = Aabb(
-            bbox.min_x - padding,
-            bbox.min_y - padding,
-            bbox.max_x + padding,
-            bbox.max_y + padding,
-        )
-        seen: set[object] = set()
-        candidates: list[object] = []
-        for bucket_x in _bucket_range(query_bbox.min_x, query_bbox.max_x, self.bucket_size):
-            for bucket_y in _bucket_range(query_bbox.min_y, query_bbox.max_y, self.bucket_size):
-                for item_id in self._buckets.get((bucket_x, bucket_y), []):
-                    if item_id in seen:
-                        continue
-                    seen.add(item_id)
-                    candidates.append(item_id)
+        candidates = list(dict.fromkeys(self._bucket_items(bbox, _validate_padding(padding))))
         candidates.sort(key=self._order.__getitem__)
         return candidates
+
+    def _bucket_items(self, bbox: Aabb, padding: float) -> Iterable[object]:
+        """Yield the ids in every bucket the padded box meets; an id may repeat."""
+        empty: list[object] = []
+        for bucket_x in _bucket_range(bbox.min_x - padding, bbox.max_x + padding, self.bucket_size):
+            for bucket_y in _bucket_range(bbox.min_y - padding, bbox.max_y + padding, self.bucket_size):
+                yield from self._buckets.get((bucket_x, bucket_y), empty)
 
 
 def split_circular_interval(start: int, end: int, genome_length: int | None) -> list[Interval]:
@@ -315,12 +307,12 @@ def candidate_aabb_pairs(
 ) -> set[tuple[int, int]]:
     """Return candidate bbox index pairs using an AABB broad phase."""
     pairs: set[tuple[int, int]] = set()
+    padding = _validate_padding(padding)
     index = AabbIndex(bucket_size=bucket_size)
     for item_idx, bbox in enumerate(bboxes):
-        for candidate_idx in index.query(bbox, padding=padding):
-            left = int(cast(int, candidate_idx))  # ids inserted above are item indexes
-            right = int(item_idx)
-            pairs.add((left, right) if left < right else (right, left))
+        for candidate_idx in index._bucket_items(bbox, padding):
+            left = cast(int, candidate_idx)  # ids inserted below are earlier item indexes
+            pairs.add((left, item_idx))
         index.insert(item_idx, bbox)
     return pairs
 
