@@ -444,6 +444,25 @@ Review checks both construction counts and response time, so a fast machine
 cannot hide duplicated work. [`gbdraw/web/CLAUDE.md`](../../gbdraw/web/CLAUDE.md)
 names the current owners.
 
+## Type checking
+
+This is the rule `TYPE-DEBT` of `tools/web-design-rule-guards.json`.
+
+- mypy, pinned in the `typecheck` extra and configured in `[tool.mypy]` of
+  `pyproject.toml`, checks `gbdraw/` except `gbdraw/web/`. Third-party
+  packages are `Any` to it, so their imports need no `# type: ignore`.
+- A file's type debt is its mypy errors plus its `# type: ignore` comments.
+  `TYPE_DEBT_BASELINE` in `tests/test_type_check_ratchet.py` is its ceiling
+  per file: a file stays at or below its entry, and a file without an entry,
+  including a new file, has no debt. Lowering or removing an entry is
+  optional. Fix the type, use `typing.cast`, or fix the code instead of adding
+  `# type: ignore`.
+- Adding or raising an entry is an authority-only change. It and relaxing
+  `[tool.mypy]` need the Owner's approval.
+
+The Web modules have their own type rules (R14 in
+[`gbdraw/web/CLAUDE.md`](../../gbdraw/web/CLAUDE.md)).
+
 ## Evidence examples
 
 These examples use changed-scope sets. They do not assert repository-wide
