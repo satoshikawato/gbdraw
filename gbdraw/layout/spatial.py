@@ -103,6 +103,20 @@ class Aabb:
         )
 
 
+def _ordered_aabb(min_x: float, min_y: float, max_x: float, max_y: float) -> Aabb:
+    """An ``Aabb`` from bounds that are finite floats in order already.
+
+    It skips the constructor's checks, which the hot broad phases below (and the
+    label repair's) would otherwise pay twice.
+    """
+    box = object.__new__(Aabb)
+    object.__setattr__(box, "min_x", min_x)
+    object.__setattr__(box, "min_y", min_y)
+    object.__setattr__(box, "max_x", max_x)
+    object.__setattr__(box, "max_y", max_y)
+    return box
+
+
 def _validate_finite_value(value: float, *, name: str) -> float:
     value = float(value)
     if not math.isfinite(value):
@@ -131,7 +145,7 @@ def union_aabbs(bboxes: Iterable[Aabb]) -> Aabb | None:
         min_y = min(min_y, bbox.min_y)
         max_x = max(max_x, bbox.max_x)
         max_y = max(max_y, bbox.max_y)
-    return Aabb(min_x, min_y, max_x, max_y)
+    return _ordered_aabb(min_x, min_y, max_x, max_y)
 
 
 def bounding_aabb(
@@ -151,9 +165,24 @@ def bounding_aabb(
         ys.append(float(y))
     if not xs or not all(map(math.isfinite, xs)) or not all(map(math.isfinite, ys)):
         return None
-    pad_x = _validate_padding(pad_x)
+    pad_x = _validate_padding(pad_x) if pad_x else 0.0
     pad_y = pad_x if pad_y is None else _validate_padding(pad_y)
-    return Aabb(min(xs) - pad_x, min(ys) - pad_y, max(xs) + pad_x, max(ys) + pad_y)
+    min_x, min_y, max_x, max_y = min(xs) - pad_x, min(ys) - pad_y, max(xs) + pad_x, max(ys) + pad_y
+    if not all(map(math.isfinite, (min_x, min_y, max_x, max_y))):
+        return None
+    return _ordered_aabb(min_x, min_y, max_x, max_y)
+
+
+def aabbs_touch(first: Aabb | None, second: Aabb | None) -> bool:
+    """Whether two boxes touch; edge contact counts and a ``None`` box touches every box."""
+    if first is None or second is None:
+        return True
+    return not (
+        second.max_x < first.min_x
+        or second.min_x > first.max_x
+        or second.max_y < first.min_y
+        or second.min_y > first.max_y
+    )
 
 
 def touching_aabb_pairs(bboxes: Sequence[Aabb | None]) -> list[tuple[int, int]]:
@@ -196,19 +225,7 @@ def touching_aabb_indices(
     order); ``skip`` is left out. A ``None`` box touches every box.
     """
     indexes = range(len(bboxes)) if candidates is None else candidates
-    if query is None:
-        return [idx for idx in indexes if idx != skip]
-    min_x, min_y, max_x, max_y = query.min_x, query.min_y, query.max_x, query.max_y
-    touching: list[int] = []
-    for idx in indexes:
-        if idx == skip:
-            continue
-        other = bboxes[idx]
-        if other is None or not (
-            other.max_x < min_x or other.min_x > max_x or other.max_y < min_y or other.min_y > max_y
-        ):
-            touching.append(idx)
-    return touching
+    return [idx for idx in indexes if idx != skip and aabbs_touch(query, bboxes[idx])]
 
 
 def _validate_bucket_size(bucket_size: float) -> float:
@@ -322,6 +339,7 @@ __all__ = [
     "AabbIndex",
     "Interval",
     "IntervalIndex",
+    "aabbs_touch",
     "bounding_aabb",
     "candidate_aabb_pairs",
     "split_circular_interval",

@@ -10,7 +10,8 @@ TextAnchor: TypeAlias = Literal["start", "middle", "end"]
 Point: TypeAlias = tuple[float, float]
 AabbTuple: TypeAlias = tuple[float, float, float, float]
 
-_EPSILON = 1e-9
+# The tolerance of every test here (the separating-axis test and its box broad phase).
+GEOMETRY_EPSILON = 1e-9
 
 
 @dataclass(frozen=True)
@@ -154,15 +155,15 @@ def convex_polygons_intersect(
             edge_x = next_point[0] - point[0]
             edge_y = next_point[1] - point[1]
             axis_len = math.hypot(edge_x, edge_y)
-            if axis_len <= _EPSILON:
+            if axis_len <= GEOMETRY_EPSILON:
                 continue
             axis = (-edge_y / axis_len, edge_x / axis_len)
             min_first, max_first = _project_polygon(first, axis)
             min_second, max_second = _project_polygon(second, axis)
             if touching:
-                separated = max_first < min_second - _EPSILON or max_second < min_first - _EPSILON
+                separated = max_first < min_second - GEOMETRY_EPSILON or max_second < min_first - GEOMETRY_EPSILON
             else:
-                separated = max_first <= min_second + _EPSILON or max_second <= min_first + _EPSILON
+                separated = max_first <= min_second + GEOMETRY_EPSILON or max_second <= min_first + GEOMETRY_EPSILON
             if separated:
                 return False
     return True
@@ -179,17 +180,17 @@ def oriented_boxes_intersect(
     second_left, second_top, second_right, second_bottom = second.aabb
     if touching:
         broad_phase_separate = (
-            first_right < second_left - _EPSILON
-            or second_right < first_left - _EPSILON
-            or first_bottom < second_top - _EPSILON
-            or second_bottom < first_top - _EPSILON
+            first_right < second_left - GEOMETRY_EPSILON
+            or second_right < first_left - GEOMETRY_EPSILON
+            or first_bottom < second_top - GEOMETRY_EPSILON
+            or second_bottom < first_top - GEOMETRY_EPSILON
         )
     else:
         broad_phase_separate = (
-            first_right <= second_left + _EPSILON
-            or second_right <= first_left + _EPSILON
-            or first_bottom <= second_top + _EPSILON
-            or second_bottom <= first_top + _EPSILON
+            first_right <= second_left + GEOMETRY_EPSILON
+            or second_right <= first_left + GEOMETRY_EPSILON
+            or first_bottom <= second_top + GEOMETRY_EPSILON
+            or second_bottom <= first_top + GEOMETRY_EPSILON
         )
     if broad_phase_separate:
         return False
@@ -206,7 +207,7 @@ def point_in_convex_polygon(point: Point, polygon: Sequence[Point], *, touching:
         cross = ((second[0] - first[0]) * (point[1] - first[1])) - (
             (second[1] - first[1]) * (point[0] - first[0])
         )
-        if abs(cross) <= _EPSILON:
+        if abs(cross) <= GEOMETRY_EPSILON:
             if not touching:
                 return False
             continue
@@ -225,18 +226,18 @@ def segments_intersect(
     (cx, cy), (dx, dy) = second
     # Segments whose boxes lie apart (beyond the touch tolerance) neither cross nor touch.
     if (
-        (ax if ax > bx else bx) < (cx if cx < dx else dx) - _EPSILON
-        or (cx if cx > dx else dx) < (ax if ax < bx else bx) - _EPSILON
-        or (ay if ay > by else by) < (cy if cy < dy else dy) - _EPSILON
-        or (cy if cy > dy else dy) < (ay if ay < by else by) - _EPSILON
+        (ax if ax > bx else bx) < (cx if cx < dx else dx) - GEOMETRY_EPSILON
+        or (cx if cx > dx else dx) < (ax if ax < bx else bx) - GEOMETRY_EPSILON
+        or (ay if ay > by else by) < (cy if cy < dy else dy) - GEOMETRY_EPSILON
+        or (cy if cy > dy else dy) < (ay if ay < by else by) - GEOMETRY_EPSILON
     ):
         return False
     o1 = ((bx - ax) * (cy - ay)) - ((by - ay) * (cx - ax))
     o2 = ((bx - ax) * (dy - ay)) - ((by - ay) * (dx - ax))
     o3 = ((dx - cx) * (ay - cy)) - ((dy - cy) * (ax - cx))
     o4 = ((dx - cx) * (by - cy)) - ((dy - cy) * (bx - cx))
-    if ((o1 > _EPSILON and o2 < -_EPSILON) or (o1 < -_EPSILON and o2 > _EPSILON)) and (
-        (o3 > _EPSILON and o4 < -_EPSILON) or (o3 < -_EPSILON and o4 > _EPSILON)
+    if ((o1 > GEOMETRY_EPSILON and o2 < -GEOMETRY_EPSILON) or (o1 < -GEOMETRY_EPSILON and o2 > GEOMETRY_EPSILON)) and (
+        (o3 > GEOMETRY_EPSILON and o4 < -GEOMETRY_EPSILON) or (o3 < -GEOMETRY_EPSILON and o4 > GEOMETRY_EPSILON)
     ):
         return True
     if not touching:
@@ -244,16 +245,16 @@ def segments_intersect(
 
     def on_segment(p: Point, q: Point, r: Point) -> bool:
         return (
-            min(p[0], r[0]) - _EPSILON <= q[0] <= max(p[0], r[0]) + _EPSILON
-            and min(p[1], r[1]) - _EPSILON <= q[1] <= max(p[1], r[1]) + _EPSILON
+            min(p[0], r[0]) - GEOMETRY_EPSILON <= q[0] <= max(p[0], r[0]) + GEOMETRY_EPSILON
+            and min(p[1], r[1]) - GEOMETRY_EPSILON <= q[1] <= max(p[1], r[1]) + GEOMETRY_EPSILON
         )
 
     a, b, c, d = first[0], first[1], second[0], second[1]
     return (
-        (abs(o1) <= _EPSILON and on_segment(a, c, b))
-        or (abs(o2) <= _EPSILON and on_segment(a, d, b))
-        or (abs(o3) <= _EPSILON and on_segment(c, a, d))
-        or (abs(o4) <= _EPSILON and on_segment(c, b, d))
+        (abs(o1) <= GEOMETRY_EPSILON and on_segment(a, c, b))
+        or (abs(o2) <= GEOMETRY_EPSILON and on_segment(a, d, b))
+        or (abs(o3) <= GEOMETRY_EPSILON and on_segment(c, a, d))
+        or (abs(o4) <= GEOMETRY_EPSILON and on_segment(c, b, d))
     )
 
 
@@ -280,6 +281,7 @@ def segment_intersects_polygon(
 
 __all__ = [
     "AabbTuple",
+    "GEOMETRY_EPSILON",
     "OrientedTextBox",
     "Point",
     "TextAnchor",

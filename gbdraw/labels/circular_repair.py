@@ -32,8 +32,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
-from ..layout.spatial import Aabb, touching_aabb_indices
-from ..layout.text_geometry import Point
+from ..layout.spatial import Aabb, aabbs_touch, bounding_aabb, touching_aabb_indices, union_aabbs
 from .circular import (
     FITS,
     HEMISPHERE_AXIS_EPS_PX,
@@ -81,28 +80,20 @@ Side: TypeAlias = Literal["out", "in"]
 DefectKind: TypeAlias = Literal["overlap", "crossing", "definition"]
 Defect: TypeAlias = tuple[DefectKind, int, int]
 Moved: TypeAlias = dict[int, dict]
-# (min_x, min_y, max_x, max_y) of the broad phase.
-Box: TypeAlias = tuple[float, float, float, float]
 
 
 @dataclass(frozen=True)
 class _Geometry:
-    """One label as the counts see it, with the boxes the broad phase compares."""
+    """One label as the counts see it, with the boxes the broad phase compares.
+
+    ``box`` is None without text parts, ``leader_box`` without a leader
+    (:func:`~gbdraw.layout.spatial.aabbs_touch` then reads it as touching).
+    """
 
     shape: LabelShape
-    box: Box
-    leader_box: Box | None
-    reach: Box
-
-
-def _points_box(points: Sequence[Point]) -> Box:
-    xs = [point[0] for point in points]
-    ys = [point[1] for point in points]
-    return (min(xs), min(ys), max(xs), max(ys))
-
-
-def _apart(first: Box, second: Box) -> bool:
-    return first[2] < second[0] or second[2] < first[0] or first[3] < second[1] or second[3] < first[1]
+    box: Aabb | None
+    leader_box: Aabb | None
+    reach: Aabb | None
 
 
 def _angle(x: float, y: float) -> float:
@@ -158,14 +149,12 @@ class _Repair:
         # Pairs that a move within the bounds can bring together.
         tallest = max((float(self.labels[index]["height_px"]) for index in self.external), default=0.0)
         expand = 2.0 * MAX_TEXT_SHIFT_PX + 2.0 * tallest + 4.0
-        reaches = [Aabb(*geometry.reach) for geometry in self.geometry]
+        reaches = [geometry.reach for geometry in self.geometry]
         self.peers: list[list[int]] = [
             [
                 other
                 for other in touching_aabb_indices(
-                    reaches,
-                    Aabb(reach.min_x - expand, reach.min_y - expand, reach.max_x + expand, reach.max_y + expand),
-                    skip=index,
+                    reaches, reach.expanded(expand) if reach is not None else None, skip=index
                 )
                 if self.movable[index] or self.movable[other]
             ]
@@ -179,44 +168,45 @@ class _Repair:
 
     def _geometry_of(self, label: dict) -> _Geometry:
         shape = circular_label_shape(label, self.total_length)
-        box = _points_box([point for part in shape.parts for point in part]) if shape.parts else (0.0, 0.0, 0.0, 0.0)
+        text = [point for part in shape.parts for point in part]
         if not shape.leader:
+            box = bounding_aabb(text)
             return _Geometry(shape, box, None, box)
-        leader_box = _points_box(shape.leader)
-        reach = (
-            min(box[0], leader_box[0]),
-            min(box[1], leader_box[1]),
-            max(box[2], leader_box[2]),
-            max(box[3], leader_box[3]),
-        )
+        box = bounding_aabb(text)
+        leader_box = bounding_aabb(shape.leader)
+        reach = union_aabbs((box, leader_box)) if box is not None and leader_box is not None else None
         return _Geometry(shape, box, leader_box, reach)
+
+    def _text_rect(self, label: dict) -> tuple[tuple[float, float, float, float], Aabb]:
+        rect = _label_bbox_rect(label, self.total_length, 0.0)
+        return rect, Aabb(*rect)
 
     def _refresh(self) -> None:
         """Recompute every engine leader end (they depend on the neighbours) and the geometry."""
 
         assign_leader_start_points([self.labels[index] for index in self.external], self.total_length)
         self.geometry = [self._geometry_of(label) for label in self.labels]
-        self.text_rects = {index: _label_bbox_rect(self.labels[index], self.total_length, 0.0) for index in self.external}
+        self.text_rects = {index: self._text_rect(self.labels[index]) for index in self.external}
         self._local_cache: dict[tuple[int, ...], frozenset[Defect]] = {}
         self._through_cache: dict[tuple[int, ...], int] = {}
 
     # ---- counts (the fit check's predicates) ------------------------------
     def _pair_defects(self, first: int, first_geometry: _Geometry, second: int, second_geometry: _Geometry) -> list[Defect]:
-        if _apart(first_geometry.reach, second_geometry.reach):
+        if not aabbs_touch(first_geometry.reach, second_geometry.reach):
             return []
         low, high = (first, second) if first < second else (second, first)
         found: list[Defect] = []
         if (
             first_geometry.shape.parts
             and second_geometry.shape.parts
-            and not _apart(first_geometry.box, second_geometry.box)
+            and aabbs_touch(first_geometry.box, second_geometry.box)
             and shapes_overlap(first_geometry.shape.parts, second_geometry.shape.parts, touching=True)
         ):
             found.append(("overlap", low, high))
         if (
-            first_geometry.leader_box is not None
-            and second_geometry.leader_box is not None
-            and not _apart(first_geometry.leader_box, second_geometry.leader_box)
+            first_geometry.shape.leader
+            and second_geometry.shape.leader
+            and aabbs_touch(first_geometry.leader_box, second_geometry.leader_box)
             and polylines_cross(first_geometry.shape.leader, second_geometry.shape.leader)
         ):
             found.append(("crossing", low, high))
@@ -256,7 +246,7 @@ class _Repair:
     def _through(self, moved: Moved, geometry: dict[int, _Geometry]) -> int:
         """Leaders drawn through another label's text, for pairs that involve a moved label."""
 
-        rects = {index: _label_bbox_rect(label, self.total_length, 0.0) for index, label in moved.items()}
+        rects = {index: self._text_rect(label) for index, label in moved.items()}
         found: set[tuple[int, int]] = set()
         for index in geometry:
             for other in self.peers[index]:
@@ -265,8 +255,8 @@ class _Repair:
                         continue  # an embedded label's text sits on its feature
                     leader_geometry = geometry.get(leader_of, self.geometry[leader_of])
                     leader = leader_geometry.shape.leader
-                    rect = rects.get(text_of, self.text_rects[text_of])
-                    if leader_geometry.leader_box is None or _apart(leader_geometry.leader_box, rect):
+                    rect, rect_box = rects.get(text_of, self.text_rects[text_of])
+                    if not leader or not aabbs_touch(leader_geometry.leader_box, rect_box):
                         continue
                     if any(
                         _segment_intersects_rect_interior(start, end, rect) for start, end in zip(leader, leader[1:])
@@ -421,11 +411,11 @@ class _Repair:
             following = indices[(at + step * offset) % len(indices)]
             if following in moved:
                 break
-            previous_box = _points_box(_label_fit_box(moved[previous], self.total_length))
+            previous_box = bounding_aabb(_label_fit_box(moved[previous], self.total_length))
 
-            def hits(turn: float, following: int = following, previous_box: Box = previous_box) -> bool:
+            def hits(turn: float, following: int = following, previous_box: Aabb | None = previous_box) -> bool:
                 label = self._arc([following], [turn])[following] if turn else self.labels[following]
-                return not _apart(_points_box(_label_fit_box(label, self.total_length)), previous_box)
+                return aabbs_touch(bounding_aabb(_label_fit_box(label, self.total_length)), previous_box)
 
             if not hits(0.0):
                 break

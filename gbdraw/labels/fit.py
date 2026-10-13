@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
-from ..layout.spatial import Aabb, candidate_aabb_pairs
+from ..layout.spatial import Aabb, bounding_aabb, candidate_aabb_pairs
 from ..layout.text_geometry import Point, convex_polygons_intersect, segments_intersect
 
 LabelKind: TypeAlias = Literal["circular_outer", "circular_inner", "circular_embedded", "linear"]
@@ -113,13 +113,13 @@ class LabelFit:
 FITS = LabelFit(0, 0)
 
 
-def _parts_aabb(parts: Sequence[Polygon]) -> Aabb:
-    return Aabb(
-        min(point[0] for part in parts for point in part),
-        min(point[1] for part in parts for point in part),
-        max(point[0] for part in parts for point in part),
-        max(point[1] for part in parts for point in part),
-    )
+def _extent(points: Sequence[Point]) -> Aabb:
+    """The box of a label's points (``bounding_aabb``); a label always has finite points."""
+
+    box = bounding_aabb(points)
+    if box is None:
+        raise ValueError("a label shape needs finite points")
+    return box
 
 
 def _closed_polygons_overlap(first: Polygon, second: Polygon) -> bool:
@@ -149,8 +149,8 @@ def _closed_polygons_overlap(first: Polygon, second: Polygon) -> bool:
 def _open_polygons_overlap(first: Polygon, second: Polygon) -> bool:
     """The rotated-text test: touching does not count (the radial placement's own rule)."""
 
-    first_box = _parts_aabb((first,))
-    second_box = _parts_aabb((second,))
+    first_box = _extent(first)
+    second_box = _extent(second)
     epsilon = 1e-9
     if (
         first_box.max_x <= second_box.min_x + epsilon
@@ -175,7 +175,7 @@ def overlapping_pairs(
 
     if not shapes:
         return []
-    boxes = [_parts_aabb(parts) for parts in shapes]
+    boxes = [_extent([point for part in parts for point in part]) for parts in shapes]
     extent = max(max(box.width, box.max_y - box.min_y) for box in boxes)
     return [
         (left, right)
@@ -193,15 +193,6 @@ def shapes_overlap(first: Sequence[Polygon], second: Sequence[Polygon], *, touch
     return any(overlap(left, right) for left in first for right in second)
 
 
-def _polyline_aabb(polyline: Polyline) -> Aabb:
-    return Aabb(
-        min(point[0] for point in polyline),
-        min(point[1] for point in polyline),
-        max(point[0] for point in polyline),
-        max(point[1] for point in polyline),
-    )
-
-
 def crossing_pairs(polylines: Sequence[Polyline]) -> list[tuple[int, int]]:
     """Index pairs of polylines that cross (touching does not count); empty polylines never cross."""
 
@@ -209,7 +200,7 @@ def crossing_pairs(polylines: Sequence[Polyline]) -> list[tuple[int, int]]:
     return [
         (indexed[left], indexed[right])
         for left, right in sorted(
-            candidate_aabb_pairs([_polyline_aabb(polylines[index]) for index in indexed], bucket_size=64.0)
+            candidate_aabb_pairs([_extent(polylines[index]) for index in indexed], bucket_size=64.0)
         )
         if polylines_cross(polylines[indexed[left]], polylines[indexed[right]])
     ]
@@ -236,7 +227,7 @@ def covers_definition_text(shape: LabelShape, definition_text: Sequence[Aabb]) -
 
     if not shape.leader or not definition_text:
         return False
-    label_box = _parts_aabb(shape.parts)
+    label_box = _extent([point for part in shape.parts for point in part])
     return any(
         min(label_box.max_x, text_box.max_x) - max(label_box.min_x, text_box.min_x)
         > DEFINITION_TEXT_MIN_OVERLAP_PX

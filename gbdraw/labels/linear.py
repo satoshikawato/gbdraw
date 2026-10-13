@@ -25,6 +25,7 @@ from ..layout.linear import (
 )
 from ..layout.spatial import Aabb, AabbIndex, Interval, IntervalIndex
 from ..layout.text_geometry import (
+    GEOMETRY_EPSILON,
     Point,
     aabb_from_points,
     anchor_x_bounds,
@@ -254,8 +255,6 @@ def _update_linear_label_leader_end(label: dict) -> None:
 
 # Shifts this close to an edge of the overlap range are decided by the polygon test itself.
 _SHIFT_DECISION_MARGIN_PX = 1e-6
-# Separating-axis tolerance of ``convex_polygons_intersect``.
-_SAT_EPSILON = 1e-9
 
 
 class _PlacedLinearLabel(NamedTuple):
@@ -291,8 +290,8 @@ def _vertical_overlap_shift_range(
             min_first, max_first = _project_polygon(first, axis_x, axis_y)
             min_second, max_second = _project_polygon(second, axis_x, axis_y)
             # Overlap on this axis at shift s: shift * axis_y lies strictly inside (below, above).
-            below = min_second + _SAT_EPSILON - max_first
-            above = max_second - _SAT_EPSILON - min_first
+            below = min_second + GEOMETRY_EPSILON - max_first
+            above = max_second - GEOMETRY_EPSILON - min_first
             if abs(axis_y) <= 1e-12:
                 if below > _SHIFT_DECISION_MARGIN_PX or above < -_SHIFT_DECISION_MARGIN_PX:
                     return math.inf, -math.inf
