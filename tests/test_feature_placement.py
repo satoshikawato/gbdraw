@@ -1646,7 +1646,10 @@ def test_final_svg_undefined_uses_negative_geometry_pool(mode, undefined, resolv
     request = _request(record, mode=mode, feature_placements=(_exact(record, 0),),
         config_overrides={"canvas.strandedness": True, "canvas.resolve_overlaps": resolve,
             ("canvas.circular.track_type" if mode == "circular" else "canvas.linear.track_layout"): "middle",
-            f"labels.{mode}.scope": "both" if mode == "circular" else "all"})
+            f"labels.{mode}.scope": "both" if mode == "circular" else "all",
+            # Unresolved, the first two features are drawn on top of each other; labels
+            # outside the features stay apart (overlapping labels stop, LP-D49).
+            "labels.rendering": "external_only"})
     drawing = plan_request(request).build()
     root = ET.fromstring((drawing.drawing if hasattr(drawing, "drawing") else drawing).tostring())
     starts = {}
