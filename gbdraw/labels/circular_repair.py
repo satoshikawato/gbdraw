@@ -20,7 +20,9 @@ Labels keep their side and the order of their features (LP-D50); a text moves
 at most ``MAX_TEXT_SHIFT_PX`` and an elbow ``MAX_ELBOW_SHIFT_PX``. The repaired
 layout is kept only when the record then has no defect at all; otherwise the
 layout stays as it was. The search is bounded by ``MAX_EVALUATIONS`` candidate
-evaluations, so its result does not depend on the machine.
+evaluations, so its result does not depend on the machine, and it stops early
+once the last move's rate (evaluations per cleared defect) cannot clear the
+remaining defects within that budget.
 """
 
 from __future__ import annotations
@@ -515,9 +517,14 @@ class _Repair:
 
     # ---- search ---------------------------------------------------------------
     def run(self) -> bool:
-        """Repair cluster by cluster, smallest first; stop at the first cluster no move improves."""
+        """Repair cluster by cluster, smallest first; stop at the first cluster no move improves.
+
+        The search also stops when, at the rate of its last move, the
+        remaining defects would need more than ``MAX_EVALUATIONS``.
+        """
 
         found = self.defects()
+        last_evaluations = 0
         while found and self.evaluations < MAX_EVALUATIONS:
             cluster = min(_clusters(found), key=lambda members: (len(members), sorted(members)))
             if not any(self.movable[index] for index in cluster):
@@ -553,7 +560,12 @@ class _Repair:
             for index, label in best[1].items():
                 self.labels[index] = label
             self._refresh()
+            cleared = -best[0][0]
             found = self.defects()
+            spent = self.evaluations - last_evaluations
+            last_evaluations = self.evaluations
+            if found and (self.evaluations * cleared + len(found) * spent) > MAX_EVALUATIONS * cleared:
+                return False
         return not found
 
 

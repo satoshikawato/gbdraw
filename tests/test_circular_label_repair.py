@@ -205,6 +205,21 @@ def test_a_repair_that_cannot_clear_every_defect_keeps_the_layout(monkeypatch: p
     assert labels == before
 
 
+def test_a_repair_that_cannot_finish_within_the_budget_stops_early() -> None:
+    """A record whose moves clear defects too slowly to reach 0 within the budget stops at the first such move.
+
+    Tobacco both sides at 14 pt (54 defects) clears one defect per about 1,500
+    evaluations and ends stuck; without the projection it spends 8,895.
+    """
+
+    labels, total_length, definition = _fixture("c_tobacco_both_f14")
+    search = repair_module._Repair(labels, total_length, definition)
+
+    assert not search.run()
+    assert search.evaluations <= 2_000
+    assert repair_circular_labels(labels, total_length, definition_text=definition) is None
+
+
 def test_records_with_more_defects_than_the_cap_are_left_alone(monkeypatch: pytest.MonkeyPatch) -> None:
     labels, total_length, definition = _fixture("o_n4_default")
     monkeypatch.setattr(repair_module, "MAX_DEFECTS", 54)
