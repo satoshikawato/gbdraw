@@ -57,6 +57,8 @@ def test_vector_ids_are_unique_and_a_disagreement_names_its_finding() -> None:
     for vector in VECTORS:
         assert {vector["python"], vector["web"]} <= {"accept", "refuse"}, vector["id"]
         assert (vector["python"] != vector["web"]) == ("difference" in vector), vector["id"]
+        # A refusal names a fragment of its message; without one any error would pass.
+        assert (vector["python"] == "refuse") == bool(vector.get("pythonMessage")), vector["id"]
 
 
 @pytest.mark.parametrize("vector", VECTORS, ids=[vector["id"] for vector in VECTORS])
@@ -68,4 +70,4 @@ def test_python_load_gives_the_vector_verdict(vector: dict[str, Any], tmp_path: 
         return
     with pytest.raises(GbdrawError) as refused:
         load_session(path)
-    assert vector.get("pythonMessage", "") in str(refused.value)
+    assert vector["pythonMessage"] in str(refused.value)
