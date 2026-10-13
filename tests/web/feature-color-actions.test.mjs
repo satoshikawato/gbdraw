@@ -432,6 +432,16 @@ legendEntries.value = [{ caption: 'single feature', color: '#123456', featureIds
 const noOpFillCount = previewFillApplyCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#123456', 'single feature'), false);
 assert.equal(previewFillApplyCount, noOpFillCount);
+// Review L-3 (D-37): the row a name names is found through the Legend owner's
+// key port (the row of that name in the color first), never by reading the
+// name as a key: a row whose key is the name in another color is not it.
+legendEntries.value = [
+  { caption: 'single feature', originalCaption: 'single feature', color: '#ff0000', featureIds: [] },
+  { caption: 'single feature', originalCaption: 'single feature [#123456]', color: '#123456', featureIds: ['f11111111_record_1'] }
+];
+assert.equal(await actions.setFeatureColor(labelFeatureA, '#123456', 'single feature'), false, 'the same color again is no edit');
+assert.equal(previewFillApplyCount, noOpFillCount);
+legendEntries.value = [{ caption: 'single feature', color: '#123456', featureIds: ['f11111111_record_1'] }];
 
 const compoundFillCount = previewFillApplyCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#654321', 'renamed feature'), true);

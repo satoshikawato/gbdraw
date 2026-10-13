@@ -185,12 +185,16 @@ export const createFeatureColorActions = ({
   legendRowIsNamed = (caption, typed) => caption === typed,
   legendRowName = (caption) => /** @type {LegendRowName} */ (String(caption ?? '')),
   legendEntryName = (entry) => legendRowName(entry.caption),
-  // Without a Legend owner (a test of this owner), a row is named by its caption.
-  findLegendRowNamed = (typed) => {
+  // Without a Legend owner (a test of this owner), a row is named by its
+  // caption, the one in `color` first.
+  findLegendRowNamed = (typed, color) => {
     const drawing = state.activeDrawing();
     const named = [...drawing.legendEntries.value, ...drawing.deletedLegendEntries.value]
-      .find((/** @type {LegendEntry} */ entry) => String(entry.caption).toLowerCase() === typed.toLowerCase());
-    return named ? legendEntryKey(named) : null;
+      .filter((/** @type {LegendEntry} */ entry) => String(entry.caption).toLowerCase() === typed.toLowerCase());
+    const wanted = resolveColorToHex(String(color || '')) || String(color || '').trim().toLowerCase();
+    const found = named.find((/** @type {LegendEntry} */ entry) => (
+      (resolveColorToHex(String(entry.color || '')) || String(entry.color || '').trim().toLowerCase()) === wanted)) || named[0];
+    return found ? legendEntryKey(found) : null;
   },
   keepBothNamesOf = ({ name }) => ({ keepBothName: name, targetNameAfter: null, restores: false })
 }) => {
@@ -443,18 +447,25 @@ export const createFeatureColorActions = ({
     })?.[1] || null;
   };
 
-  // The listed row a feature's Legend item names: the row of that key (a
-  // feature's Legend item is its row's key), else, for a typed name, the
-  // first listed row of that name.
-  /** @param {DrawingState} drawing @param {unknown} keyOrName @returns {LegendEntry | null} */
-  const findLegendRow = (drawing, keyOrName) => {
-    const text = normalizeCaption(keyOrName);
+  // The listed row of a key (a feature's Legend item is its row's key).
+  /** @param {DrawingState} drawing @param {unknown} key @returns {LegendEntry | null} */
+  const findLegendRow = (drawing, key) => {
+    const text = normalizeCaption(key);
     if (!text) return null;
     /** @type {LegendEntry[]} */
     const entries = drawing.legendEntries.value;
-    return entries.find((entry) => legendEntryKey(entry) === text)
-      || entries.find((entry) => captionsMatch(entry?.caption, text)) || null;
+    return entries.find((entry) => legendEntryKey(entry) === text) || null;
   };
+  // The listed row a name names, by the key the Legend owner finds for it (its
+  // drawn name, else its name, the row in `color` first; review L-3).
+  /** @param {DrawingState} drawing @param {LegendRowName} name @param {string} color @returns {LegendEntry | null} */
+  const findLegendRowOfName = (drawing, name, color) => findLegendRow(drawing, findLegendRowNamed(String(name), color));
+  // The row of a style scope's Legend name, which is the feature's row (a key)
+  // or a name typed in the popup (`popupLegendCaption`): that row, else the
+  // first row of that name.
+  /** @param {DrawingState} drawing @param {string} legendName @returns {LegendEntry | null} */
+  const findScopeLegendRow = (drawing, legendName) => findLegendRow(drawing, legendName)
+    || findLegendRowOfName(drawing, legendRowName(legendName), '');
   // OV-282 (D-26): the color a listed row shows, the palette's for a row the
   // palette colors; never the color the row recorded at the last Generate.
   // Without a row, nothing is derived (review L4).
@@ -471,7 +482,7 @@ export const createFeatureColorActions = ({
       };
     }
 
-    const legendEntry = findLegendRow(drawing, caption);
+    const legendEntry = findScopeLegendRow(drawing, caption);
     const legendColor = listedRowColor(drawing, legendEntry);
     if (legendEntry && legendColor) {
       return {
@@ -654,7 +665,7 @@ export const createFeatureColorActions = ({
     }
     if (!liveFeatureColorMatches(feature, color)) return false;
     if (!requireLegend) return true;
-    const legendEntry = findLegendRow(drawing, caption);
+    const legendEntry = findLegendRowOfName(drawing, /** @type {LegendRowName} */ (caption), color);
     return Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), color));
   };
 
@@ -1160,7 +1171,7 @@ export const createFeatureColorActions = ({
    */
   const applyColorToFeatureGroup = async (drawing, features, caption, color, options = {}) => {
     if (!features?.length || !normalizeCaption(caption)) return false;
-    const existingEntry = findLegendRow(drawing, caption);
+    const existingEntry = findLegendRowOfName(drawing, caption, color);
     const contributors = getFeaturesForLegendCaption(caption);
     const captionOf = effectiveLegendCaptions();
     const selectedIds = new Set(features.map(feature => feature.svg_id));
@@ -1740,7 +1751,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {string} caption @param {string} strokeColor @param {unknown} strokeWidth */
   const applyStrokeToLegendEntry = (drawing, caption, strokeColor, strokeWidth) => {
-    const targetLegendEntry = findLegendRow(drawing, caption);
+    const targetLegendEntry = findScopeLegendRow(drawing, caption);
     const svg = getCurrentSvg();
     if (!targetLegendEntry || !svg) return false;
 

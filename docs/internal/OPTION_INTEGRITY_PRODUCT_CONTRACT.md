@@ -957,14 +957,13 @@ Status: active Product authority
   - Reply 3, to the question
     「P-8（Session の版）: 推奨は、この PR で version 47 にすることです。ただし、複数 drawing の決定（PD-OI-090）の文面が「47」を予定しているので、そちらを 48 に読み替える必要があります。」
     「P-8（Session の版）: 推奨通り」
-    Session version `47` is written by this change. `PD-OI-090` keeps its
-    text; the change that implements `PD-OI-090` revises the Session version
-    numbers its receipt names.
+    Session version `47` is written by this change.
   - Reply 4, to the question
     「P-9（同じ色の行で Keep both を選んだとき）: 推奨は、「同名同色は 1 行」の規則どおり 1 行にまとめることです。保留中の P-5 も同じ扱いになります。」
     「P-9：推奨通り」
-    P-5 was the question of a Legend color edit in the Web app that gives two
-    rows of one name the same swatch.
+    P-5 is the item of that name in the change's decision record
+    (`pharokka-legend-merge-20261013/DECISIONS.md`); this entry does not
+    restate it.
   - Reply 5, to the question
     「P-10（feature を 1 つだけ切り出して Keep both にしたときの新しい行の位置）: 推奨は、同じ名前の行のすぐ後ろに置くことです。こうすると、ダイアログに出る (2) が凡例の表示と一致します。」
     「P-10:　推奨通り」
