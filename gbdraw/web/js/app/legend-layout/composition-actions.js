@@ -5,7 +5,7 @@ import {
   replaceLeadingTranslate
 } from '../../services/svg-transform.js';
 import { planLegendComposition } from '../../services/legend-layout.js';
-import { legendPositionOrDefault } from '../../services/layout-preferences.js';
+import { legendPositionOfMode, legendPositionOrDefault } from '../../services/layout-preferences.js';
 import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
 /** @import { LayoutBox, CompositionSpacingPx, CompositionOverlayPolicy } from '../../services/legend-layout.js' */
 
@@ -562,7 +562,7 @@ export const storedLegendSideIsOfMode = (rootTag, mode) => {
     /** @type {unknown} */
     const source = JSON.parse(decodeAttributeText(value));
     return isPlainObject(source) && typeof source.legendSide === 'string'
-      && LEGEND_POSITIONS[mode].includes(source.legendSide);
+      && legendPositionOfMode(source.legendSide, mode) === source.legendSide;
   } catch {
     return false;
   }

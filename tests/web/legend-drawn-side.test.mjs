@@ -69,9 +69,13 @@ const load = async (session) => {
 };
 
 // A valid, a cased and spaced, an empty, and an outside value in each mode.
+// A value that is not text is outside too; one the old `||` chain skipped
+// (null, false) is no stored side.
 const CASES = {
-  linear: [['top', 'top'], [' Top ', 'top'], ['', 'none'], ['upper_left', 'bottom'], ['banana', 'bottom']],
-  circular: [['upper_left', 'upper_left'], [' Upper_Left ', 'upper_left'], ['', 'none'], ['banana', 'left']]
+  linear: [['top', 'top'], [' Top ', 'top'], ['', 'none'], ['upper_left', 'bottom'], ['banana', 'bottom'],
+    [5, 'bottom'], [false, 'none']],
+  circular: [['upper_left', 'upper_left'], [' Upper_Left ', 'upper_left'], ['', 'none'], ['banana', 'left'],
+    [true, 'left'], [null, 'none']]
 };
 // Sessions 27 to 30: no stored request, a Result without composition metadata.
 const LEGACY = {
