@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import gbdraw.labels.circular_fit as circular_fit_module
+import gbdraw.labels.circular_repair as circular_repair_module
 from gbdraw.circular import circular_main
 from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
 
@@ -54,9 +55,10 @@ def test_radial_labels_that_collide_after_the_growth_stops_are_not_drawn(tmp_pat
 
 
 @pytest.mark.circular
-def test_inner_labels_over_the_definition_text_draw_and_warn(tmp_path: Path) -> None:
-    """DEF-WARN (OV-696): lambda at 9 pt prints two inner labels over its definition text."""
+def test_inner_labels_over_the_definition_text_draw_and_warn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """DEF-WARN (OV-696): lambda at 9 pt prints two inner labels over its definition text (with the repair off)."""
 
+    monkeypatch.setattr(circular_repair_module, "MAX_DEFECTS", 0)
     with pytest.warns(LabelLeadersCrossWarning) as caught:
         svg = _draw(tmp_path, _both_args("NC_001416.gb", "--label_font_size", "9"))
 
@@ -102,7 +104,7 @@ def test_overlapping_inner_labels_are_not_drawn(tmp_path: Path, monkeypatch: pyt
 @pytest.mark.circular
 @pytest.mark.slow
 def test_inner_font_row_is_the_largest_font_that_fits(tmp_path: Path) -> None:
-    """INNER-3: P1 at 14 pt fits at 12 pt, not at 11 pt, and at 10 pt again; the row offers 12 pt."""
+    """INNER-3: P1 at 14 pt; with the local repair (LP-D57) the largest font that fits is 12.5 pt (12 pt without it)."""
 
     with pytest.raises(LabelsDoNotFitError) as raised:
         _draw(tmp_path, _both_args("NC_005856.1.gb", "--label_font_size", "14"))
@@ -114,7 +116,7 @@ def test_inner_font_row_is_the_largest_font_that_fits(tmp_path: Path) -> None:
         assert search is not None
         font = search.row("smaller_font")
     assert font.status == "found"
-    assert font.values == {path: 12.0 for path in FONT_SIZE_PATHS}
+    assert font.values == {path: 12.5 for path in FONT_SIZE_PATHS}
 
 
 @pytest.mark.circular

@@ -18,6 +18,7 @@ from gbdraw.api.diagram import label_fit_row
 from gbdraw.circular import circular_main
 from gbdraw.config.models import GbdrawConfig
 import gbdraw.labels.circular_fit as circular_fit_module
+import gbdraw.labels.circular_repair as circular_repair_module
 from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
 from gbdraw.labels.linear import check_linear_label_fit, linear_label_fit
 from gbdraw.layout.spatial import Aabb
@@ -674,10 +675,11 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """LP-D46 CROSS-WARN: lambda at 14 pt has 2 crossing leader pairs and no overlaps."""
+    """LP-D46 CROSS-WARN: lambda at 14 pt has 2 crossing leader pairs and no overlaps (with the repair off)."""
 
     from gbdraw import cli
 
+    monkeypatch.setattr(circular_repair_module, "MAX_DEFECTS", 0)
     output = tmp_path / "lambda"
     monkeypatch.setattr(
         sys, "argv", ["gbdraw", "circular", *LAMBDA_ARGS, "-o", str(output), "-f", "svg"]
@@ -694,14 +696,18 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
 
 
 @pytest.mark.circular
-def test_drawing_with_crossing_leaders_carries_the_report_and_computes_rows() -> None:
-    """The Web reads the report from the success result and asks for one row at a time."""
+def test_drawing_with_crossing_leaders_carries_the_report_and_computes_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Web reads the report from the success result and asks for one row at a time.
+
+    The local repair (LP-D57) clears lambda's 2 crossings; it is off here, as for crossings it cannot clear.
+    """
 
     from gbdraw.api.diagram import build_circular_diagram, label_fit_report, label_fit_row
     from gbdraw.api.options import CircularDiagramOptions
     from gbdraw.config.modify import with_config_overrides
     from gbdraw.config.toml import load_config_toml
 
+    monkeypatch.setattr(circular_repair_module, "MAX_DEFECTS", 0)
     cfg = with_config_overrides(
         GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
         {

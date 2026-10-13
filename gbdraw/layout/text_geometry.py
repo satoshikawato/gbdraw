@@ -221,11 +221,26 @@ def segments_intersect(
     touching: bool = True,
 ) -> bool:
     """Return whether two closed segments intersect."""
-    a, b = first
-    c, d = second
-
-    def orientation(p: Point, q: Point, r: Point) -> float:
-        return ((q[0] - p[0]) * (r[1] - p[1])) - ((q[1] - p[1]) * (r[0] - p[0]))
+    (ax, ay), (bx, by) = first
+    (cx, cy), (dx, dy) = second
+    # Segments whose boxes lie apart (beyond the touch tolerance) neither cross nor touch.
+    if (
+        (ax if ax > bx else bx) < (cx if cx < dx else dx) - _EPSILON
+        or (cx if cx > dx else dx) < (ax if ax < bx else bx) - _EPSILON
+        or (ay if ay > by else by) < (cy if cy < dy else dy) - _EPSILON
+        or (cy if cy > dy else dy) < (ay if ay < by else by) - _EPSILON
+    ):
+        return False
+    o1 = ((bx - ax) * (cy - ay)) - ((by - ay) * (cx - ax))
+    o2 = ((bx - ax) * (dy - ay)) - ((by - ay) * (dx - ax))
+    o3 = ((dx - cx) * (ay - cy)) - ((dy - cy) * (ax - cx))
+    o4 = ((dx - cx) * (by - cy)) - ((dy - cy) * (bx - cx))
+    if ((o1 > _EPSILON and o2 < -_EPSILON) or (o1 < -_EPSILON and o2 > _EPSILON)) and (
+        (o3 > _EPSILON and o4 < -_EPSILON) or (o3 < -_EPSILON and o4 > _EPSILON)
+    ):
+        return True
+    if not touching:
+        return False
 
     def on_segment(p: Point, q: Point, r: Point) -> bool:
         return (
@@ -233,17 +248,7 @@ def segments_intersect(
             and min(p[1], r[1]) - _EPSILON <= q[1] <= max(p[1], r[1]) + _EPSILON
         )
 
-    o1 = orientation(a, b, c)
-    o2 = orientation(a, b, d)
-    o3 = orientation(c, d, a)
-    o4 = orientation(c, d, b)
-    proper = ((o1 > _EPSILON and o2 < -_EPSILON) or (o1 < -_EPSILON and o2 > _EPSILON)) and (
-        (o3 > _EPSILON and o4 < -_EPSILON) or (o3 < -_EPSILON and o4 > _EPSILON)
-    )
-    if proper:
-        return True
-    if not touching:
-        return False
+    a, b, c, d = first[0], first[1], second[0], second[1]
     return (
         (abs(o1) <= _EPSILON and on_segment(a, c, b))
         or (abs(o2) <= _EPSILON and on_segment(a, d, b))

@@ -177,14 +177,20 @@ def overlapping_pairs(
         return []
     boxes = [_parts_aabb(parts) for parts in shapes]
     extent = max(max(box.width, box.max_y - box.min_y) for box in boxes)
-    overlap = _closed_polygons_overlap if touching else _open_polygons_overlap
     return [
         (left, right)
         for left, right in sorted(
             candidate_aabb_pairs(boxes, bucket_size=max(16.0, min(256.0, extent)))
         )
-        if any(overlap(first, second) for first in shapes[left] for second in shapes[right])
+        if shapes_overlap(shapes[left], shapes[right], touching=touching)
     ]
+
+
+def shapes_overlap(first: Sequence[Polygon], second: Sequence[Polygon], *, touching: bool) -> bool:
+    """Whether two shapes (each a union of convex parts) overlap; ``touching`` as in :func:`overlapping_pairs`."""
+
+    overlap = _closed_polygons_overlap if touching else _open_polygons_overlap
+    return any(overlap(left, right) for left in first for right in second)
 
 
 def _polyline_aabb(polyline: Polyline) -> Aabb:
@@ -200,18 +206,23 @@ def crossing_pairs(polylines: Sequence[Polyline]) -> list[tuple[int, int]]:
     """Index pairs of polylines that cross (touching does not count); empty polylines never cross."""
 
     indexed = [index for index, polyline in enumerate(polylines) if len(polyline) >= 2]
-    segments = [list(zip(polylines[index], polylines[index][1:])) for index in indexed]
-    pairs: list[tuple[int, int]] = []
-    for left, right in sorted(
-        candidate_aabb_pairs([_polyline_aabb(polylines[index]) for index in indexed], bucket_size=64.0)
-    ):
-        if any(
-            segments_intersect(first, second, touching=False)
-            for first in segments[left]
-            for second in segments[right]
-        ):
-            pairs.append((indexed[left], indexed[right]))
-    return pairs
+    return [
+        (indexed[left], indexed[right])
+        for left, right in sorted(
+            candidate_aabb_pairs([_polyline_aabb(polylines[index]) for index in indexed], bucket_size=64.0)
+        )
+        if polylines_cross(polylines[indexed[left]], polylines[indexed[right]])
+    ]
+
+
+def polylines_cross(first: Polyline, second: Polyline) -> bool:
+    """Whether two polylines cross (touching does not count)."""
+
+    return any(
+        segments_intersect(left, right, touching=False)
+        for left in zip(first, first[1:])
+        for right in zip(second, second[1:])
+    )
 
 
 def polyline_crossing_count(polylines: Sequence[Polyline]) -> int:
@@ -220,13 +231,18 @@ def polyline_crossing_count(polylines: Sequence[Polyline]) -> int:
     return len(crossing_pairs(polylines))
 
 
-def _covers_text(parts: Sequence[Polygon], text_box: Aabb) -> bool:
-    label_box = _parts_aabb(parts)
-    return (
+def covers_definition_text(shape: LabelShape, definition_text: Sequence[Aabb]) -> bool:
+    """Whether a label with a leader covers a line of the definition text (embedded labels never do)."""
+
+    if not shape.leader or not definition_text:
+        return False
+    label_box = _parts_aabb(shape.parts)
+    return any(
         min(label_box.max_x, text_box.max_x) - max(label_box.min_x, text_box.min_x)
         > DEFINITION_TEXT_MIN_OVERLAP_PX
         and min(label_box.max_y, text_box.max_y) - max(label_box.min_y, text_box.min_y)
         > DEFINITION_TEXT_MIN_OVERLAP_PX
+        for text_box in definition_text
     )
 
 
@@ -256,10 +272,9 @@ def label_fits_by_kind(
         counts[owner(left, right)][0] += 1
     for left, right in crossing_pairs([shape.leader for shape in shapes]):
         counts[owner(left, right)][1] += 1
-    if definition_text:
-        for shape in shapes:
-            if shape.leader and any(_covers_text(shape.parts, box) for box in definition_text):
-                counts[shape.kind][2] += 1
+    for shape in shapes:
+        if covers_definition_text(shape, definition_text):
+            counts[shape.kind][2] += 1
     return {
         kind: LabelFit(overlaps, crossings, covered)
         for kind, (overlaps, crossings, covered) in counts.items()
@@ -614,6 +629,7 @@ __all__ = [
     "LabelShape",
     "Polygon",
     "Polyline",
+    "covers_definition_text",
     "crossing_pairs",
     "fit_counts",
     "format_label_fit_report",
@@ -623,8 +639,10 @@ __all__ = [
     "label_kind_words",
     "overlapping_pairs",
     "polyline_crossing_count",
+    "polylines_cross",
     "raise_or_warn",
     "row_note",
+    "shapes_overlap",
     "switch_row",
     "verified_row",
 ]

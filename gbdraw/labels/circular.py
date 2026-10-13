@@ -14,7 +14,7 @@ from typing import Literal, TypeAlias, cast
 from ..features.coordinates import get_strand
 from .filtering import preprocess_label_filtering
 from .circular_candidates import build_circular_label_candidates
-from .circular_leaders import leader_polyline
+from .circular_leaders import chosen_contact_end, leader_polyline
 from .circular_radial import place_radial_labels
 from .fit import FITS, LabelFit, LabelKind, LabelShape, Polygon, label_fits_by_kind
 from ..config.models import (
@@ -293,16 +293,18 @@ def circular_label_shapes(labels: Sequence[dict], total_length: int) -> list[Lab
     carry the leader the label drawer draws.
     """
 
-    shapes: list[LabelShape] = []
-    for label in labels:
-        if label.get("is_embedded"):
-            shapes.append(LabelShape("circular_embedded", _embedded_label_parts(label, total_length)))
-            continue
-        corners = label.get("oriented_corners")
-        parts = (tuple(corners),) if corners else (_label_fit_box(label, total_length),)
-        kind: LabelKind = "circular_inner" if label.get("is_inner") else "circular_outer"
-        shapes.append(LabelShape(kind, parts, leader_polyline(label)))
-    return [shape for shape in shapes if shape.parts]
+    return [shape for shape in (circular_label_shape(label, total_length) for label in labels) if shape.parts]
+
+
+def circular_label_shape(label: dict, total_length: int) -> LabelShape:
+    """One drawn label as the fit count sees it (no parts: an embedded label too small to draw)."""
+
+    if label.get("is_embedded"):
+        return LabelShape("circular_embedded", _embedded_label_parts(label, total_length))
+    corners = label.get("oriented_corners")
+    parts = (tuple(corners),) if corners else (_label_fit_box(label, total_length),)
+    kind: LabelKind = "circular_inner" if label.get("is_inner") else "circular_outer"
+    return LabelShape(kind, parts, leader_polyline(label))
 
 
 def circular_label_fits(
@@ -720,13 +722,21 @@ def _optimize_top_bottom_leader_start_points(labels: list[dict], total_length: i
 
 
 def _assign_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
-    """Populate `leader_start_x/y` used for drawing the first leader segment."""
+    """Populate `leader_start_x/y` used for drawing the first leader segment.
+
+    A contact the local repair chose stays (LP-D52), and its label leaves the edge-group refinement.
+    """
+    engine_labels: list[dict] = []
     for label in labels:
-        leader_x, leader_y = _leader_start_point(label, total_length)
+        chosen = chosen_contact_end(label, total_length)
+        leader_x, leader_y = chosen if chosen is not None else _leader_start_point(label, total_length)
         label["leader_start_x"] = leader_x
         label["leader_start_y"] = leader_y
-    labels = _refine_leader_start_points(labels, total_length)
-    return _optimize_top_bottom_leader_start_points(labels, total_length)
+        if chosen is None:
+            engine_labels.append(label)
+    _refine_leader_start_points(engine_labels, total_length)
+    _optimize_top_bottom_leader_start_points(engine_labels, total_length)
+    return labels
 
 
 def assign_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
@@ -4916,12 +4926,15 @@ def prepare_label_list(
     _candidate_cache: dict[str, object] | None = None,
     record_transform: RecordDisplayTransform | None = None,
     probe: bool = False,
+    definition_text: Sequence[Aabb] = (),
 ):
     """Return the record's drawn label list: embedded labels, then external labels.
 
     With ``probe`` (a fit search), horizontal placement raises
     :class:`CircularLabelProbeStopped` as soon as the dense outer candidate
-    overlaps, because such a layout does not fit.
+    overlaps, because such a layout does not fit. Otherwise slight defects of
+    the final horizontal layout are repaired locally (LP-D57); ``definition_text``
+    is the centre definition's lines, in the labels' coordinates.
     """
     cfg = profile.config
     embedded_labels = []
@@ -5484,23 +5497,31 @@ def prepare_label_list(
         len(outer_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD
         and max(label_spacing_px, LEGACY_MIN_ROW_GAP_PX) > LEGACY_MIN_ROW_GAP_PX
     ):
-        return embedded_labels + place_external_labels("legacy")
-    # A probe asks only whether either layout fits. It tries today's layout first
-    # and stops when its dense rows overlap: wider spaced rows overlap as well.
-    attempts: tuple[DenseOuterRows, ...] = ("legacy", "spaced") if probe else ("spaced", "legacy")
-    legacy_labels: list[dict] = []
-    for dense_outer_rows in attempts:
-        try:
-            attempt_labels = place_external_labels(dense_outer_rows)
-        except CircularLabelProbeStopped:
+        final_labels = embedded_labels + place_external_labels("legacy")
+    else:
+        # A probe asks only whether either layout fits. It tries today's layout first
+        # and stops when its dense rows overlap: wider spaced rows overlap as well.
+        attempts: tuple[DenseOuterRows, ...] = ("legacy", "spaced") if probe else ("spaced", "legacy")
+        final_labels = []
+        for dense_outer_rows in attempts:
+            try:
+                attempt_labels = place_external_labels(dense_outer_rows)
+            except CircularLabelProbeStopped:
+                if dense_outer_rows == "legacy":
+                    raise
+                continue
+            if circular_label_fits(attempt_labels, total_length).get("circular_outer", FITS).fits:
+                final_labels = embedded_labels + attempt_labels
+                break
             if dense_outer_rows == "legacy":
-                raise
-            continue
-        if circular_label_fits(attempt_labels, total_length).get("circular_outer", FITS).fits:
-            return embedded_labels + attempt_labels
-        if dense_outer_rows == "legacy":
-            legacy_labels = attempt_labels
-    return embedded_labels + legacy_labels
+                final_labels = embedded_labels + attempt_labels
+    if probe:
+        return final_labels
+    # LP-D57: repair slight defects of the final layout (Q7: not in probes; Q2: not the spaced attempt).
+    from .circular_repair import repair_circular_labels
+
+    repaired = repair_circular_labels(final_labels, total_length, definition_text=definition_text)
+    return final_labels if repaired is None else repaired
 
 
 __all__ = [
@@ -5508,6 +5529,7 @@ __all__ = [
     "CircularLabelProbeStopped",
     "calculate_angle_degrees",
     "circular_label_fits",
+    "circular_label_shape",
     "circular_label_shapes",
     "circular_label_font_size",
     "calculate_angle_for_y",

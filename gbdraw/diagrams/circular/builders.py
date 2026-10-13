@@ -271,7 +271,6 @@ def add_record_definition_group_on_canvas(
     )
     definition_group: Group = definition_builder.get_group()
     setattr(definition_group, "_gbdraw_local_bounds", definition_builder.local_bounds)
-    setattr(definition_group, "_gbdraw_line_bounds", definition_builder.line_bounds)
     definition_group = place_definition_group_on_canvas(
         definition_group,
         canvas_config,

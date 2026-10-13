@@ -2009,19 +2009,17 @@ def _record_label_layout(
     )
 
 
-def _definition_text_boxes(
-    definition_target: Group | None,
-    canvas_config: CircularCanvasConfigurator,
-) -> tuple[Aabb, ...]:
-    """The centre definition's text lines in the coordinates of the record's labels."""
+def _centre_definition_text(definition: DefinitionGroup) -> tuple[Aabb, ...]:
+    """The painted lines of a centred definition in the coordinates of the record's labels.
 
-    line_bounds = getattr(definition_target, "_gbdraw_line_bounds", ())
-    translation = getattr(definition_target, "_gbdraw_plot_translation", None)
-    if not line_bounds or translation is None:
-        return ()
-    dx = float(translation[0]) - float(canvas_config.offset_x)
-    dy = float(translation[1]) - float(canvas_config.offset_y)
-    return tuple(box.translated(dx, dy) for box in line_bounds)
+    ``place_definition_group_on_canvas`` centres the lines' union on the
+    record's centre, the origin of the label coordinates.
+    """
+
+    bounds = definition.local_bounds
+    dx = -0.5 * (bounds.min_x + bounds.max_x)
+    dy = -0.5 * (bounds.min_y + bounds.max_y)
+    return tuple(box.translated(dx, dy) for box in definition.line_bounds)
 
 
 def add_record_on_circular_canvas(
@@ -2308,6 +2306,28 @@ def add_record_on_circular_canvas(
     precalculated_labels: list[dict[str, Any]] | None = None
     # Text measurements per label font size, shared by the drawn placement and fit probes.
     label_candidate_caches: dict[float, dict[str, object]] = {}
+    # LP-D49 DEF-WARN and the LP-D57 repair: labels over the centre definition text (not a plot title).
+    definition_text: tuple[Aabb, ...] = (
+        _centre_definition_text(
+            DefinitionGroup(
+                gb_record,
+                canvas_config,
+                cfg=canvas_config.profile.config,
+                species=species,
+                strain=strain,
+                plot_title=plot_title,
+                definition_profile=definition_profile,
+                record_index=int(annotation_record_index),
+                record_count=int(definition_record_count),
+                record_transform=record_transform,
+                species_line_count=species_line_count,
+            )
+        )
+        if show_external_labels
+        and str(definition_position) == "center"
+        and str(definition_profile) != "shared_common"
+        else ()
+    )
 
     def place_labels(label_profile: CircularRenderProfile, *, probe: bool = False) -> list[dict[str, Any]]:
         """Place this record's labels with the current geometry (read at call time)."""
@@ -2337,6 +2357,7 @@ def add_record_on_circular_canvas(
             _candidate_cache=label_candidate_caches.setdefault(font_size, {}),
             record_transform=record_transform,
             probe=probe,
+            definition_text=definition_text,
         )
 
     # Radial labels that collide once the canvas stops growing are refused (OV-694, RADIAL-JOIN).
@@ -2685,12 +2706,7 @@ def add_record_on_circular_canvas(
         profile,
         precalculated_labels or [],
         place_labels,
-        # LP-D49 DEF-WARN: labels over the centre definition text (not a plot title).
-        definition_text=(
-            _definition_text_boxes(definition_target, canvas_config)
-            if str(definition_position) == "center" and str(definition_profile) != "shared_common"
-            else ()
-        ),
+        definition_text=definition_text,
         radial_refused=radial_refused,
     )
     source_content_bounds = _collect_circular_primary_bounds(
