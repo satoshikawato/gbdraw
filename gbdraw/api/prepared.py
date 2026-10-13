@@ -59,6 +59,28 @@ class _PreparedCacheEntry:
     owner_stamp: Hashable
     structure_stamp: Hashable
     retained_bytes: int
+    # Render stages only: the keys of the stages its build called, kept when
+    # this entry is reused (design 2.3, M10).
+    inner_keys: frozenset[Hashable] = frozenset()
+
+
+# The fifth layer holds render-stage results (gbdraw.render_stages). Its stamp
+# is a constant: the layer decides that, not the shape of the value.
+_RENDER_STAGE_LAYER = "render_stage"
+_RENDER_STAGE_STAMP = ("render-stage",)
+_LAYERS = ("decoded", "parsed", "resolved", "interactive", _RENDER_STAGE_LAYER)
+
+
+class _NoIdentity:
+    """Marks a value that must not be keyed: an unstored render-stage result."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "NO_IDENTITY"
+
+
+NO_IDENTITY = _NoIdentity()
 
 
 @dataclass
@@ -68,32 +90,19 @@ class _PreparedCacheTransaction:
     active_identities: frozenset[PreparedResourceIdentity]
     diagnostics: MutableMapping[str, Any] | None
     pending: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = field(
-        default_factory=lambda: {
-            "decoded": OrderedDict(),
-            "parsed": OrderedDict(),
-            "resolved": OrderedDict(),
-            "interactive": OrderedDict(),
-        }
+        default_factory=lambda: {layer: OrderedDict() for layer in _LAYERS}
     )
     used: dict[str, set[Hashable]] = field(
-        default_factory=lambda: {
-            "decoded": set(),
-            "parsed": set(),
-            "resolved": set(),
-            "interactive": set(),
-        }
+        default_factory=lambda: {layer: set() for layer in _LAYERS}
     )
     accessed: dict[str, dict[Hashable, Any]] = field(
-        default_factory=lambda: {
-            "decoded": {},
-            "parsed": {},
-            "resolved": {},
-            "interactive": {},
-        }
+        default_factory=lambda: {layer: {} for layer in _LAYERS}
     )
-    decoded_resource_values: dict[int, tuple[Any, PreparedResourceIdentity]] = field(
-        default_factory=dict
-    )
+    # One table maps a value to its identity for this transaction: a decoded
+    # resource to its PreparedResourceIdentity, a resolved record to its
+    # per-record identity, a render-stage result or a direct field of one to
+    # the stage key (NO_IDENTITY when the result was not stored).
+    value_identities: dict[int, tuple[Any, Hashable]] = field(default_factory=dict)
     resolved_record_membership: dict[int, tuple[Hashable, int]] = field(
         default_factory=dict
     )
@@ -120,6 +129,10 @@ _CACHE_METRICS = (
     "preparedInputCacheEvictionCount",
     "preparedInputCacheRetainedBytes",
     "preparedInputCacheMutationViolationCount",
+    "renderStageHitCount",
+    "renderStageBuildCount",
+    "renderStageUncacheableCount",
+    "renderStageUndeclaredReadCount",
 )
 
 _LAYER_METRICS = {
@@ -189,26 +202,45 @@ def prepared_resource_identity(
     return None
 
 
+def register_prepared_value_identity(value: object, identity: Hashable) -> None:
+    """Record the identity of one value for the active transaction.
+
+    The first registration of a value wins, so a decoded resource keeps its
+    resource identity when a render stage returns it unchanged.
+    """
+
+    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
+    if transaction is None or value is None:
+        return
+    transaction.value_identities.setdefault(id(value), (value, identity))
+
+
+def prepared_value_identity(value: object) -> Hashable | None:
+    """Return the identity registered for ``value`` in the active transaction."""
+
+    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
+    if transaction is None or value is None:
+        return None
+    registered = transaction.value_identities.get(id(value))
+    if registered is None or registered[0] is not value:
+        return None
+    return registered[1]
+
+
 def register_prepared_resource_value(value: Any, source: str | Path) -> Any:
     """Associate one decoded value with the resource that supplied it."""
 
-    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
     identity = prepared_resource_identity(source)
-    if transaction is not None and identity is not None and value is not None:
-        transaction.decoded_resource_values[id(value)] = (value, identity)
+    if identity is not None:
+        register_prepared_value_identity(value, identity)
     return value
 
 
 def prepared_resource_value_identity(value: Any) -> PreparedResourceIdentity | None:
     """Return the compact resource identity registered for a decoded value."""
 
-    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
-    if transaction is None or value is None:
-        return None
-    registered = transaction.decoded_resource_values.get(id(value))
-    if registered is None or registered[0] is not value:
-        return None
-    return registered[1]
+    identity = prepared_value_identity(value)
+    return identity if isinstance(identity, PreparedResourceIdentity) else None
 
 
 def _shallow_value_stamp(value: Any) -> Hashable:
@@ -299,6 +331,12 @@ def _records_from_value(value: Any) -> tuple[SeqRecord, ...] | None:
     ):
         return records
     return None
+
+
+def _layer_stamp(layer: str, value: Any, *, walk_features: bool) -> Hashable:
+    if layer == _RENDER_STAGE_LAYER:
+        return _RENDER_STAGE_STAMP
+    return _owner_stamp(value, walk_features=walk_features)
 
 
 def _owner_stamp(value: Any, *, walk_features: bool) -> Hashable:
@@ -525,10 +563,7 @@ class PreparedBiologicalInputCache:
 
     def __init__(self) -> None:
         self._layers: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = {
-            "decoded": OrderedDict(),
-            "parsed": OrderedDict(),
-            "resolved": OrderedDict(),
-            "interactive": OrderedDict(),
+            layer: OrderedDict() for layer in _LAYERS
         }
         # A transaction that did not commit may have changed what it read, so
         # the next one checks owners in full at entry, not only at commit.
@@ -642,7 +677,7 @@ class PreparedBiologicalInputCache:
         walk_features: bool,
     ) -> None:
         expected = entry.owner_stamp if walk_features else entry.structure_stamp
-        current_stamp = _owner_stamp(entry.value, walk_features=walk_features)
+        current_stamp = _layer_stamp(layer, entry.value, walk_features=walk_features)
         if current_stamp == expected:
             return
         _record_metric(
@@ -696,6 +731,40 @@ class PreparedBiologicalInputCache:
         transaction.used[layer].add(key)
         return value
 
+    def lookup_render_stage(
+        self,
+        key: Hashable,
+        transaction: _PreparedCacheTransaction,
+    ) -> _PreparedCacheEntry | None:
+        """Return a stored render-stage entry and mark it and its inner stages used."""
+
+        entry = self._entry(_RENDER_STAGE_LAYER, key, transaction)
+        if entry is None:
+            return None
+        used = transaction.used[_RENDER_STAGE_LAYER]
+        used.add(key)
+        used.update(entry.inner_keys)
+        return entry
+
+    def store_render_stage(
+        self,
+        key: Hashable,
+        value: object,
+        inner_keys: frozenset[Hashable],
+        transaction: _PreparedCacheTransaction,
+    ) -> None:
+        """Stage one render-stage result; it is published if the render succeeds."""
+
+        transaction.pending[_RENDER_STAGE_LAYER][key] = _PreparedCacheEntry(
+            value=value,
+            resource_identities=_key_resource_identities(key),
+            owner_stamp=_RENDER_STAGE_STAMP,
+            structure_stamp=_RENDER_STAGE_STAMP,
+            retained_bytes=0,
+            inner_keys=inner_keys,
+        )
+        transaction.used[_RENDER_STAGE_LAYER].add(key)
+
     def register_resolved_records(self, key: Hashable, value: Any) -> None:
         transaction = _ACTIVE_PREPARED_TRANSACTION.get()
         records = _records_from_value(value)
@@ -733,6 +802,46 @@ class PreparedBiologicalInputCache:
                 )
             self._layers[layer] = replacement
         self._set_retained_metric(transaction)
+
+
+def _key_resource_identities(key: Hashable) -> frozenset[PreparedResourceIdentity]:
+    """Collect the resource identities a key names, so their removal evicts it."""
+
+    identities: set[PreparedResourceIdentity] = set()
+    pending: list[object] = [key]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, PreparedResourceIdentity):
+            identities.add(item)
+        elif isinstance(item, (tuple, list, frozenset)):
+            pending.extend(item)
+    return frozenset(identities)
+
+
+def active_render_stage_transaction() -> _PreparedCacheTransaction | None:
+    """Return the active transaction for ``gbdraw.render_stages``, if any."""
+
+    return _ACTIVE_PREPARED_TRANSACTION.get()
+
+
+def lookup_render_stage(
+    transaction: _PreparedCacheTransaction,
+    key: Hashable,
+) -> _PreparedCacheEntry | None:
+    """Return the render-stage entry stored under ``key``, if any."""
+
+    return transaction.cache.lookup_render_stage(key, transaction)
+
+
+def store_render_stage(
+    transaction: _PreparedCacheTransaction,
+    key: Hashable,
+    value: object,
+    inner_keys: frozenset[Hashable],
+) -> None:
+    """Stage one render-stage result for publication at commit."""
+
+    transaction.cache.store_render_stage(key, value, inner_keys, transaction)
 
 
 def get_or_build_parsed_source(
