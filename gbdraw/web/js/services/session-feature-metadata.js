@@ -44,7 +44,7 @@
 
 /**
  * @param {unknown} warnings
- * @param {ReadonlyArray<{ name?: unknown } | undefined> | null | undefined} results The Results the warnings name.
+ * @param {{ readonly [index: number]: { readonly name?: unknown } | null | undefined } | null | undefined} results The Results the warnings name, read by index: an unvalidated value too.
  * @returns {AnnotationWarning[]}
  */
 export const validateAnnotationWarnings = (warnings, results) => {

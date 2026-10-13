@@ -201,7 +201,8 @@ import {
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry } from '../services/losat-cache.js' */
+/** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
+/** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
@@ -398,20 +399,7 @@ export const buildLosatCachePayload = ({
   return payload;
 };
 
-/**
- * One row of `state.losatCacheInfo`, the pairs a Generate keeps cache entries for: a circular conservation
- * comparison carries `key`, `filename` and `display`, a linear comparison also its edge.
- * @typedef {object} LosatCacheInfoEntry
- * @property {unknown} key The raw cache key: a string from Generate; a Session load stores the saved key (truthy, unchecked).
- * @property {unknown} filename A string from Generate; a Session load stores the saved name (truthy, unchecked) or a default.
- * @property {boolean} display
- * @property {string} [edgeKey]
- * @property {number} [ordinal]
- * @property {string} [queryUid]
- * @property {string} [subjectUid]
- * @property {number} [queryIndex]
- * @property {number} [subjectIndex]
- */
+/** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
 
 /**
  * A LOSAT search Generate queues: the fields the pool reads (`LosatJob`) and what Generate keeps on it to
@@ -444,13 +432,9 @@ export const buildLosatCachePayload = ({
  */
 
 /**
- * A raw LOSAT cache entry; `classifyRawLosatCacheEntry` tells which shape it holds.
- * @typedef {Record<string, unknown>} RawLosatCacheEntry
- */
-
-/**
- * A cache entry under its key.
- * @typedef {{ key: string, entry: RawLosatCacheEntry }} RawLosatCacheMatch
+ * A match in one of Generate's cache maps, whose keys are text (`RawLosatCacheMatch` of services/losat-cache.js
+ * leaves the key open: its reader takes any `Map`).
+ * @typedef {RawLosatCacheMatch & { key: string }} TextKeyedLosatCacheMatch
  */
 
 /**
@@ -459,13 +443,13 @@ export const buildLosatCachePayload = ({
  * @param {LosatCacheMetadata} metadata
  * @param {Record<string, any> | null} [manifest]
  * @param {object | null} [identityIndex]
- * @returns {RawLosatCacheMatch | null}
+ * @returns {TextKeyedLosatCacheMatch | null}
  */
 const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
   if (!cacheMap) return null;
   const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, { identityIndex });
   // `getCurrentRawLosatCacheEntry` returns the `cacheKey` it was given (its `unknown` parameter widens the type).
-  if (direct) return /** @type {RawLosatCacheMatch} */ (direct);
+  if (direct) return /** @type {TextKeyedLosatCacheMatch} */ (direct);
   if (metadata?.identityKind === 'protein') return null;
 
   const expectedProgram = String(metadata?.program || '');
@@ -493,7 +477,7 @@ const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, id
 /**
  * @param {Map<string, RawLosatCacheEntry> | null | undefined} cacheMap
  * @param {string} cacheKey
- * @param {RawLosatCacheMatch | null | undefined} found
+ * @param {TextKeyedLosatCacheMatch | null | undefined} found
  * @param {LosatCacheMetadata} metadata
  */
 const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
@@ -692,6 +676,28 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
     && typeof resource.value.fields === 'object'
     && !Array.isArray(resource.value.fields)
   );
+};
+
+// The reply of the `buildProteinLosatCacheKeys` helper is unchecked data. Generate uses each key as a raw LOSAT
+// cache key, so the reply holds one SHA-256 hex digest per pair, as text (`RegExp.test` alone would coerce).
+/**
+ * @param {unknown} reply
+ * @param {number} pairCount
+ * @returns {string[]}
+ */
+export const requireProteinLosatCacheKeys = (reply, pairCount) => {
+  /** @type {{ error?: unknown, keys?: unknown }} */
+  const result = reply !== null && typeof reply === 'object' ? reply : {};
+  const keys = Array.isArray(result.keys) ? /** @type {unknown[]} */ (result.keys) : null;
+  if (
+    result.error || !keys
+    || keys.length !== pairCount
+    || keys.some((key) => typeof key !== 'string' || !/^[0-9a-f]{64}$/.test(key))
+  ) {
+    throw result.error || new Error('Protein cache key generation failed.');
+  }
+  // Every key passed the text and pattern check above.
+  return /** @type {string[]} */ (keys);
 };
 
 /** @param {unknown} candidateLimit */
@@ -1231,7 +1237,6 @@ const normalizePositiveInteger = (value, fallback = 1) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 };
-/** @typedef {{ selector: string, row: number }} MultiRecordPosition */
 /**
  * @param {unknown} value
  * @param {{ maxRow?: number }} [options]
@@ -1471,7 +1476,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @typedef {object} RunAnalysisOptions
  * @property {WebState} state App state (state.js).
  * @property {RulePreparation | null} [rulePreparation] The rule owner's preparation, which Generate runs before it draws.
- * @property {(feature: Record<string, any>) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
+ * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
@@ -4106,7 +4111,7 @@ export const createRunAnalysis = ({
             proteinIdMap: result.proteinIdMap || {}
           });
           // `getCurrentRawLosatCacheEntry` returns the `cacheKey` it was given (its `unknown` parameter widens the type).
-          return /** @type {RawLosatCacheMatch} */ (verified);
+          return /** @type {TextKeyedLosatCacheMatch} */ (verified);
         };
 
         /**
@@ -4335,15 +4340,7 @@ export const createRunAnalysis = ({
               }
             );
             throwIfGenerationCanceled();
-            const result = response.result;
-            if (
-              result.error || !Array.isArray(result.keys)
-              || result.keys.length !== preparedJobs.length
-              || result.keys.some((key) => !/^[0-9a-f]{64}$/.test(key))
-            ) {
-              throw result.error || new Error('Protein cache key generation failed.');
-            }
-            proteinCacheKeys = result.keys;
+            proteinCacheKeys = requireProteinLosatCacheKeys(response.result, preparedJobs.length);
           }
 
           // mergeProteinIdentityManifests made a private deep copy for this run.
@@ -5773,7 +5770,7 @@ export const createRunAnalysis = ({
       const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
         ? candidateCommit.featureState.orthogroups
         : [];
-      // Align and Reset set `alignmentResetBefore` on a Linear Session with a plan, so `canonical` holds the plan and the translations.
+      // Only Align sets `alignmentResetBefore`, and it projects its plan onto `canonical`, so `canonical` holds the plan and the translations.
       const receipt = alignmentResetBefore
         ? await buildSimilarityAlignmentResetReceipt({before:alignmentResetBefore, after:/** @type {AlignmentResetPlannedCanonical} */ (canonical)})
         : alignmentResetReceipt === undefined ? state.similarityAlignmentResetReceipt?.value

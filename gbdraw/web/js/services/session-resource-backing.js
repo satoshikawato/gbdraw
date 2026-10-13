@@ -97,7 +97,7 @@ const normalizedChecksum = (value) => {
 
 /**
  * @param {string} resourceId
- * @param {RawSessionResourceDescriptor} descriptor
+ * @param {RawSessionResourceDescriptor | null | undefined} descriptor Unvalidated; the first check proves an object.
  * @returns {LeafBacking}
  */
 const validateDescriptor = (resourceId, descriptor) => {
@@ -142,7 +142,8 @@ const validateDescriptor = (resourceId, descriptor) => {
 // comparison-plan authority remain with their existing owners.
 /**
  * @param {{ bindings?: unknown } | null | undefined} webFiles
- * @param {Record<string, RawSessionResourceDescriptor>} [resources]
+ * @param {{ readonly [resourceId: string]: RawSessionResourceDescriptor | null | undefined } | null} [resources]
+ *   The Session's `resources`, unvalidated: read by the id of each binding, and each entry read is checked.
  * @returns {Record<string, unknown> | undefined} the `webFiles.bindings` object, checked
  */
 export const validateWebFileBindings = (webFiles, resources = {}) => {
@@ -176,7 +177,8 @@ export const validateWebFileBindings = (webFiles, resources = {}) => {
     if (typeof id !== 'string' || !id || id !== id.trim()) {
       throw new Error('A Web file binding requires a canonical resourceId.');
     }
-    if (!Object.hasOwn(resources, id)) throw new Error(`Missing canonical resource: ${id}`);
+    // A `resources` that is null holds no resource, like any other value without this id (OV-636).
+    if (resources === null || !Object.hasOwn(resources, id)) throw new Error(`Missing canonical resource: ${id}`);
     if (current) {
       if (Object.keys(value).some(key => !['resourceId', 'name', 'type', 'lastModified'].includes(key))) {
         throw new Error('Unknown Web file binding field.');
@@ -208,7 +210,8 @@ export const validateWebFileBindings = (webFiles, resources = {}) => {
       // `leaf` checks each component's `resourceId`, so it is a string here.
       binding.components.forEach((/** @type {{ resourceId: string }} */ component) => {
         leaf(component);
-        if (resources[component.resourceId].encoding !== 'base64') {
+        // `leaf` proved that `resources` holds this id and, for these schema 2 bindings, that its entry is an object.
+        if (/** @type {Record<string, RawSessionResourceDescriptor>} */ (resources)[component.resourceId].encoding !== 'base64') {
           throw new Error('Composite components require base64 resources.');
         }
       });

@@ -9,7 +9,8 @@
 /** @import { LegendRowColorOf } from './candidate-render.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
-/** @import { LegacyResultSvgData, LegacyResultSvgTransform } from '../services/config.js' */
+/** @import { LegacyResultSvgData, LegacyResultSvgTransform, SessionFileInput } from '../services/config.js' */
+/** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 /** @import { LegendRowContext } from '../services/specific-color-rules.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
@@ -20,7 +21,6 @@
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
-/** @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput The Session file input's change event, or an object with its `target`; the type `importSession` of services/config.js declares inline. */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
 import { createResultPaintRecord, editorPaintState } from './result-paint-record.js';
@@ -288,7 +288,8 @@ import {
 /** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
-/** @import { LosatCacheInfoEntry, MultiRecordPosition } from './run-analysis.js' */
+/** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
+/** @import { UnvalidatedFields } from '../services/session-authority.js' */
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, shallowRef, reactive, isRef } = window.Vue;
 const toRaw = window.Vue.toRaw || ((/** @type {unknown} */ value) => value);
@@ -1654,6 +1655,7 @@ export const createAppSetup = () => {
   window.__GBDRAW_HISTORY__ = history;
   // R13: owners receive this port, not the record display controls. The check
   // is pure (services/feature-identity.js) over the record display's binding.
+  /** @param {RecordKeyedFeature} feature */
   const isCurrentResultFeature = (feature) => isCurrentFeature(feature, recordDisplayControls.sourceBinding());
   const canUndoHistory = computed(() => {
     void history.revision.value;
@@ -3854,7 +3856,8 @@ export const createAppSetup = () => {
         drawnTracks: readDrawnTracks(),
         ...legendRowsOf(displayedLegendRowContext(state, drawing)),
         drawnContext: domains.includes('featureVisibility')
-          ? featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })
+          // The committed request may be one a Session stored (unchecked): its options are read as unvalidated.
+          ? featureDrawnContext(drawing, { diagramOptions: /** @type {UnvalidatedFields<'selectedFeaturesSet'>} */ (getCommittedCanonicalRenderRequest()?.diagramOptions) })
           : null,
         ruleRows
       } : null

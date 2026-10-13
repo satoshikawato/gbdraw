@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
@@ -15,7 +16,7 @@ import { isRecordDrawKey } from './record-draw-selection.js';
 import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
-import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION, ORTHOGROUP_INFERENCE_VERSION, SESSION_VERSION } from '../contracts/schema.generated.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 /**
@@ -225,12 +226,17 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
 /**
  * Throws when `storedConfig` is not a current-writer active configuration:
  * a Session 46 slice of `mode`, or (`scopedDrafts`) the flat draft of a
- * Session 41-44, whose record display and placement rows name their mode.
- * @param {{ mode: string, storedConfig: Record<string, any> | null | undefined, scopedDrafts?: boolean }} input
+ * Session 40-44, whose record display and placement rows name their mode.
+ * `sessionVersion` is the version of the Session that holds the draft; the
+ * default, the current version, is for the writer's own draft and a slice.
+ * @param {{
+ *   mode: unknown, storedConfig: unknown, scopedDrafts?: boolean,
+ *   sessionVersion?: number
+ * }} input
  * @returns {void}
  */
-export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false }) => {
-  if (!['circular', 'linear'].includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
+export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false, sessionVersion = SESSION_VERSION }) => {
+  if (!(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');
   assertSafeObjectKeys(config, 'Current session active configuration');
   const domains = new Set([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
@@ -246,13 +252,19 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     || !config.recordsOff.every((/** @type {unknown} */ key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
-  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, { scoped: scopedDrafts });
+  // Python checks the record display drafts of a Session from that version
+  // (`validate_session`) and refuses a row whose selector is not text
+  // (gbdraw/session_io.py:853-857). A Session 40 draft is not checked there, so
+  // here it keeps the verdict it had before OV-575.
+  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, {
+    scoped: scopedDrafts, textSelector: sessionVersion >= DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION
+  });
   if (has(config, 'featurePlacementOverrides')) {
     if (scopedDrafts) validateScopedFeaturePlacements(config.featurePlacementOverrides);
-    else canonicalFeaturePlacements(config.featurePlacementOverrides, mode);
+    else canonicalFeaturePlacements(config.featurePlacementOverrides, /** @type {'circular' | 'linear'} */ (mode)); // the first check
   }
   if (has(config.adv, 'feature_overlap_tolerance_bp') && (!Number.isSafeInteger(config.adv.feature_overlap_tolerance_bp)
-    || config.adv.feature_overlap_tolerance_bp < 0)) throw new Error('Feature overlap tolerance must be a non-negative integer.');
+    || /** @type {number} */ (config.adv.feature_overlap_tolerance_bp) < 0)) throw new Error('Feature overlap tolerance must be a non-negative integer.'); // a safe integer here
   assertFields(config.form, new Set(CURRENT_WRITER_FORM_FIELDS), 'config.form'); assertFields(config.adv, new Set(CURRENT_WRITER_ADV_FIELDS), 'config.adv');
   if (has(config.form, 'keep_definition_left_aligned') && typeof config.form.keep_definition_left_aligned !== 'boolean')
     throw new Error('Current session active configuration config.form.keep_definition_left_aligned must be a boolean.');
@@ -269,11 +281,12 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     'Linear Length / Coordinates visibility'
   );
   for (const [path, value] of [['config.adv.losatProgram', config.adv.losatProgram], ['config.losatProgram', config.losatProgram]]) {
-    if (value !== undefined && !['blastn', 'tblastx', 'blastp'].includes(value))
+    if (value !== undefined && !(/** @type {readonly unknown[]} */ (['blastn', 'tblastx', 'blastp'])).includes(value))
       throw new Error(`Current session active configuration ${path} is invalid.`);
   }
-  if (isObject(config.losat?.blastp)) {
-    const blastp = config.losat.blastp;
+  // `losat` is an object when present (`validateDomainShapes`); the test proves its `blastp` an object.
+  if (isObject(/** @type {{ blastp?: unknown } | undefined} */ (config.losat)?.blastp)) {
+    const blastp = /** @type {{ blastp: Record<string, unknown> }} */ (config.losat).blastp;
     if (has(blastp, 'mode')) requireCurrentProteinBlastpMode(blastp.mode);
     if (has(blastp, 'hitLimitsByMode')) {
       if (!isObject(blastp.hitLimitsByMode)) throw new Error('LOSATP mode hit limits must be an object.');
@@ -305,8 +318,9 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     requireCurrentCollinearSearchScope(blastp.collinearSearchScope);
     requireCurrentCollinearInferOrthogroups(blastp.collinearInferOrthogroups);
   }
-  if (has(config, 'filterMode') && !['None', 'Whitelist', 'Blacklist'].includes(config.filterMode)) throw new Error('Current session active configuration config.filterMode is invalid.');
-  if (has(config, 'palette') && !config.palette.trim()) throw new Error('Current session active configuration config.palette cannot be empty.');
+  if (has(config, 'filterMode') && !(/** @type {readonly unknown[]} */ (['None', 'Whitelist', 'Blacklist'])).includes(config.filterMode)) throw new Error('Current session active configuration config.filterMode is invalid.');
+  // `palette` is a string when present (`validateDomainShapes`).
+  if (has(config, 'palette') && !/** @type {string} */ (config.palette).trim()) throw new Error('Current session active configuration config.palette cannot be empty.');
   if (isObject(config.importedComparisonResolution)) {
     assertFields(
       config.importedComparisonResolution,
@@ -315,7 +329,7 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     );
     if (
       config.importedComparisonResolution.action !== null
-      && !['INHERIT', 'REPLACE', 'CLEAR'].includes(config.importedComparisonResolution.action)
+      && !(/** @type {readonly unknown[]} */ (['INHERIT', 'REPLACE', 'CLEAR'])).includes(config.importedComparisonResolution.action)
     ) {
       throw new Error('Current session active configuration config.importedComparisonResolution.action is invalid.');
     }
@@ -332,7 +346,7 @@ const linearTypographyValuesMatch = (adv = {}) => (
  * @param {{
  *   adv: Record<string, any>,
  *   linked: any,
- *   ui?: { linearTypographyLinked?: boolean }
+ *   ui?: { readonly linearTypographyLinked?: unknown }
  * }} options
  */
 export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) => {
@@ -382,14 +396,18 @@ const sortedValue = (value) => Array.isArray(value)
  * }} AlignmentResetCanonical
  */
 /**
- * A canonical session of a Linear Alignment: it holds the plan and the
- * translations that the receipt compares.
+ * The canonical session an Align started from (`before` of a reset), as `projectCommittedSimilarityAlignment`
+ * returns it: the generated request types with a Linear layout. Its plan is null: Align materializes its
+ * baseline without a plan. Not for a Session's request, which the `AlignmentResetCanonical` view above reads.
  * @typedef {{
- *   renderRequest: {
- *     mode: string, records: AlignmentResetRecord[],
- *     layout: { similarityAlignment: AlignmentPlanView, recordTranslations: { recordKey: string, x?: number }[] }
- *   },
+ *   renderRequest: Omit<CanonicalLinearRenderRequest, 'layout'> & { layout: CanonicalLinearLayout },
  *   resources?: Record<string, RawSessionResourceDescriptor> | null
+ * }} AlignmentResetBaselineCanonical
+ */
+/**
+ * The canonical session an Align produced (`after` of a reset): the same, with the plan present.
+ * @typedef {AlignmentResetBaselineCanonical & {
+ *   renderRequest: { layout: { similarityAlignment: CanonicalSimilarityAlignmentPlan } }
  * }} AlignmentResetPlannedCanonical
  */
 /**
@@ -491,7 +509,7 @@ export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical
 };
 
 /**
- * @param {{ before: AlignmentResetPlannedCanonical, after: AlignmentResetPlannedCanonical }} sessions
+ * @param {{ before: AlignmentResetBaselineCanonical, after: AlignmentResetPlannedCanonical }} sessions
  */
 export const buildSimilarityAlignmentResetReceipt = async ({ before, after }) => {
   const previous = new Map(before.renderRequest.records.map((record) => [record.recordKey, record]));
@@ -504,7 +522,7 @@ export const buildSimilarityAlignmentResetReceipt = async ({ before, after }) =>
       : [{ recordKey: record.recordKey, before: beforeReverse, after: afterReverse }];
   });
   const referenceKey = after.renderRequest.layout.similarityAlignment.reference.recordKey;
-  /** @param {AlignmentResetPlannedCanonical} canonical */
+  /** @param {AlignmentResetBaselineCanonical} canonical */
   const x = (canonical) => canonical.renderRequest.layout.recordTranslations
     .find(({ recordKey }) => recordKey === referenceKey)?.x ?? 0;
   const deltaX = x(after) - x(before);

@@ -193,6 +193,7 @@ import {
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
+  readSessionInput,
   validateSessionAuthorityInventory
 } from './session-authority.js';
 import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
@@ -245,7 +246,6 @@ import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   MODE_SCOPED_SESSION_VERSION,
   SESSION_VERSION,
-  SUPPORTED_SESSION_VERSIONS,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
 import {
@@ -264,7 +264,7 @@ const LOSAT_EXECUTION_FIELDS = MODE_SCOPED_SETTINGS.losatExecutionFields;
 /**
  * Installs saved LOSAT execution settings; a field the value lacks takes its
  * normalized default, as a saved draft always read.
- * @param {Record<string, any>} source
+ * @param {SessionLosatExecution} source Unvalidated: each field is matched or converted here.
  */
 export const applyLosatExecutionData = (source) => {
   const target = state.losatExecution;
@@ -297,7 +297,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { CanonicalLinearLayout, CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { FeatureCatalog } from './feature-catalog.js' */
+/** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
@@ -312,7 +312,33 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // The Session document's types are generated from gbdraw/session_contract.py:
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
-/** @import { GbdrawSession, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
+/** @import { GbdrawSession, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
+/** @import { UnvalidatedFields } from './session-authority.js' */
+
+/** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
+
+// A saved `ui` or `features` object (a Session's, a mode slice's, a History
+// snapshot's) has one unvalidated view, declared with History's fallback
+// readers (services/history-snapshot.js); these name the parts read here.
+/**
+ * The saved palette values of a `ui` object as they are read: unvalidated.
+ * @typedef {Pick<FallbackUiData, 'appliedPaletteName' | 'appliedPaletteColors' | 'pendingPaletteName'
+ *   | 'pendingPaletteColors'>} SavedPaletteFields
+ */
+/**
+ * A saved `ui` object as `applyUiStateData` reads it: every leaf is
+ * unvalidated until the line that reads it converts or matches it.
+ * @typedef {Omit<FallbackUiData, 'selectedResultIndex' | 'layoutPreferences'> & {
+ *   losatExecution?: unknown, richFeaturePopup?: unknown, featurePanelTab?: unknown,
+ *   circularPlotTitlePosition?: unknown, zoom?: unknown, canvasPan?: OffsetData | null
+ * }} SavedUiFields
+ */
+/**
+ * Saved feature state (a Session's `features`, a mode slice's, a History
+ * checkpoint's) as it is read: unvalidated.
+ * @typedef {FeatureEditsData & { extractedFeatures?: unknown, biologicalFeatures?: unknown,
+ *   featureRecordIds?: unknown, labelOverrideRows?: unknown }} SavedFeatureFields
+ */
 
 /**
  * What an older Session's Result needs from the Session: the committed legend
@@ -333,7 +359,6 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  */
 export { SESSION_VERSION };
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
-const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 // D-25 (PD-OI-079): a Result without current feature metadata (a legacy
 // Session) is saved only after one Generate; the error offers that Generate.
@@ -359,10 +384,18 @@ const recognizedCauseOr = (error, fallback) => {
 /** @param {unknown} value */
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+/**
+ * @template {UnvalidatedFields<string>} T
+ * @param {T} colors A color map. A caller that passes a saved one passes it unvalidated, and the copy is then
+ *   unvalidated too.
+ */
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
+/** @param {unknown} colors */
 const hasColorEntries = (colors) =>
-  Boolean(colors) && typeof colors === 'object' && !Array.isArray(colors) && Object.keys(colors).length > 0;
+  Boolean(colors) && typeof colors === 'object' && !Array.isArray(colors)
+    // The cast: `Boolean(colors)` above proves the object is not null.
+    && Object.keys(/** @type {NonNullable<UnvalidatedFields<string>>} */ (colors)).length > 0;
 
 /** @param {unknown} colors */
 const normalizeColorMap = (colors) => {
@@ -420,10 +453,15 @@ const splitLegacyFeatureVisibilityRules = (features = {}) => {
 
 // The identity-keyed per-feature edit draft; a Session or History value is
 // checked as the request rows are (services/feature-placement.js).
+/** @param {unknown} value */
 const featureOverridesForState = (value) => featureDraftMap(
   canonicalFeatureOverrides(isPlainObject(value) ? value : {})
 );
 
+/**
+ * @param {UnvalidatedFields<'nucleotide_sequence' | 'amino_acid_sequence' | 'nucleotideSequence'
+ *   | 'aminoAcidSequence'>} feature
+ */
 const sanitizeExtractedFeatureForSession = (feature) => {
   if (!feature || typeof feature !== 'object' || Array.isArray(feature)) return feature;
   const {
@@ -488,6 +526,11 @@ const replaceQualifierPriorityRules = (drawing, rules) => {
   );
 };
 
+/**
+ * @param {Record<string, unknown>} target The live settings object.
+ * @param {UnvalidatedFields<string>} source A saved value: a leaf is copied when its `typeof` is the
+ *   target's, or when either is `null`; nothing else about it is checked.
+ */
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
 
@@ -510,13 +553,15 @@ const safeDeepMerge = (target, source) => {
       typeof sourceValue === 'object' &&
       !Array.isArray(sourceValue)
     ) {
-      safeDeepMerge(targetValue, sourceValue);
+      // The casts: both are non-null objects that are not arrays (the test above).
+      safeDeepMerge(/** @type {Record<string, unknown>} */ (targetValue), /** @type {UnvalidatedFields<string>} */ (sourceValue));
       return;
     }
 
     // 4. For arrays, intentionally overwrite (replacing lists of settings is natural)
     if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
-      target[key].splice(0, target[key].length, ...sourceValue);
+      // The casts: `targetValue` is `target[key]`, an array.
+      /** @type {unknown[]} */ (target[key]).splice(0, /** @type {unknown[]} */ (target[key]).length, .../** @type {unknown[]} */ (sourceValue));
       return;
     }
 
@@ -539,10 +584,15 @@ const parseMultiRecordPositionToken = (value) => {
   return { selector, row };
 };
 
+/**
+ * One row of `adv.multi_record_positions`: a record selector and its 1-based row on the Multi-Record Canvas.
+ * `applyConfigData` writes the checked rows.
+ * @typedef {{ selector: string, row: number }} MultiRecordPosition
+ */
 /** @param {{ args?: unknown } | null | undefined} cliInvocation */
 const multiRecordPositionsFromCliInvocation = (cliInvocation) => {
   const args = Array.isArray(cliInvocation?.args) ? cliInvocation.args : [];
-  /** @type {{ selector: string, row: number }[]} */
+  /** @type {MultiRecordPosition[]} */
   const positions = [];
   const seenSelectors = new Set();
 
@@ -864,6 +914,11 @@ const normalizeStrokeWidth = (value) => {
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
 };
 
+/**
+ * @template T
+ * @param {T[] | null | undefined} value An app-written list (a state value).
+ * @returns {T[]}
+ */
 const cloneJsonArray = (value) => {
   if (!Array.isArray(value)) return [];
   return cloneJsonValue(value, []);
@@ -874,11 +929,13 @@ const cloneJsonObject = (value) => {
   return cloneJsonValue(value, {});
 };
 
+/** @param {unknown} source */
 const normalizeLegendColorOverrides = (source) => {
   /** @type {Record<string, string>} */
   const normalized = {};
   if (!isPlainObject(source)) return normalized;
-  Object.entries(source).forEach(([key, value]) => {
+  // The cast: a plain object (the line above).
+  Object.entries(/** @type {Record<string, unknown>} */ (source)).forEach(([key, value]) => {
     const caption = String(key || '').trim();
     const color = normalizeOptionalHexColor(value);
     if (!caption || !color) return;
@@ -887,13 +944,23 @@ const normalizeLegendColorOverrides = (source) => {
   return normalized;
 };
 
+/**
+ * A saved stroke override as it is read: unvalidated.
+ * @typedef {NonNullable<UnvalidatedFields<'strokeColor' | 'strokeWidth' | 'originalStrokeColor'
+ *   | 'originalStrokeWidth'>>} StrokeOverrideFields
+ */
+/**
+ * @param {unknown} source
+ * @param {{ requireOverride?: boolean }} [options]
+ */
 const normalizeStrokeOverride = (source, { requireOverride = false } = {}) => {
   if (!isPlainObject(source)) return null;
   const normalized = {};
-  const strokeColor = normalizeOptionalHexColor(source.strokeColor);
-  const strokeWidth = normalizeStrokeWidth(source.strokeWidth);
-  const originalStrokeColor = normalizeOptionalHexColor(source.originalStrokeColor);
-  const originalStrokeWidth = normalizeStrokeWidth(source.originalStrokeWidth);
+  // The casts below: `source` is a plain object (the first line).
+  const strokeColor = normalizeOptionalHexColor(/** @type {StrokeOverrideFields} */ (source).strokeColor);
+  const strokeWidth = normalizeStrokeWidth(/** @type {StrokeOverrideFields} */ (source).strokeWidth);
+  const originalStrokeColor = normalizeOptionalHexColor(/** @type {StrokeOverrideFields} */ (source).originalStrokeColor);
+  const originalStrokeWidth = normalizeStrokeWidth(/** @type {StrokeOverrideFields} */ (source).originalStrokeWidth);
 
   if (strokeColor !== null) normalized.strokeColor = strokeColor;
   if (strokeWidth !== null) normalized.strokeWidth = strokeWidth;
@@ -914,11 +981,16 @@ const normalizeStrokeOverride = (source, { requireOverride = false } = {}) => {
   return Object.keys(normalized).length > 0 ? normalized : null;
 };
 
+/**
+ * @param {unknown} source
+ * @param {{ requireOverride?: boolean }} [options]
+ */
 const normalizeStrokeOverrideMap = (source, { requireOverride = false } = {}) => {
   /** @type {Record<string, NonNullable<ReturnType<typeof normalizeStrokeOverride>>>} */
   const normalized = {};
   if (!isPlainObject(source)) return normalized;
-  Object.entries(source).forEach(([key, value]) => {
+  // The cast: a plain object (the line above).
+  Object.entries(/** @type {Record<string, unknown>} */ (source)).forEach(([key, value]) => {
     const normalizedKey = String(key || '').trim();
     if (!normalizedKey) return;
     const override = normalizeStrokeOverride(value, { requireOverride });
@@ -963,12 +1035,15 @@ const DEPTH_TRACK_FALLBACK_COLORS = [
 ];
 
 /**
+ * @param {UnvalidatedFields<'label' | 'color' | 'height' | 'large_tick_interval' | 'small_tick_interval'
+ *   | 'tick_font_size'>} entry A saved Depth track row, unvalidated.
  * @param {number} index
  * @param {{ depth_color?: unknown, depth_height?: unknown, depth_large_tick_interval?: unknown,
  *   depth_small_tick_interval?: unknown, depth_tick_font_size?: unknown }} [legacyAdv]
  */
 const normalizeDepthTrackConfig = (entry, index, legacyAdv = {}) => {
-  const source = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
+  // The cast: the row when it is a non-null object, or the empty object.
+  const source = /** @type {NonNullable<typeof entry>} */ (entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {});
   const hasHeight = Object.prototype.hasOwnProperty.call(source, 'height');
   const fallbackColor =
     index === 0
@@ -1007,6 +1082,27 @@ const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
 let lastSessionFilename = null;
 /** @type {Record<string, any> | null} */
 let preservedCliOptions = null;
+/**
+ * A request as a Session stored it, admitted by Load without promotion: schema
+ * 1, 2 or 5 to 8, or a schema 9 whose leaves the Web has not checked. Load
+ * establishes only that it is a plain object (`adoptRuntimeCanonicalSession`,
+ * `cloneCanonicalSession`); a reader checks what it reads. Stage 1d promotes
+ * it once at Load, and this arm of the committed request then goes.
+ * @typedef {Readonly<Record<string, unknown>>} StoredRenderRequest
+ */
+/**
+ * The committed Session: the request that drew the shown Result, with its
+ * resources and Web file bindings. Generate and the automatic rerender commit
+ * the schema 9 request they built; Load commits the request the Session
+ * stored; History and the Load rollback put a captured one back.
+ * @typedef {object} CommittedCanonicalSession
+ * @property {CanonicalRenderRequest | StoredRenderRequest} renderRequest
+ * @property {Readonly<Record<string, unknown>>} resources
+ * @property {Readonly<Record<string, unknown>>} webFiles
+ */
+// The variable keeps its earlier type: `applyResultsData` passes the request's
+// `diagramOptions.selectedFeaturesSet` on as feature types without a check,
+// which the true type refuses (stage 1d).
 /** @type {Record<string, any> | null} */
 let committedCanonicalSession = null;
 // Counts replacements of the committed Session, so a computed that reads the
@@ -1495,20 +1591,11 @@ const applyModeSliceData = (drawing, mode, slice, {
   reconcileImportedLinearTypographyLink({ adv: drawing.adv, linked: drawing.linearTypographyLinked, ui });
 };
 
-const SESSION_FORMAT_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
 const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
-const validateSessionVersion = version => {
-  if (!Number.isInteger(version)) throw SESSION_FORMAT_ERROR();
-  if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSION_SET.has(version)) {
-    throw SESSION_FIELDS_ERROR();
-  }
-};
 
 /** @param {{ list: string, caption: string }[] | null} droppedLegendColors */
 const normalizeSessionData = (data, droppedLegendColors) => {
-  if (!isPlainObject(data) || data.format !== 'gbdraw-session') throw SESSION_FORMAT_ERROR();
   const version = data.version;
-  validateSessionVersion(version);
   if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION && Object.prototype.hasOwnProperty.call(data, 'files')) {
     throw new Error(
       `Session version ${version} cannot contain legacy files; use resources and webFiles.`
@@ -1720,10 +1807,12 @@ const LEGACY_CONFIG_KEYS = new Set([
   'circularConservation'
 ]);
 
+/** @param {unknown} data A parsed file. */
 const isLegacyConfigPayload = (data) =>
   isPlainObject(data) &&
   !Object.prototype.hasOwnProperty.call(data, 'format') &&
-  Object.keys(data).some((key) => LEGACY_CONFIG_KEYS.has(key));
+  // The cast: a plain object (the first test).
+  Object.keys(/** @type {Record<string, unknown>} */ (data)).some((key) => LEGACY_CONFIG_KEYS.has(key));
 
 /** @param {DrawingState} drawing */
 const applyLegacyConfigPayload = (drawing, data) => {
@@ -1744,7 +1833,10 @@ const applyLegacyConfigPayload = (drawing, data) => {
   restorePaletteStateAfterConfigImport(drawing);
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {UnvalidatedFields<'multi_record_canvas'>} incomingForm
+ */
 const shouldSuppressCircularMultiRecordDefaults = (drawing, incomingForm) => {
   if (state.mode.value !== 'circular') return false;
   if (!incomingForm || typeof incomingForm !== 'object' || Array.isArray(incomingForm)) return false;
@@ -1854,11 +1946,11 @@ export const restoreCurrentWriterActiveConfig = ({
   mode,
   projectedConfig,
   storedConfig
-}) => {
+}, sessionVersion = SESSION_VERSION) => {
   if (!isPlainObject(projectedConfig)) {
     throw new Error('Current session is missing its canonical configuration projection.');
   }
-  validateCurrentWriterActiveConfig({ mode, storedConfig, scopedDrafts: true });
+  validateCurrentWriterActiveConfig({ mode, storedConfig, scopedDrafts: true, sessionVersion });
   const restored = cloneJsonData(projectedConfig);
   /** @type {string[]} */
   const restoredDomains = [];
@@ -1920,8 +2012,7 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
 
 /** @param {{ list: string, caption: string }[]} droppedLegendColors Collects the Legend entries dropped for their color. */
 const preflightSessionImport = async (sessionData, droppedLegendColors) => {
-  const sourceSessionVersion = sessionData?.version;
-  validateSessionVersion(sourceSessionVersion);
+  const sourceSessionVersion = readSessionInput(sessionData).version;
   const rawData = await convertMainSessionComparisonFrames(sessionData);
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
@@ -1937,7 +2028,6 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   let normalizedData;
 
   if (currentSession) {
-    if (!isPlainObject(rawData) || rawData.format !== 'gbdraw-session') throw SESSION_FORMAT_ERROR();
     recordSessionLifecycleEvent('session-authority-validation-start');
     adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion);
     recordSessionLifecycleEvent('session-authority-validation-end');
@@ -2122,7 +2212,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
       mode: canonicalProjection.mode,
       projectedConfig: canonicalProjection.config,
       storedConfig: runtimeStoredConfig
-    });
+    }, sourceSessionVersion);
     recordSessionLifecycleEvent('current-draft-validation-end');
   }
   // Session 46: each slice is a current-writer draft of its own mode; the
@@ -2558,7 +2648,7 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   const rawMultiRecordPositions = Array.isArray(drawing.adv.multi_record_positions)
     ? drawing.adv.multi_record_positions
     : [];
-  /** @type {{ selector: string, row: number }[]} */
+  /** @type {MultiRecordPosition[]} */
   const dedupedMultiRecordPositions = [];
   const seenMultiRecordSelectors = new Set();
   rawMultiRecordPositions.forEach((/** @type {{ selector?: unknown, row?: unknown } | null} */ entry) => {
@@ -2906,7 +2996,10 @@ const restorePaletteStateAfterConfigImport = (drawing) => {
 
 // The palette the shown Result was drawn with (an artifact value), or else
 // the drawing's palette.
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {SavedPaletteFields} [ui]
+ */
 const restoreAppliedPaletteFromSession = (drawing, ui = {}) => {
   const draftPaletteName = String(drawing.selectedPalette.value || state.appliedPaletteName.value || 'default');
   const draftColors = normalizePaletteColors(cloneColors(drawing.currentColors.value));
@@ -2925,7 +3018,10 @@ const restoreAppliedPaletteFromSession = (drawing, ui = {}) => {
 };
 
 // A drawing's pending palette applies only while Instant Preview is off.
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {SavedPaletteFields} [ui]
+ */
 const restorePendingPaletteFromSession = (drawing, ui = {}) => {
   const draftColors = normalizePaletteColors(cloneColors(drawing.currentColors.value));
   const savedPendingPaletteName = String(ui.pendingPaletteName || '').trim();
@@ -2947,7 +3043,10 @@ const restorePendingPaletteFromSession = (drawing, ui = {}) => {
   }
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {SavedPaletteFields} [ui]
+ */
 const restorePaletteStateFromSession = (drawing, ui = {}) => {
   restoreAppliedPaletteFromSession(drawing, ui);
   restorePendingPaletteFromSession(drawing, ui);
@@ -3069,6 +3168,20 @@ export const serializeResults = () => {
   })));
 };
 
+/**
+ * One row of `state.losatCacheInfo`, the pairs a Generate keeps cache entries for: a circular conservation
+ * comparison carries `key`, `filename` and `display`, a linear comparison also its edge.
+ * @typedef {object} LosatCacheInfoEntry
+ * @property {unknown} key The raw cache key: a string from Generate; a Session load stores the saved key (truthy, unchecked).
+ * @property {unknown} filename A string from Generate; a Session load stores the saved name (truthy, unchecked) or a default.
+ * @property {boolean} display
+ * @property {string} [edgeKey]
+ * @property {number} [ordinal]
+ * @property {string} [queryUid]
+ * @property {string} [subjectUid]
+ * @property {number} [queryIndex]
+ * @property {number} [subjectIndex]
+ */
 const LOSAT_CACHE_INFO_STRING_FIELDS = ['edgeKey', 'queryUid', 'subjectUid'];
 const LOSAT_CACHE_INFO_INTEGER_FIELDS = ['ordinal', 'queryIndex', 'subjectIndex'];
 const losatCacheInfoIdentity = (entry) => {
@@ -3747,12 +3860,15 @@ export const adoptCanonicalRenderArtifacts = (
   }
 };
 
+/** @returns {CommittedCanonicalSession['renderRequest'] | null} */
 export const getCommittedCanonicalRenderRequest = () => {
   void committedCanonicalRevision.value;
   return committedCanonicalSession?.renderRequest || null;
 };
 
-export const getCommittedCanonicalSession = () => committedCanonicalSession;
+// The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.
+/** @returns {CommittedCanonicalSession | null} */
+export const getCommittedCanonicalSession = () => /** @type {CommittedCanonicalSession | null} */ (committedCanonicalSession);
 
 // The recorded track settings of the shown mode's loaded Result; the other mode has none.
 export const getLoadedTrackSettings = () => {
@@ -4468,7 +4584,11 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
 
 // `mode` is not restored here: History restores run the mode transition
 // first, and Session rollback sets it with the restored document.
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {SavedUiFields} [ui] What `buildUiStateData` wrote (History, the Load rollback).
+ * @param {{ restorePreviewNavigation?: boolean }} [options]
+ */
 export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true } = {}) => {
   if (typeof ui.title === 'string') state.sessionTitle.value = ui.title;
   if (ui.cInputType) state.cInputType.value = ui.cInputType;
@@ -4485,7 +4605,8 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
     ui
   });
   state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
-  if (isPlainObject(ui.losatExecution)) applyLosatExecutionData(ui.losatExecution);
+  // The cast: a plain object, and every field of the type is an optional unknown.
+  if (isPlainObject(ui.losatExecution)) applyLosatExecutionData(/** @type {SessionLosatExecution} */ (ui.losatExecution));
   if (typeof ui.richFeaturePopup === 'boolean') state.richFeaturePopup.value = ui.richFeaturePopup;
   if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
     state.featurePanelTab.value = ui.featurePanelTab;
@@ -4597,21 +4718,26 @@ export const buildFeatureStateData = (drawing) => ({
 });
 
 // The catalog features of the shown Result (artifact values).
+/** @param {SavedFeatureFields} [features] */
 const applyFeatureArtifactData = (features = {}) => {
+  // The casts: `Array.isArray` proves an array, not its elements.
   state.extractedFeatures.value = Array.isArray(features.extractedFeatures)
-    ? features.extractedFeatures
+    ? /** @type {unknown[]} */ (features.extractedFeatures)
     : [];
   if (state.biologicalFeatures) {
     state.biologicalFeatures.value = Array.isArray(features.biologicalFeatures)
-      ? features.biologicalFeatures
+      ? /** @type {unknown[]} */ (features.biologicalFeatures)
       : [];
   }
   state.featureRecordIds.value = Array.isArray(features.featureRecordIds)
-    ? features.featureRecordIds
+    ? /** @type {unknown[]} */ (features.featureRecordIds)
     : [];
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {SavedFeatureFields} [features]
+ */
 export const applyFeatureStateData = (drawing, features = {}) => {
   applyFeatureArtifactData(features);
   state.selectedFeatureRecordIdx.value = Number.isInteger(features.selectedFeatureRecordIdx)
@@ -4622,7 +4748,10 @@ export const applyFeatureStateData = (drawing, features = {}) => {
 
 // A drawing's per-feature edits as saved (a Session 46 slice's `features`, a
 // flat draft's, or a History checkpoint's).
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {SavedFeatureFields} [features]
+ */
 const applyDrawingFeatureData = (drawing, features = {}) => {
   replacePlainObject(drawing.featureColorOverrides, cloneJsonObject(features.featureColorOverrides));
   drawing.featureVisibilityManualRules.splice(
@@ -4632,7 +4761,7 @@ const applyDrawingFeatureData = (drawing, features = {}) => {
   );
   replacePlainObject(drawing.featureOverrides, featureOverridesForState(features.featureOverrides));
   drawing.canonicalLabelOverrideRows.value = Array.isArray(features.labelOverrideRows)
-    ? cloneJsonData(features.labelOverrideRows)
+    ? cloneJsonData(/** @type {unknown[]} */ (features.labelOverrideRows))
     : [];
   replacePlainObject(drawing.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
 };
@@ -4651,11 +4780,16 @@ export const buildRunStateData = () => ({
   pairwiseMatchFactors: cloneJsonObject(state.pairwiseMatchFactors.value)
 });
 
+/** @param {NonNullable<UnvalidatedFields<'lastRunInfo' | 'pairwiseMatchFactors'>>} [runState] */
 export const applyRunStateData = (runState = {}) => {
   state.lastRunInfo.value = runState.lastRunInfo ? cloneJsonData(runState.lastRunInfo) : null;
   state.pairwiseMatchFactors.value = cloneJsonObject(runState.pairwiseMatchFactors);
 };
 
+/**
+ * @param {{ status?: string, generationId?: string, error?: string | null, summaryCount?: number,
+ *   detailsCacheSize?: number }} [updates]
+ */
 const setFeatureEditorStatusData = (updates = {}) => {
   if (!state.featureEditorStatus || typeof state.featureEditorStatus !== 'object') return;
   Object.assign(state.featureEditorStatus, {
@@ -4790,22 +4924,20 @@ const buildArtifactEditorState = (view) => {
 // (a legacy Session) is saved after a Generate in its mode. The error names that
 // mode when it is not the one shown, and its Generate action runs there.
 /**
- * @param {Record<string, any>} editorState
- * @param {Record<string, any>[]} logicalResults
+ * @param {FeatureCatalog | null} featureCatalog The artifact's admitted catalog.
+ * @param {FeatureCatalogResult[]} logicalResults
  * @param {'circular' | 'linear'} mode
+ * @returns {FeatureCatalog | null} The catalog checked against the Results; null without Results.
  */
-const admitSavedFeatureCatalog = (editorState, logicalResults, mode) => {
-  if (logicalResults.length === 0) {
-    editorState.featureCatalog = null;
-    return;
-  }
+const admitSavedFeatureCatalog = (featureCatalog, logicalResults, mode) => {
+  if (logicalResults.length === 0) return null;
   const requiresGenerate = () => sessionSaveRequiresGenerate(
     mode === state.mode.value ? {} : { diagramMode: mode }
   );
-  if (!editorState.featureCatalog) throw requiresGenerate();
+  if (!featureCatalog) throw requiresGenerate();
   try {
-    editorState.featureCatalog = validateFeatureCatalog(
-      editorState.featureCatalog,
+    return validateFeatureCatalog(
+      featureCatalog,
       logicalResults,
       { adopt: true, mode }
     );
@@ -4863,7 +4995,7 @@ const artifactUiState = (view) => ({
 const prepareOtherModeArtifact = (view) => {
   const results = serializeArtifactResults(view);
   const editorState = buildArtifactEditorState(view);
-  admitSavedFeatureCatalog(editorState, results, view.mode);
+  editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, results, view.mode);
   if (!view.committedCanonicalSession) throw sessionSaveRequiresGenerate({ diagramMode: view.mode });
   const committed = promoteSavedCanonicalSession(
     isAdoptedCanonicalSession(view.committedCanonicalSession)
@@ -4959,7 +5091,7 @@ const exportSessionDocument = async (
   recordSessionLifecycleEvent('session-save-projection-start');
   const logicalResults = serializeArtifactResults(artifact);
   const editorState = buildArtifactEditorState(artifact);
-  admitSavedFeatureCatalog(editorState, logicalResults, artifact.mode);
+  editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, logicalResults, artifact.mode);
   const other = otherArtifact ? prepareOtherModeArtifact(otherArtifact) : null;
 
   const {
@@ -6127,7 +6259,11 @@ export const exportSession = (titleOverride = null, options = {}) => {
   return operation.promise;
 };
 
-/** @param {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} event */
+/**
+ * The Session file input's change event, or an object with its `target`.
+ * @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput
+ */
+/** @param {SessionFileInput} event */
 export const importSession = async (event, options = {}) => {
   const input = event?.target;
   const file = input?.files?.[0];

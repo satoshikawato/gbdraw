@@ -1,5 +1,9 @@
 // @ts-check
 /**
+ * A value as `JSON.parse` returns it.
+ * @typedef {null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }} JsonValue
+ */
+/**
  * @template T
  * @param {T} value
  * @returns {T} The clone; a nullish `value` is returned as it is.

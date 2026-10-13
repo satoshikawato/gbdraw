@@ -2,6 +2,7 @@
 /** @import { DiagramMode, DrawingState } from '../../state.js' */
 /** @import { FeaturePlacementDraftRow, FeaturePlacementTarget } from '../../services/feature-placement.js' */
 /** @import { ChangeTrackLayout, LayoutControl } from '../track-slot-edits.js' */
+/** @import { RecordKeyedFeature } from '../../services/feature-identity.js' */
 import {
   canonicalFeaturePlacements,
   featureIdentityKeyOf,
@@ -97,7 +98,7 @@ export const restoreTrackLayout = ({ form, adv }, saved) => {
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {() => ({ mode?: string } | null)} getCommittedRequest The committed canonical request.
- * @property {(feature: PlacedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
+ * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {<T extends object>(value: T) => T} [reactive] Vue `reactive`
  * @property {() => Promise<any>} [nextTick] Vue `nextTick`
  */
