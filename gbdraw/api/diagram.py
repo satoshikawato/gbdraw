@@ -174,7 +174,11 @@ from gbdraw.legend.table import (
     LegendTable,
     pairwise_identity_legend_from_comparisons,
 )
-from gbdraw.linear_comparison import ComparisonRecordIdWarning, LinearComparison
+from gbdraw.linear_comparison import (
+    ComparisonRecordIdWarning,
+    LinearComparison,
+    ProteinComparisonFrames,
+)
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
     DEFAULT_FEATURE_TYPES,
@@ -1550,15 +1554,59 @@ def _linear_losat_cache_filenames(
     )
 
 
+def project_collinearity_frames(
+    result: CollinearityResult,
+    records: Sequence[SeqRecord],
+    *,
+    color_mode: CollinearityColorMode,
+    search_scope: CollinearitySearchScope,
+    comparison_pairs: Sequence[tuple[int, int]] | None,
+) -> ProteinComparisonFrames:
+    """The comparisons a Linear diagram draws for collinearity blocks.
+
+    Without ``comparison_pairs`` the blocks give one ordered frame per adjacent
+    record pair; with them, one comparison per listed pair.
+    """
+
+    if comparison_pairs is None:
+        return ProteinComparisonFrames(
+            ordered=tuple(
+                convert_collinearity_blocks_to_comparisons(
+                    result,
+                    records=records,
+                    color_mode=color_mode,
+                    search_scope=search_scope,
+                )
+            )
+        )
+    pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
+        result,
+        records=records,
+        color_mode=color_mode,
+        search_scope=search_scope,
+    )
+    allowed_pairs = set(comparison_pairs)
+    return ProteinComparisonFrames(
+        pairs=tuple(
+            LinearComparison(query_index, subject_index, matches)
+            for (query_index, subject_index), matches in pair_comparisons.items()
+            if (query_index, subject_index) in allowed_pairs
+        )
+    )
+
+
 @dataclass(frozen=True)
 class ProteinComparisonAnalysis:
-    """A protein analysis and the writes it made into a fork of the request's raw cache.
+    """A protein analysis, the comparisons it draws, and its raw-cache writes.
 
-    The caller replays ``cache_writes`` on its cache on a build and on a hit,
-    since ``session_entries()`` reads the display marks after the drawing.
+    ``comparisons`` is a direct field, so the stages that draw it can key it
+    by this stage. The caller replays ``cache_writes`` (writes into a fork of
+    the request's raw cache) on its cache on a build and on a hit, since
+    ``session_entries()`` reads the display marks after the drawing.
     """
 
     result: ProteinBlastpResult | CollinearityResult
+    comparisons: ProteinComparisonFrames
     cache_writes: tuple[LosatCacheWrite, ...]
 
 
@@ -1582,6 +1630,7 @@ def _invoke_protein_analysis_helper(
     collinearity_unit_mode: CollinearityUnitMode | str,
     collinearity_anchor_mode: CollinearityAnchorMode,
     collinearity_search_scope: CollinearitySearchScope,
+    collinearity_color_mode: CollinearityColorMode,
     collinear_infer_orthogroups: bool,
     collinearity_comparison_pairs: Sequence[tuple[int, int]] | None,
     cache_state: LosatpCacheState | None,
@@ -1596,6 +1645,7 @@ def _invoke_protein_analysis_helper(
         LosatpCacheManager.from_state(cache_state) if cache_state is not None else None
     )
     result: ProteinBlastpResult | CollinearityResult
+    comparisons: ProteinComparisonFrames
     if mode == "pairwise":
         result = build_pairwise_protein_blastp_comparisons(
             records,
@@ -1613,6 +1663,18 @@ def _invoke_protein_analysis_helper(
             protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
+        )
+        comparisons = (
+            ProteinComparisonFrames(
+                pairs=tuple(
+                    LinearComparison(query_index, subject_index, matches)
+                    for (query_index, subject_index), matches in zip(
+                        pairwise_pairs, result.comparisons, strict=True
+                    )
+                )
+            )
+            if pairwise_pairs is not None
+            else ProteinComparisonFrames(ordered=tuple(result.comparisons))
         )
     elif mode == "orthogroup":
         result = build_rbh_orthogroup_protein_blastp_comparisons(
@@ -1633,6 +1695,7 @@ def _invoke_protein_analysis_helper(
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
         )
+        comparisons = ProteinComparisonFrames(ordered=tuple(result.comparisons))
     elif mode == "collinear":
         result = build_orthogroup_collinearity_blocks(
             records,
@@ -1658,10 +1721,17 @@ def _invoke_protein_analysis_helper(
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
         )
+        comparisons = project_collinearity_frames(
+            result,
+            records,
+            color_mode=collinearity_color_mode,
+            search_scope=collinearity_search_scope,
+            comparison_pairs=collinearity_comparison_pairs,
+        )
     else:
         raise ValidationError(f"Unsupported protein analysis mode: {mode!r}.")
     return ProteinComparisonAnalysis(
-        result, losatp_cache.writes if losatp_cache is not None else ()
+        result, comparisons, losatp_cache.writes if losatp_cache is not None else ()
     )
 
 
@@ -1941,35 +2011,10 @@ def assemble_linear_diagram_from_records(
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
-    resolved_protein_comparisons: list[DataFrame] | None = None
-    resolved_linear_comparisons: list[LinearComparison] = list(linear_comparisons or ())
+    resolved_protein_frames: ProteinComparisonFrames | None = None
     resolved_orthogroups: OrthogroupResult | OrthogroupGraphResult | None = orthogroups
     resolved_collinearity_result: CollinearityResult | None = None
     losat_cache_filenames = _linear_losat_cache_filenames(records, _record_presentations)
-
-    def project_collinearity_comparisons(
-        result: CollinearityResult,
-    ) -> list[DataFrame] | None:
-        if collinearity_comparison_pairs is None:
-            return convert_collinearity_blocks_to_comparisons(
-                result,
-                records=records,
-                color_mode=normalized_collinearity_color_mode,
-                search_scope=normalized_collinearity_search_scope,
-            )
-        pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
-            result,
-            records=records,
-            color_mode=normalized_collinearity_color_mode,
-            search_scope=normalized_collinearity_search_scope,
-        )
-        allowed_pairs = set(collinearity_comparison_pairs)
-        resolved_linear_comparisons.extend(
-            LinearComparison(query_index, subject_index, matches)
-            for (query_index, subject_index), matches in pair_comparisons.items()
-            if (query_index, subject_index) in allowed_pairs
-        )
-        return None
 
     def invoke_protein_analysis(
         mode: ProteinBlastpMode,
@@ -1977,7 +2022,7 @@ def assemble_linear_diagram_from_records(
         *,
         analysis_cache_filenames: Sequence[str] | None = losat_cache_filenames,
         pairwise_pairs: Sequence[tuple[int, int]] | None = None,
-    ) -> ProteinBlastpResult | CollinearityResult:
+    ) -> ProteinComparisonAnalysis:
         analysis = render_stage(
             "protein_analysis",
             _invoke_protein_analysis_helper,
@@ -2008,6 +2053,7 @@ def assemble_linear_diagram_from_records(
             collinearity_unit_mode=collinearity_unit_mode,
             collinearity_anchor_mode=normalized_collinearity_anchor_mode,
             collinearity_search_scope=normalized_collinearity_search_scope,
+            collinearity_color_mode=normalized_collinearity_color_mode,
             collinear_infer_orthogroups=collinear_infer_orthogroups,
             collinearity_comparison_pairs=collinearity_comparison_pairs,
             cache_state=losatp_cache.state() if losatp_cache is not None else None,
@@ -2017,10 +2063,10 @@ def assemble_linear_diagram_from_records(
         )
         if losatp_cache is not None:
             losatp_cache.apply_writes(analysis.cache_writes)
-        return analysis.result
+        return analysis
 
     if protein_comparisons is not None:
-        resolved_protein_comparisons = list(protein_comparisons)
+        resolved_protein_frames = ProteinComparisonFrames(ordered=tuple(protein_comparisons))
     elif collinearity_blocks is not None:
         if isinstance(collinearity_blocks, CollinearityResult):
             collinearity_result = collinearity_blocks
@@ -2029,53 +2075,43 @@ def assemble_linear_diagram_from_records(
         resolved_collinearity_result = collinearity_result
         if collinearity_result.orthogroups is not None:
             resolved_orthogroups = collinearity_result.orthogroups
-        resolved_protein_comparisons = project_collinearity_comparisons(
-            collinearity_result
+        resolved_protein_frames = project_collinearity_frames(
+            collinearity_result,
+            records,
+            color_mode=normalized_collinearity_color_mode,
+            search_scope=normalized_collinearity_search_scope,
+            comparison_pairs=collinearity_comparison_pairs,
         )
+    elif normalized_protein_blastp_mode == "pairwise" and normalized_protein_pairs is not None:
+        # One plan for every pair, so records of one file share a database.
+        resolved_protein_frames = invoke_protein_analysis(
+            "pairwise",
+            records,
+            analysis_cache_filenames=_linear_losat_cache_filenames(
+                records, _record_presentations, normalized_protein_pairs
+            ),
+            pairwise_pairs=normalized_protein_pairs,
+        ).comparisons
     elif normalized_protein_blastp_mode == "pairwise":
-        pair_inputs = normalized_protein_pairs
-        if pair_inputs is not None:
-            # One plan for every pair, so records of one file share a database.
-            protein_blastp_result = cast(
-                ProteinBlastpResult,
-                invoke_protein_analysis(
-                    "pairwise",
-                    records,
-                    analysis_cache_filenames=_linear_losat_cache_filenames(
-                        records, _record_presentations, pair_inputs
-                    ),
-                    pairwise_pairs=pair_inputs,
-                ),
-            )
-            resolved_linear_comparisons.extend(
-                LinearComparison(query_index, subject_index, matches)
-                for (query_index, subject_index), matches in zip(
-                    pair_inputs, protein_blastp_result.comparisons, strict=True
-                )
-            )
-        else:
-            protein_blastp_result = cast(
-                ProteinBlastpResult,
-                invoke_protein_analysis("pairwise", records),
-            )
-            resolved_protein_comparisons = protein_blastp_result.comparisons
+        resolved_protein_frames = invoke_protein_analysis("pairwise", records).comparisons
     elif normalized_protein_blastp_mode == "orthogroup":
-        protein_blastp_result = cast(
-            ProteinBlastpResult,
-            invoke_protein_analysis("orthogroup", records),
-        )
-        resolved_protein_comparisons = protein_blastp_result.comparisons
-        resolved_orthogroups = protein_blastp_result.orthogroups
+        analysis = invoke_protein_analysis("orthogroup", records)
+        resolved_protein_frames = analysis.comparisons
+        resolved_orthogroups = cast(ProteinBlastpResult, analysis.result).orthogroups
     elif normalized_protein_blastp_mode == "collinear":
-        collinearity_result = cast(
-            CollinearityResult,
-            invoke_protein_analysis("collinear", records),
-        )
+        analysis = invoke_protein_analysis("collinear", records)
+        collinearity_result = cast(CollinearityResult, analysis.result)
         resolved_collinearity_result = collinearity_result
         resolved_orthogroups = collinearity_result.orthogroups
-        resolved_protein_comparisons = project_collinearity_comparisons(
-            collinearity_result
-        )
+        resolved_protein_frames = analysis.comparisons
+    # Ordered frames and explicit pairs, as the reply metadata and the canvas read them.
+    resolved_protein_comparisons = (
+        resolved_protein_frames.ordered if resolved_protein_frames is not None else None
+    )
+    resolved_linear_comparisons = (
+        *(linear_comparisons or ()),
+        *(resolved_protein_frames.pairs if resolved_protein_frames is not None else ()),
+    )
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = _resolve_linear_plot_title_position(
         str(plot_title_position)
@@ -2183,9 +2219,9 @@ def assemble_linear_diagram_from_records(
         plot_title=normalized_plot_title or None,
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
-        comparison_dataframes=resolved_protein_comparisons,
+        protein_comparisons=resolved_protein_frames,
         pairwise_identity_legend=protein_identity_legend,
-        linear_comparisons=resolved_linear_comparisons or None,
+        linear_comparisons=list(linear_comparisons) if linear_comparisons else None,
         linear_layout=layout,
         orthogroups=resolved_orthogroups,
         similarity_alignment=similarity_alignment,
@@ -2194,12 +2230,8 @@ def assemble_linear_diagram_from_records(
     build_result = LinearDiagramBuildResult(
         drawing=canvas,
         metadata=LinearDiagramMetadata(
-            protein_comparisons=(
-                tuple(resolved_protein_comparisons)
-                if resolved_protein_comparisons is not None
-                else None
-            ),
-            linear_comparisons=tuple(resolved_linear_comparisons),
+            protein_comparisons=resolved_protein_comparisons,
+            linear_comparisons=resolved_linear_comparisons,
             orthogroups=resolved_orthogroups,
             collinearity_result=resolved_collinearity_result,
             comparison_warnings=getattr(canvas, "_gbdraw_comparison_record_id_warnings", ()),

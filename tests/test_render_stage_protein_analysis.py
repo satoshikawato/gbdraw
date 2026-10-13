@@ -141,6 +141,14 @@ def test_a_repeat_render_reuses_the_protein_analysis_and_its_display_marks(
     assert cold_metrics["renderStageBuild:protein_analysis"] == 1
     assert warm_metrics["renderStageHit:protein_analysis"] == 1
     assert "renderStageBuild:protein_analysis" not in warm_metrics
+    # The analysis gives its comparison frames an identity, so the stages that
+    # draw them are reused too, and nothing in the warm render is uncacheable.
+    assert warm_metrics["renderStageHit:comparison_rows"] == 1
+    assert warm_metrics["renderStageHit:comparison_content"] >= 1
+    assert not {name for name in warm_metrics if name.startswith("renderStageBuild:")}
+    for metrics in (cold_metrics, warm_metrics):
+        assert metrics.get("renderStageUncacheableCount", 0) == 0
+        assert metrics.get("renderStageUndeclaredReadCount", 0) == 0
     assert [entry["display"] for entry in warm.losat_cache_entries if entry.get("kind") == "raw-losat"] == [
         entry["display"] for entry in expected.losat_cache_entries if entry.get("kind") == "raw-losat"
     ]

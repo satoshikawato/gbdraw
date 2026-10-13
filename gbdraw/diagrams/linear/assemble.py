@@ -130,6 +130,7 @@ from ...mode_profiles import ComparisonThresholds
 from ...linear_comparison import (
     ComparisonRecordIdWarning,
     LinearComparison,
+    ProteinComparisonFrames,
     merge_linear_comparisons,
     project_search_frame_comparisons,
     validate_linear_comparison_record_ids,
@@ -671,7 +672,7 @@ class LinearComparisonRows:
 
 def linear_comparison_rows(
     blast_tables: tuple[DataFrame, ...],
-    comparison_dataframes: tuple[DataFrame, ...],
+    protein_comparisons: ProteinComparisonFrames | None,
     linear_comparisons: tuple[LinearComparison, ...],
     thresholds: ComparisonThresholds,
     records: tuple[SeqRecord, ...],
@@ -681,12 +682,14 @@ def linear_comparison_rows(
     """Filter, merge, validate and project the comparisons (render stage ``comparison_rows``).
 
     The ordered tables (comparison files, then protein comparisons) pair
-    record ``i`` with ``i + 1``; explicit comparisons name their records.
+    record ``i`` with ``i + 1``; explicit comparisons (given, then protein
+    pairs) name their records.
     """
 
+    proteins = protein_comparisons or ProteinComparisonFrames()
     sources = [
         [filter_comparison_dataframe(table, thresholds) for table in source]
-        for source in (blast_tables, comparison_dataframes)
+        for source in (blast_tables, proteins.ordered)
         if source
     ]
     ordered_frames: list[DataFrame] = []
@@ -699,7 +702,7 @@ def linear_comparison_rows(
             item.subject_record_index,
             filter_comparison_dataframe(item.matches, thresholds),
         )
-        for item in linear_comparisons
+        for item in (*linear_comparisons, *proteins.pairs)
     ]
     if ordered_frames:
         if multi_record_enabled:
@@ -1895,7 +1898,7 @@ def assemble_linear_diagram(
     plot_title: str | None = None,
     plot_title_position: str = "bottom",
     plot_title_font_size: float = 32.0,
-    comparison_dataframes: list[DataFrame] | None = None,
+    protein_comparisons: ProteinComparisonFrames | None = None,
     pairwise_identity_legend: PairwiseIdentityLegend | None = None,
     linear_comparisons: list[LinearComparison] | None = None,
     linear_layout: LinearMultiRecordOptions | None = None,
@@ -1996,7 +1999,7 @@ def assemble_linear_diagram(
         "comparison_rows",
         linear_comparison_rows,
         _read_comparison_files(blast_files),
-        tuple(comparison_dataframes or ()),
+        protein_comparisons,
         tuple(linear_comparisons or ()),
         ComparisonThresholds(
             evalue=blast_config.evalue,

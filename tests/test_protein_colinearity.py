@@ -65,6 +65,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.genome import load_gff_fasta
 from gbdraw.io.record_select import reverse_records
+from gbdraw.linear_comparison import ProteinComparisonFrames
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 
 
@@ -4179,7 +4180,7 @@ def test_assemble_linear_diagram_accepts_precomputed_protein_comparisons(
     captured: dict[str, object] = {}
 
     def fake_assemble(*_args, **kwargs):
-        captured["comparison_dataframes"] = kwargs.get("comparison_dataframes")
+        captured["protein_comparisons"] = kwargs.get("protein_comparisons")
         return Drawing(filename="dummy.svg")
 
     monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram", fake_assemble)
@@ -4196,10 +4197,11 @@ def test_assemble_linear_diagram_accepts_precomputed_protein_comparisons(
     )
 
     assert isinstance(canvas, Drawing)
-    frames = captured["comparison_dataframes"]
-    assert isinstance(frames, list)
-    assert len(frames) == 1
-    assert frames[0].equals(comparison)
+    frames = captured["protein_comparisons"]
+    assert isinstance(frames, ProteinComparisonFrames)
+    assert frames.pairs == ()
+    assert frames.ordered is not None and len(frames.ordered) == 1
+    assert frames.ordered[0].equals(comparison)
 
 
 @pytest.mark.linear
