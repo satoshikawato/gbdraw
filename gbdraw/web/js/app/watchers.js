@@ -10,6 +10,7 @@ import {
   parseWhitelistRules
 } from '../services/file-imports.js';
 import {
+  legendPositionOfMode,
   normalizeCircularPlotTitlePosition,
   resolveCircularLayoutPreference
 } from '../services/layout-preferences.js';
@@ -152,15 +153,6 @@ export const setupWatchers = ({
     syncPaletteDraftState
   } = resultsManager;
 
-  /**
-   * @param {unknown} value
-   * @param {string} [fallback]
-   */
-  const normalizeLegendPosition = (value, fallback = 'left') => {
-    const normalized = String(value || '').trim().toLowerCase();
-    return normalized || fallback;
-  };
-
   /** @param {unknown} value */
   const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
@@ -230,10 +222,8 @@ export const setupWatchers = ({
 
       if (enabled && !hasStoredCircularMultiRecordLayout(drawing)) {
         if (suppressCircularMultiRecordDefaults.value) {
-          drawing.layoutPreferences.circular.multi.legend = normalizeLegendPosition(
-            drawing.form.legend,
-            'left'
-          );
+          drawing.layoutPreferences.circular.multi.legend =
+            legendPositionOfMode(drawing.form.legend, 'circular') ?? 'left';
           drawing.layoutPreferences.circular.multi.plotTitlePosition =
             normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
         } else {

@@ -186,6 +186,11 @@ write-up of a release.
 - The first Generate shows each runtime preparation step ("step 2 of 5, ...").
 - Fixed: a Session load error raised in Circular stayed on screen after switching
   to Linear (OV-372).
+- Fixed (web app): a Session or configuration file whose legend position is not
+  one of its diagram mode (a Circular corner such as Upper Left in Linear, or any
+  other text) loaded, and **Generate** then failed with "Input validation
+  failed". Such a position is now read as unset, so the legend takes the default
+  position; capitals and outer spaces are still accepted (OV-652).
 - Fixed: the records of one multi-record File were named differently in
   **Record Layout**, **Selected pairs** and the **BLAST TSV missing** dialog
   (one by its definition, the next by its accession); each now shows the File's

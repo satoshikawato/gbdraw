@@ -55,6 +55,7 @@ import {
 } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
+  legendPositionOfMode,
   normalizeCircularPlotTitlePosition,
   normalizeLayoutPreferences,
   replaceLayoutPreferences,
@@ -653,13 +654,14 @@ const buildSessionFilename = (title) => {
 };
 
 /**
+ * The legend side of a stored Result of `mode`; a value outside the mode's
+ * positions reads as the side an unset one had.
  * @param {unknown} value
- * @param {string} [fallback]
+ * @param {string} mode
  */
-const normalizeLegendPosition = (value, fallback = 'left') => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return normalized || fallback;
-};
+const storedGeneratedLegendPosition = (value, mode) => (
+  legendPositionOfMode(value, mode) ?? (mode === 'linear' ? 'bottom' : 'left')
+);
 
 /** @param {unknown} value */
 const normalizeLabelRendering = (value) => {
@@ -2524,9 +2526,7 @@ const buildLoadedArtifactSlot = (set, {
       annotationWarnings: cloneJsonData(runMetadata.annotationWarnings || []),
       featureIdentityNotices: cloneJsonData(runMetadata.featureIdentityNotices || []),
       comparisonWarnings: cloneJsonData(runMetadata.comparisonWarnings || []),
-      generatedLegendPosition: normalizeLegendPosition(
-        ui.generatedLegendPosition, mode === 'linear' ? 'bottom' : 'left'
-      ),
+      generatedLegendPosition: storedGeneratedLegendPosition(ui.generatedLegendPosition, mode),
       generatedMode: mode,
       generatedMultiRecordCanvas: Boolean(ui.generatedMultiRecordCanvas),
       generatedCircularPlotTitlePosition: hasStoredLayoutValue(ui.generatedCircularPlotTitlePosition)
@@ -4720,9 +4720,8 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
 
   if (ui.generatedMode) state.generatedMode.value = ui.generatedMode === 'linear' ? 'linear' : 'circular';
   if (ui.generatedLegendPosition) {
-    state.generatedLegendPosition.value = normalizeLegendPosition(
-      ui.generatedLegendPosition,
-      state.generatedMode.value === 'linear' ? 'bottom' : 'left'
+    state.generatedLegendPosition.value = storedGeneratedLegendPosition(
+      ui.generatedLegendPosition, state.generatedMode.value
     );
   }
   if (Object.prototype.hasOwnProperty.call(ui, 'generatedMultiRecordCanvas')) {
@@ -5895,9 +5894,8 @@ const importSessionDocument = async (e, options = {}) => {
     }
     state.generatedMode.value = (committedMode || ui.mode) === 'linear' ? 'linear' : 'circular';
     if (ui.generatedLegendPosition) {
-      state.generatedLegendPosition.value = normalizeLegendPosition(
-        ui.generatedLegendPosition,
-        (committedMode || ui.mode) === 'linear' ? 'bottom' : 'left'
+      state.generatedLegendPosition.value = storedGeneratedLegendPosition(
+        ui.generatedLegendPosition, state.generatedMode.value
       );
     }
     state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);
