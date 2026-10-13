@@ -221,13 +221,19 @@ export const createLegendEntryActions = ({
   // the rows into the intent, the row a rename draws in the place of the row
   // it renames (OV-158), and returns the rows the displayed Result shows at
   // once until Python draws them (gaps 1 and 2; null when the rows only change
-  // color). Resolves to false when the Result or the caller became stale.
+  // color). A row of `rekeyed` (old key to new key) is one rule row whose key
+  // the rule table change re-allocates (OV-645): the row the commit adds under
+  // the new key takes the place of the row it removes under the old one, in
+  // the list and in the generated inventory, so the order stays the default
+  // order or the user's. Resolves to false when the Result or the caller
+  // became stale.
   /**
    * @param {(EntryRecord & { name?: string })[]} intents
-   * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean, placement?: { caption: string, at: string } | null }} [options]
+   * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean,
+   *   placement?: { caption: string, at: string } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
    */
   const prepareFileLegendEntries = async (intents, {
-    drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null
+    drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null, rekeyed = new Map()
   } = {}) => {
     const mountedSvg = svgContainer.value?.querySelector('svg');
     if (getAllFeatureLegendGroups(mountedSvg).length === 0) {
@@ -267,24 +273,34 @@ export const createLegendEntryActions = ({
         let entries = (drawing.legendEntries.value || []).map((/** @type {EntryRecord} */ entry) => (
           colors.has(legendCaption(entry)) ? { ...entry, color: colors.get(legendCaption(entry)) } : entry
         ));
+        // A re-keyed row (OV-645) is the row the commit removes, added under
+        // its new key: it keeps its place and its rank in the inventory.
+        const rekeys = [...rekeyed].filter(([from, to]) => removed.has(from) && added.has(to))
+          .map(([at, caption]) => ({ caption, at }));
+        if (rekeys.length > 0) {
+          /** @type {Map<string, string>} */
+          const newKey = new Map(rekeys.map(({ caption, at }) => [at, caption]));
+          originalLegendOrder.value = originalLegendOrder.value.map((/** @type {string} */ key) => newKey.get(key) ?? key);
+        }
         // OV-158 (Owner decision 2026-10-07): the row a rename draws takes the
         // place of the row it renames, so the editor list records the edited
         // order Generate replays (PD-OI-063).
-        let before = '';
-        if (placement && intents.some((intent) => intent.caption === placement.caption)) {
-          const row = added.get(placement.caption) || entries.find((entry) => legendCaption(entry) === placement.caption);
-          const others = entries.filter((entry) => legendCaption(entry) !== placement.caption);
-          const at = others.findIndex((entry) => legendCaption(entry) === placement.at);
-          if (row && at >= 0) {
-            entries = [...others.slice(0, at), row, ...others.slice(at)];
-            if (added.delete(placement.caption)) before = placement.at;
-          }
+        const renamed = placement && intents.some((intent) => intent.caption === placement.caption) ? [placement] : [];
+        /** @type {Map<string, string>} A row the commit adds, and the row it is shown before. */
+        const before = new Map();
+        for (const { caption, at: key } of [...rekeys, ...renamed]) {
+          const row = added.get(caption) || entries.find((entry) => legendCaption(entry) === caption);
+          const others = entries.filter((entry) => legendCaption(entry) !== caption);
+          const at = others.findIndex((entry) => legendCaption(entry) === key);
+          if (!row || at < 0) continue;
+          entries = [...others.slice(0, at), row, ...others.slice(at)];
+          if (added.delete(caption)) before.set(caption, key);
         }
         drawing.legendEntries.value = [...entries.filter((entry) => !removed.has(legendCaption(entry))), ...added.values()];
         const rows = {
           add: diff.add.map(({ caption, color }) => ({
             caption, color, ...(names.get(caption) ? { name: names.get(caption) } : {}),
-            ...(before && caption === placement?.caption ? { before } : {})
+            ...(before.has(caption) ? { before: before.get(caption) } : {})
           })),
           retire: [...removed]
         };

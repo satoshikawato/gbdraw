@@ -11,8 +11,8 @@ import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-util
 import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
-  buildLegendIntents, createRuleLegendCaptions, legendRowRules, prepareSpecificColorImport, ruleCommitLegendRows,
-  ruleLegendCaptions
+  buildLegendIntents, createRuleLegendCaptions, legendRowRules, prepareSpecificColorImport, rekeyedRuleRows,
+  ruleCommitLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
 import { resolveFeatureLabelSelector } from '../../services/feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
@@ -69,7 +69,7 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
 /**
  * @typedef {object} FeatureRuleActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: LegendPlacement | null }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
+ * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: LegendPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
@@ -140,7 +140,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // `takenKeys`, with the caption and the swatch they show, OV-310), and
   // `retiredLegendIntents`, rows this commit replaces, which are no
   // renderer rows for the N-06 caption allocation. `removedRuleRows` are
-  // the rows of current rules that no candidate rule names, drawn or not.
+  // the rows of current rules that no candidate rule names, drawn or not;
+  // `rekeyed` are the rows both rule tables hold under another key (OV-645).
   /**
    * @param {DrawingState} drawing
    * @param {Partial<SpecificColorRule>[]} candidateRules
@@ -167,7 +168,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return {
       intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents,
       previousIntents: [...ruleRows, ...takenRows, ...retiredLegendIntents],
-      removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption))
+      removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption)),
+      rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows)
     };
   };
   // OV-43 (Owner decision 2026-10-06, option A), narrowed by R14-8 (U3a 1d):
@@ -417,14 +419,15 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const current = () => !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
-    const { intents, previousIntents, removedRuleRows } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
+    const { intents, previousIntents, removedRuleRows, rekeyed } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
       .some((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,
       previousFileIntents: previousIntents,
       isCurrent: current,
-      placement: legendPlacement
+      placement: legendPlacement,
+      rekeyed
     });
     if (!legend) return false;
     const redrawsLegend = redrawsLegendFor(drawing, [...drawing.manualSpecificRules], candidate.rules, {

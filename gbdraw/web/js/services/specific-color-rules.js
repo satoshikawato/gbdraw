@@ -395,6 +395,31 @@ export const createRuleLegendCaptions = (rules = [], rendererRows = []) => {
   };
 };
 
+// The rule rows a change of the rule table re-keys (OV-645): a group of one
+// caption and one fill that both tables hold is one Legend row, and its key
+// changes when its caption starts or stops being written in several colors.
+// Old key to new key; the Legend owner keeps such a row in its place.
+/**
+ * @param {readonly Partial<SpecificColorRule>[]} before
+ * @param {readonly Partial<SpecificColorRule>[]} after
+ * @param {RendererLegendRow[]} [rendererRows]
+ * @returns {Map<PythonLegendKey, PythonLegendKey>}
+ */
+export const rekeyedRuleRows = (before, after, rendererRows = []) => {
+  const keyBefore = createRuleLegendCaptions([...before], rendererRows);
+  const keyAfter = createRuleLegendCaptions([...after], rendererRows);
+  const kept = new Set(after.map((rule) => legendGroupKey(normalizeSpecificRule(rule))));
+  /** @type {Map<PythonLegendKey, PythonLegendKey>} */
+  const rekeyed = new Map();
+  for (const rule of before) {
+    const group = normalizeSpecificRule(rule);
+    if (group.cap && kept.has(legendGroupKey(group)) && keyBefore(group) !== keyAfter(group)) {
+      rekeyed.set(keyBefore(group), keyAfter(group));
+    }
+  }
+  return rekeyed;
+};
+
 // Only a caption written with several colors, or one that names a current row
 // of another swatch, can be allocated.
 /** @param {ReturnType<typeof normalizeSpecificRule>} rule @param {RendererLegendRow[]} rows */

@@ -8,7 +8,7 @@ import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { readFileSync } from 'node:fs';
 import {
   createRuleLegendCaptions, diffLegendIntents, generatedLegendRow, legendRowRules, prepareSpecificColorImport,
-  ruleCommitLegendRows, ruleLegendCaptions, savedRuleCaption, savedSpecificRules
+  rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions, savedRuleCaption, savedSpecificRules
 } from '../../gbdraw/web/js/services/specific-color-rules.js';
 import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
@@ -925,6 +925,25 @@ for (const { name, rules, renderer_rows: rendererRows, rule_stroke: ruleStroke =
     assert.deepEqual(rules.map(lazy), keys);
   });
 }
+
+// OV-645: the rules of one caption and one fill draw one Legend row, and its key
+// changes when the caption starts or stops being written in several colors.
+// The Legend owner keeps such a row in its place, so the mirror names it: the
+// old key and the new key of each row both rule tables hold.
+test('rule row keys: a rule table change re-keys the rows whose caption starts or stops being shared (OV-645)', () => {
+  const red = { feat: 'CDS', qual: 'gene', val: 'a', color: '#e63946', cap: 'alpha' };
+  const teal = { feat: 'CDS', qual: 'gene', val: 'b', color: '#2a9d8f', cap: 'alpha' };
+  const rekeyed = (before, after, rows) => [...rekeyedRuleRows(before, after, rows)];
+  assert.deepEqual(rekeyed([red, teal], [red, { ...teal, cap: 'gamma' }]), [['alpha [#e63946]', 'alpha']], 'a name stops being shared');
+  assert.deepEqual(rekeyed([red, { ...teal, cap: 'beta' }], [red, teal]), [['alpha', 'alpha [#e63946]']], 'a name becomes shared');
+  assert.deepEqual(rekeyed([red, teal], [red]), [['alpha [#e63946]', 'alpha']], 'the other rule of the name is removed');
+  assert.deepEqual(rekeyed([red, teal], [teal, { ...red, color: 'rgb(230, 57, 70)' }]), [], 'the same rows in another order and spelling');
+  // A recolored or renamed rule draws another row; a row no table change touches keeps its key.
+  assert.deepEqual(rekeyed([red, teal], [red, { ...teal, color: '#000000' }]), []);
+  assert.deepEqual(rekeyed([red], [{ ...red, cap: 'beta' }]), []);
+  const typeRow = [{ caption: 'alpha', color: '#54bcf8', ruleLine: true }];
+  assert.deepEqual(rekeyed([red], [red, { ...teal, cap: 'beta' }], typeRow), [], 'a rule named like a renderer row keeps its allocated key');
+});
 
 // OV-640 (D-15): a feature's row is read by its key ("Shared [#112233]" for a
 // caption written in two colors). A caption written from that reading is the

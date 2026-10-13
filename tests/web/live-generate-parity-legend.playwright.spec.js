@@ -1580,6 +1580,29 @@ test('legend names: a rule renamed onto the name of another rule numbers both ro
   await expectNamesLiveAndGenerated(page, ['alpha', 'gamma', ...rest], 'the rule renamed away');
 });
 
+// OV-645: the key of a rule's row changes when its name starts or stops being
+// written in several colors (`alpha` and `alpha [#e63946]`). The row is the
+// same row: it keeps its place when the Legend editor renames the other row of
+// its name, and, in an order the user set, when the rule list makes the name
+// shared and single again. A row the rule list renames is drawn anew, last.
+test('legend names: a rule row keeps its place when its key changes with the sharing of its name, also in a user order, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
+  await setRuleField(page, 1, 'cap', 'alpha');
+  await expectLegendNames(page, ['alpha (1)', 'alpha (2)', 'other proteins', 'repeat_region'], 'two rules of one name');
+  await renameAndSettle(page, 'alpha [#2a9d8f]', 'gamma');
+  await expectNamesLiveAndGenerated(page, ['alpha', 'gamma', 'other proteins', 'repeat_region'], 'the Legend editor renames one of two rows of a name');
+  expect(await ruleTable(page)).toEqual([['^FL1$', 'alpha', '#e63946'], ['^FL2$', 'gamma', '#2a9d8f']]);
+
+  await appAction(page, 'moveLegendEntry', 0, 2);
+  await expectLegendNames(page, ['gamma', 'other proteins', 'alpha', 'repeat_region'], 'the user moves the alpha row');
+  await setRuleField(page, 1, 'cap', 'alpha');
+  await expectNamesLiveAndGenerated(page, ['other proteins', 'alpha (1)', 'repeat_region', 'alpha (2)'], 'the name becomes shared in a user order');
+  await setRuleField(page, 1, 'cap', 'beta');
+  await expectNamesLiveAndGenerated(page, ['other proteins', 'alpha', 'repeat_region', 'beta'], 'the name stops being shared in a user order');
+});
+
 // A row key keeps the string 0.13.0 gave the second source of a label
 // (`GC content (2)`), so the edits a Session stores under it stay on that
 // track's row. Once both tracks have one swatch they share the first row, and
