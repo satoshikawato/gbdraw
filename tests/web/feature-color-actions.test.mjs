@@ -1260,6 +1260,15 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.deepEqual([typed.legendRenameDialog.show, typed.legendRenameDialog.mergeAvailable], [true, false],
       `a typed rename onto ${name} offers no Merge`);
   }
+  // D-11 (OV-587): the two results above are told apart by where the name
+  // comes from, so the Legend name field suggests no group: a group's name is
+  // a typed rename only when the user types it, and the list under the field
+  // is the only place that offers a group.
+  const template = await readFile(join(repoRoot, 'gbdraw', 'web', 'index.html'), 'utf8');
+  const nameField = template.match(/<input\b[^>]*aria-label="Feature legend name"[^>]*>/)?.[0] || '';
+  assert.match(nameField, /@change="handleLegendNameCommit"/, 'the popup has its Legend name field');
+  assert.doesNotMatch(nameField, /\blist=/, 'the Legend name field suggests no group');
+  assert.doesNotMatch(template, /<datalist\b[^>]*legend-name/);
   const pickedDeleted = ruleRows({
     entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }],
     deleted: [{ caption: 'Special', originalCaption: 'Special', color: '#ff0000', featureIds: ['t2'] }]

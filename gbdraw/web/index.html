@@ -6280,7 +6280,6 @@
                             <input type="text"
                                    :value="clickedFeature.legendName === clickedFeature.appliedLegendName ? shownLegendName(clickedFeature.legendName) : clickedFeature.legendName"
                                    @input="clickedFeature.legendName = $event.target.value"
-                                   list="specific-rule-legend-name-options"
                                    @change="handleLegendNameCommit"
                                    @keydown.enter.prevent="handleLegendNameCommit"
                                    data-history-managed
@@ -6299,12 +6298,6 @@
                                     {{ group.name }}
                                 </option>
                             </select>
-                            <datalist id="specific-rule-legend-name-options">
-                                <option v-for="group in popupLegendGroups"
-                                        :key="`specific-rule-cap-${group.name}-${group.color}`"
-                                        :value="group.name">
-                                </option>
-                            </datalist>
                         </div>
                             </div>
                         </section>
