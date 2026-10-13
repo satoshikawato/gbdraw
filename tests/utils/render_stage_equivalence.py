@@ -336,6 +336,17 @@ def stage_counts(metrics: Mapping[str, int]) -> StageCounts:
 def canonical(value: object) -> JsonValue:
     """A JSON form of a reply value for equality; it keeps order and types."""
 
+    # Exact JSON types first: most of a reply is strings, numbers, lists and
+    # dicts, and the ``isinstance`` chain below costs a few ABC checks each.
+    kind = type(value)
+    if kind is str or kind is int or kind is bool:
+        return value
+    if kind is float:
+        return {"$float": "nan"} if math.isnan(value) else value
+    if kind is list or kind is tuple:
+        return [canonical(item) for item in value]
+    if kind is dict:
+        return {"$mapping": [[canonical(key), canonical(entry)] for key, entry in value.items()]}
     if value is None or isinstance(value, (bool, str)):
         return value
     if isinstance(value, enum.Enum):
@@ -1134,6 +1145,13 @@ HEAVY_RENDER_SECONDS: Mapping[tuple[str, str, str], float] = {
     ("C2", "circular_label_spacing", "--circular_label_spacing 40"): 25.0,
     ("C2", "inner_label_x_radius_offset", "--inner_label_x_radius_offset 1.3"): 23.0,
     ("C2", "inner_label_y_radius_offset", "--inner_label_y_radius_offset 1.3"): 23.0,
+    # C3: half a warm-and-cold step under pytest at a load average of 1.
+    ("C3", "labels", "--labels both"): 5.0,
+    ("C3", "outer_label_y_radius_offset", "--outer_label_y_radius_offset 0.8"): 7.0,
+    ("C3", "inner_label_x_radius_offset", "--inner_label_x_radius_offset 0.8"): 6.0,
+    ("C3", "inner_label_x_radius_offset", "--inner_label_x_radius_offset 1.3"): 7.0,
+    ("C3", "inner_label_y_radius_offset", "--inner_label_y_radius_offset 0.8"): 5.0,
+    ("C3", "inner_label_y_radius_offset", "--inner_label_y_radius_offset 1.3"): 7.0,
 }
 # C2 variants left out of the universe. Each ends in LabelsDoNotFitError, so the
 # test only checks that warm and cold raise the same error; together they cost

@@ -28,6 +28,7 @@ from pathlib import Path
 
 import pytest
 
+import gbdraw.labels.circular_fit as circular_fit
 from tests.utils.render_stage_equivalence import (
     UNIVERSE_MARKS,
     CASES,
@@ -209,6 +210,18 @@ _SLOW_CHUNKS = [
     for case_id in ("C2", "C3", "L2", "L3")
     for chunk in cost_chunks(case_id, f"{case_id}-", p1_p2_variants(case_id, include_slow=True))
 ]
+
+
+@pytest.fixture(autouse=True)
+def no_label_fit_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stop the label-fit search of a figure drawn with crossing leaders at once.
+
+    Each verify render of that search measures the legend at its own wrap
+    width, and how many run within ``WARN_SEARCH_SECONDS`` depends on machine
+    load, so a variant could build a ``legend_measurement`` its base never reached.
+    """
+
+    monkeypatch.setattr(circular_fit, "WARN_SEARCH_SECONDS", 0.0)
 
 
 @pytest.fixture(scope="module")
