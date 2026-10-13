@@ -3,7 +3,10 @@
 // `utils/load-repairs.js` owns the wording (G1); the Load port answers.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
@@ -23,7 +26,15 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { importSession } = await import('../../gbdraw/web/js/services/config.js');
+const { importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+// The Worker's typed override check, run by Python (as session-cli-compatibility does).
+setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
+import json, sys
+from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
+p = json.load(sys.stdin)
+print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
+    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['requireUnmanagedOnly']))
+`], { input: JSON.stringify(payload), encoding: 'utf8', cwd: new URL('../../', import.meta.url).pathname })) }));
 // A Session older than 40 has its Results transformed through the composition root's port.
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -306,4 +317,68 @@ test('an older Session whose match sequences cannot be read again lists it (OV-7
   assert.ok(dialogs.flat().includes('Comparisons: the sequences of the saved comparison matches could not be read again from the'
     + ' input files; the SVG preview stays, and the next Generate reads them.'), JSON.stringify(dialogs));
   assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'match-sequences-unrestored').map(({ path }) => path), ['files']);
+});
+
+// Inventory B51 (Q2): a Session older than 27 stays refused, and the error
+// says it is from an older gbdraw. A file that is no gbdraw Session is not
+// called an old one.
+test('a Session older than 27 is refused as an old version (B51)', async () => {
+  for (const version of [8, 13, 26]) {
+    const refused = await importSession(input({ format: 'gbdraw-session', version }), {
+      confirmLoadRepairs: async () => assert.fail('no dialog for a refusal')
+    });
+    assert.equal(refused.status, 'error');
+    assert.deepEqual([refused.error.code, refused.error.context.reason], ['INPUT_INVALID', 'SESSION_TOO_OLD']);
+    assert.match(refused.error.summary, /gbdraw 0\.11\.0 or older/);
+  }
+  const other = await importSession(input({ format: 'other', version: 26 }), { confirmLoadRepairs: async () => true });
+  assert.equal(other.status, 'error');
+  assert.notEqual(other.error.context.reason, 'SESSION_TOO_OLD');
+});
+
+// PLAN 12.2: Gallery publication never loads through the dialog; it reads the
+// tables strictly, so a Session with a row Load would repair is refused.
+test('Gallery publication refuses a Session with a table row Load would repair', () => {
+  const out = join(mkdtempSync(join(tmpdir(), 'gbdraw-publish-')), 'session.json');
+  const run = spawnSync(process.execPath, [
+    new URL('../../tools/publish_gallery_session.mjs', import.meta.url).pathname, 'prepare',
+    new URL('../fixtures/sessions/whitelist-tab-keyword.v39.gbdraw-session.json.gz', import.meta.url).pathname, out
+  ], { encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /TABLE_INVALID/);
+});
+
+// G3: every Gallery Session and every Session fixture loads without a repair;
+// a repair there is a producer bug. Two fixtures are lossy on purpose. In
+// node, a Session older than 40 lists its feature recovery, which needs the
+// diagram Worker, and five fixtures need that Worker to load at all.
+const LOSSY_FIXTURES = {
+  'feature-edits-circular-copies.v44.gbdraw-session.json.gz': ['feature-visibility-narrowed'],
+  'whitelist-tab-keyword.v39.gbdraw-session.json.gz': ['table-row-joined']
+};
+const NEEDS_DIAGRAM_WORKER = new Set([
+  'feature-edits-circular.v33.gbdraw-session.json.gz', 'feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz',
+  'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', 'q-frame-main-web-losatn.v42.gbdraw-session.json.gz',
+  'q-frame-main-web-upload.v42.gbdraw-session.json.gz'
+]);
+test('every Gallery Session and Session fixture loads without a repair (G3)', async () => {
+  const sessions = (dir, keep) => readdirSync(new URL(dir, import.meta.url)).filter(keep).map((name) => [name, new URL(`${dir}${name}`, import.meta.url)]);
+  const corpus = [
+    ...sessions('../fixtures/sessions/', (name) => /\.json(\.gz)?$/.test(name) && !/provenance|expected|evidence|vectors/.test(name)),
+    ...sessions('../../gbdraw/web/gallery/sessions/', (name) => /\.json(\.gz)?$/.test(name))
+  ];
+  assert.ok(corpus.length > 50, String(corpus.length));
+  for (const [name, url] of corpus) {
+    const bytes = readFileSync(url);
+    const session = JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+    const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    if (NEEDS_DIAGRAM_WORKER.has(name)) {
+      assert.equal(loaded.status, 'error', `${name} loads in node now: check it here`);
+      continue;
+    }
+    assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
+    const codes = loaded.repairs.map(({ code }) => code)
+      .filter((code) => !(session.version < 40 && code === 'feature-recovery-failed'));
+    assert.deepEqual(codes, LOSSY_FIXTURES[name] ?? [], name);
+  }
 });
