@@ -1864,6 +1864,7 @@ export const createAppSetup = () => {
     setDefaultColor: resultsManager.setDefaultColor,
     legendRowIsNamed: legendActions.legendRowIsNamed,
     legendRowName: legendActions.legendRowName,
+    shownLegendName: legendActions.shownLegendName,
     askChoice,
     showNotice,
     revealSetting: settingsPaneActions.revealSetting

@@ -243,6 +243,21 @@ test('two color rules of one caption: the popups and the deleted list show names
   const names = await drawnNames();
   expect(keys.map((key) => names[key]).sort()).toEqual(['Shared (1)', 'Shared (2)']);
 
+  // A feature's hover summary names its row as the Legend draws it, never by the key.
+  const hoverFeature = (type) => page.evaluate((eventType) => {
+    const id = window.__GBDRAW_APP__.extractedFeatures.find((feature) => /NADH/.test(feature.product)).svg_id;
+    const element = [...document.querySelectorAll('.gbdraw-preview-surface :is(path, polygon, rect)')]
+      .find((candidate) => candidate.getAttribute('data-gbdraw-feature-id') === id || candidate.id === id);
+    const box = element.getBoundingClientRect();
+    element.dispatchEvent(new MouseEvent(eventType, { bubbles: true, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }));
+  }, type);
+  await hoverFeature('mouseover');
+  const hoverSummary = page.locator('.feature-hover-summary');
+  await expect(hoverSummary).toBeVisible();
+  await expect.soft(hoverSummary.locator('.feature-hover-summary-row').filter({ hasText: /^\s*Legend/ })
+    .locator('.feature-hover-summary-value')).toHaveText(names[keys[0]]);
+  await hoverFeature('mouseout');
+
   // The Legend item popup is titled and filled with the drawn name.
   await clickCentre(legendRow(page, keys[0]).locator('path').first());
   const legendDialog = page.getByRole('dialog', { name: `Legend item: ${names[keys[0]]}`, exact: true });
