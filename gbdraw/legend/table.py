@@ -359,64 +359,71 @@ def collect_comparison_collinearity_color_modes(
     return color_modes
 
 
-def configure_pairwise_identity_legend_from_comparisons(
-    blast_config,
+class PairwiseIdentityGradient(NamedTuple):
+    """One identity gradient row of the pairwise match legend."""
+
+    label: str
+    min_color: str
+    max_color: str
+
+
+class PairwiseIdentityLegend(NamedTuple):
+    """How the pairwise match identity legend is drawn.
+
+    ``gradients`` replaces the single ``label`` row when collinear and inverted
+    matches have their own colors; ``hidden`` drops the rows.
+    """
+
+    hidden: bool = False
+    label: str = "Pairwise match identity"
+    gradients: tuple[PairwiseIdentityGradient, ...] = ()
+
+
+def pairwise_identity_legend_from_comparisons(
+    blast_config: object,
     comparison_dataframes: Sequence[DataFrame] | None,
     *,
     additional_color_modes: Iterable[object] | None = None,
-) -> set[str]:
-    """Configure pairwise identity legend labels from collinearity metadata."""
+) -> PairwiseIdentityLegend | None:
+    """The pairwise identity legend that collinearity color modes ask for.
+
+    ``None`` when the comparisons carry no recognized color mode, so the
+    caller keeps the legend it had.
+    """
 
     color_modes = collect_comparison_collinearity_color_modes(comparison_dataframes)
     for value in additional_color_modes or ():
         normalized = _normalize_collinearity_legend_color_mode(value)
         if normalized is not None:
             color_modes.add(normalized)
-
     if not color_modes:
-        return color_modes
-
-    if hasattr(blast_config, "pairwise_identity_legend_entries"):
-        delattr(blast_config, "pairwise_identity_legend_entries")
-    if hasattr(blast_config, "pairwise_identity_legend_label"):
-        delattr(blast_config, "pairwise_identity_legend_label")
-
-    blast_config.hide_pairwise_identity_legend = color_modes == {"orientation"}
+        return None
+    hidden = color_modes == {"orientation"}
     if "orientation_identity" in color_modes:
-        orientation_min_colors = getattr(
+        min_colors = getattr(
             blast_config,
             "collinearity_orientation_min_colors",
             DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
         )
-        orientation_colors = getattr(
+        max_colors = getattr(
             blast_config,
             "collinearity_orientation_colors",
             DEFAULT_COLLINEAR_ORIENTATION_COLORS,
         )
-        blast_config.pairwise_identity_legend_entries = [
-            {
-                "label": "Collinear",
-                "min_color": orientation_min_colors.get(
-                    "plus", DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS["plus"]
-                ),
-                "max_color": orientation_colors.get(
-                    "plus", DEFAULT_COLLINEAR_ORIENTATION_COLORS["plus"]
-                ),
-            },
-            {
-                "label": "Inverted",
-                "min_color": orientation_min_colors.get(
-                    "minus", DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS["minus"]
-                ),
-                "max_color": orientation_colors.get(
-                    "minus", DEFAULT_COLLINEAR_ORIENTATION_COLORS["minus"]
-                ),
-            },
-        ]
-    elif "average_identity" in color_modes:
-        blast_config.pairwise_identity_legend_label = "Average identity"
-
-    return color_modes
+        return PairwiseIdentityLegend(
+            hidden=hidden,
+            gradients=tuple(
+                PairwiseIdentityGradient(
+                    label,
+                    min_colors.get(strand, DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS[strand]),
+                    max_colors.get(strand, DEFAULT_COLLINEAR_ORIENTATION_COLORS[strand]),
+                )
+                for label, strand in (("Collinear", "plus"), ("Inverted", "minus"))
+            ),
+        )
+    if "average_identity" in color_modes:
+        return PairwiseIdentityLegend(hidden=hidden, label="Average identity")
+    return PairwiseIdentityLegend(hidden=hidden)
 
 
 def _other_feature_legend_key(feature_type: str) -> LegendRowKey:
@@ -508,6 +515,7 @@ def prepare_legend_table(
     show_gc: bool,
     show_skew: bool,
     show_depth: bool,
+    pairwise_identity_legend: PairwiseIdentityLegend = PairwiseIdentityLegend(),
 ) -> LegendTable:
     """
     Prepare the legend table for the diagram.
@@ -566,33 +574,21 @@ def prepare_legend_table(
                 legend_table.add(key, generated.pop(key))
     for key, entry in generated.items():
         legend_table.add_default_track(key, entry)
-    if has_blast and blast_config and not bool(getattr(blast_config, "hide_pairwise_identity_legend", False)):
-        identity_legend_entries = getattr(blast_config, "pairwise_identity_legend_entries", None)
-        if identity_legend_entries:
-            for entry in identity_legend_entries:
-                label = str(entry["label"])
-                min_color = entry["min_color"]
-                if float(blast_config.identity) >= 100:
-                    min_color = entry["max_color"]
-                legend_table.add(label, {
-                    "type": "gradient",
-                    "min_color": min_color,
-                    "max_color": entry["max_color"],
-                    "stroke": "none",
-                    "width": 0,
-                    "min_value": blast_config.identity,
-                })
-        else:
-            identity_legend_label = str(
-                getattr(blast_config, "pairwise_identity_legend_label", "Pairwise match identity")
-            )
-            min_color = blast_config.min_color
-            if float(blast_config.identity) >= 100:
-                min_color = blast_config.max_color
-            legend_table.add(identity_legend_label, {
+    if has_blast and blast_config and not pairwise_identity_legend.hidden:
+        gradients = pairwise_identity_legend.gradients or (
+            PairwiseIdentityGradient(
+                pairwise_identity_legend.label,
+                blast_config.min_color,
+                blast_config.max_color,
+            ),
+        )
+        for gradient in gradients:
+            legend_table.add(gradient.label, {
                 "type": "gradient",
-                "min_color": min_color,
-                "max_color": blast_config.max_color,
+                "min_color": (
+                    gradient.max_color if float(blast_config.identity) >= 100 else gradient.min_color
+                ),
+                "max_color": gradient.max_color,
                 "stroke": "none",
                 "width": 0,
                 "min_value": blast_config.identity,
@@ -606,12 +602,14 @@ __all__ = [
     "LegendRowName",
     "LegendRowNames",
     "LegendTable",
+    "PairwiseIdentityGradient",
+    "PairwiseIdentityLegend",
     "as_legend_table",
     "collect_comparison_collinearity_color_modes",
-    "configure_pairwise_identity_legend_from_comparisons",
     "drawn_legend_names",
     "legend_row_names",
     "legend_swatch",
+    "pairwise_identity_legend_from_comparisons",
     "prepare_legend_table",
     "rule_legend_keys",
     "write_legend_row_names",

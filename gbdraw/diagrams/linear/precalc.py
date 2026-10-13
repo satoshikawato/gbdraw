@@ -23,14 +23,14 @@ from ...config.models import (
 )
 from ...configurators import FeatureDrawingConfigurator
 from ...auto_sizes import linear_label_font_size
-from ...features.colors import preprocess_color_tables
 from ...features.factory import (
     FeatureBuildResult,
     create_feature_layers,
 )
 from ...features.objects import FeatureObject
 from ...render.groups.linear import DefinitionGroup
-from ...labels.filtering import preprocess_label_filtering
+from ...labels.filtering import label_filter_maps
+from ...render_stages import render_stage
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
@@ -113,20 +113,18 @@ def _precalculate_feature_layers(
     """Build feature objects once per record for the linear assembly pipeline."""
 
     cfg = profile.config
-    color_table, default_colors = preprocess_color_tables(
-        feature_config.color_table,
-        feature_config.default_colors,
-    )
-    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
 
     feature_layers: list[FeatureBuildResult] = []
     for i, record in enumerate(records):
         compute_label_text = profile.labels_in_scope(i)
-        result = create_feature_layers(
+        result = render_stage(
+            "feature_layers",
+            create_feature_layers,
             record,
-            color_table,
+            feature_config.specific_color_rules,
             feature_config.selected_features_set,
-            default_colors,
+            feature_config.default_color_map,
             profile.strandedness,
             profile.resolve_overlaps,
             label_filtering if compute_label_text else {},
@@ -171,12 +169,7 @@ def _precalculate_label_dimensions(
     all_labels_by_record: list[list[dict]] = []
     record_label_heights: list[float] = []
     normalize_length = cfg.canvas.linear.normalize_length
-    if precomputed_feature_dicts is None:
-        color_table, default_colors = preprocess_color_tables(
-            feature_config.color_table,
-            feature_config.default_colors,
-        )
-        label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
 
     for i, record in enumerate(records):
         if not profile.record_has_labels(i):
@@ -193,9 +186,9 @@ def _precalculate_label_dimensions(
         else:
             feature_result = create_feature_layers(
                 record,
-                color_table,
+                feature_config.specific_color_rules,
                 feature_config.selected_features_set,
-                default_colors,
+                feature_config.default_color_map,
                 profile.strandedness,
                 profile.resolve_overlaps,
                 label_filtering,
@@ -237,6 +230,7 @@ def _precalculate_label_dimensions(
                 else None
             ),
             record_transform=(record_transforms[i] if record_transforms is not None else None),
+            label_filtering=label_filtering,
         )
         all_labels_by_record.append(label_list)
 

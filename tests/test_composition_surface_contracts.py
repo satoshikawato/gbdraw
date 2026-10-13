@@ -29,7 +29,7 @@ from gbdraw.api import (
 )
 import gbdraw.api.diagram as api_diagram
 from gbdraw.api.diagram import build_circular_diagram, build_linear_diagram
-from gbdraw.configurators import LegendDrawingConfigurator
+from gbdraw.configurators.legend import measure_legend
 import gbdraw.diagrams.circular.assemble as circular_assemble
 import gbdraw.diagrams.linear.assemble as linear_assemble
 from gbdraw.exceptions import ValidationError
@@ -417,11 +417,9 @@ def test_legend_reflow_carries_the_exact_python_layout_inputs(
 ) -> None:
     measured: list[float] = []
     primaries: list[Aabb] = []
-    measure_legend = LegendDrawingConfigurator.measure_legend
-
-    def spy_measure_legend(self, legend_table, *, placement, wrap_width):
+    def spy_measure_legend(legend_config, legend_table, *, placement, wrap_width):
         measurement = measure_legend(
-            self, legend_table, placement=placement, wrap_width=wrap_width
+            legend_config, legend_table, placement=placement, wrap_width=wrap_width
         )
         if legend_table:
             measured.append(measurement.wrap_width)
@@ -431,8 +429,8 @@ def test_legend_reflow_carries_the_exact_python_layout_inputs(
         primaries.append(request.primary.local_bounds)
         return plan_composition(request)
 
-    monkeypatch.setattr(LegendDrawingConfigurator, "measure_legend", spy_measure_legend)
     for module in (circular_assemble, linear_assemble, api_diagram):
+        monkeypatch.setattr(module, "measure_legend", spy_measure_legend)
         monkeypatch.setattr(module, "plan_composition", spy_plan_composition)
 
     request = _request(mode, legend=legend, title_position="bottom")

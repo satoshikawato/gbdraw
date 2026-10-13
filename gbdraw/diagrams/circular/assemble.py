@@ -25,7 +25,9 @@ from svgwrite.container import Group
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...analysis.conservation import (
+    ConservationLegendSource,
     ConservationTrack,
+    conservation_legend_sources,
     conservation_track_gradient_colors,
 )
 from ...analysis.depth_tracks import (
@@ -47,6 +49,8 @@ from ...configurators import (
     LegendMeasurement,
 )
 from ...configurators.gc import _slot_skew_config
+from ...configurators.legend import measure_legend
+from ...render_stages import render_stage
 from ...core.sequence import check_feature_presence
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
 from ...config.modify import with_config_overrides
@@ -66,7 +70,7 @@ from ...labels.circular import (
 )
 from ...labels.circular_fit import CircularOuterLabelLayout
 from ...labels.fit import LabelFit
-from ...labels.filtering import preprocess_label_filtering
+from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.circular import (
     CircularFeatureLaneDirection,
@@ -1415,7 +1419,7 @@ def _sync_legend_table_for_circular_slots(
     depth_df: DataFrame | None,
     depth_tracks: Sequence[DepthTrackData] | None = None,
     cfg: GbdrawConfig,
-    conservation_tracks: Sequence[ConservationTrack] | None = None,
+    conservation_legend: Sequence[ConservationLegendSource] = (),
     conservation_min_identity: float | None = None,
 ) -> LegendTable:
     """Replace singleton numeric legend entries with slot-aware entries."""
@@ -1513,9 +1517,9 @@ def _sync_legend_table_for_circular_slots(
                     "stroke": slot_skew_config.stroke_color,
                     "width": slot_skew_config.stroke_width,
                 })
-    if conservation_tracks:
-        if any(track.track_color for track in conservation_tracks):
-            for conservation_track in conservation_tracks:
+    if conservation_legend:
+        if any(track.track_color for track in conservation_legend):
+            for conservation_track in conservation_legend:
                 min_color, max_color = conservation_track_gradient_colors(
                     conservation_track.track_color,
                     default_min_color=cfg.objects.conservation.min_color,
@@ -2163,7 +2167,7 @@ def add_record_on_circular_canvas(
 
     compute_label_text = show_external_labels
     label_filtering = (
-        preprocess_label_filtering(cfg.labels.filtering.as_dict())
+        label_filter_maps(cfg.labels.filtering.as_dict())
         if compute_label_text
         else {}
     )
@@ -2307,6 +2311,7 @@ def add_record_on_circular_canvas(
             _candidate_cache=label_candidate_caches.setdefault(font_size, {}),
             record_transform=record_transform,
             probe=probe,
+            label_filtering=label_filtering,
         )
 
     if show_external_labels and precomputed_feature_dict is not None:
@@ -2489,7 +2494,8 @@ def add_record_on_circular_canvas(
         overlay_obstacles=overlay_obstacles,
     )
     if legend_config is not None:
-        legend_measurement = legend_config.measure_legend(
+        legend_measurement = measure_legend(
+            legend_config,
             legend_table,
             placement=canvas_config.legend_position,
             wrap_width=source_content_bounds.width,
@@ -2836,7 +2842,7 @@ def build_circular_legend_table(
     depth_track_count_value: int = 0,
     circular_track_slots: list[CircularTrackSlot] | None = None,
     annotations: ResolvedAnnotationBundle | None = None,
-    conservation_tracks: Sequence[ConservationTrack] | None = None,
+    conservation_legend: Sequence[ConservationLegendSource] = (),
     conservation_min_identity: float = 0.0,
 ) -> LegendTable:
     """Build the one Circular legend table for the records drawn on a canvas.
@@ -2894,7 +2900,7 @@ def build_circular_legend_table(
         depth_df=depth_df,
         depth_tracks=depth_tracks,
         cfg=cfg,
-        conservation_tracks=conservation_tracks,
+        conservation_legend=conservation_legend,
         conservation_min_identity=conservation_min_identity,
     )
     if annotations is not None:
@@ -2984,13 +2990,16 @@ def _assemble_circular_diagram_result(
     )
 
     legend_table = LegendTable()
-    legend_measurement = legend_config.measure_legend(
+    legend_measurement = measure_legend(
+        legend_config,
         legend_table,
         placement=canvas_config.legend_position,
         wrap_width=canvas_config.total_width,
     )
     if canvas_config.legend_position != "none":
-        legend_table = build_circular_legend_table(
+        legend_table = render_stage(
+            "legend_table",
+            build_circular_legend_table,
             [gb_record],
             feature_config=feature_config,
             gc_config=gc_config,
@@ -3002,7 +3011,7 @@ def _assemble_circular_diagram_result(
             depth_track_count_value=resolved_depth_track_count,
             circular_track_slots=effective_circular_track_slots,
             annotations=resolved_annotations,
-            conservation_tracks=conservation_tracks,
+            conservation_legend=conservation_legend_sources(conservation_tracks),
             conservation_min_identity=conservation_min_identity,
         )
     canvas: Drawing = canvas_config.create_svg_canvas()

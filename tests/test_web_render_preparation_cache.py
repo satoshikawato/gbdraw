@@ -245,8 +245,7 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
     assert cold_metrics["parsedSourceParseCount"] == 1
     assert cold_metrics["resolvedRecordCacheMissCount"] == 1
     assert cold_metrics["resolvedRecordBuildCount"] == 1
-    assert cold_metrics["interactiveContextCacheMissCount"] == 1
-    assert cold_metrics["interactiveContextBuildCount"] == 1
+    assert cold_metrics["renderStageBuild:interactive_context"] == 1
     assert cold_metrics["interactiveFeatureTraversalCount"] == 1
     assert cold_metrics["preparedInputCacheRetainedBytes"] > 0
 
@@ -256,13 +255,17 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
         assert metrics["parsedSourceParseCount"] == 0
         assert metrics["resolvedRecordCacheHitCount"] == 1
         assert metrics["resolvedRecordBuildCount"] == 0
-        assert metrics["interactiveContextCacheHitCount"] == 1
-        assert metrics["interactiveContextBuildCount"] == 0
+        # Every counter of these stages, so a build would show as a second key.
+        for stage in ("interactive_context", "catalog_normalization"):
+            assert {
+                name: count for name, count in metrics.items() if name.endswith(f":{stage}")
+            } == {f"renderStageHit:{stage}": 1}
         assert metrics["interactiveFeatureTraversalCount"] == 0
         assert metrics["preparedInputCacheRetainedBytes"] > 0
         assert metrics["preparedInputCacheMutationViolationCount"] == 0
 
     assert warm["results"] == cold["results"]
+    assert warm["metadata"] == cold["metadata"]
     assert render_only["results"] != cold["results"]
     assert _metrics(warm_diagnostics)["featureCatalogSvgParseCount"] == 1
     assert _metrics(render_only_diagnostics)["featureCatalogSvgParseCount"] == 1
@@ -381,12 +384,11 @@ def test_annotation_change_invalidates_interactive_context_only(
         request_id=3,
     )
 
-    assert _metrics(warm_diagnostics)["interactiveContextCacheHitCount"] == 1
+    assert _metrics(warm_diagnostics)["renderStageHit:interactive_context"] == 1
     changed_metrics = _metrics(changed_diagnostics)
     assert changed_metrics["parsedSourceCacheHitCount"] == 1
     assert changed_metrics["resolvedRecordCacheHitCount"] == 1
-    assert changed_metrics["interactiveContextCacheMissCount"] == 1
-    assert changed_metrics["interactiveContextBuildCount"] == 1
+    assert changed_metrics["renderStageBuild:interactive_context"] == 1
     assert changed["metadata"] != first["metadata"]
 
 
@@ -416,8 +418,7 @@ def test_visibility_resource_invalidates_context_but_not_genbank_records(
     metrics = _metrics(diagnostics)
     assert metrics["parsedSourceCacheHitCount"] == 1
     assert metrics["resolvedRecordCacheHitCount"] == 1
-    assert metrics["interactiveContextCacheMissCount"] == 1
-    assert metrics["interactiveContextBuildCount"] == 1
+    assert metrics["renderStageBuild:interactive_context"] == 1
     assert result["results"] != first["results"]
 
 
@@ -491,8 +492,7 @@ def test_orthogroup_resource_invalidates_interactive_context_only(
     assert metrics["parsedSourceParseCount"] == 0
     assert metrics["resolvedRecordCacheHitCount"] == 1
     assert metrics["resolvedRecordBuildCount"] == 0
-    assert metrics["interactiveContextCacheMissCount"] == 1
-    assert metrics["interactiveContextBuildCount"] == 1
+    assert metrics["renderStageBuild:interactive_context"] == 1
     assert changed["metadata"] != first["metadata"]
     changed_payload = json.dumps(changed, sort_keys=True)
     assert "OG-B" in changed_payload
@@ -722,8 +722,7 @@ def test_semantic_changes_invalidate_only_the_dependent_layers(
     else:
         assert metrics["resolvedRecordCacheMissCount"] == 1
         assert metrics["resolvedRecordBuildCount"] == 1
-    assert metrics["interactiveContextCacheMissCount"] == 1
-    assert metrics["interactiveContextBuildCount"] == 1
+    assert metrics["renderStageBuild:interactive_context"] == 1
     assert metrics["interactiveFeatureTraversalCount"] == 1
 
 
@@ -751,8 +750,7 @@ def test_source_token_replacement_invalidates_every_layer(tmp_path: Path) -> Non
     assert metrics["parsedSourceParseCount"] == 1
     assert metrics["resolvedRecordCacheMissCount"] == 1
     assert metrics["resolvedRecordBuildCount"] == 1
-    assert metrics["interactiveContextCacheMissCount"] == 1
-    assert metrics["interactiveContextBuildCount"] == 1
+    assert metrics["renderStageBuild:interactive_context"] == 1
     assert metrics["preparedInputCacheEvictionCount"] >= 3
     assert result != original
     replacement_payload = json.dumps(result, sort_keys=True)

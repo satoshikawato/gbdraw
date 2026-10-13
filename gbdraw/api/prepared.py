@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -13,12 +15,9 @@ from typing import Any, Callable, Hashable, Iterator, Mapping, MutableMapping
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
-from gbdraw.core.color import normalize_hex_color
+from gbdraw.core.fonts import registered_fonts
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.source import SourceFeatureIdentity
-from gbdraw.features.visibility import compile_feature_visibility_rules
-from gbdraw.io.colors import check_user_color, resolve_color_to_hex
 
 
 @dataclass(frozen=True)
@@ -59,6 +58,28 @@ class _PreparedCacheEntry:
     owner_stamp: Hashable
     structure_stamp: Hashable
     retained_bytes: int
+    # Render stages only: the keys of the stages its build called, kept when
+    # this entry is reused (design 2.3, M10).
+    inner_keys: frozenset[Hashable] = frozenset()
+
+
+# The fifth layer holds render-stage results (gbdraw.render_stages). Its stamp
+# is a constant: the layer decides that, not the shape of the value.
+_RENDER_STAGE_LAYER = "render_stage"
+_RENDER_STAGE_STAMP = ("render-stage",)
+_LAYERS = ("decoded", "parsed", "resolved", _RENDER_STAGE_LAYER)
+
+
+class _NoIdentity:
+    """Marks a value that must not be keyed: an unstored render-stage result."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "NO_IDENTITY"
+
+
+NO_IDENTITY = _NoIdentity()
 
 
 @dataclass
@@ -68,35 +89,22 @@ class _PreparedCacheTransaction:
     active_identities: frozenset[PreparedResourceIdentity]
     diagnostics: MutableMapping[str, Any] | None
     pending: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = field(
-        default_factory=lambda: {
-            "decoded": OrderedDict(),
-            "parsed": OrderedDict(),
-            "resolved": OrderedDict(),
-            "interactive": OrderedDict(),
-        }
+        default_factory=lambda: {layer: OrderedDict() for layer in _LAYERS}
     )
     used: dict[str, set[Hashable]] = field(
-        default_factory=lambda: {
-            "decoded": set(),
-            "parsed": set(),
-            "resolved": set(),
-            "interactive": set(),
-        }
+        default_factory=lambda: {layer: set() for layer in _LAYERS}
     )
     accessed: dict[str, dict[Hashable, Any]] = field(
-        default_factory=lambda: {
-            "decoded": {},
-            "parsed": {},
-            "resolved": {},
-            "interactive": {},
-        }
+        default_factory=lambda: {layer: {} for layer in _LAYERS}
     )
-    decoded_resource_values: dict[int, tuple[Any, PreparedResourceIdentity]] = field(
-        default_factory=dict
-    )
-    resolved_record_membership: dict[int, tuple[Hashable, int]] = field(
-        default_factory=dict
-    )
+    # One table maps a value to its identity for this transaction: a decoded
+    # resource to its PreparedResourceIdentity, a resolved record to its
+    # per-record identity, a render-stage result or a direct field of one to
+    # the stage key (NO_IDENTITY when the result was not stored).
+    value_identities: dict[int, tuple[object, Hashable]] = field(default_factory=dict)
+    # The fonts registered when the transaction starts (D-11): text measured
+    # inside a render stage depends on them, so every stage key includes them.
+    font_environment: tuple[tuple[str, int, bool, str, int], ...] = ()
 
 
 _ACTIVE_PREPARED_TRANSACTION: ContextVar[_PreparedCacheTransaction | None] = (
@@ -113,13 +121,14 @@ _CACHE_METRICS = (
     "resolvedRecordCacheHitCount",
     "resolvedRecordCacheMissCount",
     "resolvedRecordBuildCount",
-    "interactiveContextCacheHitCount",
-    "interactiveContextCacheMissCount",
-    "interactiveContextBuildCount",
     "interactiveFeatureTraversalCount",
     "preparedInputCacheEvictionCount",
     "preparedInputCacheRetainedBytes",
     "preparedInputCacheMutationViolationCount",
+    "renderStageHitCount",
+    "renderStageBuildCount",
+    "renderStageUncacheableCount",
+    "renderStageUndeclaredReadCount",
 )
 
 _LAYER_METRICS = {
@@ -137,11 +146,6 @@ _LAYER_METRICS = {
         "resolvedRecordCacheHitCount",
         "resolvedRecordCacheMissCount",
         "resolvedRecordBuildCount",
-    ),
-    "interactive": (
-        "interactiveContextCacheHitCount",
-        "interactiveContextCacheMissCount",
-        "interactiveContextBuildCount",
     ),
 }
 
@@ -189,26 +193,56 @@ def prepared_resource_identity(
     return None
 
 
+def register_prepared_value_identity(value: object, identity: Hashable) -> None:
+    """Record the identity of one value for the active transaction.
+
+    The first registration of a value wins, so a decoded resource keeps its
+    resource identity when a render stage returns it unchanged.
+    """
+
+    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
+    if transaction is None or value is None:
+        return
+    transaction.value_identities.setdefault(id(value), (value, identity))
+
+
+def prepared_value_identity(value: object) -> Hashable | None:
+    """Return the identity registered for ``value`` in the active transaction."""
+
+    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
+    if transaction is None or value is None:
+        return None
+    registered = transaction.value_identities.get(id(value))
+    if registered is None or registered[0] is not value:
+        return None
+    return registered[1]
+
+
 def register_prepared_resource_value(value: Any, source: str | Path) -> Any:
     """Associate one decoded value with the resource that supplied it."""
 
-    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
     identity = prepared_resource_identity(source)
-    if transaction is not None and identity is not None and value is not None:
-        transaction.decoded_resource_values[id(value)] = (value, identity)
+    if identity is not None:
+        register_prepared_value_identity(value, identity)
+        # The fields of a decoded dataclass (an orthogroup or collinearity
+        # result) come from the same resource, so a stage keys them by it
+        # instead of walking them.
+        if dataclasses.is_dataclass(value) and not isinstance(value, type):
+            for item in dataclasses.fields(value):
+                child = getattr(value, item.name)
+                if child is None or isinstance(child, (bool, int, float, str, bytes, Enum)) or (
+                    type(child) in (tuple, frozenset) and not child
+                ):
+                    continue
+                register_prepared_value_identity(child, ("field", identity, item.name))
     return value
 
 
 def prepared_resource_value_identity(value: Any) -> PreparedResourceIdentity | None:
     """Return the compact resource identity registered for a decoded value."""
 
-    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
-    if transaction is None or value is None:
-        return None
-    registered = transaction.decoded_resource_values.get(id(value))
-    if registered is None or registered[0] is not value:
-        return None
-    return registered[1]
+    identity = prepared_value_identity(value)
+    return identity if isinstance(identity, PreparedResourceIdentity) else None
 
 
 def _shallow_value_stamp(value: Any) -> Hashable:
@@ -301,6 +335,12 @@ def _records_from_value(value: Any) -> tuple[SeqRecord, ...] | None:
     return None
 
 
+def _layer_stamp(layer: str, value: Any, *, walk_features: bool) -> Hashable:
+    if layer == _RENDER_STAGE_LAYER:
+        return _RENDER_STAGE_STAMP
+    return _owner_stamp(value, walk_features=walk_features)
+
+
 def _owner_stamp(value: Any, *, walk_features: bool) -> Hashable:
     """Stamp a cached value; ``walk_features=False`` gives the structure stamp.
 
@@ -319,32 +359,6 @@ def _owner_stamp(value: Any, *, walk_features: bool) -> Hashable:
                 for record in records
             ),
             _shallow_value_stamp(provenance),
-        )
-    if all(
-        hasattr(value, field_name)
-        for field_name in (
-            "features",
-            "biological_features",
-            "orthogroups",
-            "annotations",
-            "sequence_sources",
-            "record_keys",
-        )
-    ):
-        return (
-            "interactive-context",
-            tuple(
-                (field_name, _shallow_value_stamp(getattr(value, field_name)))
-                for field_name in (
-                    "features",
-                    "biological_features",
-                    "orthogroups",
-                    "annotations",
-                    "sequence_sources",
-                    "record_keys",
-                    "collinearity_search_scope",
-                )
-            ),
         )
     return (type(value).__name__, id(value))
 
@@ -481,40 +495,25 @@ def _retained_bytes(value: Any) -> int:
                                for key, values in entry.qualifiers)
                          for entry in catalog)
         return total
-    if all(
-        hasattr(value, field_name)
-        for field_name in ("features", "biological_features", "sequence_sources")
-    ):
-        total = 0
-        for field_name in (
-            "features",
-            "biological_features",
-            "orthogroups",
-            "annotations",
-        ):
-            total += len(getattr(value, field_name, ()) or ()) * 512
-        for source in getattr(value, "sequence_sources", ()) or ():
-            if isinstance(source, Mapping):
-                total += len(str(source.get("sequence") or "")) + 256
-        return total
     return 0
 
 
 class PreparedBiologicalInputCache:
-    """One-project Worker cache for parsed, resolved, and interactive inputs.
+    """One-project Worker cache for decoded, parsed and resolved inputs and render stages.
 
     The Pyodide Worker owns one instance. Keys contain resource ID, cache token,
     byte size, and the semantic fields for the corresponding preparation layer.
-    Values are parsed source records, one resolved record collection, and the
-    interactive contexts used by the current request, including batch items.
+    Values are decoded resources, parsed source records, one resolved record
+    collection, and the render-stage results used by the current request,
+    including batch items.
     Publication waits until SVG generation and catalog construction succeed.
 
     A successful transaction is the one-project bound: it discards entries that
     the request did not use. A changed semantic key rebuilds its dependent layer;
     a changed or removed resource identity evicts every entry that refers to it.
     The retained-byte diagnostic estimates source bytes, sequence lengths,
-    feature counts, qualifier counts, and interactive-context payloads without
-    serializing them. Worker termination releases the cache with the Python
+    feature counts and qualifier counts without serializing them; render-stage
+    results are not counted. Worker termination releases the cache with the Python
     runtime.
 
     Ownership guard (D-05): a reused entry is checked by structure when it is
@@ -525,10 +524,7 @@ class PreparedBiologicalInputCache:
 
     def __init__(self) -> None:
         self._layers: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = {
-            "decoded": OrderedDict(),
-            "parsed": OrderedDict(),
-            "resolved": OrderedDict(),
-            "interactive": OrderedDict(),
+            layer: OrderedDict() for layer in _LAYERS
         }
         # A transaction that did not commit may have changed what it read, so
         # the next one checks owners in full at entry, not only at commit.
@@ -588,6 +584,12 @@ class PreparedBiologicalInputCache:
             resource_paths=normalized_paths,
             active_identities=frozenset(resource_paths.values()),
             diagnostics=diagnostics,
+            font_environment=tuple(
+                sorted(
+                    (font.family, font.weight, font.italic, font.face.content_id, font.face.index)
+                    for font in registered_fonts()
+                )
+            ),
         )
         if diagnostics is not None:
             metrics = diagnostics.setdefault("metrics", {})
@@ -642,7 +644,7 @@ class PreparedBiologicalInputCache:
         walk_features: bool,
     ) -> None:
         expected = entry.owner_stamp if walk_features else entry.structure_stamp
-        current_stamp = _owner_stamp(entry.value, walk_features=walk_features)
+        current_stamp = _layer_stamp(layer, entry.value, walk_features=walk_features)
         if current_stamp == expected:
             return
         _record_metric(
@@ -696,13 +698,39 @@ class PreparedBiologicalInputCache:
         transaction.used[layer].add(key)
         return value
 
-    def register_resolved_records(self, key: Hashable, value: Any) -> None:
-        transaction = _ACTIVE_PREPARED_TRANSACTION.get()
-        records = _records_from_value(value)
-        if transaction is None or records is None:
-            return
-        for index, record in enumerate(records):
-            transaction.resolved_record_membership[id(record)] = (key, index)
+    def lookup_render_stage(
+        self,
+        key: Hashable,
+        transaction: _PreparedCacheTransaction,
+    ) -> _PreparedCacheEntry | None:
+        """Return a stored render-stage entry and mark it and its inner stages used."""
+
+        entry = self._entry(_RENDER_STAGE_LAYER, key, transaction)
+        if entry is None:
+            return None
+        used = transaction.used[_RENDER_STAGE_LAYER]
+        used.add(key)
+        used.update(entry.inner_keys)
+        return entry
+
+    def store_render_stage(
+        self,
+        key: Hashable,
+        value: object,
+        inner_keys: frozenset[Hashable],
+        transaction: _PreparedCacheTransaction,
+    ) -> None:
+        """Stage one render-stage result; it is published if the render succeeds."""
+
+        transaction.pending[_RENDER_STAGE_LAYER][key] = _PreparedCacheEntry(
+            value=value,
+            resource_identities=_key_resource_identities(key),
+            owner_stamp=_RENDER_STAGE_STAMP,
+            structure_stamp=_RENDER_STAGE_STAMP,
+            retained_bytes=0,
+            inner_keys=inner_keys,
+        )
+        transaction.used[_RENDER_STAGE_LAYER].add(key)
 
     def _commit(self, transaction: _PreparedCacheTransaction) -> None:
         replacements: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = {}
@@ -733,6 +761,46 @@ class PreparedBiologicalInputCache:
                 )
             self._layers[layer] = replacement
         self._set_retained_metric(transaction)
+
+
+def _key_resource_identities(key: Hashable) -> frozenset[PreparedResourceIdentity]:
+    """Collect the resource identities a key names, so their removal evicts it."""
+
+    identities: set[PreparedResourceIdentity] = set()
+    pending: list[object] = [key]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, PreparedResourceIdentity):
+            identities.add(item)
+        elif isinstance(item, (tuple, list, frozenset)):
+            pending.extend(item)
+    return frozenset(identities)
+
+
+def active_render_stage_transaction() -> _PreparedCacheTransaction | None:
+    """Return the active transaction for ``gbdraw.render_stages``, if any."""
+
+    return _ACTIVE_PREPARED_TRANSACTION.get()
+
+
+def lookup_render_stage(
+    transaction: _PreparedCacheTransaction,
+    key: Hashable,
+) -> _PreparedCacheEntry | None:
+    """Return the render-stage entry stored under ``key``, if any."""
+
+    return transaction.cache.lookup_render_stage(key, transaction)
+
+
+def store_render_stage(
+    transaction: _PreparedCacheTransaction,
+    key: Hashable,
+    value: object,
+    inner_keys: frozenset[Hashable],
+) -> None:
+    """Stage one render-stage result for publication at commit."""
+
+    transaction.cache.store_render_stage(key, value, inner_keys, transaction)
 
 
 def get_or_build_parsed_source(
@@ -792,109 +860,7 @@ def get_or_build_resolved_records(
         resource_identities,
         builder,
     )
-    transaction.cache.register_resolved_records(key, value)
     return value
 
 
-def get_or_build_interactive_context(
-    key: Hashable,
-    resource_identities: frozenset[PreparedResourceIdentity],
-    builder: Callable[[], Any],
-) -> Any:
-    """Get or transactionally stage one interactive metadata context."""
-
-    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
-    if transaction is None:
-        return builder()
-    return transaction.cache.get_or_build(
-        "interactive",
-        key,
-        resource_identities,
-        builder,
-    )
-
-
-def prepared_record_membership(
-    records: tuple[SeqRecord, ...],
-) -> tuple[tuple[Hashable, int], ...] | None:
-    """Return cached resolved-record membership without inspecting records."""
-
-    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
-    if transaction is None:
-        return None
-    membership: list[tuple[Hashable, int]] = []
-    for record in records:
-        item = transaction.resolved_record_membership.get(id(record))
-        if item is None:
-            return None
-        membership.append(item)
-    return tuple(membership)
-
-
-def _check_feature_colors(table: DataFrame | None, label: str, *, by_row: bool) -> None:
-    """Check every color of a -t/-d table once, whether it came from a file or a DataFrame.
-
-    Rows of the specific color table carry their position; default colors are
-    named by feature type (their rows merge the palette with the user's file).
-    """
-
-    if table is None or table.empty:
-        return
-    for row, (feature_type, color) in enumerate(zip(table["feature_type"], table["color"]), start=1):
-        check_user_color(
-            color,
-            where=f"for feature type {feature_type!r} in the {label}" + (f" (row {row})" if by_row else ""),
-            diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", **({"row": row} if by_row else {})},
-        )
-
-
-def _check_caption_colors(color_table: DataFrame | None) -> None:
-    """Check the colors of a color table with captions.
-
-    A caption groups legend rows by color (``gbdraw.legend.table``), so every
-    color of such a table is none, an SVG color name, #RGB, or #RRGGBB.
-    """
-
-    if color_table is None or color_table.empty or "caption" not in color_table:
-        return
-    for row, color in enumerate((str(value).strip() for value in color_table["color"]), start=1):
-        if color.lower() == "none":
-            continue
-        try:
-            normalize_hex_color(resolve_color_to_hex(color))
-        except (ValueError, ValidationError) as exc:
-            raise ValidationError(
-                f"Invalid color {color!r} in the color table (row {row}). "
-                "A color table with captions uses none, an SVG color name, #RGB, or #RRGGBB.",
-                diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": row},
-            ) from exc
-
-
-def resolve_feature_inputs(
-    *,
-    color_table: DataFrame | None,
-    default_colors: DataFrame,
-    feature_visibility_table: DataFrame | None,
-) -> ResolvedFeatureInputs:
-    """Compile already-loaded feature inputs into one reusable value."""
-
-    _check_feature_colors(color_table, "color table", by_row=True)
-    _check_feature_colors(default_colors, "default colors", by_row=False)
-    _check_caption_colors(color_table)
-    specific_color_rules, default_color_map = preprocess_color_tables(
-        color_table,
-        default_colors,
-    )
-    return ResolvedFeatureInputs(
-        color_table=color_table,
-        default_colors=default_colors,
-        feature_visibility_table=feature_visibility_table,
-        feature_visibility_rules=compile_feature_visibility_rules(
-            feature_visibility_table
-        ),
-        specific_color_rules=specific_color_rules,
-        default_color_map=default_color_map,
-    )
-
-
-__all__ = ["ResolvedFeatureInputs", "resolve_feature_inputs"]
+__all__ = ["ResolvedFeatureInputs"]

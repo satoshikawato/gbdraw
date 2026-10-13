@@ -19,7 +19,7 @@ from gbdraw.api.options import (
     CircularMultiRecordOptions,
     ColorOptions,
 )
-from gbdraw.api.prepared import resolve_feature_inputs
+from gbdraw.api.diagram import resolve_feature_inputs
 from gbdraw.api.request_render import render_request
 from gbdraw.api.requests import (
     CircularDiagramRequest,

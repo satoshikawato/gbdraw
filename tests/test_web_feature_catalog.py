@@ -601,7 +601,7 @@ def test_feature_catalog_rejects_ambiguous_orthogroup_identity() -> None:
             )
 
 
-def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
+def _sequence_ownership_case() -> tuple[InteractiveSvgContext, str]:
     full_note = ("x" * 49) + "😀tail"
     compact_note = ("x" * 49) + "😀"
     context = InteractiveSvgContext(
@@ -761,6 +761,11 @@ def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
         data-subject-protein-id="PROTEIN_001" />
 </svg>
 """
+    return context, svg
+
+
+def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
+    context, svg = _sequence_ownership_case()
 
     item = build_feature_catalog_item(
         svg,
@@ -1907,3 +1912,32 @@ def test_reverse_complement_sequence_matches_the_former_per_base_mapping() -> No
             _former_reverse_complement_sequence(text)
         )
     assert _reverse_complement_sequence("") == ""
+
+
+def test_a_reused_catalog_normalization_starts_from_its_stored_features() -> None:
+    """A request changes its copies of the normalized features, not the stored ones (M11)."""
+
+    from gbdraw.api.prepared import PreparedBiologicalInputCache, register_prepared_value_identity
+
+    context, svg = _sequence_ownership_case()
+    # This render has no comparison, so the feature keeps its nucleotide sequence.
+    plain_svg = svg[: svg.index("  <path id=\"comparison-match\"")] + "</svg>\n"
+    expected = build_feature_catalog_item(plain_svg, context, result_index=0, result_name="r.svg")
+    cache = PreparedBiologicalInputCache()
+    items = []
+    stage_counts = []
+    for source in (svg, plain_svg):
+        diagnostics: dict[str, dict[str, int]] = {"metrics": {}}
+        with cache.transaction(resource_paths={}, diagnostics=diagnostics):
+            register_prepared_value_identity(context, ("context", 1))
+            items.append(build_feature_catalog_item(source, context, result_index=0, result_name="r.svg"))
+        stage_counts.append(
+            {name: count for name, count in diagnostics["metrics"].items() if name.endswith(":catalog_normalization")}
+        )
+    # The first request builds the normalization, the second reuses it.
+    assert stage_counts == [
+        {"renderStageBuild:catalog_normalization": 1},
+        {"renderStageHit:catalog_normalization": 1},
+    ]
+    assert items[0]["biologicalFeatures"][0]["sequenceSourceIndex"] == 0
+    assert items[1]["biologicalFeatures"] == expected["biologicalFeatures"]

@@ -56,11 +56,16 @@ from gbdraw.configurators import (
     LegendDrawingConfigurator,
     LegendMeasurement,
 )
+from gbdraw.configurators.legend import measure_legend
 from gbdraw.configurators.blast import BlastMatchConfigurator
 from gbdraw.core.color import interpolate_color
 from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
-from gbdraw.legend.table import prepare_legend_table
+from gbdraw.legend.table import (
+    PairwiseIdentityGradient,
+    PairwiseIdentityLegend,
+    prepare_legend_table,
+)
 from gbdraw.render.groups.linear.legend import LegendGroup
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 from gbdraw.exceptions import ValidationError
@@ -81,18 +86,13 @@ def _linear_legend_measurement(
         legend=legend_position,
     )
     configurator = LegendDrawingConfigurator(
-        color_table=None,
-        default_colors=None,
-        selected_features_set=[],
         profile=profile,
-        gc_config=None,
-        skew_config=None,
-        feature_config=None,
         canvas_config=canvas_config,
     )
     return (
         canvas_config,
-        configurator.measure_legend(
+        measure_legend(
+            configurator,
             legend_table,
             placement=canvas_config.legend_position,
             wrap_width=canvas_config.total_width,
@@ -3095,7 +3095,6 @@ def test_orientation_collinearity_suppresses_pairwise_identity_legend() -> None:
         min_color="#ffffff",
         max_color="#000000",
         identity=0,
-        hide_pairwise_identity_legend=True,
     )
 
     legend_table = prepare_legend_table(
@@ -3108,6 +3107,7 @@ def test_orientation_collinearity_suppresses_pairwise_identity_legend() -> None:
         show_gc=False,
         show_skew=False,
         show_depth=False,
+        pairwise_identity_legend=PairwiseIdentityLegend(hidden=True),
     )
 
     assert "Pairwise match identity" not in legend_table
@@ -3140,8 +3140,6 @@ def test_average_identity_collinearity_legend_uses_average_identity_label() -> N
         min_color="#ffffff",
         max_color="#000000",
         identity=0,
-        hide_pairwise_identity_legend=False,
-        pairwise_identity_legend_label="Average identity",
     )
 
     legend_table = prepare_legend_table(
@@ -3154,6 +3152,7 @@ def test_average_identity_collinearity_legend_uses_average_identity_label() -> N
         show_gc=False,
         show_skew=False,
         show_depth=False,
+        pairwise_identity_legend=PairwiseIdentityLegend(label="Average identity"),
     )
 
     assert "Average identity" in legend_table
@@ -3187,19 +3186,6 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
         min_color="#ffffff",
         max_color="#000000",
         identity=0,
-        hide_pairwise_identity_legend=False,
-        pairwise_identity_legend_entries=[
-            {
-                "label": "Collinear",
-                "min_color": "#eeeeee",
-                "max_color": "#112233",
-            },
-            {
-                "label": "Inverted",
-                "min_color": "#ffeeee",
-                "max_color": "#445566",
-            },
-        ],
     )
 
     legend_table = prepare_legend_table(
@@ -3212,6 +3198,12 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
         show_gc=False,
         show_skew=False,
         show_depth=False,
+        pairwise_identity_legend=PairwiseIdentityLegend(
+            gradients=(
+                PairwiseIdentityGradient("Collinear", "#eeeeee", "#112233"),
+                PairwiseIdentityGradient("Inverted", "#ffeeee", "#445566"),
+            ),
+        ),
     )
 
     assert "Collinear" in legend_table
