@@ -3447,12 +3447,17 @@ const pruneLosatDerivedCache = (map) => {
   }
 };
 
+/**
+ * @param {unknown} value Saved evidence, unvalidated. The casts below: `isPlainObject(value)`, first in the same
+ *   expression, proves the object; each entry is tested by the filter.
+ * @param {unknown[]} [fallbackEntries]
+ */
 const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
   schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   entries: [
     ...(
-      isPlainObject(value) && value.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA && Array.isArray(value.entries)
-        ? value.entries
+      isPlainObject(value) && /** @type {Record<string, unknown>} */ (value).schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA && Array.isArray(/** @type {Record<string, unknown>} */ (value).entries)
+        ? /** @type {unknown[]} */ (/** @type {Record<string, unknown>} */ (value).entries)
         : []
     ),
     ...fallbackEntries
@@ -3501,6 +3506,10 @@ const applyLosatDerivedCache = (
   );
 };
 
+/**
+ * @param {unknown} manifest Unvalidated: `validateProteinIdentityManifest` below admits it or it is dropped.
+ * @param {{ adoptCurrent?: boolean }} [options]
+ */
 const applyProteinIdentityManifest = (manifest, { adoptCurrent = false } = {}) => {
   if (!validateProteinIdentityManifest(manifest)) {
     state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
