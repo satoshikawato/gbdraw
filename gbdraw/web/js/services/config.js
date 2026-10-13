@@ -314,6 +314,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
+/** @import { RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 
 /** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
 
@@ -3101,12 +3102,27 @@ const serializeFile = async (file) => {
   return cacheSerializedFileDescriptor(file, descriptor);
 };
 
+/**
+ * What `serializeFileValue` gives for a file slot's value: the descriptor Save stores, or the list of them.
+ * @typedef {RawSessionResourceDescriptor | null | SerializedFileValue[]} SerializedFileValue
+ */
+/**
+ * @param {DeserializedFile | undefined} value A file slot's value.
+ * @returns {Promise<SerializedFileValue>}
+ */
 const serializeFileValue = async (value) => (
   Array.isArray(value)
     ? Promise.all(value.map((item) => serializeFileValue(item)))
     : serializeFile(value)
 );
 
+/**
+ * What `deserializeFile` gives for a stored value: a file slot's value, or a list of them for a stored list.
+ * @typedef {File | SessionResourceFileView | null | DeserializedFile[]} DeserializedFile
+ */
+// `entry` keeps its implicit type: a legacy `files` entry's `name`, `type` and `lastModified` go unconverted
+// into `new File(...)` below, which the true type (`unknown`) does not allow without a cast of those leaves.
+/** @returns {DeserializedFile} */
 const deserializeFile = (entry) => {
   if (Array.isArray(entry)) {
     return entry.map((item) => deserializeFile(item));
