@@ -207,6 +207,17 @@ def test_a_repair_that_cannot_clear_every_defect_returns_none_and_leaves_the_lab
     assert labels == before
 
 
+def test_one_inner_label_over_the_definition_text_is_repaired() -> None:
+    """OV-736: one movable label can have a defect (it covers the centre text), so it is repaired."""
+
+    labels, total_length, definition = _fixture("c_tobacco_both_f14")
+    one = [next(label for label in labels if label["label_text"].startswith("RNA polymerase beta subunit"))]
+    assert one[0]["is_inner"] and defect_count(one, total_length, definition) == 1
+
+    repaired = repair_circular_labels(one, total_length, definition_text=definition)
+    assert repaired is not None and defect_count(repaired, total_length, definition) == 0
+
+
 def test_a_repair_that_cannot_finish_within_the_budget_stops_early() -> None:
     """A record whose moves clear defects too slowly to reach 0 within the budget stops at the first such move.
 

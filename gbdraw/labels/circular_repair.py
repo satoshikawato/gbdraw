@@ -609,8 +609,8 @@ def repair_circular_labels(
 
     if any(label.get("placement") == "radial" or label.get("oriented_corners") for label in labels):
         return None
-    if sum(1 for label in labels if not label.get("is_embedded")) < 2:
-        return None
+    if all(label.get("is_embedded") for label in labels):
+        return None  # nothing to move; one label can still cover the definition text
     count = defect_count(labels, total_length, definition_text)
     if not 0 < count <= MAX_DEFECTS:
         return None
