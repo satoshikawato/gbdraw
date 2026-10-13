@@ -198,24 +198,24 @@ test('Add sequence, an upload, Undo, Redo, a mode switch, and Reset Settings lea
   await expectFolded(page, [true, true, false, true, true, false]);
 
   // Undo and Redo of the upload and the added card change no card that stays.
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect(header(cards(page).nth(5))).toHaveAttribute('aria-label', 'File 6: No file');
   await expectFolded(page, [true, true, false, true, true, false]);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect(cards(page)).toHaveCount(5);
   await expectFolded(page, [true, true, false, true, true]);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await expect(cards(page)).toHaveCount(6);
   await expectFolded(page, [true, true, false, true, true, false]);
   // A card folded by hand comes back folded through Undo and Redo of the step that added it.
   await header(cards(page).nth(5)).click();
   await expectFolded(page, [true, true, false, true, true, true]);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect(cards(page)).toHaveCount(5);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await expect(cards(page)).toHaveCount(6);
   await expectFolded(page, [true, true, false, true, true, true]);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect(cards(page)).toHaveCount(5);
 
   // A mode round trip and Reset Settings.
@@ -424,11 +424,11 @@ test('removing a File moves the focus to the header line of a folded neighbour a
   await expect(header(cards(page).nth(2))).toBeFocused();
   await expectFolded(page, [true, true, true]);
   // Undo brings the removed File back as it was: folded.
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect(cards(page)).toHaveCount(4);
   await expect(header(cards(page).nth(3))).toHaveAttribute('aria-label', 'File 4: BGC0000713.gbk');
   await expectFolded(page, [true, true, true, true]);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await expect(cards(page)).toHaveCount(3);
   await expectFolded(page, [true, true, true]);
 
