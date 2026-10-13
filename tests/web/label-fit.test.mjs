@@ -139,6 +139,33 @@ test('a row\'s config paths become the draft fields the request mapping projects
   assert.throws(() => draftFieldsForConfigValues({}, 'circular', adv), unknown);
 });
 
+test('a row may write exactly the config paths Python\'s rows send, in the mode that sends them', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { applyLabelFitValues } = await import('../../gbdraw/web/js/services/config.js');
+  const fit = await readFile(new URL('../../gbdraw/labels/fit.py', import.meta.url), 'utf8');
+  const constants = new Map([...fit.matchAll(/^([A-Z_]+_PATHS?) = (.+)$/gm)]
+    .map(([, name, value]) => [name, [...value.matchAll(/"([^"]+)"/g)].map(([, path]) => path)]));
+  const { SEPARATE_FEATURES_PATH: [separate], FONT_SIZE_PATHS: fontSizes, ...single } = Object.fromEntries(constants);
+  assert.equal(fontSizes.length, 2);
+  const sample = { [separate]: true, 'labels.circular.scope': 'outer', 'labels.circular.placement': 'radial' };
+  const unknown = (error) => error.code === 'INPUT_INVALID' && error.context.reason === 'UNKNOWN_CONFIG_PATH';
+  // Circular rows: every path Python names; Linear rows: separate overlapping features only.
+  applyLabelFitValues(state.drawings.circular, Object.fromEntries(fontSizes.map((path) => [path, 12])), 'circular');
+  for (const [path] of Object.values(single)) {
+    applyLabelFitValues(state.drawings.circular, { [path]: sample[path] ?? 1.1 }, 'circular');
+  }
+  applyLabelFitValues(state.drawings.linear, { [separate]: true }, 'linear');
+  // Label settings no row sends are not row writes.
+  for (const [values, mode] of [
+    [{ 'labels.unified_adjustment.inner_labels.x_radius_offset': 1.1 }, 'circular'],
+    [{ 'labels.unified_adjustment.inner_labels.y_radius_offset': 1.1 }, 'circular'],
+    [{ 'labels.spacing.linear': 0.5 }, 'linear'],
+    [{ 'labels.linear.scope': 'out' }, 'linear']
+  ]) {
+    assert.throws(() => applyLabelFitValues(state.drawings[mode], values, mode), unknown, JSON.stringify(values));
+  }
+});
+
 const dialogHarness = ({ computeRow = async () => ({}) } = {}) => {
   const steps = [];
   const writes = [];
