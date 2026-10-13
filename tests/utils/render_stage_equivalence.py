@@ -1126,8 +1126,9 @@ def random_walk(
 # that at a load average of 8-10). A step renders twice: warm and cold in a
 # chain, or the variant and the base again in the expected-builds test.
 RENDER_SECONDS: Mapping[str, float] = {"C1": 0.5, "C2": 13.0, "C3": 1.3, "L1": 0.2, "L2": 1.3, "L3": 1.4}
-# Cold renders far above their case: the slower label settings. A warm render
-# can take up to twice its cold render, so a heavy step counts three cold renders.
+# Cold renders far above their case: the slower label settings. A heavy step
+# counts three cold renders; the third is a margin for machine load, which can
+# slow a long render by 25-70 % (a warm render is no slower than a cold one).
 HEAVY_RENDER_SECONDS: Mapping[tuple[str, str, str], float] = {
     ("C1", "label_font_size", "--label_font_size 30"): 21.0,
     ("C2", "circular_label_spacing", "--circular_label_spacing 40"): 25.0,
@@ -1136,8 +1137,8 @@ HEAVY_RENDER_SECONDS: Mapping[tuple[str, str, str], float] = {
 }
 # C2 variants left out of the universe. Each ends in LabelsDoNotFitError, so the
 # test only checks that warm and cold raise the same error; together they cost
-# about 47 min (cold 81-421 s each, warm up to twice that). The cause is the slow
-# failing label fit, bug OV-701.
+# about 47 min (cold 68-421 s each at low load). The cause is the slow failing
+# label fit, bug OV-701, which dev has too.
 LABEL_FIT_FAILURES: frozenset[tuple[str, str, str]] = frozenset({
     ("C2", "label_font_size", "--label_font_size 30"),
     ("C2", "feature_overlap_tolerance_bp", "--feature_overlap_tolerance_bp 200"),
