@@ -174,6 +174,22 @@ export const resolveBundledFontFace = (metrics, fontFamily) => {
 };
 
 /**
+ * The face an edited Legend is measured with: the face Python recorded
+ * (`legendReflow.fontFile`) when the Web has its metrics, else the bundled
+ * face of the label's font family. A Result drawn on the CLI with a system
+ * font records a face the Web has no metrics for (OV-683).
+ * @param {LegendFontMetrics} metrics
+ * @param {string | null | undefined} recordedFontFile
+ * @param {string} fontFamily The label's `font-family`.
+ * @returns {string}
+ */
+export const legendMeasurementFace = (metrics, recordedFontFile, fontFamily) => (
+  recordedFontFile && metrics.faces.has(recordedFontFile)
+    ? recordedFontFile
+    : resolveBundledFontFace(metrics, fontFamily)
+);
+
+/**
  * Measure text as gbdraw's Python layout does: `calculate_bbox_dimensions(text,
  * family, size, dpi)` in gbdraw/core/text.py, with the face it resolves to.
  * Every Python layout that sizes text this way (the Legend, record labels,

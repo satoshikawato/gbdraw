@@ -12,6 +12,7 @@ import {
   buildLinearLegendLayout,
   circularLegendLocalBounds,
   createLegendFontMetrics,
+  legendMeasurementFace,
   linearLegendLocalBounds,
   loadLegendFontMetrics,
   measureTextBox,
@@ -174,4 +175,15 @@ test('sums follow CPython float sum()', () => {
   assert.equal(pythonFloatSum([]), 0);
   assert.equal(pythonFloatSum(Array(10).fill(0.1)), 1.0);
   assert.equal(pythonFloatSum([1e16, 1.0, -1e16]), 1.0);
+});
+
+// OV-683: a Result drawn on the CLI with a system font records a face the Web
+// has no metrics for; the editor measures with the label family's bundled face.
+test('an unknown recorded face falls back to the bundled face of the family', () => {
+  assert.equal(legendMeasurementFace(metrics, 'LiberationSerif-Regular', 'sans-serif'), 'LiberationSerif-Regular');
+  assert.equal(legendMeasurementFace(metrics, 'DejaVuSans', "'DejaVu Sans', serif"), 'LiberationSerif-Regular');
+  assert.equal(legendMeasurementFace(metrics, undefined, "'DejaVu Sans', sans-serif"), 'LiberationSans-Regular');
+  assert.doesNotThrow(() => measureTextBox(metrics, {
+    text: 'CDS', fontFile: legendMeasurementFace(metrics, 'DejaVuSans', 'sans-serif'), fontSize: 14, dpi: 96
+  }));
 });

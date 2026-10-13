@@ -447,9 +447,11 @@ def _add_font_family_arg(parser: argparse.ArgumentParser) -> None:
             'Font for all diagram text: one font family name (for example "DejaVu Sans"), '
             'which gets its generic family appended, or a CSS font-family list. Text is '
             'measured with the font file of the first family that is a bundled Liberation '
-            'font or alias, or that fontconfig (fc-match) finds. A family that is not '
-            'available is replaced with the nearest Liberation font, with a warning '
-            "(optional; default: 'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif)."
+            'font or alias, that fontconfig (fc-match) finds, or, without fontconfig, that '
+            'is installed in the system font folders. A family found nowhere is replaced with '
+            'the nearest Liberation font, with a warning. A Session saves the font name, not '
+            "the font file (optional; default: 'Liberation Sans', 'Arial', 'Helvetica', "
+            "'Nimbus Sans L', sans-serif)."
         ),
         type=str)
 

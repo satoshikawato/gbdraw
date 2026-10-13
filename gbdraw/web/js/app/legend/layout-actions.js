@@ -5,8 +5,8 @@ import {
   buildLinearLegendLayout,
   circularLegendLocalBounds,
   linearLegendLocalBounds,
-  loadLegendFontMetrics,
-  resolveBundledFontFace
+  legendMeasurementFace,
+  loadLegendFontMetrics
 } from '../../services/legend-layout.js';
 import { getComparisonLegendGroup, getLegendEntrySwatch, legendRowShown } from '../../services/legend-svg.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
@@ -182,7 +182,7 @@ export const createLegendLayoutActions = () => {
       // Before Python recorded its inputs, the wrap width is the primary
       // item's width: what Linear passes; Circular passed its content width.
       wrapWidth: recorded.wrapWidth ?? metadata.primary.finalBounds.width,
-      fontFile: recorded.fontFile || resolveBundledFontFace(metrics, sampleLabel?.getAttribute('font-family') || ''),
+      fontFile: legendMeasurementFace(metrics, recorded.fontFile, sampleLabel?.getAttribute('font-family') || ''),
       fontSize: recorded.fontSize ?? Number(sampleLabel?.getAttribute('font-size')),
       dpi: recorded.dpi ?? DEFAULT_LEGEND_DPI,
       colorRectSize: recorded.colorRectSize

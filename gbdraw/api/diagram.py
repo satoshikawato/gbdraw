@@ -267,17 +267,24 @@ def _resolve_optional_table(
     return False, None
 
 
+# Requested font-family lists already warned about in this process.
+_warned_font_families: set[str] = set()
+
+
 def _with_available_font_family(cfg: GbdrawConfig) -> GbdrawConfig:
     """Draw and measure text only with font families that resolve.
 
     A family that is not available is replaced with the nearest one
-    (``resolve_font_family``), with one warning naming both.
+    (``resolve_font_family``), with one warning per requested list and
+    process naming both.
     """
 
     resolution = resolve_font_family(cfg.objects.text.font_family)
     if not resolution.substituted:
         return cfg
-    logger.warning(resolution.message)
+    if resolution.requested not in _warned_font_families:
+        _warned_font_families.add(resolution.requested)
+        logger.warning(resolution.message)
     text = replace(cfg.objects.text, font_family=resolution.effective)
     return replace(cfg, objects=replace(cfg.objects, text=text))
 
