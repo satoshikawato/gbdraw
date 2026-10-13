@@ -4,6 +4,7 @@ import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
 /** @import { CommittedDisplayRow, ResolvedRecordTransform } from '../record-display-options.js' */
 /** @import { AnchorIntent } from './feature-anchor.js' */
 /** @import { SessionBusy } from '../../state.js' */
+/** @import { RecordKeyedFeature } from '../../services/feature-identity.js' */
 
 /**
  * One capability verdict as the popup shows it.
@@ -42,7 +43,7 @@ const sameFeatureIdentity = (feature, identity) => {
  * @property {(run: { canonical: Record<string, any>, row: CommittedDisplayRow, transform: ResolvedRecordTransform }) => Promise<Record<string, any>>} runRecordRotation
  *   composition root port: runs the candidate and commits the target draft
  * @property {((identity: { recordKey: string, biologicalFeatureId: string }) => PopupFeature | null) | null} [resolveCurrentFeature]
- * @property {((feature: PopupFeature) => boolean) | null} [isCurrentFeature]
+ * @property {((feature: RecordKeyedFeature) => boolean) | null} [isCurrentFeature]
  * @property {(() => Promise<Record<string, any>> | SessionBusy) | null} [readRecords]
  */
 

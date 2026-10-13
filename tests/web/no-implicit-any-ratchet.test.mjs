@@ -26,12 +26,9 @@ import { fileURLToPath } from 'node:url';
 import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
 
 const NO_IMPLICIT_ANY_BASELINE = {
-  'app/app-setup.js': 1,
-  'app/run-analysis.js': 9,
-  'services/config.js': 205,
-  'services/losat-cache.js': 2,
-  'services/session-authority.js': 7,
-  'services/session-request.js': 191
+  'app/run-analysis.js': 8,
+  'services/config.js': 109,
+  'services/session-request.js': 124
 };
 
 const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');

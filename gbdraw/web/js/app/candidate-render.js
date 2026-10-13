@@ -20,7 +20,7 @@ import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feat
 import {
   admitCurrentGeneratedResults
 } from '../services/svg-result-ingestion.js';
-/** @import { FeatureOverrideRow } from '../services/feature-placement.js' */
+/** @import { CanonicalFeatureOverride } from '../contracts/request.generated.js' */
 
 /**
  * A Legend entry as the compile reads it: a listed, deleted, or dormant row
@@ -41,7 +41,7 @@ import {
  *   a Result without a catalog (`displayedFeatureAddressing`).
  * @property {Record<string, SavedFeatureColorEdit>} [featureColorOverrides]
  * @property {Record<string, SavedStrokeEdit>} [featureStrokeOverrides]
- * @property {Record<string, FeatureOverrideRow>} [featureOverrides]
+ * @property {Record<string, CanonicalFeatureOverride>} [featureOverrides]
  * @property {readonly (LegendEntryInput | null | undefined)[]} [legendEntries]
  * @property {readonly (LegendEntryInput | null | undefined)[]} [deletedLegendEntries]
  * @property {string[]} [originalLegendOrder]
@@ -478,7 +478,7 @@ const renderedResultIndexes = (catalogAdmission, renderedId) => (
 // 6.2, R2).
 /**
  * @param {EditorAddressing} catalogAdmission
- * @param {FeatureOverrideRow | null | undefined} row
+ * @param {CanonicalFeatureOverride | null | undefined} row
  */
 const identityTargets = (catalogAdmission, row) => (
   resolvedStableTargets(catalogAdmission, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId))

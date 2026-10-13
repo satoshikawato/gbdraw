@@ -105,7 +105,20 @@ test('record display drafts use one exact transform and provenance contract', ()
     { ...draft, scope: 'linear' },
     { ...draft, reverseComplementOverride: 'true' },
     { ...draft, anchorIntent: { ...anchorIntent, schema: 2 } }
-  ]) assert.throws(() => validateRecordDisplayDrafts([invalid]));
+  ]) assert.throws(() => validateRecordDisplayDrafts([invalid]), JSON.stringify(invalid));
+  // OV-575: a row's selector is text, as gbdraw/session_io.py:853-857 requires.
+  const refusedDraft = /^Error: Invalid record display draft; only source-bound requested intent is supported\.$/;
+  for (const selector of [['#1'], 1]) assert.throws(
+    () => validateRecordDisplayDrafts([{ ...draft, selector }]), refusedDraft, JSON.stringify(selector)
+  );
+  // A row of a Session Python does not check (Session 40) keeps the verdict it
+  // had: only the match of the selector against `#N` (OV-634 for the number).
+  const uncheckedRows = [{ scope: 'linear', ...draft, selector: ['#1'] }];
+  assert.equal(validateRecordDisplayDrafts(uncheckedRows, { scoped: true, textSelector: false }), uncheckedRows);
+  assert.throws(
+    () => validateRecordDisplayDrafts([{ ...draft, selector: 1 }], { textSelector: false }),
+    /^Error: Record display requires a source UID and exact record selector\.$/
+  );
 });
 
 test('complete orientation override has one owner while cropped reverse stays region-owned', () => {
@@ -384,6 +397,30 @@ test('isCurrentFeature is a pure check of the committed record, its bound source
   // Both the primary input and its paired FASTA match the committed Session.
   assert.equal(current('seq-a', { matchesSavedSource: () => false }), false);
   assert.equal(current('seq-b:1', { matchesSavedSource: (file, resourceId) => resourceId !== 'b-fasta' }), false);
+});
+
+// A feature row of a Session before 40 is stored unchecked: it can lack `record_key` or hold a value that is
+// not text. Such a key names no committed record, also when the request draws a source whole.
+test('a feature whose record key is not text is not current, with a source drawn whole (OV-618)', () => {
+  const file = {};
+  const request = { mode: 'linear', records: [
+    { recordKey: 'card', cardinality: 'all', source: { kind: 'genbank', resourceId: 'a' }, selector: null }
+  ] };
+  const sources = [{ scope: 'linear', sourceUid: 'card', source: file, paired: null }];
+  const binding = { request, sources, boundSources: sources.map((entry) => ({ ...entry })), matchesSavedSource: () => true };
+  assert.equal(isCurrentFeature({ record_key: 'card:1' }, binding), true);
+  for (const feature of [{}, { record_key: null }, { recordKey: 'card:1' }, { record_key: 5 }, { record_key: ['card:1'] },
+    { record_key: new String('card:1') }]) {
+    assert.equal(isCurrentFeature(feature, binding), false, JSON.stringify(feature));
+  }
+  // The placement control reads a feature's identity from either spelling; the check reads `record_key`.
+  const state = { mode: { value: 'linear' }, form: createDefaultForm(), adv: createDefaultAdv('linear'),
+    featurePlacementOverrides: {}, featureCatalog: { value: { items: [{ recordKeys: ['card:1'] }] } } };
+  const actions = createFeaturePlacementActions({ state: withDrawings(state), runUndoable: (_label, fn) => fn(),
+    getCommittedRequest: () => request, isCurrentFeature: (feature) => isCurrentFeature(feature, binding) });
+  const enabled = (feature) => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value);
+  assert.ok(enabled({ record_key: 'card:1', biological_feature_id: 'gene' }).includes('auto'));
+  assert.deepEqual(enabled({ recordKey: 'card:1', biologicalFeatureId: 'gene' }), []);
 });
 
 test('the record display binding is refreshed for the committed request before the check reads it', async () => {

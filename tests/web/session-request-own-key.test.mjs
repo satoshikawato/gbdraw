@@ -17,9 +17,10 @@ globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { serializeActiveRenderFiles } = await import('../../gbdraw/web/js/services/config.js');
-const { buildCanonicalRenderRequest, projectCanonicalSessionRequest } = await import(
-  '../../gbdraw/web/js/services/session-request.js'
-);
+const {
+  buildCanonicalRenderRequest, compareCanonicalRenderRequests, decodeCanonicalResourceText,
+  projectCanonicalSessionRequest
+} = await import('../../gbdraw/web/js/services/session-request.js');
 const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
   '../../gbdraw/web/js/services/session-resource-backing.js'
 );
@@ -85,5 +86,37 @@ test('OV-565: a committed Circular label scope outside the table shows None', as
     const session = JSON.parse(JSON.stringify(built));
     session.renderRequest.diagramOptions.configOverrides['labels.circular.scope'] = scope;
     assert.equal(projectCanonicalSessionRequest(session).config.form.labels_mode, labelsMode, scope);
+  }
+});
+
+test('OV-613: a resource id that names an Object.prototype member and no resource is missing', async () => {
+  circularState({});
+  const built = await buildWithFiles();
+  for (const resourceId of ['__proto__', 'constructor', 'toString']) {
+    const session = JSON.parse(JSON.stringify(built));
+    session.renderRequest.records[0].source.resourceId = resourceId;
+    assert.throws(
+      () => projectCanonicalSessionRequest(session),
+      { message: `Missing canonical resource: ${resourceId}` }, resourceId
+    );
+    assert.throws(
+      () => decodeCanonicalResourceText(session.resources, resourceId),
+      { message: `Missing canonical resource: ${resourceId}` }, resourceId
+    );
+  }
+  // A resource the Session stores under such an id is read (JSON.parse writes it as an own key).
+  const stored = JSON.parse('{"__proto__":{"kind":"genbank","encoding":"base64","data":"TE9DVVM="}}');
+  assert.equal(decodeCanonicalResourceText(stored, '__proto__'), 'LOCUS');
+});
+
+test('OV-614: a request compared with a resource table that lacks its resource names the resource', async () => {
+  for (const resourceId of ['absent', '__proto__', 'constructor']) {
+    const request = { diagramOptions: { depthTracks: [{ resourceId }] } };
+    await assert.rejects(
+      compareCanonicalRenderRequests({
+        expectedRequest: request, expectedResources: {}, actualRequest: request, actualResources: {}
+      }),
+      { message: `Canonical request resource '${resourceId}' is missing.` }, resourceId
+    );
   }
 });

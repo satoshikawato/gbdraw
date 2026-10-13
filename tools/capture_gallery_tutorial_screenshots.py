@@ -1314,6 +1314,23 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
         page.wait_for_timeout(100)
 
 
+def wait_for_css_transitions(page) -> None:
+    """Let running CSS transitions end, so a crop never shows a control mid-change.
+
+    The caret of a card or section turns over 200 ms after it opens.
+    """
+
+    page.evaluate(
+        """
+        () => Promise.all(
+          document.getAnimations()
+            .filter((animation) => animation instanceof CSSTransition)
+            .map((animation) => animation.finished.catch(() => undefined)),
+        )
+        """
+    )
+
+
 def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], base_url: str, quality: int) -> Path:
     capture = operation.get("capture")
     if not isinstance(capture, dict):
@@ -1341,6 +1358,7 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
         """
     )
     apply_open_select_overlays(page, capture.get("openSelect"))
+    wait_for_css_transitions(page)
 
     clip_selectors = [as_text(selector) for selector in as_array(capture.get("clipSelectors")) if as_text(selector)]
 

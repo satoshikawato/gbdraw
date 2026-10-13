@@ -84,7 +84,7 @@ def _mapping(value: Any) -> Mapping[str, Any]:
 
 
 def _only(source: Mapping[str, Any], fields: frozenset[str]) -> dict[str, Any]:
-    return {key: source[key] for key in fields if key in source}
+    return {key: value for key, value in source.items() if key in fields}
 
 
 def _without(source: Mapping[str, Any], fields: frozenset[str]) -> dict[str, Any]:
