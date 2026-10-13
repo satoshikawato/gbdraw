@@ -1,0 +1,62 @@
+{
+  "purpose": "Positive fixture for the Session 46 reading of Legend color and stroke edits stored under a row's shown caption (Session 47 keys them by the row key).",
+  "history": "first-parent main 9839de8eec50935d9479738f50d7953eedff49fa (2026-10-11, #1003); Session version 46 is the writer format of that commit. No release tag holds it (0.13.0 is older).",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web) of that commit; the Session bytes are kept unchanged (as the writer gzipped it)",
+  "checkout": "git worktree add --detach <dir> 9839de8e (outside the repository); python tools/prepare_browser_wheel.py in <dir>; Playwright (@playwright/test) with that commit's playwright.config.js and tests/web/helpers (audit-browser.cjs openWithGenBank and settle, app-lifecycle.cjs generateAndWaitForResult, mode-transition.cjs download); a one-off driver spec performed the steps below",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.1",
+    "python": "3.13.3"
+  },
+  "sessions": {
+    "legend-renamed-rows.v46.gbdraw-session.json.gz": {
+      "sourceCommit": "9839de8eec50935d9479738f50d7953eedff49fa",
+      "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+      "sessionVersion": 46,
+      "records": "tests/fixtures/sessions/cli-web-mito.gb (sha256 f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92), Circular, one Result",
+      "steps": [
+        "GenBank/DDBJ File = cli-web-mito.gb; Generate Diagram",
+        "Legend editor: rename row GC skew (+) to Z (name field, Enter)",
+        "Rename row GC content to GC skew (+) (no dialog)",
+        "Set the color of the row now named GC skew (+) to #ff0000 (app.updateLegendEntryColor; the row has no color control in the editor at this commit)",
+        "Stroke options of row Z: stroke color mode Color, stroke color #00aa00, stroke width 2",
+        "Rename row GC skew (-) to W, set its color to #0000ff (app.updateLegendEntryColor), then Remove W",
+        "Save Session (the app asks for the Session title; the default was accepted)"
+      ],
+      "legend": {
+        "rows": [
+          "tRNA",
+          "rRNA",
+          "CDS",
+          "GC skew (+)",
+          "Z"
+        ],
+        "originalCaptions": {
+          "tRNA": "tRNA",
+          "rRNA": "rRNA",
+          "CDS": "CDS",
+          "GC skew (+)": "GC content",
+          "Z": "GC skew (+)",
+          "W": "GC skew (-)"
+        },
+        "deletedEntries": [
+          "W"
+        ],
+        "colorOverrides": {
+          "GC skew (+)": "#ff0000",
+          "W": "#0000ff"
+        },
+        "strokeOverrides": {
+          "Z": {
+            "originalStrokeColor": "none",
+            "originalStrokeWidth": 0,
+            "strokeWidth": 2,
+            "strokeColor": "#00aa00"
+          }
+        }
+      },
+      "sha256": "77c2c9f14caf7021fb37544accc862e0fee363a1b66fd142ba3753c733ed3528",
+      "decompressedSha256": "8efd7a20948b7dcc9e5cb815d2391178d2b7a48c22bf37ece64160385340237a"
+    }
+  }
+}

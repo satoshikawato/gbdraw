@@ -5,10 +5,13 @@
 // gbdraw/web_support/mode_scoped_settings.py) and the split of a Session 27-44
 // draft into the two slices. Its Python twin is `split_draft_into_modes` in
 // gbdraw/session_io.py; tests/fixtures/sessions/mode-split-vectors.json pins
-// both.
+// both. It also reads a Session 46 Legend's edits by row key (Session 47,
+// `legendEditsByRowKey`; twin `legend_edits_by_row_key`, pinned by
+// tests/fixtures/sessions/legend-row-key-vectors.json).
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 // `FLAT_DRAFT_TOP_LEVEL_FIELDS`: the top-level homes that Session 46 moved into `modes`.
-import { FLAT_DRAFT_TOP_LEVEL_FIELDS } from '../contracts/schema.generated.js';
+import { FLAT_DRAFT_TOP_LEVEL_FIELDS, ROW_KEYED_LEGEND_SESSION_VERSION } from '../contracts/schema.generated.js';
+import { legendEntryKey } from './legend-svg.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { cloneJsonData } from './json-clone.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -409,4 +412,118 @@ export const splitDraftIntoModes = (draft, { committedMode, modeProfiles = undef
   if (Object.hasOwn(config, 'cliOptions')) result.cliOptions = cloneJsonData(config.cliOptions);
   if (isObject(configValue)) result.modes = { circular: slices.circular, linear: slices.linear };
   return result;
+};
+
+/** @typedef {'colorOverrides' | 'strokeOverrides'} LegendEditStore */
+/**
+ * One Session 46 Legend edit that did not stay under its key (`legendEditsByRowKey`):
+ * `moved` to the row key, kept as `unmatched` (no entry shows or holds its key),
+ * or dropped (`toKey: null`) as `unshown` (the key of a renamed row that no
+ * entry shows) or as a `collision` with an edit that already landed on `rowKey`.
+ * `slice`: the mode slice, or `draft` (`sessionLegendEditsByRowKey`).
+ * @typedef {{ store: LegendEditStore, fromKey: string, toKey: string, outcome: 'moved' | 'unmatched', slice?: string }
+ *   | { store: LegendEditStore, fromKey: string, toKey: null, outcome: 'unshown', slice?: string }
+ *   | { store: LegendEditStore, fromKey: string, toKey: null, outcome: 'collision', rowKey: string, slice?: string }} LegendEditRekey
+ */
+/** @type {readonly LegendEditStore[]} */
+const LEGEND_EDIT_STORES = Object.freeze(['colorOverrides', 'strokeOverrides']);
+
+// A Session 46 Legend (a slice's, or a flat draft's, `editorState.legend`)
+// read as Session 47, and what the reading did to each edit that did not stay
+// under its key. Session 46 stored the Legend color and stroke edits under the
+// caption a row shows, Session 47 under the row key (`legendEntryKey`). The
+// first entry that shows a caption names its row, the listed (and dormant)
+// entries before the deleted ones, as Session 46 Load kept only that entry.
+// Each edit, in store order: under a caption an entry shows, it goes to that
+// entry's key (`moved` when the key differs), unless an earlier edit of the
+// store took that key (`collision`, dropped); under the key of a renamed row
+// that no entry shows, Session 46 applied it to no row (`unshown`, dropped);
+// under any other key it stays (`unmatched`). Other fields are kept as they
+// are. The outcomes are data for Load's repair report, computed before Load
+// commits; the twin is `legend_edits_by_row_key` (gbdraw/session_io.py).
+/**
+ * @template {Record<string, unknown>} Legend
+ * @param {Legend} legend
+ * @returns {{ legend: Legend, outcomes: LegendEditRekey[] }}
+ */
+export const legendEditsByRowKey = (legend) => {
+  /** @type {Map<string, string>} */
+  const rowOf = new Map();
+  /** @type {Set<string>} */
+  const renamedKeys = new Set();
+  for (const rows of ['entries', 'dormantEntries', 'deletedEntries']) {
+    const entries = legend[rows];
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      if (!isObject(entry)) continue;
+      const caption = String(entry.caption || '').trim();
+      if (!caption) continue;
+      const key = legendEntryKey(entry);
+      if (key !== caption) renamedKeys.add(key);
+      if (!rowOf.has(caption)) rowOf.set(caption, key);
+    }
+  }
+  /** @type {Record<string, unknown>} */
+  const read = { ...legend };
+  /** @type {LegendEditRekey[]} */
+  const outcomes = [];
+  for (const store of LEGEND_EDIT_STORES) {
+    const record = legend[store];
+    if (!isObject(record)) continue;
+    /** @type {Record<string, unknown>} */
+    const keyed = {};
+    for (const [key, value] of Object.entries(/** @type {Record<string, unknown>} */ (record))) {
+      const rowKey = rowOf.get(key);
+      if (rowKey !== undefined) {
+        if (Object.hasOwn(keyed, rowKey)) {
+          outcomes.push({ store, fromKey: key, toKey: null, outcome: 'collision', rowKey });
+          continue;
+        }
+        keyed[rowKey] = value;
+        if (rowKey !== key) outcomes.push({ store, fromKey: key, toKey: rowKey, outcome: 'moved' });
+      } else if (renamedKeys.has(key)) {
+        outcomes.push({ store, fromKey: key, toKey: null, outcome: 'unshown' });
+      } else {
+        keyed[key] = value;
+        outcomes.push({ store, fromKey: key, toKey: key, outcome: 'unmatched' });
+      }
+    }
+    read[store] = keyed;
+  }
+  return { legend: /** @type {Legend} */ (read), outcomes };
+};
+
+// A Session document of `version` with each Legend's edits keyed by row key:
+// every mode slice's (Session 46), and the flat draft's of a Session 27-44;
+// with the outcomes of `legendEditsByRowKey`, each naming its slice. A
+// Session 47 or later is returned as it is.
+/**
+ * @template {Record<string, unknown>} Session
+ * @param {Session} session
+ * @param {number} version
+ * @returns {{ session: Session, outcomes: LegendEditRekey[] }}
+ */
+export const sessionLegendEditsByRowKey = (session, version) => {
+  /** @type {LegendEditRekey[]} */
+  const outcomes = [];
+  if (version >= ROW_KEYED_LEGEND_SESSION_VERSION) return { session, outcomes };
+  /** @template {Record<string, unknown>} Holder @param {Holder} holder @param {string} slice @returns {Holder} */
+  const withRowKeyedLegend = (holder, slice) => {
+    const editor = holder.editorState;
+    if (!isObject(editor) || !isObject(/** @type {Record<string, unknown>} */ (editor).legend)) return holder;
+    const editorState = /** @type {Record<string, unknown>} */ (editor);
+    const read = legendEditsByRowKey(/** @type {Record<string, unknown>} */ (editorState.legend));
+    read.outcomes.forEach((outcome) => outcomes.push({ ...outcome, slice }));
+    return { ...holder, editorState: { ...editorState, legend: read.legend } };
+  };
+  const read = withRowKeyedLegend(session, 'draft');
+  if (!isObject(read.modes)) return { session: read, outcomes };
+  return {
+    session: {
+      ...read,
+      modes: Object.fromEntries(Object.entries(/** @type {Record<string, unknown>} */ (read.modes)).map(([mode, slice]) => [
+        mode, isObject(slice) ? withRowKeyedLegend(/** @type {Record<string, unknown>} */ (slice), mode) : slice
+      ]))
+    },
+    outcomes
+  };
 };

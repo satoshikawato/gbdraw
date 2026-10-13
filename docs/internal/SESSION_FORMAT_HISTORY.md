@@ -9,6 +9,48 @@ documents current support and what a user does with an older file, including
 the [retired inputs](../REFERENCE/session-and-request-compatibility.md#retired-inputs).
 Release notes record when a format changed.
 
+## Unreleased: Session 47 keys the Legend edits by the row key
+
+Session version 47 stores each mode slice's Legend color and stroke edits
+(`editorState.legend.colorOverrides` and `strokeOverrides`) under the row key:
+the caption gbdraw drew for the row, kept in the entry's `originalCaption`
+(the entry's `caption` when it has none). Session 46 stored them under the
+name the row shows (`caption`). Keep both in the Legend rename dialog keeps the
+typed name (PD-OI-061 scenario revision 5), so two rows can show one name; the
+shown name no longer identifies a row. A rename changes only the entry's
+`caption`; its edits stay under the key. Within one Legend list the entries are
+unique by row key, not by caption. No other field changed.
+
+The bytes of a Session 46 cannot be read as Session 47: after a rename of
+GC skew to `Z` and of GC content to `GC skew`, a color stored under `GC skew`
+belongs to the GC content row in Session 46 and would name the GC skew row in
+Session 47. Every reader of a Session older than 47 therefore reads, per
+Legend and in store order, each edit by the caption it is stored under. The
+first entry that shows a caption names its row, listed and dormant entries
+before deleted ones, as Session 46 Load kept only that entry. An edit under a
+caption an entry shows moves to that entry's key (`moved`), unless an earlier
+edit of the store already took the key (`collision`, dropped). An edit under
+the key of a renamed row that no entry shows applied to no row in Session 46
+and is dropped (`unshown`). An edit under any other key stays (`unmatched`).
+Each reader returns these outcomes as data (`{store, fromKey, toKey, outcome}`,
+`toKey` null when dropped); the Web Load computes them before it commits.
+The Web Load (`sessionLegendEditsByRowKey`
+in `services/mode-scoped-migration.js`, before any other reader), the CLI
+re-save (`build_session_json`), the Python migration of an older Session
+(`_split_session_adjunct`), and `upgrade_session_document` (a Session 46 keeps
+its drawings) read them this way; `legend_edits_by_row_key` in
+`gbdraw/session_io.py` is the Python twin of `legendEditsByRowKey`.
+`tests/fixtures/sessions/legend-row-key-vectors.json` pins both, and
+`legend-renamed-rows.v46.gbdraw-session.json.gz` is the positive Session 46
+fixture written by first-parent `main` 9839de8e (#1003), which holds Session
+46. The Legend inventory and generated colors (`originalOrder`,
+`originalColors`) were already keyed by Python's key and are unchanged, as is
+`addedCaptions` (rule row keys).
+
+The multi-drawing format planned as "Session 47" in PD-OI-090 becomes Session
+48 (Owner decision of 2026-10-13, quoted in the Product Contract revision
+that records PD-OI-061 scenario revision 5).
+
 ## Unreleased: Session 46 keeps the settings and the Result of each diagram mode
 
 In the Web app, Circular and Linear each keep their own settings, edits, and
@@ -423,9 +465,9 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 46 | 27–33, 39–42, 44, and 46 |
+| gbdraw session | 47 | 27–33, 39–42, 44, 46, and 47 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, 46, and 47 |
 
 Previously written Session 44 documents with request schema 7 or 8 and feature
 catalog schema 4 remain readable. Current saves write request schema 9;

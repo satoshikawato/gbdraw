@@ -22,7 +22,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn, Sequence, TextIO, cast
+from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn, Sequence, TextIO, TypedDict, cast
 
 from .analysis.protein_artifacts import (
     CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
@@ -67,18 +67,21 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 46
+CURRENT_SESSION_VERSION = 47
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
-# ``modes`` (PD-OI-086) and keys per-feature edits by source identity.
+# ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
+# version 47 keys a slice's Legend color and stroke edits by the row key
+# (``originalCaption``) instead of the shown caption (PD-OI-061 revision 5).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
+ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
 # From version 41 the record display and feature placement drafts of a flat draft are checked.
 DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
@@ -88,7 +91,9 @@ FEATURE_CATALOG_SCHEMA = 1
 FEATURE_CATALOG_ENCODING = "biological-authority-v1"
 CURRENT_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
-FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {44: 4, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA}
+FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
+    44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
+}
 # The field sets below are the keys of the Session document's declaration
 # (gbdraw.session_contract).
 # Every top-level key a Session of a supported version may hold.
@@ -607,7 +612,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         )
     if version not in SUPPORTED_SESSION_VERSIONS:
         raise ValidationError(f"Unsupported session version: {version}.")
-    if "otherModeResult" in session and version < CURRENT_SESSION_VERSION:
+    if "otherModeResult" in session and version < MODE_SCOPED_SESSION_MIN_VERSION:
         raise ValidationError(
             f"Session version {version} cannot contain otherModeResult.", diagnostic=_OTHER_MODE_RESULT_INVALID
         )
@@ -666,7 +671,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
 
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
     """Recognize the explicit document variant, never a missing-resource error."""
-    return session.get("version") in (42, 44, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
+    return session.get("version") in (42, 44, 46, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
 
 
 def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
@@ -722,9 +727,9 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") not in (41, 42, 44, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
+    if current and (session.get("version") not in (41, 42, 44, 46, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
         raise ValidationError(
-            f"Web binding schema 2 requires session 41, 42, 44, or {CURRENT_SESSION_VERSION} and c_gb."
+            f"Web binding schema 2 requires session 41, 42, 44, 46, or {CURRENT_SESSION_VERSION} and c_gb."
         )
     resources = session.get("resources", {})
 
@@ -3268,6 +3273,128 @@ def _with_normalized_editor_colors(draft: Mapping[str, Any]) -> Mapping[str, Any
     return {**draft, "editorState": changed}
 
 
+# How a Session 46 Legend edit is read in Session 47 (``legend_edits_by_row_key``):
+# ``moved`` to the row key, kept as ``unmatched`` (no entry shows or holds its
+# key), or dropped as ``unshown`` (the key of a renamed row that no entry shows)
+# or as a ``collision`` (another edit already landed on ``rowKey``).
+LegendEditRekeyOutcome = Literal["moved", "unmatched", "unshown", "collision"]
+LegendEditStore = Literal["colorOverrides", "strokeOverrides"]
+_LEGEND_EDIT_STORES: tuple[LegendEditStore, ...] = ("colorOverrides", "strokeOverrides")
+
+
+class _LegendEditRekeyRequired(TypedDict):
+    store: LegendEditStore
+    fromKey: str
+    toKey: str | None
+    outcome: LegendEditRekeyOutcome
+
+
+class LegendEditRekey(_LegendEditRekeyRequired, total=False):
+    """One Session 46 Legend edit that did not stay under its key; ``toKey``
+    is ``None`` when it was dropped. ``rowKey``: the key a ``collision`` met;
+    ``slice``: the mode slice, or ``"draft"`` (``session_legend_edits_by_row_key``)."""
+
+    rowKey: str
+    slice: str
+
+
+def legend_edits_by_row_key(legend: Mapping[str, Any]) -> tuple[dict[str, Any], list[LegendEditRekey]]:
+    """A Session 46 Legend (a slice's ``editorState.legend``) read as Session 47,
+    and what the reading did to each edit that did not stay under its key.
+
+    Session 46 stored the Legend color and stroke edits (``colorOverrides``,
+    ``strokeOverrides``) under the caption a row shows, Session 47 under the
+    row key (``originalCaption``, else the caption). The first entry that
+    shows a caption names its row, the listed (and dormant) entries before the
+    deleted ones, as Session 46 Load kept only that entry. Each edit, in store
+    order:
+
+    - under a caption an entry shows: stored under that entry's key
+      (``moved`` when the key differs); when an earlier edit of the store
+      already took that key, it is dropped (``collision``, ``rowKey``);
+    - under the key of a renamed row that no entry shows: Session 46 applied
+      it to no row, so it is dropped (``unshown``);
+    - under any other key: kept (``unmatched``).
+
+    Each outcome is ``{store, fromKey, toKey, outcome}`` (``toKey`` is
+    ``None`` when dropped). Other fields are kept as they are.
+
+    The twin of ``legendEditsByRowKey`` in the Web
+    ``services/mode-scoped-migration.js``;
+    ``tests/fixtures/sessions/legend-row-key-vectors.json`` pins both.
+    """
+
+    row_of: dict[str, str] = {}
+    renamed_keys: set[str] = set()
+    for rows in ("entries", "dormantEntries", "deletedEntries"):
+        entries = legend.get(rows)
+        for entry in entries if isinstance(entries, list) else ():
+            if not isinstance(entry, Mapping):
+                continue
+            caption = _js_text(entry.get("caption") or "")
+            if not caption:
+                continue
+            key = _js_text(entry.get("originalCaption") or entry.get("caption") or "")
+            if key != caption:
+                renamed_keys.add(key)
+            row_of.setdefault(caption, key)
+    changed = dict(legend)
+    outcomes: list[LegendEditRekey] = []
+    for store in _LEGEND_EDIT_STORES:
+        record = legend.get(store)
+        if not isinstance(record, Mapping):
+            continue
+        read: dict[str, Any] = {}
+        for key, value in record.items():
+            if key in row_of:
+                row_key = row_of[key]
+                if row_key in read:
+                    outcomes.append({"store": store, "fromKey": key, "toKey": None,
+                                     "outcome": "collision", "rowKey": row_key})
+                    continue
+                read[row_key] = value
+                if row_key != key:
+                    outcomes.append({"store": store, "fromKey": key, "toKey": row_key, "outcome": "moved"})
+            elif key in renamed_keys:
+                outcomes.append({"store": store, "fromKey": key, "toKey": None, "outcome": "unshown"})
+            else:
+                read[key] = value
+                outcomes.append({"store": store, "fromKey": key, "toKey": key, "outcome": "unmatched"})
+        changed[store] = read
+    return changed, outcomes
+
+
+def session_legend_edits_by_row_key(
+    session: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[LegendEditRekey]]:
+    """The fields of a Session older than 47 with each Legend's edits keyed by
+    row key (:func:`legend_edits_by_row_key`): every mode slice's, and the flat
+    draft's of a Session before 46; and the outcomes, each naming its
+    ``slice`` (the mode, or ``"draft"``)."""
+
+    outcomes: list[LegendEditRekey] = []
+
+    def read(holder: Mapping[str, Any], slice_name: str) -> Mapping[str, Any]:
+        editor = holder.get("editorState")
+        legend = editor.get("legend") if isinstance(editor, Mapping) else None
+        if not isinstance(editor, Mapping) or not isinstance(legend, Mapping):
+            return holder
+        keyed, found = legend_edits_by_row_key(legend)
+        for outcome in found:
+            outcome["slice"] = slice_name
+        outcomes.extend(found)
+        return {**holder, "editorState": {**editor, "legend": keyed}}
+
+    changed = dict(read(session, "draft"))
+    modes = changed.get("modes")
+    if isinstance(modes, Mapping):
+        changed["modes"] = {
+            mode: read(value, str(mode)) if isinstance(value, Mapping) else value
+            for mode, value in modes.items()
+        }
+    return changed, outcomes
+
+
 def split_draft_into_modes(
     draft: Mapping[str, Any],
     *,
@@ -5313,6 +5440,8 @@ def build_session_json(
             depth_sources=session_depth_source_widths(files_for_web),
             palette_colors=mode_split_palette_colors(payload.get("config")),
         )
+    if source_version is not None and source_version < ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
+        payload, _outcomes = session_legend_edits_by_row_key(payload)
     _attach_current_web_file_bindings(payload, files_for_web)
     payload.pop("files", None)
     normalize_current_session_artifacts(
@@ -7018,6 +7147,7 @@ __all__ = [
     "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "PROTEIN_LOSAT_CACHE_SCHEMA",
     "MODE_SCOPED_SESSION_MIN_VERSION",
+    "ROW_KEYED_LEGEND_SESSION_MIN_VERSION",
     "SESSION_FORMAT",
     "SUPPORTED_SESSION_VERSIONS",
     "SessionBuildContext",
@@ -7044,7 +7174,9 @@ __all__ = [
     "migrate_session_feature_edits",
     "migrate_legacy_repeat_feature_shape_args",
     "normalize_current_session_artifacts",
+    "legend_edits_by_row_key",
     "safe_embedded_filename",
+    "session_legend_edits_by_row_key",
     "serialize_file_entry",
     "session_depth_source_widths",
     "session_mode",
