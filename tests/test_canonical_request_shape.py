@@ -17,6 +17,7 @@ from gbdraw.api.options import (
     CircularRequestTrackOptions,
     LinearDiagramOptions,
     LinearRequestTrackOptions,
+    LosatSearchOptions,
 )
 from gbdraw.contract_shapes import INTEGER, STRING, array, literal, nullable, obj, record
 from gbdraw.api.requests import (
@@ -228,22 +229,12 @@ def _smallest_request(mode: str, tmp_path: Path) -> Encoded:
 
 # Where one change cannot show that the decoder and the description agree, and why.
 # An entry with positions differs only there and agrees at every other position.
-_COERCED = "accepted", "the typed constructor reads null as a value (str, bool, a default); no writer writes null"
 _TOGETHER = "refused", "a decision's status, rationale and anchor are checked together; none encoded is skipped"
 _REFERENCE = (
     "refused", "the plan's reference must equal the anchor of its reference record",
     ("linear:layout.similarityAlignment.reference",),
 )
 _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]] = {
-    "CanonicalAnnotationSet.id = null": _COERCED,
-    "CanonicalRegionAnnotation.id = null": _COERCED,
-    "CanonicalRegionAnnotation.label = null": _COERCED,
-    "CanonicalCoordinateSpan.wrapsOrigin = null": _COERCED,
-    "CanonicalFeatureSelector.value = null": _COERCED,
-    "CanonicalHatchStyle.cross = null": _COERCED,
-    "CanonicalGeneratedProteinComparison.mode = null": _COERCED,
-    "CanonicalCircularDiagramOptions.conservationReference = null": _COERCED,
-    "CanonicalLinearDiagramOptions.pairwiseMatchStyle = null": _COERCED,
     "CanonicalAlignmentRecordDecision.anchor = null": _TOGETHER,
     "CanonicalAlignmentRecordDecision.status = 'skipped'": _TOGETHER,
     "CanonicalAlignmentRecordDecision.rationale = 'skipped_by_user'": _TOGETHER,
@@ -341,25 +332,6 @@ _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalSimilarityAlignmentPlan.records": ("an array",),
     "CanonicalTableRef.resourceId": ("another string",),
 }
-# The decoder takes a value of a kind the description refuses, at every
-# position: the typed constructor converts it (str, int, bool) or reads an
-# empty array as no value. No writer writes it; the type is narrower than
-# Python there (OV-528, OV-596).
-_CONVERTED: dict[str, tuple[str, ...]] = {
-    "CanonicalAnnotationSet.id": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalAnnotationSet.legendLabel": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalCircularDiagramOptions.conservationReference": ("an array",),
-    "CanonicalCoordinateSpan.wrapsOrigin": ("an array",),
-    "CanonicalFeatureSelector.key": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalFeatureSelector.value": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalGeneratedProteinComparison.mode": ("an array",),
-    "CanonicalHatchStyle.cross": ("a fraction", "a null item", "an array", "another integer", "another string"),
-    "CanonicalRegionAnnotation.id": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalRegionAnnotation.label": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalRegionAnnotation.lane": ("a fraction",),
-    "CanonicalRegionAnnotation.legendLabel": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalRegionAnnotationStyle.fill": ("an array",),
-}
 _EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
     **{
         change: (entry[0], list(entry[2]) if len(entry) == 3 else None)
@@ -370,7 +342,6 @@ _EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
         for verdict, table in (
             ("refused", {field: ("another string",) for field in _NAMES_TYPED_STRING}),
             ("refused", _VALUE_CHECKED),
-            ("accepted", _CONVERTED),
         )
         for field, values in table.items()
         for value in values
@@ -583,6 +554,10 @@ def _decode_at(schema: int, request: Any, tmp_path: Path, change: Any = None) ->
 
     encoded = encode_canonical_request(request)
     payload = codec_tests._payload_for_schema(encoded, schema)
+    if schema == 1:
+        # Schema 1 stored no record pairs of a protein comparison.
+        for comparison in payload["comparisons"]:
+            comparison.pop("pairs", None)
     if change is not None:
         change(payload)
     return decode_canonical_request(
@@ -678,3 +653,108 @@ def test_the_structural_checker_reports_each_kind_of_violation(
     value: object, shape: dict[str, Any], expected: list[str]
 ) -> None:
     assert _problems(value, shape) == expected
+
+
+def _annotated_request(mode: str) -> Any:
+    """A request whose annotations hold each annotation field the decoder converted (OV-528, OV-596)."""
+
+    from gbdraw.annotations import (
+        AnnotationOptions, AnnotationSet, CoordinateSpan, FeatureSelector, FeatureSpan, HatchStyle,
+        RegionAnnotation, RegionAnnotationStyle,
+    )
+    from gbdraw.io.record_select import parse_record_selector
+
+    annotations = AnnotationOptions(sets=(AnnotationSet("review", (
+        RegionAnnotation(
+            "coordinates", CoordinateSpan(parse_record_selector("#1"), 2, 20), label="Review", lane=1,
+            style=RegionAnnotationStyle(fill="#88aaff", hatch=HatchStyle(cross=True)), legend_label="Reviewed",
+        ),
+        RegionAnnotation(
+            "features", FeatureSpan(parse_record_selector("#1"), (FeatureSelector("dnaA", "gene"),)),
+        ),
+    ), legend_label="Review regions"),))
+    options: dict[str, object] = {"annotations": annotations}
+    if mode == "linear":
+        options["losat_search"] = LosatSearchOptions(program="losatp", losatp_mode="collinear")
+    return _request(mode, **options)
+
+
+_SET = ("diagramOptions", "annotations", "sets", 0)
+_COORDINATES = (*_SET, "annotations", 0)
+_FEATURES = (*_SET, "annotations", 1)
+_TEXT_FORMS = (("null", None), ("a fraction", 0.5), ("an integer", 7), ("an array", []), ("a null item", [None]))
+_OPTIONAL_TEXT_FORMS = _TEXT_FORMS[1:]
+# Each field and the forms of another kind the decoder converted at every
+# schema (the test tables _COERCED and _CONVERTED before stage 1d PR-B); no
+# writer wrote any of them (stage1d/audit.md section 3).
+_UNWRITTEN_FORMS: dict[tuple[str, tuple[str | int, ...], str], tuple[tuple[str, object], ...]] = {
+    ("linear", _SET, "id"): _TEXT_FORMS,
+    ("linear", _SET, "legendLabel"): _OPTIONAL_TEXT_FORMS,
+    ("linear", _COORDINATES, "id"): _TEXT_FORMS,
+    ("linear", _COORDINATES, "label"): _TEXT_FORMS,
+    ("linear", _COORDINATES, "legendLabel"): _OPTIONAL_TEXT_FORMS,
+    ("linear", (*_COORDINATES, "target"), "wrapsOrigin"): (("null", None), ("an array", []), ("an integer", 0)),
+    ("linear", (*_FEATURES, "target", "selectors", 0), "key"): _OPTIONAL_TEXT_FORMS,
+    ("linear", (*_FEATURES, "target", "selectors", 0), "value"): _TEXT_FORMS,
+    ("linear", (*_COORDINATES, "style", "hatch"), "cross"): (*_TEXT_FORMS, ("a string", "true")),
+    ("linear", (*_COORDINATES, "style"), "fill"): (("an array", []),),
+    ("linear", ("comparisons", 0), "mode"): (("null", None), ("an array", [])),
+    ("linear", ("diagramOptions",), "pairwiseMatchStyle"): (("null", None),),
+    ("circular", ("diagramOptions",), "conservationReference"): (("null", None), ("an array", [])),
+}
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+@pytest.mark.parametrize(
+    ("mode", "path", "key", "name", "value"),
+    [
+        (mode, path, key, name, value)
+        for (mode, path, key), forms in _UNWRITTEN_FORMS.items()
+        for name, value in forms
+    ],
+)
+def test_the_decoder_refuses_a_value_of_another_kind_at_every_schema(
+    mode: str, path: tuple[str | int, ...], key: str, name: str, value: object, schema: int, tmp_path: Path
+) -> None:
+    request = _annotated_request(mode)
+    _decode_at(schema, request, tmp_path)
+
+    def change(payload: dict[str, Any]) -> None:
+        holder: Any = payload
+        for step in path:
+            holder = holder[step]
+        holder[key] = value
+
+    with pytest.raises(CanonicalRequestDecodingError, match=key):
+        _decode_at(schema, request, tmp_path, change)
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+def test_a_fraction_at_an_annotation_lane_reads_as_its_integer_part_at_every_schema(
+    schema: int, tmp_path: Path
+) -> None:
+    """The Web's Lane input wrote fractions at every schema (OV-630); Python draws lane 0."""
+
+    def fraction(payload: dict[str, Any]) -> None:
+        holder: Any = payload
+        for step in _COORDINATES:
+            holder = holder[step]
+        holder["lane"] = 0.5
+
+    decoded = _decode_at(schema, _annotated_request("linear"), tmp_path, fraction)
+    assert decoded.options.annotations.sets[0].annotations[0].lane == 0
+
+
+def test_the_encoder_writes_a_boolean_where_a_coordinate_span_wraps_the_origin(tmp_path: Path) -> None:
+    """A caller that gives wraps_origin another kind still gets a boolean (OV-632)."""
+
+    from gbdraw.annotations import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation
+
+    written = []
+    for wraps, start, end in ((None, 10, 30), (1, 30, 10), ([], 10, 30), ("yes", 30, 10)):
+        span = CoordinateSpan(None, start, end, wraps_origin=wraps)
+        annotations = AnnotationOptions(sets=(AnnotationSet("s", (RegionAnnotation("a", span),)),))
+        payload, resources = _encoded(_request("linear", annotations=annotations), tmp_path / str(len(written)))
+        written.append(payload["diagramOptions"]["annotations"]["sets"][0]["annotations"][0]["target"]["wrapsOrigin"])
+        decode_canonical_request(payload, resource_paths=resources, output_directory=tmp_path / "output")
+    assert written == [False, True, False, True]

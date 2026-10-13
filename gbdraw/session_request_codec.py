@@ -530,6 +530,9 @@ _ALL_DEPTH_INPUT_FIELDS = _DEPTH_COMPATIBILITY_FIELDS | {"depth_tracks"}
 # A comparison table path: encode_canonical_request refuses it (call
 # resolve_request first) and no request of any schema holds it (OV-324).
 _TABLE_PATH_FIELDS = frozenset({"conservation_table_file", "comparison_table_file"})
+# Options that hold a name. Their constructors read null (and an empty array)
+# as the default; every writer wrote a name (OV-528, OV-596).
+_NAME_OPTIONS = frozenset({"conservation_reference", "pairwise_match_style"})
 
 _TYPED_TREE_CLASSES = {
     cls.__name__: cls
@@ -2791,6 +2794,8 @@ def _decode_option_value(
         return _decode_resource_matrix(
             value, name=name, table=False, resource_paths=resource_paths
         )
+    if name in _NAME_OPTIONS:
+        return _string(value, f"renderRequest.diagramOptions.{_option_wire_key(name)}")
     return value
 
 
@@ -3134,14 +3139,14 @@ def _decode_annotation_style(value: object, *, path: str) -> RegionAnnotationSty
             path=f"{path}.hatch",
             required={"angle", "spacing", "color", "width", "cross"},
         )
-        hatch = HatchStyle(**raw_hatch)
+        hatch = HatchStyle(**{**raw_hatch, "cross": _boolean(raw_hatch["cross"], f"{path}.hatch.cross")})
     dasharray = _array(payload["strokeDasharray"], path=f"{path}.strokeDasharray")
     return RegionAnnotationStyle(
         stroke=payload["stroke"],
         stroke_width=payload["strokeWidth"],
         stroke_dasharray=tuple(dasharray),
         line_cap=payload["lineCap"],
-        fill=payload["fill"],
+        fill=_optional_string(payload["fill"], f"{path}.fill"),
         fill_opacity=payload["fillOpacity"],
         hatch=hatch,
         label_color=payload["labelColor"],
@@ -3168,7 +3173,8 @@ def _encode_annotations(value: object, *, resources: RequestResources) -> dict[s
                     "start": target.start,
                     "end": target.end,
                     "coordinateSpace": target.coordinate_space,
-                    "wrapsOrigin": target.wraps_origin,
+                    # CoordinateSpan reads wraps_origin by truth (OV-632).
+                    "wrapsOrigin": bool(target.wraps_origin),
                     "outOfBounds": target.out_of_bounds,
                 }
             elif isinstance(target, FeatureSpan):
@@ -3265,7 +3271,7 @@ def _decode_annotations(
                     start=target_payload["start"],
                     end=target_payload["end"],
                     coordinate_space=target_payload["coordinateSpace"],
-                    wraps_origin=target_payload["wrapsOrigin"],
+                    wraps_origin=_boolean(target_payload["wrapsOrigin"], f"{item_path}.target.wrapsOrigin"),
                     out_of_bounds=target_payload["outOfBounds"],
                 )
             elif kind == "featureSpan":
@@ -3276,7 +3282,7 @@ def _decode_annotations(
                 )
                 raw_selectors = _array(target_payload["selectors"], path=f"{item_path}.target.selectors")
                 selectors = tuple(
-                    FeatureSelector(**_object(raw, path=f"{item_path}.target.selectors[{index}]", required={"key", "value"}))
+                    _decode_feature_selector(raw, path=f"{item_path}.target.selectors[{index}]")
                     for index, raw in enumerate(raw_selectors)
                 )
                 target = FeatureSpan(
@@ -3300,20 +3306,22 @@ def _decode_annotations(
             else:
                 raise CanonicalRequestDecodingError(f"Unsupported annotation target kind at {item_path}: {kind!r}.")
             metadata = _object(item["metadata"], path=f"{item_path}.metadata")
+            # A Web writer wrote a fraction at lane (OV-630): the model reads its integer part.
             annotations.append(
                 RegionAnnotation(
-                    id=item["id"], target=target, label=item["label"], mark=item["mark"],
+                    id=_string(item["id"], f"{item_path}.id"), target=target,
+                    label=_string(item["label"], f"{item_path}.label"), mark=item["mark"],
                     lane=item["lane"],
                     style=(_decode_annotation_style(item["style"], path=f"{item_path}.style") if item["style"] is not None else None),
-                    legend_label=item["legendLabel"], metadata=metadata,
+                    legend_label=_optional_string(item["legendLabel"], f"{item_path}.legendLabel"), metadata=metadata,
                 )
             )
         sets.append(
             AnnotationSet(
-                id=set_payload["id"],
+                id=_string(set_payload["id"], f"{set_path}.id"),
                 annotations=tuple(annotations),
                 default_style=_decode_annotation_style(set_payload["defaultStyle"], path=f"{set_path}.defaultStyle"),
-                legend_label=set_payload["legendLabel"],
+                legend_label=_optional_string(set_payload["legendLabel"], f"{set_path}.legendLabel"),
             )
         )
     table = (
@@ -3330,6 +3338,14 @@ def _decode_annotations(
         if payload["tableFile"] is not None else None
     )
     return AnnotationOptions(sets=tuple(sets), table=table, table_file=table_file)
+
+
+def _decode_feature_selector(value: object, *, path: str) -> FeatureSelector:
+    selector = _object(value, path=path, required={"key", "value"})
+    return FeatureSelector(
+        key=_optional_string(selector["key"], f"{path}.key"),
+        value=_string(selector["value"], f"{path}.value"),
+    )
 
 
 def _encode_track_slots(value: object) -> list[Any] | None:
@@ -4039,7 +4055,7 @@ def _decode_pipeline(
         required=setting_keys - _OPTIONAL_PROTEIN_SETTINGS,
         optional=set(_OPTIONAL_PROTEIN_SETTINGS),
     )
-    mode = normalize_protein_blastp_mode(item["mode"])
+    mode = normalize_protein_blastp_mode(_string(item["mode"], f"{path}.mode"))
     result: dict[str, Any] = {}
     search_values: dict[str, Any] = {}
     runtime_values: dict[str, Any] = {}
@@ -4812,6 +4828,12 @@ def _boolean(value: object, path: str) -> bool:
     return value
 
 
+def _string(value: object, path: str) -> str:
+    if not isinstance(value, str):
+        raise CanonicalRequestDecodingError(f"{path} must be a string.")
+    return value
+
+
 def _optional_string(value: object, path: str) -> str | None:
     if value is not None and not isinstance(value, str):
         raise CanonicalRequestDecodingError(f"{path} must be a string or null.")
@@ -4843,7 +4865,7 @@ def describe_canonical_request() -> dict[str, Any]:
     """
 
     from .contract_shapes import (
-        INTEGER, NULL, STRING, UNKNOWN, Shape,
+        INTEGER, NULL, NUMBER, STRING, UNKNOWN, Shape,
         array, literal, non_null, nullable, obj, record, ref, shape_of_hint, tuple_of, union,
     )
 
@@ -4965,7 +4987,8 @@ def describe_canonical_request() -> dict[str, Any]:
     data(CoordinateSpan, kind="coordinateSpan")
     data(FeatureSpan, kind="featureSpan")
     data(FeatureIdentitySpan, kind="featureIdentity")
-    data(RegionAnnotation)
+    # A Web writer wrote a fraction at lane (OV-630); the decoder reads its integer part.
+    data(RegionAnnotation, replace={"lane": nullable(NUMBER)})
     data(AnnotationSet)
     data(AnnotationOptions, files=frozenset({"table_file"}))
     scalar = data(ScalarSpec)
