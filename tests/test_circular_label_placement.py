@@ -1,5 +1,6 @@
 import copy
 import math
+import random
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -23,7 +24,7 @@ from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.layout.common import calculate_cds_ratio
-from gbdraw.layout.spatial import Aabb
+from gbdraw.layout.spatial import Aabb, touching_aabb_indices
 from gbdraw.labels.circular import (
     angle_from_middle,
     improved_label_placement_fc,
@@ -155,6 +156,134 @@ def test_circular_label_overlap_count_index_matches_full_scan() -> None:
         total_length,
         use_min_gap=True,
     ) == _count_overlaps_with_min_gap(labels, total_length)
+
+
+def _random_label_set(
+    seed: int,
+    *,
+    max_labels: int = 12,
+    widths: tuple[float, ...] = (20.0, 45.5, 80.0, 150.0, 235.2),
+    heights: tuple[float, ...] = (8.0, 14.0, 17.5),
+) -> tuple[list[dict], int, float]:
+    """A clustered outer/inner label set with leader geometry, spacing and resolve keys."""
+    rng = random.Random(seed)
+    total_length = rng.choice([20000, 16569, 100000])
+    radius = rng.uniform(250.0, 450.0)
+    feature_radius = radius * 0.8
+    centers = [rng.uniform(0, total_length) for _ in range(rng.randint(1, 4))]
+    labels = []
+    for _ in range(rng.randint(4, max_labels)):
+        middle = (rng.choice(centers) + rng.gauss(0, total_length * 0.02)) % total_length
+        is_inner = rng.random() < 0.15
+        angle = math.radians(360 * middle / total_length - 90)
+        label_radius = (feature_radius * 0.7 if is_inner else radius) * rng.uniform(0.97, 1.06)
+        jitter = math.radians(rng.gauss(0, 4))
+        feature_x, feature_y = feature_radius * math.cos(angle), feature_radius * math.sin(angle)
+        middle_radius = feature_radius * 0.75 if is_inner else radius * 0.95
+        label = {
+            "label_text": "x",
+            "middle": middle,
+            "start_x": label_radius * math.cos(angle + jitter),
+            "start_y": label_radius * math.sin(angle + jitter),
+            "middle_x": middle_radius * math.cos(angle + rng.gauss(0, 0.03)),
+            "middle_y": middle_radius * math.sin(angle + rng.gauss(0, 0.03)),
+            "feature_middle_x": feature_x,
+            "feature_middle_y": feature_y,
+            "feature_anchor_x": feature_x + rng.gauss(0, 3),
+            "feature_anchor_y": feature_y + rng.gauss(0, 3),
+            "width_px": rng.choice(widths),
+            "height_px": rng.choice(heights),
+            "is_inner": is_inner,
+            "is_embedded": False,
+        }
+        if rng.random() < 0.5:
+            label["_spacing_px"] = rng.choice([0.0, 1.5, 3.0, 8.0])
+            label["_enforce_spacing_px"] = rng.random() < 0.8
+        if rng.random() < 0.4 and not is_inner:
+            label["min_outer_start_radius_px"] = radius * 0.9
+        labels.append(label)
+    labels.sort(key=lambda label: label["middle"])
+    return labels, total_length, radius
+
+
+def _touching_everything(bboxes, query, *, skip=None, candidates=None) -> list[int]:
+    return [idx for idx in (range(len(bboxes)) if candidates is None else candidates) if idx != skip]
+
+
+def _all_index_pairs(bboxes) -> list[tuple[int, int]]:
+    return [(idx, jdx) for idx in range(len(bboxes)) for jdx in range(idx + 1, len(bboxes))]
+
+
+@pytest.mark.circular
+def test_circular_label_reach_boxes_keep_every_overlapping_peer() -> None:
+    """Overlap counts over the reach-box peers equal full scans, also for tiny labels at the margins."""
+    module = circular_labels_module
+    checked = 0
+    for seed in range(60):
+        labels, total_length, _ = _random_label_set(seed, max_labels=40, widths=(0.5, 2.0, 6.0), heights=(0.5, 2.0, 5.0))
+        pad = module._label_reach_pad(labels, extra_margin_px=module.LEADER_LABEL_COLLISION_MARGIN_PX)
+        boxes = [module._label_reach_box(label, pad) for label in labels]
+        for idx, label in enumerate(labels):
+            peers = touching_aabb_indices(boxes, module._label_reach_box(label, pad), skip=idx)
+            for use_min_gap in (False, True):
+                full = module._count_local_label_overlaps(labels, total_length, idx, label, use_min_gap=use_min_gap)
+                checked += full
+                assert module._count_local_label_overlaps(
+                    labels, total_length, idx, label, use_min_gap=use_min_gap, peers=peers
+                ) == full
+    assert checked > 0
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("seed", [0, 1, 2, 9])
+def test_circular_label_peer_pruning_keeps_every_count(seed: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The reach-box peer pruning must not change a count: same placements as scanning every label."""
+    labels, total_length, radius = _random_label_set(seed)
+    spacing_px = random.Random(seed).choice([None, 0.0, 1.5, 4.0])
+    module = circular_labels_module
+
+    def place() -> str:
+        resolved = module._resolve_label_leader_line_collisions(
+            module.assign_leader_start_points(copy.deepcopy(labels), total_length),
+            total_length,
+            margin_px=module.LEADER_LABEL_COLLISION_MARGIN_PX,
+            step_deg=module.LEADER_LABEL_SHIFT_STEP_DEG,
+            max_shift_deg=module.LEADER_LABEL_MAX_SHIFT_DEG,
+            max_passes=module.LEADER_LABEL_MAX_PASSES,
+            min_order_gap_deg=module.LEADER_LABEL_MIN_ORDER_GAP_DEG,
+        )
+        improved = improved_label_placement_fc(
+            copy.deepcopy(labels), 0.0, 0.0, radius, radius, radius * 0.8, total_length, 0, 360, spacing_px=spacing_px
+        )
+        polish_input = copy.deepcopy(labels)
+        for label in polish_input:
+            label["angle_unwrapped"] = math.degrees(math.atan2(label["start_y"], label["start_x"]))
+        polished = module._polish_total_leader_distance(polish_input, total_length, 0.0, 0.0, radius, radius)
+        return repr((resolved, improved, polished))
+
+    pruned = place()
+    monkeypatch.setattr(module, "touching_aabb_indices", _touching_everything)
+    monkeypatch.setattr(module, "touching_aabb_pairs", _all_index_pairs)
+    assert place() == pruned
+
+
+def test_circular_leader_crossing_count_keeps_pairs_with_non_finite_points() -> None:
+    """A non-finite leader coordinate must not drop a crossing pair from the broad phase."""
+    # A NaN sort key used to leave this order unsorted, so the x sweep stopped at the far
+    # segment before reaching the one that crosses the first.
+    segments = [
+        ((0.0, 0.0), (10.0, 10.0)),
+        ((50.0, 0.0), (60.0, 10.0)),
+        ((float("nan"), 5.0), (6.0, 7.0)),
+        ((5.0, 10.0), (8.0, 0.0)),
+    ]
+    expected = sum(
+        circular_labels_module._segments_properly_intersect(segments[idx], segments[jdx])
+        for idx in range(len(segments))
+        for jdx in range(idx + 1, len(segments))
+    )
+
+    assert circular_labels_module._count_leader_line_intersections([], primary_segments=segments) == expected
 
 
 def _sum_leader_length(labels: list[dict]) -> float:

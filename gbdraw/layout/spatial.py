@@ -134,6 +134,83 @@ def union_aabbs(bboxes: Iterable[Aabb]) -> Aabb | None:
     return Aabb(min_x, min_y, max_x, max_y)
 
 
+def bounding_aabb(
+    points: Iterable[tuple[float, float]],
+    pad_x: float = 0.0,
+    pad_y: float | None = None,
+) -> Aabb | None:
+    """Return the box around ``points`` grown by ``pad_x`` / ``pad_y`` on each side.
+
+    ``None`` means the extent is unknown: there are no points or a coordinate is
+    not finite. The touch queries below treat such a box as touching every box.
+    """
+    xs: list[float] = []
+    ys: list[float] = []
+    for x, y in points:
+        xs.append(float(x))
+        ys.append(float(y))
+    if not xs or not all(map(math.isfinite, xs)) or not all(map(math.isfinite, ys)):
+        return None
+    pad_x = _validate_padding(pad_x)
+    pad_y = pad_x if pad_y is None else _validate_padding(pad_y)
+    return Aabb(min(xs) - pad_x, min(ys) - pad_y, max(xs) + pad_x, max(ys) + pad_y)
+
+
+def touching_aabb_pairs(bboxes: Sequence[Aabb | None]) -> list[tuple[int, int]]:
+    """Return every index pair whose boxes touch; edge contact counts.
+
+    A ``None`` box (unknown extent) touches every box. A predicate that needs two
+    shapes to meet is false for every other pair, so a count over these pairs
+    equals the count over all pairs.
+    """
+    finite = sorted(
+        ((idx, bbox) for idx, bbox in enumerate(bboxes) if bbox is not None),
+        key=lambda item: item[1].min_x,
+    )
+    pairs: list[tuple[int, int]] = []
+    for position, (idx, bbox) in enumerate(finite):
+        for jdx, other in finite[position + 1:]:
+            if other.min_x > bbox.max_x:
+                break
+            if other.min_y > bbox.max_y or other.max_y < bbox.min_y:
+                continue
+            pairs.append((idx, jdx))
+    unknown = [idx for idx, bbox in enumerate(bboxes) if bbox is None]
+    for idx in unknown:
+        for jdx in range(len(bboxes)):
+            if jdx != idx and (bboxes[jdx] is not None or jdx > idx):
+                pairs.append((idx, jdx))
+    return pairs
+
+
+def touching_aabb_indices(
+    bboxes: Sequence[Aabb | None],
+    query: Aabb | None,
+    *,
+    skip: int | None = None,
+    candidates: Iterable[int] | None = None,
+) -> list[int]:
+    """Return the indexes of ``bboxes`` that touch ``query``; edge contact counts.
+
+    ``candidates`` limits and orders the indexes looked at (default: all, in
+    order); ``skip`` is left out. A ``None`` box touches every box.
+    """
+    indexes = range(len(bboxes)) if candidates is None else candidates
+    if query is None:
+        return [idx for idx in indexes if idx != skip]
+    min_x, min_y, max_x, max_y = query.min_x, query.min_y, query.max_x, query.max_y
+    touching: list[int] = []
+    for idx in indexes:
+        if idx == skip:
+            continue
+        other = bboxes[idx]
+        if other is None or not (
+            other.max_x < min_x or other.min_x > max_x or other.max_y < min_y or other.min_y > max_y
+        ):
+            touching.append(idx)
+    return touching
+
+
 def _validate_bucket_size(bucket_size: float) -> float:
     bucket_size = float(bucket_size)
     if not math.isfinite(bucket_size) or bucket_size <= 0.0:
@@ -253,7 +330,10 @@ __all__ = [
     "AabbIndex",
     "Interval",
     "IntervalIndex",
+    "bounding_aabb",
     "candidate_aabb_pairs",
     "split_circular_interval",
+    "touching_aabb_indices",
+    "touching_aabb_pairs",
     "union_aabbs",
 ]
