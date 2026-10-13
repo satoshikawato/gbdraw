@@ -100,6 +100,52 @@ def test_a_changed_session_field_set_makes_the_generated_module_stale(
     assert "Object.freeze(['another', 'originalColors', 'originalOrder'])" in generator.render_web_contracts_module()
 
 
+def test_the_legend_positions_of_a_mode_have_one_python_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # OV-652: the output options check the mapping the Web reads.
+    import gbdraw.api.options as options
+    from gbdraw.exceptions import ValidationError
+
+    generator = _generator()
+    assert (
+        "// gbdraw/api/options.py: LEGEND_POSITIONS\n"
+        "/** @type {Readonly<Record<'circular' | 'linear', readonly string[]>>} */\n"
+        "export const LEGEND_POSITIONS = Object.freeze({\n"
+        "  circular: Object.freeze(['left', 'right', 'top', 'bottom', 'upper_left', 'upper_right',"
+        " 'lower_left', 'lower_right', 'none']),\n"
+        "  linear: Object.freeze(['left', 'right', 'top', 'bottom', 'none'])\n"
+        "});\n"
+    ) in generator.render_web_contracts_module()
+    with pytest.raises(ValidationError) as circular:
+        options.CircularOutputOptions(legend="center")
+    with pytest.raises(ValidationError) as linear:
+        options.LinearOutputOptions(legend="upper_left")
+    assert [str(circular.value), str(linear.value)] == [
+        "Circular legend must be one of: left, right, top, bottom, "
+        "upper_left, upper_right, lower_left, lower_right, none.",
+        "Linear legend must be one of: left, right, top, bottom, none.",
+    ]
+    # The composition's placements are the Circular positions; Linear has no corner (overlay) placement.
+    from gbdraw.layout.composition import LegendPlacement
+
+    assert dict(options.LEGEND_POSITIONS) == {
+        "circular": tuple(placement.value for placement in LegendPlacement),
+        "linear": tuple(placement.value for placement in LegendPlacement if not placement.is_overlay),
+    }
+
+    monkeypatch.setattr(
+        options,
+        "LEGEND_POSITIONS",
+        {**options.LEGEND_POSITIONS, "linear": (*options.LEGEND_POSITIONS["linear"], "upper_left")},
+    )
+
+    assert options.LinearOutputOptions(legend="upper_left").legend == "upper_left"
+    assert (
+        "  linear: Object.freeze(['left', 'right', 'top', 'bottom', 'none', 'upper_left'])\n"
+    ) in generator.render_web_contracts_module()
+
+
 def test_the_session_typedefs_import_only_the_request_typedefs() -> None:
     # A leaf of the Web layers may import a leaf (R13).
     source = _generator().render_session_typedefs_module()
