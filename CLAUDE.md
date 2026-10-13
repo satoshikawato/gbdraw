@@ -227,7 +227,8 @@ The `gbdraw/render/` module has a two-tier architecture:
   `tests/test_type_check_ratchet.py`) is "Type checking" in
   [the architecture ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#type-checking).
   In short: a file's mypy errors plus `# type: ignore` comments stay at or
-  below its entry, and a new file has none.
+  below its entry, a new file has none, and adding or raising an entry needs
+  the Owner's approval.
 - Class-body annotations are runtime data. `get_type_hints` reads dataclass
   fields in `gbdraw/config/modify.py` (config overrides) and
   `gbdraw/session_request_codec.py` (canonical request validation), and

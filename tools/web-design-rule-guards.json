@@ -279,7 +279,7 @@
           "path": "tests/web/twin-registry.test.mjs",
           "rootCause": "P4",
           "job": "web-contracts-pr",
-          "retireWhen": "tools/twins.json has no rows: every twin has one owner"
+          "retireWhen": "never"
         }
       ],
       "allowlists": [

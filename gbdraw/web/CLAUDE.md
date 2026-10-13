@@ -397,8 +397,11 @@ Logic that Python and the Web each implement (a twin: a reader, migration,
 normalizer, layout, or constant with one copy on each side) has a row in
 `tools/twins.json`: its concern, both owners, the shared vector, the reason,
 and the condition that retires it. The registry only shrinks: a row leaves
-when one side is deleted, and adding a row is an authority-only change.
-Editing a row's owners, vector, reason, or retirement condition is not.
+when its retirement condition is met or one side is deleted. Adding a row,
+or adding an owner to a row (a further copy of a registered twin), is an
+authority-only change. Removing or renaming an owner, or editing a row's
+reason, retirement condition, or a vector that is not part of its id, is
+not; a `vector:` row's vector is part of its id.
 
 Guards: `tests/test_comparison_tables.py` (`test_outfmt_table_columns_have_one_reader`
 scans the Python and Web JavaScript sources for a second mapping onto
@@ -655,8 +658,9 @@ authority-only change. A new module is checked from its first commit.
   `js/contracts/*.generated.js`. `js/contracts/` holds only the modules that
   tool writes. They are never edited by hand, and no other module declares a
   typedef or a constant that one of them declares. A hand-written Web copy of
-  a Python constant that the tool does not write yet is a `constant:` row of
-  `tools/twins.json` (R9) until the tool writes it. The feature catalog's
+  a Python constant or schema literal that the Web does not import from the
+  generated modules is a `constant:` row of `tools/twins.json` (R9) until it
+  does. The feature catalog's
   typedef is in its writer, `services/feature-catalog.js`.
 - A reader of an unvalidated document takes `unknown`, or the generated input
   type whose values are `unknown` (`SessionInput`, and `SessionEnvelope` once
