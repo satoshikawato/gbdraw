@@ -302,6 +302,8 @@ class _Par:
         self.arcslope = ctx.opt("arcslope", 1.9)         # Q: the arc radius of two neighbours differs by at most this many px
         self.qgap = ctx.opt("qgap", 20.0)                 # Q: boxes at most this many px apart are one run (labels with room stay on their own ray)
         self.qnq = ctx.opt("qnq", 0.34)                  # Q: a run is built in arc coordinates when every ray is within acos(qnq) degrees of the horizontal
+        self.qvert = int(ctx.opt("qvert", 0))             # Q3: 1: the vertex is always the near-end one (box extends toward +q), whichever way the leader leans; 0: the vertex on the leader's side (brief Q3)
+        self.qdbg = int(ctx.opt("qdbg", 0))               # Q: 1: the reason of a failed legal test is written into the run's q_kept_names
         self.qrhomax = ctx.opt("qrhomax", 120.0)         # Q2: a long run's arc may move out this many px
         self.maxturn = ctx.opt("maxturn", 40.0)          # Q: a bent leader turns at most this many degrees
         self.rhomax = ctx.opt("rhomax", 40.0)            # Q: the arc of a run moves out at most this many px from its smallest radius
@@ -557,7 +559,7 @@ class _Lab:
             ya, ga = self.snap(yc, qs, ya, ga, par)
         return qs, ya, ga, base
 
-    def port_end(self, j: int, yc, q0, par: _Par):
+    def port_end(self, j: int, yc, q0, par: _Par, wide: bool = False):
         """Prototype P: the leader S -> contact point j of the ink box (q0, yc +- h/2) stops lgap before the point.  (attach height, gap q0 - attach q);
         NaN where the direction may not use that point (round 2: within 45 degrees of a short side's normal only the middle of that side; 45 to 70 degrees
         a vertex from outside its corner or a long-side point; steeper than 70 degrees a long-side point only)."""
@@ -571,7 +573,10 @@ class _Lab:
         nyn = -1.0 if fy == 0.0 else (1.0 if fy == 1.0 else 0.0)
         deg = np.degrees(np.arctan2(np.abs(ay), np.abs(ax)))                # 0 = along the normal of a short side (horizontal text)
         if nqn and nyn:                                                     # a vertex: from outside its corner, 45 to 70 degrees
-            ok = (ax * nqn > 0) & (ay * nyn > 0) & (deg > 45.0) & (deg <= 70.0)
+            if wide:                                                        # Q3 (LP-D23 read without a limit): a vertex from outside its corner, 45 to 90 degrees
+                ok = (ay * nyn > 0) & (deg > 45.0) & ((ax * nqn > -1e-9) | bool(par.qvert))   # qvert=1: also a leader that leans away from the corner (it passes below the box, not through it); port_check.py counts that as a wrong direction
+            else:
+                ok = (ax * nqn > 0) & (ay * nyn > 0) & (deg > 45.0) & (deg <= 70.0)
         elif nqn:                                                           # the middle of a short side: within 45 degrees of its normal, and only it
             ok = (ax * nqn > 0) & (deg <= 45.0)
         else:                                                               # a long-side point: within 45 degrees of its normal (steeper than 45 degrees)
@@ -1605,7 +1610,7 @@ class _Eng:
         return None
 
     # ---- prototype Q: a side cluster in arc coordinates
-    def arc_geom(self, L: _Lab, rho, phi, pole: bool = False, lv: int = 0):
+    def arc_geom(self, L: _Lab, rho, phi, pole: bool = False, lv: int = 0, wide: bool = False):
         """The seat of label L whose leader ends on the circle of radius rho at angle phi (radians, + towards +y) from the label's own ray.
         The last piece S -> end points at a contact point the arrival rule allows (middle of the short side within 45 degrees, the facing
         vertex 45 to 70, a long-side point beyond).  (box q0, box centre y, end q, end y, contact point index or -1)."""
@@ -1619,7 +1624,9 @@ class _Eng:
         dy = np.where(seen, vy / np.maximum(ln, 1e-9), L.ny)
         cq, cy = aq + par.lgap * dq, ay + par.lgap * dy
         deg = np.degrees(np.arctan2(np.abs(dy), np.abs(dq)))
-        if pole:                                           # Q2: beyond 70 degrees a long-side point (lv: 0, 1, 2 = the 0.25, 0.5, 0.75 point) needs no direction along the stack
+        if wide:                                           # Q3: the short-side middle within 45 degrees, beyond it the vertex on the leader's side (q frame: near end if the leader leans toward +q)
+            j = np.where(deg <= 45.0, np.where(dq > 0, 4, 5), np.where(dy > 0, 0, 2) + (0 if par.qvert else np.where(dq < 0, 1, 0)))
+        elif pole:                                         # Q2: beyond 70 degrees a long-side point (lv: 0, 1, 2 = the 0.25, 0.5, 0.75 point) needs no direction along the stack
             jl = np.where(dy > 0, 6, 9) + lv
             j = np.where(deg > 70.0, jl, np.where(dq <= 0.05, -1, np.where(deg <= 45.0, 4, np.where(dy > 0, 0, 2))))
         else:
@@ -1627,13 +1634,13 @@ class _Eng:
         fq, fy = PORTS_ARR[np.maximum(j, 0), 0], PORTS_ARR[np.maximum(j, 0), 1]
         return cq - fq * L.w, cy - (fy - 0.5) * L.h, aq, ay, j
 
-    def arc_static(self, L: _Lab, q0, yc, aq, ay, j):
+    def arc_static(self, L: _Lab, q0, yc, aq, ay, j, wide: bool = False):
         """Seats given by arc_geom against the tests that need no other label (static, and the arrival rule of port_end)."""
         q0, yc, aq, ay, j = (np.atleast_1d(np.asarray(v, dtype=float)) for v in (q0, yc, aq, ay, j))
         ok = np.zeros(len(q0), dtype=bool)
         for jj in np.unique(j[j >= 0]).astype(int):
             m = j == jj
-            ya, ga = L.port_end(jj, yc[m], q0[m], self.par)
+            ya, ga = L.port_end(jj, yc[m], q0[m], self.par, wide)
             okk, _c, _ln = L.static(yc[m][:, None], q0[m][:, None], ya[:, None], ga[:, None], self.geo, self.par, self.par.cone_cos)
             ok[m] = okk[:, 0] & np.isfinite(ya) & (np.abs(ya - ay[m]) < 0.05) & (np.abs(q0[m] - ga - aq[m]) < 0.05)
         return ok
@@ -1730,14 +1737,14 @@ class _Eng:
         if key not in self.qcache:
             par = self.par
             phis = np.linspace(-0.35, 0.35, 701)
-            q0, yc, aq, ay, j = self.arc_geom(L, rho, phis, True, self._lv(L))
+            q0, yc, aq, ay, j = self.arc_geom(L, rho, phis, True, self._lv(L), self.par.arcfirst >= 3)
             vq, vy = aq - L.Sq, ay - L.Sy
             ln = np.hypot(vq, vy)
             turn = np.where(ln < par.nostraight, 0.0, np.degrees(np.arccos(np.clip((vq * L.nq + vy * L.ny) / np.maximum(ln, 1e-9), -1.0, 1.0))))
-            ok = self.arc_static(L, q0, yc, aq, ay, j) & (turn <= par.maxturn)
+            ok = self.arc_static(L, q0, yc, aq, ay, j, self.par.arcfirst >= 3) & (turn <= par.maxturn)
             ts = np.arange(0.0, 300.0, 0.5)
-            q0r, ycr, aqr, ayr, jr = self.arc_geom(L, rho + ts, np.zeros_like(ts), True, self._lv(L))
-            self.qcache[key] = (phis, yc, ok, ts, ycr, self.arc_static(L, q0r, ycr, aqr, ayr, jr))
+            q0r, ycr, aqr, ayr, jr = self.arc_geom(L, rho + ts, np.zeros_like(ts), True, self._lv(L), self.par.arcfirst >= 3)
+            self.qcache[key] = (phis, yc, ok, ts, ycr, self.arc_static(L, q0r, ycr, aqr, ayr, jr, self.par.arcfirst >= 3))
         return self.qcache[key]
 
     def arc_chain2(self, chain: list, labs: list, recs: list, bg: _Placed, pend: _Pending):
@@ -1767,14 +1774,15 @@ class _Eng:
             r0 = []
             for L, r in zip(Ls, rs):
                 rho = r + grid
-                q0, yc, aq, ay, j = self.arc_geom(L, rho, np.zeros_like(rho), True, self._lv(L))
-                ok = self.arc_static(L, q0, yc, aq, ay, j)
+                q0, yc, aq, ay, j = self.arc_geom(L, rho, np.zeros_like(rho), True, self._lv(L), self.par.arcfirst >= 3)
+                ok = self.arc_static(L, q0, yc, aq, ay, j, self.par.arcfirst >= 3)
                 r0.append(float(rho[int(np.argmax(ok))]) if ok.any() else r + 10.0)   # a straight leader at its natural place may be refused (a wide label on a steep ray): the arc track decides
             if r0 is None:
                 continue
             r0 = np.array(r0)
             r = r0.copy()
             self.q_dbg = {}
+            self.q_dbg0 = {}
             done = False
             for _it in range(80):
                 env = _lipschitz(r, par.arcslope)
@@ -1812,17 +1820,17 @@ class _Eng:
                     if on_ray:
                         o = np.argsort(ycr[okr])
                         t = float(np.interp(yc_t[i], ycr[okr][o], ts[okr][o]))
-                        seat = tuple(float(v[0]) for v in map(np.atleast_1d, self.arc_geom(L, env[i] + t, 0.0, True, self._lv(L))))
+                        seat = tuple(float(v[0]) for v in map(np.atleast_1d, self.arc_geom(L, env[i] + t, 0.0, True, self._lv(L), self.par.arcfirst >= 3)))
                     else:
                         phi = float(np.interp(yc_t[i], np.maximum.accumulate(yc[ok]), phis[ok])) if ok.any() else 0.0
-                        seat = tuple(float(v[0]) for v in map(np.atleast_1d, self.arc_geom(L, env[i], phi, True, self._lv(L))))
+                        seat = tuple(float(v[0]) for v in map(np.atleast_1d, self.arc_geom(L, env[i], phi, True, self._lv(L), self.par.arcfirst >= 3)))
                     q0, ycc, aq, ay, j = seat
                     x0 = q0 if L.sx > 0 else -(q0 + L.w)
                     box = (x0, ycc - 0.5 * L.h, x0 + L.w, ycc + 0.5 * L.h)
                     att = (L.sx * aq, ay)
                     new[ks[i]] = (box, [L.it.anchor, L.S, att])
                     pl.add(box, L.S, att, L)
-                    if j < 0 or not self.arc_static(L, q0, ycc, aq, ay, j)[0]:
+                    if j < 0 or not self.arc_static(L, q0, ycc, aq, ay, j, self.par.arcfirst >= 3)[0]:
                         bad.add(i)
                         self.q_dbg[i] = "[static]"
                     elif not on_ray and abs(_sturn_arr(L.it.anchor, L.S, np.array([att]))[0]) > par.maxturn:
@@ -1837,12 +1845,23 @@ class _Eng:
                     if not self.legal(L, bx, at, np.array([L.S], dtype=float), _View(pl, base + i), pend, min(L.Sy, bx[0, 1]) - par.lpad - 1.0, max(L.Sy, bx[0, 3]) + par.lpad + 1.0)[0]:
                         bad.add(i)
                         self.q_dbg[i] = "[legal]"
+                        if par.qdbg:                                # name the failing test and the other label (study aid)
+                            pb, s0, s1 = _View(pl, base + i).arrays()
+                            nm = [lb.it.text[:10] for lb in _View(pl, base + i).labs()]
+                            g = par.gap - 1e-6
+                            gap = np.nonzero((bx[0, 0] < pb[:, 2] + g) & (pb[:, 0] < bx[0, 2] + g) & (bx[0, 1] < pb[:, 3] + g) & (pb[:, 1] < bx[0, 3] + g))[0]
+                            mine = np.nonzero(_seg_box_hit(np.array([L.S], dtype=float), at, pb, par.lpad)[0])[0]
+                            theirs = np.nonzero(_seg_box_hit(s0, s1, bx, par.lpad).any(axis=1))[0] if len(s0) else []
+                            cross = np.nonzero(_seg_cross_matrix(np.array([L.S], dtype=float), at, s0, s1)[0])[0] if len(s0) else []
+                            self.q_dbg[i] = "[legal gap:" + "/".join(nm[m] for m in gap) + " myleader-box:" + "/".join(nm[m] for m in mine) + " theirleader-mybox:" + "/".join(nm[m] for m in theirs) + " cross:" + "/".join(nm[m] for m in cross) + (" ring/objects]" if not (len(gap) or len(mine) or len(theirs) or len(cross)) else "]")
+                            if _it == 0:
+                                self.q_dbg0[i] = self.q_dbg[i]
                 if not bad:
                     return new
                 for i in bad:
                     r[i] = max(r[i], env[i]) + 3.0
-                if (r - r0).max() > par.qrhomax:
-                    why = "rho:" + ",".join(f"{Ls[i].it.text}{self.q_dbg.get(i, '[reach]')}" for i in sorted(bad))
+                if (r - r0).max() > (par.rhomax if par.arcfirst >= 3 else par.qrhomax):
+                    why = "rho:" + ",".join(f"{Ls[i].it.text}{self.q_dbg.get(i, '[reach]')}" for i in sorted(bad)) + (" FIRST:" + ",".join(f"{Ls[i].it.text}{v}" for i, v in sorted(self.q_dbg0.items())) if par.qdbg else "")
                     break
         self.q_why = why
         return None
@@ -1888,7 +1907,7 @@ class _Eng:
                         if j not in chain:
                             bg.add(r[1], labs[j].S, r[2][-1], labs[j])
                     new = self.arc_chain(chain, labs, recs, bg, pend)
-                    if new is None and par.arcfirst == 2:           # Q2: the runs round 1 could not build (pole labels, long runs)
+                    if new is None and par.arcfirst >= 2:           # Q2: the runs round 1 could not build (pole labels, long runs)
                         new = self.arc_chain2(chain, labs, recs, bg, pend)
                     if new is None:
                         info["q_kept"] = info.get("q_kept", 0) + 1
