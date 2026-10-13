@@ -95,3 +95,39 @@ export const drawnLegendNames = (rows) => {
   });
   return rows.map((row) => numbered.get(rowKey(row)) || /** @type {DrawnLegendName} */ (/** @type {string} */ (row.name)));
 };
+
+/**
+ * A row the Legend draws, under its key (PD-OI-061 scenario revision 5).
+ * @template {string} Key
+ * @typedef {NamedLegendRow & { key: Key }} KeyedLegendRow
+ */
+
+/**
+ * The names "Keep both" gives (PD-OI-061 scenario revision 5): the renamed row
+ * keeps the typed name, and every row of that name is numbered in legend
+ * order. `rows` are the rows the Legend draws, in legend order. The renamed
+ * row is `renamedKey`'s row, which keeps its place, or, for a row split off
+ * one, a row placed right after the target row (D-29); after the rename it
+ * shows `swatch`. Returns the name the renamed row is drawn with, and the
+ * target row's drawn name after the rename when the target is drawn and its
+ * drawn name changes, else null.
+ * @template {string} Key
+ * @param {readonly KeyedLegendRow<Key>[]} rows
+ * @param {{ name: LegendRowName, swatch: LegendSwatchIdentity, renamedKey: Key | null, targetKey: Key | null }} rename
+ * @returns {{ keepBothName: DrawnLegendName, targetNameAfter: DrawnLegendName | null }}
+ */
+export const keepBothNames = (rows, { name, swatch, renamedKey, targetKey }) => {
+  const renamed = { name, swatch };
+  const after = renamedKey === null
+    ? (() => {
+      const at = rows.findIndex((row) => row.key === targetKey);
+      return at < 0 ? [...rows, renamed] : [...rows.slice(0, at + 1), renamed, ...rows.slice(at + 1)];
+    })()
+    : rows.map((row) => (row.key === renamedKey ? renamed : row));
+  const target = rows.findIndex((row) => row.key === targetKey);
+  const drawnBefore = drawnLegendNames(rows);
+  const drawnAfter = drawnLegendNames(after);
+  const targetAt = target < 0 ? -1 : after.indexOf(rows[target]);
+  const targetNameAfter = targetAt < 0 || drawnAfter[targetAt] === drawnBefore[target] ? null : drawnAfter[targetAt];
+  return { keepBothName: drawnAfter[after.indexOf(renamed)], targetNameAfter };
+};
