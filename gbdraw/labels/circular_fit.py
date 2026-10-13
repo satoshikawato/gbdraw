@@ -13,11 +13,13 @@ Outer labels have six rows, searched with fit probes (fit is monotone along
 each lever). Inner labels and radial labels have the font row, scanned down
 with the full assembly because fit is not monotone along the font there,
 and two switches, all labels outside and radial labels (LP-D49 ``INNER-3``),
-which are verified first (``SWITCHES-FIRST``). When the figure is drawn anyway
-the search stops after ``WARN_SEARCH_SECONDS`` (LP-D48
-``SEARCH-BOUNDED-5S``); when nothing is drawn the inner font scan stops after
-``FONT_SCAN_SECONDS``. A row not reached is computed later with
-:meth:`CircularLabelFitSearch.row`.
+which are verified first (``SWITCHES-FIRST``). Embedded labels that overlap
+also get the switch that puts overlapping features on separate tracks
+(LP-D52 ``E-ROW``). When the figure is drawn anyway the search stops after
+``WARN_SEARCH_SECONDS`` (LP-D48 ``SEARCH-BOUNDED-5S``); when nothing is
+drawn, the switches and the font scan of inner and radial labels share
+``SWITCH_SEARCH_SECONDS`` (OD-F15), and outer-only rows are all computed. A
+row not reached is computed later with :meth:`CircularLabelFitSearch.row`.
 """
 
 from __future__ import annotations
@@ -31,12 +33,13 @@ from typing import Literal, TypeAlias
 from .fit import (
     ALL_OUTSIDE_SCOPE,
     FITS,
-    FONT_SCAN_SECONDS,
     FONT_SIZE_PATHS,
     PLACEMENT_PATH,
     RADIAL_PLACEMENT,
     SCOPE_PATH,
+    SEPARATE_FEATURES_VALUES,
     SPACING_PATH,
+    SWITCH_SEARCH_SECONDS,
     WARN_SEARCH_SECONDS,
     X_OFFSET_PATH,
     Y_OFFSET_PATH,
@@ -46,10 +49,11 @@ from .fit import (
     LabelFitRow,
     LabelFitRowKind,
     LabelFitValue,
+    LabelFitVerification,
     LabelKind,
-    fit_counts,
     label_fit_outcome,
     raise_or_warn,
+    switch_row,
 )
 
 OFFSET_STEP = 0.025
@@ -68,6 +72,7 @@ ROW_KINDS: tuple[LabelFitRowKind, ...] = (
     "combination",
     "labels_out",
     "radial",
+    "separate_features",
 )
 _OUTER_ROWS: frozenset[LabelFitRowKind] = frozenset(ROW_KINDS[:6])
 _INNER_ROWS: frozenset[LabelFitRowKind] = frozenset({"smaller_font", "labels_out", "radial"})
@@ -82,11 +87,18 @@ _SEARCH_ORDER: tuple[LabelFitRowKind, ...] = (
     "tighter_rows",
     "combination",
 )
-# With inner or radial labels failing, the two switches come first (SWITCHES-FIRST).
-_SWITCHES_FIRST_ORDER: tuple[LabelFitRowKind, ...] = ("labels_out", "radial", *_SEARCH_ORDER)
+# With inner, embedded or radial labels failing, the switches come first
+# (SWITCHES-FIRST); separating features applies only to overlapping embedded labels.
+_SWITCHES_FIRST_ORDER: tuple[LabelFitRowKind, ...] = (
+    "separate_features",
+    "labels_out",
+    "radial",
+    *_SEARCH_ORDER,
+)
 _SWITCH_VALUES: Mapping[LabelFitRowKind, Mapping[str, LabelFitValue]] = {
     "labels_out": {SCOPE_PATH: ALL_OUTSIDE_SCOPE},
     "radial": {PLACEMENT_PATH: RADIAL_PLACEMENT},
+    "separate_features": SEPARATE_FEATURES_VALUES,
 }
 _OUTER_LEVER_REASON = "Does not move inner or radial labels"
 
@@ -99,7 +111,8 @@ class CircularLabelLayout:
     """One record's drawn labels: their fit by kind, and a probe for the outer rows.
 
     ``refused`` marks radial labels that could not be placed in the room the
-    tracks leave. ``probe`` (horizontal records with outer labels) places the
+    tracks leave; ``features_separated`` that overlapping features already
+    have their own tracks (``--resolve_overlaps``). ``probe`` (horizontal records with outer labels) places the
     record's labels again with config overrides and returns the outer labels'
     fit; it may stop early on a layout that cannot fit, so its answer is a
     hint that the full assembly verifies.
@@ -114,6 +127,7 @@ class CircularLabelLayout:
     y_radius_offset: float
     label_spacing: float
     refused: bool = False
+    features_separated: bool = False
     probe: CircularLabelFitProbe | None = field(default=None, compare=False, repr=False)
 
     @property
@@ -145,24 +159,7 @@ class CircularLabelLayout:
         )
 
 
-@dataclass(frozen=True)
-class CircularLabelVerification:
-    """The full assembly with a row's settings.
-
-    ``fits`` when every record fits; ``canvas_size`` is the figure's size,
-    ``fit`` its labels' fit over every record, and ``reason`` why the
-    assembly failed when it raised.
-    """
-
-    fits: bool
-    canvas_size: tuple[float, float] | None
-    fit: LabelFit | None = None
-    reason: str | None = None
-
-
-CircularLabelFitVerifier: TypeAlias = Callable[
-    [Mapping[str, LabelFitValue]], CircularLabelVerification
-]
+CircularLabelFitVerifier: TypeAlias = Callable[[Mapping[str, LabelFitValue]], LabelFitVerification]
 
 
 class _SearchStopped(Exception):
@@ -292,10 +289,17 @@ class _Lever:
 
 
 def _applicable_rows(layouts: Sequence[CircularLabelLayout]) -> frozenset[LabelFitRowKind]:
-    """The rows of the failing sides: outer labels six, inner labels three, radial labels two."""
+    """The rows of the failing sides: outer labels six, inner labels three, radial labels two.
+
+    Overlapping embedded labels add the switch that separates overlapping
+    features, unless they are separated already.
+    """
 
     kinds: set[LabelFitRowKind] = set()
     for layout in layouts:
+        embedded = layout.kind_fits.get("circular_embedded", FITS)
+        if embedded.overlap_pairs and not layout.features_separated:
+            kinds.add("separate_features")
         if layout.placement == "radial":
             kinds |= _RADIAL_ROWS
             continue
@@ -344,7 +348,7 @@ class CircularLabelFitSearch:
             {} for _ in self.layouts
         ]
         self._verifications: dict[
-            tuple[tuple[str, LabelFitValue], ...], CircularLabelVerification
+            tuple[tuple[str, LabelFitValue], ...], LabelFitVerification
         ] = {}
         self._rows: dict[LabelFitRowKind, tuple[LabelFitRow, float | None]] = {}
         self._deadline: float | None = None
@@ -360,28 +364,20 @@ class CircularLabelFitSearch:
         finally:
             self._deadline = None
 
-    def rows(
-        self,
-        *,
-        deadline: float | None = None,
-        font_scan_seconds: float | None = None,
-    ) -> tuple[LabelFitRow, ...]:
-        """The rows that apply, in the dialog order.
+    @property
+    def outer_only(self) -> bool:
+        """Only horizontal outer labels fail: the rows search with probes."""
 
-        ``font_scan_seconds`` bounds the full-assembly font scan of inner and
-        radial labels when nothing else is bounded.
-        """
+        return self._outer_only
+
+    def rows(self, *, deadline: float | None = None) -> tuple[LabelFitRow, ...]:
+        """The rows that apply, in the dialog order, searched until ``deadline``."""
 
         found: dict[LabelFitRowKind, LabelFitRow] = {}
         order = _SEARCH_ORDER if self._outer_only else _SWITCHES_FIRST_ORDER
         for kind in order:
-            if kind not in self.row_kinds:
-                continue
-            row_deadline = deadline
-            if kind == "smaller_font" and not self._outer_only and font_scan_seconds is not None:
-                scan_deadline = time.monotonic() + font_scan_seconds
-                row_deadline = scan_deadline if deadline is None else min(deadline, scan_deadline)
-            found[kind] = self.row(kind, deadline=row_deadline)
+            if kind in self.row_kinds:
+                found[kind] = self.row(kind, deadline=deadline)
         return tuple(found[kind] for kind in ROW_KINDS if kind in found)
 
     # --- probes ---
@@ -401,7 +397,7 @@ class CircularLabelFitSearch:
             answers[key] = probe(values).fits
         return answers[key]
 
-    def _verify(self, values: Mapping[str, LabelFitValue]) -> CircularLabelVerification:
+    def _verify(self, values: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         key = _settings_key(values)
         if key not in self._verifications:
             self._check_deadline(self._assembly_seconds)
@@ -428,16 +424,7 @@ class CircularLabelFitSearch:
 
     def _switch(self, kind: LabelFitRowKind) -> LabelFitRow:
         values = _SWITCH_VALUES[kind]
-        verification = self._verify(values)
-        if verification.fits:
-            return LabelFitRow(kind, "found", values, verification.canvas_size)
-        if verification.reason is not None:
-            reason = verification.reason
-        elif verification.fit is not None and not verification.fit.fits:
-            reason = f"Labels still do not fit ({fit_counts(verification.fit)})"
-        else:
-            reason = "Labels still do not fit"
-        return LabelFitRow(kind, "not_found", reason=reason)
+        return switch_row(kind, values, self._verify(values))
 
     def _font_scan(self) -> tuple[LabelFitRow, float | None]:
         """The largest smaller font that fits, trying each step down (fit is not monotone)."""
@@ -567,8 +554,9 @@ def check_circular_label_fit(
 
     Returns ``None`` when every record fits. Raises ``LabelsDoNotFitError``
     when labels overlap or radial labels have no room; its rows are computed
-    (the inner font scan for ``FONT_SCAN_SECONDS``) and ``row_search``
-    computes a row not reached. When only leaders cross or labels cover the
+    (outer-only rows all; the switches and the font scan of inner, embedded and
+    radial labels for ``SWITCH_SEARCH_SECONDS``) and ``row_search`` computes a
+    row not reached. When only leaders cross or labels cover the
     definition text, warns with ``LabelLeadersCrossWarning`` and returns the
     report (rows searched for ``warn_search_seconds``; 0 leaves every row
     ``not_computed``) and the search that computes the other rows.
@@ -584,14 +572,14 @@ def check_circular_label_fit(
     failing = tuple(layout for layout in layouts if not layout.fits)
     search = CircularLabelFitSearch(failing, verify, assembly_seconds=assembly_seconds)
     drawn = outcome == "warn"
+    if drawn:
+        deadline: float | None = time.monotonic() + warn_search_seconds
+    elif search.outer_only:
+        deadline = None
+    else:
+        deadline = time.monotonic() + SWITCH_SEARCH_SECONDS
     report = LabelFitReport(
-        records=_fit_records(failing),
-        rows=(
-            search.rows(deadline=time.monotonic() + warn_search_seconds)
-            if drawn
-            else search.rows(font_scan_seconds=FONT_SCAN_SECONDS)
-        ),
-        drawn=drawn,
+        records=_fit_records(failing), rows=search.rows(deadline=deadline), drawn=drawn
     )
     raise_or_warn(report, row_search=search)
     return report, search
@@ -604,6 +592,5 @@ __all__ = [
     "CircularLabelFitVerifier",
     "CircularLabelLayout",
     "CircularLabelPlacement",
-    "CircularLabelVerification",
     "check_circular_label_fit",
 ]

@@ -2004,6 +2004,7 @@ def _record_label_layout(
         y_radius_offset=float(outer_offsets.y_radius_offset),
         label_spacing=float(cfg.labels.spacing.circular),
         refused=radial_refused,
+        features_separated=bool(profile.resolve_overlaps),
         probe=probe if horizontal and label_counts.get("circular_outer") else None,
     )
 

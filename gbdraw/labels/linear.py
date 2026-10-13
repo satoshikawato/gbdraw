@@ -4,6 +4,8 @@
 """Linear track-based label placement utilities."""
 
 from collections import defaultdict
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, cast
 from .coordinates import display_label_segment
 
@@ -28,7 +30,22 @@ from ..layout.text_geometry import (
     text_box_corner_offsets,
     translate_points,
 )
-from .fit import LabelShape
+from .fit import (
+    FITS,
+    SEPARATE_FEATURES_VALUES,
+    LabelFit,
+    LabelFitRecord,
+    LabelFitReport,
+    LabelFitRow,
+    LabelFitVerification,
+    LabelFitValue,
+    LabelShape,
+    label_fit_outcome,
+    label_fits_by_kind,
+    overlapping_pairs,
+    raise_or_warn,
+    switch_row,
+)
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -725,8 +742,81 @@ def linear_label_shapes(labels: list[dict]) -> list[LabelShape]:
     ]
 
 
+# The drawing attribute that carries a Linear figure's label fit to the check.
+LINEAR_LABEL_FIT_ATTR = "_gbdraw_linear_label_fit"
+
+
+@dataclass(frozen=True)
+class LinearLabelFit:
+    """The drawn Linear labels that do not fit, by record.
+
+    ``embedded_overlap`` marks an overlapping pair with a label drawn on its
+    feature: the features are drawn on top of each other.
+    """
+
+    records: tuple[LabelFitRecord, ...] = ()
+    embedded_overlap: bool = False
+
+    @property
+    def fit(self) -> LabelFit:
+        return sum((record.fit for record in self.records), FITS)
+
+    @property
+    def fits(self) -> bool:
+        return self.fit.fits
+
+
+def linear_label_fit(
+    record_labels: Sequence[tuple[str, Sequence[dict]]],
+    font_size: float,
+) -> LinearLabelFit:
+    """Count one figure's drawn Linear labels with the shared rule (LP-D48 SCOPE-ALL-LABELS)."""
+
+    failing: list[LabelFitRecord] = []
+    embedded_overlap = False
+    for record_id, labels in record_labels:
+        shapes = linear_label_shapes(list(labels))
+        fit = label_fits_by_kind(shapes, touching=False).get("linear", FITS)
+        if fit.fits:
+            continue
+        failing.append(LabelFitRecord(record_id, "linear", len(labels), font_size, fit))
+        if fit.overlap_pairs and not embedded_overlap:
+            embedded_overlap = any(
+                labels[left]["is_embedded"] or labels[right]["is_embedded"]
+                for left, right in overlapping_pairs([shape.parts for shape in shapes], touching=False)
+            )
+    return LinearLabelFit(tuple(failing), embedded_overlap)
+
+
+def check_linear_label_fit(
+    label_fit: LinearLabelFit,
+    verify: Callable[[Mapping[str, LabelFitValue]], LabelFitVerification],
+    *,
+    features_separated: bool,
+) -> None:
+    """Raise or warn for a drawn Linear figure whose labels do not fit.
+
+    Placed Linear labels keep apart, so overlaps come from labels drawn on
+    features drawn on top of each other; their one row puts overlapping
+    features on separate tracks (LP-D52 ``E-ROW``), verified with ``verify``.
+    """
+
+    outcome = label_fit_outcome([record.fit for record in label_fit.records])
+    if outcome == "fits":
+        return
+    rows: tuple[LabelFitRow, ...] = ()
+    if outcome == "stop" and label_fit.embedded_overlap and not features_separated:
+        values = SEPARATE_FEATURES_VALUES
+        rows = (switch_row("separate_features", values, verify(values)),)
+    raise_or_warn(LabelFitReport(label_fit.records, rows=rows, drawn=outcome == "warn"))
+
+
 __all__ = [
+    "LINEAR_LABEL_FIT_ATTR",
+    "LinearLabelFit",
     "calculate_label_bounds",
+    "check_linear_label_fit",
+    "linear_label_fit",
     "calculate_label_y_bounds",
     "check_label_overlap",
     "find_lowest_available_track",

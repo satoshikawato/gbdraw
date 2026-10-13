@@ -289,19 +289,21 @@ drawing the whole figure again. The rows depend on which labels do not fit:
 | combination | the font reduced by half the smaller-font change (at least 0.5 pt), with the smallest Y offset that then fits | outer labels |
 | all labels outside | `--labels out` | records with inner labels, in either placement |
 | radial labels | `--label_placement radial` | inner and embedded labels |
+| separate overlapping features | `--resolve_overlaps` | labels drawn on features that are drawn on top of each other, Circular and Linear |
 
 Each row gives the mildest value that fits, or says that none fits within its
 limit. With several records, one value must fit every record. The outer-label
 rows do not move inner or radial labels. For inner, embedded, or radial
-labels, the two switches are tried first; the smaller font is then the first
+labels, the switches are tried first; the smaller font is then the first
 font size, going down from the current one, at which the whole figure fits, so
 a smaller size than the one offered may not fit.
 
 When the figure is drawn anyway, gbdraw searches for 5 seconds and names the
-rows it did not reach. When nothing is drawn, every row is searched, except
-that the font search for inner, embedded, or radial labels stops after 30
-seconds. Linear labels have no rows: the Linear layout keeps its labels
-apart, so this check reports a fault in that layout.
+rows it did not reach. When nothing is drawn, every outer-label row is
+searched; for inner, embedded, or radial labels the switches and then the font
+search share 30 seconds, and a setting is tried only if drawing the figure once
+more ends within that time. Linear labels get only the separate overlapping
+features row, because the Linear layout keeps its other labels apart.
 
 With 50 or more outer labels, gbdraw packs the labels in rows with
 `--circular_label_spacing` between them. If those rows do not fit, the labels

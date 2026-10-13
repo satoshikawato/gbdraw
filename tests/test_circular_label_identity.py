@@ -14,6 +14,7 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.options import CircularDiagramOptions
 from gbdraw.api.request_render import plan_request
 from gbdraw.api.requests import CircularDiagramRequest, InMemoryRecordSource, RecordDisplayOptions, RecordInput
+from gbdraw.exceptions import LabelsDoNotFitError
 from gbdraw.features.ids import compute_feature_hash
 
 
@@ -42,22 +43,31 @@ def test_labels_resolve_all_parts_and_disambiguate_equal_source_hashes(
         qualifiers={"product": ["single"]},
     )]
     count = 2 if repeated_record else 1
-    request = CircularDiagramRequest(
-        records=tuple(RecordInput(InMemoryRecordSource(record),
-            display=RecordDisplayOptions(start_coordinate=1)) for _ in range(count)),
-        grouping="grid" if repeated_record else "single",
-        options=CircularDiagramOptions(config=apply_config_overrides(None, {
-            "labels.circular.scope": "outer",
-            "labels.circular.placement": placement,
-            "labels.rendering": rendering,
-            "labels.filtering.blacklist_keywords": [],
-            "canvas.show_gc": False, "canvas.show_skew": False,
-            # The duplicate gets its own track, so its embedded label does not
-            # overlap the original's (overlapping labels are not drawn, LP-D49).
-            "canvas.resolve_overlaps": True,
-        })),
-    )
-    drawing = plan_request(request).build()
+
+    def request_for(resolve_overlaps: bool) -> CircularDiagramRequest:
+        return CircularDiagramRequest(
+            records=tuple(RecordInput(InMemoryRecordSource(record),
+                display=RecordDisplayOptions(start_coordinate=1)) for _ in range(count)),
+            grouping="grid" if repeated_record else "single",
+            options=CircularDiagramOptions(config=apply_config_overrides(None, {
+                "labels.circular.scope": "outer",
+                "labels.circular.placement": placement,
+                "labels.rendering": rendering,
+                "labels.filtering.blacklist_keywords": [],
+                "canvas.show_gc": False, "canvas.show_skew": False,
+                "canvas.resolve_overlaps": resolve_overlaps,
+            })),
+        )
+
+    if rendering != "external_only":
+        # The duplicate is drawn on top of the original, and so is its embedded label:
+        # nothing is drawn, and the row separates the features (LP-D52).
+        with pytest.raises(LabelsDoNotFitError) as stopped:
+            plan_request(request_for(False)).build()
+        rows = {row.kind: row for row in stopped.value.report.rows}
+        assert rows["separate_features"].status == "found"
+        assert rows["separate_features"].values == {"canvas.resolve_overlaps": True}
+    drawing = plan_request(request_for(rendering != "external_only")).build()
     root = ET.fromstring(drawing.tostring())
     paths = [node for node in root.iter() if node.get("data-gbdraw-feature-part") == "block"]
     labels = [

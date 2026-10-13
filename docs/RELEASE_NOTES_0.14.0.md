@@ -326,7 +326,8 @@ Labels that would overlap are no longer drawn: Circular outer, inner, and
 embedded labels in either placement, and Linear labels. The command line exits
 with an error and Python raises `LabelsDoNotFitError`; the message lists
 settings that fit, such as a larger outer-label offset, a smaller font, all
-labels outside, or radial labels. Radial labels that need more room than the
+labels outside, radial labels, or `--resolve_overlaps` for labels on features
+drawn on top of each other. Radial labels that need more room than the
 circular tracks leave stop the same way instead of being drawn with crossing
 leaders or failing with a track error. Leader lines that cross, and labels over
 the definition text in the centre, are drawn as before with the same settings as

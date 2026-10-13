@@ -80,8 +80,9 @@ def test_inner_labels_over_the_definition_text_draw_and_warn(tmp_path: Path) -> 
 def test_overlapping_inner_labels_are_not_drawn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """SAME-RULES: tobacco at 14 pt with inner labels has 47 overlapping inner label pairs."""
 
-    # The font scan has its own test; here the switches are verified first (SWITCHES-FIRST).
-    monkeypatch.setattr(circular_fit_module, "FONT_SCAN_SECONDS", 0.0, raising=False)
+    # The search budget has its own test; here every row is left for later and one is
+    # computed on demand from the error.
+    monkeypatch.setattr(circular_fit_module, "SWITCH_SEARCH_SECONDS", 0.0)
     with pytest.raises(LabelsDoNotFitError) as raised:
         _draw(tmp_path, _both_args("NC_001879.gbk", "--label_font_size", "14"))
 
@@ -90,10 +91,12 @@ def test_overlapping_inner_labels_are_not_drawn(tmp_path: Path, monkeypatch: pyt
     assert inner and inner[0].fit.overlap_pairs > 0
     rows = {row.kind: row for row in report.rows}
     assert list(rows) == ["smaller_font", "labels_out", "radial"]
-    assert rows["smaller_font"].status == "not_computed"
-    assert rows["radial"].status == "found"
-    assert rows["radial"].values == {"labels.circular.placement": "radial"}
-    assert raised.value.row_search is not None
+    assert {row.status for row in rows.values()} == {"not_computed"}
+    search = raised.value.row_search
+    assert search is not None
+    radial = search.row("radial")
+    assert radial.status == "found"
+    assert radial.values == {"labels.circular.placement": "radial"}
 
 
 @pytest.mark.circular

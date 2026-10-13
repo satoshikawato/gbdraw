@@ -12,27 +12,25 @@ from pathlib import Path
 
 import pytest
 from Bio import SeqIO
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
 
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
-import gbdraw.diagrams.linear.assemble as linear_assemble_module
 from gbdraw.api.diagram import label_fit_row
 from gbdraw.circular import circular_main
 from gbdraw.config.models import GbdrawConfig
 import gbdraw.labels.circular_fit as circular_fit_module
 from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
+from gbdraw.labels.linear import check_linear_label_fit, linear_label_fit
 from gbdraw.layout.spatial import Aabb
 from gbdraw.labels.circular_fit import (
     CircularLabelLayout,
     CircularLabelPlacement,
-    CircularLabelVerification,
     check_circular_label_fit,
 )
 from gbdraw.labels.fit import (
     FONT_SIZE_PATHS,
     PLACEMENT_PATH,
     SCOPE_PATH,
+    SEPARATE_FEATURES_PATH,
     SPACING_PATH,
     X_OFFSET_PATH,
     Y_OFFSET_PATH,
@@ -40,6 +38,7 @@ from gbdraw.labels.fit import (
     LabelFitRecord,
     LabelFitReport,
     LabelFitRow,
+    LabelFitVerification,
     LabelShape,
     format_label_fit_report,
     label_fit_outcome,
@@ -91,10 +90,10 @@ def _layout(
 def _verifier(*layouts_fits: Callable[[float, float, float, float], bool]):
     calls: list[Mapping[str, float]] = []
 
-    def verify(values: Mapping[str, float]) -> CircularLabelVerification:
+    def verify(values: Mapping[str, float]) -> LabelFitVerification:
         calls.append(dict(values))
         settings = _settings(values)
-        return CircularLabelVerification(
+        return LabelFitVerification(
             fits=all(fits(*settings) for fits in layouts_fits),
             canvas_size=(1000.0 * settings[0], 1000.0 * settings[1]),
         )
@@ -338,11 +337,11 @@ def _inner_layout(*, placement: CircularLabelPlacement = "horizontal", refused: 
 def _assembly(fits: Callable[[Mapping[str, object]], bool]):
     calls: list[dict[str, object]] = []
 
-    def verify(values: Mapping[str, object]) -> CircularLabelVerification:
+    def verify(values: Mapping[str, object]) -> LabelFitVerification:
         calls.append(dict(values))
         if fits(values):
-            return CircularLabelVerification(True, (1000.0, 900.0))
-        return CircularLabelVerification(False, None, LabelFit(1, 0))
+            return LabelFitVerification(True, (1000.0, 900.0))
+        return LabelFitVerification(False, None, LabelFit(1, 0))
 
     return verify, calls
 
@@ -392,7 +391,7 @@ def test_outer_levers_do_not_move_inner_labels() -> None:
         check_circular_label_fit(layouts, verify)
 
     rows = {row.kind: row for row in raised.value.report.rows}
-    assert list(rows) == list(circular_fit_module.ROW_KINDS)
+    assert list(rows) == [kind for kind in circular_fit_module.ROW_KINDS if kind != "separate_features"]
     assert rows["labels_out"].status == "found"
     assert rows["outward_vertical"].reason == "Does not move inner or radial labels"
     assert "--labels out   (all labels outside)" in str(raised.value)
@@ -416,41 +415,63 @@ def test_radial_labels_without_room_stop_and_offer_the_font_row_only_without_inn
     )
 
 
-def test_the_font_scan_stops_after_its_limit_and_a_row_is_computed_from_the_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The scan runs for FONT_SCAN_SECONDS when nothing is drawn; the error computes the rest."""
+def test_one_budget_covers_the_switches_then_the_font_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OD-F15: 30 s for inner labels when nothing is drawn; a verification starts only
+    if one more assembly ends before the deadline; the error computes the rest."""
 
-    monkeypatch.setattr(circular_fit_module, "FONT_SCAN_SECONDS", 0.0)
+    clock = [0.0]
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
     verify, calls = _assembly(_p1_inner)
 
-    with pytest.raises(LabelsDoNotFitError) as raised:
-        check_circular_label_fit([_inner_layout()], verify)
+    def slow(values: Mapping[str, object]) -> LabelFitVerification:
+        clock[0] += 12.0
+        return verify(values)
 
-    rows = {row.kind: row for row in raised.value.report.rows}
-    assert rows["smaller_font"].status == "not_computed"
-    assert len(calls) == 2
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_inner_layout()], slow, assembly_seconds=12.0)
+
+    # labels_out starts at 0 s and radial at 12 s; the font scan would end after 36 s.
+    assert calls == [{SCOPE_PATH: "outer"}, {PLACEMENT_PATH: "radial"}]
+    rows = {row.kind: row.status for row in raised.value.report.rows}
+    assert rows == {"smaller_font": "not_computed", "labels_out": "not_found", "radial": "not_found"}
     assert str(raised.value).splitlines()[-1] == "Not searched within 30 s: a smaller font."
     row = label_fit_row(raised.value, "smaller_font")
     assert row is not None and row.values == {path: 12.0 for path in FONT_SIZE_PATHS}
 
 
-def test_a_verification_that_would_overrun_the_limit_is_not_started(monkeypatch: pytest.MonkeyPatch) -> None:
-    clock = [0.0]
-    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
+def test_the_outer_error_path_computes_every_row_past_the_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(circular_fit_module, "SWITCH_SEARCH_SECONDS", 0.0)
+    verify, _calls = _verifier(_p1_like)
 
-    def slow(values: Mapping[str, object]) -> CircularLabelVerification:
-        clock[0] += 4.0
-        return CircularLabelVerification(False, None, LabelFit(0, 1))
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_layout("P1", _p1_like)], verify, assembly_seconds=60.0)
 
-    crossing = dataclasses.replace(_inner_layout(), kind_fits={"circular_inner": LabelFit(0, 2)})
-    with pytest.warns(LabelLeadersCrossWarning) as caught:
-        checked = check_circular_label_fit([crossing], slow, assembly_seconds=4.0)
+    assert "not_computed" not in {row.status for row in raised.value.report.rows}
 
-    assert checked is not None
-    # The first switch starts (0 + 4 < 5 s); the next would end after the limit.
-    assert [row.status for row in checked[0].rows] == ["not_computed", "not_found", "not_computed"]
-    assert str(caught[0].message).splitlines()[-1].startswith("Not searched within 5 s: ")
+
+def test_overlapping_embedded_labels_offer_to_separate_the_features() -> None:
+    """LP-D52 E-ROW: the switch is verified first and found only when the figure then fits."""
+
+    layout = dataclasses.replace(
+        _inner_layout(inner=0),
+        label_counts={"circular_outer": 80, "circular_embedded": 3},
+        kind_fits={"circular_embedded": LabelFit(1, 0)},
+    )
+    verify, calls = _assembly(lambda values: values.get(SEPARATE_FEATURES_PATH) is True)
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([layout], verify)
+
+    assert calls[0] == {SEPARATE_FEATURES_PATH: True}
+    rows = {row.kind: row for row in raised.value.report.rows}
+    assert list(rows) == ["smaller_font", "radial", "separate_features"]
+    assert rows["separate_features"].values == {SEPARATE_FEATURES_PATH: True}
+    assert "  --resolve_overlaps   (separate overlapping features)" in str(raised.value)
+
+    separated = dataclasses.replace(layout, features_separated=True)
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([separated], verify)
+    assert "separate_features" not in {row.kind for row in raised.value.report.rows}
 
 
 def test_labels_count_once_by_kind_and_leaders_count_against_the_definition_text() -> None:
@@ -474,21 +495,42 @@ def test_labels_count_once_by_kind_and_leaders_count_against_the_definition_text
     }
 
 
-def test_linear_guard_stops_on_overlapping_linear_labels() -> None:
-    def label(start: float, middle_y: float) -> dict:
+def test_linear_labels_on_stacked_features_stop_with_the_separate_features_row() -> None:
+    def label(start: float, middle_y: float, *, embedded: bool) -> dict:
         return {
-            "start": start, "middle": start + 20.0, "middle_x": start + 20.0, "width_px": 40.0, "height_px": 10.0,
-            "middle_y": middle_y, "feature_middle_y": 50.0, "is_embedded": False,
-            "leader_line": False,
+            "start": start, "middle": start + 20.0, "middle_x": start + 20.0, "width_px": 40.0,
+            "height_px": 10.0, "middle_y": middle_y, "feature_middle_y": 50.0,
+            "is_embedded": embedded, "leader_line": False,
         }
 
-    record = SeqRecord(Seq("A"), id="rec")
-    with pytest.raises(LabelsDoNotFitError) as raised:
-        linear_assemble_module._check_linear_label_fit([record], [[label(0.0, 20.0), label(10.0, 22.0)]], 8.0)
+    stacked = [label(0.0, 50.0, embedded=True), label(10.0, 50.0, embedded=True), label(80.0, 20.0, embedded=False)]
+    label_fit = linear_label_fit([("rec", stacked)], 8.0)
+    assert label_fit.embedded_overlap and label_fit.fit == LabelFit(1, 0)
+    calls: list[Mapping[str, object]] = []
 
-    assert str(raised.value).startswith("2 Linear labels do not fit at 8 pt (1 label pair overlaps")
+    def verify(values: Mapping[str, object]) -> LabelFitVerification:
+        calls.append(dict(values))
+        return LabelFitVerification(True, (500.0, 200.0))
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_linear_label_fit(label_fit, verify, features_separated=False)
+
+    assert str(raised.value).startswith("3 Linear labels do not fit at 8 pt (1 label pair overlaps")
+    (row,) = raised.value.report.rows
+    assert (row.kind, row.status, row.values) == ("separate_features", "found", {SEPARATE_FEATURES_PATH: True})
+    assert calls == [{SEPARATE_FEATURES_PATH: True}]
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_linear_label_fit(label_fit, verify, features_separated=True)
     assert raised.value.report.rows == ()
-    linear_assemble_module._check_linear_label_fit([record], [[label(0.0, 20.0), label(50.0, 20.0)]], 8.0)
+
+    placed = [label(0.0, 20.0, embedded=False), label(10.0, 22.0, embedded=False)]
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_linear_label_fit(linear_label_fit([("rec", placed)], 8.0), verify, features_separated=False)
+    assert raised.value.report.rows == ()
+    check_linear_label_fit(
+        linear_label_fit([("rec", [label(0.0, 20.0, embedded=False)])], 8.0), verify, features_separated=False
+    )
 
 
 # --- engine and CLI -------------------------------------------------------------------------------

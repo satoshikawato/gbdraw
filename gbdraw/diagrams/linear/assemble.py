@@ -116,15 +116,7 @@ from ...layout.scalar_axis import (
     format_percent_tick,
     scalar_axis_tick_values,
 )
-from ...labels.fit import (
-    FITS,
-    LabelFitRecord,
-    LabelFitReport,
-    label_fit_outcome,
-    label_fits_by_kind,
-    raise_or_warn,
-)
-from ...labels.linear import calculate_label_bounds, linear_label_shapes
+from ...labels.linear import LINEAR_LABEL_FIT_ATTR, calculate_label_bounds, linear_label_fit
 from ...tracks import (
     LinearTrackSlot,
     ScalarSpec,
@@ -1769,27 +1761,6 @@ def _final_record_translations(
     return tuple(resolved)
 
 
-def _check_linear_label_fit(
-    records: Sequence[SeqRecord],
-    labels_by_record: Sequence[Sequence[dict]],
-    font_size: float,
-) -> None:
-    """Guard the drawn Linear labels with the shared fit rule (LP-D48 SCOPE-ALL-LABELS).
-
-    Rows never overlap and leaders are vertical, so this fires only on a bug;
-    there are no rows of settings to offer.
-    """
-
-    failing = []
-    for record, labels in zip(records, labels_by_record):
-        fit = label_fits_by_kind(linear_label_shapes(list(labels)), touching=False).get("linear", FITS)
-        if not fit.fits:
-            failing.append(LabelFitRecord(str(record.id), "linear", len(labels), font_size, fit))
-    outcome = label_fit_outcome([record.fit for record in failing])
-    if outcome != "fits":
-        raise_or_warn(LabelFitReport(tuple(failing), rows=(), drawn=outcome == "warn"))
-
-
 def assemble_linear_diagram(
     records: list[SeqRecord],
     blast_files,
@@ -2700,7 +2671,10 @@ def assemble_linear_diagram(
         canvas_config=canvas_config,
         profile=profile,
     )
-    _check_linear_label_fit(records, all_labels, label_font_size)
+    # The API checks the drawn labels and offers the rows (LP-D48, LP-D52).
+    label_fit = linear_label_fit(
+        [(str(record.id), labels) for record, labels in zip(records, all_labels)], label_font_size
+    )
 
     total_records = len(records)
     for count, record in enumerate(records, start=1):
@@ -3155,6 +3129,7 @@ def assemble_linear_diagram(
     setattr(canvas, "_gbdraw_linear_source_content_bounds", source_primary_bounds)
     setattr(canvas, "_gbdraw_linear_composition_plan", composition_plan)
     setattr(canvas, "_gbdraw_comparison_record_id_warnings", comparison_record_id_warnings)
+    setattr(canvas, LINEAR_LABEL_FIT_ATTR, label_fit)
 
     return canvas
 

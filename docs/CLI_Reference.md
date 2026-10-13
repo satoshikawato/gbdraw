@@ -598,8 +598,8 @@ disable that slot to hide the scale.
 
 If labels would overlap, or radial labels need more room than the circular
 tracks leave, `gbdraw circular` draws nothing, prints settings that fit (such
-as `--outer_label_y_radius_offset`, `--label_font_size`, `--labels out`, or
-`--label_placement radial`), and exits with status 1. If only leader lines
+as `--outer_label_y_radius_offset`, `--label_font_size`, `--labels out`,
+`--label_placement radial`, or `--resolve_overlaps`), and exits with status 1. If only leader lines
 cross or labels cover the definition text, it draws the figure, prints the same
 settings as a warning, and exits with status 0. `gbdraw linear` stops the same
 way if its labels overlap. See [Labels that do not

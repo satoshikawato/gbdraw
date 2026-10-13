@@ -1643,13 +1643,24 @@ def test_final_svg_undefined_uses_negative_geometry_pool(mode, undefined, resolv
     record.seq = Seq("ATGC" * 3000)
     record.features = [SeqFeature(SimpleLocation(1000, 2000, strand), type="CDS",
         qualifiers={"locus_tag": [label]}) for strand, label in ((undefined, "undefined"), (-1, "negative"), (1, "positive"))]
+    overrides = {"canvas.strandedness": True, "canvas.resolve_overlaps": resolve,
+        ("canvas.circular.track_type" if mode == "circular" else "canvas.linear.track_layout"): "middle",
+        f"labels.{mode}.scope": "both" if mode == "circular" else "all"}
+    if not resolve:
+        # Unresolved, the first two features are drawn on top of each other and so are
+        # their labels: nothing is drawn, and the row separates the features (LP-D52).
+        from gbdraw.exceptions import LabelsDoNotFitError
+        with pytest.raises(LabelsDoNotFitError) as stopped:
+            plan_request(_request(record, mode=mode, feature_placements=(_exact(record, 0),),
+                config_overrides=overrides)).build()
+        rows = {row.kind: row for row in stopped.value.report.rows}
+        assert rows["separate_features"].status == "found"
+        assert rows["separate_features"].values == {"canvas.resolve_overlaps": True}
+        assert "--resolve_overlaps   (separate overlapping features)" in str(stopped.value)
+        # Labels outside the features stay apart.
+        overrides["labels.rendering"] = "external_only"
     request = _request(record, mode=mode, feature_placements=(_exact(record, 0),),
-        config_overrides={"canvas.strandedness": True, "canvas.resolve_overlaps": resolve,
-            ("canvas.circular.track_type" if mode == "circular" else "canvas.linear.track_layout"): "middle",
-            f"labels.{mode}.scope": "both" if mode == "circular" else "all",
-            # Unresolved, the first two features are drawn on top of each other; labels
-            # outside the features stay apart (overlapping labels stop, LP-D49).
-            "labels.rendering": "external_only"})
+        config_overrides=overrides)
     drawing = plan_request(request).build()
     root = ET.fromstring((drawing.drawing if hasattr(drawing, "drawing") else drawing).tostring())
     starts = {}

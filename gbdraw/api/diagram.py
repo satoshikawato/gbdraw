@@ -110,10 +110,21 @@ from gbdraw.diagrams.circular.positioning import _parse_svg_number
 from gbdraw.labels.circular_fit import (
     CircularLabelFitSearch,
     CircularLabelLayout,
-    CircularLabelVerification,
     check_circular_label_fit,
 )
-from gbdraw.labels.fit import FITS, LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitValue
+from gbdraw.labels.linear import (
+    LINEAR_LABEL_FIT_ATTR,
+    LinearLabelFit,
+    check_linear_label_fit,
+)
+from gbdraw.labels.fit import (
+    FITS,
+    LabelFitReport,
+    LabelFitRow,
+    LabelFitRowKind,
+    LabelFitValue,
+    LabelFitVerification,
+)
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.labels.filtering import (
     DERIVED_LABEL_FILTERING_KEYS,
@@ -3243,14 +3254,14 @@ def _checked_circular_drawing(assemble: Callable[[Mapping[str, LabelFitValue]], 
     drawing = assemble({})
     assembly_seconds = time.monotonic() - started
 
-    def verify(overrides: Mapping[str, LabelFitValue]) -> CircularLabelVerification:
+    def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         try:
             verified = assemble(overrides)
         except GbdrawError as error:
             # A setting the engine cannot draw (for example a radial layout error) does not fit.
-            return CircularLabelVerification(fits=False, canvas_size=None, reason=str(error))
+            return LabelFitVerification(fits=False, canvas_size=None, reason=str(error))
         layouts = _circular_label_layouts(verified)
-        return CircularLabelVerification(
+        return LabelFitVerification(
             fits=all(layout.fits for layout in layouts),
             canvas_size=_drawing_size(verified),
             fit=sum((layout.fit for layout in layouts), FITS),
@@ -3429,79 +3440,114 @@ def _build_linear_diagram(
         str(options.collinearity_anchor_mode)
     )
 
-    return assemble_linear_diagram_from_records(
-        records,
-        cfg=cfg,
-        blast_files=options.blast_files,
-        linear_comparisons=options.linear_comparisons,
-        layout=layout,
-        protein_comparisons=options.protein_comparisons,
-        orthogroups=options.orthogroups,
-        losat_search=options.losat_search,
-        pairwise_match_style=options.pairwise_match_style,
-        collinearity_blocks=options.collinearity_blocks,
-        collinearity_params=options.collinearity_params,
-        collinearity_unit_mode=options.collinearity_unit_mode,
-        collinearity_anchor_mode=normalized_collinearity_anchor_mode,
-        collinearity_search_scope=options.collinearity_search_scope,
-        collinearity_color_mode=options.collinearity_color_mode,
-        losatp_cache=losatp_cache,
-        protein_extraction=protein_extraction,
-        orthogroup_membership_mode=options.orthogroup_membership_mode,
-        collinear_infer_orthogroups=options.collinear_infer_orthogroups,
-        collinear_max_paralog_links_per_orthogroup=options.collinear_max_paralog_links_per_orthogroup,
-        similarity_alignment=similarity_alignment,
-        color_table=colors.color_table if colors else None,
-        color_table_file=colors.color_table_file if colors else None,
-        default_colors=colors.default_colors if colors else None,
-        default_colors_palette=colors.default_colors_palette if colors else "default",
-        default_colors_file=colors.default_colors_file if colors else None,
-        selected_features_set=options.selected_features_set,
-        feature_visibility_table=options.feature_visibility_table,
-        feature_visibility_table_file=options.feature_visibility_table_file,
-        feature_shapes=options.feature_shapes,
-        output_prefix="out",
-        legend=output.legend if output else "right",
-        dinucleotide=options.dinucleotide,
-        window=options.window,
-        step=options.step,
-        depth_window=options.depth_window,
-        depth_step=options.depth_step,
-        depth_tracks=options.depth_tracks,
-        depth_table=options.depth_table,
-        depth_file=options.depth_file,
-        depth_tables=options.depth_tables,
-        depth_files=options.depth_files,
-        depth_track_tables=options.depth_track_tables,
-        depth_track_files=options.depth_track_files,
-        depth_track_labels=options.depth_track_labels,
-        depth_track_colors=options.depth_track_colors,
-        depth_track_heights=options.depth_track_heights,
-        depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
-        depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
-        depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
-        linear_track_slots=tracks.linear_track_slots if tracks else None,
-        linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
-        annotation_options=options.annotations,
-        _resolved_annotations=_resolved_annotations,
-        plot_title=options.plot_title,
-        plot_title_position=(
-            output.plot_title_position
-            if output and output.plot_title_position is not None
-            else "bottom"
-        ),
-        plot_title_font_size=options.plot_title_font_size,
-        # The builder options resolved omitted thresholds from the mode profile.
-        evalue=cast(float, options.evalue),
-        bitscore=cast(float, options.bitscore),
-        identity=cast(float, options.identity),
-        alignment_length=cast(int, options.alignment_length),
-        _resolved_feature_inputs=_resolved_feature_inputs,
-        _resolved_record_features=_resolved_record_features,
-        _record_transforms=_record_transforms,
-        _alignment_anchor_centers=_alignment_anchor_centers,
-        _return_build_result=_return_build_result,
+    def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing | LinearDiagramBuildResult:
+        return assemble_linear_diagram_from_records(
+            records,
+            cfg=with_config_overrides(cfg, overrides),
+            blast_files=options.blast_files,
+            linear_comparisons=options.linear_comparisons,
+            layout=layout,
+            protein_comparisons=options.protein_comparisons,
+            orthogroups=options.orthogroups,
+            losat_search=options.losat_search,
+            pairwise_match_style=options.pairwise_match_style,
+            collinearity_blocks=options.collinearity_blocks,
+            collinearity_params=options.collinearity_params,
+            collinearity_unit_mode=options.collinearity_unit_mode,
+            collinearity_anchor_mode=normalized_collinearity_anchor_mode,
+            collinearity_search_scope=options.collinearity_search_scope,
+            collinearity_color_mode=options.collinearity_color_mode,
+            losatp_cache=losatp_cache,
+            protein_extraction=protein_extraction,
+            orthogroup_membership_mode=options.orthogroup_membership_mode,
+            collinear_infer_orthogroups=options.collinear_infer_orthogroups,
+            collinear_max_paralog_links_per_orthogroup=options.collinear_max_paralog_links_per_orthogroup,
+            similarity_alignment=similarity_alignment,
+            color_table=colors.color_table if colors else None,
+            color_table_file=colors.color_table_file if colors else None,
+            default_colors=colors.default_colors if colors else None,
+            default_colors_palette=colors.default_colors_palette if colors else "default",
+            default_colors_file=colors.default_colors_file if colors else None,
+            selected_features_set=options.selected_features_set,
+            feature_visibility_table=options.feature_visibility_table,
+            feature_visibility_table_file=options.feature_visibility_table_file,
+            feature_shapes=options.feature_shapes,
+            output_prefix="out",
+            legend=output.legend if output else "right",
+            dinucleotide=options.dinucleotide,
+            window=options.window,
+            step=options.step,
+            depth_window=options.depth_window,
+            depth_step=options.depth_step,
+            depth_tracks=options.depth_tracks,
+            depth_table=options.depth_table,
+            depth_file=options.depth_file,
+            depth_tables=options.depth_tables,
+            depth_files=options.depth_files,
+            depth_track_tables=options.depth_track_tables,
+            depth_track_files=options.depth_track_files,
+            depth_track_labels=options.depth_track_labels,
+            depth_track_colors=options.depth_track_colors,
+            depth_track_heights=options.depth_track_heights,
+            depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
+            linear_track_slots=tracks.linear_track_slots if tracks else None,
+            linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
+            annotation_options=options.annotations,
+            _resolved_annotations=_resolved_annotations,
+            plot_title=options.plot_title,
+            plot_title_position=(
+                output.plot_title_position
+                if output and output.plot_title_position is not None
+                else "bottom"
+            ),
+            plot_title_font_size=options.plot_title_font_size,
+            # The builder options resolved omitted thresholds from the mode profile.
+            evalue=cast(float, options.evalue),
+            bitscore=cast(float, options.bitscore),
+            identity=cast(float, options.identity),
+            alignment_length=cast(int, options.alignment_length),
+            _resolved_feature_inputs=_resolved_feature_inputs,
+            _resolved_record_features=_resolved_record_features,
+            _record_transforms=_record_transforms,
+            _alignment_anchor_centers=_alignment_anchor_centers,
+            _return_build_result=_return_build_result,
+        )
+
+    return _checked_linear_build(assemble, features_separated=bool(cfg.canvas.resolve_overlaps))
+
+
+def _linear_drawing(result: Drawing | LinearDiagramBuildResult) -> Drawing:
+    return result.drawing if isinstance(result, LinearDiagramBuildResult) else result
+
+
+def _linear_label_fit(drawing: Drawing) -> LinearLabelFit:
+    label_fit = getattr(drawing, LINEAR_LABEL_FIT_ATTR, None)
+    return label_fit if isinstance(label_fit, LinearLabelFit) else LinearLabelFit()
+
+
+def _checked_linear_build(
+    assemble: Callable[[Mapping[str, LabelFitValue]], Drawing | LinearDiagramBuildResult],
+    *,
+    features_separated: bool,
+) -> Drawing | LinearDiagramBuildResult:
+    """Assemble a Linear figure and apply the label fit check to it."""
+
+    result = assemble({})
+
+    def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
+        try:
+            verified = _linear_drawing(assemble(overrides))
+        except GbdrawError as error:
+            return LabelFitVerification(fits=False, canvas_size=None, reason=str(error))
+        label_fit = _linear_label_fit(verified)
+        return LabelFitVerification(label_fit.fits, _drawing_size(verified), label_fit.fit)
+
+    check_linear_label_fit(
+        _linear_label_fit(_linear_drawing(result)), verify, features_separated=features_separated
     )
+    return result
 
 
 def build_linear_diagram(

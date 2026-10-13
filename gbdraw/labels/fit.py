@@ -31,12 +31,14 @@ LabelFitRowKind: TypeAlias = Literal[
     "combination",
     "labels_out",
     "radial",
+    "separate_features",
 ]
 # ``found``: ``values`` fit; ``not_found``: no value within the lever's limit
 # (``reason`` says which); ``not_computed``: the bounded search stopped first.
 LabelFitRowStatus: TypeAlias = Literal["found", "not_found", "not_computed"]
-# A row sets numbers (offsets, font size, spacing) and words (label scope, placement).
-LabelFitValue: TypeAlias = float | str
+# A row sets numbers (offsets, font size, spacing), words (label scope,
+# placement) and switches (separate overlapping features).
+LabelFitValue: TypeAlias = bool | float | str
 Polygon: TypeAlias = tuple[Point, ...]
 Polyline: TypeAlias = Sequence[Point]
 
@@ -54,14 +56,18 @@ FONT_SIZE_PATHS = ("labels.font_size.short", "labels.font_size.long")
 SPACING_PATH = "labels.spacing.circular"
 SCOPE_PATH = "labels.circular.scope"
 PLACEMENT_PATH = "labels.circular.placement"
-# The switch rows' values: every label outside (``--labels out``), radial labels.
+SEPARATE_FEATURES_PATH = "canvas.resolve_overlaps"
+# The switch rows' values: every label outside (``--labels out``), radial
+# labels, and overlapping features on separate tracks (``--resolve_overlaps``).
 ALL_OUTSIDE_SCOPE = "outer"
 RADIAL_PLACEMENT = "radial"
+SEPARATE_FEATURES_VALUES: Mapping[str, LabelFitValue] = {SEPARATE_FEATURES_PATH: True}
 
 # How long the rows are searched: a figure drawn anyway (LP-D48
-# SEARCH-BOUNDED-5S), and the inner font scan when nothing was drawn (SWITCHES-FIRST).
+# SEARCH-BOUNDED-5S), and, when nothing was drawn, the switches and the font
+# scan of inner and radial labels together (SWITCHES-FIRST, OD-F15).
 WARN_SEARCH_SECONDS = 5.0
-FONT_SCAN_SECONDS = 30.0
+SWITCH_SEARCH_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -304,6 +310,36 @@ class LabelFitRow:
 
 
 @dataclass(frozen=True)
+class LabelFitVerification:
+    """The full assembly with a row's settings.
+
+    ``fits`` when every record fits (no overlaps, crossings or covered
+    definition text); ``canvas_size`` is the figure's size, ``fit`` its
+    labels' fit over every record, and ``reason`` why the assembly failed
+    when it raised.
+    """
+
+    fits: bool
+    canvas_size: tuple[float, float] | None
+    fit: LabelFit | None = None
+    reason: str | None = None
+
+
+def switch_row(kind: LabelFitRowKind, values: Mapping[str, LabelFitValue], verification: LabelFitVerification) -> LabelFitRow:
+    """A row with one setting to turn on, from its full assembly."""
+
+    if verification.fits:
+        return LabelFitRow(kind, "found", values, verification.canvas_size)
+    if verification.reason is not None:
+        reason = verification.reason
+    elif verification.fit is not None and not verification.fit.fits:
+        reason = f"Labels still do not fit ({fit_counts(verification.fit)})"
+    else:
+        reason = "Labels still do not fit"
+    return LabelFitRow(kind, "not_found", reason=reason)
+
+
+@dataclass(frozen=True)
 class LabelFitReport:
     """Failing records and the rows that apply to them, in the dialog order.
 
@@ -343,6 +379,7 @@ _CLI_OPTIONS: Mapping[str, str] = {
     SPACING_PATH: "--circular_label_spacing",
     SCOPE_PATH: "--labels",
     PLACEMENT_PATH: "--label_placement",
+    SEPARATE_FEATURES_PATH: "--resolve_overlaps",
 }
 # The CLI spells the all-outside scope ``out``.
 _CLI_WORDS: Mapping[str, str] = {ALL_OUTSIDE_SCOPE: "out"}
@@ -355,6 +392,7 @@ ROW_TITLES: Mapping[LabelFitRowKind, str] = {
     "combination": "combination",
     "labels_out": "all labels outside",
     "radial": "radial labels",
+    "separate_features": "separate overlapping features",
 }
 _ROW_NAMES: Mapping[LabelFitRowKind, str] = {
     "outward_both": "outward in both directions",
@@ -365,6 +403,7 @@ _ROW_NAMES: Mapping[LabelFitRowKind, str] = {
     "combination": "the combination",
     "labels_out": "all labels outside",
     "radial": "radial labels",
+    "separate_features": "separating overlapping features",
 }
 _KIND_WORDS: Mapping[LabelKind, str] = {
     "circular_outer": "outer",
@@ -405,9 +444,14 @@ def _cli_value(value: LabelFitValue) -> str:
     return _CLI_WORDS.get(value, value) if isinstance(value, str) else f"{value:g}"
 
 
+def _cli_argument(option: str, value: LabelFitValue) -> str:
+    # A switch is a flag (``--resolve_overlaps``); rows only turn switches on.
+    return option if isinstance(value, bool) else f"{option} {_cli_value(value)}"
+
+
 def _cli_arguments(values: Mapping[str, LabelFitValue]) -> str:
     return " ".join(
-        f"{option} {_cli_value(values[path])}"
+        _cli_argument(option, values[path])
         for path, option in _CLI_OPTIONS.items()
         if path in values
     )
@@ -467,7 +511,7 @@ def format_label_fit_report(report: LabelFitReport) -> str:
     elif missing:
         lines.append("No single change of the label settings fits this map.")
     if skipped:
-        seconds = WARN_SEARCH_SECONDS if report.drawn else FONT_SCAN_SECONDS
+        seconds = WARN_SEARCH_SECONDS if report.drawn else SWITCH_SEARCH_SECONDS
         lines.append(
             f"Not searched within {seconds:g} s: {_joined([_ROW_NAMES[kind] for kind in skipped])}."
         )
@@ -487,12 +531,14 @@ __all__ = [
     "ALL_OUTSIDE_SCOPE",
     "DEFINITION_TEXT_MIN_OVERLAP_PX",
     "FITS",
-    "FONT_SCAN_SECONDS",
     "FONT_SIZE_PATHS",
     "PLACEMENT_PATH",
     "RADIAL_PLACEMENT",
     "ROW_TITLES",
     "SCOPE_PATH",
+    "SEPARATE_FEATURES_PATH",
+    "SEPARATE_FEATURES_VALUES",
+    "SWITCH_SEARCH_SECONDS",
     "SPACING_PATH",
     "WARN_SEARCH_SECONDS",
     "X_OFFSET_PATH",
@@ -504,6 +550,7 @@ __all__ = [
     "LabelFitRow",
     "LabelFitRowKind",
     "LabelFitRowStatus",
+    "LabelFitVerification",
     "LabelFitRows",
     "LabelFitValue",
     "LabelKind",
@@ -518,4 +565,5 @@ __all__ = [
     "overlapping_pairs",
     "polyline_crossing_count",
     "raise_or_warn",
+    "switch_row",
 ]
