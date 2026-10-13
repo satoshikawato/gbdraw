@@ -220,9 +220,6 @@ _REFERENCE = (
     "refused", "the plan's reference must equal the anchor of its reference record",
     ("linear:layout.similarityAlignment.reference",),
 )
-_CIRCULAR_PLACEMENT = "circular:diagramOptions.featurePlacements.[].placement"
-_LINEAR_PLACEMENT = "linear:diagramOptions.featurePlacements.[].placement"
-_LANE_SIDE = "a lane side belongs to one mode (FeaturePlacementOverride.from_mapping); the row is one typedef"
 _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]] = {
     "CanonicalAnnotationSet.id = null": _COERCED,
     "CanonicalRegionAnnotation.id = null": _COERCED,
@@ -249,10 +246,6 @@ _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]
     "CanonicalAlignmentAnchorIdentity.sourceFeatureIndex = null": _REFERENCE,
     "CanonicalAlignmentAnchorIdentity.stableFeatureSvgId = another string": _REFERENCE,
     "CanonicalAlignmentAnchorIdentity.stableFeatureSvgId = null": _REFERENCE,
-    "CanonicalFeaturePlacement.placement[lane].side = 'above'": ("refused", _LANE_SIDE, (_CIRCULAR_PLACEMENT,)),
-    "CanonicalFeaturePlacement.placement[lane].side = 'below'": ("refused", _LANE_SIDE, (_CIRCULAR_PLACEMENT,)),
-    "CanonicalFeaturePlacement.placement[lane].side = 'inward'": ("refused", _LANE_SIDE, (_LINEAR_PLACEMENT,)),
-    "CanonicalFeaturePlacement.placement[lane].side = 'outward'": ("refused", _LANE_SIDE, (_LINEAR_PLACEMENT,)),
     "CanonicalRecord.cardinality = 'all'": (
         "refused", "a Circular record of every cardinality needs a grouping, a selector and a region that agree",
         ("circular:records.[]",),
@@ -260,12 +253,6 @@ _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]
     "CanonicalRequestOutput.interactiveMetadataPolicy = 'required'": (
         "refused", "requires interactive_svg among the formats; no request encoded there has it",
         ("circular:output.[]", "linear:output"),
-    ),
-    "CanonicalDepthTrack.height = a fraction": (
-        "refused", "a depth track has a height only in a Linear diagram", ("circular:diagramOptions.depthTracks.[]",)
-    ),
-    "CanonicalDepthTrack.height = another integer": (
-        "refused", "a depth track has a height only in a Linear diagram", ("circular:diagramOptions.depthTracks.[]",)
     ),
     "CanonicalRecordPresentation.gridColumn = another integer": (
         "refused", "grid_column requires grid_row; no Linear request encoded has a grid row",
@@ -296,22 +283,24 @@ _NAMES_TYPED_STRING: tuple[str, ...] = (
 _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalAlignmentAnchorIdentity.recordKey": ("another string",),
     "CanonicalAlignmentRecordDecision.recordKey": ("another string",),
+    "CanonicalCircularDepthTrack.source": ("an array",),
     "CanonicalCircularDiagramOptions.depthTracks": ("an array",),
     "CanonicalCircularDiagramOptions.dinucleotide": ("another string",),
+    "CanonicalCircularFeaturePlacement.placement[lane].level": ("another integer",),
     "CanonicalCircularLayout.multiRecordMinRadiusRatio": ("another integer",),
     "CanonicalCircularRenderRequest.output": ("an array",),
     "CanonicalCircularRenderRequest.records": ("an array",),
     "CanonicalCollinearityResultComparison.resourceId": ("another string",),
-    "CanonicalDepthTrack.source": ("an array",),
-    "CanonicalFeaturePlacement.placement[lane].level": ("another integer",),
     "CanonicalFeatureSpan.selectors": ("an array",),
     "CanonicalFileRef.resourceId": ("another string",),
     "CanonicalGenbankRecordSource.resourceId": ("another string",),
     "CanonicalGffFastaRecordSource.fastaResourceId": ("another string",),
     "CanonicalGffFastaRecordSource.gffResourceId": ("another string",),
     "CanonicalHatchStyle.color": ("another string",),
+    "CanonicalLinearDepthTrack.source": ("an array",),
     "CanonicalLinearDiagramOptions.depthTracks": ("an array",),
     "CanonicalLinearDiagramOptions.dinucleotide": ("another string",),
+    "CanonicalLinearFeaturePlacement.placement[lane].level": ("another integer",),
     "CanonicalLinearRecordTranslation.recordKey": ("another string",),
     "CanonicalLinearRenderRequest.records": ("an array",),
     "CanonicalLinearTrackOptions.linearTrackAxisIndex": ("another integer",),

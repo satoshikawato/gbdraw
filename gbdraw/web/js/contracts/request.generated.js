@@ -203,16 +203,6 @@
  * @property {CanonicalFileRef | null} tableFile
  */
 /**
- * @typedef {object} CanonicalDepthTrack
- * @property {CanonicalFileRef | CanonicalTableRef | (CanonicalFileRef | CanonicalTableRef | null)[]} source
- * @property {string | null} label
- * @property {string | null} color
- * @property {number | null} height
- * @property {number | null} largeTickInterval
- * @property {number | null} smallTickInterval
- * @property {number | null} tickFontSize
- */
-/**
  * @typedef {object} CanonicalScalarSpec
  * @property {number} value
  * @property {'px' | 'factor'} unit
@@ -257,10 +247,20 @@
  * @property {string | null} labelText
  */
 /**
- * @typedef {object} CanonicalFeaturePlacement
+ * @typedef {object} CanonicalCircularDepthTrack
+ * @property {CanonicalFileRef | CanonicalTableRef | (CanonicalFileRef | CanonicalTableRef | null)[]} source
+ * @property {string | null} label
+ * @property {string | null} color
+ * @property {null} height
+ * @property {number | null} largeTickInterval
+ * @property {number | null} smallTickInterval
+ * @property {number | null} tickFontSize
+ */
+/**
+ * @typedef {object} CanonicalCircularFeaturePlacement
  * @property {string} recordKey
  * @property {string} biologicalFeatureId
- * @property {{ kind: 'main' } | { kind: 'lane', side: 'outward' | 'inward' | 'above' | 'below', level: number }} placement
+ * @property {{ kind: 'main' } | { kind: 'lane', side: 'outward' | 'inward', level: number }} placement
  */
 /**
  * @typedef {object} CanonicalCircularTrackOptions
@@ -277,7 +277,7 @@
  */
 /**
  * @typedef {object} CanonicalCircularDiagramOptions
- * @property {CanonicalFeaturePlacement[]} featurePlacements
+ * @property {CanonicalCircularFeaturePlacement[]} featurePlacements
  * @property {CanonicalFeatureOverride[]} featureOverrides
  * @property {Record<string, unknown>} [config]
  * @property {Record<string, unknown> | null} [configOverrides]
@@ -298,7 +298,7 @@
  * @property {number | null} [step]
  * @property {number | null} [depthWindow]
  * @property {number | null} [depthStep]
- * @property {CanonicalDepthTrack[]} [depthTracks]
+ * @property {CanonicalCircularDepthTrack[]} [depthTracks]
  * @property {string | null} [plotTitle]
  * @property {number | null} [plotTitleFontSize]
  * @property {number | null} [evalue]
@@ -322,6 +322,22 @@
  * @property {'ribbon'} [pairwiseMatchStyle]
  */
 /**
+ * @typedef {object} CanonicalLinearDepthTrack
+ * @property {CanonicalFileRef | CanonicalTableRef | (CanonicalFileRef | CanonicalTableRef | null)[]} source
+ * @property {string | null} label
+ * @property {string | null} color
+ * @property {number | null} height
+ * @property {number | null} largeTickInterval
+ * @property {number | null} smallTickInterval
+ * @property {number | null} tickFontSize
+ */
+/**
+ * @typedef {object} CanonicalLinearFeaturePlacement
+ * @property {string} recordKey
+ * @property {string} biologicalFeatureId
+ * @property {{ kind: 'main' } | { kind: 'lane', side: 'above' | 'below', level: number }} placement
+ */
+/**
  * @typedef {object} CanonicalLinearTrackOptions
  * @property {null} circularTrackSlots
  * @property {null} circularTrackAxisIndex
@@ -336,7 +352,7 @@
  */
 /**
  * @typedef {object} CanonicalLinearDiagramOptions
- * @property {CanonicalFeaturePlacement[]} featurePlacements
+ * @property {CanonicalLinearFeaturePlacement[]} featurePlacements
  * @property {CanonicalFeatureOverride[]} featureOverrides
  * @property {Record<string, unknown>} [config]
  * @property {Record<string, unknown> | null} [configOverrides]
@@ -357,7 +373,7 @@
  * @property {number | null} [step]
  * @property {number | null} [depthWindow]
  * @property {number | null} [depthStep]
- * @property {CanonicalDepthTrack[]} [depthTracks]
+ * @property {CanonicalLinearDepthTrack[]} [depthTracks]
  * @property {string | null} [plotTitle]
  * @property {number | null} [plotTitleFontSize]
  * @property {number | null} [evalue]

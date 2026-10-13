@@ -57,7 +57,11 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
-from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
+from gbdraw.features.placement import (
+    _LANE_SIDES,
+    FeaturePlacementOverride,
+    FeaturePlacementTarget,
+)
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
@@ -4953,7 +4957,6 @@ def describe_canonical_request() -> dict[str, Any]:
     data(RegionAnnotation)
     data(AnnotationSet)
     data(AnnotationOptions, files=frozenset({"table_file"}))
-    data(DepthTrackInput, "DepthTrack", files=frozenset({"source"}))
     scalar = data(ScalarSpec)
     data(CircularTrackSlot, kind="circularTrackSlot")
     # A Linear slot's height and spacing are pixels (gbdraw.tracks.linear._validate_px_scalar).
@@ -4962,15 +4965,8 @@ def describe_canonical_request() -> dict[str, Any]:
     )))
     data(LinearTrackSlot, kind="linearTrackSlot", replace={"height": pixels, "spacing": pixels})
     data(FeatureOverride)  # FeatureOverride.to_mapping
-    # FeaturePlacementOverride.from_mapping: a lane has a side and a level, main neither.
     target_hints = _class_type_hints(FeaturePlacementTarget)
-    lane = {name: non_null(of(target_hints[name])) for name in ("side", "level")}
     placement_hints = _class_type_hints(FeaturePlacementOverride)
-    wire[FeaturePlacementOverride] = named("FeaturePlacement", obj({
-        "recordKey": of(placement_hints["record_key"]),
-        "biologicalFeatureId": of(placement_hints["biological_feature_id"]),
-        "placement": union(obj({"kind": literal("main")}), obj({"kind": literal("lane"), **lane})),
-    }))
     modes: dict[Literal["circular", "linear"], tuple[type, type, type]] = {
         "circular": (CircularDiagramOptions, CircularRequestTrackOptions, CircularOutputOptions),
         "linear": (LinearDiagramOptions, LinearRequestTrackOptions, LinearOutputOptions),
@@ -5002,6 +4998,23 @@ def describe_canonical_request() -> dict[str, Any]:
     diagram_options: dict[str, Shape] = {}
     for mode, (options_class, track_class, output_class) in modes.items():
         title = mode.capitalize()
+        # A depth track has a height only in a Linear diagram
+        # (CircularDiagramOptions.__post_init__).
+        data(
+            DepthTrackInput, f"{title}DepthTrack", files=frozenset({"source"}),
+            replace={"height": NULL} if mode == "circular" else None,
+        )
+        # FeaturePlacementOverride.from_mapping: a lane has a level and a side
+        # of its mode (FeaturePlacementTarget.validate_mode), main neither.
+        wire[FeaturePlacementOverride] = named(f"{title}FeaturePlacement", obj({
+            "recordKey": of(placement_hints["record_key"]),
+            "biologicalFeatureId": of(placement_hints["biological_feature_id"]),
+            "placement": union(obj({"kind": literal("main")}), obj({
+                "kind": literal("lane"),
+                "side": literal(*_LANE_SIDES[mode]),
+                "level": non_null(of(target_hints["level"])),
+            })),
+        }))
         # _encode_tracks writes the track fields of both modes, the other mode's as null.
         track_hints = _class_type_hints(track_class)
         wire[track_class] = named(f"{title}TrackOptions", obj({
