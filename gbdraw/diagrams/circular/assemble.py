@@ -25,7 +25,9 @@ from svgwrite.container import Group
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...analysis.conservation import (
+    ConservationLegendSource,
     ConservationTrack,
+    conservation_legend_sources,
     conservation_track_gradient_colors,
 )
 from ...analysis.depth_tracks import (
@@ -1417,7 +1419,7 @@ def _sync_legend_table_for_circular_slots(
     depth_df: DataFrame | None,
     depth_tracks: Sequence[DepthTrackData] | None = None,
     cfg: GbdrawConfig,
-    conservation_tracks: Sequence[ConservationTrack] | None = None,
+    conservation_legend: Sequence[ConservationLegendSource] = (),
     conservation_min_identity: float | None = None,
 ) -> LegendTable:
     """Replace singleton numeric legend entries with slot-aware entries."""
@@ -1515,9 +1517,9 @@ def _sync_legend_table_for_circular_slots(
                     "stroke": slot_skew_config.stroke_color,
                     "width": slot_skew_config.stroke_width,
                 })
-    if conservation_tracks:
-        if any(track.track_color for track in conservation_tracks):
-            for conservation_track in conservation_tracks:
+    if conservation_legend:
+        if any(track.track_color for track in conservation_legend):
+            for conservation_track in conservation_legend:
                 min_color, max_color = conservation_track_gradient_colors(
                     conservation_track.track_color,
                     default_min_color=cfg.objects.conservation.min_color,
@@ -2840,7 +2842,7 @@ def build_circular_legend_table(
     depth_track_count_value: int = 0,
     circular_track_slots: list[CircularTrackSlot] | None = None,
     annotations: ResolvedAnnotationBundle | None = None,
-    conservation_tracks: Sequence[ConservationTrack] | None = None,
+    conservation_legend: Sequence[ConservationLegendSource] = (),
     conservation_min_identity: float = 0.0,
 ) -> LegendTable:
     """Build the one Circular legend table for the records drawn on a canvas.
@@ -2898,7 +2900,7 @@ def build_circular_legend_table(
         depth_df=depth_df,
         depth_tracks=depth_tracks,
         cfg=cfg,
-        conservation_tracks=conservation_tracks,
+        conservation_legend=conservation_legend,
         conservation_min_identity=conservation_min_identity,
     )
     if annotations is not None:
@@ -3009,7 +3011,7 @@ def _assemble_circular_diagram_result(
             depth_track_count_value=resolved_depth_track_count,
             circular_track_slots=effective_circular_track_slots,
             annotations=resolved_annotations,
-            conservation_tracks=conservation_tracks,
+            conservation_legend=conservation_legend_sources(conservation_tracks),
             conservation_min_identity=conservation_min_identity,
         )
     canvas: Drawing = canvas_config.create_svg_canvas()

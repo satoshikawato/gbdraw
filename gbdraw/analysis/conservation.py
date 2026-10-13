@@ -109,6 +109,20 @@ class ConservationTrack:
 
 
 @dataclass(frozen=True)
+class ConservationLegendSource:
+    """What a legend reads from one conservation track: its label and color."""
+
+    track_label: str
+    track_color: str | None
+
+
+def conservation_legend_sources(
+    tracks: Sequence[ConservationTrack] | None,
+) -> tuple[ConservationLegendSource, ...]:
+    return tuple(ConservationLegendSource(track.track_label, track.track_color) for track in tracks or ())
+
+
+@dataclass(frozen=True)
 class ConservationLoadResult:
     sources: tuple[ConservationSource, ...]
     skipped_sources: tuple[ConservationSource, ...]
@@ -517,6 +531,7 @@ def normalize_conservation_tracks_for_record(
 
 
 __all__ = [
+    "ConservationLegendSource",
     "ConservationLoadResult",
     "ConservationSearchResult",
     "ConservationReferenceMode",
@@ -524,6 +539,7 @@ __all__ = [
     "ConservationSource",
     "ConservationTrack",
     "NORMALIZED_CONSERVATION_COLUMNS",
+    "conservation_legend_sources",
     "conservation_track_gradient_colors",
     "empty_normalized_conservation_hits",
     "load_conservation_sources",

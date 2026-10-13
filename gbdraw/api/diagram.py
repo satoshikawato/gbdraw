@@ -39,6 +39,7 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.analysis.collinearity_units import CollinearityUnitMode
 from gbdraw.analysis.conservation import (
+    conservation_legend_sources,
     ConservationLoadResult,
     ConservationTrack,
     load_conservation_sources,
@@ -3156,7 +3157,7 @@ def assemble_circular_diagram_from_records(
             depth_track_count_value=depth_track_data_count(record_depth_track_data),
             circular_track_slots=legend_slots,
             annotations=legend_annotations,
-            conservation_tracks=first_record_conservation_tracks,
+            conservation_legend=conservation_legend_sources(first_record_conservation_tracks),
             conservation_min_identity=float(identity),
         )
         if legend_table:

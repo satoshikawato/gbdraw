@@ -77,7 +77,7 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "gc_skew_data": frozenset(),
     "depth_frame": frozenset(),
     "depth_track_data": frozenset(),
-    "legend_table": frozenset(),
+    "legend_table": frozenset({"objects.conservation"}),
     "legend_measurement": frozenset(),
     "interactive_context": frozenset(),
     "catalog_normalization": frozenset(),
