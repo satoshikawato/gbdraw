@@ -11,6 +11,7 @@ import test from 'node:test';
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
 const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
 const logo = readFileSync(join(webRoot, 'assets', 'gbdraw-logo.svg'), 'utf8');
+const outlinedTitle = readFileSync(join(webRoot, 'assets', 'gbdraw-logo-title-outlined.svg'), 'utf8');
 
 const svgAt = (source, label) => {
   const start = source.indexOf('<svg class="gbdraw-loader"');
@@ -45,6 +46,18 @@ test('the loader reveals the logo asset paths under the logo transform', () => {
   assert.deepEqual(revealed.map((match) => match[1]), [transform, transform]);
   assert.deepEqual(revealed.map((match) => match[2]).sort(), logoPaths);
   assert.match(svg, /aria-hidden="true"/);
+});
+
+// The boot splash shows the outlined title logo's word beside the loader, so its frame
+// starts with the loader's viewBox, and its mark is the logo asset's paths.
+test('the outlined title logo starts with the loader frame and draws the logo asset paths', () => {
+  const loaderViewBox = svgAt(templateMatch[1], 'the template').match(/viewBox="([^"]+)"/)[1].split(' ').map(Number);
+  const titleViewBox = outlinedTitle.match(/viewBox="([^"]+)"/)[1].split(' ').map(Number);
+  assert.deepEqual([titleViewBox[0], titleViewBox[1], titleViewBox[3]], [loaderViewBox[0], loaderViewBox[1], loaderViewBox[3]]);
+  const [, transform, d] = outlinedTitle.match(/<path transform="([^"]+)" d="([^"]+)"\/>/);
+  assert.equal(transform, logo.match(/id="g1"\s+transform="([^"]+)"/)[1]);
+  const logoPaths = [...logo.matchAll(/\sd="m (67\.732299[^"]+)"/g)].map((match) => `M ${match[1]}`);
+  assert.equal(d, logoPaths.join(' '));
 });
 
 test('every loading place renders the loader', () => {

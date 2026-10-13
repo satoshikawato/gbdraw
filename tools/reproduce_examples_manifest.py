@@ -31,7 +31,8 @@ MANUALLY_MANAGED_FIGURES: dict[str, str] = {
         "Lambda session and its declarative No comparison capture contract."
     ),
     "gbdraw/web/assets/gbdraw-logo-title.png": (
-        "Brand asset derived from the adjacent SVG; update and verify both logo files together."
+        "Brand asset derived from the adjacent SVG; update and verify it together with "
+        "gbdraw-logo-title.svg and gbdraw-logo-title-outlined.svg."
     ),
 }
 

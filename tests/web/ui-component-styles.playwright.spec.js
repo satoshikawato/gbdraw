@@ -477,6 +477,37 @@ const openBootSplash = async (page) => {
   return page.locator('#app-boot-splash .gbdraw-loader');
 };
 
+// Compares the dark pixels of two element screenshots over their common size. The loader
+// outlines each part with a 0.175-unit hairline (under 0.2 px at these sizes), and a
+// reference may sit a subpixel off, so a dark pixel counts as matching when the other
+// image is dark within 1 px. `inked` counts the reference's (the second's) dark pixels.
+const compareInk = async (context, screenshots) => {
+  const scratch = await context.newPage();
+  const result = await scratch.evaluate(async (sources) => {
+    const images = await Promise.all(sources.map(async (source) => {
+      const image = new Image();
+      image.src = source;
+      await image.decode();
+      return image;
+    }));
+    const width = Math.min(...images.map((image) => image.width));
+    const height = Math.min(...images.map((image) => image.height));
+    const dark = images.map((image) => {
+      const canvas = Object.assign(document.createElement('canvas'), { width, height });
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      const { data } = context.getImageData(0, 0, width, height);
+      return Array.from({ length: width * height }, (_, index) => data[index * 4] < 128);
+    });
+    const nearDark = (pixels, index) => [-width - 1, -width, -width + 1, -1, 0, 1, width - 1, width, width + 1]
+      .some((offset) => pixels[index + offset]);
+    const unmatched = (from, to) => from.filter((value, index) => value && !nearDark(to, index)).length;
+    return { inked: dark[1].filter(Boolean).length, differing: unmatched(dark[0], dark[1]) + unmatched(dark[1], dark[0]) };
+  }, screenshots.map((png) => `data:image/png;base64,${png.toString('base64')}`));
+  await scratch.close();
+  return result;
+};
+
 test('the loader\'s finished frame is the logo asset (reduced motion)', async ({ browser }) => {
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   const page = await context.newPage();
@@ -496,31 +527,53 @@ test('the loader\'s finished frame is the logo asset (reduced motion)', async ({
     loader.after(logo);
   });
   await expect.poll(() => page.evaluate(() => document.getElementById('reference-logo').complete)).toBe(true);
-  const shots = [await loader.screenshot(), await page.locator('#reference-logo').screenshot()]
-    .map((png) => `data:image/png;base64,${png.toString('base64')}`);
-  const scratch = await context.newPage();
-  const { inked, differing } = await scratch.evaluate(async (sources) => {
-    let width = 0;
-    const dark = await Promise.all(sources.map(async (source) => {
-      const image = new Image();
-      image.src = source;
-      await image.decode();
-      const canvas = Object.assign(document.createElement('canvas'), { width: image.width, height: image.height });
-      const context = canvas.getContext('2d');
-      context.drawImage(image, 0, 0);
-      const { data } = context.getImageData(0, 0, image.width, image.height);
-      width = image.width;
-      return Array.from({ length: data.length / 4 }, (_, index) => data[index * 4] < 128);
-    }));
-    // The loader outlines each part with a 0.175-unit hairline (under 0.2 px here), so
-    // a dark pixel counts as matching when the other image is dark within 1 px.
-    const nearDark = (pixels, index) => [-width - 1, -width, -width + 1, -1, 0, 1, width - 1, width, width + 1]
-      .some((offset) => pixels[index + offset]);
-    const unmatched = (from, to) => from.filter((value, index) => value && !nearDark(to, index)).length;
-    return { inked: dark[1].filter(Boolean).length, differing: unmatched(dark[0], dark[1]) + unmatched(dark[1], dark[0]) };
-  }, shots);
+  const { inked, differing } = await compareInk(context,
+    [await loader.screenshot(), await page.locator('#reference-logo').screenshot()]);
   expect(inked).toBeGreaterThan(1000);
   expect(differing / inked).toBeLessThan(0.01);
+  await context.close();
+});
+
+test('the outlined title logo and the boot splash with the loader as its mark match the title artwork (reduced motion)', async ({ browser }) => {
+  // Tall enough for three logos at 3 px per unit and the splash text.
+  const context = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1400, height: 1300 } });
+  const page = await context.newPage();
+  const loader = await openBootSplash(page);
+  await expect(loader).toBeVisible();
+  // One logo: the image beside the loader shows the word only.
+  await expect(page.locator('#app-boot-splash img')).toHaveAttribute('src', './assets/gbdraw-logo-title-outlined.svg');
+  // The header and the Gallery show the whole outlined title logo, whose frame is the splash's
+  // logo row. The reference is the title logo artwork: gbdraw-logo-title.png is its drawing at
+  // 300 dpi, cropped to the ink, which starts at the mark's top left (13.106, 13.501); the
+  // frame starts at (12.7, 13.1). All are drawn at 3 px per unit.
+  await page.evaluate(async () => {
+    const unit = 3;
+    const loader = document.querySelector('#app-boot-splash .gbdraw-loader');
+    const brand = loader.parentElement;
+    // Zoom keeps the splash's own CSS sizes and crop.
+    brand.style.zoom = String(109.2 * unit / loader.getBoundingClientRect().height);
+    await brand.querySelector('img').decode();
+    const outlined = Object.assign(document.createElement('img'), { src: './assets/gbdraw-logo-title-outlined.svg', id: 'outlined-logo' });
+    outlined.style.height = `${109.2 * unit}px`;
+    await outlined.decode();
+    const { width, height } = brand.getBoundingClientRect();
+    const frame = Object.assign(document.createElement('div'), { id: 'reference-logo' });
+    Object.assign(frame.style, { position: 'relative', overflow: 'hidden', width: `${width}px`, height: `${height}px` });
+    const title = Object.assign(document.createElement('img'), { src: './assets/gbdraw-logo-title.png' });
+    await title.decode();
+    Object.assign(title.style, {
+      position: 'absolute', maxWidth: 'none', left: `${(13.106 - 12.7) * unit}px`, top: `${(13.501 - 13.1) * unit}px`,
+      width: `${title.naturalWidth / (300 / 25.4) * unit}px`
+    });
+    frame.append(title);
+    brand.after(outlined, frame);
+  });
+  const reference = await page.locator('#reference-logo').screenshot();
+  for (const subject of ['#app-boot-splash .boot-brand', '#outlined-logo']) {
+    const { inked, differing } = await compareInk(context, [await page.locator(subject).screenshot(), reference]);
+    expect(inked, subject).toBeGreaterThan(50000);
+    expect(differing / inked, subject).toBeLessThan(0.01);
+  }
   await context.close();
 });
 
