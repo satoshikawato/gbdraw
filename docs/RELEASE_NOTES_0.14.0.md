@@ -322,10 +322,10 @@ from the command line, Python, and a Session; the web app draws and saves it
 but cannot edit it yet. See
 [Region annotations](./CLI_Reference.md#region-annotations).
 
-Small overlaps, crossing leader lines, and labels over the definition text of
-horizontal Circular outer labels, up to 100 per record, are now repaired by
-moving the labels involved slightly; a record is changed only when the repair
-clears all of them.
+Small label defects of horizontal Circular labels, up to 100 per record, are
+now repaired by moving outer and inner labels slightly: overlapping labels,
+crossing leader lines, and inner labels over the definition text in the centre.
+A record is changed only when the repair clears all of them.
 Labels that would still overlap are no longer drawn: Circular outer, inner, and
 embedded labels in either placement, and Linear labels. The command line exits
 with an error and Python raises `LabelsDoNotFitError`; the message lists

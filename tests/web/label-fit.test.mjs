@@ -207,7 +207,7 @@ test('rows Generate did not search are computed one after another when the dialo
   assert.equal(dialog.labelFitDialog.selectedKind, 'outward_vertical');
 });
 
-test('closing the dialog stops the rows still to compute', async () => {
+test('closing the dialog starts no further row; the row already asked for still runs to its end', async () => {
   const asked = [];
   let release;
   const computeRow = (token, kind) => {

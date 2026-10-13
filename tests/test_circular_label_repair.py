@@ -194,8 +194,10 @@ def test_no_move_of_any_kind_passes_a_neighbour() -> None:
     assert kinds >= {"elbow", "ring", "away", "arc"}
 
 
-def test_a_repair_that_cannot_clear_every_defect_keeps_the_layout(monkeypatch: pytest.MonkeyPatch) -> None:
-    """All or nothing: out of budget, the labels come back untouched (byte for byte in the drawing)."""
+def test_a_repair_that_cannot_clear_every_defect_returns_none_and_leaves_the_labels_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """All or nothing: out of budget, the repair returns None and the caller's labels are unchanged."""
 
     labels, total_length, definition = _fixture("o_n4_default")
     before = copy.deepcopy(labels)
