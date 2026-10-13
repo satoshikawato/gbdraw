@@ -279,12 +279,28 @@ export const LEGACY_LAYOUT_PREFERENCE_FIELDS = Object.freeze([
  */
 const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+// The legacy legend fields and the mode whose positions each one holds; `legend`
+// holds the restored mode's.
+/** @type {Readonly<Record<string, string | null>>} */
+const LEGACY_LEGEND_FIELD_MODES = Object.freeze({
+  legend: null,
+  circularLegendPosition: 'circular',
+  circularSingleRecordLegendPosition: 'circular',
+  circularMultiRecordLegendPosition: 'circular',
+  linearLegendPosition: 'linear'
+});
+
 // Partial objects remain authoritative for session compatibility; normalization
-// supplies the current defaults for omitted branches.
-/** @param {Record<string, unknown> | null | undefined} ui */
-const hasStoredLayoutPreferences = (ui) => (
+// supplies the current defaults for omitted branches. A legend field outside
+// its mode's positions is not a stored layout (OV-652).
+/** @param {Record<string, unknown> | null | undefined} ui @param {string} mode */
+const hasStoredLayoutPreferences = (ui, mode) => (
   isRecord(ui?.layoutPreferences) ||
-  LEGACY_LAYOUT_PREFERENCE_FIELDS.some((field) => storedText(ui?.[field]))
+  LEGACY_LAYOUT_PREFERENCE_FIELDS.some((field) => (
+    Object.hasOwn(LEGACY_LEGEND_FIELD_MODES, field)
+      ? legendPositionOfMode(ui?.[field], LEGACY_LEGEND_FIELD_MODES[field] ?? mode) !== null
+      : storedText(ui?.[field])
+  ))
 );
 
 /**
@@ -299,7 +315,7 @@ const hasStoredLayoutPreferences = (ui) => (
  * @returns {LayoutPreferences}
  */
 export const restoredLayoutPreferences = (ui, { mode, multiRecord, projected = null, active }) => {
-  if (projected && !hasStoredLayoutPreferences(ui)) return normalizeLayoutPreferences(projected);
+  if (projected && !hasStoredLayoutPreferences(ui, mode)) return normalizeLayoutPreferences(projected);
   const fallback = projected ? resolveActiveLayoutPreference(projected, mode, multiRecord) : active;
   const migrationUi = (
     !isRecord(ui?.layoutPreferences) &&
