@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import base64
 import gzip
+import io
 import json
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 import tools.capture_gallery_tutorial_screenshots as capture_tool
 from tools.capture_gallery_tutorial_screenshots import (
@@ -514,6 +516,27 @@ def test_basic_gallery_capture_session_contains_the_named_record(
     assert expected["resource_marker"] in decoded
 
 
+def test_vnig_upload_capture_names_the_session_file_it_shows() -> None:
+    """The tool retakes the upload crop only from capture metadata (OV-628)."""
+
+    filename = "GCF_015097735.1_ASM1509773v1_genomic.gbff"
+    sample = load_ready_examples("Vnig_TUMSAT-TG-2018")[0]
+    operations = [
+        operation
+        for _, operation in iter_operation_contexts(sample, _load_tutorial(sample))
+        if operation.get("media", {}).get("src", "").endswith("/manual-02-01-gbff-upload.webp")
+    ]
+
+    assert len(operations) == 1
+    operation = operations[0]
+    assert operation.get("dataDependent") is True
+    capture = operation.get("capture", {})
+    assert capture.get("source") == "webapp"
+    assert capture.get("session") == sample["session"]
+    assert capture.get("assertAppState") == {"mode": "circular", "files.c_gb.name": filename}
+    assert capture.get("visibleText") == [filename]
+
+
 def test_ready_gallery_media_passes_capture_contract_validation() -> None:
     result = validate_tutorial_media(
         load_ready_examples(),
@@ -649,3 +672,34 @@ def test_replay_resets_then_performs_steps_through_the_named_one(
         {"type": "fill", "value": "one"},
         {"type": "generate"},
     ]
+
+
+def test_capture_lets_css_transitions_end_before_the_crop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A caret turns over 200 ms after its card opens; a crop taken sooner shows it mid-turn (OV-627)."""
+
+    events: list[str] = []
+
+    class FakePage:
+        def evaluate(self, script: str, *args: object) -> None:
+            events.append(script)
+
+        def screenshot(self, **kwargs: object) -> bytes:
+            events.append("screenshot")
+            buffer = io.BytesIO()
+            Image.new("RGB", (2, 2)).save(buffer, "PNG")
+            return buffer.getvalue()
+
+    monkeypatch.setattr(capture_tool, "prepare_capture_page", lambda *args: None)
+    monkeypatch.setattr(capture_tool, "output_path_for_operation", lambda operation: tmp_path / "crop.webp")
+    operation = {"capture": {"boundingBox": {"x": 0, "y": 0, "width": 2, "height": 2}}}
+
+    capture_tool.capture_operation(FakePage(), {}, operation, "http://127.0.0.1", 90)
+
+    waits = [
+        index
+        for index, script in enumerate(events)
+        if "CSSTransition" in script and ".finished" in script
+    ]
+    assert waits and waits[-1] < events.index("screenshot")

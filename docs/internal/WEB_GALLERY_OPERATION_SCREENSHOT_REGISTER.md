@@ -440,3 +440,21 @@ the same media in the rows of the earlier sections; those rows stay as history.
 | `majanivirus_orthogroup` | `manual-02-01-upload-row-label-context.webp` | Recapture; recipe changed | The capture finds the field by `[data-linear-record-names="record-1"]`; MjeNMV.gb File card with its Organism / strain value on the card; **Record options** closed | Recaptured, 1782x1002; compared by eye |
 | `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Keep | The clip is the card header and the uploader; the names area is outside it | Recaptured and reverted |
 | `BGC0000708-BGC0000713` | `manual-04-01-preview-defaults.webp`, `manual-10-04-preview-final.webp` | Keep | The replay with the names in the record fields draws the same previews (step 4 SVG byte-identical, step 10 within raster noise) | Recaptured as proof and reverted |
+
+## File card fold line and long upload names (Gallery revision 2026-10-13)
+
+Each Linear File card has a header line with a caret that folds the card, and
+the upload zone cuts a long file name at its end with an ellipsis. Two upload
+crops were held back from the first recapture of the File cards and are
+recorded here; the rows of the earlier sections for the same media stay as
+history.
+
+The capture tool now lets running CSS transitions end before it measures and
+takes a crop (`wait_for_css_transitions`). A caret turns over 200 ms after its
+card or section opens, and the Lambda upload crop, taken right after the tool
+opened the loaded Session's folded card, showed the caret mid-turn.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Recapture; recipe unchanged | Exact Lambda Session; open File 1 card from its header line, with the caret at rest, to the **GenBank / DDBJ File** uploader containing `NC_001416.gb` | Recaptured at DSF 3, 864x336 (was 930x324; the same two elements are 22 px narrower and 4 px taller in the current pane); compared side by side |
+| `Vnig_TUMSAT-TG-2018` | `manual-02-01-gbff-upload.webp` | Recapture; recipe added | Exact Vnig Session; `dataDependent`; clip from the **Input Genomes** card header to the **GenBank/DDBJ File** uploader; `assertAppState` and `visibleText` name `GCF_015097735.1_ASM1509773v1_genomic.gbff`; the zone shows the name cut at its end with an ellipsis. The rest of the card is outside the clip: the restored Session shows the record hints of the finished figure (Multi-Record Canvas on), not the state at the upload step | Recaptured at DSF 3, 942x483 (was a manual 656x542 crop); compared side by side |
