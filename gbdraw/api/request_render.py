@@ -1413,11 +1413,11 @@ def _normalize_request_records(
     # record. Collection regions, labels and subtitles apply by the place in
     # the whole collection, which every input shapes, so with collection
     # options a record has the whole key and its place.
+    # The source feature catalog of a record is resolved with it.
     default_collection = request.record_options == RecordCollectionOptions()
     for record, provenance in zip(collection.records, collection.provenance, strict=True):
         input_index = provenance.input_index
-        register_prepared_value_identity(
-            record,
+        record_identity = (
             (
                 "record-v1",
                 typed_source_specs[input_index][0],
@@ -1427,8 +1427,13 @@ def _normalize_request_records(
                 gff_type_key if isinstance(request.records[input_index].source, GffFastaInputSource) else None,
             )
             if default_collection
-            else ("record-v1", key, provenance.resolved_index),
+            else ("record-v1", key, provenance.resolved_index)
         )
+        register_prepared_value_identity(record, record_identity)
+        if provenance.source_feature_catalog:
+            register_prepared_value_identity(
+                provenance.source_feature_catalog, ("source-feature-catalog", record_identity)
+            )
     return collection
 
 
@@ -2260,7 +2265,9 @@ def _extract_linear_request_proteins(
         record_input.record_key or f"record-{index + 1}"
         for index, record_input in enumerate(request.records)
     )
-    extraction = extract_web_stable_cds_proteins(
+    extraction = render_stage(
+        "protein_extraction",
+        extract_web_stable_cds_proteins,
         records,
         record_instance_keys=record_instance_keys,
         record_source_ids=tuple(str(record.id) for record in records),
@@ -2605,12 +2612,17 @@ def _build_current_derived_entries(
         }
     from gbdraw.session_request_codec import encode_canonical_typed_resource
 
+    # The canonical bytes are the stage result, so no reader can change them.
     compact_resource = {}
     collinearity = metadata.collinearity_result if metadata is not None else request.options.collinearity_blocks
     if mode == "collinear" and isinstance(collinearity, CollinearityResult):
-        compact_resource["collinearityResult"] = json.loads(encode_canonical_typed_resource("result", collinearity))
+        compact_resource["collinearityResult"] = json.loads(
+            render_stage("derived_losat_entries", encode_canonical_typed_resource, "result", collinearity)
+        )
     elif orthogroups is not None:
-        compact_resource["orthogroupResult"] = json.loads(encode_canonical_typed_resource("orthogroupResult", orthogroups))
+        compact_resource["orthogroupResult"] = json.loads(
+            render_stage("derived_losat_entries", encode_canonical_typed_resource, "orthogroupResult", orthogroups)
+        )
     key = hashlib.sha256(
         json.dumps(
             identity,
