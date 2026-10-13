@@ -19,7 +19,18 @@ name the row shows (`caption`). Keep both in the Legend rename dialog keeps the
 typed name (PD-OI-061 scenario revision 5), so two rows can show one name; the
 shown name no longer identifies a row. A rename changes only the entry's
 `caption`; its edits stay under the key. Within one Legend list the entries are
-unique by row key, not by caption. No other field changed.
+unique by row key, not by caption.
+
+Session 47 also adds the diagram font of each mode slice,
+`modes.<mode>.config.adv.font_family` (the **Font** section, PD-OI-097): the
+CSS `font-family` list a drawing's text uses, `null` for the default
+(Liberation Sans). A Session stores only the name, never the font file
+(D-02). A Session older than 47 has no such field; when its draft holds the
+font as the preserved override `objects.text.font_family` (a Python API
+request that set it, saved again by the Web app), the Web Load moves that value into
+the field. `font-family-preserved.v44.gbdraw-session.json.gz` and
+`font-family-preserved.v46.gbdraw-session.json.gz` are the positive fixtures.
+No other field changed.
 
 The bytes of a Session 46 cannot be read as Session 47: after a rename of
 GC skew to `Z` and of GC content to `GC skew`, a color stored under `GC skew`
