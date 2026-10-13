@@ -393,11 +393,23 @@ BLAST outfmt 6 tables are read only by `read_comparison_table` in
 (`normalize_comparison_dataframe`). An unreadable row raises `ValidationError`
 and is never skipped. GenBank headers follow R4.
 
+Logic that Python and the Web each implement (a twin: a reader, migration,
+normalizer, layout, or constant with one copy on each side) has a row in
+`tools/twins.json`: its concern, both owners, the shared vector, the reason,
+and the condition that retires it. The registry only shrinks: a row leaves
+when one side is deleted, and adding a row is an authority-only change.
+Editing a row's owners, vector, reason, or retirement condition is not.
+
 Guards: `tests/test_comparison_tables.py` (`test_outfmt_table_columns_have_one_reader`
 scans the Python and Web JavaScript sources for a second mapping onto
-`COMPARISON_COLUMNS`, and the shared vectors run through every entry point) and
+`COMPARISON_COLUMNS`, and the shared vectors run through every entry point),
 `tests/web/genbank-header-reader-owner.test.mjs` (no Web module other than
-`services/genbank-header.js` matches a GenBank header keyword).
+`services/genbank-header.js` matches a GenBank header keyword), and
+`tests/web/twin-registry.test.mjs` (the detector `twin.unregistered.v1` in
+`tools/web-twin-detectors.mjs` finds a JavaScript test and a Python test that
+read the same vector file, and a watch-list function name defined both in
+`gbdraw/` Python and in `js/services/`; each such twin has a row, and every
+row's owners and vector exist).
 
 ### R10: A watcher does not repair state
 
@@ -642,7 +654,9 @@ authority-only change. A new module is checked from its first commit.
   `CANONICAL_REQUEST_SCHEMA`, and `FEATURE_CATALOG_SCHEMA`), to the modules
   `js/contracts/*.generated.js`. `js/contracts/` holds only the modules that
   tool writes. They are never edited by hand, and no other module declares a
-  typedef or a constant that one of them declares. The feature catalog's
+  typedef or a constant that one of them declares. A hand-written Web copy of
+  a Python constant that the tool does not write yet is a `constant:` row of
+  `tools/twins.json` (R9) until the tool writes it. The feature catalog's
   typedef is in its writer, `services/feature-catalog.js`.
 - A reader of an unvalidated document takes `unknown`, or the generated input
   type whose values are `unknown` (`SessionInput`, and `SessionEnvelope` once
