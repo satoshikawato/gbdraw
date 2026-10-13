@@ -100,7 +100,7 @@ _SWITCH_VALUES: Mapping[LabelFitRowKind, Mapping[str, LabelFitValue]] = {
     "radial": {PLACEMENT_PATH: RADIAL_PLACEMENT},
     "separate_features": SEPARATE_FEATURES_VALUES,
 }
-_OUTER_LEVER_REASON = "Does not move inner or radial labels"
+_OUTER_LEVER_REASON = "Does not move inner, embedded, or radial labels"
 
 CircularLabelPlacement: TypeAlias = Literal["horizontal", "radial"]
 CircularLabelFitProbe: TypeAlias = Callable[[Mapping[str, LabelFitValue]], LabelFit]

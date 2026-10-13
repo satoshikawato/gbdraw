@@ -393,7 +393,8 @@ def test_outer_levers_do_not_move_inner_labels() -> None:
     rows = {row.kind: row for row in raised.value.report.rows}
     assert list(rows) == [kind for kind in circular_fit_module.ROW_KINDS if kind != "separate_features"]
     assert rows["labels_out"].status == "found"
-    assert rows["outward_vertical"].reason == "Does not move inner or radial labels"
+    # The outer levers do not move embedded labels either (OV-725).
+    assert rows["outward_vertical"].reason == "Does not move inner, embedded, or radial labels"
     assert "--labels out   (all labels outside)" in str(raised.value)
 
 

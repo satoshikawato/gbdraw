@@ -174,8 +174,9 @@ const DEFINITIONS = Object.freeze({
   ANNOTATION_TARGET: ['The region annotation target is invalid.', ['edit-annotation', 'retry']],
   TRACK_INVALID: ['The track settings are invalid.', ['edit-track', 'retry']],
   TRACK_LAYOUT: ['A circular track does not fit.', ['edit-track', 'retry']],
-  // Circular outer labels overlap or their leaders cross; nothing new was drawn (LP-D43).
-  LABEL_LAYOUT: ['Circular outer labels do not fit.', ['edit-input', 'retry'], 'Move the outer labels outward, use a smaller label font, or reduce the label spacing.'],
+  // Labels of any kind overlap, or radial labels lack room; nothing new was drawn (LP-D43,
+  // SCOPE-ALL-LABELS). Generate opens the fixes Python found.
+  LABEL_LAYOUT: ['Labels do not fit.', ['edit-input', 'retry'], 'Generate again to choose a fix, or change the label settings.'],
   FEATURE_PLACEMENT: ['A Feature placement uses a lane that the current feature track does not have.', ['edit-track', 'retry']],
   FEATURE_IDENTITY: ['A feature edit does not identify a record of the current inputs. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   // The same request fails the same way until the setting or the mode changes.

@@ -293,7 +293,7 @@ drawing the whole figure again. The rows depend on which labels do not fit:
 
 Each row gives the mildest value that fits, or says that none fits within its
 limit. With several records, one value must fit every record. The outer-label
-rows do not move inner or radial labels. For inner, embedded, or radial
+rows do not move inner, embedded, or radial labels. For inner, embedded, or radial
 labels, the switches are tried first; the smaller font is then the first
 font size, going down from the current one, at which the whole figure fits, so
 a smaller size than the one offered may not fit.
