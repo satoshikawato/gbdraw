@@ -12,7 +12,7 @@ from ....legend.linear_layout import (
     LinearGradientLegendLayout,
     LinearOrientationLegendLayout,
 )
-from ....legend.table import write_legend_row_names
+from ....legend.table import LegendRowKey, write_legend_row_names
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
 
@@ -90,7 +90,7 @@ class LegendGroup:
 
     @staticmethod
     def _build_pairwise_gradient_id(
-        key: str,
+        key: LegendRowKey,
         properties: Mapping[str, object],
         orientation: str,
     ) -> str:

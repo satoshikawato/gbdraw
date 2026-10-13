@@ -7,7 +7,7 @@ from gbdraw.svg.elements import Group, LinearGradient, Path
 
 from ....configurators.legend import LegendMeasurement
 from ....legend.circular_layout import CircularGradientLegendLayout
-from ....legend.table import write_legend_row_names
+from ....legend.table import LegendRowKey, write_legend_row_names
 from ....svg.text_path import generate_text_path
 from ....svg.ids import stable_svg_id
 
@@ -50,7 +50,7 @@ class LegendGroup:
         )
         return rectangle_path
 
-    def _gradient_id(self, key: str, properties: Mapping[str, object]) -> str:
+    def _gradient_id(self, key: LegendRowKey, properties: Mapping[str, object]) -> str:
         return stable_svg_id(
             "circular_legend_grad",
             "circular-conservation-gradient",

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Hashable, Iterator, Mapping, MutableMapping
-from typing import Iterable, List, NamedTuple, Optional, Sequence, Set, Tuple
+from typing import Iterable, List, NamedTuple, NewType, Optional, Sequence, Set, Tuple
 
 from pandas import DataFrame
 
@@ -18,17 +18,30 @@ from gbdraw.exceptions import ValidationError
 
 LegendEntry = Mapping[str, object]
 
+# A legend row's identity (``data-legend-key``), such as ``name [fill]`` or ``label (2)``; never drawn.
+LegendRowKey = NewType("LegendRowKey", str)
+# A legend row's name as the user or the renderer wrote it; never a key, never rewritten.
+LegendRowName = NewType("LegendRowName", str)
+# The name the legend draws for a row: its name, numbered when rows of other swatches share it.
+DrawnLegendName = NewType("DrawnLegendName", str)
 
-def _unique_legend_key(reserved: Iterable[str], preferred: str) -> str:
+
+def _key_of_name(name: str) -> LegendRowKey:
+    """The key of a row whose key is its name: a renderer row, and a row no other row contests."""
+
+    return LegendRowKey(name)
+
+
+def _unique_legend_key(reserved: Iterable[str], preferred: str) -> LegendRowKey:
     """A row key no reserved key equals: ``preferred``, else ``preferred (2)``, ``(3)``, ..."""
 
     taken = set(reserved)
     if preferred not in taken:
-        return preferred
+        return LegendRowKey(preferred)
     suffix = 2
     while f"{preferred} ({suffix})" in taken:
         suffix += 1
-    return f"{preferred} ({suffix})"
+    return LegendRowKey(f"{preferred} ({suffix})")
 
 
 def _legend_fill_identity(color: object) -> str:
@@ -69,7 +82,7 @@ def legend_swatch(entry: LegendEntry) -> tuple[object, ...]:
     return ("solid", _legend_fill_identity(entry.get("fill")), stroke, width)
 
 
-def drawn_legend_names(rows: Sequence[tuple[str, Hashable]]) -> list[str]:
+def drawn_legend_names(rows: Sequence[tuple[LegendRowName, Hashable]]) -> list[DrawnLegendName]:
     """THE naming rule: the name each legend row is drawn with.
 
     ``rows`` are the rows being drawn, in legend order, each as its name and
@@ -79,13 +92,13 @@ def drawn_legend_names(rows: Sequence[tuple[str, Hashable]]) -> list[str]:
     number skips a drawn name that another row already has.
     """
 
-    swatches: dict[str, list[Hashable]] = {}
+    swatches: dict[LegendRowName, list[Hashable]] = {}
     for name, swatch in rows:
         group = swatches.setdefault(name, [])
         if swatch not in group:
             group.append(swatch)
-    taken = {name for name, group in swatches.items() if len(group) == 1}
-    numbered: dict[tuple[str, Hashable], str] = {}
+    taken: set[str] = {name for name, group in swatches.items() if len(group) == 1}
+    numbered: dict[tuple[LegendRowName, Hashable], DrawnLegendName] = {}
     for name, group in swatches.items():
         if len(group) == 1:
             continue
@@ -94,25 +107,25 @@ def drawn_legend_names(rows: Sequence[tuple[str, Hashable]]) -> list[str]:
             number += 1
             while f"{name} ({number})" in taken:
                 number += 1
-            numbered[name, swatch] = f"{name} ({number})"
+            numbered[name, swatch] = DrawnLegendName(f"{name} ({number})")
             taken.add(numbered[name, swatch])
-    return [numbered.get((name, swatch), name) for name, swatch in rows]
+    return [numbered.get((name, swatch), DrawnLegendName(name)) for name, swatch in rows]
 
 
 class LegendRowNames(NamedTuple):
     """A legend row's name as written, and the name the legend draws."""
 
-    name: str
-    drawn: str
+    name: LegendRowName
+    drawn: DrawnLegendName
 
 
 class _LegendRow(NamedTuple):
-    name: str
+    name: LegendRowName
     swatch: tuple[object, ...]
     entry: LegendEntry
 
 
-class LegendTable(Mapping[str, LegendEntry]):
+class LegendTable(Mapping[LegendRowKey, LegendEntry]):
     """The legend rows of one drawing, in legend order, by row key.
 
     A row has three separate facts. Its *key* is its identity (the Web stores
@@ -124,17 +137,17 @@ class LegendTable(Mapping[str, LegendEntry]):
     """
 
     def __init__(self, rows: Mapping[object, LegendEntry] | None = None) -> None:
-        self._rows: dict[str, _LegendRow] = {}
-        self._sources: dict[str, int] = {}
-        self._shared_keys: list[str] = []
-        self._default_tracks: dict[str, str] = {}
+        self._rows: dict[LegendRowKey, _LegendRow] = {}
+        self._sources: dict[LegendRowKey, int] = {}
+        self._shared_keys: list[LegendRowKey] = []
+        self._default_tracks: dict[LegendRowKey, LegendRowKey] = {}
         for key, entry in (rows or {}).items():
             self.add(str(key), entry)
 
-    def add(self, name: str, entry: LegendEntry, *, key: str | None = None) -> None:
+    def add(self, name: str, entry: LegendEntry, *, key: LegendRowKey | None = None) -> None:
         """Add a row under its key (its name unless given); one of the same name and swatch is shared."""
 
-        self._add(name, entry, name if key is None else key)
+        self._add(name, entry, _key_of_name(name) if key is None else key)
 
     def add_source(self, name: str, entry: LegendEntry) -> None:
         """Add the row of a track or annotation source, which has no key of its own.
@@ -146,14 +159,16 @@ class LegendTable(Mapping[str, LegendEntry]):
 
         self._add(name, entry, _unique_legend_key([*self._rows, *self._shared_keys], name))
 
-    def add_default_track(self, key: str, entry: LegendEntry) -> None:
+    def add_default_track(self, name: str, entry: LegendEntry) -> None:
         """Add the renderer's own row of a numeric track, which explicit slots replace (``discard_default_track``)."""
 
-        self._default_tracks[key] = self._add(key, entry, key)
+        key = _key_of_name(name)
+        self._default_tracks[key] = self._add(name, entry, key)
 
-    def discard_default_track(self, key: str) -> None:
+    def discard_default_track(self, name: str) -> None:
         """Take a default track's row back; a row another source shares stays for that source (OV-588)."""
 
+        key = _key_of_name(name)
         row_key = self._default_tracks.pop(key, None)
         if row_key is None:
             return
@@ -163,7 +178,7 @@ class LegendTable(Mapping[str, LegendEntry]):
         if key in self._shared_keys:
             self._shared_keys.remove(key)
 
-    def _add(self, name: str, entry: LegendEntry, key: str) -> str:
+    def _add(self, name: str, entry: LegendEntry, key: LegendRowKey) -> LegendRowKey:
         """Add a source's row and return the key of the row that draws it."""
 
         swatch = legend_swatch(entry)
@@ -173,17 +188,17 @@ class LegendTable(Mapping[str, LegendEntry]):
                 if key not in self._rows:
                     self._shared_keys.append(key)
                 return row_key
-        self._rows[key] = _LegendRow(name, swatch, entry)
+        self._rows[key] = _LegendRow(LegendRowName(name), swatch, entry)
         self._sources[key] = 1
         return key
 
     @property
-    def shared_keys(self) -> tuple[str, ...]:
+    def shared_keys(self) -> tuple[LegendRowKey, ...]:
         """Keys of the sources whose row another source of the same name and swatch draws."""
 
         return tuple(key for key in dict.fromkeys(self._shared_keys) if key not in self._rows)
 
-    def names(self) -> dict[str, LegendRowNames]:
+    def names(self) -> dict[LegendRowKey, LegendRowNames]:
         """Each row's name and drawn name, by key.
 
         The names are numbered in the order the legends draw the rows: the
@@ -197,29 +212,31 @@ class LegendTable(Mapping[str, LegendEntry]):
         texts = {key: text for (key, _), text in zip(solid_first, drawn)}
         return {key: LegendRowNames(row.name, texts[key]) for key, row in self._rows.items()}
 
-    def __getitem__(self, key: str) -> LegendEntry:
+    def __getitem__(self, key: LegendRowKey) -> LegendEntry:
         return self._rows[key].entry
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) -> Iterator[LegendRowKey]:
         return iter(self._rows)
 
     def __len__(self) -> int:
         return len(self._rows)
 
 
-def legend_row_names(legend_table: Mapping[object, LegendEntry]) -> dict[str, LegendRowNames]:
-    """The names the legend layouts measure and the legend drawers write, by row key.
+def as_legend_table(legend_table: Mapping[object, LegendEntry]) -> LegendTable:
+    """The table itself; a plain mapping (a test's table) is read as rows named by their keys."""
 
-    A plain mapping (a test's table) is read as rows named by their keys.
-    """
+    return legend_table if isinstance(legend_table, LegendTable) else LegendTable(legend_table)
 
-    table = legend_table if isinstance(legend_table, LegendTable) else LegendTable(legend_table)
-    return table.names()
+
+def legend_row_names(legend_table: Mapping[object, LegendEntry]) -> dict[LegendRowKey, LegendRowNames]:
+    """The names the legend layouts measure and the legend drawers write, by row key."""
+
+    return as_legend_table(legend_table).names()
 
 
 def write_legend_row_names(
     legend_table: Mapping[object, LegendEntry] | None,
-) -> Callable[[MutableMapping[str, object], str], str]:
+) -> Callable[[MutableMapping[str, object], LegendRowKey], DrawnLegendName]:
     """The legend drawers' one writer of a row's key, name, and drawn name.
 
     The returned function writes ``data-legend-key`` on a row group's
@@ -230,7 +247,7 @@ def write_legend_row_names(
 
     names = legend_row_names(legend_table or {})
 
-    def write(attribs: MutableMapping[str, object], key: str) -> str:
+    def write(attribs: MutableMapping[str, object], key: LegendRowKey) -> DrawnLegendName:
         attribs["data-legend-key"] = key
         if names[key].name != key:
             attribs["data-legend-name"] = names[key].name
@@ -281,7 +298,7 @@ def rule_legend_keys(
     rules: Iterable[tuple[object, object]],
     renderer_swatches: Mapping[str, tuple[object, ...]],
     rule_swatch: Callable[[str], tuple[object, ...]],
-) -> dict[tuple[str, str], str]:
+) -> dict[tuple[str, str], LegendRowKey]:
     """Row keys for the captions of the color table, by caption and fill identity.
 
     A rule row's key is its caption. A caption written with several colors in
@@ -298,7 +315,7 @@ def rule_legend_keys(
         if str(caption or "").strip():
             fills.setdefault(str(caption), set()).add(_legend_fill_identity(color))
     reserved = {*renderer_swatches, *fills}
-    keys: dict[tuple[str, str], str] = {}
+    keys: dict[tuple[str, str], LegendRowKey] = {}
     for caption in sorted(fills):
         renderer_swatch = renderer_swatches.get(caption)
         for fill in sorted(fills[caption]):
@@ -306,7 +323,7 @@ def rule_legend_keys(
                 key = _unique_legend_key(reserved, _rule_fill_key(caption, fill))
                 reserved.add(key)
             else:
-                key = caption
+                key = _key_of_name(caption)
             keys[caption, fill] = key
     return keys
 
@@ -402,8 +419,8 @@ def configure_pairwise_identity_legend_from_comparisons(
     return color_modes
 
 
-def _other_feature_legend_key(feature_type: str) -> str:
-    return "other proteins" if feature_type == "CDS" else f"other {feature_type}s"
+def _other_feature_legend_key(feature_type: str) -> LegendRowKey:
+    return _key_of_name("other proteins" if feature_type == "CDS" else f"other {feature_type}s")
 
 
 def _resolve_legend_feature_color(default_colors: DataFrame, feature_type: str) -> str:
@@ -584,8 +601,12 @@ def prepare_legend_table(
 
 
 __all__ = [
+    "DrawnLegendName",
+    "LegendRowKey",
+    "LegendRowName",
     "LegendRowNames",
     "LegendTable",
+    "as_legend_table",
     "collect_comparison_collinearity_color_modes",
     "configure_pairwise_identity_legend_from_comparisons",
     "drawn_legend_names",

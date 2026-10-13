@@ -19,7 +19,13 @@ from typing import TYPE_CHECKING, Any
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.features.colors import precompute_used_color_rules
-from gbdraw.legend.table import LegendTable, _other_feature_legend_key, prepare_legend_table
+from gbdraw.legend.table import (
+    LegendRowKey,
+    LegendTable,
+    _key_of_name,
+    _other_feature_legend_key,
+    prepare_legend_table,
+)
 
 if TYPE_CHECKING:
     from gbdraw.configurators import (
@@ -50,11 +56,11 @@ class LegendRowFacts:
         self._feature_config = feature_config
         self._gc_config = gc_config
         self._skew_config = skew_config
-        self.drawn: tuple[str, ...] = tuple(legend_table)
+        self.drawn: tuple[LegendRowKey, ...] = tuple(legend_table)
         self._shared = legend_table.shared_keys
 
     @cached_property
-    def suppressed(self) -> tuple[str, ...]:
+    def suppressed(self) -> tuple[LegendRowKey, ...]:
         """Rows the records can name that the draft did not draw.
 
         The rows are those of every feature type of the records (hidden or not
@@ -91,10 +97,10 @@ class LegendRowFacts:
             show_skew=True,
             show_depth=False,
         )
-        rows = dict.fromkeys(
+        rows: dict[LegendRowKey, None] = dict.fromkeys(
             [
                 *producible,
-                *feature_types,
+                *map(_key_of_name, feature_types),
                 *(_other_feature_legend_key(feature_type) for feature_type in feature_types),
                 *self._shared,
             ]

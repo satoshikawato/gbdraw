@@ -6,7 +6,7 @@ from typing import Literal, Mapping
 from ..core.text import calculate_bbox_dimensions
 from .circular_layout import min_gradient_label_text
 from .metrics import legend_line_height, legend_text_x_offset
-from .table import legend_row_names
+from .table import LegendRowKey, as_legend_table
 
 
 GRADIENT_BAR_WIDTH_RATIO = 10
@@ -15,7 +15,7 @@ GRADIENT_LABEL_GAP_RATIO = 0.2
 
 @dataclass(frozen=True, slots=True)
 class LinearLegendEntryLayout:
-    key: str
+    key: LegendRowKey
     properties: Mapping[str, object]
     rect_x: float
     rect_y: float
@@ -33,7 +33,7 @@ class LinearFeatureLegendLayout:
 
 @dataclass(frozen=True, slots=True)
 class LinearGradientEntryLayout:
-    key: str
+    key: LegendRowKey
     properties: Mapping[str, object]
     title_x: float
     title_y: float
@@ -87,7 +87,7 @@ class LinearLegendLayout:
 
 @dataclass(frozen=True, slots=True)
 class _MeasuredSolidEntry:
-    key: str
+    key: LegendRowKey
     properties: Mapping[str, object]
     text_width: float
 
@@ -99,19 +99,20 @@ def _measure_solid_entries(
     font_size: float,
     dpi: int,
 ) -> tuple[_MeasuredSolidEntry, ...]:
-    drawn_names = legend_row_names(legend_table)
+    table = as_legend_table(legend_table)
+    drawn_names = table.names()
     return tuple(
         _MeasuredSolidEntry(
-            key=str(key),
+            key=key,
             properties=properties,
             text_width=calculate_bbox_dimensions(
-                drawn_names[str(key)].drawn,
+                drawn_names[key].drawn,
                 font_family,
                 font_size,
                 dpi,
             )[0],
         )
-        for key, properties in legend_table.items()
+        for key, properties in table.items()
         if properties.get("type") == "solid"
     )
 
@@ -125,15 +126,16 @@ def _build_gradient_layout(
     color_rect_size: float,
     line_height: float,
 ) -> LinearGradientLegendLayout | None:
+    table = as_legend_table(legend_table)
     gradient_entries = tuple(
-        (str(key), properties)
-        for key, properties in legend_table.items()
+        (key, properties)
+        for key, properties in table.items()
         if properties.get("type") == "gradient"
     )
     if not gradient_entries:
         return None
 
-    drawn_names = legend_row_names(legend_table)
+    drawn_names = table.names()
     bar_width = GRADIENT_BAR_WIDTH_RATIO * color_rect_size
     min_label_text = min_gradient_label_text(
         gradient_entries[0][1].get("min_value", 0)
