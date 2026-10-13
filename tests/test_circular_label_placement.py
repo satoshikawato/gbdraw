@@ -3399,3 +3399,89 @@ def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:
     srna_override = next(label for label in override_labels if label.get("label_text") == "12S ribosomal RNA")
     assert bool(nd4_override["is_embedded"])
     assert bool(srna_override["is_embedded"])
+
+
+def _tobacco_cli_default_cfg(label_font_size: float) -> GbdrawConfig:
+    """``gbdraw circular --separate_strands --track_type tuckin --labels out`` defaults.
+
+    The CLI's default label blacklist is empty, unlike the packaged config.
+    """
+
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        {
+            "labels.filtering.blacklist_keywords": [],
+            "labels.circular.scope": "outer",
+            "canvas.strandedness": True,
+            "canvas.circular.track_type": "tuckin",
+            "labels.font_size.short": label_font_size,
+            "labels.font_size.long": label_font_size,
+        },
+    )
+    return GbdrawConfig.from_dict(config_dict)
+
+
+def _drawn_outer_labels(monkeypatch: pytest.MonkeyPatch) -> list[list[dict]]:
+    """Capture the external label list each assembly hands to the label drawer."""
+
+    drawn: list[list[dict]] = []
+    original = circular_assemble_module.add_labels_group_on_canvas
+
+    def capture(canvas, *args, **kwargs):
+        if kwargs.get("phase") == "leaders":
+            drawn.append(
+                [
+                    label
+                    for label in kwargs["precalculated_labels"]
+                    if not label.get("is_embedded") and not label.get("is_inner")
+                ]
+            )
+        return original(canvas, *args, **kwargs)
+
+    monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", capture)
+    return drawn
+
+
+@pytest.mark.circular
+def test_tobacco_14pt_outer_labels_that_overlap_are_not_drawn(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-456 / LP-D42: overlapping outer labels are never drawn; the error offers a fitting row."""
+
+    import gbdraw.exceptions as gbdraw_exceptions
+
+    record = SeqIO.read(str(Path(__file__).parent / "test_inputs" / "NC_001879.gbk"), "genbank")
+    total_length = len(record.seq)
+    drawn = _drawn_outer_labels(monkeypatch)
+    cfg = _tobacco_cli_default_cfg(14.0)
+
+    error: Exception | None = None
+    try:
+        assemble_circular_diagram_from_record(record, cfg=cfg, legend="right")
+    except gbdraw_exceptions.GbdrawError as exc:
+        error = exc
+    assert error is None or not drawn
+    assert error is not None, (
+        f"drew {len(drawn[0])} outer labels with "
+        f"{_count_overlaps(drawn[0], total_length)} overlapping label pairs"
+    )
+    assert isinstance(error, gbdraw_exceptions.CircularLabelsDoNotFitError)
+
+    report = error.report
+    (failing,) = report.records
+    assert failing.outer_label_count == 140
+    assert failing.font_size == pytest.approx(14.0)
+    assert failing.fit.overlap_pairs > 0
+    vertical = next(row for row in report.rows if row.kind == "outward_vertical")
+    assert vertical.values is not None
+
+    from gbdraw.api.config import apply_config_overrides
+    from gbdraw.labels.circular_leaders import leader_crossing_count
+
+    assemble_circular_diagram_from_record(
+        record,
+        cfg=apply_config_overrides(cfg, vertical.values),
+        legend="right",
+    )
+    fitted = drawn[-1]
+    assert len(fitted) == 140
+    assert _count_overlaps(fitted, total_length) == 0
+    assert leader_crossing_count(fitted) == 0
