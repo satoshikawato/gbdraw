@@ -6241,7 +6241,8 @@ test('a Python design-rule baseline cannot expand alongside Python package files
   });
   // Python has no `const`: a baseline is read only when one module-level
   // assignment is the single place that binds or changes the name. A removed
-  // baseline contracted.
+  // baseline contracts, but alongside production code its test has lost a
+  // registered literal (design-rule.count-scope).
   const pythonSource = designRuleGuardSources2()[DESIGN_RULE_PYTHON_GUARD_PATH];
   const declaration = 'TYPE_DEBT_BASELINE: dict[str, int] = ';
   const unreadable = `${blocked.source}\\(${designRuleSubjectPattern('TYPE_DEBT_BASELINE', 'unreadable')}\\)`;
@@ -6262,7 +6263,9 @@ test('a Python design-rule baseline cannot expand alongside Python package files
     [withStatement('from tests.other_baselines import TYPE_DEBT_BASELINE')],
     [withStatement('import tests.other_baselines as TYPE_DEBT_BASELINE')],
     [withStatement('def _grow():\n    global TYPE_DEBT_BASELINE\n    TYPE_DEBT_BASELINE = {"gbdraw/cli.py": 3}')],
-    [pythonSource.replace(/^TYPE_DEBT_BASELINE.*\n/m, '').replace('TYPE_DEBT_BASELINE is not None and ', ''), 0, '- contraction: TYPE-DEBT [^\\n]*#TYPE_DEBT_BASELINE\\n']
+    [pythonSource.replace(/^TYPE_DEBT_BASELINE.*\n/m, '').replace('TYPE_DEBT_BASELINE is not None and ', ''), 1,
+      '^(?=[\\s\\S]*- contraction: TYPE-DEBT [^\\n]*#TYPE_DEBT_BASELINE\\n)(?=[\\s\\S]*design-rule\\.count-scope: [^\\n]*'
+      + 'tests/test_design_rule_guard_fixture\\.py \\(registered literal missing or unreadable\\))']
   ].forEach(([source, status = 1, expected = unreadable]) => {
     withDesignRuleGuardRepository2(({ execute, write }) => {
       assert.notEqual(source, pythonSource);
