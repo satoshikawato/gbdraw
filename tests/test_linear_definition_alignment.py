@@ -17,7 +17,7 @@ from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
-from gbdraw.core import text as text_module
+from gbdraw.core import fonts as fonts_module
 from gbdraw.diagrams.linear import precalc as linear_precalc
 from gbdraw.diagrams.linear import assemble as linear_assemble
 from gbdraw.diagrams.linear.builders import add_record_definition_group
@@ -674,9 +674,9 @@ def test_linear_definition_band_matches_resolved_feature_center(
 def test_liberation_sans_bundled_fonts_preferred_over_system_fontconfig(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    text_module._font_path_cache.clear()
+    fonts_module.resolve_font_face.cache_clear()
     monkeypatch.setattr(
-        text_module.subprocess,
+        fonts_module.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("fc-match should not be used for bundled Liberation Sans"),
     )
@@ -688,15 +688,14 @@ def test_liberation_sans_bundled_fonts_preferred_over_system_fontconfig(
         ("bold", "italic", "LiberationSans-BoldItalic.ttf"),
     ]
     for font_weight, font_style, expected_name in cases:
-        font_path = text_module._resolve_font_path(
+        face = fonts_module.resolve_font_face(
             "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
-            allow_system=True,
-            font_weight=font_weight,
-            font_style=font_style,
+            font_weight,
+            font_style,
         )
 
-        assert font_path is not None
-        assert Path(font_path).name == expected_name
+        assert face is not None
+        assert Path(face.path).name == expected_name
 
 
 @pytest.mark.linear

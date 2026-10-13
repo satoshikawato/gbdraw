@@ -180,8 +180,9 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--gc_skew_width GC_SKEW_WIDTH]
               [--gc_skew_radius GC_SKEW_RADIUS]
               [--legend_box_size LEGEND_BOX_SIZE]
-              [--legend_font_size LEGEND_FONT_SIZE] [--session SESSION]
-              [--drawing ID] [--save_session] [--session_output PATH]
+              [--legend_font_size LEGEND_FONT_SIZE]
+              [--font_family FONT_FAMILY] [--session SESSION] [--drawing ID]
+              [--save_session] [--session_output PATH]
 
 Generate genome diagrams in PNG/PDF/SVG/PS/EPS. By default, diagrams for
 multiple entries are saved separately. Use --multi_record_canvas to place
@@ -562,6 +563,18 @@ options:
                         Legend font size (optional; float; default: 20 (pt)
                         for genomes shorter than the short/long boundary (75
                         kb circular, 100 kb linear), 16 otherwise).
+  --font_family FONT_FAMILY
+                        Font for all diagram text: one font family name (for
+                        example "DejaVu Sans"), which gets its generic family
+                        appended, or a CSS font-family list. Text is measured
+                        with the font file of the first family that is a
+                        bundled Liberation font or alias, that fontconfig (fc-
+                        match) finds, or, without fontconfig, that is
+                        installed in the system font folders. A family found
+                        nowhere is replaced with the nearest Liberation font,
+                        with a warning. A Session saves the font name, not the
+                        font file (optional; default: 'Liberation Sans',
+                        'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif).
   --session SESSION     Regenerate a diagram from a plain or gzip-compressed
                         gbdraw GUI session JSON file.
   --drawing ID          With --session, the drawing to render, by ID or name
@@ -994,7 +1007,8 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--ruler_label_color RULER_LABEL_COLOR]
               [--scale_interval SCALE_INTERVAL]
               [--legend_box_size LEGEND_BOX_SIZE]
-              [--legend_font_size LEGEND_FONT_SIZE] [--normalize_length]
+              [--legend_font_size LEGEND_FONT_SIZE]
+              [--font_family FONT_FAMILY] [--normalize_length]
               [--region REGION] [--record_id RECORD_ID]
               [--reverse_complement REVERSE_COMPLEMENT] [--session SESSION]
               [--drawing ID] [--save_session] [--session_output PATH]
@@ -1416,6 +1430,18 @@ options:
                         Legend font size (optional; float; default: 20 (pt)
                         for genomes shorter than the short/long boundary (75
                         kb circular, 100 kb linear), 16 otherwise).
+  --font_family FONT_FAMILY
+                        Font for all diagram text: one font family name (for
+                        example "DejaVu Sans"), which gets its generic family
+                        appended, or a CSS font-family list. Text is measured
+                        with the font file of the first family that is a
+                        bundled Liberation font or alias, that fontconfig (fc-
+                        match) finds, or, without fontconfig, that is
+                        installed in the system font folders. A family found
+                        nowhere is replaced with the nearest Liberation font,
+                        with a warning. A Session saves the font name, not the
+                        font file (optional; default: 'Liberation Sans',
+                        'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif).
   --normalize_length    Normalize record length (experimental; default:
                         False).
   --region REGION       Crop a region (repeatable). Format: record_id:start-

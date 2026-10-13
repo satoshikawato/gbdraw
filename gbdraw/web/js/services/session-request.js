@@ -116,6 +116,7 @@ import {
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   createDefaultLayoutPreferences,
+  legendPositionOfMode,
   updateActiveLayoutPreference
 } from './layout-preferences.js';
 import {
@@ -3070,7 +3071,8 @@ const projectCanonicalRenderInput = ({
     }),
     tracks: trackPlan.tracks,
     output: {
-      legend: String(drawing.form.legend || 'right'),
+      legend: legendPositionOfMode(drawing.form.legend, state.mode.value)
+        ?? WEB_UX_PROFILE[state.mode.value === 'linear' ? 'linear' : 'circular'].legend,
       plotTitlePosition: String(drawing.adv.plot_title_position || (state.mode.value === 'linear' ? 'bottom' : 'none'))
     },
     selectedFeaturesSet: Array.from(drawing.adv.features || []).map((value) => String(value)),

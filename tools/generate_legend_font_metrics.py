@@ -4,10 +4,9 @@
 The Web lays out an edited Legend with a port of Python's Legend layout
 (``gbdraw/web/js/services/legend-layout.js``). Its text measurement reads the
 same font facts that ``gbdraw.core.text.get_text_bbox_size_pixels`` reads, so
-this module records them from the bundled fonts with the same expressions:
-the cmap, per glyph the advance, left side bearing, ``xMax``, ``yMax`` and
-``yMin``, the ``hhea`` ascent and descent (the em box of a character the face
-lacks), and the kerned glyph pairs of ``font_pair_kerning_table``.
+this module records them for the bundled faces with
+``gbdraw.core.text.font_metrics_table``, which the Web also calls for a
+registered font.
 """
 
 from __future__ import annotations
@@ -21,6 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET = REPO_ROOT / "gbdraw" / "web" / "js" / "utils" / "legend-font-metrics.generated.js"
 sys.path.insert(0, str(REPO_ROOT))
 
+from gbdraw.core import fonts as gbdraw_fonts  # noqa: E402
 from gbdraw.core import text as gbdraw_text  # noqa: E402
 
 # The Legend measures with the default weight and style (calculate_bbox_dimensions
@@ -36,49 +36,16 @@ NUMBERS_PER_LINE = 40
 
 def _bundled_font_paths() -> dict[str, Path]:
     return {
-        Path(str(path)).stem: Path(str(path))
-        for path in gbdraw_text._available_bundled_fonts()
+        Path(path).stem: Path(path)
+        for path in gbdraw_fonts.bundled_font_paths()
     }
 
 
-def _glyph_facts(font, glyph_name: str) -> list[int]:
-    # The expressions of get_text_bbox_size_pixels, read once per glyph.
+def _face_payload(name: str, path: Path) -> gbdraw_text.FontMetricsTable:
     try:
-        glyph = font["glyf"][glyph_name]
-        ymax = glyph.yMax if hasattr(glyph, "yMax") else 0
-        ymin = glyph.yMin if hasattr(glyph, "yMin") else 0
-        xmax = glyph.xMax if hasattr(glyph, "xMax") else 0
-    except Exception:
-        ymax, ymin, xmax = 0, 0, 0
-    try:
-        advance, lsb = font["hmtx"][glyph_name]
-    except KeyError:
-        advance, lsb = font["head"].unitsPerEm, 0
-    return [int(advance), int(lsb), int(xmax), int(ymax), int(ymin)]
-
-
-def _face_payload(name: str, path: Path) -> dict[str, object]:
-    font = gbdraw_text._get_cached_font(str(path))
-    if font is None:
-        raise SystemExit(f"Cannot read bundled font {path}")
-    order = font.getGlyphOrder()
-    index = {glyph: position for position, glyph in enumerate(order)}
-    cmap = font["cmap"].getcmap(3, 1).cmap
-    mapped = set(cmap.values())
-    # Python's applied pairs (GPOS `kern` feature lookups, else the legacy
-    # `kern` table), limited to glyphs a character can reach through the cmap.
-    kerning = []
-    for (left, right), value in gbdraw_text.font_pair_kerning_table(font).items():
-        if value and left in mapped and right in mapped:
-            kerning.extend([index[left], index[right], int(value)])
-    return {
-        "unitsPerEm": int(font["head"].unitsPerEm),
-        "ascent": int(font["hhea"].ascent),
-        "descent": int(font["hhea"].descent),
-        "cmap": [value for code_point in sorted(cmap) for value in (code_point, index[cmap[code_point]])],
-        "glyphs": [value for glyph in order for value in _glyph_facts(font, glyph)],
-        "kerning": kerning,
-    }
+        return gbdraw_text.font_metrics_table(gbdraw_fonts.FontFace(str(path)))
+    except ValueError as exc:
+        raise SystemExit(f"Cannot read bundled font {path}") from exc
 
 
 def _wrapped(values: list[int], indent: str) -> str:
@@ -107,7 +74,7 @@ def render_legend_font_metrics_module() -> str:
             f"      kerning: {_wrapped(face['kerning'], '      ')}\n"
             "    }"
         )
-    aliases = json.dumps(dict(sorted(gbdraw_text._BUNDLED_FONT_FAMILY_ALIASES.items())), indent=2)
+    aliases = json.dumps(dict(sorted(gbdraw_fonts._BUNDLED_FONT_FAMILY_ALIASES.items())), indent=2)
     bundled = json.dumps(sorted(paths), indent=2)
     return (
         "// @ts-check\n"

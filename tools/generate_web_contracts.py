@@ -8,7 +8,7 @@ import importlib
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET = REPO_ROOT / "gbdraw" / "web" / "js" / "contracts" / "schema.generated.js"
@@ -48,6 +48,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("LEGACY_PROTEIN_CANDIDATE_SCHEMA", "gbdraw.session_io", "LEGACY_PROTEIN_CANDIDATE_SCHEMA"),
     ("DEPTH_FILE_SCHEMA", "gbdraw.session_io", "DEPTH_FILE_SCHEMA"),
     ("DEPTH_FILE_ENCODING", "gbdraw.session_io", "DEPTH_FILE_ENCODING"),
+    ("LEGEND_POSITIONS", "gbdraw.api.options", "LEGEND_POSITIONS"),
     # Session field sets: the keys of the classes of gbdraw/session_contract.py.
     ("FLAT_DRAFT_TOP_LEVEL_FIELDS", "gbdraw.session_io", "FLAT_DRAFT_TOP_LEVEL_FIELDS"),
     ("OTHER_MODE_RESULT_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_FIELDS"),
@@ -90,6 +91,13 @@ def _declaration(web_name: str, value: object) -> str:
         return (
             f"/** @type {{readonly {items}[]}} */\n"
             f"export const {web_name} = {_frozen(sorted(value))};\n"
+        )
+    if isinstance(value, Mapping) and all(isinstance(item, tuple) for item in value.values()):
+        # Strings per key, in the owner's order.
+        keys = " | ".join(_scalar(key) for key in value)
+        return (
+            f"/** @type {{Readonly<Record<{keys}, readonly string[]>>}} */\n"
+            f"export const {web_name} = {_frozen({key: list(item) for key, item in value.items()})};\n"
         )
     if isinstance(value, dict):
         return (

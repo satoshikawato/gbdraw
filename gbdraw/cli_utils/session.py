@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import argparse
 import copy
+import logging
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
+from gbdraw.core.fonts import custom_font_families
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import (
     read_circular_track_table,
@@ -49,6 +51,8 @@ if TYPE_CHECKING:
     from gbdraw.render.interactive_svg import InteractiveSvgContext
     from gbdraw.session import SessionDocument
 
+
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class RenderedSvg:
@@ -517,7 +521,27 @@ def save_session_sidecar_if_requested(
     )
     # build_session_json validated the payload it returned (without "files").
     _write_validated_session_json(sidecar_path, payload, overwrite=overwrite)
+    _warn_custom_fonts_saved_by_name(run_result.canonical_request)
     return sidecar_path
+
+
+def _warn_custom_fonts_saved_by_name(request: DiagramRequest | None) -> None:
+    """D-02: a Session stores a font's name, never its file."""
+
+    if request is None:
+        return
+    from gbdraw.api.config import apply_config_overrides
+
+    options = request.options
+    font_family = apply_config_overrides(options.config, options.config_overrides).objects.text.font_family
+    custom = custom_font_families(font_family)
+    if custom:
+        names = ", ".join(f"'{name}'" for name in custom)
+        logger.warning(
+            "The Session stores the font name %s but not the font file; a computer without "
+            "that font draws the text with the nearest available font.",
+            names,
+        )
 
 
 def _require_committed_render(document: SessionDocument) -> None:

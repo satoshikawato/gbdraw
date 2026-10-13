@@ -96,6 +96,13 @@ export const DEPTH_FILE_SCHEMA = 1;
 // gbdraw/session_io.py: DEPTH_FILE_ENCODING
 export const DEPTH_FILE_ENCODING = 'gbdraw-depth-table-v1';
 
+// gbdraw/api/options.py: LEGEND_POSITIONS
+/** @type {Readonly<Record<'circular' | 'linear', readonly string[]>>} */
+export const LEGEND_POSITIONS = Object.freeze({
+  circular: Object.freeze(['left', 'right', 'top', 'bottom', 'upper_left', 'upper_right', 'lower_left', 'lower_right', 'none']),
+  linear: Object.freeze(['left', 'right', 'top', 'bottom', 'none'])
+});
+
 // gbdraw/session_io.py: FLAT_DRAFT_TOP_LEVEL_FIELDS
 /** @type {readonly string[]} */
 export const FLAT_DRAFT_TOP_LEVEL_FIELDS = Object.freeze(['config', 'features']);

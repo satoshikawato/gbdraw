@@ -5,7 +5,7 @@
 // that the Web places an edited Legend's rows, sizes the Legend and docks it
 // exactly where Python would (zero shift). Sources:
 // - text: gbdraw/core/text.py `calculate_bbox_dimensions` → `get_text_bbox_size_pixels`
-//   and `_resolve_font_path`;
+//   and gbdraw/core/fonts.py `resolve_font_face`;
 // - rows: gbdraw/legend/metrics.py, linear_layout.py, circular_layout.py;
 // - Legend size: gbdraw/configurators/legend.py `_linear_legend_local_bounds`,
 //   `_circular_legend_local_bounds`;
@@ -151,11 +151,9 @@ const comparableName = (value) => normalizeFamily(value).toLowerCase().replaceAl
 
 /**
  * The bundled face Python measures a font family with, for the default weight
- * and style (`_resolve_font_path` without system fonts): the first family of
- * the list with an alias, else the first bundled face whose file name
- * contains a family name, else Liberation Sans. Python searches files in
- * directory order; this searches them sorted, which agrees whenever one font
- * family matches. A Result's `legendReflow.fontFile` is the authority.
+ * and style (`resolve_font_face` without registered or fontconfig fonts): the
+ * first family of the list with an alias, else Liberation Sans. A Result's
+ * `legendReflow.fontFile` is the authority.
  * @param {LegendFontMetrics} metrics
  * @param {string} fontFamily A CSS-style list ("'Liberation Sans', Arial, sans-serif").
  * @returns {string} A face stem such as "LiberationSans-Regular".
@@ -172,13 +170,24 @@ export const resolveBundledFontFace = (metrics, fontFamily) => {
     const face = prefix ? regular(prefix) : null;
     if (face) return face;
   }
-  for (const family of families) {
-    const requested = comparableName(family);
-    const match = metrics.bundledFaces.find((stem) => `${stem.toLowerCase()}.ttf`.includes(requested));
-    if (match) return regular(match.split('-', 1)[0]) || match;
-  }
   return regular(FALLBACK_FAMILY) || metrics.bundledFaces[0];
 };
+
+/**
+ * The face an edited Legend is measured with: the face Python recorded
+ * (`legendReflow.fontFile`) when the Web has its metrics, else the bundled
+ * face of the label's font family. A Result drawn on the CLI with a system
+ * font records a face the Web has no metrics for (OV-683).
+ * @param {LegendFontMetrics} metrics
+ * @param {string | null | undefined} recordedFontFile
+ * @param {string} fontFamily The label's `font-family`.
+ * @returns {string}
+ */
+export const legendMeasurementFace = (metrics, recordedFontFile, fontFamily) => (
+  recordedFontFile && metrics.faces.has(recordedFontFile)
+    ? recordedFontFile
+    : resolveBundledFontFace(metrics, fontFamily)
+);
 
 /**
  * Measure text as gbdraw's Python layout does: `calculate_bbox_dimensions(text,

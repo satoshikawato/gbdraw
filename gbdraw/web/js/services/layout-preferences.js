@@ -1,4 +1,5 @@
 // @ts-check
+import { LEGEND_POSITIONS } from '../contracts/schema.generated.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 
 /**
@@ -38,12 +39,17 @@ export const normalizeLinearPlotTitlePosition = (value) => {
 };
 
 /**
+ * The legend position of a mode: `value` without case and outer spaces when it
+ * is one of the mode's positions (Python names them), otherwise null. A value
+ * outside the set reads like an absent one, so each caller keeps the fallback
+ * it has for an unset position (OV-652).
  * @param {unknown} value
- * @param {string} fallback
+ * @param {string} mode 'linear'; any other mode reads the Circular positions.
+ * @returns {string | null}
  */
-const normalizeLegendPosition = (value, fallback) => {
-  const normalized = String(value ?? '').trim().toLowerCase();
-  return normalized || fallback;
+export const legendPositionOfMode = (value, mode) => {
+  const position = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return LEGEND_POSITIONS[mode === 'linear' ? 'linear' : 'circular'].includes(position) ? position : null;
 };
 
 /**
@@ -51,6 +57,31 @@ const normalizeLegendPosition = (value, fallback) => {
  * @returns {value is string}
  */
 const storedText = (value) => typeof value === 'string' && value.trim() !== '';
+
+/**
+ * The legend position of a mode, or the mode's default legend position for a
+ * value outside the mode's positions (OV-652, OV-671).
+ * @param {unknown} value
+ * @param {string} mode 'linear'; any other mode reads the Circular positions.
+ * @returns {string}
+ */
+export const legendPositionOrDefault = (value, mode) => (
+  legendPositionOfMode(value, mode) ?? WEB_UX_PROFILE[mode === 'linear' ? 'linear' : 'circular'].legend
+);
+
+/**
+ * The side a Result saved without composition metadata (Session 27 to 30) is
+ * laid out with: `none` when its Session stored no side (no value, a falsy
+ * value the old `||` chain read as `none`, or blank text, which failed Load
+ * before), otherwise the stored position of the Result's mode or the mode's
+ * default (OV-671, BA-D26).
+ * @param {unknown} value The Session's `config.form.legend`.
+ * @param {string} mode The Result's mode.
+ * @returns {string}
+ */
+export const drawnLegendSideOfMode = (value, mode) => (
+  !value || (typeof value === 'string' && value.trim() === '') ? 'none' : legendPositionOrDefault(value, mode)
+);
 
 /** @returns {LayoutPreferences} */
 export const createDefaultLayoutPreferences = () => ({
@@ -79,19 +110,14 @@ export const resolveCircularLayoutPreference = (preferences, useMultiRecord = fa
   const defaults = createDefaultLayoutPreferences();
   const circular = preferences?.circular || defaults.circular;
   const single = {
-    legend: normalizeLegendPosition(
-      circular.single?.legend,
-      WEB_UX_PROFILE.circular.legend
-    ),
+    legend: legendPositionOrDefault(circular.single?.legend, 'circular'),
     plotTitlePosition: normalizeCircularPlotTitlePosition(
       circular.single?.plotTitlePosition
     )
   };
   if (!useMultiRecord) return single;
   return {
-    legend: storedText(circular.multi?.legend)
-      ? normalizeLegendPosition(circular.multi.legend, single.legend)
-      : single.legend,
+    legend: legendPositionOfMode(circular.multi?.legend, 'circular') ?? single.legend,
     plotTitlePosition: storedText(circular.multi?.plotTitlePosition)
       ? normalizeCircularPlotTitlePosition(circular.multi.plotTitlePosition)
       : single.plotTitlePosition
@@ -111,10 +137,7 @@ export const resolveActiveLayoutPreference = (
 ) => {
   if (mode === 'linear') {
     return {
-      legend: normalizeLegendPosition(
-        preferences?.linear?.legend,
-        WEB_UX_PROFILE.linear.legend
-      ),
+      legend: legendPositionOrDefault(preferences?.linear?.legend, 'linear'),
       plotTitlePosition: normalizeLinearPlotTitlePosition(
         preferences?.linear?.plotTitlePosition
       )
@@ -137,10 +160,7 @@ export const updateActiveLayoutPreference = (
 ) => {
   if (mode === 'linear') {
     if (Object.prototype.hasOwnProperty.call(patch, 'legend')) {
-      preferences.linear.legend = normalizeLegendPosition(
-        patch.legend,
-        WEB_UX_PROFILE.linear.legend
-      );
+      preferences.linear.legend = legendPositionOrDefault(patch.legend, 'linear');
     }
     if (Object.prototype.hasOwnProperty.call(patch, 'plotTitlePosition')) {
       preferences.linear.plotTitlePosition = normalizeLinearPlotTitlePosition(
@@ -152,10 +172,7 @@ export const updateActiveLayoutPreference = (
 
   const key = useMultiRecord ? 'multi' : 'single';
   if (Object.prototype.hasOwnProperty.call(patch, 'legend')) {
-    preferences.circular[key].legend = normalizeLegendPosition(
-      patch.legend,
-      WEB_UX_PROFILE.circular.legend
-    );
+    preferences.circular[key].legend = legendPositionOrDefault(patch.legend, 'circular');
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'plotTitlePosition')) {
     preferences.circular[key].plotTitlePosition = normalizeCircularPlotTitlePosition(
@@ -174,29 +191,19 @@ export const normalizeLayoutPreferences = (source) => {
     return defaults;
   }
   // The guard above makes `source` a non-array object, the stored shape (`StoredLayoutPreferences`).
-  const single = resolveCircularLayoutPreference(/** @type {StoredLayoutPreferences} */ (source), false);
-  const rawMulti = /** @type {StoredLayoutPreferences} */ (source).circular?.multi;
+  const stored = /** @type {StoredLayoutPreferences} */ (source);
+  const rawMulti = stored.circular?.multi;
   return {
     circular: {
-      single,
+      single: resolveCircularLayoutPreference(stored, false),
       multi: {
-        legend: storedText(rawMulti?.legend)
-          ? normalizeLegendPosition(rawMulti.legend, single.legend)
-          : null,
+        legend: legendPositionOfMode(rawMulti?.legend, 'circular'),
         plotTitlePosition: storedText(rawMulti?.plotTitlePosition)
           ? normalizeCircularPlotTitlePosition(rawMulti.plotTitlePosition)
           : null
       }
     },
-    linear: {
-      legend: normalizeLegendPosition(
-        /** @type {StoredLayoutPreferences} */ (source).linear?.legend,
-        WEB_UX_PROFILE.linear.legend
-      ),
-      plotTitlePosition: normalizeLinearPlotTitlePosition(
-        /** @type {StoredLayoutPreferences} */ (source).linear?.plotTitlePosition
-      )
-    }
+    linear: resolveActiveLayoutPreference(stored, 'linear')
   };
 };
 
@@ -233,20 +240,19 @@ export const migrateLegacyLayoutPreferences = (
     return normalizeLayoutPreferences(ui.layoutPreferences);
   }
 
-  const circularLegend = storedText(ui?.circularLegendPosition)
-    ? normalizeLegendPosition(ui.circularLegendPosition, activeLegend)
-    : storedText(ui?.legend)
-      ? normalizeLegendPosition(ui.legend, activeLegend)
-      : normalizeLegendPosition(activeLegend, 'left');
+  // Each legend slot takes its first source that holds a position of its mode.
+  const activeCircularLegend = legendPositionOfMode(activeLegend, 'circular');
+  const circularLegend = legendPositionOfMode(ui?.circularLegendPosition, 'circular')
+    ?? legendPositionOfMode(ui?.legend, 'circular')
+    ?? activeCircularLegend
+    ?? 'left';
   const circularPlotTitle = storedText(ui?.circularPlotTitlePosition)
     ? normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition)
     : normalizeCircularPlotTitlePosition(activePlotTitlePosition);
   const single = {
-    legend: storedText(ui?.circularSingleRecordLegendPosition)
-      ? normalizeLegendPosition(ui.circularSingleRecordLegendPosition, circularLegend)
-      : multiRecord
-        ? circularLegend
-        : normalizeLegendPosition(activeLegend, circularLegend),
+    legend: legendPositionOfMode(ui?.circularSingleRecordLegendPosition, 'circular')
+      ?? (multiRecord ? null : activeCircularLegend)
+      ?? circularLegend,
     plotTitlePosition: storedText(ui?.circularSingleRecordPlotTitlePosition)
       ? normalizeCircularPlotTitlePosition(ui.circularSingleRecordPlotTitlePosition)
       : multiRecord
@@ -254,11 +260,9 @@ export const migrateLegacyLayoutPreferences = (
         : normalizeCircularPlotTitlePosition(activePlotTitlePosition)
   };
   const multi = {
-    legend: storedText(ui?.circularMultiRecordLegendPosition)
-      ? normalizeLegendPosition(ui.circularMultiRecordLegendPosition, circularLegend)
-      : multiRecord
-        ? normalizeLegendPosition(activeLegend, circularLegend)
-        : circularLegend,
+    legend: legendPositionOfMode(ui?.circularMultiRecordLegendPosition, 'circular')
+      ?? (multiRecord ? activeCircularLegend : null)
+      ?? circularLegend,
     plotTitlePosition: storedText(ui?.circularMultiRecordPlotTitlePosition)
       ? normalizeCircularPlotTitlePosition(ui.circularMultiRecordPlotTitlePosition)
       : multiRecord
@@ -268,11 +272,9 @@ export const migrateLegacyLayoutPreferences = (
   return {
     circular: { single, multi },
     linear: {
-      legend: storedText(ui?.linearLegendPosition)
-        ? normalizeLegendPosition(ui.linearLegendPosition, 'bottom')
-        : mode === 'linear'
-          ? normalizeLegendPosition(activeLegend, 'bottom')
-          : 'bottom',
+      legend: legendPositionOfMode(ui?.linearLegendPosition, 'linear')
+        ?? (mode === 'linear' ? legendPositionOfMode(activeLegend, 'linear') : null)
+        ?? 'bottom',
       plotTitlePosition: storedText(ui?.linearPlotTitlePosition)
         ? normalizeLinearPlotTitlePosition(ui.linearPlotTitlePosition)
         : mode === 'linear'
@@ -301,12 +303,29 @@ export const LEGACY_LAYOUT_PREFERENCE_FIELDS = Object.freeze([
  */
 const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+// The legacy legend fields and the mode whose positions each one holds. The
+// migration reads `legend` as a Circular position in every mode (and as the
+// Linear one in Linear, whose positions are Circular's).
+/** @type {Readonly<Record<string, 'circular' | 'linear'>>} */
+const LEGACY_LEGEND_FIELD_MODES = Object.freeze({
+  legend: 'circular',
+  circularLegendPosition: 'circular',
+  circularSingleRecordLegendPosition: 'circular',
+  circularMultiRecordLegendPosition: 'circular',
+  linearLegendPosition: 'linear'
+});
+
 // Partial objects remain authoritative for session compatibility; normalization
-// supplies the current defaults for omitted branches.
+// supplies the current defaults for omitted branches. A legend field outside
+// its mode's positions is not a stored layout (OV-652).
 /** @param {Record<string, unknown> | null | undefined} ui */
 const hasStoredLayoutPreferences = (ui) => (
   isRecord(ui?.layoutPreferences) ||
-  LEGACY_LAYOUT_PREFERENCE_FIELDS.some((field) => storedText(ui?.[field]))
+  LEGACY_LAYOUT_PREFERENCE_FIELDS.some((field) => (
+    Object.hasOwn(LEGACY_LEGEND_FIELD_MODES, field)
+      ? legendPositionOfMode(ui?.[field], LEGACY_LEGEND_FIELD_MODES[field]) !== null
+      : storedText(ui?.[field])
+  ))
 );
 
 /**
@@ -326,7 +345,7 @@ export const restoredLayoutPreferences = (ui, { mode, multiRecord, projected = n
   const migrationUi = (
     !isRecord(ui?.layoutPreferences) &&
     mode === 'linear' &&
-    !storedText(ui?.linearLegendPosition) &&
+    legendPositionOfMode(ui?.linearLegendPosition, 'linear') === null &&
     storedText(ui?.legend)
   )
     ? { ...ui, linearLegendPosition: ui.legend }
