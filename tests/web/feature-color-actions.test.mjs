@@ -167,7 +167,7 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [],
       const candidate = await preparation.prepareCandidate(rules);
       if (!candidate) return false;
       const drawn = new Set(extractedFeatures.value.map(feature => firstMatchingRule(feature, candidate.rules)));
-      const { intents } = buildLegendIntents(candidate.rules.filter(rule => drawn.has(rule)));
+      const { intents } = buildLegendIntents(candidate.rules, [], rule => drawn.has(rule));
       manualSpecificRules.splice(0,manualSpecificRules.length,...candidate.rules);
       legendEntries.value = intents.map(entry=>({...entry}));
       for (const feature of extractedFeatures.value) {

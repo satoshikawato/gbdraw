@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createRulePreparation, rebindRuleColorOverrides, runWhenPrepared } from '../../gbdraw/web/js/app/rule-matching.js';
+import { createRulePreparation, runWhenPrepared } from '../../gbdraw/web/js/app/rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
 
 const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
-import { readFileSync } from 'node:fs';
-import { ruleCaptionsAreNormalized } from '../../gbdraw/web/js/services/specific-color-rules.js';
 
 const setup = (evaluate = evaluatePythonRules) => {
   const features = ['NADH', 'β-lactamase', 'ı', 'other'].map((product, i) => ({
@@ -86,10 +84,15 @@ test('25,000-feature matching is prepared once and reused synchronously', async 
   console.log(JSON.stringify({ featureCount: 25000, preparedMs, synchronousReuseMs: performance.now() - matchStart }));
 });
 
-test('full candidate normalizes captions on matching cache hits and retains provenance', async () => {
-  const messages = [];
+// PD-OI-042 scenario revision 2: gbdraw never rewrites a rule caption. A
+// caption written in several colors stays as written (the Legend numbers the
+// names it draws), and no request asks Python for other captions.
+test('a candidate keeps every caption as written, asks Python only for matches, and retains provenance', async () => {
+  const kinds = [];
   const { state, features } = setup();
-  const preparation = createRulePreparation({ state: withDrawings(state), evaluate: evaluatePythonRules, notify: message => messages.push(message) });
+  const preparation = createRulePreparation({
+    state: withDrawings(state), evaluate: (payload) => { kinds.push(payload.kind); return evaluatePythonRules(payload); }
+  });
   const source = [
     { ...rule('NADH'), color: '#112233', cap: 'Shared', fromFile: true },
     { ...rule('other'), color: '#445566', cap: 'Shared' },
@@ -97,22 +100,21 @@ test('full candidate normalizes captions on matching cache hits and retains prov
   ];
   await preparation.prepare(source);
   const candidate = await preparation.prepareCandidate(source);
-  assert.deepEqual(candidate.rules.map(r => r.cap), ['Shared [#112233]', 'Shared [#445566]', 'Shared [#778899]']);
+  assert.deepEqual(candidate.rules.map(r => r.cap), ['Shared', 'Shared', 'Shared']);
   assert.equal(candidate.rules[0].fromFile, true);
-  assert.equal(firstMatchingRule(features[0], candidate.rules).cap, 'Shared [#112233]');
+  assert.equal(firstMatchingRule(features[0], candidate.rules).color, '#112233');
   assert.equal(preparation.prepare(source), true, 'matching remains synchronous');
-  preparation.notifyChanges(candidate);
-  assert.match(messages[0], /Updated 3/);
   const edited = source.map((r, i) => i === 1 ? { ...r, color: '#112233' } : r);
   const next = await preparation.prepareCandidate(edited);
-  assert.equal(next.rules[1].cap, 'Shared [#112233]');
+  assert.equal(next.rules[1].cap, 'Shared');
   const repeated = await preparation.prepareCandidate(next.rules);
   assert.deepEqual(repeated.rules, next.rules);
-  assert.deepEqual(repeated.changes, []);
+  assert.deepEqual([...new Set(kinds)], ['color'], 'only the matches are asked');
+  assert.deepEqual(Object.keys(candidate).sort(), ['rules', 'snapshot'], 'a candidate reports no caption change');
 });
 
 for (const replace of [s => { s.files.t_color = {}; }, s => { s.results.value = [{ name: 'replacement', content: '<svg/>' }]; }, s => { s.legendEntries.value = [{caption:'Manual'}]; }, s => { s.linearSeqs.push({gb:{}}); }, s => { s.linearSeqs[0].gff = {}; }, s => { s.cInputType.value='gff'; }]) {
-  test('caption preparation rejects replaced source, Result and legend snapshots', async () => {
+  test('a candidate preparation rejects replaced source, Result and legend snapshots', async () => {
     const { state } = setup();
     state.files = { t_color: null };
     state.linearSeqs = [{gb:null,gff:null,fasta:null}];
@@ -129,26 +131,15 @@ for (const replace of [s => { s.files.t_color = {}; }, s => { s.results.value = 
 }
 
 
-test('canceled caption helper cannot admit rules or emit a notification', async () => {
+test('a canceled preparation admits no rules', async () => {
   const {state}=setup();
-  const notices=[];
-  const preparation=createRulePreparation({state: withDrawings(state),evaluate:async()=>{throw new Error('canceled');},notify:value=>notices.push(value)});
+  const preparation=createRulePreparation({state: withDrawings(state),evaluate:async()=>{throw new Error('canceled');}});
   await assert.rejects(()=>preparation.prepareCandidate([{...rule('NADH'),color:'#112233',cap:'Shared'}]),/canceled/);
   assert.deepEqual(state.manualSpecificRules,[]);
-  assert.deepEqual(notices,[]);
-});
-
-test('historical rule-derived overrides rebind by source caption and color while direct overrides survive',async()=>{
-  const {state,preparation}=setup();
-  state.featureColorOverrides={a:{caption:'Shared',color:'#112233'},b:{caption:'Shared',color:'#445566'},direct:{caption:'Manual',color:'#abcdef'}};
-  const source=[{...rule('NADH'),cap:'Shared',color:'#112233'}, {...rule('other'),cap:'Shared',color:'#445566'}];
-  const candidate=await preparation.prepareCandidate(source);
-  assert.deepEqual(rebindRuleColorOverrides(state.featureColorOverrides,source,candidate.rules),{a:{caption:'Shared [#112233]',color:'#112233'},b:{caption:'Shared [#445566]',color:'#445566'},direct:state.featureColorOverrides.direct});
-  assert.equal(state.featureColorOverrides.a.caption,'Shared');
 });
 
 
-test('Generate preparation forwards its progress observer through caption and membership evaluation', async () => {
+test('Generate preparation forwards its progress observer through the membership evaluation', async () => {
   const observations = [];
   const options = { onProgress: event => observations.push(event) };
   const kinds = [];
@@ -161,9 +152,9 @@ test('Generate preparation forwards its progress observer through caption and me
   const candidate = await preparation.prepareCandidate([
     { ...rule('NADH'), color: '#112233', cap: 'NADH' }, { ...rule('other'), color: '#445566', cap: 'NADH' }
   ], options);
-  assert.deepEqual(kinds, ['color-captions', 'color']);
-  assert.equal(candidate.rules[0].cap, 'NADH [#112233]');
-  assert.equal(observations.length, 2);
+  assert.deepEqual(kinds, ['color']);
+  assert.equal(candidate.rules[0].cap, 'NADH');
+  assert.equal(observations.length, 1);
 });
 
 
@@ -171,7 +162,7 @@ test('derived comparison cache invalidation keeps prepared colors current while 
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   const { state, preparation } = setup(async payload => {
-    if (payload.kind === 'color-captions') await gate;
+    await gate;
     return evaluatePythonRules(payload);
   });
   state.files = { c_gb: {}, t_color: null, linearCanonicalComparisons: [] };
@@ -261,33 +252,6 @@ test('retained rules are matched in the next preparation, in one evaluation', as
   preparation.retain([]);
 });
 
-
-// U3a 1e (R4, closes OV-238): Python changes captions only when one caption
-// has two or more colors, so rules whose every caption has one color string
-// are their own normalization and send no `color-captions` request; the
-// shared vectors hold the Web answer and Python's (tests/test_web_rule_matching.py).
-const CAPTION_FIXPOINTS = JSON.parse(readFileSync(new URL('../fixtures/specific_color_caption_fixpoints.json', import.meta.url), 'utf8'));
-test('the caption fixpoint vectors give the Web answer', () => {
-  for (const { name, rules, fixpoint } of CAPTION_FIXPOINTS.cases) {
-    assert.equal(ruleCaptionsAreNormalized(rules), fixpoint, name);
-  }
-});
-test('a candidate whose captions each have one color sends no caption request', async () => {
-  const kinds = [];
-  const { preparation } = setup(async (payload) => { kinds.push(payload.kind); return evaluatePythonRules(payload); });
-  const single = [{ ...rule('NADH'), color: '#112233', cap: 'Shared' }, { ...rule('other'), color: '#112233', cap: 'Shared' }];
-  const candidate = await preparation.prepareCandidate(single);
-  assert.deepEqual(kinds, ['color'], 'only the matches');
-  assert.deepEqual(candidate.rules.map(r => r.cap), ['Shared', 'Shared']);
-  assert.deepEqual(candidate.changes, []);
-  kinds.length = 0;
-  const split = await preparation.prepareCandidate([single[0], { ...single[1], color: '#445566' }]);
-  assert.deepEqual(kinds, ['color-captions'], 'two colors under one caption ask Python (the matches are known)');
-  assert.deepEqual(split.rules.map(r => r.cap), ['Shared [#112233]', 'Shared [#445566]']);
-  kinds.length = 0;
-  await preparation.prepareCandidate(split.rules);
-  assert.deepEqual(kinds, [], 'Python\'s captions are a fixpoint: the next run asks nothing (OV-238)');
-});
 
 // OV-377: opening a feature popup prepares rule matches only to read them. It
 // is not an edit, so it does not hold the lock that keeps Save and Load

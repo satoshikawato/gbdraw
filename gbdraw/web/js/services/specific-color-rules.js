@@ -28,26 +28,6 @@ export const normalizeSpecificRule = (rule, { fromFile = Boolean(rule?.fromFile)
   ...(fromFile ? { fromFile: true } : {})
 });
 
-// Whether Python's caption normalization
-// (gbdraw/features/colors.py::normalize_specific_color_captions) returns these
-// rules as they are: it changes captions only when a non-blank caption has two
-// or more colors, so a table whose every caption has one color string is its
-// own normalization (equal strings normalize equally; one direction only, so
-// `red` and `#ff0000` under one caption still ask Python). R4: the vectors in
-// tests/fixtures/specific_color_caption_fixpoints.json hold both answers.
-/** @param {readonly { cap?: unknown, color?: unknown }[]} rules */
-export const ruleCaptionsAreNormalized = (rules) => {
-  /** @type {Map<string, string>} */
-  const colorOf = new Map();
-  return rules.every((rule) => {
-    const caption = String(rule?.cap ?? '');
-    if (!caption.trim()) return true;
-    const color = String(rule?.color ?? '').trim();
-    if (!colorOf.has(caption)) colorOf.set(caption, color);
-    return colorOf.get(caption) === color;
-  });
-};
-
 /** @param {SpecificRuleInput} rule */
 export const specificRuleIdentity = (rule) => {
   const normalized = normalizeSpecificRule(rule);
@@ -418,17 +398,22 @@ export const ruleLegendCaptions = (context) => {
   };
 };
 
+// The Legend rows of a rule table: one per row key, for the rules `draws`
+// admits (a commit: those a displayed feature takes). The keys are allocated
+// from the whole table, as Python allocates them, whichever rules draw a row.
 /**
  * @param {Partial<SpecificColorRule>[] | null | undefined} rules
  * @param {RendererLegendRow[]} [rendererRows]
+ * @param {(rule: Partial<SpecificColorRule>) => boolean} [draws]
  */
-export const buildLegendIntents = (rules, rendererRows = []) => {
+export const buildLegendIntents = (rules, rendererRows = [], draws = () => true) => {
   const legendCaption = createRuleLegendCaptions(rules, rendererRows);
   // An intent is a rule's Legend row: its key (`caption`), its color, and its
   // name (the rule's caption) where that is not the key, as `data-legend-name`.
   /** @type {Map<PythonLegendKey, { caption: PythonLegendKey, name?: string, color: string }>} */
   const byCaption = new Map();
   for (const rule of rules || []) {
+    if (!draws(rule)) continue;
     const normalized = normalizeSpecificRule(rule);
     const caption = legendCaption(normalized);
     if (caption && !byCaption.has(caption)) {

@@ -1726,7 +1726,6 @@ export const createAppSetup = () => {
   setHeldPreviewViewportReader(heldPreviewViewport);
   const { startResizing } = createSidebarResize(state);
 
-  const specificRuleNotice = ref('');
   const { ruleMatchingPending } = state;
   // An edit's rule preparation: Save and Load wait for it, not for a popup's (OV-377).
   const ruleMatchingBlocking = ref(false);
@@ -1738,7 +1737,6 @@ export const createAppSetup = () => {
     state,
     pending: ruleMatchingPending,
     blocking: ruleMatchingBlocking,
-    notify: notice => { specificRuleNotice.value = notice; },
     evaluate: evaluateRules,
     visibilityRules: () => requestFeatureVisibilityRules(state.activeDrawing().featureVisibilityManualRules)
   });
@@ -3506,7 +3504,6 @@ export const createAppSetup = () => {
         }
         featureActions.clearSpecificRulePatternDrafts();
         annotationImportNotice.value = '';
-        specificRuleNotice.value = '';
         recordSessionLifecycleEvent('history-baseline-end');
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
         closeLegendStrokeOptions();
@@ -6563,7 +6560,6 @@ export const createAppSetup = () => {
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
     annotationImportNotice,
-    specificRuleNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,

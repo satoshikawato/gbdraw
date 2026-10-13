@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeSpecificRule, ruleCaptionsAreNormalized } from '../services/specific-color-rules.js';
+import { normalizeSpecificRule } from '../services/specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
 import { getFeatureColorRuleHash, getRenderedFeatureHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -9,7 +9,6 @@ import {
 /** @import { FeatureLike } from '../services/feature-utils.js' */
 /** @import { ColorRule, RuleFeature, VisibilityRule } from '../services/rule-matchers.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { SavedFeatureColorEdit } from '../services/svg-result-ingestion.js' */
 
 // A feature of a catalog before schema 5 has no drawn selector values. Where
 // its rendered ID carries its source hash, its record was drawn with the
@@ -106,26 +105,6 @@ const buildRuleFeaturePayload = (feature, label) => {
   return { type: metadata.featureType, record: metadata.record, qualifiers, selector, label };
 };
 
-// The feature color overrides a rule drew follow the rule's normalized caption
-// (`prepareCandidate`): rebound by their source row, never by suffix parsing.
-// A direct override keeps its caption.
-/**
- * @param {Readonly<Record<string, SavedFeatureColorEdit>> | null | undefined} overrides
- * @param {readonly Partial<SpecificColorRule>[]} rules
- * @param {readonly Partial<SpecificColorRule>[]} normalized The rules, with Python's captions.
- */
-export const rebindRuleColorOverrides = (overrides, rules, normalized) => {
-  const source = rules.map((rule) => normalizeSpecificRule(rule));
-  return Object.fromEntries(Object.entries(overrides || {}).map(([key, override]) => {
-    // A string or null edit has no `caption` (read as undefined, which no rule's `cap` equals),
-    // so `index` is not negative only for an object edit.
-    const edit = /** @type {{ color?: unknown, caption?: unknown } | null | undefined} */ (override);
-    const index = source.findIndex((rule) => rule.cap === edit?.caption
-      && rule.color === String(edit?.color || '').toLowerCase());
-    return [key, index < 0 ? override : { ...edit, caption: normalized[index].cap }];
-  }));
-};
-
 // A run (`runWhenPrepared`) that fails, in its preparation or its commit,
 // shows its error as the caller's `operation`, unless another error replaced
 // the one shown when it started. Every owner that runs through the rule
@@ -168,7 +147,7 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
 /**
  * Python's answer to a rule evaluation (R7): per feature, the indexes of the
  * rules it matches and, for color rules, the priority of each match (aligned
- * with the indexes); or the normalized rows of `color-captions`.
+ * with the indexes).
  * @typedef {Record<string, any>} RuleEvaluationResult
  */
 
@@ -180,7 +159,6 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * @property {{ value: boolean }} [pending] Receives whether a preparation is running.
  * @property {{ value: boolean }} [blocking] Receives whether an edit's preparation is running: one
  *   that is not a `view` preparation (OV-377). Save and Load wait for it.
- * @property {(notice: string) => void} [notify] Shows the notice of a caption Python changed.
  * @property {() => Record<string, any>[]} [visibilityRules] The Feature visibility rule rows, in table order.
  */
 
@@ -193,8 +171,8 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
 /**
  * The candidate rules a commit or a run admits (`prepareCandidate`).
  * @typedef {object} RuleCandidate
- * @property {Partial<SpecificColorRule>[]} rules Python's normalized rule rows.
- * @property {{ index: number, before: string, after: string }[]} changes The captions it changed.
+ * @property {Partial<SpecificColorRule>[]} rules The rule rows, as `normalizeSpecificRule` writes them
+ *   (as given with `options.asGiven`); a caption stays as written.
  * @property {RuleInputsSnapshot} snapshot The inputs the candidate was prepared from.
  */
 
@@ -214,8 +192,7 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  *   `view` marks a preparation that only reads the matches (a popup opening): it does not raise `blocking`.
  * @property {(rules?: Partial<SpecificColorRule>[]) => boolean} isPrepared
  * @property {(rules?: Partial<SpecificColorRule>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
- *   `options.captions` false prepares the rules as given, without Python's caption normalization.
- * @property {(candidate: RuleCandidate | null) => void} notifyChanges
+ *   `options.asGiven` prepares the rules as they are, without writing them as `normalizeSpecificRule` does.
  * @property {() => RuleInputsSnapshot} snapshot The inputs the matches depend on.
  * @property {(before: RuleInputsSnapshot) => boolean} isCurrent Whether `before` is still the current inputs.
  * @property {{ value: boolean }} pending
@@ -226,7 +203,7 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * @returns {RulePreparation}
  */
 export const createRulePreparation = ({
-  state, evaluate, pending = { value: false }, blocking = { value: false }, notify = () => {}, visibilityRules = () => []
+  state, evaluate, pending = { value: false }, blocking = { value: false }, visibilityRules = () => []
 }) => {
   // The rule keys Python accepted: a key's syntax is a fact of its content.
   /** @type {Set<string>} */
@@ -382,37 +359,19 @@ export const createRulePreparation = ({
     return Promise.all([strict ? colors : Promise.resolve(colors).catch(() => false), visibility])
       .then(([current, outcome]) => strict && !current ? false : /** @type {any} */ (outcome)?.error ? outcome : true);
   };
-  // The rules a commit or a run admits: Python's normalized captions, their
-  // matches prepared, and the captions it changed (`notifyChanges`). `options`
-  // are the caller's evaluation options (a run's progress observer). A run
-  // that only reads the matches of rules it keeps as they are asks for
-  // `captions: false`: the rules are prepared as given and no caption changes.
+  // The rules a commit or a run admits, with their matches prepared: the rows
+  // as `normalizeSpecificRule` writes them, each caption as written (gbdraw
+  // never rewrites one; the Legend numbers the names it draws). `options` are
+  // the caller's evaluation options (a run's progress observer). A run that
+  // only reads the matches of rules it keeps as they are asks for `asGiven`.
   /** @type {RulePreparation['prepareCandidate']} */
-  const prepareCandidate = async (rules = state.activeDrawing().manualSpecificRules, { captions = true, ...options } = {}) => {
+  const prepareCandidate = async (rules = state.activeDrawing().manualSpecificRules, { asGiven = false, ...options } = {}) => {
     const before = snapshot();
-    if (!captions) {
-      return await prepare(rules, options) && isCurrent(before)
-        ? { rules, changes: [], snapshot: before } : null;
-    }
-    const source = rules.map(rule => normalizeSpecificRule(rule));
-    // Rules whose every caption has one color are Python's normalization
-    // already (`ruleCaptionsAreNormalized`), so they send no request (OV-238).
-    /** @type {SpecificColorRule[]} */
-    const normalized = ruleCaptionsAreNormalized(source)
-      ? source
-      : (await evaluate({ features: [], rules: source, kind: 'color-captions' }, options)).rules;
-    if (!isCurrent(before)) return null;
-    if (!await prepare(normalized, options) || !isCurrent(before)) return null;
-    const changes = normalized.flatMap((rule, index) => rule.cap !== source[index].cap
-      ? [{ index, before: source[index].cap, after: rule.cap }] : []);
-    return { rules: normalized, changes, snapshot: before };
-  };
-  /** @type {RulePreparation['notifyChanges']} */
-  const notifyChanges = (candidate) => {
-    if (candidate?.changes.length) notify(`Updated ${candidate.changes.length} specific-color caption(s) to distinguish their colors.`);
+    const candidate = asGiven ? rules : rules.map(rule => normalizeSpecificRule(rule));
+    return await prepare(candidate, options) && isCurrent(before) ? { rules: candidate, snapshot: before } : null;
   };
   return {
-    prepare, retain, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, snapshot,
+    prepare, retain, prepareDrawn, isPrepared, prepareCandidate, snapshot,
     isCurrent, pending
   };
 };

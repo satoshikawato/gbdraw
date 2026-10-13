@@ -4770,7 +4770,6 @@
                                     <option v-for="value in specificRuleQualifierSuggestions" :key="`specific-rule-qual-${value}`" :value="value"></option>
                                 </datalist>
 
-                                <p role="status" aria-live="polite" aria-atomic="true" class="mb-2 text-[10px] text-slate-600 break-words">{{ specificRuleNotice }}</p>
                                 <p v-if="new Set(manualSpecificRules.map((rule) => rule.qual)).size < manualSpecificRules.length" data-specific-rule-order-hint class="mb-2 ui-hint break-words">Rules on the same qualifier: the first match wins.</p>
                                 <div class="mb-2 bg-slate-50 p-2 rounded border border-slate-200" data-specific-rule-add>
                                     <div class="grid grid-cols-2 gap-1 mb-1">

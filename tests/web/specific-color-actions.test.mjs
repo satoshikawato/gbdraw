@@ -40,8 +40,8 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
     state.labelReflowProcessing.value = busy;
     [...watchers].filter(entry => entry.source === state.labelReflowProcessing).forEach(entry => entry.callback(busy));
   };
-  const notices = [], transactions = [], transactionScopes = [];
-  const preparation = createRulePreparation({state: withDrawings(state), evaluate, notify:message=>notices.push(message)});
+  const transactions = [], transactionScopes = [];
+  const preparation = createRulePreparation({state: withDrawings(state), evaluate});
   let prepareLegend = async () => {};
   let previousIntents = [];
   let openTransaction = null;
@@ -70,7 +70,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
       state.results.value=[{name:'figure',content:'after'}];
     } };
   }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch, ...options});
-  return {state,actions,history,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders, setRerendering};
+  return {state,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders, setRerendering};
 };
 // Review 3 (OV-262 in the Features drawer): with the type's default color
 // Auto, the drawer's color input shows the applied palette's color, as
@@ -102,16 +102,16 @@ test('rule action admits full canonical rules and legend in one transaction afte
   release();
   assert.equal(await pending,true);
   s.setLegendPreparation(async () => {});
-  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
+  // A caption written in two colors stays as written (PD-OI-042 scenario revision 2).
+  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared','Shared']);
   assert.equal(s.state.manualSpecificRules[0].fromFile,true);
-  assert.deepEqual([...s.state.fileLegendCaptions.value],['Shared [#112233]']);
+  assert.deepEqual([...s.state.fileLegendCaptions.value],['Shared']);
   assert.equal(s.transactions.length,1);
-  assert.deepEqual(s.legendApplies,[{transaction:'Change specific color rules',rules:['Shared [#112233]','Shared [#445566]']}],
+  assert.deepEqual(s.legendApplies,[{transaction:'Change specific color rules',rules:['Shared','Shared']}],
     'the legend rows apply after the rule transition, inside its History step (R13)');
-  assert.match(s.notices[0],/Updated 2/);
   await s.actions.setSpecificRuleField(1,'cap','Renamed');
   assert.equal(s.state.manualSpecificRules[1].cap,'Renamed');
-  assert.equal(s.state.manualSpecificRules[0].cap,'Shared [#112233]');
+  assert.equal(s.state.manualSpecificRules[0].cap,'Shared');
   await s.actions.moveSpecificRuleUp(1);
   assert.equal(s.state.manualSpecificRules[0].cap,'Renamed');
   s.state.addedLegendCaptions.value.add('Independent manual legend');
@@ -161,7 +161,7 @@ test('a rule commit whose preparation spans the rerendered Result binding prepar
   });
   assert.equal(await s.actions.commitSpecificRules(() => rules),true);
   assert.equal(preparations,2,'one more preparation, against the bound Result');
-  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
+  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared','Shared']);
   assert.equal(s.transactions.length,1);
   assert.notEqual(results,s.state.results.value,'the Legend rows applied');
 });
@@ -190,12 +190,12 @@ test('a rule run waits for the automatic rerender in flight before it prepares (
   assert(s.preparation.isPrepared([saved,candidate]));
 });
 
-test('historical caption ownership retains every source color before normalization',async()=>{
+test('a caption written in two colors keeps a row per color, each under its own key, and stays as written',async()=>{
   const s=setup();s.state.manualSpecificRules.push(...rules.map(rule=>({...rule})));
   await s.actions.setSpecificRuleField(0,'val','a');
   // The rows the rules had: one caption in two colors is two rows, each under its own key.
   assert.deepEqual(s.previousIntents(),[{caption:'Shared [#112233]',color:'#112233'},{caption:'Shared [#445566]',color:'#445566'}]);
-  assert.deepEqual(s.state.manualSpecificRules.map(rule=>rule.cap),['Shared [#112233]','Shared [#445566]']);
+  assert.deepEqual(s.state.manualSpecificRules.map(rule=>rule.cap),['Shared','Shared']);
 });
 
 test('complete caption recolor uses bounded intent while caption replacement retains checkpoint History', async () => {
@@ -234,9 +234,8 @@ test('biological safety rows and hidden rendered features do not create unused l
     { feat: 'CDS', qual: 'gene', val: 'c', color: '#778899', cap: 'Shared' },
     { feat: 'CDS', qual: 'gene', val: 'absent', color: '#aabbcc', cap: 'Shared' }
   ]), true);
-  assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap),
-    ['Shared [#112233]', 'Shared [#445566]', 'Shared [#778899]', 'Shared [#aabbcc]']);
-  assert.deepEqual(intents, [{ caption: 'Shared [#112233]', color: '#112233' }]);
+  assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap), ['Shared', 'Shared', 'Shared', 'Shared']);
+  assert.deepEqual(intents, [{ caption: 'Shared [#112233]', color: '#112233', name: 'Shared' }]);
 });
 
 // F-2 (release D-39): a hash rule names the feature's hash in its source
@@ -525,7 +524,7 @@ test('a color action prepares the color matches of its rules without the caption
   assert.ok(pending instanceof Promise, 'unprepared rules are prepared first');
   assert.deepEqual(commits, []);
   assert.equal(await pending, 'cold');
-  assert.deepEqual(kinds, ['color'], 'the matches only; commitSpecificRules evaluates the captions');
+  assert.deepEqual(kinds, ['color'], 'the matches only');
   assert.equal(s.actions.runWithRuleMatches(rules, () => { commits.push('warm'); return 'warm'; }), 'warm');
   assert.deepEqual(commits, ['cold', 'warm']);
   assert.deepEqual(kinds, ['color']);

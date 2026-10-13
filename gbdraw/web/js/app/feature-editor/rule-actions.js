@@ -165,7 +165,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       .map(entry => ({ caption: entry.caption, color: entry.color }));
     const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
     return {
-      intents: buildLegendIntents(candidateRules.filter(rule => used.has(rule)), rendererRows).intents,
+      intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents,
       previousIntents: [...ruleRows, ...takenRows, ...retiredLegendIntents],
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption))
     };
@@ -378,7 +378,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
   // R13: this owner builds the candidate rules, so it is the one place that asks
   // the rule preparation for their matches: a commit prepares the candidate
-  // with its captions, a color action prepares the rules it reads as they are.
+  // rows, a color action prepares the rules it reads as they are.
   /**
    * @param {Partial<SpecificColorRule>[]} rules
    * @param {Parameters<import('../rule-matching.js').RulePreparation['prepareCandidate']>[1]} [options]
@@ -399,7 +399,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const runWithRuleMatches = (rules, commit) => {
     const writes = appliedWrites;
     return runWhenPrepared(state, () => {
-      const prepare = () => prepareRules(rules, { captions: false });
+      const prepare = () => prepareRules(rules, { asGiven: true });
       return [rulePreparation.isPrepared(rules)
         || (state.labelReflowProcessing?.value ? rerenderIdle().then(prepare) : prepare())];
     }, commit, () => (appliedWrites !== writes ? runWithRuleMatches(rules, commit) : undefined));
@@ -462,7 +462,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       projectPaletteAndRules({ prepareRules: false, legendRows });
       return legend.diff;
     }, { joinsOpenStep });
-    if (applied) { appliedWrites += 1; rulePreparation.notifyChanges(candidate); }
+    if (applied) appliedWrites += 1;
     if (applied && redrawsLegend) ports.requestAutomaticRerender();
     return applied;
   };
