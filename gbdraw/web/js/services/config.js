@@ -303,7 +303,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { LinearComparisonEdge, LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
-/** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { DiagnosticContext, UserFacingError } from '../utils/error-normalization.js' */
@@ -315,7 +315,6 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { GbdrawSession, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
-/** @import { DiagramMode } from '../state.js' */
 
 /** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
 
@@ -4898,8 +4897,9 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
       status: 'summary-ready',
       generationId,
       error: plan.warning || null,
+      // The cast: `Array.isArray` on the line above; the elements stay unvalidated.
       summaryCount: Array.isArray(plan.recoveredFeatureState?.extractedFeatures)
-        ? plan.recoveredFeatureState.extractedFeatures.length
+        ? /** @type {unknown[]} */ (plan.recoveredFeatureState.extractedFeatures).length
         : state.extractedFeatures.value.length
     });
     return;
