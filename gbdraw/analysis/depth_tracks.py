@@ -492,6 +492,41 @@ def normalize_depth_tracks(
     )
 
 
+def depth_track_inputs(
+    record_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
+) -> tuple[DepthTrackInput, ...] | None:
+    """The logical tracks of normalized specs, with the tables already read.
+
+    ``normalize_depth_tracks`` of the result gives the same specs without
+    reading a file, so a builder that assembles a figure more than once reads
+    each depth file once.
+    """
+
+    from gbdraw.api.options import DepthTrackInput
+
+    if record_tracks is None:
+        return None
+    tracks: dict[int, tuple[DepthTrackSpec, list[DataFrame | None]]] = {}
+    for record_index, row in enumerate(record_tracks):
+        for spec in row:
+            sources = tracks.setdefault(
+                spec.track_index, (spec, [None] * len(record_tracks))
+            )[1]
+            sources[record_index] = spec.table
+    return tuple(
+        DepthTrackInput(
+            source=sources,
+            label=spec.label,
+            color=spec.fill_color,
+            height=spec.height,
+            large_tick_interval=spec.large_tick_interval,
+            small_tick_interval=spec.small_tick_interval,
+            tick_font_size=spec.tick_font_size,
+        )
+        for _index, (spec, sources) in sorted(tracks.items())
+    )
+
+
 def index_depth_track_row(
     row: Sequence[DepthTrack],
     *,
@@ -793,6 +828,7 @@ __all__ = [
     "depth_track_data_count",
     "depth_track_heights",
     "depth_track_indices",
+    "depth_track_inputs",
     "index_depth_track_row",
     "normalize_depth_tracks",
     "representative_depth_tracks",

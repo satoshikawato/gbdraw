@@ -57,11 +57,10 @@ from gbdraw.analysis.protein_colinearity import (
     validate_protein_raw_entry_references,
 )
 from gbdraw.annotations import (
-    AnnotationOptions,
     FeatureIdentitySpan,
     ResolutionWarning,
     ResolvedAnnotationBundle,
-    read_annotation_table,
+    read_annotation_options,
     resolve_annotations,
 )
 from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat
@@ -352,14 +351,7 @@ def _resolve_request_option_tables(
     annotations = options.annotations
     if annotations is not None and annotations.table_file is not None:
         annotations = register_prepared_resource_value(
-            AnnotationOptions(
-                sets=tuple(
-                    read_annotation_table(
-                        annotations.table_file,
-                        mode=mode,
-                    )
-                )
-            ),
+            read_annotation_options(annotations, mode=mode),
             annotations.table_file,
         )
         changed = True

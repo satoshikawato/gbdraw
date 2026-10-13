@@ -406,6 +406,16 @@ def _materialize_sets(options: AnnotationOptions, *, mode: str) -> tuple[Annotat
     return ()
 
 
+def read_annotation_options(
+    options: AnnotationOptions | None, *, mode: Literal["circular", "linear"]
+) -> AnnotationOptions | None:
+    """The options with their table file read into sets, so no later resolution reads it."""
+
+    if options is None or not options.table_file:
+        return options
+    return AnnotationOptions(sets=_materialize_sets(options, mode=mode))
+
+
 def resolve_annotations(
     annotations: AnnotationOptions | Sequence[AnnotationSet] | None,
     records: Sequence[SeqRecord],
@@ -444,6 +454,7 @@ def resolve_annotations(
 __all__ = [
     "annotation_midpoint",
     "merge_annotation_segments",
+    "read_annotation_options",
     "resolve_annotation_set",
     "resolve_annotations",
 ]

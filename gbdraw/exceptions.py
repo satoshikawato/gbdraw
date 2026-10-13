@@ -44,6 +44,14 @@ class ValidationError(GbdrawError):
     """Raised when user input or data fails validation."""
 
 
+class LabelLayoutError(ValidationError):
+    """A label setting the engine cannot draw (radial labels that find no room).
+
+    The label fit counts it as a setting that does not fit; any other error of
+    an assembly is not about labels and is raised.
+    """
+
+
 class ComparisonIdentityError(ValueError, GbdrawError):
     """Comparison endpoints conflict; remains catchable as ValueError.
 

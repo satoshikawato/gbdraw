@@ -358,3 +358,128 @@ def test_a_row_computed_after_the_conservation_file_is_gone_reads_no_file(tmp_pa
     assert row is not None and row.status in {"found", "not_found"}
     assert reads == []
     assert "Skipping conservation source" not in caplog.text
+
+
+def _write_input_files(directory: Path, record) -> dict[str, Path]:
+    directory.mkdir(parents=True, exist_ok=True)
+    texts = {
+        "depth": "".join(f"{record.id}\t{i}\t{10 + i % 50}\n" for i in range(1, len(record.seq) + 1)),
+        "colors": "CDS\tproduct\t.*\t#D55E00\tCDS\n",
+        "default_colors": "CDS\t#D0D0D0\n",
+        "visibility": "*\tCDS\tproduct\t.*\tshow\n",
+        "annotations": "set_id\tid\tmark\tstart\tend\tlabel\ns\ta\tband\t1\t500\tregion\n",
+    }
+    paths = {name: directory / f"{name}.tsv" for name in texts}
+    for name, text in texts.items():
+        paths[name].write_text(text, encoding="utf-8")
+    return paths
+
+
+def _crossing_options_with_files(paths: dict[str, Path]) -> CircularDiagramOptions:
+    from gbdraw.annotations.models import AnnotationOptions
+    from gbdraw.api.options import ColorOptions
+
+    return CircularDiagramOptions(
+        config_overrides={
+            "labels.circular.scope": "outer",
+            "labels.rendering": "external_only",
+            "labels.font_size.short": 14.0,
+            "labels.font_size.long": 14.0,
+            "canvas.show_depth": True,
+        },
+        colors=ColorOptions(
+            color_table_file=str(paths["colors"]), default_colors_file=str(paths["default_colors"])
+        ),
+        feature_visibility_table_file=str(paths["visibility"]),
+        annotations=AnnotationOptions(table_file=str(paths["annotations"])),
+        depth_file=str(paths["depth"]),
+    )
+
+
+def test_rows_computed_after_every_input_file_is_gone_match_the_rows_with_the_files(tmp_path) -> None:
+    """OV-732: the builder reads each file input once; a row reassembles the figure without them."""
+
+    from gbdraw.api.diagram import build_circular_diagram, label_fit_report, label_fit_row
+
+    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    drawings = {}
+    for name in ("kept", "gone"):
+        paths = _write_input_files(tmp_path / name, record)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            drawings[name] = build_circular_diagram(
+                record, options=_crossing_options_with_files(paths), _label_fit_warn_search_seconds=0.0
+            )
+    for path in (tmp_path / "gone").iterdir():
+        path.unlink()
+
+    report = label_fit_report(drawings["gone"])
+    assert report is not None and report.drawn and report.rows
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for row in report.rows:
+            assert label_fit_row(drawings["gone"], row.kind) == label_fit_row(drawings["kept"], row.kind)
+
+
+def test_web_rows_computed_after_the_staged_depth_file_is_gone_match_the_rows_with_it(tmp_path) -> None:
+    """OV-732: the Web deletes the staged files after Generate; "Choose a fix" rows still compute."""
+
+    import shutil
+
+    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    paths = _write_input_files(tmp_path / "inputs", record)
+    document = build_session_document(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=_crossing_options_with_files(paths),
+            output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
+        )
+    ).to_dict()
+    searches = {name: LabelFitRowSearches() for name in ("kept", "gone")}
+    entries = {}
+    for name, search in searches.items():
+        (entries[name],) = _web_render(document, tmp_path / name, search)["metadata"]["labelFitReports"]
+    shutil.rmtree(tmp_path / "gone" / "resources")
+    shutil.rmtree(tmp_path / "inputs")
+
+    kinds = [row["kind"] for row in entries["gone"]["report"]["rows"]]
+    assert kinds
+    for kind in kinds:
+        gone = searches["gone"].row(entries["gone"]["rowToken"], kind)
+        assert gone == searches["kept"].row(entries["kept"]["rowToken"], kind)
+        assert gone["status"] != "not_computed"
+
+
+def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() -> None:
+    """OV-733: only a label setting the engine cannot draw counts as "does not fit"."""
+
+    from gbdraw.api.diagram import _checked_circular_drawing, build_circular_diagram, label_fit_row
+    from gbdraw.exceptions import LabelLayoutError
+
+    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    options = CircularDiagramOptions(
+        config_overrides={
+            "labels.circular.scope": "outer",
+            "labels.rendering": "external_only",
+            "labels.font_size.short": 14.0,
+            "labels.font_size.long": 14.0,
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
+
+    def failing(error: Exception):
+        def assemble(overrides):
+            if not overrides:
+                return drawing
+            raise error
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return _checked_circular_drawing(assemble, warn_search_seconds=0.0)
+
+    with pytest.raises(ValidationError, match="Depth file does not exist"):
+        label_fit_row(failing(ValidationError("Depth file does not exist: gone.tsv")), "smaller_font")
+    row = label_fit_row(failing(LabelLayoutError("radial label packing did not converge")), "smaller_font")
+    assert row is not None and row.status == "not_found"

@@ -6,7 +6,7 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
-from ..exceptions import ValidationError
+from ..exceptions import LabelLayoutError, ValidationError
 from ..layout.spatial import Aabb, AabbIndex
 from ..layout.text_geometry import (
     OrientedTextBox,
@@ -169,7 +169,7 @@ def _pack_angles(
             break
         start_angle += closing_overflow
     else:  # pragma: no cover - arithmetic guard for non-finite input
-        raise ValidationError("radial label cyclic relaxation did not converge")
+        raise LabelLayoutError("radial label cyclic relaxation did not converge")
 
     if balance:
         # The clockwise sweep can cross leaders from different feature radii.
@@ -186,7 +186,7 @@ def _pack_angles(
                 break
             end_angle -= overflow
         else:
-            raise ValidationError("radial label cyclic relaxation did not converge")
+            raise LabelLayoutError("radial label cyclic relaxation did not converge")
         placed = [(first + second) / 2.0 for first, second in zip(placed, backward, strict=True)]
 
     return [angle % _TAU for angle in placed]
@@ -399,7 +399,7 @@ def _place_side(
         collision_radius += radial_deficit
         if is_inner:
             required_growth += radial_deficit
-    raise ValidationError(
+    raise LabelLayoutError(
         "radial label packing did not converge after deterministic radius expansion; "
         f"side={'inner' if is_inner else 'outer'}, labels={len(ordered)}"
     )
