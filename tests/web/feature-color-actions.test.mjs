@@ -196,7 +196,9 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [],
     findMatchingRegexRule: () => matchingRegexRule,
     getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
     effectiveLegendCaptions: () => () => 'Core',
-    getLegendRowRules: (caption) => legendRowRules(caption, { rules: manualSpecificRules, pythonRows: new Map() }),
+    // The port's answer for this table, whose row `Core` holds every rule captioned `Core` (the key
+    // allocation, which gives one caption in several colors a row per color, has its own fixture).
+    getLegendRowRules: (caption) => manualSpecificRules.filter((rule) => rule.cap === caption),
     getIndividualFeatureLabel: (feature) => feature.product || '',
     // FE-09 (D-14): "This feature only" always writes the stable hash.
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureColorRuleHash(feature) }),

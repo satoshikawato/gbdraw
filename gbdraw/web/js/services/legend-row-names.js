@@ -51,6 +51,14 @@ export const legendSwatch = (paint) => {
   return /** @type {LegendSwatchIdentity} */ (JSON.stringify(['solid', legendColorIdentity(paint.fill), drawn ? stroke : 'none', drawn ? width : 0]));
 };
 
+// Whether two swatches have the same line, whatever their fills.
+/**
+ * @param {{ stroke?: unknown, width?: unknown } | null | undefined} left
+ * @param {{ stroke?: unknown, width?: unknown } | null | undefined} right
+ */
+export const sameLegendLine = (left, right) => legendSwatch({ stroke: left?.stroke, width: left?.width })
+  === legendSwatch({ stroke: right?.stroke, width: right?.width });
+
 /**
  * The name each row is drawn with, for the rows being drawn in legend order.
  * Rows of one name and one swatch are one row and share a drawn name. A name

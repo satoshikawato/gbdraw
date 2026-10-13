@@ -330,36 +330,23 @@ test('the compile gives every track row Python draws its palette color', async (
   }
 });
 
-// OV-347: rules of one caption in two colors (a table Python's caption
-// normalization has not seen, as a History step restores it) draw one live
-// row. It shows the color of the first rule a drawn feature takes, as Python
-// draws only the caption and color a feature took; a rule that matches no
-// feature colors no row. Unknown matches keep the first rule's color.
-test('a rule row shows the color of the first rule a drawn feature takes', async () => {
+// Rules of one caption in two colors draw a row per color, each under its own
+// key (tests/fixtures/legend_rule_keys.json), so a rule's row has one color
+// whichever rule a drawn feature takes (OV-347 was one live row for both).
+test('rules of one caption in two colors color a row each', async () => {
   const { draftLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
-  const { recordRuleMatches, ruleKey } = await import('../../gbdraw/web/js/services/rule-matchers.js');
-  const unmatched = { feat: 'CDS', qual: 'gene', val: 'psaA_NO_MATCH', color: '#ff0000', cap: 'photosystem I' };
   const psaA = { feat: 'CDS', qual: 'gene', val: 'psaA', color: '#ff0000', cap: 'photosystem I' };
   const psaB = { feat: 'CDS', qual: 'gene', val: 'psaB', color: '#00662c', cap: 'photosystem I' };
-  const draft = (rules, features) => draftLegendRowColors({
-    rules,
-    pythonRows: new Map([['photosystem I', { key: 'photosystem I', color: '#00662c' }]]),
-    features,
-    originalLegendOrder: ['photosystem I', 'other proteins'],
+  const draft = draftLegendRowColors({
+    rules: [psaA, psaB],
+    pythonRows: new Map([['photosystem I [#00662c]', { key: 'photosystem I [#00662c]', color: '#00662c' }]]),
+    features: [{ type: 'CDS', gene: 'psaA', fill_color: '#54bcf8' }, { type: 'CDS', gene: 'psaB', fill_color: '#00662c' }],
+    originalLegendOrder: ['photosystem I [#00662c]', 'other proteins'],
     paletteColors: { CDS: '#54bcf8' }, drawnTracks: []
-  }).colorOf('photosystem I');
-  const drawn = () => [{ type: 'CDS', gene: 'psaA', fill_color: '#54bcf8' }, { type: 'CDS', gene: 'psaB', fill_color: '#00662c' }];
-  const seed = (rules, features) => {
-    const keys = rules.map(ruleKey);
-    recordRuleMatches(features, keys, (index) => {
-      const matched = rules.flatMap((rule, ruleIndex) => (rule.val === features[index].gene ? [ruleIndex] : []));
-      return { matched, priorities: matched.map(() => 0), declined: [] };
-    });
-    return features;
-  };
-  assert.equal(draft([unmatched, psaB], seed([unmatched, psaB], drawn())), '#00662c');
-  assert.equal(draft([psaA, psaB], seed([psaA, psaB], drawn())), '#ff0000');
-  assert.equal(draft([unmatched, psaB], drawn()), '#ff0000', 'unknown matches keep the first rule');
+  });
+  assert.deepEqual(draft.ruleCaptions, ['photosystem I [#ff0000]', 'photosystem I [#00662c]']);
+  assert.deepEqual(draft.ruleCaptions.map(draft.colorOf), ['#ff0000', '#00662c']);
+  assert.equal(draft.colorOf('photosystem I'), null);
 });
 
 // Review 2: a Legend row that a Specific color rule draws keeps the rule's

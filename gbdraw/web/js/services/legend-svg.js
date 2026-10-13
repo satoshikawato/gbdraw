@@ -1,6 +1,7 @@
 // @ts-check
 import { parseTransform } from './svg-transform.js';
 import { isAutoFeatureUnderlay } from './feature-dom.js';
+import { sameLegendLine } from './legend-row-names.js';
 import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 
 export { parseTransform };
@@ -296,6 +297,9 @@ export const setsFeatureStroke = (override) => {
  * @typedef {object} PythonLegendRow
  * @property {PythonLegendKey} key
  * @property {SwatchColor | null} color Null when the row has no swatch fill.
+ * @property {boolean} [ruleLine] False when Python drew the swatch with another line than a color-rule
+ *   row's (the Result's block stroke): a rule named like the row then draws a row of its own (D-13).
+ *   `pythonLegendRows` gives it.
  */
 
 // The key of a listed Legend row: its key record (`originalCaption`), else
@@ -320,9 +324,16 @@ export const pythonLegendRows = (svg) => {
   const rows = new Map();
   const drawn = getAllFeatureLegendGroups(svg).flatMap((group) => Array.from(group.querySelectorAll('g[data-legend-key]')));
   const editor = (/** @type {Element} */ row) => row.getAttribute('data-legend-owner') === 'direct-editor';
+  const block = drawnBlockStroke(svg);
+  const ruleLine = { stroke: block?.color, width: block?.width };
   [...drawn.filter((row) => !editor(row)), ...drawn.filter(editor)].forEach((element) => {
     const row = pythonLegendRow(element);
-    if (row.key && !rows.has(row.key)) rows.set(row.key, row);
+    if (!row.key || rows.has(row.key)) return;
+    const swatch = getLegendEntrySwatch(element);
+    rows.set(row.key, {
+      ...row,
+      ruleLine: sameLegendLine({ stroke: pythonDrawnAttribute(swatch, 'stroke'), width: pythonDrawnAttribute(swatch, 'stroke-width') }, ruleLine)
+    });
   });
   return rows;
 };

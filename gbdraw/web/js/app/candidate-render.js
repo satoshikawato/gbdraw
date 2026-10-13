@@ -13,7 +13,7 @@ import { defaultLegendCaptionOrder, isLegendOrderEdited, legendEntryKey } from '
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
-import { generatedLegendRow, ruleCaptionsAreNormalized, ruleLegendCaptions } from '../services/specific-color-rules.js';
+import { generatedLegendRow, ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
@@ -247,23 +247,13 @@ const paletteLegendColor = (key, palette, trackRows) => {
   return track ? trackRowColor(track, palette) : palette[generatedLegendRow(key).paletteKey] || '';
 };
 
-// Rules of one caption in two colors (a table Python's caption normalization
-// has not seen, as a History step restores it) share a live row, which takes
-// the color of the first rule a drawn feature takes: Python draws only the
-// caption and color a feature took (OV-347). Rules of unknown matches follow.
-/** @param {readonly Partial<SpecificColorRule>[]} rules @param {LegendRowContext['features']} features */
-const drawnRulesFirst = (rules, features) => {
-  const { firstIfKnown } = ruleMatcher([...rules]);
-  const drawn = new Set(Array.from(features, (feature) => firstIfKnown(feature)));
-  return [...rules.filter((rule) => drawn.has(rule)), ...rules.filter((rule) => !drawn.has(rule))];
-};
-
 // The color the draft gives the features of a Legend row (its Python key)
-// where a displayed Result predates the draft: its first rule's color
-// (`drawnRulesFirst`), else its palette color, as Python draws them. A rule's
-// row is the key Python draws for it (N-06: "<caption> [<hex>]" when the caption names a row of
-// another color), allocated from the colors Python drew for its rows, never
-// from their swatches (R15-4), nor a row its caption only spells. The live
+// where a displayed Result predates the draft: its rules' color, else its
+// palette color, as Python draws them. A rule's row is the key Python draws
+// for it ("<caption> [<fill>]" when the caption is written with several colors
+// or names a row of another swatch, so a row has the rules of one color),
+// allocated from what Python drew for its rows, never from their swatches
+// (R15-4), nor a row its caption only spells. The live
 // compile shows it on rows without a Legend color of their own, and a row's
 // stroke reaches by it (`LegendRowReach.draftColor`); the feature popup reads
 // it the same way.
@@ -279,7 +269,7 @@ export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features =
   const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, features, originalLegendOrder: [...originalLegendOrder] });
   /** @type {Map<PythonLegendKey, string>} */
   const ruleColors = new Map();
-  (ruleCaptionsAreNormalized(rules) ? rules : drawnRulesFirst(rules, features)).forEach((rule) => {
+  rules.forEach((rule) => {
     const key = text(rule?.cap) ? rowOf(rule) : null;
     if (key && !ruleColors.has(key)) ruleColors.set(key, text(rule.color));
   });

@@ -7,8 +7,9 @@ import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-edito
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { readFileSync } from 'node:fs';
 import {
-  diffLegendIntents, generatedLegendRow, legendRowRules, ruleCommitLegendRows, ruleLegendCaptions
+  createRuleLegendCaptions, diffLegendIntents, generatedLegendRow, legendRowRules, ruleCommitLegendRows, ruleLegendCaptions
 } from '../../gbdraw/web/js/services/specific-color-rules.js';
+import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
@@ -192,7 +193,8 @@ test('a rule run waits for the automatic rerender in flight before it prepares (
 test('historical caption ownership retains every source color before normalization',async()=>{
   const s=setup();s.state.manualSpecificRules.push(...rules.map(rule=>({...rule})));
   await s.actions.setSpecificRuleField(0,'val','a');
-  assert.deepEqual(s.previousIntents(),[{caption:'Shared',color:'#112233'},{caption:'Shared',color:'#445566'}]);
+  // The rows the rules had: one caption in two colors is two rows, each under its own key.
+  assert.deepEqual(s.previousIntents(),[{caption:'Shared [#112233]',color:'#112233'},{caption:'Shared [#445566]',color:'#445566'}]);
   assert.deepEqual(s.state.manualSpecificRules.map(rule=>rule.cap),['Shared [#112233]','Shared [#445566]']);
 });
 
@@ -881,5 +883,25 @@ for (const [kind, cancel] of [
     assert.equal(await edited,true);
     assert.deepEqual(table(),['b #000000 ','zz #778899 ']);
     assert.deepEqual(s.transactions,['Edit specific color rule']);
+  });
+}
+
+// The key of the row a rule draws (PD-OI-042 scenario revision 2): Python's answer is
+// gbdraw/legend/table.py::rule_legend_keys (tests/test_specific_color_captions.py).
+for (const { name, rules, renderer_rows: rendererRows, rule_stroke: ruleStroke = [], keys } of JSON.parse(
+  readFileSync(new URL('../fixtures/legend_rule_keys.json', import.meta.url), 'utf8')
+).cases) {
+  test(`rule row keys: ${name}`, () => {
+    // A renderer row is its key and fill, then its line; `rule_stroke` is the line of a rule row.
+    const rows = rendererRows.map(([caption, color, stroke, width]) => ({
+      caption, color: legendColorIdentity(color), ruleLine: sameLegendLine({ stroke, width }, { stroke: ruleStroke[0], width: ruleStroke[1] })
+    }));
+    const keyOf = createRuleLegendCaptions(rules, rows);
+    assert.deepEqual(rules.map(keyOf), keys);
+    assert.deepEqual(rules.map(createRuleLegendCaptions([...rules].reverse(), rows)), keys);
+    // The lazy reader of a Result's rows allocates the same keys.
+    const pythonRows = new Map(rows.map((row) => [row.caption, { key: row.caption, color: row.color, ruleLine: row.ruleLine }]));
+    const lazy = ruleLegendCaptions({ rules, pythonRows, features: [], originalLegendOrder: rows.map((row) => row.caption) });
+    assert.deepEqual(rules.map(lazy), keys);
   });
 }
