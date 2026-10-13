@@ -4554,14 +4554,14 @@
                             <div v-if="fontSettings.installedPicker.open" class="border border-slate-200 rounded p-2 space-y-2" role="dialog" aria-label="Choose installed font" data-font-installed-picker>
                                 <p v-if="fontSettings.installedPicker.error" class="text-[10px] text-red-600" role="alert">{{ fontSettings.installedPicker.error }}</p>
                                 <template v-else>
-                                    <input type="search" v-model="fontSettings.installedPicker.query" class="form-input form-input-compact" aria-label="Search installed fonts" placeholder="Search fonts" data-history-ignore>
+                                    <input type="search" v-model="fontSettings.installedPicker.query" class="form-input form-input-compact" aria-label="Search installed fonts" placeholder="Search installed fonts" data-history-ignore>
                                     <ul class="max-h-48 overflow-y-auto text-xs" aria-label="Installed font families">
                                         <li v-for="entry in fontSettings.filteredInstalledFamilies.value" :key="entry.family">
                                             <button type="button" class="w-full text-left px-1 py-0.5 hover:bg-slate-100" :style="{ fontFamily: JSON.stringify(entry.family) }" data-history-managed @click="fontSettings.chooseInstalledFamily(entry.family)">{{ entry.family }} <span class="text-slate-400">({{ entry.faces.length }})</span></button>
                                         </li>
                                     </ul>
                                 </template>
-                                <button type="button" class="btn-secondary text-xs" data-history-ignore @click="fontSettings.closeInstalledFonts()">Cancel</button>
+                                <button type="button" class="btn btn-secondary btn-sm" data-history-ignore @click="fontSettings.closeInstalledFonts()">Cancel</button>
                             </div>
                         </div>
                     </details>
