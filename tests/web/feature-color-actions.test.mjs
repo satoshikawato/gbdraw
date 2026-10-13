@@ -886,7 +886,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     };
   };
   const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null, legendRowIsNamed,
-    legendRowName, findLegendRowNamed, keepBothNamesOf }) => {
+    legendRowName, findLegendRowNamed, keepBothNamesOf, ruleOverrides = {} }) => {
     // Each derivation of the Legend row colors reads the displayed Result once.
     const derivations = { count: 0 };
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
@@ -897,6 +897,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const svgRoot = legendSvg(legendGroup);
     const committed = [];
     const commitOptions = [];
+    const errorLog = ref(null);
     const legendRenameDialog = {};
     const stateLegendEntries = ref(entries.map((entry) => ({ featureIds: [], originalCaption: entry.caption, ...entry })));
     const originalOrder = ref([...order]);
@@ -912,7 +913,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         legendStrokeOverrides: {}, legendColorOverrides,
         originalLegendOrder: originalOrder, originalLegendColors: ref({}),
         featureStrokeOverrides: {}, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
-        addedLegendCaptions: ref(new Set()),
+        addedLegendCaptions: ref(new Set()), errorLog,
         svgContent: { get value() { derivations.count += 1; return null; } }
       }),
       nextTick: async () => {},
@@ -933,12 +934,13 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
         findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
         findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,
-        getIndividualFeatureLabel: (feature) => feature.product, getLabelSpecificRule: () => null
+        getIndividualFeatureLabel: (feature) => feature.product, getLabelSpecificRule: () => null,
+        ...ruleOverrides
       },
       getFeatureElements: () => [],
       getFeatureFillElements: () => []
     });
-    return { renameActions, committed, commitOptions, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides, deleted, derivations };
+    return { renameActions, committed, commitOptions, errorLog, scopeDialog, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides, deleted, derivations };
   };
 
   // A row's name field shows the name the Legend draws (`Shared (1)`), not the
@@ -1085,6 +1087,31 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   await cancel.renameActions.handleLegendRenameChoice('cancel');
   assert.equal(cancel.committed.length, 0);
   assert.equal(cancel.legendRenameDialog.show, false);
+
+  // OV-648: the Color Change Scope dialog leaves out a label scope that selects
+  // the features the Legend item scope selects (or, for the annotation label,
+  // the display label scope), whatever the names: a row key such as
+  // `Shared [#112233]` is no label, and a label that repeats a row's name can
+  // select other features.
+  const scoped = (legendName, { legend, display, annotation }) => {
+    const others = (ids) => () => ids.map((id) => ({ ...trna, id, svg_id: id, product: 'Shared' }));
+    const fixture = build({ entries: [{ caption: legendName, color: '#e8b441', featureIds: ['t1'] }], order: [legendName],
+      features: [{ ...trna, product: 'Shared', legendCaption: legendName }],
+      scopeDialog: {}, ruleOverrides: { findFeaturesWithSameLegendItem: others(legend), findFeaturesWithSameDisplayedLabel: others(display),
+        findFeaturesWithSameIndividualLabel: others(annotation), getDisplayedFeatureLabel: () => 'Shared',
+        findMatchingRegexRule: () => null, countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null } });
+    return fixture;
+  };
+  for (const [name, legendName, sets, offered] of [
+    ['a keyed row selecting the labeled features', 'Shared [#112233]', { legend: ['t2'], display: ['t2'], annotation: ['t2'] }, [false, false]],
+    ['a row named like the label selecting other features', 'Shared', { legend: ['t2'], display: ['t2', 't3'], annotation: ['t2', 't3'] }, [true, false]],
+    ['an annotation label selecting other features than both', 'Shared', { legend: ['t2'], display: ['t2'], annotation: ['t2', 't4'] }, [false, true]]
+  ]) {
+    const fixture = scoped(legendName, sets);
+    await fixture.renameActions.requestFeatureColorChange({ ...trna, product: 'Shared', legendCaption: legendName }, '#123456');
+    assert.equal(fixture.errorLog.value, null, name);
+    assert.deepEqual([fixture.scopeDialog.displayLabelOffered, fixture.scopeDialog.annotationLabelOffered], offered, name);
+  }
 
   // PD-OI-061 scenario revision 5: the dialog names what Keep both draws (the
   // Legend owner's `keepBothNamesOf`). A row renamed whole keeps its place and

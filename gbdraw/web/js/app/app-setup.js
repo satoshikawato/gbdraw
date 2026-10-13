@@ -4262,17 +4262,11 @@ export const createAppSetup = () => {
   );
   // The label scopes the Color/Stroke Change Scope dialog offers; a
   // label that repeats the Legend name, or the other label, is not offered.
-  const featureStyleScopeLabelOptions = computed(() => {
-    const text = (/** @type {unknown} */ value) => String(value || '').trim().toLowerCase();
-    const dialog = featureStyleScopeDialog;
-    const legend = text(dialog.legendName);
-    const display = text(dialog.displayLabel);
-    const annotation = text(dialog.annotationLabel);
-    return {
-      displayLabel: dialog.displayLabelSiblingCount > 0 && display !== '' && display !== legend,
-      annotationLabel: dialog.annotationLabelSiblingCount > 0 && annotation !== '' && annotation !== legend && annotation !== display
-    };
-  });
+  // OV-648: the color owner decides which label scopes select other features.
+  const featureStyleScopeLabelOptions = computed(() => ({
+    displayLabel: featureStyleScopeDialog.displayLabelOffered === true,
+    annotationLabel: featureStyleScopeDialog.annotationLabelOffered === true
+  }));
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
   const joinLegendGroupWithHistory = undoableAction('Rename legend item', joinLegendGroup);
   // The Legend tab's grip reorders a row by drag or by the Up and Down arrow

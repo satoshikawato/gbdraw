@@ -498,6 +498,10 @@ const featureStyleScopeDialog = reactive({
   displayLabelSiblingCount: 0, // Number of other features sharing display label
   annotationLabel: null, // Feature's source annotation label (product/gene/locus_tag)
   annotationLabelSiblingCount: 0, // Number of other features sharing source annotation label
+  // OV-648: whether each label scope selects other features than the Legend
+  // item scope (the annotation label also than the display label scope).
+  displayLabelOffered: false,
+  annotationLabelOffered: false,
   existingCaptionRule: null, // Existing hash rule for same caption (already colored)
   existingCaptionColor: null, // Color of existing caption rule
   defaultColorType: null, // D-15: the feature type whose default color "Apply to all" sets

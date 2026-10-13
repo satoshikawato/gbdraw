@@ -498,6 +498,8 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog.displayLabelSiblingCount = 0;
     featureStyleScopeDialog.annotationLabel = null;
     featureStyleScopeDialog.annotationLabelSiblingCount = 0;
+    featureStyleScopeDialog.displayLabelOffered = false;
+    featureStyleScopeDialog.annotationLabelOffered = false;
     featureStyleScopeDialog.existingCaptionRule = null;
     featureStyleScopeDialog.existingCaptionColor = null;
     featureStyleScopeDialog.defaultColorType = null;
@@ -520,13 +522,22 @@ export const createFeatureColorActions = ({
     const siblings = findFeaturesWithSameLegendItem(feat, legendName);
     const siblingCount = siblings.length;
     const displayLabel = normalizeCaption(getDisplayedFeatureLabel(feat));
-    const displayLabelSiblingCount = displayLabel
-      ? findFeaturesWithSameDisplayedLabel(feat, displayLabel).length
-      : 0;
+    const displayLabelSiblings = displayLabel ? findFeaturesWithSameDisplayedLabel(feat, displayLabel) : [];
+    const displayLabelSiblingCount = displayLabelSiblings.length;
     const annotationLabel = normalizeCaption(getIndividualFeatureLabel(feat));
-    const annotationLabelSiblingCount = annotationLabel
-      ? findFeaturesWithSameIndividualLabel(feat, annotationLabel).length
-      : 0;
+    const annotationLabelSiblings = annotationLabel ? findFeaturesWithSameIndividualLabel(feat, annotationLabel) : [];
+    const annotationLabelSiblingCount = annotationLabelSiblings.length;
+    // OV-648: a label scope is offered only when it selects other features
+    // than the Legend item scope (and, for the annotation label, than the
+    // display label scope); names are not compared, as a row key is no label
+    // and a label that repeats a row's name may select other features.
+    /** @param {readonly ColorFeature[]} features */
+    const selection = (features) => [...new Set(features.map((feature) => feature?.svg_id))].sort().join('\u0000');
+    const legendSelection = selection(siblings);
+    const displayLabelOffered = displayLabelSiblingCount > 0 && selection(displayLabelSiblings) !== legendSelection;
+    const annotationSelection = selection(annotationLabelSiblings);
+    const annotationLabelOffered = annotationLabelSiblingCount > 0 && annotationSelection !== legendSelection
+      && annotationSelection !== selection(displayLabelSiblings);
 
     return {
       requestedCaption,
@@ -539,6 +550,8 @@ export const createFeatureColorActions = ({
       displayLabelSiblingCount,
       annotationLabel,
       annotationLabelSiblingCount,
+      displayLabelOffered,
+      annotationLabelOffered,
       needsDialog: Boolean(
         matchingRule || siblingCount > 0 || displayLabelSiblingCount > 0 || annotationLabelSiblingCount > 0
       )
@@ -585,6 +598,8 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog.displayLabelSiblingCount = scope.displayLabelSiblingCount;
     featureStyleScopeDialog.annotationLabel = scope.annotationLabel;
     featureStyleScopeDialog.annotationLabelSiblingCount = scope.annotationLabelSiblingCount;
+    featureStyleScopeDialog.displayLabelOffered = scope.displayLabelOffered;
+    featureStyleScopeDialog.annotationLabelOffered = scope.annotationLabelOffered;
     featureStyleScopeDialog.existingCaptionRule = existingCaption?.rule || null;
     featureStyleScopeDialog.existingCaptionColor = existingCaption?.color || null;
     featureStyleScopeDialog.defaultColorType = defaultColorType;
