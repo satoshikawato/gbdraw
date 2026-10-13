@@ -69,7 +69,9 @@ class FeaturePlacementTarget:
             )
 
     def validate_mode(self, mode: str) -> None:
-        if mode not in _LANE_SIDES:
+        # A tuple, not the mapping: a mode that is not text (an array from a
+        # Session file) is refused here and never hashed.
+        if mode not in tuple(_LANE_SIDES):
             raise ValidationError("Placement mode must be circular or linear.")
         if self.kind == "lane" and self.side not in _LANE_SIDES[mode]:
             raise ValidationError(
@@ -186,7 +188,7 @@ def _table_target(row: Mapping[str, str], mode: str) -> FeaturePlacementTarget |
         if level:
             raise ValidationError("Auto/Main placement must omit level.")
         return None if token == "auto" else FeaturePlacementTarget("main")
-    if token not in ("outward", "inward", "above", "below"):
+    if not any(token in sides for sides in _LANE_SIDES.values()):
         raise ValidationError(f"Unsupported placement token {token!r}.")
     if level not in ("", "1"):
         raise ValidationError("Only feature lane level 1 is supported.")
@@ -370,7 +372,7 @@ class FeaturePlacementSlot:
         """Expose requested targets using the same resolved-slot validity owner."""
         targets: list[dict[str, object]] = [{"kind": "main"}]
         if self.bidirectional:
-            for side in (("outward", "inward") if self.mode == "circular" else ("above", "below")):
+            for side in _LANE_SIDES[self.mode]:
                 targets.append({"kind": "lane", "side": side, "level": 1})
         return targets
 
