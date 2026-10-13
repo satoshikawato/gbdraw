@@ -118,15 +118,17 @@ presentation](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#fea
 covers qualifier priority, whitelist and blacklist behavior, overrides, and
 overlap controls.
 
-### Why did gbdraw draw nothing and say my outer labels do not fit?
+### Why did gbdraw draw nothing and say my labels do not fit?
 
-Some Circular outer labels would overlap, so gbdraw stopped instead of drawing
-them. Run the command again with one of the settings the message lists, for
-example `--outer_label_y_radius_offset 1.15` to move the labels outward or
-`--label_font_size 12` to make them smaller. If only leader lines cross, the
-figure is drawn and the same settings are shown as a warning. See [Circular
-outer labels that do not
-fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#circular-outer-labels-that-do-not-fit).
+Some labels would overlap, or radial labels needed more room than the circular
+tracks leave, so gbdraw stopped instead of drawing them. Run the command again
+with one of the settings the message lists, for example
+`--outer_label_y_radius_offset 1.15` to move outer labels outward,
+`--label_font_size 12` to make the labels smaller, or `--labels out` to move
+inner labels outside. If only leader lines cross or labels cover the definition
+text, the figure is drawn and the same settings are shown as a warning. See
+[Labels that do not
+fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 
 ### How do I change the color of one specific gene?
 

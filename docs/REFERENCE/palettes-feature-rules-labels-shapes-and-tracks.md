@@ -254,49 +254,67 @@ The schemas for default-color, specific-color, qualifier-priority,
 label-filter, label-override, and visibility tables are in [Input formats and
 TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
 
-## Circular outer labels that do not fit
+## Labels that do not fit
 
-After a Circular figure is laid out, gbdraw checks the outer labels of the
-default horizontal placement. Labels drawn inside a feature, inner labels,
-radial placement, and Linear labels are not checked. Two labels overlap when
-their boxes come within 1 px horizontally and 0.1 px vertically. Two leader
-lines cross when they intersect; lines that only touch do not cross.
+After a figure is laid out, gbdraw checks every drawn label: Circular outer,
+inner, and embedded labels in either placement, and Linear labels. Two
+horizontal Circular labels overlap when their boxes come within 1 px
+horizontally and 0.1 px vertically; radial, embedded, and Linear labels
+overlap when their text areas intersect. Two leader lines cross when they
+intersect; lines that only touch do not cross. A Circular label with a leader
+covers the definition text in the centre when its box overlaps a line of that
+text by more than 0.5 px in both directions.
 
-- If any labels overlap, nothing is drawn. The command line prints `ERROR:`
-  with the message and exits with status 1. Python raises
-  `LabelsDoNotFitError`, a `GbdrawError`.
-- If leader lines cross but no labels overlap, the figure is drawn as before.
-  The command line prints the same message after `WARNING:` and exits with
-  status 0. Python warns with `LabelLeadersCrossWarning`, a `UserWarning`.
+- If any labels overlap, or radial labels need more room than the circular
+  tracks leave, nothing is drawn. The command line prints `ERROR:` with the
+  message and exits with status 1. Python raises `LabelsDoNotFitError`, a
+  `GbdrawError`.
+- If leader lines cross or labels cover the definition text, but no labels
+  overlap, the figure is drawn as before. The command line prints the same
+  message after `WARNING:` and exits with status 0. Python warns with
+  `LabelLeadersCrossWarning`, a `UserWarning`.
 
-The message counts the overlapping label pairs and crossing leader pairs and
-lists settings that make the labels fit. Each setting changes one thing and is
-checked by drawing the whole figure again:
+The message counts the overlapping label pairs, crossing leader pairs, and
+labels over the definition text of each record and side, and lists settings
+that make the labels fit. Each setting changes one thing and is checked by
+drawing the whole figure again. The rows depend on which labels do not fit:
 
-| Row | Change |
-|---|---|
-| outward, both directions | `--outer_label_x_radius_offset` and `--outer_label_y_radius_offset` together, in steps of 0.025, up to 2 |
-| outward, vertical only | `--outer_label_y_radius_offset`, in steps of 0.025, up to 2 |
-| outward, horizontal only | `--outer_label_x_radius_offset`, in steps of 0.025, up to 2 |
-| smaller font | `--label_font_size`, in steps of 0.5 pt, down to 6 pt |
-| tighter rows | `--circular_label_spacing`: 2.5, 2, 1.5, 1, 0.5, 0.25, or 0.1 px, below the current value |
-| combination | the font reduced by half the smaller-font change (at least 0.5 pt), with the smallest Y offset that then fits |
+| Row | Change | Offered for |
+|---|---|---|
+| outward, both directions | `--outer_label_x_radius_offset` and `--outer_label_y_radius_offset` together, in steps of 0.025, up to 2 | outer labels |
+| outward, vertical only | `--outer_label_y_radius_offset`, in steps of 0.025, up to 2 | outer labels |
+| outward, horizontal only | `--outer_label_x_radius_offset`, in steps of 0.025, up to 2 | outer labels |
+| smaller font | `--label_font_size`, in steps of 0.5 pt, down to 6 pt | all labels |
+| tighter rows | `--circular_label_spacing`: 2.5, 2, 1.5, 1, 0.5, 0.25, or 0.1 px, below the current value | outer labels |
+| combination | the font reduced by half the smaller-font change (at least 0.5 pt), with the smallest Y offset that then fits | outer labels |
+| all labels outside | `--labels out` | records with inner labels, in either placement |
+| radial labels | `--label_placement radial` | inner and embedded labels |
 
 Each row gives the mildest value that fits, or says that none fits within its
-limit. With several records, one value must fit every record. When the figure
-is drawn anyway, gbdraw searches for 5 seconds and names the rows it did not
-reach. When nothing is drawn, every row is searched.
+limit. With several records, one value must fit every record. The outer-label
+rows do not move inner or radial labels. For inner, embedded, or radial
+labels, the two switches are tried first; the smaller font is then the first
+font size, going down from the current one, at which the whole figure fits, so
+a smaller size than the one offered may not fit.
+
+When the figure is drawn anyway, gbdraw searches for 5 seconds and names the
+rows it did not reach. When nothing is drawn, every row is searched, except
+that the font search for inner, embedded, or radial labels stops after 30
+seconds. Linear labels have no rows: the Linear layout keeps its labels
+apart, so this check reports a fault in that layout.
 
 With 50 or more outer labels, gbdraw packs the labels in rows with
 `--circular_label_spacing` between them. If those rows do not fit, the labels
 are packed 0.1 px apart, as in 0.13, so a map that fit in 0.13 still draws.
 
 In Python, `LabelsDoNotFitError.report` and `LabelLeadersCrossWarning.report`
-hold a `LabelFitReport`: the records that do not fit, with their label counts
-and font sizes, and the rows. A row's `values` maps config paths to the values
+hold a `LabelFitReport`: the records that do not fit, by label kind
+(`circular_outer`, `circular_inner`, `circular_embedded`, or `linear`), with
+their label counts, font sizes, and counts, and `refused` for radial labels
+without room; and the rows. A row's `values` maps config paths to the values
 that fit, and its `status` is `found`, `not_found`, or `not_computed`.
 `RequestRenderResult.label_fit_report` returns the report of a figure drawn
-with crossing leader lines.
+anyway.
 
 ## Manual feature placement
 
