@@ -11,7 +11,6 @@ from ....canvas import CircularCanvasConfigurator
 from ....auto_sizes import determine_length_parameter
 from ....features.factory import FeatureBuildResult
 from ....features.objects import FeatureObject
-from ....labels.circular import prepare_label_list
 from ....layout.circular import CircularRecordRenderContext
 from ....svg.ids import record_group_svg_id
 from ...drawers.circular.labels import LabelDrawer
@@ -79,30 +78,13 @@ class SeqRecordGroup:
         self.record_group: Group = self.setup_record_group()
 
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
-        label_list = []
         feature_anchor_radius = (
             float(self.feature_anchor_radius_px)
             if self.feature_anchor_radius_px is not None
             else float(self.canvas_config.radius)
         )
-        if self.show_labels is True:
-            # Reuse pre-calculated labels when available to avoid repeating heavy placement work.
-            if self.precalculated_labels is not None:
-                label_list = self.precalculated_labels
-            else:
-                label_list = prepare_label_list(
-                    feature_dict,
-                    record_length,
-                    feature_anchor_radius,
-                    self.track_ratio,
-                    self.render_context.profile,
-                    feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
-                    feature_layout=self.render_context.feature_layout,
-                    track_preset=self.render_context.track_preset,
-                    feature_lane_direction=str(
-                        self.render_context.feature_lane_direction
-                    ),
-                )
+        # The record assembly places every drawn label (and checks their fit) once.
+        label_list = (self.precalculated_labels or []) if self.show_labels is True else []
         feature_track_ratio_factor = (
             float(self.feature_track_ratio_factor_override)
             if self.feature_track_ratio_factor_override is not None

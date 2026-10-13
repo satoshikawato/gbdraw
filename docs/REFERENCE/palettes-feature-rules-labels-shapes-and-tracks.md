@@ -254,6 +254,50 @@ The schemas for default-color, specific-color, qualifier-priority,
 label-filter, label-override, and visibility tables are in [Input formats and
 TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
 
+## Circular outer labels that do not fit
+
+After a Circular figure is laid out, gbdraw checks the outer labels of the
+default horizontal placement. Labels drawn inside a feature, inner labels,
+radial placement, and Linear labels are not checked. Two labels overlap when
+their boxes come within 1 px horizontally and 0.1 px vertically. Two leader
+lines cross when they intersect; lines that only touch do not cross.
+
+- If any labels overlap, nothing is drawn. The command line prints `ERROR:`
+  with the message and exits with status 1. Python raises
+  `LabelsDoNotFitError`, a `GbdrawError`.
+- If leader lines cross but no labels overlap, the figure is drawn as before.
+  The command line prints the same message after `WARNING:` and exits with
+  status 0. Python warns with `LabelLeadersCrossWarning`, a `UserWarning`.
+
+The message counts the overlapping label pairs and crossing leader pairs and
+lists settings that make the labels fit. Each setting changes one thing and is
+checked by drawing the whole figure again:
+
+| Row | Change |
+|---|---|
+| outward, both directions | `--outer_label_x_radius_offset` and `--outer_label_y_radius_offset` together, in steps of 0.025, up to 2 |
+| outward, vertical only | `--outer_label_y_radius_offset`, in steps of 0.025, up to 2 |
+| outward, horizontal only | `--outer_label_x_radius_offset`, in steps of 0.025, up to 2 |
+| smaller font | `--label_font_size`, in steps of 0.5 pt, down to 6 pt |
+| tighter rows | `--circular_label_spacing`: 2.5, 2, 1.5, 1, 0.5, 0.25, or 0.1 px, below the current value |
+| combination | the font reduced by half the smaller-font change (at least 0.5 pt), with the smallest Y offset that then fits |
+
+Each row gives the mildest value that fits, or says that none fits within its
+limit. With several records, one value must fit every record. When the figure
+is drawn anyway, gbdraw searches for 5 seconds and names the rows it did not
+reach. When nothing is drawn, every row is searched.
+
+With 50 or more outer labels, gbdraw packs the labels in rows with
+`--circular_label_spacing` between them. If those rows do not fit, the labels
+are packed 0.1 px apart, as in 0.13, so a map that fit in 0.13 still draws.
+
+In Python, `LabelsDoNotFitError.report` and `LabelLeadersCrossWarning.report`
+hold a `LabelFitReport`: the records that do not fit, with their label counts
+and font sizes, and the rows. A row's `values` maps config paths to the values
+that fit, and its `status` is `found`, `not_found`, or `not_computed`.
+`RequestRenderResult.label_fit_report` returns the report of a figure drawn
+with crossing leader lines.
+
 ## Manual feature placement
 
 A placement belongs to a whole biological feature within its existing feature

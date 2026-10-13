@@ -121,6 +121,19 @@ def config_to_raw_dict(config: GbdrawConfig) -> dict[str, Any]:
     return raw
 
 
+def with_config_overrides(
+    config: GbdrawConfig,
+    overrides: Mapping[str, object] | None,
+) -> GbdrawConfig:
+    """Return ``config`` with canonical dotted-path overrides applied."""
+
+    if not overrides:
+        return config
+    return GbdrawConfig.from_dict(
+        _apply_validated_config_overrides(config_to_raw_dict(config), overrides)
+    )
+
+
 def _literal_value_matches(value: object, candidate: object) -> bool:
     return type(value) is type(candidate) and value == candidate
 
@@ -427,4 +440,5 @@ __all__ = [
     "config_to_raw_dict",
     "modify_config_dict",
     "validate_config_overrides",
+    "with_config_overrides",
 ]

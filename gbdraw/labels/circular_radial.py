@@ -13,8 +13,8 @@ from ..layout.text_geometry import (
     oriented_boxes_intersect,
     oriented_text_box,
     segment_intersects_polygon,
-    segments_intersect,
 )
+from .circular_leaders import leader_crossing_count, leader_segments
 from .circular_types import CircularLabelLayoutResult
 
 _TAU = 2.0 * math.pi
@@ -273,37 +273,12 @@ def _text_collision_pairs(labels: Sequence[Mapping[str, Any]], spacing_px: float
     ]
 
 
-def _leader_segments(label: Mapping[str, Any]) -> tuple[tuple[tuple[float, float], tuple[float, float]], ...]:
-    feature = (
-        float(label.get("feature_anchor_x", label.get("feature_middle_x", 0.0))),
-        float(label.get("feature_anchor_y", label.get("feature_middle_y", 0.0))),
-    )
-    elbow = (float(label.get("middle_x", 0.0)), float(label.get("middle_y", 0.0)))
-    contact = (
-        float(label.get("leader_start_x", label.get("start_x", 0.0))),
-        float(label.get("leader_start_y", label.get("start_y", 0.0))),
-    )
-    return ((feature, elbow), (elbow, contact))
-
-
 def _segment_aabb(segment: tuple[tuple[float, float], tuple[float, float]]) -> Aabb:
     return Aabb(
         min(segment[0][0], segment[1][0]),
         min(segment[0][1], segment[1][1]),
         max(segment[0][0], segment[1][0]),
         max(segment[0][1], segment[1][1]),
-    )
-
-
-def _segments_aabb(
-    segments: Sequence[tuple[tuple[float, float], tuple[float, float]]],
-) -> Aabb:
-    points = [point for segment in segments for point in segment]
-    return Aabb(
-        min(point[0] for point in points),
-        min(point[1] for point in points),
-        max(point[0] for point in points),
-        max(point[1] for point in points),
     )
 
 
@@ -314,7 +289,7 @@ def _leader_text_collision_count(labels: Sequence[Mapping[str, Any]]) -> int:
         box_index.insert(index, Aabb(*box.aabb))
     count = 0
     for label_index, label in enumerate(labels):
-        for segment in _leader_segments(label):
+        for segment in leader_segments(label):
             for candidate in box_index.query(_segment_aabb(segment)):
                 # Every id inserted into box_index above is a label index (int).
                 candidate_index = cast(int, candidate)
@@ -322,20 +297,6 @@ def _leader_text_collision_count(labels: Sequence[Mapping[str, Any]]) -> int:
                     continue
                 if segment_intersects_polygon(segment, boxes[candidate_index].corners, touching=False):
                     count += 1
-    return count
-
-
-def _leader_crossing_count(labels: Sequence[Mapping[str, Any]]) -> int:
-    segments = [_leader_segments(label) for label in labels]
-    leader_aabbs = [_segments_aabb(label_segments) for label_segments in segments]
-    count = 0
-    for left, right in candidate_aabb_pairs(leader_aabbs, bucket_size=64.0):
-        if any(
-            segments_intersect(first, second, touching=False)
-            for first in segments[left]
-            for second in segments[right]
-        ):
-            count += 1
     return count
 
 
@@ -356,7 +317,7 @@ def _content_bounds(labels: Sequence[Mapping[str, Any]]) -> tuple[float, float, 
     points: list[tuple[float, float]] = []
     for label in labels:
         points.extend(tuple(label.get("oriented_corners", ())))
-        for segment in _leader_segments(label):
+        for segment in leader_segments(label):
             points.extend(segment)
     if not points:
         return None
@@ -412,7 +373,7 @@ def _place_side(
         ]
         collisions = _text_collision_pairs(placed, spacing_px)
         leader_text_collisions = _leader_text_collision_count(placed)
-        leader_crossings = _leader_crossing_count(placed)
+        leader_crossings = leader_crossing_count(placed)
         order_violations = _order_violation_count(placed)
         if not balance and (leader_text_collisions or leader_crossings):
             balance = True
@@ -478,7 +439,7 @@ def place_radial_labels(
     )
     text_collisions = len(_text_collision_pairs(labels, spacing_px))
     leader_text_collisions = _leader_text_collision_count(labels)
-    leader_crossings = _leader_crossing_count(labels)
+    leader_crossings = leader_crossing_count(labels)
     order_violations = _order_violation_count(outer) + _order_violation_count(inner)
     result = CircularLabelLayoutResult(
         labels=tuple(labels),

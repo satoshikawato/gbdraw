@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
+
+if TYPE_CHECKING:
+    from gbdraw.labels.fit import LabelFitReport
 
 
 class GbdrawError(Exception):
@@ -64,12 +67,45 @@ class ExportError(GbdrawError):
     """Raised when an explicitly requested library export cannot be generated."""
 
 
+def _label_fit_diagnostic(report: LabelFitReport) -> dict[str, object]:
+    # The code alone names the failure; the shared CANNOT_FIT reason carries track wording.
+    return {
+        "code": "LABEL_LAYOUT",
+        "overlapPairs": report.overlap_pairs,
+        "crossingPairs": report.crossing_pairs,
+    }
+
+
+class LabelsDoNotFitError(GbdrawError):
+    """Labels would overlap, so nothing was drawn.
+
+    ``report`` names the failing records and the settings that fit.
+    """
+
+    def __init__(self, message: str, *, report: LabelFitReport) -> None:
+        super().__init__(message, diagnostic=_label_fit_diagnostic(report))
+        self.report = report
+
+
+class LabelLeadersCrossWarning(UserWarning):
+    """Label leaders cross; the figure was drawn anyway.
+
+    ``report`` names the records and the settings that remove the crossings.
+    """
+
+    def __init__(self, message: str, *, report: LabelFitReport) -> None:
+        super().__init__(message)
+        self.report = report
+
+
 __all__ = [
     "ComparisonIdentityError",
     "ConfigError",
     "ExportError",
     "GbdrawError",
     "InputFileError",
+    "LabelLeadersCrossWarning",
+    "LabelsDoNotFitError",
     "ParseError",
     "ValidationError",
 ]

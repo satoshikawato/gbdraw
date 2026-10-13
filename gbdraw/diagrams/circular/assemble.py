@@ -49,17 +49,23 @@ from ...configurators import (
 from ...configurators.gc import _slot_skew_config
 from ...core.sequence import check_feature_presence
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
+from ...config.modify import with_config_overrides
 from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
 from ...features.colors import precompute_used_color_rules
 from ...features.factory import FeatureBuildResult, create_feature_layers
 from ...labels.circular import (
+    CircularLabelProbeStopped,
     assign_leader_start_points,
+    circular_label_fit,
+    circular_label_font_size,
     minimum_bbox_gap_px,
     prepare_label_list,
     x_overlap,
     y_overlap,
 )
+from ...labels.circular_fit import CircularOuterLabelLayout
+from ...labels.fit import LabelFit
 from ...labels.filtering import preprocess_label_filtering
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.circular import (
@@ -152,6 +158,7 @@ class _CircularPlotAssembly:
     primary_targets: tuple[Group, ...]
     legend_target: Group | None
     track_slot_geometry: Mapping[str, Any]
+    outer_label_layout: CircularOuterLabelLayout | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +176,8 @@ class CircularAssemblyResult:
     title_target: Group | None
     track_slot_geometry: Mapping[str, Any]
     composition_plan: CompositionPlan
+    # Horizontal outer labels: their fit and a probe for the fit search (None without them).
+    outer_label_layout: CircularOuterLabelLayout | None = None
 
 
 def _mark_circular_track_slot_group(
@@ -1913,10 +1922,14 @@ def _draw_resolved_circular_slot(
 def _default_outer_label_arena(
     *,
     canvas_config: CircularCanvasConfigurator,
+    config: GbdrawConfig | None = None,
 ) -> tuple[float, float]:
-    """Return default (anchor_radius_px, arc_outer_radius_px) for outer labels."""
+    """Return default (anchor_radius_px, arc_outer_radius_px) for outer labels.
+
+    ``config`` replaces the canvas config's labels settings (a fit probe).
+    """
     profile = canvas_config.profile
-    cfg = profile.config
+    cfg = config if config is not None else profile.config
     length_param = str(canvas_config.length_param)
     track_type = _circular_preset_for_layout(cfg)
     strands = "separate" if profile.strandedness else "single"
@@ -1941,6 +1954,44 @@ def _default_outer_label_arena(
     return anchor_radius, arc_outer
 
 
+
+
+def _horizontal_outer_label_layout(
+    gb_record: SeqRecord,
+    profile: CircularRenderProfile,
+    drawn_labels: Sequence[dict[str, Any]],
+    place_labels: Callable[..., list[dict[str, Any]]],
+) -> CircularOuterLabelLayout | None:
+    """The drawn horizontal outer labels' fit and a probe that places them with other settings."""
+
+    total_length = len(gb_record.seq)
+    outer_label_count = sum(
+        1 for label in drawn_labels if not label.get("is_embedded") and not label.get("is_inner")
+    )
+    if profile.label_placement != "horizontal" or outer_label_count == 0:
+        return None
+    cfg = profile.config
+
+    def probe(overrides: Mapping[str, float]) -> LabelFit:
+        probe_profile = replace(profile, config=with_config_overrides(cfg, overrides))
+        try:
+            labels = place_labels(probe_profile, probe=True)
+        except CircularLabelProbeStopped as stopped:
+            # The dense candidate already overlaps; crossings are not counted.
+            return LabelFit(overlap_pairs=stopped.overlap_pairs, crossing_pairs=0)
+        return circular_label_fit(labels, total_length)
+
+    outer_offsets = cfg.labels.unified_adjustment.outer_labels
+    return CircularOuterLabelLayout(
+        record_id=str(gb_record.id),
+        outer_label_count=outer_label_count,
+        font_size=circular_label_font_size(cfg, total_length),
+        x_radius_offset=float(outer_offsets.x_radius_offset),
+        y_radius_offset=float(outer_offsets.y_radius_offset),
+        label_spacing=float(cfg.labels.spacing.circular),
+        fit=circular_label_fit(list(drawn_labels), total_length),
+        probe=probe,
+    )
 
 
 def add_record_on_circular_canvas(
@@ -2225,9 +2276,14 @@ def add_record_on_circular_canvas(
             outer_arena = (default_anchor_px, default_arc_outer_px)
 
     precalculated_labels: list[dict[str, Any]] | None = None
-    if show_external_labels and precomputed_feature_dict is not None:
-        label_candidate_cache: dict[str, object] = {}
-        precalculated_labels = prepare_label_list(
+    # Text measurements per label font size, shared by the drawn placement and fit probes.
+    label_candidate_caches: dict[float, dict[str, object]] = {}
+
+    def place_labels(label_profile: CircularRenderProfile, *, probe: bool = False) -> list[dict[str, Any]]:
+        """Place this record's labels with the current geometry (read at call time)."""
+
+        font_size = circular_label_font_size(label_profile.config, len(gb_record.seq))
+        return prepare_label_list(
             precomputed_feature_dict,
             len(gb_record.seq),
             (
@@ -2236,16 +2292,25 @@ def add_record_on_circular_canvas(
                 else canvas_config.radius
             ),
             canvas_config.track_ratio,
-            profile,
-            outer_arena=outer_arena,
+            label_profile,
+            # The arena follows the outer label offsets, which a probe may change.
+            outer_arena=(
+                _default_outer_label_arena(canvas_config=canvas_config, config=label_profile.config)
+                if outer_arena is not None
+                else None
+            ),
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
             feature_layout=radial_layout.features,
             radial_layout=radial_layout,
             track_preset=_circular_preset_for_layout(cfg),
             feature_lane_direction=feature_lane_direction,
-            _candidate_cache=label_candidate_cache,
+            _candidate_cache=label_candidate_caches.setdefault(font_size, {}),
             record_transform=record_transform,
+            probe=probe,
         )
+
+    if show_external_labels and precomputed_feature_dict is not None:
+        precalculated_labels = place_labels(profile)
         if profile.label_placement == "radial":
             previous_growth: float | None = None
             stagnant_passes = 0
@@ -2401,35 +2466,12 @@ def add_record_on_circular_canvas(
                     if feature_width_override_requested
                     else None
                 )
-                precalculated_labels = prepare_label_list(
-                    precomputed_feature_dict,
-                    len(gb_record.seq),
-                    (
-                        float(resolved_feature_anchor_radius_px)
-                        if resolved_feature_anchor_radius_px is not None
-                        else canvas_config.radius
-                    ),
-                    canvas_config.track_ratio,
-                    profile,
-                    outer_arena=outer_arena,
-                    feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-                    feature_layout=radial_layout.features,
-                    radial_layout=radial_layout,
-                    track_preset=_circular_preset_for_layout(cfg),
-                    feature_lane_direction=feature_lane_direction,
-                    _candidate_cache=label_candidate_cache,
-                    record_transform=record_transform,
-                )
+                precalculated_labels = place_labels(profile)
 
             gc_content_tick_font_size_override = _gc_content_matches_depth_axis_font_size(
                 gc_config=gc_config,
                 depth_config=depth_config if show_depth_track else None,
                 resolved_track_slots=resolved_track_slots,
-            )
-        if profile.label_placement == "horizontal":
-            assign_leader_start_points(
-                [label for label in precalculated_labels if not label.get("is_embedded")],
-                len(gb_record.seq),
             )
 
     overlay_obstacles = _external_label_obstacles_on_canvas(
@@ -2493,6 +2535,13 @@ def add_record_on_circular_canvas(
                 depth_config=depth_config,
                 overlay_obstacles=overlay_obstacles,
             )
+
+    outer_label_layout = _horizontal_outer_label_layout(
+        gb_record,
+        profile,
+        precalculated_labels or [],
+        place_labels,
+    )
 
     render_context = CircularRecordRenderContext(
         profile=profile,
@@ -2677,6 +2726,7 @@ def add_record_on_circular_canvas(
         primary_targets=primary_targets,
         legend_target=legend_target,
         track_slot_geometry=track_slot_geometry,
+        outer_label_layout=outer_label_layout,
     )
 
 
@@ -2767,6 +2817,7 @@ def _compose_circular_plot(
         title_target=title_target,
         track_slot_geometry=plot.track_slot_geometry,
         composition_plan=plan,
+        outer_label_layout=plot.outer_label_layout,
     )
     setattr(plot.drawing, "_gbdraw_circular_assembly_result", result)
     return result

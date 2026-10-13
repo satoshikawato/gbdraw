@@ -357,6 +357,8 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
     [{ code: 'TRACK_LAYOUT', context: { reason: 'CANNOT_FIT', slotIndex: 1, innerPx: 181, outerPx: 209 } },
       /^A circular track does not fit\. Track row 2\. Move the track.*the other side of the Axis\. Available band: 181–209 px\.$/],
     [{ code: 'DEPTH_INVALID', context: { reason: 'DEPTH_VALUES', seriesIndex: 0 } }, / Depth series 1\. Use integer positions/],
+    [{ code: 'LABEL_LAYOUT', context: { overlapPairs: 20, crossingPairs: 21 } },
+      /^Circular outer labels do not fit\. Move the outer labels outward, use a smaller label font, or reduce the label spacing\. Overlapping label pairs: 20\. Crossing leader pairs: 21\.$/],
     [{ code: 'INPUT_INVALID', context: { reason: 'INTEGER', configPath: 'objects.scale.interval' } }, / Setting: objects\.scale\.interval\. Use an integer\.$/]
   ]) assert.match(roundtrip(source).summary, pattern);
   for (const configPath of ['PRIVATE VALUE', 'a', 'Objects.scale', `objects.${'x'.repeat(80)}`, 7]) {

@@ -7,12 +7,16 @@ from __future__ import annotations
 
 import math
 from collections import Counter
+from collections.abc import Iterable
 from functools import lru_cache
+from typing import Literal, TypeAlias
 
 from ..features.coordinates import get_strand
 from .filtering import preprocess_label_filtering
 from .circular_candidates import build_circular_label_candidates
+from .circular_leaders import leader_polyline
 from .circular_radial import place_radial_labels
+from .fit import LabelFit, label_fit
 from ..config.models import (
     CircularRenderProfile,
     GbdrawConfig,
@@ -43,6 +47,17 @@ FULL_SCAN_LABEL_LIMIT = 70
 MAX_EXPANDED_SHIFT_DEG = 90.0
 RELAX_CENTER_DELTA_CAP_DEG = 35.0
 LEGACY_PLACEMENT_LABEL_THRESHOLD = 50
+# Smallest row gap of the dense legacy packer: the y margin of the overlap count.
+LEGACY_MIN_ROW_GAP_PX = 0.1
+DenseOuterRows: TypeAlias = Literal["spaced", "legacy"]
+
+
+class CircularLabelProbeStopped(Exception):
+    """The dense outer candidate overlaps, so this placement attempt cannot fit."""
+
+    def __init__(self, overlap_pairs: int) -> None:
+        super().__init__(overlap_pairs)
+        self.overlap_pairs = int(overlap_pairs)
 DENSE_INNER_RELAX_MIN_LABELS = 40
 HEMISPHERE_AXIS_NEUTRAL_DEG = 8.0
 HEMISPHERE_AXIS_EPS_PX = 1.0
@@ -228,6 +243,33 @@ def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bo
         ):
             overlap_count += 1
     return overlap_count
+
+
+def circular_label_font_size(cfg: GbdrawConfig, total_length: int) -> float:
+    """The label font size of a record of this length (its size class)."""
+
+    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
+    return float(cfg.labels.font_size.for_length_param(length_param))
+
+
+def _label_fit_box(label: dict, total_length: int) -> Aabb:
+    """A drawn label's box for the fit count, with the overlap margins (x 1.0 px, y 0.1 px)."""
+
+    min_x, max_x = _label_x_bounds(label, 1.0)
+    min_y, max_y = _label_y_bounds(label, total_length, 0.1)
+    return Aabb(min_x, min_y, max_x, max_y)
+
+
+def circular_label_fit(labels: list[dict], total_length: int) -> LabelFit:
+    """Count overlapping boxes and crossing leaders of the drawn outer labels."""
+
+    outer_labels = [
+        label for label in labels if not label.get("is_embedded") and not label.get("is_inner")
+    ]
+    return label_fit(
+        [_label_fit_box(label, total_length) for label in outer_labels],
+        [leader_polyline(label) for label in outer_labels],
+    )
 
 
 def _label_y_bounds(label: dict, total_len: int, minimum_margin: float) -> tuple[float, float]:
@@ -558,6 +600,9 @@ def _optimize_top_bottom_leader_start_points(labels: list[dict], total_length: i
     if not labels:
         return labels
 
+    # Built on first use and kept current: a label's update below only moves its own leader start.
+    rects: list[tuple[float, float, float, float]] | None = None
+    segments: list[list[tuple[tuple[float, float], tuple[float, float]]]] | None = None
     for idx, label in enumerate(labels):
         meta = _leader_start_meta(label, total_length)
         if meta is None:
@@ -591,6 +636,10 @@ def _optimize_top_bottom_leader_start_points(labels: list[dict], total_length: i
 
         best_score: tuple[int, float, float] | None = None
         best_coord = current_coord
+        if rects is None or segments is None:
+            rects, segments = _build_label_leader_collision_geometry(
+                labels, total_length, LEADER_LABEL_COLLISION_MARGIN_PX
+            )
         for coord in unique_coords:
             candidate_label = label.copy()
             candidate_label["leader_start_x"] = float(coord)
@@ -601,6 +650,8 @@ def _optimize_top_bottom_leader_start_points(labels: list[dict], total_length: i
                 idx,
                 margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
                 candidate=candidate_label,
+                rects=rects,
+                segments=segments,
             )
             midpoint_distance = abs(float(coord) - midpoint_coord)
             leader_length = math.hypot(
@@ -614,6 +665,7 @@ def _optimize_top_bottom_leader_start_points(labels: list[dict], total_length: i
 
         label["leader_start_x"] = float(best_coord)
         label["leader_start_y"] = fixed
+        segments[idx] = _leader_segments(label)
 
     return labels
 
@@ -714,6 +766,14 @@ def _segments_properly_intersect(
     (ax1, ay1), (ax2, ay2) = seg_a
     (bx1, by1), (bx2, by2) = seg_b
     eps = 1e-9
+    # Segments whose bounding boxes lie more than 1e-6 px apart neither cross nor touch within eps.
+    if (
+        (ax1 if ax1 > ax2 else ax2) < (bx1 if bx1 < bx2 else bx2) - 1e-6
+        or (bx1 if bx1 > bx2 else bx2) < (ax1 if ax1 < ax2 else ax2) - 1e-6
+        or (ay1 if ay1 > ay2 else ay2) < (by1 if by1 < by2 else by2) - 1e-6
+        or (by1 if by1 > by2 else by2) < (ay1 if ay1 < ay2 else ay2) - 1e-6
+    ):
+        return False
 
     def _orient(px: float, py: float, qx: float, qy: float, rx: float, ry: float) -> float:
         return ((qx - px) * (ry - py)) - ((qy - py) * (rx - px))
@@ -753,12 +813,35 @@ def _count_leader_line_intersections(
     if primary_segments is None:
         primary_segments = _build_primary_leader_segments(labels)
     intersection_count = 0
-    for idx in range(len(primary_segments)):
-        segment_i = primary_segments[idx]
-        for jdx in range(idx + 1, len(primary_segments)):
-            if _segments_properly_intersect(segment_i, primary_segments[jdx]):
-                intersection_count += 1
+    for idx, jdx in _touching_box_pairs([list(segment) for segment in primary_segments]):
+        if _segments_properly_intersect(primary_segments[idx], primary_segments[jdx]):
+            intersection_count += 1
     return intersection_count
+
+
+def _touching_box_pairs(point_sets: list[list[tuple[float, float]]], pad: float = 1.0) -> list[tuple[int, int]]:
+    """Return index pairs whose point bounding boxes, padded by `pad`, touch (sweep on x).
+
+    Pair predicates that need two shapes to meet are false for every other pair, so a count over
+    these pairs equals the count over all pairs.
+    """
+    boxes = []
+    for points in point_sets:
+        xs = [float(point[0]) for point in points]
+        ys = [float(point[1]) for point in points]
+        boxes.append((min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad))
+    order = sorted(range(len(boxes)), key=lambda item: boxes[item][0])
+    pairs: list[tuple[int, int]] = []
+    for position, idx in enumerate(order):
+        box_i = boxes[idx]
+        for jdx in order[position + 1:]:
+            box_j = boxes[jdx]
+            if box_j[0] > box_i[2]:
+                break
+            if box_j[1] > box_i[3] or box_j[3] < box_i[1]:
+                continue
+            pairs.append((idx, jdx))
+    return pairs
 
 
 def _count_local_leader_line_intersections(
@@ -768,8 +851,13 @@ def _count_local_leader_line_intersections(
     candidate: dict | None = None,
     primary_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
     candidate_segment: tuple[tuple[float, float], tuple[float, float]] | None = None,
+    peers: list[int] | None = None,
+    cap: int | None = None,
 ) -> int:
-    """Count primary leader-line intersections involving one label."""
+    """Count primary leader-line intersections involving one label.
+
+    `peers` limits the scan to labels that can touch it; `cap` stops counting once the count exceeds it.
+    """
     if idx < 0 or idx >= len(labels):
         return 0
     if primary_segments is None:
@@ -781,11 +869,13 @@ def _count_local_leader_line_intersections(
     else:
         target_segment = primary_segments[idx]
     intersection_count = 0
-    for peer_idx, peer_segment in enumerate(primary_segments):
+    for peer_idx in range(len(primary_segments)) if peers is None else peers:
         if peer_idx == idx:
             continue
-        if _segments_properly_intersect(target_segment, peer_segment):
+        if _segments_properly_intersect(target_segment, primary_segments[peer_idx]):
             intersection_count += 1
+            if cap is not None and intersection_count > cap:
+                break
     return intersection_count
 
 
@@ -803,6 +893,14 @@ def _segment_intersects_rect_interior(
     x2, y2 = float(p2[0]), float(p2[1])
     min_x, min_y, max_x, max_y = map(float, rect)
     if max_x <= min_x or max_y <= min_y:
+        return False
+    # A segment on one side of the rectangle has no interior point.
+    if (
+        (x1 <= min_x and x2 <= min_x)
+        or (x1 >= max_x and x2 >= max_x)
+        or (y1 <= min_y and y2 <= min_y)
+        or (y1 >= max_y and y2 >= max_y)
+    ):
         return False
 
     dx = x2 - x1
@@ -849,18 +947,19 @@ def _count_label_leader_line_collisions(
     if rects is None or segments is None:
         rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
     collision_count = 0
-    for idx in range(len(labels)):
+    point_sets = [
+        [(rect[0], rect[1]), (rect[2], rect[3]), *(point for segment in label_segments for point in segment)]
+        for rect, label_segments in zip(rects, segments)
+    ]
+    for idx, jdx in _touching_box_pairs(point_sets):
         rect_i = rects[idx]
-        segments_i = segments[idx]
-        for jdx in range(idx + 1, len(labels)):
-            rect_j = rects[jdx]
-            segments_j = segments[jdx]
-            for segment in segments_i:
-                if _segment_intersects_rect_interior(segment[0], segment[1], rect_j):
-                    collision_count += 1
-            for segment in segments_j:
-                if _segment_intersects_rect_interior(segment[0], segment[1], rect_i):
-                    collision_count += 1
+        rect_j = rects[jdx]
+        for segment in segments[idx]:
+            if _segment_intersects_rect_interior(segment[0], segment[1], rect_j):
+                collision_count += 1
+        for segment in segments[jdx]:
+            if _segment_intersects_rect_interior(segment[0], segment[1], rect_i):
+                collision_count += 1
     return collision_count
 
 
@@ -875,8 +974,13 @@ def _count_local_leader_line_collisions(
     segments: list[list[tuple[tuple[float, float], tuple[float, float]]]] | None = None,
     candidate_rect: tuple[float, float, float, float] | None = None,
     candidate_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
+    peers: list[int] | None = None,
+    cap: int | None = None,
 ) -> int:
-    """Count collisions involving one label (optionally with a candidate geometry)."""
+    """Count collisions involving one label (optionally with a candidate geometry).
+
+    `peers` limits the scan to labels that can touch it; `cap` stops counting once the count exceeds it.
+    """
     if idx < 0 or idx >= len(labels):
         return 0
     if rects is None or segments is None:
@@ -896,17 +1000,72 @@ def _count_local_leader_line_collisions(
         target_segments = segments[idx]
     collision_count = 0
 
-    for peer_idx, peer_segments in enumerate(segments):
+    for peer_idx in range(len(segments)) if peers is None else peers:
         if peer_idx == idx:
             continue
         peer_rect = rects[peer_idx]
         for segment in target_segments:
             if _segment_intersects_rect_interior(segment[0], segment[1], peer_rect):
                 collision_count += 1
-        for peer_segment in peer_segments:
+        for peer_segment in segments[peer_idx]:
             if _segment_intersects_rect_interior(peer_segment[0], peer_segment[1], target_rect):
                 collision_count += 1
+        if cap is not None and collision_count > cap:
+            break
     return collision_count
+
+
+def _label_reach_pad(labels: list[dict], *, extra_margin_px: float = 0.0) -> float:
+    """Pad of a reach box: more than half of any margin the bbox-overlap or leader predicates use.
+
+    The min-gap margin of a pair never exceeds the largest single-label min gap plus
+    RESOLVE_OVERLAP_MARGIN_EXTRA_PX; the plain predicates use at most 1 px; `extra_margin_px`
+    covers a caller's collision rect margin. The extra 1 px keeps disjoint boxes strictly apart.
+    """
+    gap_bound = (
+        max((minimum_bbox_gap_px(label, label) for label in labels), default=0.0)
+        + RESOLVE_OVERLAP_MARGIN_EXTRA_PX
+    )
+    return 0.5 * max(gap_bound, float(extra_margin_px), 1.0) + 1.0
+
+
+def _reach_box(
+    anchors: list[tuple[float, float]],
+    half_w: float,
+    half_h: float,
+    pad: float,
+    *,
+    points: Iterable[tuple[float, float]] = (),
+) -> list[float]:
+    """Return [min_x, min_y, max_x, max_y] around label boxes anchored at `anchors` and `points`.
+
+    A label's bbox at margin m lies within width_px and height_px (plus m/2) of its anchor
+    (start_x, start_y) whatever its text anchor and baseline, so half sizes of (width, height)
+    padded by `pad` hold it.
+    """
+    box = [
+        min(anchor[0] for anchor in anchors) - half_w - pad,
+        min(anchor[1] for anchor in anchors) - half_h - pad,
+        max(anchor[0] for anchor in anchors) + half_w + pad,
+        max(anchor[1] for anchor in anchors) + half_h + pad,
+    ]
+    for px, py in points:
+        box[0] = min(box[0], float(px) - pad)
+        box[1] = min(box[1], float(py) - pad)
+        box[2] = max(box[2], float(px) + pad)
+        box[3] = max(box[3], float(py) + pad)
+    return box
+
+
+def _touching_boxes(boxes: list[list[float]], box: list[float], skip_idx: int) -> list[int]:
+    """Return the indexes (except `skip_idx`) of `boxes` that touch `box`."""
+    min_x, min_y, max_x, max_y = box
+    return [
+        idx
+        for idx, other in enumerate(boxes)
+        if idx != skip_idx
+        and not (other[2] < min_x or other[0] > max_x or other[3] < min_y or other[1] > max_y)
+    ]
 
 
 def _resolve_label_leader_line_collisions(
@@ -944,11 +1103,19 @@ def _resolve_label_leader_line_collisions(
     ):
         return labels
 
-    def _label_overlap_count(label_idx: int, candidate_label: dict, *, use_min_gap: bool) -> int:
+    def _label_overlap_count(
+        label_idx: int,
+        candidate_label: dict,
+        *,
+        use_min_gap: bool,
+        peers: list[int] | None = None,
+        cap: int | None = None,
+    ) -> int:
         overlap_count = 0
-        for other_idx, other_label in enumerate(labels):
+        for other_idx in range(len(labels)) if peers is None else peers:
             if other_idx == label_idx:
                 continue
+            other_label = labels[other_idx]
             if use_min_gap:
                 min_gap_px = minimum_bbox_gap_px(candidate_label, other_label)
                 y_margin = min_gap_px
@@ -963,7 +1130,40 @@ def _resolve_label_leader_line_collisions(
                 y_margin,
             ):
                 overlap_count += 1
+                if cap is not None and overlap_count > cap:
+                    return overlap_count
         return overlap_count
+
+    # Peer pruning (output-preserving): every predicate below is false for two labels whose reach
+    # boxes are disjoint, so the counts only visit labels whose reach box meets the label's sweep.
+    reach_pad = _label_reach_pad(labels, extra_margin_px=margin_px)
+
+    def _label_reach_boxes(idx: int) -> tuple[list[float], list[float], list[float]]:
+        """Reach boxes of the text (bbox overlaps), the primary leader (crossings), and all (collisions)."""
+        label = labels[idx]
+        rect = rects[idx]
+        anchor = [(float(label["start_x"]), float(label["start_y"]))]
+        half_w = float(label["width_px"])
+        half_h = float(label["height_px"])
+        return (
+            _reach_box(anchor, half_w, half_h, reach_pad),
+            _reach_box([primary_segments[idx][0]], 0.0, 0.0, reach_pad, points=[primary_segments[idx][1]]),
+            _reach_box(
+                anchor,
+                half_w,
+                half_h,
+                reach_pad,
+                points=[
+                    (rect[0], rect[1]),
+                    (rect[2], rect[3]),
+                    *(point for segment in segments[idx] for point in segment),
+                    *primary_segments[idx],
+                ],
+            ),
+        )
+
+    def _set_reach_boxes(idx: int) -> None:
+        text_boxes[idx], primary_boxes[idx], reach_boxes[idx] = _label_reach_boxes(idx)
 
     for _ in range(max_passes):
         current_total_bbox_collisions = _count_label_leader_line_collisions(
@@ -984,25 +1184,35 @@ def _resolve_label_leader_line_collisions(
         current_min_gap_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=True)
         pass_changed = False
         unwrapped_angles = _derive_monotonic_unwrapped_angles(labels, total_length)
-        local_scores = [
-            (
-                _count_local_leader_line_intersections(
-                    labels,
+        text_boxes: list[list[float]] = [[] for _ in labels]
+        primary_boxes: list[list[float]] = [[] for _ in labels]
+        reach_boxes: list[list[float]] = [[] for _ in labels]
+        for idx in range(len(labels)):
+            _set_reach_boxes(idx)
+        local_scores = []
+        for idx in range(len(labels)):
+            crossing_peers = _touching_boxes(primary_boxes, primary_boxes[idx], idx)
+            near_peers = _touching_boxes(reach_boxes, reach_boxes[idx], idx)
+            local_scores.append(
+                (
+                    _count_local_leader_line_intersections(
+                        labels,
+                        idx,
+                        primary_segments=primary_segments,
+                        peers=crossing_peers,
+                    ),
+                    _count_local_leader_line_collisions(
+                        labels,
+                        total_length,
+                        idx,
+                        margin_px=margin_px,
+                        rects=rects,
+                        segments=segments,
+                        peers=near_peers,
+                    ),
                     idx,
-                    primary_segments=primary_segments,
-                ),
-                _count_local_leader_line_collisions(
-                    labels,
-                    total_length,
-                    idx,
-                    margin_px=margin_px,
-                    rects=rects,
-                    segments=segments,
-                ),
-                idx,
+                )
             )
-            for idx in range(len(labels))
-        ]
         local_scores.sort(key=lambda item: (item[0], item[1]), reverse=True)
 
         for local_line_intersection_count, local_collision_count, label_idx in local_scores:
@@ -1059,8 +1269,11 @@ def _resolve_label_leader_line_collisions(
             best_plain_total = current_plain_overlaps
             best_min_gap_total = current_min_gap_overlaps
 
+            # Candidate anchors per step, in the search order; their sweep box selects the peers.
+            step_positions: list[list[tuple[float, float, float, float]]] = []
             for step_idx in range(1, max_steps + 1):
                 angle_offset = step_idx * step_deg
+                positions: list[tuple[float, float, float, float]] = []
                 for direction in (1.0, -1.0):
                     candidate_angle = current_angle + (direction * angle_offset)
                     if candidate_angle <= (lower_bound + 1e-9) or candidate_angle >= (upper_bound - 1e-9):
@@ -1072,7 +1285,32 @@ def _resolve_label_leader_line_collisions(
                         candidate_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX
                     ) != current_half:
                         continue
+                    positions.append((angle_offset, candidate_angle, candidate_x, candidate_y))
+                step_positions.append(positions)
+            sweep_points = [(item[2], item[3]) for positions in step_positions for item in positions]
+            if not sweep_points:
+                continue
+            half_w = float(label["width_px"])
+            half_h = float(label["height_px"])
+            middle_point, feature_anchor_point = _leader_segments(label)[1]
+            text_peers = _touching_boxes(
+                text_boxes, _reach_box(sweep_points, half_w, half_h, reach_pad), label_idx
+            )
+            crossing_peers = _touching_boxes(
+                primary_boxes,
+                _reach_box(sweep_points, half_w, half_h, reach_pad, points=[middle_point]),
+                label_idx,
+            )
+            collision_peers = _touching_boxes(
+                reach_boxes,
+                _reach_box(
+                    sweep_points, half_w, half_h, reach_pad, points=[middle_point, feature_anchor_point]
+                ),
+                label_idx,
+            )
 
+            for positions in step_positions:
+                for angle_offset, candidate_angle, candidate_x, candidate_y in positions:
                     candidate = label.copy()
                     candidate["start_x"] = float(candidate_x)
                     candidate["start_y"] = float(candidate_y)
@@ -1084,6 +1322,25 @@ def _resolve_label_leader_line_collisions(
                     candidate_segments = _leader_segments(candidate)
                     candidate_primary_segment = _primary_leader_segment(candidate)
 
+                    # Same rejections as counting everything first: a count only has to be exact
+                    # while it stays within the bound that would reject the candidate.
+                    line_cap = min(local_line_intersection_count, best_score[0])
+                    candidate_local_line_intersection_count = _count_local_leader_line_intersections(
+                        labels,
+                        label_idx,
+                        candidate=candidate,
+                        primary_segments=primary_segments,
+                        candidate_segment=candidate_primary_segment,
+                        peers=crossing_peers,
+                        cap=line_cap,
+                    )
+                    if candidate_local_line_intersection_count > line_cap:
+                        continue
+                    collision_cap = (
+                        min(local_collision_count, best_score[1])
+                        if candidate_local_line_intersection_count == best_score[0]
+                        else local_collision_count
+                    )
                     candidate_local_collision_count = _count_local_leader_line_collisions(
                         labels,
                         total_length,
@@ -1094,28 +1351,14 @@ def _resolve_label_leader_line_collisions(
                         segments=segments,
                         candidate_rect=candidate_rect,
                         candidate_segments=candidate_segments,
+                        peers=collision_peers,
+                        cap=collision_cap,
                     )
-                    candidate_local_line_intersection_count = _count_local_leader_line_intersections(
-                        labels,
-                        label_idx,
-                        candidate=candidate,
-                        primary_segments=primary_segments,
-                        candidate_segment=candidate_primary_segment,
-                    )
-                    if candidate_local_line_intersection_count > local_line_intersection_count:
-                        continue
-                    if candidate_local_collision_count > local_collision_count:
-                        continue
-                    if candidate_local_line_intersection_count > best_score[0]:
-                        continue
-                    if (
-                        candidate_local_line_intersection_count == best_score[0]
-                        and candidate_local_collision_count > best_score[1]
-                    ):
+                    if candidate_local_collision_count > collision_cap:
                         continue
 
                     candidate_plain_for_label = _label_overlap_count(
-                        label_idx, candidate, use_min_gap=False
+                        label_idx, candidate, use_min_gap=False, peers=text_peers, cap=current_plain_for_label
                     )
                     candidate_plain_total = (
                         current_plain_overlaps - current_plain_for_label + candidate_plain_for_label
@@ -1124,7 +1367,7 @@ def _resolve_label_leader_line_collisions(
                         continue
 
                     candidate_min_gap_for_label = _label_overlap_count(
-                        label_idx, candidate, use_min_gap=True
+                        label_idx, candidate, use_min_gap=True, peers=text_peers, cap=current_min_gap_for_label
                     )
                     candidate_min_gap_total = (
                         current_min_gap_overlaps - current_min_gap_for_label + candidate_min_gap_for_label
@@ -1172,6 +1415,7 @@ def _resolve_label_leader_line_collisions(
                 segments[label_idx] = best_candidate_segments
             if best_candidate_primary_segment is not None:
                 primary_segments[label_idx] = best_candidate_primary_segment
+            _set_reach_boxes(label_idx)
             current_plain_overlaps = best_plain_total
             current_min_gap_overlaps = best_min_gap_total
             pass_changed = True
@@ -2230,23 +2474,35 @@ def _hemisphere_mismatch_metrics(
     mismatch_count = 0
     weighted_score = 0.0
     for label in labels:
-        preferred_half = _preferred_half_for_label(label, total_length, axis_neutral_deg)
-        if preferred_half == 0:
+        weight = _label_hemisphere_mismatch_weight(label, total_length, axis_neutral_deg)
+        if weight is None:
             continue
-
-        current_half = _current_half_from_x(float(label.get("start_x", 0.0)), axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
-        if current_half in (0, preferred_half):
-            continue
-
         mismatch_count += 1
-        target_angle_unwrapped = float(
-            label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
-        )
-        target_angle_mod = target_angle_unwrapped % 360.0
-        distance_from_axis = _vertical_axis_distance_deg(target_angle_mod)
-        weighted_score += max(0.0, distance_from_axis - axis_neutral_deg)
+        weighted_score += weight
 
     return mismatch_count, weighted_score
+
+
+def _label_hemisphere_mismatch_weight(
+    label: dict,
+    total_length: int,
+    axis_neutral_deg: float = HEMISPHERE_AXIS_NEUTRAL_DEG,
+) -> float | None:
+    """Return the mismatch weight of one label on the wrong half, or None when it is not."""
+    preferred_half = _preferred_half_for_label(label, total_length, axis_neutral_deg)
+    if preferred_half == 0:
+        return None
+
+    current_half = _current_half_from_x(float(label.get("start_x", 0.0)), axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
+    if current_half in (0, preferred_half):
+        return None
+
+    target_angle_unwrapped = float(
+        label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
+    )
+    target_angle_mod = target_angle_unwrapped % 360.0
+    distance_from_axis = _vertical_axis_distance_deg(target_angle_mod)
+    return max(0.0, distance_from_axis - axis_neutral_deg)
 
 
 def place_labels_on_arc_fc(
@@ -2370,12 +2626,15 @@ def _legacy_place_labels_on_arc_fc(
     start_angle: float,
     end_angle: float,
     total_length: int,
+    *,
+    spacing_px: float,
 ) -> list[dict]:
     """
     Legacy placement strategy (from pre-93dc098 implementation).
 
     This remains as a fallback for dense cases where the new optimizer leaves
-    unresolved overlaps.
+    unresolved overlaps. ``spacing_px`` is the circular label spacing: the
+    vertical gap kept between neighbouring labels.
     """
 
     def move_label(label: dict, angle: float) -> tuple[float, float]:
@@ -2418,7 +2677,7 @@ def _legacy_place_labels_on_arc_fc(
         label["start_x"], label["start_y"] = calculate_coordinates(
             center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
         )
-        while rearranged_labels and check_overlap(label, rearranged_labels[-1], total_length, 0.1):
+        while rearranged_labels and check_overlap(label, rearranged_labels[-1], total_length, spacing_px):
             new_angle += 0.01
             label["start_x"], label["start_y"] = calculate_coordinates(
                 center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
@@ -2440,7 +2699,8 @@ def _legacy_improved_label_placement_fc(
     total_length: int,
     start_angle: float,
     end_angle: float,
-    y_margin: float = 0.1,
+    *,
+    y_margin: float,
     max_iterations: int = 10000,
 ) -> list[dict]:
     """
@@ -2657,11 +2917,8 @@ def improved_label_placement_fc(
             return pair_margins[idx1][idx2]
         return pair_margins[idx2][idx1]
 
-    def overlap_count(label_idx, candidate_label=None, *, full_scan: bool = False):
-        current = candidate_label if candidate_label is not None else labels[label_idx]
+    def overlap_indices(label_idx: int, *, full_scan: bool) -> set[int]:
         n_labels = len(labels)
-        if n_labels <= 1:
-            return 0
         checked_indices: set[int] = set()
         if full_scan:
             checked_indices = set(range(n_labels))
@@ -2674,13 +2931,38 @@ def improved_label_placement_fc(
                 next_idx = (label_idx + delta) % n_labels
                 checked_indices.add(prev_idx)
                 checked_indices.add(next_idx)
+        return checked_indices
+
+    def overlap_count(
+        label_idx,
+        candidate_label=None,
+        *,
+        full_scan: bool = False,
+        indices: Iterable[int] | None = None,
+        cap: int | None = None,
+    ):
+        """Count overlaps with the checked labels (`indices`: a subset holding every one that can overlap)."""
+        current = candidate_label if candidate_label is not None else labels[label_idx]
+        n_labels = len(labels)
+        if n_labels <= 1:
+            return 0
         overlaps = 0
-        for other_idx in checked_indices:
+        for other_idx in overlap_indices(label_idx, full_scan=full_scan) if indices is None else indices:
             if other_idx == label_idx:
                 continue
             if check_overlap(current, labels[other_idx], total_length, pair_margin(label_idx, other_idx)):
                 overlaps += 1
+                if cap is not None and overlaps > cap:
+                    break
         return overlaps
+
+    def label_reach_box(label: dict, anchors: list[tuple[float, float]] | None = None) -> list[float]:
+        return _reach_box(
+            anchors if anchors is not None else [(float(label["start_x"]), float(label["start_y"]))],
+            float(label["width_px"]),
+            float(label["height_px"]),
+            0.5 * max(max_pair_margin, 1.0) + 1.0,
+        )
 
     def update_label_coordinates(label: dict, angle_unwrapped: float) -> None:
         label["angle_unwrapped"] = angle_unwrapped
@@ -2955,6 +3237,8 @@ def improved_label_placement_fc(
                 changes_made = True
 
             iteration_order = sorted(range(len(labels)), key=local_density_weight)
+            # Peer pruning (output-preserving): check_overlap is false for labels whose reach boxes are disjoint.
+            reach_boxes = [label_reach_box(label) for label in labels]
             for label_idx in iteration_order:
                 label = labels[label_idx]
                 current_angle = label["angle_unwrapped"]
@@ -2996,31 +3280,61 @@ def improved_label_placement_fc(
                 )
                 best_score = initial_score
 
-                search_complete = False
+                step_positions: list[list[tuple[float, float, float]]] = []
                 for step in range(max_steps + 1):
                     if step == 0:
                         offsets = [0.0]
                     else:
                         offset = step * angle_step
                         offsets = [offset, -offset]
-
+                    positions: list[tuple[float, float, float]] = []
                     for offset in offsets:
                         candidate_angle = target_angle + offset
                         if not (lower_bound <= candidate_angle <= upper_bound):
                             continue
-                        candidate_x, candidate_y = move_label(label, candidate_angle)
+                        positions.append((candidate_angle, *move_label(label, candidate_angle)))
+                    step_positions.append(positions)
+                sweep_anchors = [(item[1], item[2]) for positions in step_positions for item in positions]
+                if not sweep_anchors:
+                    continue
+                sweep_box = label_reach_box(label, sweep_anchors)
+                peer_indices = [
+                    other_idx
+                    for other_idx in overlap_indices(label_idx, full_scan=full_scan_checks)
+                    if not (
+                        reach_boxes[other_idx][2] < sweep_box[0]
+                        or reach_boxes[other_idx][0] > sweep_box[2]
+                        or reach_boxes[other_idx][3] < sweep_box[1]
+                        or reach_boxes[other_idx][1] > sweep_box[3]
+                    )
+                ]
+
+                search_complete = False
+                for positions in step_positions:
+                    for candidate_angle, candidate_x, candidate_y in positions:
                         label_copy = label.copy()
                         label_copy["start_x"] = candidate_x
                         label_copy["start_y"] = candidate_y
 
-                        candidate_overlaps = overlap_count(label_idx, label_copy, full_scan=full_scan_checks)
+                        # A candidate with more overlaps than the best, or a worse (overlaps, weighted
+                        # delta) prefix, cannot win; the rest of its score is then not needed.
+                        candidate_overlaps = overlap_count(
+                            label_idx, label_copy, indices=peer_indices, cap=best_score[0]
+                        )
+                        if candidate_overlaps > best_score[0]:
+                            continue
                         candidate_target_delta = abs(candidate_angle - target_angle)
                         candidate_move = abs(candidate_angle - current_angle)
                         candidate_middle_penalty = middle_proximity_penalty(label_idx, candidate_angle)
+                        candidate_weighted_delta = (
+                            anchor_weight * candidate_target_delta + proximity_penalty_factor * candidate_middle_penalty
+                        )
+                        if (candidate_overlaps, candidate_weighted_delta) > best_score[:2]:
+                            continue
                         candidate_leader_length = _leader_length_px(label_copy, total_length)
                         candidate_score = (
                             candidate_overlaps,
-                            anchor_weight * candidate_target_delta + proximity_penalty_factor * candidate_middle_penalty,
+                            candidate_weighted_delta,
                             candidate_leader_length,
                             candidate_move,
                         )
@@ -3050,6 +3364,7 @@ def improved_label_placement_fc(
                     label["start_x"] = best_x
                     label["start_y"] = best_y
                     label["angle_unwrapped"] = best_angle
+                    reach_boxes[label_idx] = label_reach_box(label)
                     changes_made = True
             if not changes_made:
                 break
@@ -4058,14 +4373,36 @@ def _polish_total_leader_distance(
             minimum_margin=x_margin,
         )
 
-    def _label_overlap_count(label_idx: int, candidate_label: dict, *, use_min_gap: bool) -> int:
+    def _label_overlap_count(
+        label_idx: int,
+        candidate_label: dict,
+        *,
+        use_min_gap: bool,
+        peers: list[int] | None = None,
+        cap: int | None = None,
+    ) -> int:
         overlap_count = 0
-        for other_idx, other in enumerate(labels):
+        for other_idx in range(len(labels)) if peers is None else peers:
             if other_idx == label_idx:
                 continue
-            if _labels_overlap(candidate_label, other, use_min_gap=use_min_gap):
+            if _labels_overlap(candidate_label, labels[other_idx], use_min_gap=use_min_gap):
                 overlap_count += 1
+                if cap is not None and overlap_count > cap:
+                    break
         return overlap_count
+
+    # Peer pruning (output-preserving): both overlap predicates are false for labels whose reach boxes are disjoint.
+    reach_pad = _label_reach_pad(labels)
+
+    def _label_reach_box(label: dict) -> list[float]:
+        return _reach_box(
+            [(float(label["start_x"]), float(label["start_y"]))],
+            float(label["width_px"]),
+            float(label["height_px"]),
+            reach_pad,
+        )
+
+    reach_boxes = [_label_reach_box(label) for label in labels]
 
     unwrapped = _derive_monotonic_unwrapped_angles(labels, total_length)
     for idx, angle_unwrapped in enumerate(unwrapped):
@@ -4127,34 +4464,64 @@ def _polish_total_leader_distance(
             current_min_gap_for_label = _label_overlap_count(label_idx, label, use_min_gap=True)
             current_leader = _leader_length_px(label, total_length)
             current_target_delta = abs(current_angle - target_angle)
-            original_start_x = float(label["start_x"])
-            original_start_y = float(label["start_y"])
-            original_angle = current_angle
+            # hemisphere_mismatch_count always counts the current labels, so a move changes it by
+            # this label's own flag only.
+            others_mismatch_count = hemisphere_mismatch_count - (
+                _label_hemisphere_mismatch_weight(label, total_length) is not None
+            )
 
-            best_strict: tuple[float, tuple[int, int, int, float, float]] | None = None
-            best_relaxed: tuple[float, tuple[int, int, int, float, float], tuple[float, float, int]] | None = None
+            candidate_positions = []
             for candidate_angle in candidate_angles:
                 if candidate_angle <= lower_bound + 1e-9 or candidate_angle >= upper_bound - 1e-9:
                     continue
+                candidate_positions.append(
+                    (
+                        candidate_angle,
+                        *calculate_coordinates(
+                            center_x,
+                            center_y,
+                            x_radius,
+                            y_radius,
+                            candidate_angle,
+                            label["middle"],
+                            total_length,
+                        ),
+                    )
+                )
+            if not candidate_positions:
+                continue
+            peers = _touching_boxes(
+                reach_boxes,
+                _reach_box(
+                    [(item[1], item[2]) for item in candidate_positions],
+                    float(label["width_px"]),
+                    float(label["height_px"]),
+                    reach_pad,
+                ),
+                label_idx,
+            )
 
+            best_strict: tuple[float, tuple[int, int, int, float, float]] | None = None
+            best_relaxed: tuple[float, tuple[int, int, int, float, float], tuple[float, float, int]] | None = None
+            for candidate_angle, candidate_x, candidate_y in candidate_positions:
                 candidate_label = label.copy()
                 candidate_label["angle_unwrapped"] = candidate_angle
-                candidate_label["start_x"], candidate_label["start_y"] = calculate_coordinates(
-                    center_x,
-                    center_y,
-                    x_radius,
-                    y_radius,
-                    candidate_angle,
-                    label["middle"],
-                    total_length,
-                )
+                candidate_label["start_x"], candidate_label["start_y"] = candidate_x, candidate_y
 
-                candidate_plain_for_label = _label_overlap_count(label_idx, candidate_label, use_min_gap=False)
+                candidate_plain_for_label = _label_overlap_count(
+                    label_idx, candidate_label, use_min_gap=False, peers=peers, cap=current_plain_for_label
+                )
                 candidate_plain_total = plain_overlaps - current_plain_for_label + candidate_plain_for_label
                 if candidate_plain_total > plain_overlaps:
                     continue
 
-                candidate_min_gap_for_label = _label_overlap_count(label_idx, candidate_label, use_min_gap=True)
+                candidate_min_gap_for_label = _label_overlap_count(
+                    label_idx,
+                    candidate_label,
+                    use_min_gap=True,
+                    peers=peers,
+                    cap=max_allowed_min_gap_overlaps - min_gap_overlaps + current_min_gap_for_label,
+                )
                 candidate_min_gap_total = min_gap_overlaps - current_min_gap_for_label + candidate_min_gap_for_label
                 if candidate_min_gap_total > max_allowed_min_gap_overlaps:
                     continue
@@ -4164,13 +4531,9 @@ def _polish_total_leader_distance(
                 candidate_target_delta = abs(candidate_angle - target_angle)
                 candidate_target_delta_sum = target_delta_sum - current_target_delta + candidate_target_delta
 
-                label["start_x"] = candidate_label["start_x"]
-                label["start_y"] = candidate_label["start_y"]
-                label["angle_unwrapped"] = candidate_angle
-                candidate_mismatch_count, _ = _hemisphere_mismatch_metrics(labels, total_length)
-                label["start_x"] = original_start_x
-                label["start_y"] = original_start_y
-                label["angle_unwrapped"] = original_angle
+                candidate_mismatch_count = others_mismatch_count + (
+                    _label_hemisphere_mismatch_weight(candidate_label, total_length) is not None
+                )
                 if candidate_mismatch_count > hemisphere_mismatch_count:
                     continue
 
@@ -4211,6 +4574,7 @@ def _polish_total_leader_distance(
 
             accepted_angle, accepted_score = accepted
             _update_label_coordinates(label, accepted_angle)
+            reach_boxes[label_idx] = _label_reach_box(label)
             plain_overlaps = accepted_score[0]
             min_gap_overlaps = accepted_score[1]
             hemisphere_mismatch_count = accepted_score[2]
@@ -4237,7 +4601,20 @@ def rearrange_labels_fc(
     arena_outer_radius: float | None = None,
     spacing_px: float | None = None,
     track_preset: str | None = None,
+    *,
+    dense_outer_rows: DenseOuterRows = "legacy",
+    probe: bool = False,
 ):
+    """Place one side's external labels on their arc.
+
+    ``dense_outer_rows`` chooses the row gap of the dense legacy packer for
+    outer labels: ``"spaced"`` keeps the circular label spacing (OV-479),
+    ``"legacy"`` keeps the 0.1 px gap of earlier releases. When the dense outer
+    candidate overlaps and the caller can use that answer (a ``"spaced"``
+    attempt, which falls back to ``"legacy"``, or a fit ``probe``), placement
+    stops with :class:`CircularLabelProbeStopped` instead of trying the slower
+    candidates.
+    """
     track_type = _normalize_circular_track_preset(track_preset or cfg.canvas.circular.track_type)
 
     if is_outer:
@@ -4283,6 +4660,12 @@ def rearrange_labels_fc(
     if not sorted_labels:
         return []
     label_spacing_px = _resolve_label_spacing_px(sorted_labels[0], base_margin_px=spacing_px)
+    # OV-479: a spaced attempt keeps the circular label spacing between dense outer rows.
+    legacy_row_gap_px = (
+        max(label_spacing_px, LEGACY_MIN_ROW_GAP_PX)
+        if is_outer and dense_outer_rows == "spaced"
+        else LEGACY_MIN_ROW_GAP_PX
+    )
 
     def _build_legacy_candidate() -> list[dict]:
         candidate_legacy = [label.copy() for label in sorted_labels]
@@ -4295,6 +4678,7 @@ def rearrange_labels_fc(
             start_angle,
             end_angle,
             total_length,
+            spacing_px=legacy_row_gap_px,
         )
         candidate_legacy = _legacy_improved_label_placement_fc(
             candidate_legacy,
@@ -4306,6 +4690,7 @@ def rearrange_labels_fc(
             total_length,
             start_angle,
             end_angle,
+            y_margin=legacy_row_gap_px,
         )
         candidate_legacy = sort_labels(candidate_legacy)
         return _refine_labels_to_preferred_hemisphere(
@@ -4328,6 +4713,8 @@ def rearrange_labels_fc(
     if is_dense:
         candidate_legacy = _build_legacy_candidate()
         legacy_score = _placement_score(candidate_legacy, total_length)
+        if is_outer and legacy_score[0] > 0 and (probe or dense_outer_rows == "spaced"):
+            raise CircularLabelProbeStopped(legacy_score[0])
         if (not is_outer) and legacy_score[0] == 0:
             # Dense inner labels prioritize leader-collision-free readability and runtime over min-gap polishing.
             legacy_with_leaders = _assign_leader_start_points(
@@ -4472,7 +4859,14 @@ def prepare_label_list(
     label_font_size: float | None = None,
     _candidate_cache: dict[str, object] | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    probe: bool = False,
 ):
+    """Return the record's drawn label list: embedded labels, then external labels.
+
+    With ``probe`` (a fit search), horizontal placement raises
+    :class:`CircularLabelProbeStopped` as soon as the dense outer candidate
+    overlaps, because such a layout does not fit.
+    """
     cfg = profile.config
     embedded_labels = []
     outer_labels = []
@@ -4508,7 +4902,7 @@ def prepare_label_list(
     font_size: float = (
         float(label_font_size)
         if label_font_size is not None
-        else cfg.labels.font_size.for_length_param(length_param)
+        else circular_label_font_size(cfg, total_length)
     )
     interval = cfg.canvas.dpi
     label_spacing_px = float(cfg.labels.spacing.circular)
@@ -4812,160 +5206,45 @@ def prepare_label_list(
             )
         return embedded_labels + external_labels
 
-    outer_labels_rearranged = rearrange_labels_fc(
-        outer_labels,
-        radius,
-        total_length,
-        length_param,
-        cfg,
-        strands,
-        is_outer=True,
-        inner_labels_enabled=inner_labels_enabled,
-        arena_outer_radius=(float(outer_arena[1]) if outer_arena is not None else None),
-        spacing_px=label_spacing_px,
-        track_preset=track_type,
-    )
-    feature_outer_radius_intervals: list[tuple[float, float, float]] | None = None
-    feature_inner_radius_intervals: list[tuple[float, float, float]] | None = None
-    if lane_clearance:
-        feature_outer_radius_intervals = _build_outer_feature_radius_intervals(
-            feature_dict,
-            total_length,
-            radius,
-            track_ratio,
-            profile,
-            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-            feature_layout=feature_layout,
-            track_preset=track_type,
-        )
-        feature_inner_radius_intervals = _build_inner_feature_radius_intervals(
-            feature_dict,
-            total_length,
-            radius,
-            track_ratio,
-            profile,
-            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-            feature_layout=feature_layout,
-            track_preset=track_type,
-        )
-        outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-            outer_labels_rearranged,
-            total_length,
-            feature_outer_radius_intervals,
-            text_clearance_px=effective_text_clearance_px,
-        )
-        outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-        for _ in range(2):
-            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
-                outer_labels_rearranged,
-                total_length,
-            )
-            outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-                outer_labels_rearranged,
-                total_length,
-                feature_outer_radius_intervals,
-                text_clearance_px=effective_text_clearance_px,
-            )
-            outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-        outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
-            outer_labels_rearranged,
-            total_length,
-        )
-        outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-            outer_labels_rearranged,
-            total_length,
-            feature_outer_radius_intervals,
-            text_clearance_px=effective_text_clearance_px,
-        )
-        outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-        # Final overlap pass, then enforce outer clearances as the final priority.
-        outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
-            outer_labels_rearranged,
-            total_length,
-        )
-        outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-            outer_labels_rearranged,
-            total_length,
-            feature_outer_radius_intervals,
-            text_clearance_px=effective_text_clearance_px,
-        )
-        outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-        outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
-            outer_labels_rearranged,
-            total_length,
-            feature_outer_radius_intervals,
-            anchor_clearance_px=effective_anchor_clearance_px,
-        )
-        outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
-            outer_labels_rearranged,
-            total_length,
-        )
-        # Reconcile angular overlaps once more after stricter radial clearances.
-        outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
-            outer_labels_rearranged,
-            total_length,
-        )
-        outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-            outer_labels_rearranged,
-            total_length,
-            feature_outer_radius_intervals,
-            text_clearance_px=effective_text_clearance_px,
-        )
-        outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-        outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
-            outer_labels_rearranged,
-            total_length,
-            feature_outer_radius_intervals,
-            anchor_clearance_px=effective_anchor_clearance_px,
-        )
-        outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
-            outer_labels_rearranged,
-            total_length,
-        )
-    inner_labels_rearranged = []
-    if inner_labels_enabled:
-        inner_labels_rearranged = rearrange_labels_fc(
-            inner_labels,
+    def place_external_labels(dense_outer_rows: DenseOuterRows) -> list[dict]:
+        outer_labels_rearranged = rearrange_labels_fc(
+            [dict(label) for label in outer_labels],
             radius,
             total_length,
             length_param,
             cfg,
             strands,
-            is_outer=False,
+            is_outer=True,
             inner_labels_enabled=inner_labels_enabled,
+            arena_outer_radius=(float(outer_arena[1]) if outer_arena is not None else None),
             spacing_px=label_spacing_px,
             track_preset=track_type,
+            dense_outer_rows=dense_outer_rows,
+            probe=probe,
         )
-        if (not resolve_overlaps) and len(inner_labels_rearranged) >= 2:
-            inner_labels_rearranged = _rebalance_inner_labels_strict_order(
-                inner_labels_rearranged,
+        feature_outer_radius_intervals: list[tuple[float, float, float]] | None = None
+        feature_inner_radius_intervals: list[tuple[float, float, float]] | None = None
+        if lane_clearance:
+            feature_outer_radius_intervals = _build_outer_feature_radius_intervals(
+                feature_dict,
                 total_length,
+                radius,
+                track_ratio,
+                profile,
+                feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+                feature_layout=feature_layout,
+                track_preset=track_type,
             )
-        if feature_inner_radius_intervals is not None and inner_labels_rearranged:
-            inner_labels_rearranged = _stabilize_inner_label_clearance(
-                inner_labels_rearranged,
+            feature_inner_radius_intervals = _build_inner_feature_radius_intervals(
+                feature_dict,
                 total_length,
-                feature_inner_radius_intervals,
-                text_clearance_px=effective_text_clearance_px,
-                anchor_clearance_px=effective_anchor_clearance_px,
+                radius,
+                track_ratio,
+                profile,
+                feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+                feature_layout=feature_layout,
+                track_preset=track_type,
             )
-
-    external_labels = outer_labels_rearranged + inner_labels_rearranged
-    if external_labels:
-        # Collision optimization assumes angularly ordered neighbors.
-        external_labels_sorted = sorted(external_labels, key=lambda label: float(label["middle"]))
-        assign_leader_start_points(external_labels_sorted, total_length)
-        _resolve_label_leader_line_collisions(
-            external_labels_sorted,
-            total_length,
-            margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
-            step_deg=LEADER_LABEL_SHIFT_STEP_DEG,
-            max_shift_deg=LEADER_LABEL_MAX_SHIFT_DEG,
-            max_passes=LEADER_LABEL_MAX_PASSES,
-            min_order_gap_deg=LEADER_LABEL_MIN_ORDER_GAP_DEG,
-        )
-        reanchor_required = False
-        if feature_outer_radius_intervals is not None and outer_labels_rearranged:
             outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
                 outer_labels_rearranged,
                 total_length,
@@ -4973,16 +5252,30 @@ def prepare_label_list(
                 text_clearance_px=effective_text_clearance_px,
             )
             outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-            outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
+            for _ in range(2):
+                outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
+                    outer_labels_rearranged,
+                    total_length,
+                )
+                outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+                    outer_labels_rearranged,
+                    total_length,
+                    feature_outer_radius_intervals,
+                    text_clearance_px=effective_text_clearance_px,
+                )
+                outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
+                outer_labels_rearranged,
+                total_length,
+            )
+            outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
                 outer_labels_rearranged,
                 total_length,
                 feature_outer_radius_intervals,
-                anchor_clearance_px=effective_anchor_clearance_px,
+                text_clearance_px=effective_text_clearance_px,
             )
-            outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
-                outer_labels_rearranged,
-                total_length,
-            )
+            outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+            # Final overlap pass, then enforce outer clearances as the final priority.
             outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
                 outer_labels_rearranged,
                 total_length,
@@ -5004,30 +5297,162 @@ def prepare_label_list(
                 outer_labels_rearranged,
                 total_length,
             )
-            reanchor_required = True
-        if feature_inner_radius_intervals is not None and inner_labels_rearranged:
-            inner_labels_rearranged = _stabilize_inner_label_clearance(
-                inner_labels_rearranged,
+            # Reconcile angular overlaps once more after stricter radial clearances.
+            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
+                outer_labels_rearranged,
                 total_length,
-                feature_inner_radius_intervals,
+            )
+            outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+                outer_labels_rearranged,
+                total_length,
+                feature_outer_radius_intervals,
                 text_clearance_px=effective_text_clearance_px,
+            )
+            outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+            outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
+                outer_labels_rearranged,
+                total_length,
+                feature_outer_radius_intervals,
                 anchor_clearance_px=effective_anchor_clearance_px,
             )
-            reanchor_required = True
-        if reanchor_required:
-            assign_leader_start_points(external_labels_sorted, total_length)
+            outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
+                outer_labels_rearranged,
+                total_length,
+            )
+        inner_labels_rearranged = []
+        if inner_labels_enabled:
+            inner_labels_rearranged = rearrange_labels_fc(
+                [dict(label) for label in inner_labels],
+                radius,
+                total_length,
+                length_param,
+                cfg,
+                strands,
+                is_outer=False,
+                inner_labels_enabled=inner_labels_enabled,
+                spacing_px=label_spacing_px,
+                track_preset=track_type,
+            )
+            if (not resolve_overlaps) and len(inner_labels_rearranged) >= 2:
+                inner_labels_rearranged = _rebalance_inner_labels_strict_order(
+                    inner_labels_rearranged,
+                    total_length,
+                )
+            if feature_inner_radius_intervals is not None and inner_labels_rearranged:
+                inner_labels_rearranged = _stabilize_inner_label_clearance(
+                    inner_labels_rearranged,
+                    total_length,
+                    feature_inner_radius_intervals,
+                    text_clearance_px=effective_text_clearance_px,
+                    anchor_clearance_px=effective_anchor_clearance_px,
+                )
 
-    external_labels_ordered = sorted(
-        outer_labels_rearranged + inner_labels_rearranged,
-        key=lambda label: float(label["middle"]),
-    )
-    label_list_fc = embedded_labels + external_labels_ordered
-    return label_list_fc
+        external_labels = outer_labels_rearranged + inner_labels_rearranged
+        if external_labels:
+            # Collision optimization assumes angularly ordered neighbors.
+            external_labels_sorted = sorted(external_labels, key=lambda label: float(label["middle"]))
+            assign_leader_start_points(external_labels_sorted, total_length)
+            _resolve_label_leader_line_collisions(
+                external_labels_sorted,
+                total_length,
+                margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
+                step_deg=LEADER_LABEL_SHIFT_STEP_DEG,
+                max_shift_deg=LEADER_LABEL_MAX_SHIFT_DEG,
+                max_passes=LEADER_LABEL_MAX_PASSES,
+                min_order_gap_deg=LEADER_LABEL_MIN_ORDER_GAP_DEG,
+            )
+            reanchor_required = False
+            if feature_outer_radius_intervals is not None and outer_labels_rearranged:
+                outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+                    outer_labels_rearranged,
+                    total_length,
+                    feature_outer_radius_intervals,
+                    text_clearance_px=effective_text_clearance_px,
+                )
+                outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+                outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
+                    outer_labels_rearranged,
+                    total_length,
+                    feature_outer_radius_intervals,
+                    anchor_clearance_px=effective_anchor_clearance_px,
+                )
+                outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
+                    outer_labels_rearranged,
+                    total_length,
+                )
+                outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
+                    outer_labels_rearranged,
+                    total_length,
+                )
+                outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+                    outer_labels_rearranged,
+                    total_length,
+                    feature_outer_radius_intervals,
+                    text_clearance_px=effective_text_clearance_px,
+                )
+                outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+                outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
+                    outer_labels_rearranged,
+                    total_length,
+                    feature_outer_radius_intervals,
+                    anchor_clearance_px=effective_anchor_clearance_px,
+                )
+                outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
+                    outer_labels_rearranged,
+                    total_length,
+                )
+                reanchor_required = True
+            if feature_inner_radius_intervals is not None and inner_labels_rearranged:
+                inner_labels_rearranged = _stabilize_inner_label_clearance(
+                    inner_labels_rearranged,
+                    total_length,
+                    feature_inner_radius_intervals,
+                    text_clearance_px=effective_text_clearance_px,
+                    anchor_clearance_px=effective_anchor_clearance_px,
+                )
+                reanchor_required = True
+            if reanchor_required:
+                assign_leader_start_points(external_labels_sorted, total_length)
+
+        external_labels_ordered = sorted(
+            outer_labels_rearranged + inner_labels_rearranged,
+            key=lambda label: float(label["middle"]),
+        )
+        # The drawer reads leader starts from this final assignment.
+        assign_leader_start_points(external_labels_ordered, total_length)
+        return external_labels_ordered
+
+    # OV-479 / LP-D45: dense outer rows keep the circular label spacing when the
+    # drawn layout then fits; otherwise the record is placed as in earlier releases.
+    if not (
+        len(outer_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD
+        and max(label_spacing_px, LEGACY_MIN_ROW_GAP_PX) > LEGACY_MIN_ROW_GAP_PX
+    ):
+        return embedded_labels + place_external_labels("legacy")
+    # A probe asks only whether either layout fits. It tries today's layout first
+    # and stops when its dense rows overlap: wider spaced rows overlap as well.
+    attempts: tuple[DenseOuterRows, ...] = ("legacy", "spaced") if probe else ("spaced", "legacy")
+    legacy_labels: list[dict] = []
+    for dense_outer_rows in attempts:
+        try:
+            attempt_labels = place_external_labels(dense_outer_rows)
+        except CircularLabelProbeStopped:
+            if dense_outer_rows == "legacy":
+                raise
+            continue
+        if circular_label_fit(attempt_labels, total_length).fits:
+            return embedded_labels + attempt_labels
+        if dense_outer_rows == "legacy":
+            legacy_labels = attempt_labels
+    return embedded_labels + legacy_labels
 
 
 __all__ = [
     "minimum_bbox_gap_px",
+    "CircularLabelProbeStopped",
     "calculate_angle_degrees",
+    "circular_label_fit",
+    "circular_label_font_size",
     "calculate_angle_for_y",
     "calculate_coordinates",
     "angle_from_middle",

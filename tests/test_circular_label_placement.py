@@ -10,8 +10,6 @@ from svgwrite.container import Group
 
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
 import gbdraw.labels.circular as circular_labels_module
-import gbdraw.render.groups.circular.labels as circular_labels_group_module
-import gbdraw.render.groups.circular.seq_record as circular_seq_record_group_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.canvas.circular import CircularCanvasConfigurator
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
@@ -2199,8 +2197,9 @@ def test_mjenmv_resolve_overlaps_middle_keeps_current_wsv134_wsv133_radial_gap()
     radial_gap = wsv134_middle_radius - wsv133_outer_radius
     required_gap = expected_anchor_clearance + float(circular_labels_module.OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX)
 
-    assert radial_gap == pytest.approx(-9.5725, abs=1e-6)
+    # OV-479: with 3 px rows the dense packer leaves wsv134's elbow clear of wsv133's anchor.
     assert required_gap == pytest.approx(12.8525, abs=1e-6)
+    assert radial_gap >= required_gap - 1e-6
 
 
 def test_mjenmv_resolve_overlaps_middle_keeps_current_top_bottom_leader_anchor_selection() -> None:
@@ -2218,7 +2217,7 @@ def test_mjenmv_resolve_overlaps_middle_keeps_current_top_bottom_leader_anchor_s
         total_length,
         margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
     )
-    assert global_collisions == 1
+    assert global_collisions == 0
 
     top_bottom_count = 0
     midpoint_preferred_count = 0
@@ -3147,10 +3146,8 @@ def test_circular_assembly_reuses_precalculated_labels_once() -> None:
         },
     )
 
-    counts = {"assemble": 0, "labels_group": 0, "seq_record_group": 0}
+    counts = {"assemble": 0}
     original_assemble_prepare = circular_assemble_module.prepare_label_list
-    original_labels_prepare = circular_labels_group_module.prepare_label_list
-    original_seq_prepare = circular_seq_record_group_module.prepare_label_list
 
     def wrap_counter(counter_key: str, original_func):
         def wrapped(*args, **kwargs):
@@ -3160,8 +3157,6 @@ def test_circular_assembly_reuses_precalculated_labels_once() -> None:
         return wrapped
 
     circular_assemble_module.prepare_label_list = wrap_counter("assemble", original_assemble_prepare)
-    circular_labels_group_module.prepare_label_list = wrap_counter("labels_group", original_labels_prepare)
-    circular_seq_record_group_module.prepare_label_list = wrap_counter("seq_record_group", original_seq_prepare)
     try:
         _ = assemble_circular_diagram_from_record(
             record,
@@ -3172,12 +3167,8 @@ def test_circular_assembly_reuses_precalculated_labels_once() -> None:
         )
     finally:
         circular_assemble_module.prepare_label_list = original_assemble_prepare
-        circular_labels_group_module.prepare_label_list = original_labels_prepare
-        circular_seq_record_group_module.prepare_label_list = original_seq_prepare
 
     assert counts["assemble"] == 1
-    assert counts["labels_group"] == 0
-    assert counts["seq_record_group"] == 0
 
 
 @pytest.mark.parametrize(
@@ -3399,3 +3390,137 @@ def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:
     srna_override = next(label for label in override_labels if label.get("label_text") == "12S ribosomal RNA")
     assert bool(nd4_override["is_embedded"])
     assert bool(srna_override["is_embedded"])
+
+
+def _tobacco_cli_default_cfg(label_font_size: float) -> GbdrawConfig:
+    """``gbdraw circular --separate_strands --track_type tuckin --labels out`` defaults.
+
+    The CLI's default label blacklist is empty, unlike the packaged config.
+    """
+
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        {
+            "labels.filtering.blacklist_keywords": [],
+            "labels.circular.scope": "outer",
+            "canvas.strandedness": True,
+            "canvas.circular.track_type": "tuckin",
+            "labels.font_size.short": label_font_size,
+            "labels.font_size.long": label_font_size,
+        },
+    )
+    return GbdrawConfig.from_dict(config_dict)
+
+
+def _drawn_outer_labels(monkeypatch: pytest.MonkeyPatch) -> list[list[dict]]:
+    """Capture the external label list each assembly hands to the label drawer."""
+
+    drawn: list[list[dict]] = []
+    original = circular_assemble_module.add_labels_group_on_canvas
+
+    def capture(canvas, *args, **kwargs):
+        if kwargs.get("phase") == "leaders":
+            drawn.append(
+                [
+                    label
+                    for label in kwargs["precalculated_labels"]
+                    if not label.get("is_embedded") and not label.get("is_inner")
+                ]
+            )
+        return original(canvas, *args, **kwargs)
+
+    monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", capture)
+    return drawn
+
+
+@pytest.mark.circular
+def test_tobacco_14pt_outer_labels_that_overlap_are_not_drawn() -> None:
+    """OV-456 / LP-D42: overlapping outer labels are never drawn; the error offers a fitting row."""
+
+    from gbdraw.api.diagram import build_circular_diagram
+    from gbdraw.api.options import CircularDiagramOptions
+    from gbdraw.config.modify import with_config_overrides
+    from gbdraw.api.diagram import _circular_label_layouts
+    from gbdraw.exceptions import LabelsDoNotFitError
+    from gbdraw.labels.fit import LabelFit
+
+    record = SeqIO.read(str(Path(__file__).parent / "test_inputs" / "NC_001879.gbk"), "genbank")
+    cfg = _tobacco_cli_default_cfg(14.0)
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        build_circular_diagram(record, options=CircularDiagramOptions(config=cfg))
+
+    report = raised.value.report
+    assert not report.drawn
+    (failing,) = report.records
+    assert failing.label_count == 140
+    assert failing.font_size == pytest.approx(14.0)
+    assert failing.fit.overlap_pairs > 0
+    assert raised.value.diagnostic == {
+        "code": "LABEL_LAYOUT",
+        "overlapPairs": failing.fit.overlap_pairs,
+        "crossingPairs": failing.fit.crossing_pairs,
+    }
+    assert [row.kind for row in report.rows] == [
+        "outward_both",
+        "outward_vertical",
+        "outward_horizontal",
+        "smaller_font",
+        "tighter_rows",
+        "combination",
+    ]
+    vertical = report.rows[1]
+    assert vertical.values is not None
+    assert vertical.canvas_size is not None
+    assert str(raised.value).startswith(
+        f"140 outer labels do not fit at 14 pt ({failing.fit.overlap_pairs} label pairs overlap,"
+    )
+    assert "Nothing was drawn.\nRun again with one of:\n" in str(raised.value)
+
+    fitted = build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(config=with_config_overrides(cfg, vertical.values)),
+    )
+    (layout,) = _circular_label_layouts(fitted)
+    assert layout.outer_label_count == 140
+    assert layout.fit == LabelFit(overlap_pairs=0, crossing_pairs=0)
+
+
+def _smallest_row_gap_px(labels: list[dict], total_length: int) -> float:
+    """Smallest vertical gap between two labels whose boxes share an x range."""
+
+    smallest = math.inf
+    for index, first in enumerate(labels):
+        first_x = circular_labels_module._label_x_bounds(first, 0.0)
+        first_y = circular_labels_module._label_y_bounds(first, total_length, 0.0)
+        for second in labels[index + 1:]:
+            second_x = circular_labels_module._label_x_bounds(second, 0.0)
+            if first_x[1] <= second_x[0] or second_x[1] <= first_x[0]:
+                continue
+            second_y = circular_labels_module._label_y_bounds(second, total_length, 0.0)
+            smallest = min(smallest, max(second_y[0] - first_y[1], first_y[0] - second_y[1]))
+    return smallest
+
+
+@pytest.mark.circular
+def test_dense_outer_label_rows_follow_circular_label_spacing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-479: maps with 50 or more outer labels keep ``labels.spacing.circular`` between rows."""
+
+    record = SeqIO.read(str(Path(__file__).parent / "test_inputs" / "MjeNMV.gbk"), "genbank")
+    total_length = len(record.seq)
+    drawn = _drawn_outer_labels(monkeypatch)
+    gaps: dict[float, float] = {}
+    for spacing in (0.5, 3.0):
+        config_dict = modify_config_dict(
+            load_config_toml("gbdraw.data", "config.toml"),
+            {
+                "labels.circular.scope": "outer",
+                "canvas.strandedness": True,
+                "labels.spacing.circular": spacing,
+            },
+        )
+        assemble_circular_diagram_from_record(record, cfg=GbdrawConfig.from_dict(config_dict), legend="none")
+        assert len(drawn[-1]) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
+        gaps[spacing] = _smallest_row_gap_px(drawn[-1], total_length)
+
+    assert gaps[3.0] > gaps[0.5] + 1.0

@@ -11,8 +11,8 @@ from gbdraw.api import materialize_session, session_to_request
 from gbdraw.api.request_render import plan_request
 from gbdraw.diagrams.circular import assemble
 from gbdraw.features.placement import FeaturePlacementSlot
+from gbdraw.labels.circular_leaders import leader_crossing_count
 from gbdraw.labels.circular_radial import (
-    _leader_crossing_count,
     _leader_text_collision_count,
     _text_collision_pairs,
 )
@@ -82,7 +82,7 @@ def test_chloroplast_placement_preserves_lanes_and_clears_labels_and_legend(
         side_labels = [label for label in labels if not label["is_embedded"] and label.get("is_inner") == inner]
         assert not _text_collision_pairs(side_labels, 3)
         assert _leader_text_collision_count(side_labels) == 0
-        assert _leader_crossing_count(side_labels) == 0
+        assert leader_crossing_count(side_labels) == 0
         if inner and scope == "outer":
             assert side_labels == []
     for label in labels:
