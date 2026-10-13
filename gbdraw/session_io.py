@@ -3303,9 +3303,6 @@ class LegendEditRekey(_LegendEditRekeyRequired, total=False):
     slice: str
 
 
-_JS_ARRAY_INDEX = re.compile(r"0|[1-9][0-9]*")
-
-
 def _js_key_order(record: Mapping[Any, Any]) -> list[Any]:
     """The keys of a JSON object in the order JavaScript lists them: array
     indexes ascending, then the other keys in insertion order."""
