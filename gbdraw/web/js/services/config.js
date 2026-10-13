@@ -2043,8 +2043,10 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
 const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   const sourceSessionVersion = readSessionInput(sessionData).version;
   // A Session before 47 stored the Legend edits under the shown caption; every
-  // reader below reads them by row key (PD-OI-061 revision 5).
-  const rawData = sessionLegendEditsByRowKey(await convertMainSessionComparisonFrames(sessionData), sourceSessionVersion);
+  // reader below reads them by row key (PD-OI-061 revision 5). What the reading
+  // moved or dropped is returned before Load commits (`legendEditRekeys`).
+  const legendRead = sessionLegendEditsByRowKey(await convertMainSessionComparisonFrames(sessionData), sourceSessionVersion);
+  const rawData = legendRead.session;
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
@@ -2347,6 +2349,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   return {
     data,
     sourceSessionVersion,
+    legendEditRekeys: legendRead.outcomes,
     canonicalProjection,
     restoredConfig,
     projectionResult,

@@ -71,6 +71,7 @@ from gbdraw.session_io import (
     decode_depth_payload,
     legend_edits_by_row_key,
     load_session,
+    session_legend_edits_by_row_key,
     materialize_embedded_file,
     migrate_legacy_repeat_feature_shape_args,
     migrate_persisted_web_state_field_names,
@@ -553,7 +554,7 @@ LEGEND_ROW_KEY_VECTORS = json.loads(
 def test_session_46_legend_edits_move_to_the_row_key(case: dict) -> None:
     assert LEGEND_ROW_KEY_VECTORS["readsSessionVersion"] == MODE_SCOPED_SESSION_MIN_VERSION
     source = copy.deepcopy(case["legend"])
-    assert legend_edits_by_row_key(source) == case["expected"]
+    assert legend_edits_by_row_key(source) == (case["expected"], case["outcomes"])
     assert source == case["legend"]
 
 
@@ -571,6 +572,14 @@ ROW_KEYED_LEGEND_EDITS = {
 }
 
 
+# The moves its reading reports, in the order the Web reports them.
+LEGEND_RENAMED_ROWS_V46_MOVES = (
+    ("colorOverrides", "GC skew (+)", "GC content"),
+    ("colorOverrides", "W", "GC skew (-)"),
+    ("strokeOverrides", "Z", "GC skew (+)"),
+)
+
+
 def _legend_edits(session: dict) -> dict:
     legend = session["modes"]["circular"]["editorState"]["legend"]
     return {store: legend[store] for store in ROW_KEYED_LEGEND_EDITS}
@@ -582,6 +591,10 @@ def test_session_46_upgrade_and_cli_resave_key_the_legend_edits_by_row(tmp_path:
     source = load_session(LEGEND_RENAMED_ROWS_V46)
     assert source["version"] == 46
     assert _legend_edits(source)["colorOverrides"] == {"GC skew (+)": "#ff0000", "W": "#0000ff"}
+    assert session_legend_edits_by_row_key(source)[1] == [
+        {"slice": "circular", "store": store, "fromKey": shown, "toKey": key, "outcome": "moved"}
+        for store, shown, key in LEGEND_RENAMED_ROWS_V46_MOVES
+    ]
 
     upgraded = upgrade_session_document(LEGEND_RENAMED_ROWS_V46).document.to_dict()
     assert upgraded["version"] == CURRENT_SESSION_VERSION

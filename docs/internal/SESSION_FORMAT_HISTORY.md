@@ -24,12 +24,17 @@ unique by row key, not by caption. No other field changed.
 The bytes of a Session 46 cannot be read as Session 47: after a rename of
 GC skew to `Z` and of GC content to `GC skew`, a color stored under `GC skew`
 belongs to the GC content row in Session 46 and would name the GC skew row in
-Session 47. Every reader of a Session older than 47 therefore moves, per
-Legend, an edit stored under a renamed row's caption to that row's key. The
+Session 47. Every reader of a Session older than 47 therefore reads, per
+Legend and in store order, each edit by the caption it is stored under. The
 first entry that shows a caption names its row, listed and dormant entries
-before deleted ones, as Session 46 Load kept only that entry; edits move all
-at once, so two rows renamed to each other's caption swap theirs, and an edit
-already stored under the key stays. The Web Load (`sessionLegendEditsByRowKey`
+before deleted ones, as Session 46 Load kept only that entry. An edit under a
+caption an entry shows moves to that entry's key (`moved`), unless an earlier
+edit of the store already took the key (`collision`, dropped). An edit under
+the key of a renamed row that no entry shows applied to no row in Session 46
+and is dropped (`unshown`). An edit under any other key stays (`unmatched`).
+Each reader returns these outcomes as data (`{store, fromKey, toKey, outcome}`,
+`toKey` null when dropped); the Web Load computes them before it commits.
+The Web Load (`sessionLegendEditsByRowKey`
 in `services/mode-scoped-migration.js`, before any other reader), the CLI
 re-save (`build_session_json`), the Python migration of an older Session
 (`_split_session_adjunct`), and `upgrade_session_document` (a Session 46 keeps

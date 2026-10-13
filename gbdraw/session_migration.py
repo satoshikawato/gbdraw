@@ -540,7 +540,7 @@ def _split_session_adjunct(
     if source_version >= ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
         return adjunct
     if source_version >= MODE_SCOPED_SESSION_MIN_VERSION:
-        return session_legend_edits_by_row_key(adjunct)
+        return session_legend_edits_by_row_key(adjunct)[0]
     web_files = session.get("webFiles")
     bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else None
     return session_legend_edits_by_row_key(split_draft_into_modes(
@@ -550,7 +550,7 @@ def _split_session_adjunct(
             bindings if isinstance(bindings, Mapping) else session.get("files")
         ),
         palette_colors=mode_split_palette_colors(adjunct.get("config")),
-    ))
+    ))[0]
 
 
 def with_current_artifacts(

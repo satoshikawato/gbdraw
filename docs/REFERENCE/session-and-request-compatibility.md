@@ -38,8 +38,10 @@ row shows. Two rows can then show one name and keep their own edits. Session 46
 stored these edits under the shown name. Reading a Session 46, or an older
 Session, moves an edit stored under a renamed row's shown name to that row's
 key. When several rows show that name, the first listed row takes the edit, and
-a deleted row only when no listed row shows it. The Web app, a CLI re-save, and
-`upgrade_session_document()` read these edits the same way.
+a deleted row only when no listed row shows it. An edit stored under the
+original caption of a renamed row that no row shows any more had no effect and
+is dropped. The Web app, a CLI re-save, and `upgrade_session_document()` read
+these edits the same way.
 
 Sessions 46 and 47 store the per-feature edits (Feature visibility, Label visibility,
 and label text) in each slice's `features.featureOverrides`. There is one row

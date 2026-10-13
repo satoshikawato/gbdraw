@@ -40,7 +40,7 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
   }
 };
 
-const { splitDraftIntoModes } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
+const { sessionLegendEditsByRowKey, splitDraftIntoModes } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const {
   buildModeSliceData, importSession, setUnmanagedConfigOverrideValidator
 } = await import('../../gbdraw/web/js/services/config.js');
@@ -195,6 +195,10 @@ for (const vector of VECTORS.cases) {
 test('a Session 46 written by main loads its renamed rows\' edits under their row keys', async () => {
   const fixture = readFixture('tests/fixtures/sessions/legend-renamed-rows.v46.gbdraw-session.json.gz');
   assert.equal(fixture.version, 46);
+  // The moves Load reports before it commits, as Python reports them (tests/test_session_io.py).
+  assert.deepEqual(sessionLegendEditsByRowKey(fixture, fixture.version).outcomes, [
+    ['colorOverrides', 'GC skew (+)', 'GC content'], ['colorOverrides', 'W', 'GC skew (-)'], ['strokeOverrides', 'Z', 'GC skew (+)']
+  ].map(([store, fromKey, toKey]) => ({ store, fromKey, toKey, outcome: 'moved', slice: 'circular' })));
   await load(fixture);
   const drawing = state.drawings.circular;
   assert.deepEqual({ ...drawing.legendColorOverrides }, { 'GC content': '#ff0000', 'GC skew (-)': '#0000ff' });

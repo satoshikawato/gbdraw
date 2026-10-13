@@ -1176,9 +1176,8 @@ def upgrade_session_document(
         return SessionUpgrade(loaded)
     if loaded.version == MODE_SCOPED_SESSION_MIN_VERSION:
         # Session 47 differs only in the keys of each slice's Legend edits.
-        return SessionUpgrade(SessionDocument(
-            {**session_legend_edits_by_row_key(loaded._data), "version": CURRENT_SESSION_VERSION}
-        ))
+        keyed, _outcomes = session_legend_edits_by_row_key(loaded._data)
+        return SessionUpgrade(SessionDocument({**keyed, "version": CURRENT_SESSION_VERSION}))
     if loaded.version < CANONICAL_SESSION_MIN_VERSION:
         raise SessionVersionError(
             "Sessions version 27 through 30 have no canonical request; replay one with "

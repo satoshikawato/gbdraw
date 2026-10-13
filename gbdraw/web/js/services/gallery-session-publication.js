@@ -411,7 +411,7 @@ export const createGallerySessionPublication = (owners) => {
     if (version === CURRENT_VERSION || version === MODE_SCOPED_SESSION_VERSION) {
       // A Session 46 differs only in the keys of its Legend edits.
       const current = version === CURRENT_VERSION
-        ? session : { ...sessionLegendEditsByRowKey(session, version), version: CURRENT_VERSION };
+        ? session : { ...sessionLegendEditsByRowKey(session, version).session, version: CURRENT_VERSION };
       validateCurrentFields(current);
       return isCliWritten(current) ? validateEnvelope(current) : validateCurrent(current);
     }

@@ -22,7 +22,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn, Sequence, TextIO, cast
+from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn, Sequence, TextIO, TypedDict, cast
 
 from .analysis.protein_artifacts import (
     CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
@@ -3273,72 +3273,126 @@ def _with_normalized_editor_colors(draft: Mapping[str, Any]) -> Mapping[str, Any
     return {**draft, "editorState": changed}
 
 
-def legend_edits_by_row_key(legend: Mapping[str, Any]) -> dict[str, Any]:
-    """A Session 46 Legend (a slice's ``editorState.legend``) read as Session 47.
+# How a Session 46 Legend edit is read in Session 47 (``legend_edits_by_row_key``):
+# ``moved`` to the row key, kept as ``unmatched`` (no entry shows or holds its
+# key), or dropped as ``unshown`` (the key of a renamed row that no entry shows)
+# or as a ``collision`` (another edit already landed on ``rowKey``).
+LegendEditRekeyOutcome = Literal["moved", "unmatched", "unshown", "collision"]
+LegendEditStore = Literal["colorOverrides", "strokeOverrides"]
+_LEGEND_EDIT_STORES: tuple[LegendEditStore, ...] = ("colorOverrides", "strokeOverrides")
+
+
+class _LegendEditRekeyRequired(TypedDict):
+    store: LegendEditStore
+    fromKey: str
+    toKey: str | None
+    outcome: LegendEditRekeyOutcome
+
+
+class LegendEditRekey(_LegendEditRekeyRequired, total=False):
+    """One Session 46 Legend edit that did not stay under its key; ``toKey``
+    is ``None`` when it was dropped. ``rowKey``: the key a ``collision`` met;
+    ``slice``: the mode slice, or ``"draft"`` (``session_legend_edits_by_row_key``)."""
+
+    rowKey: str
+    slice: str
+
+
+def legend_edits_by_row_key(legend: Mapping[str, Any]) -> tuple[dict[str, Any], list[LegendEditRekey]]:
+    """A Session 46 Legend (a slice's ``editorState.legend``) read as Session 47,
+    and what the reading did to each edit that did not stay under its key.
 
     Session 46 stored the Legend color and stroke edits (``colorOverrides``,
     ``strokeOverrides``) under the caption a row shows, Session 47 under the
-    row key (``originalCaption``, else the caption). An edit stored under the
-    caption of a row whose key differs moves to that key. The first entry that
+    row key (``originalCaption``, else the caption). The first entry that
     shows a caption names its row, the listed (and dormant) entries before the
-    deleted ones, as Session 46 Load kept only that entry. Edits are moved all
-    at once, so two rows renamed to each other's caption swap theirs; an edit
-    already stored under the new key stays. Other fields are kept as they are.
+    deleted ones, as Session 46 Load kept only that entry. Each edit, in store
+    order:
+
+    - under a caption an entry shows: stored under that entry's key
+      (``moved`` when the key differs); when an earlier edit of the store
+      already took that key, it is dropped (``collision``, ``rowKey``);
+    - under the key of a renamed row that no entry shows: Session 46 applied
+      it to no row, so it is dropped (``unshown``);
+    - under any other key: kept (``unmatched``).
+
+    Each outcome is ``{store, fromKey, toKey, outcome}`` (``toKey`` is
+    ``None`` when dropped). Other fields are kept as they are.
 
     The twin of ``legendEditsByRowKey`` in the Web
-    ``services/mode-scoped-migration.js`` (``rekeyLegendRecords``);
+    ``services/mode-scoped-migration.js``;
     ``tests/fixtures/sessions/legend-row-key-vectors.json`` pins both.
     """
 
-    rekeyed: dict[str, str] = {}
-    shown: set[str] = set()
+    row_of: dict[str, str] = {}
+    renamed_keys: set[str] = set()
     for rows in ("entries", "dormantEntries", "deletedEntries"):
         entries = legend.get(rows)
         for entry in entries if isinstance(entries, list) else ():
             if not isinstance(entry, Mapping):
                 continue
             caption = _js_text(entry.get("caption") or "")
-            if not caption or caption in shown:
+            if not caption:
                 continue
-            shown.add(caption)
             key = _js_text(entry.get("originalCaption") or entry.get("caption") or "")
-            if key and key != caption:
-                rekeyed[caption] = key
+            if key != caption:
+                renamed_keys.add(key)
+            row_of.setdefault(caption, key)
     changed = dict(legend)
-    for store in ("colorOverrides", "strokeOverrides"):
+    outcomes: list[LegendEditRekey] = []
+    for store in _LEGEND_EDIT_STORES:
         record = legend.get(store)
-        if not rekeyed or not isinstance(record, Mapping):
+        if not isinstance(record, Mapping):
             continue
-        moved = {key: value for key, value in record.items() if key not in rekeyed}
+        read: dict[str, Any] = {}
         for key, value in record.items():
-            target = rekeyed.get(key)
-            if target is not None and target not in moved:
-                moved[target] = value
-        changed[store] = moved
-    return changed
+            if key in row_of:
+                row_key = row_of[key]
+                if row_key in read:
+                    outcomes.append({"store": store, "fromKey": key, "toKey": None,
+                                     "outcome": "collision", "rowKey": row_key})
+                    continue
+                read[row_key] = value
+                if row_key != key:
+                    outcomes.append({"store": store, "fromKey": key, "toKey": row_key, "outcome": "moved"})
+            elif key in renamed_keys:
+                outcomes.append({"store": store, "fromKey": key, "toKey": None, "outcome": "unshown"})
+            else:
+                read[key] = value
+                outcomes.append({"store": store, "fromKey": key, "toKey": key, "outcome": "unmatched"})
+        changed[store] = read
+    return changed, outcomes
 
 
-def _with_row_keyed_legend(holder: Mapping[str, Any]) -> Mapping[str, Any]:
-    editor = holder.get("editorState")
-    legend = editor.get("legend") if isinstance(editor, Mapping) else None
-    if not isinstance(editor, Mapping) or not isinstance(legend, Mapping):
-        return holder
-    return {**holder, "editorState": {**editor, "legend": legend_edits_by_row_key(legend)}}
-
-
-def session_legend_edits_by_row_key(session: Mapping[str, Any]) -> dict[str, Any]:
+def session_legend_edits_by_row_key(
+    session: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[LegendEditRekey]]:
     """The fields of a Session older than 47 with each Legend's edits keyed by
     row key (:func:`legend_edits_by_row_key`): every mode slice's, and the flat
-    draft's of a Session before 46."""
+    draft's of a Session before 46; and the outcomes, each naming its
+    ``slice`` (the mode, or ``"draft"``)."""
 
-    changed = dict(_with_row_keyed_legend(session))
+    outcomes: list[LegendEditRekey] = []
+
+    def read(holder: Mapping[str, Any], slice_name: str) -> Mapping[str, Any]:
+        editor = holder.get("editorState")
+        legend = editor.get("legend") if isinstance(editor, Mapping) else None
+        if not isinstance(editor, Mapping) or not isinstance(legend, Mapping):
+            return holder
+        keyed, found = legend_edits_by_row_key(legend)
+        for outcome in found:
+            outcome["slice"] = slice_name
+        outcomes.extend(found)
+        return {**holder, "editorState": {**editor, "legend": keyed}}
+
+    changed = dict(read(session, "draft"))
     modes = changed.get("modes")
     if isinstance(modes, Mapping):
         changed["modes"] = {
-            mode: _with_row_keyed_legend(value) if isinstance(value, Mapping) else value
+            mode: read(value, str(mode)) if isinstance(value, Mapping) else value
             for mode, value in modes.items()
         }
-    return changed
+    return changed, outcomes
 
 
 def split_draft_into_modes(
@@ -5387,7 +5441,7 @@ def build_session_json(
             palette_colors=mode_split_palette_colors(payload.get("config")),
         )
     if source_version is not None and source_version < ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
-        payload = session_legend_edits_by_row_key(payload)
+        payload, _outcomes = session_legend_edits_by_row_key(payload)
     _attach_current_web_file_bindings(payload, files_for_web)
     payload.pop("files", None)
     normalize_current_session_artifacts(
