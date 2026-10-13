@@ -12,7 +12,7 @@ from functools import lru_cache
 from typing import Literal, TypeAlias
 
 from ..features.coordinates import get_strand
-from .filtering import preprocess_label_filtering
+from .filtering import label_filter_maps
 from .circular_candidates import build_circular_label_candidates
 from .circular_leaders import leader_polyline
 from .circular_radial import place_radial_labels
@@ -4871,8 +4871,7 @@ def prepare_label_list(
     embedded_labels = []
     outer_labels = []
     inner_labels = []
-    label_filtering = cfg.labels.filtering.as_dict()
-    label_filtering = preprocess_label_filtering(label_filtering)
+    label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
     label_rendering = profile.label_rendering
     length_threshold = cfg.labels.length_threshold.circular
     length_param = determine_length_parameter(total_length, length_threshold)

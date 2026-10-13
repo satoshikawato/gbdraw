@@ -66,7 +66,7 @@ from ...labels.circular import (
 )
 from ...labels.circular_fit import CircularOuterLabelLayout
 from ...labels.fit import LabelFit
-from ...labels.filtering import preprocess_label_filtering
+from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.circular import (
     CircularFeatureLaneDirection,
@@ -2163,7 +2163,7 @@ def add_record_on_circular_canvas(
 
     compute_label_text = show_external_labels
     label_filtering = (
-        preprocess_label_filtering(cfg.labels.filtering.as_dict())
+        label_filter_maps(cfg.labels.filtering.as_dict())
         if compute_label_text
         else {}
     )

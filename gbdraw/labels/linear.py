@@ -7,7 +7,7 @@ from collections import defaultdict
 from typing import Any, cast
 from .coordinates import display_label_segment
 
-from .filtering import get_label_text
+from .filtering import get_label_text, label_filter_maps
 from ..config.models import LinearRenderProfile
 from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
@@ -431,7 +431,7 @@ def prepare_label_list_linear(
         )
     base_rotation_deg = profile.label_rotation
     interval = cfg.canvas.dpi
-    label_filtering = cfg.labels.filtering.as_dict()
+    label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
     # First pass: Calculate feature track positions
     for feature_id, feature_object in feature_dict.items():
         if len(feature_object.coordinates) == 0:

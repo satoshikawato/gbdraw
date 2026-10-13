@@ -364,3 +364,22 @@ def test_a_table_is_keyed_by_its_resource_identity(tmp_path: Path) -> None:
 def test_unknown_stage_names_are_rejected() -> None:
     with pytest.raises(ValueError):
         render_stage("not_a_stage", double, 1)  # type: ignore[arg-type]
+
+
+def test_label_filter_maps_leave_the_config_mapping_unchanged() -> None:
+    from gbdraw.labels.filtering import DERIVED_LABEL_FILTERING_KEYS, label_filter_maps
+
+    config = _config()
+    raw = config.labels.filtering.as_dict()
+    before = dict(raw)
+    maps = label_filter_maps(raw)
+    assert raw == before
+    assert DERIVED_LABEL_FILTERING_KEYS <= set(maps)
+    cache = PreparedBiologicalInputCache()
+    for _ in range(2):
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            label_filter_maps(raw)
+            label_filter_maps(dict(raw))
+        assert _metrics(metrics)["renderStageHit:label_filter_maps"] >= 1
+    assert raw == before

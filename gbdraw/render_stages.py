@@ -444,25 +444,41 @@ def _is_keyable_function(function: Callable[..., object]) -> bool:
     )
 
 
-def _register_result(value: object, identity: Hashable) -> None:
-    """Give a result and its direct fields the stage key, or NO_IDENTITY."""
+def _direct_children(value: object) -> Iterable[tuple[Hashable, object]]:
+    if _is_dataclass_value(value):
+        return _raw_fields(value).items()
+    if isinstance(value, tuple) and hasattr(value, "_fields"):
+        return zip(cast(Any, value)._fields, value)
+    if isinstance(value, (tuple, list)):
+        return enumerate(value)
+    if isinstance(value, dict):
+        return ((name, child) for name, child in value.items() if isinstance(name, _PLAIN_TYPES))
+    return ()
 
-    if value is None or isinstance(value, (*_PLAIN_TYPES, Enum)):
+
+def _argument_ids(args: tuple[object, ...], kwargs: Mapping[str, object]) -> set[int]:
+    """The arguments and their direct children: a result may pass these through."""
+
+    ids: set[int] = set()
+    for arg in (*args, *kwargs.values()):
+        ids.add(id(arg))
+        ids.update(id(child) for _name, child in _direct_children(arg))
+    return ids
+
+
+def _register_result(value: object, identity: Hashable, passed: set[int]) -> None:
+    """Give a result and its direct fields the stage key, or NO_IDENTITY.
+
+    A value the stage received (an argument or a direct child of one) keeps the
+    key it was given as an argument, so its key does not depend on whether a
+    stage has returned it.
+    """
+
+    if value is None or isinstance(value, (*_PLAIN_TYPES, Enum)) or id(value) in passed:
         return
     register_prepared_value_identity(value, identity)
-    children: Iterable[tuple[Hashable, object]]
-    if _is_dataclass_value(value):
-        children = _raw_fields(value).items()
-    elif isinstance(value, tuple) and hasattr(value, "_fields"):
-        children = zip(cast(Any, value)._fields, value)
-    elif isinstance(value, (tuple, list)):
-        children = enumerate(value)
-    elif isinstance(value, dict):
-        children = ((name, child) for name, child in value.items() if isinstance(name, _PLAIN_TYPES))
-    else:
-        return
-    for name, child in children:
-        if child is None or isinstance(child, (*_PLAIN_TYPES, Enum)):
+    for name, child in _direct_children(value):
+        if child is None or isinstance(child, (*_PLAIN_TYPES, Enum)) or id(child) in passed:
             continue
         register_prepared_value_identity(
             child,
@@ -516,7 +532,7 @@ def render_stage(
         logger.debug("render stage %s is not cached: %s", name, reason)
         _metric("Uncacheable", name)
         result = function(*args, **kwargs)
-        _register_result(result, NO_IDENTITY)
+        _register_result(result, NO_IDENTITY, _argument_ids(args, kwargs))
         return result
 
     enclosing = _FRAMES.get()
@@ -527,7 +543,7 @@ def render_stage(
             frame.inner_keys.add(key)
             frame.inner_keys.update(entry.inner_keys)
         result = cast(R, entry.value)
-        _register_result(result, key)
+        _register_result(result, key, _argument_ids(args, kwargs))
         return result
 
     frame = _StageFrame(name)
@@ -550,13 +566,13 @@ def render_stage(
             sorted(frame.undeclared_sections),
         )
         _metric("UndeclaredRead", name)
-        _register_result(result, NO_IDENTITY)
+        _register_result(result, NO_IDENTITY, _argument_ids(args, kwargs))
         return result
     for outer in enclosing:
         outer.inner_keys.add(key)
         outer.inner_keys.update(frame.inner_keys)
     store_render_stage(transaction, key, result, frozenset(frame.inner_keys))
-    _register_result(result, key)
+    _register_result(result, key, _argument_ids(args, kwargs))
     return result
 
 
