@@ -36,17 +36,18 @@ const denseGenbank = (count, length) => {
     ...features, 'ORIGIN', ...origin, '//', ''].join('\n');
 };
 
-const openWithOuterLabels = async (page, { name, text, fontSize }) => {
+const openWithOuterLabels = async (page, { name, text, fontSize, rendering = 'auto' }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openApp(page);
   await page.getByLabel('GenBank/DDBJ File', { exact: true })
     .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
   await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length === 1);
-  await page.evaluate((size) => {
+  await page.evaluate(({ size, labelRendering }) => {
     const app = window.__GBDRAW_APP__;
     app.form.labels_mode = 'out';
     app.adv.label_font_size = size;
-  }, fontSize);
+    app.adv.label_rendering = labelRendering;
+  }, { size: fontSize, labelRendering: rendering });
 };
 const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
 const labelSettings = (page) => page.evaluate(() => {
@@ -68,6 +69,7 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   const dialog = page.locator('[data-label-fit-dialog]');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('heading')).toHaveText('Labels do not fit');
+  await expect(dialog.locator('[data-label-fit-records]')).toContainText('80 outer labels at 18 pt (1 label pair overlaps');
   // Python searched every row before the dialog opened, in its order.
   const statuses = await rowStatuses(dialog);
   expect(statuses.map(([kind]) => kind)).toEqual(ROW_KINDS);
@@ -115,7 +117,8 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
 test('crossing leaders: the notice bar opens the dialog, which computes the rows; Cancel keeps the figure', async ({ page }) => {
   test.setTimeout(600000);
   const text = readFileSync(join(process.cwd(), 'tests/test_inputs/SARS-CoV-2.gbk'), 'utf8');
-  await openWithOuterLabels(page, { name: 'SARS-CoV-2.gbk', text, fontSize: 14 });
+  // Its embedded labels overlap at 14 pt and stop the run (Q-E1): outside labels only.
+  await openWithOuterLabels(page, { name: 'SARS-CoV-2.gbk', text, fontSize: 14, rendering: 'external_only' });
   await generateAndWaitForResult(page);
   const notice = page.getByTestId('label-fit-notice');
   await expect(notice).toBeVisible();
@@ -132,7 +135,8 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
   await notice.getByRole('button', { name: 'Choose a fix', exact: true }).click();
   const dialog = page.locator('[data-label-fit-dialog]');
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('heading')).toHaveText('Leader lines cross');
+  await expect(dialog.getByRole('heading')).toHaveText('Labels do not fit');
+  await expect(dialog).toContainText('The figure is drawn.');
   // The rows are computed one after another and show as they arrive.
   await expect.poll(async () => (await rowStatuses(dialog))
     .every(([, status]) => status === 'found' || status === 'not_found'), { timeout: 420000 }).toBe(true);

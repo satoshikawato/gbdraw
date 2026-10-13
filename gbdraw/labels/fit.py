@@ -429,13 +429,17 @@ def fit_counts(fit: LabelFit) -> str:
     return counts
 
 
-def _record_counts(record: LabelFitRecord) -> str:
+def label_fit_record_counts(record: LabelFitRecord) -> str:
+    """A record's counts as the report states them, or why radial labels were refused."""
+
     if record.refused:
         return "they need more room than the circular tracks leave"
     return fit_counts(record.fit)
 
 
-def _kind_words(record: LabelFitRecord) -> str:
+def label_kind_words(record: LabelFitRecord) -> str:
+    """The words naming a record's label kind (``outer``, ``radial inner``, ...)."""
+
     words = _KIND_WORDS[record.label_kind]
     return f"radial {words}" if record.refused else words
 
@@ -469,21 +473,21 @@ def _first_line(report: LabelFitReport) -> str:
     if len(records) == 1:
         (record,) = records
         return (
-            f"{record.label_count} {_kind_words(record)} labels do not fit at {record.font_size:g} pt "
-            f"({_record_counts(record)}). {outcome}"
+            f"{record.label_count} {label_kind_words(record)} labels do not fit at {record.font_size:g} pt "
+            f"({label_fit_record_counts(record)}). {outcome}"
         )
-    kinds = {_kind_words(record) for record in records}
+    kinds = {label_kind_words(record) for record in records}
     if len(kinds) == 1 and len({record.record_id for record in records}) == len(records):
         listed = "; ".join(
             f"{record.record_id} ({record.label_count} labels at {record.font_size:g} pt: "
-            f"{_record_counts(record)})"
+            f"{label_fit_record_counts(record)})"
             for record in records
         )
         words = next(iter(kinds))
         return f"{words[0].upper()}{words[1:]} labels do not fit in {len(records)} records: {listed}. {outcome}"
     listed = "; ".join(
-        f"{record.record_id}: {record.label_count} {_kind_words(record)} labels at "
-        f"{record.font_size:g} pt ({_record_counts(record)})"
+        f"{record.record_id}: {record.label_count} {label_kind_words(record)} labels at "
+        f"{record.font_size:g} pt ({label_fit_record_counts(record)})"
         for record in records
     )
     return f"Labels do not fit: {listed}. {outcome}"
@@ -561,7 +565,9 @@ __all__ = [
     "fit_counts",
     "format_label_fit_report",
     "label_fit_outcome",
+    "label_fit_record_counts",
     "label_fits_by_kind",
+    "label_kind_words",
     "overlapping_pairs",
     "polyline_crossing_count",
     "raise_or_warn",

@@ -4575,9 +4575,11 @@ export const createAppSetup = () => {
         if (result?.status === 'error' && mode.value === 'linear') {
           await focusLinearComparisonIssue();
         }
-        // Overlapping labels drew nothing: Python searched every row already.
+        // Labels that do not fit drew nothing: the dialog computes the rows the bounded search did not reach.
         if (result?.status === 'error' && result.labelFit) {
-          void openLabelFitDialog(result.labelFit, { mode: mode.value === 'linear' ? 'linear' : 'circular' });
+          void openLabelFitDialog(result.labelFit.report, {
+            rowToken: result.labelFit.rowToken, mode: mode.value === 'linear' ? 'linear' : 'circular'
+          });
         }
         if (result?.status === 'ok') {
           featureActions.clearSpecificRulePatternDrafts();
@@ -4725,11 +4727,12 @@ export const createAppSetup = () => {
     runAnalysis: () => runAnalysis(),
     errorSummary: (error) => normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summary
   });
-  // The notice bar over the shown Result drawn with crossing leaders (WARN-NOTICE).
+  // The notice bar over the shown Result drawn with crossing leaders or labels
+  // over the definition text (WARN-NOTICE, DEF-WARN).
   const labelFitNotice = computed(() => {
     const entry = /** @type {readonly ResultLabelFit[]} */ (labelFitReports.value).find((item) => item.resultIndex === selectedResultIndex.value
       && item.resultName === results.value[selectedResultIndex.value]?.name);
-    return entry && entry.report.drawn && entry.report.crossingPairs > 0 ? entry : null;
+    return entry && entry.report.drawn ? entry : null;
   });
   const openLabelFitNotice = () => {
     const entry = labelFitNotice.value;

@@ -19,7 +19,7 @@ from gbdraw.api.prepared import (
     PreparedBiologicalInputCache,
     PreparedResourceIdentity,
 )
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.io.colors import rule_captions_as_written
 from gbdraw.web_support.error_adapter import WebErrorAttributes, web_error_stage
 from gbdraw.legend.row_facts import collect_legend_row_facts
@@ -180,11 +180,17 @@ def _render_canonical_web_request(
             output_directory=output_root,
         )
     with _web_render_diagnostic_phase(diagnostics, "renderRequest"):
-        rendered = render_request(
-            request,
-            include_feature_catalog=True,
-            label_fit_warn_search_seconds=WEB_LABEL_FIT_WARN_SEARCH_SECONDS,
-        )
+        try:
+            rendered = render_request(
+                request,
+                include_feature_catalog=True,
+                label_fit_warn_search_seconds=WEB_LABEL_FIT_WARN_SEARCH_SECONDS,
+            )
+        except LabelsDoNotFitError as error:
+            # Nothing was drawn: keep the failure for the rows its bounded search did not reach.
+            if label_fit_searches is not None:
+                label_fit_searches.retain_failure(str(payload.get("mode", "")), error)
+            raise
     items: tuple[RequestRenderResult, ...]
     if isinstance(rendered, CircularBatchRenderResult):
         items = rendered.items

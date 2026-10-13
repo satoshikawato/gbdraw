@@ -16,12 +16,22 @@ from gbdraw.api import (
     RenderOutputRequest,
 )
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
-from gbdraw.labels.fit import FONT_SIZE_PATHS, ROW_KINDS, Y_OFFSET_PATH
-from gbdraw.labels.fit import LabelFit, LabelFitRecord, LabelFitReport, LabelFitRow
+from gbdraw.labels.circular_fit import ROW_KINDS
+from gbdraw.labels.fit import (
+    FONT_SIZE_PATHS,
+    PLACEMENT_PATH,
+    SCOPE_PATH,
+    Y_OFFSET_PATH,
+    LabelFit,
+    LabelFitRecord,
+    LabelFitReport,
+    LabelFitRow,
+    LabelFitRowKind,
+)
 from gbdraw.session import build_session_document
 from gbdraw.web_support.label_fit import (
     LabelFitRowSearches,
-    label_fit_error_payload,
+    label_fit_failure,
     label_fit_report_payload,
 )
 from gbdraw.web_support.request_render import render_canonical_web_request
@@ -50,6 +60,8 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     assert payload["records"] == [{
         "recordId": "rec-1", "labelKind": "circular_outer", "labelKindTitle": "outer labels",
         "labelCount": 111, "fontSize": 14.0, "overlapPairs": 20, "crossingPairs": 21,
+        "definitionOverlaps": 0, "refused": False,
+        "counts": "20 label pairs overlap, 21 leader pairs cross",
     }]
     vertical, font, tighter, combination = payload["rows"]
     assert vertical == {
@@ -76,16 +88,60 @@ def test_a_row_with_an_unknown_config_path_is_an_error() -> None:
         label_fit_report_payload(report)
 
 
-def test_the_error_payload_is_found_through_the_exception_chain() -> None:
+def test_word_rows_show_the_web_option_and_a_refused_record_says_why() -> None:
+    report = LabelFitReport(
+        records=(LabelFitRecord("rec-2", "circular_inner", 145, 8.0, LabelFit(0, 0), refused=True),),
+        rows=(
+            LabelFitRow("labels_out", "found", {SCOPE_PATH: "outer"}, (900.0, 900.0)),
+            LabelFitRow("radial", "found", {PLACEMENT_PATH: "radial"}, (950.0, 950.0)),
+        ),
+        drawn=False,
+    )
+    payload = label_fit_report_payload(report)
+    (record,) = payload["records"]
+    # OV-699: 0 overlaps and 0 crossings, and the reason instead of the counts.
+    assert record["refused"] is True and record["labelKindTitle"] == "radial inner labels"
+    assert record["counts"] == "they need more room than the circular tracks leave"
+    outside, radial = payload["rows"]
+    assert outside["values"] == {SCOPE_PATH: "outer"}
+    assert outside["settings"] == [{"name": "Label Mode", "unit": "", "value": "Out"}]
+    assert radial["settings"] == [{"name": "Circular Label Placement", "unit": "", "value": "Radial"}]
+
+
+class _Rows:
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    def row(self, kind: LabelFitRowKind) -> LabelFitRow:
+        self.asked.append(kind)
+        return LabelFitRow(kind, "found", {path: 11.0 for path in FONT_SIZE_PATHS}, (800.0, 800.0))
+
+
+def test_a_failure_with_rows_to_compute_is_kept_and_found_through_the_exception_chain() -> None:
     report = _report(drawn=False)
+    rows = _Rows()
+    error = LabelsDoNotFitError("labels overlap", report=report, row_search=rows)
     try:
         try:
-            raise LabelsDoNotFitError("labels overlap", report=report)
-        except LabelsDoNotFitError as error:
-            raise ValidationError("wrapped") from error
+            raise error
+        except LabelsDoNotFitError as raised:
+            raise ValidationError("wrapped") from raised
     except ValidationError as wrapped:
-        assert label_fit_error_payload(wrapped) == label_fit_report_payload(report)
-    assert label_fit_error_payload(ValueError("other")) is None
+        assert label_fit_failure(wrapped) is error
+    assert label_fit_failure(ValueError("other")) is None
+
+    searches = LabelFitRowSearches()
+    assert searches.failure_payload(error)["rowToken"] is None
+    token = searches.retain_failure("circular", error)
+    payload = searches.failure_payload(error)
+    assert payload == {"report": label_fit_report_payload(report), "rowToken": token}
+    assert searches.row(str(token), "combination")["status"] == "found" and rows.asked == ["combination"]
+    # A newer render of the mode releases the failure.
+    searches.retain("circular", [])
+    assert searches.row(str(token), "combination")["status"] == "not_computed"
+    # A failure whose rows are all computed keeps no token.
+    done = LabelsDoNotFitError("labels overlap", report=LabelFitReport(records=(), rows=(), drawn=False))
+    assert searches.retain_failure("circular", done) is None
 
 
 def _crossing_request() -> dict:
@@ -95,6 +151,8 @@ def _crossing_request() -> dict:
             records=(RecordInput(source=InMemoryRecordSource(record)),),
             options=CircularDiagramOptions(config_overrides={
                 "labels.circular.scope": "outer",
+                # Embedded labels of SARS-CoV-2 overlap at 14 pt and stop the run (Q-E1).
+                "labels.rendering": "external_only",
                 "labels.font_size.short": 14.0,
                 "labels.font_size.long": 14.0,
             }),
@@ -128,7 +186,7 @@ def test_web_render_draws_crossing_leaders_with_counts_only_and_computes_rows_la
     report = entry["report"]
     assert report["drawn"] is True and report["overlapPairs"] == 0 and report["crossingPairs"] > 0
     # OD-F14: Generate searched no row.
-    assert [row["kind"] for row in report["rows"]] == list(ROW_KINDS)
+    assert [row["kind"] for row in report["rows"]] == list(ROW_KINDS[:6])
     assert {row["status"] for row in report["rows"]} == {"not_computed"}
     token = entry["rowToken"]
     assert isinstance(token, str)

@@ -2564,15 +2564,21 @@ const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) =
 
 // The draft fields a label fit row may write: label settings only, never a
 // feature-slot input (R10).
-/** @type {Readonly<Record<string, (adv: Record<string, unknown>, value: number) => void>>} */
-const LABEL_FIT_FIELD_WRITERS = Object.freeze({
+/** @type {Readonly<Record<string, (adv: Record<string, unknown>, value: number | string) => void>>} */
+const LABEL_FIT_ADV_WRITERS = Object.freeze({
   outer_label_x_offset: (adv, value) => { adv.outer_label_x_offset = value; },
   outer_label_y_offset: (adv, value) => { adv.outer_label_y_offset = value; },
   inner_label_x_offset: (adv, value) => { adv.inner_label_x_offset = value; },
   inner_label_y_offset: (adv, value) => { adv.inner_label_y_offset = value; },
   label_font_size: (adv, value) => { adv.label_font_size = value; },
   circular_label_spacing: (adv, value) => { adv.circular_label_spacing = value; },
-  linear_label_spacing: (adv, value) => { adv.linear_label_spacing = value; }
+  linear_label_spacing: (adv, value) => { adv.linear_label_spacing = value; },
+  circular_label_placement: (adv, value) => { adv.circular_label_placement = value; }
+});
+/** @type {Readonly<Record<string, (form: Record<string, unknown>, value: string) => void>>} */
+const LABEL_FIT_FORM_WRITERS = Object.freeze({
+  labels_mode: (form, value) => { form.labels_mode = value; },
+  show_labels_linear: (form, value) => { form.show_labels_linear = value; }
 });
 
 // Settings a label fit row gives by config path (LP-D43) go into the drawing's
@@ -2581,15 +2587,19 @@ const LABEL_FIT_FIELD_WRITERS = Object.freeze({
 // UNKNOWN_CONFIG_PATH error and writes nothing.
 /**
  * @param {DrawingState} drawing
- * @param {Readonly<Record<string, number>>} values
+ * @param {Readonly<Record<string, number | string>>} values
  * @param {'circular' | 'linear'} mode
  */
 export const applyLabelFitValues = (drawing, values, mode) => {
-  const fields = Object.entries(draftFieldsForConfigValues(values, mode, drawing.adv));
-  if (!fields.every(([field]) => Object.hasOwn(LABEL_FIT_FIELD_WRITERS, field))) {
+  const fields = draftFieldsForConfigValues(values, mode, drawing.adv);
+  const form = Object.entries(fields.form);
+  const adv = Object.entries(fields.adv);
+  if (!form.every(([field]) => Object.hasOwn(LABEL_FIT_FORM_WRITERS, field))
+    || !adv.every(([field]) => Object.hasOwn(LABEL_FIT_ADV_WRITERS, field))) {
     throw diagnosticError('INPUT_INVALID', { field: 'configOverrides', reason: 'UNKNOWN_CONFIG_PATH' });
   }
-  fields.forEach(([field, value]) => LABEL_FIT_FIELD_WRITERS[field](drawing.adv, value));
+  form.forEach(([field, value]) => LABEL_FIT_FORM_WRITERS[field](drawing.form, value));
+  adv.forEach(([field, value]) => LABEL_FIT_ADV_WRITERS[field](drawing.adv, value));
 };
 
 // Captured or stored settings (History Undo and Redo, the failed Session Load

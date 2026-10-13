@@ -5789,7 +5789,8 @@
                      role="status" aria-live="polite" aria-atomic="true" data-testid="label-fit-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
                     <p class="flex flex-wrap items-center gap-2">
-                        <span class="font-semibold">Leader lines cross ({{ labelFitNotice.report.crossingPairs }} {{ labelFitNotice.report.crossingPairs === 1 ? 'pair' : 'pairs' }}).</span>
+                        <span v-if="labelFitNotice.report.crossingPairs" class="font-semibold">Leader lines cross ({{ labelFitNotice.report.crossingPairs }} {{ labelFitNotice.report.crossingPairs === 1 ? 'pair' : 'pairs' }}).</span>
+                        <span v-if="labelFitNotice.report.definitionOverlaps" class="font-semibold">Labels cover the definition text ({{ labelFitNotice.report.definitionOverlaps }}).</span>
                         <button type="button" data-history-ignore class="btn btn-secondary text-xs h-7 px-2" @click="openLabelFitNotice">Choose a fix</button>
                     </p>
                 </div>
@@ -8375,17 +8376,17 @@
              data-label-fit-dialog
              @cancel="resolveLabelFitChoice('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="label-fit-title" class="text-base font-bold text-slate-800">{{ labelFitDialog.drawn ? 'Leader lines cross' : 'Labels do not fit' }}</h2>
-            <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                <template v-if="labelFitDialog.drawn">{{ labelFitDialog.crossingPairs }} {{ labelFitDialog.crossingPairs === 1 ? 'pair of leader lines crosses' : 'pairs of leader lines cross' }}. The figure is drawn; choose a fix to Generate again, or Cancel to keep it.</template>
-                <template v-else>{{ labelFitDialog.overlapPairs }} {{ labelFitDialog.overlapPairs === 1 ? 'pair of labels overlaps' : 'pairs of labels overlap' }}, so nothing was drawn. Choose a fix to Generate again.</template>
-            </p>
+            <h2 id="label-fit-title" class="text-base font-bold text-slate-800">Labels do not fit</h2>
+            <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ labelFitDialog.drawn
+                ? 'The figure is drawn. Choose a fix to Generate again, or Cancel to keep it.'
+                : 'Nothing was drawn. Choose a fix to Generate again.' }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
                 <li v-for="record in labelFitDialog.records" :key="`${record.recordId}:${record.labelKindTitle}`">
-                    <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt<template v-if="record.overlapPairs">, {{ record.overlapPairs }} overlapping</template><template v-if="record.crossingPairs">, {{ record.crossingPairs }} crossing</template>
+                    <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})
                 </li>
             </ul>
-            <fieldset class="mt-3">
+            <p v-if="!labelFitDialog.rows.length" class="mt-3 text-sm text-slate-600">No setting in this dialog makes these labels fit.</p>
+            <fieldset v-else class="mt-3">
                 <legend class="sr-only">Fix</legend>
                 <ul class="divide-y divide-slate-200 rounded border border-slate-200" data-label-fit-rows>
                     <li v-for="row in labelFitDialog.rows" :key="row.kind" :data-label-fit-row="row.kind" :data-label-fit-status="row.status"

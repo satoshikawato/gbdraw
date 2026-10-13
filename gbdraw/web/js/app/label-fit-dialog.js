@@ -1,16 +1,16 @@
 // @ts-check
 // The "Labels do not fit" dialog (LP-D43, LP-D45 SHOW-ALL, LP-D48
-// WARN-NOTICE): the six rows of Python's label fit report in its order, each
-// with the settings it changes and the canvas size, or disabled with its
-// reason. Overlapping labels open it after a Generate that drew nothing;
-// crossing leaders open it from the notice bar over the drawn figure, and the
-// rows Generate did not search are computed here, one after another, by the
-// Worker (OD-F14). Apply writes the row's settings as one History step
+// WARN-NOTICE): the rows of Python's label fit report in its order, each with
+// the settings it changes and the canvas size, or disabled with its reason.
+// A Generate that drew nothing opens it; crossing leaders or labels over the
+// definition text open it from the notice bar over the drawn figure. Rows a
+// bounded search did not reach are computed here, one after another, by the
+// Worker (OD-F14, the font scan bound). Apply writes the row's settings as one History step
 // (PD-OI-088) and runs Generate; Cancel writes nothing.
 import { normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
-/** @import { LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitRowToken, ConfigPath, LabelFitSetting } from '../services/label-fit.js' */
+/** @import { LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitRowToken, ConfigPath, LabelFitSetting, LabelFitValue } from '../services/label-fit.js' */
 
 /**
  * @typedef {object} LabelFitDialogRow What a row of the dialog shows.
@@ -24,11 +24,9 @@ import { diagnosticError } from '../utils/error-normalization.js';
 /**
  * @typedef {object} LabelFitDialogState
  * @property {boolean} show
- * @property {boolean} drawn True over a drawn figure (crossing leaders only).
- * @property {number} overlapPairs
- * @property {number} crossingPairs
+ * @property {boolean} drawn True over a drawn figure (crossing leaders or labels over the definition text).
  * @property {{ recordId: string, labelKindTitle: string, labelCount: number, fontSize: number,
- *   overlapPairs: number, crossingPairs: number }[]} records
+ *   counts: string }[]} records Python's counts text per record (OV-699: a refused record says why).
  * @property {LabelFitDialogRow[]} rows
  * @property {LabelFitRowKind | ''} selectedKind
  */
@@ -38,7 +36,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {(value: LabelFitDialogState) => LabelFitDialogState} reactive Vue `reactive`.
  * @property {(rowToken: LabelFitRowToken, kind: LabelFitRowKind) => Promise<unknown>} computeRow
  *   The Worker's `computeLabelFitRow` reply for one row.
- * @property {(values: Readonly<Record<ConfigPath, number>>, mode: LabelFitMode) => void} writeRowSettings
+ * @property {(values: Readonly<Record<ConfigPath, LabelFitValue>>, mode: LabelFitMode) => void} writeRowSettings
  *   Writes a row's settings into the drawing of `mode` (the request mapping's draft fields).
  * @property {(label: () => string, handler: (choice: string) => unknown, cancel: () => unknown) =>
  *   (choice: string) => unknown} withHistory The modal choice's one History step (`createDialogChoice`).
@@ -66,7 +64,7 @@ export const createLabelFitDialog = ({
   reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary
 }) => {
   const dialog = reactive({
-    show: false, drawn: false, overlapPairs: 0, crossingPairs: 0, records: [], rows: [], selectedKind: ''
+    show: false, drawn: false, records: [], rows: [], selectedKind: ''
   });
   // The rows' values stay with the report, out of the reactive display state.
   /** @type {Map<LabelFitRowKind, LabelFitRow>} */
@@ -123,15 +121,12 @@ export const createLabelFitDialog = ({
     dialogMode = mode;
     rowsByKind = new Map(report.rows.map((row) => [row.kind, row]));
     dialog.drawn = report.drawn;
-    dialog.overlapPairs = report.overlapPairs;
-    dialog.crossingPairs = report.crossingPairs;
     dialog.records = report.records.map((record) => ({
       recordId: record.recordId,
       labelKindTitle: record.labelKindTitle,
       labelCount: record.labelCount,
       fontSize: record.fontSize,
-      overlapPairs: record.overlapPairs,
-      crossingPairs: record.crossingPairs
+      counts: record.counts
     }));
     dialog.rows = report.rows.map(displayRow);
     dialog.selectedKind = '';

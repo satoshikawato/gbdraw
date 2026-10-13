@@ -16,7 +16,7 @@ globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { draftFieldsForConfigValues } = await import('../../gbdraw/web/js/services/session-request.js');
-const { normalizeLabelFitReport, normalizeLabelFitRow, normalizeResultLabelFits } = await import(
+const { normalizeLabelFitFailure, normalizeLabelFitRow, normalizeResultLabelFits } = await import(
   '../../gbdraw/web/js/services/label-fit.js'
 );
 const { createLabelFitDialog } = await import('../../gbdraw/web/js/app/label-fit-dialog.js');
@@ -30,33 +30,45 @@ const foundRow = (kind, value) => row(kind, 'found', {
   canvasSize: { width: 1708, height: 1130 }
 });
 const report = (rows, { drawn = false } = {}) => ({
-  schema: 1, drawn, overlapPairs: drawn ? 0 : 3, crossingPairs: 5,
+  schema: 1, drawn, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0,
   records: [{ recordId: 'NC_1', labelKind: 'circular_outer', labelKindTitle: 'outer labels',
-    labelCount: 80, fontSize: 18, overlapPairs: drawn ? 0 : 3, crossingPairs: 5 }],
+    labelCount: 80, fontSize: 18, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0,
+    refused: false, counts: '3 label pairs overlap, 5 leader pairs cross' }],
   rows
 });
+const failure = (value, rowToken = null) => JSON.stringify({ report: value, rowToken });
+const normalizeReport = (value) => normalizeLabelFitFailure(failure(value)).report;
 
-test('the report reader keeps Python\'s rows in order and parses the error path\'s JSON text', () => {
+test('the failure reader keeps Python\'s rows in order, the record counts, and the row token', () => {
   const rows = [foundRow('outward_vertical', 1.15), row('tighter_rows', 'not_found', { reason: 'No fit' }),
-    row('combination', 'not_computed')];
-  const parsed = normalizeLabelFitReport(JSON.stringify(report(rows)));
+    row('combination', 'not_computed'),
+    row('labels_out', 'found', { values: { 'labels.circular.scope': 'outer' },
+      settings: [{ name: 'Label Mode', unit: '', value: 'Out' }], canvasSize: { width: 900, height: 900 } })];
+  const { report: parsed, rowToken } = normalizeLabelFitFailure(failure(report(rows), 'circular:2:0'));
+  assert.equal(rowToken, 'circular:2:0');
+  assert.equal(parsed.records[0].counts, '3 label pairs overlap, 5 leader pairs cross');
+  assert.deepEqual(parsed.rows[3].values, { 'labels.circular.scope': 'outer' });
+  assert.equal(parsed.rows[3].settings[0].value, 'Out');
   assert.deepEqual(parsed.rows.map((item) => [item.kind, item.status]),
-    [['outward_vertical', 'found'], ['tighter_rows', 'not_found'], ['combination', 'not_computed']]);
+    [['outward_vertical', 'found'], ['tighter_rows', 'not_found'], ['combination', 'not_computed'], ['labels_out', 'found']]);
   assert.deepEqual(parsed.rows[0].values, { [Y_OFFSET]: 1.15 });
   assert.deepEqual(parsed.rows[0].canvasSize, { width: 1708, height: 1130 });
   assert.equal(parsed.rows[1].reason, 'No fit');
-  assert.equal(normalizeLabelFitReport(undefined), null);
+  assert.equal(normalizeLabelFitFailure(undefined), null);
   assert.ok(Object.isFrozen(parsed.rows[0].values));
 });
 
 test('a malformed report or row is RESULT_INVALID', () => {
   const invalid = (error) => error.code === 'RESULT_INVALID';
-  assert.throws(() => normalizeLabelFitReport('{'), invalid);
-  assert.throws(() => normalizeLabelFitReport({ ...report([]), schema: 2 }), invalid);
+  assert.throws(() => normalizeLabelFitFailure('{'), invalid);
+  assert.throws(() => normalizeLabelFitFailure(failure({ ...report([]), schema: 2 })), invalid);
+  assert.throws(() => normalizeLabelFitFailure(failure(report([]), '')), invalid);
+  const [record] = report([]).records;
+  assert.throws(() => normalizeLabelFitFailure(failure({ ...report([]), records: [{ ...record, counts: 3 }] })), invalid);
   assert.throws(() => normalizeLabelFitRow(row('x', 'maybe')), invalid);
   // A found row has values and a canvas size.
   assert.throws(() => normalizeLabelFitRow(row('x', 'found')), invalid);
-  assert.throws(() => normalizeLabelFitRow({ ...foundRow('x', 1), values: { [Y_OFFSET]: 'wide' } }), invalid);
+  assert.throws(() => normalizeLabelFitRow({ ...foundRow('x', 1), values: { [Y_OFFSET]: { wide: true } } }), invalid);
 });
 
 test('a Result\'s report names that Result by index and name', () => {
@@ -69,11 +81,15 @@ test('a Result\'s report names that Result by index and name', () => {
 
 test('a row\'s config paths become the draft fields the request mapping projects back', () => {
   const { adv } = state.drawings.circular;
-  assert.deepEqual(draftFieldsForConfigValues({ [Y_OFFSET]: 1.15 }, 'circular', adv), { outer_label_y_offset: 1.15 });
-  assert.deepEqual(draftFieldsForConfigValues({ 'labels.font_size.short': 12, 'labels.font_size.long': 12 }, 'circular', adv),
-    { label_font_size: 12 });
-  assert.deepEqual(draftFieldsForConfigValues({ 'labels.spacing.circular': 0.5 }, 'circular', adv),
-    { circular_label_spacing: 0.5 });
+  const draft = (values) => draftFieldsForConfigValues(values, 'circular', adv);
+  assert.deepEqual(draft({ [Y_OFFSET]: 1.15 }), { form: {}, adv: { outer_label_y_offset: 1.15 } });
+  assert.deepEqual(draft({ 'labels.font_size.short': 12, 'labels.font_size.long': 12 }),
+    { form: {}, adv: { label_font_size: 12 } });
+  assert.deepEqual(draft({ 'labels.spacing.circular': 0.5 }), { form: {}, adv: { circular_label_spacing: 0.5 } });
+  // Word rows: every label outside, radial labels.
+  assert.deepEqual(draft({ 'labels.circular.scope': 'outer' }), { form: { labels_mode: 'out' }, adv: {} });
+  assert.deepEqual(draft({ 'labels.circular.placement': 'radial' }),
+    { form: {}, adv: { circular_label_placement: 'radial' } });
   const unknown = (error) => error.code === 'INPUT_INVALID' && error.context.reason === 'UNKNOWN_CONFIG_PATH';
   assert.throws(() => draftFieldsForConfigValues({ 'labels.unknown': 1 }, 'circular', adv), unknown);
   assert.throws(() => draftFieldsForConfigValues({}, 'circular', adv), unknown);
@@ -106,7 +122,7 @@ const dialogHarness = ({ computeRow = async () => ({}) } = {}) => {
 test('Apply writes the chosen row as one History step, closes, and Generates; Cancel writes nothing', async () => {
   const rows = [row('outward_vertical', 'not_found', { reason: 'No fit' }), foundRow('smaller_font', 1.2)];
   const { dialog, steps, writes, generates } = dialogHarness();
-  await dialog.openLabelFitDialog(normalizeLabelFitReport(report(rows)), { mode: 'circular' });
+  await dialog.openLabelFitDialog(normalizeReport(report(rows)), { mode: 'circular' });
   assert.equal(dialog.labelFitDialog.show, true);
   assert.equal(dialog.labelFitDialog.selectedKind, 'smaller_font');
   await dialog.resolveLabelFitChoice('apply');
@@ -115,7 +131,7 @@ test('Apply writes the chosen row as one History step, closes, and Generates; Ca
   assert.equal(generates.length, 1);
   assert.equal(dialog.labelFitDialog.show, false);
 
-  await dialog.openLabelFitDialog(normalizeLabelFitReport(report(rows)), { mode: 'circular' });
+  await dialog.openLabelFitDialog(normalizeReport(report(rows)), { mode: 'circular' });
   await dialog.resolveLabelFitChoice('cancel');
   assert.equal(steps.length, 1);
   assert.equal(writes.length, 1);
@@ -133,7 +149,7 @@ test('rows Generate did not search are computed one after another when the dialo
   const rows = [row('outward_vertical', 'not_computed'), row('tighter_rows', 'not_computed'),
     row('combination', 'not_computed')];
   const { dialog } = dialogHarness({ computeRow });
-  await dialog.openLabelFitDialog(normalizeLabelFitReport(report(rows, { drawn: true })),
+  await dialog.openLabelFitDialog(normalizeReport(report(rows, { drawn: true })),
     { rowToken: 'circular:1:0', mode: 'circular' });
   assert.deepEqual(asked, [['circular:1:0', 'outward_vertical'], ['circular:1:0', 'tighter_rows'],
     ['circular:1:0', 'combination']]);
@@ -151,7 +167,7 @@ test('closing the dialog stops the rows still to compute', async () => {
   };
   const rows = [row('outward_vertical', 'not_computed'), row('combination', 'not_computed')];
   const { dialog } = dialogHarness({ computeRow });
-  const computing = dialog.openLabelFitDialog(normalizeLabelFitReport(report(rows, { drawn: true })),
+  const computing = dialog.openLabelFitDialog(normalizeReport(report(rows, { drawn: true })),
     { rowToken: 'circular:1:0', mode: 'circular' });
   assert.equal(dialog.labelFitDialog.rows[0].status, 'computing');
   await dialog.resolveLabelFitChoice('cancel');

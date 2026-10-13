@@ -19,7 +19,7 @@ from gbdraw.web_support.config_overrides import validate_web_config_overrides_js
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
-from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_error_payload
+from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -194,10 +194,12 @@ def run_canonical_request_wrapper(
         return result
     except Exception as e:
         failure = {"error": serialize_web_error(e, operation="generate", stage="render")}
-        # Overlapping labels: the report travels next to the error for the dialog.
-        label_fit = label_fit_error_payload(e)
+        # Labels that do not fit: the report and its row token travel next to the error.
+        label_fit = label_fit_failure(e)
         if label_fit is not None:
-            failure["labelFit"] = json.dumps(label_fit, ensure_ascii=False, separators=(",", ":"))
+            failure["labelFit"] = json.dumps(
+                _WEB_LABEL_FIT_SEARCHES.failure_payload(label_fit), ensure_ascii=False, separators=(",", ":")
+            )
         return failure
 
 def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
