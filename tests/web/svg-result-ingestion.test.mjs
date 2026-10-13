@@ -674,7 +674,7 @@ test('Load keeps a saved Result\'s bytes when its records change nothing', () =>
     const plan = createSavedResultPlan(results, admission, {
       featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#aaaaaa' },
       featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
-      originalLegendColors: {}, originalLegendOrder: [], mode: 'linear', sessionVersion: 44
+      originalLegendColors: {}, originalLegendOrder: [], rules: [], mode: 'linear', sessionVersion: 44
     });
     assert.equal(plan.kind, 'MUTATING');
     return captureMetrics(() => admitCurrentSessionResults(createCurrentSessionResultSource(results, admission), {
@@ -1201,6 +1201,83 @@ test('Load records Python\'s paint only on the Result of a Session older than 46
   assert.deepEqual(createSavedResultPlan(results, admission, { ...edits, sessionVersion: 46 }), createEmptySvgMutationPlan(1));
 });
 
+// D-19: a build of first-parent main drew a color rule's row under its key
+// (`Complex IV [#ffe700]`) and wrote no `data-legend-name`
+// (tests/fixtures/sessions/rule-captions-with-color-id.provenance.json). Load
+// names such a row once, by the caption of the loaded rule whose row has that
+// key, and draws the names; the keys, and the edits stored under them, stay.
+const RULE_CAPTIONS = 'rule-captions-with-color-id.v46.gbdraw-session.json.gz';
+const savedLegendRows = (svg) => svg.querySelectorAll('g[data-legend-key]').map((row) => [
+  row.getAttribute('data-legend-key'), row.getAttribute('data-legend-name'), row.querySelector('text').textContent
+]);
+test('Load names the color-rule rows of a Result an older build saved, by the loaded rules (D-19)', () => {
+  const session = sessionFixture(RULE_CAPTIONS);
+  const results = normalizeLogicalResults(session.results);
+  const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, session.modes.circular.config.rules);
+  const svg = parseSvgText(results[0].content);
+  const ruleRows = () => savedLegendRows(svg).filter(([key]) => key.startsWith('Complex'));
+  const stroke = () => svg.querySelectorAll('g[data-legend-key]')
+    .find((row) => row.getAttribute('data-legend-key') === 'Complex IV [#ffe700]').querySelector('path').getAttribute('stroke');
+  // `parseSvgText` reads no text node: the saved texts are the keys (the Playwright case reads them).
+  const keysAndNames = (rows) => rows.map(([key, name]) => [key, name]);
+  assert.deepEqual(keysAndNames(ruleRows()), [['Complex IV [#ffe700]', null], ['Complex IV [#1f77b4]', null], ['Complex I', null]], 'as saved');
+  const saved = keysAndNames(savedLegendRows(svg));
+  const { callerTransforms } = createSavedResultPlan(results, admission, edits).operationsByResult[0];
+  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [true]);
+  assert.deepEqual(ruleRows(), [
+    ['Complex IV [#ffe700]', 'Complex IV', 'Complex IV (1)'], ['Complex IV [#1f77b4]', 'Complex IV', 'Complex IV (2)'],
+    ['Complex I', null, 'Complex I']
+  ]);
+  assert.deepEqual(keysAndNames(savedLegendRows(svg)).filter(([key]) => !key.startsWith('Complex IV')), saved.filter(([key]) => !key.startsWith('Complex IV')));
+  assert.deepEqual(savedLegendRows(svg).filter(([key, , drawn]) => !key.startsWith('Complex IV') && drawn !== key), [], 'every other row is drawn by its key');
+  assert.equal(stroke(), '#d62728', 'the stroke saved under the key stays on its row');
+  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [false], 'a named Result is named once');
+  assert.equal(reconcileMountedResult(svg, createEmptySvgMutationPlan(1).operationsByResult[0]).legendChanged, false, 'the naming pass keeps the names');
+  // Without rules, and for a Result that shows no color ID, Load reads no Result.
+  assert.deepEqual(createSavedResultPlan(results, admission, { ...edits, rules: [] }), createEmptySvgMutationPlan(1));
+  assert.deepEqual(createSavedResultPlan([{ ...results[0], content: '<svg/>' }], admission, edits), createEmptySvgMutationPlan(1));
+});
+
+// The other allocated key: a rule named like a renderer row of another swatch
+// (`tRNA` in red beside the tRNA type row). A row this build named, a row a
+// rename shows under another key, and a row no loaded rule draws stay as saved.
+test('Load names a saved rule row keyed for a renderer row of another swatch, and no other row (D-19)', () => {
+  const ruleRow = (key, y, attributes = {}) => {
+    const row = legendRow(key, y, attributes);
+    row.querySelector('path').setAttribute('fill', '#ff0000');
+    return row;
+  };
+  const savedFigure = (...rows) => {
+    const svg = legendSvg(rows);
+    // The block stroke of the figure: a rule row is drawn with it.
+    svg.appendChild(new FakeElement('path', { id: 'f1', stroke: '#000000', 'stroke-width': '0.5' }));
+    return svg;
+  };
+  const edits = {
+    featureColorOverrides: {}, featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
+    originalLegendColors: {}, originalLegendOrder: ['tRNA', 'tRNA [#ff0000]', 'rRNA [#ff0000]'], mode: 'circular', sessionVersion: 46,
+    rules: [{ feat: 'CDS', qual: 'gene', val: '^a$', color: '#ff0000', cap: 'tRNA' }]
+  };
+  const name = (svg) => {
+    const results = [{ name: 'figure.svg', content: serializeNode(svg) }];
+    const { callerTransforms } = createSavedResultPlan(results, null, edits).operationsByResult[0];
+    return callerTransforms.map((transform) => transform(svg));
+  };
+  const older = savedFigure(legendRow('tRNA', 7), ruleRow('tRNA [#ff0000]', 31), ruleRow('rRNA [#ff0000]', 55));
+  assert.deepEqual(name(older), [true]);
+  assert.deepEqual(savedLegendRows(older), [
+    ['tRNA', null, 'tRNA (1)'], ['tRNA [#ff0000]', 'tRNA', 'tRNA (2)'], ['rRNA [#ff0000]', null, 'rRNA [#ff0000]']
+  ], 'a key no loaded rule is allocated stays a name');
+  const named = savedFigure(legendRow('tRNA', 7), ruleRow('tRNA [#ff0000]', 31, { 'data-legend-name': 'Mine' }));
+  const renamed = savedFigure(legendRow('tRNA', 7), ruleRow('tRNA [#ff0000]', 31, { 'data-gbdraw-base-data-legend-key': 'CDS' }));
+  for (const svg of [named, renamed]) {
+    const before = serializeNode(svg);
+    assert.deepEqual(name(svg), [false]);
+    assert.equal(serializeNode(svg), before);
+  }
+});
+
 // OV-288 (R15-4): the stroked repeat_region row has a Legend color of its
 // own. Load finds the row's features by Python's row color, not the
 // swatch's, so Reset returns them to Python's stroke.
@@ -1605,7 +1682,7 @@ test('the Load normalizer records no fill Python is not known to have drawn', ()
   const plan = createSavedResultPlan(response.results, admission, {
     featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#112233' },
     featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
-    originalLegendColors: {}, originalLegendOrder: [], mode: 'linear', sessionVersion: 44
+    originalLegendColors: {}, originalLegendOrder: [], rules: [], mode: 'linear', sessionVersion: 44
   });
   plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
   assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-fill/);

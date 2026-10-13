@@ -9,10 +9,14 @@ const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime
 const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'feature-dom.js');
 const serviceNames = [
   'current-worker-result-source.js',
+  'file-imports.js',
+  'legend-row-names.js',
   'legend-svg.js',
   'result-paint-bases.js',
+  'rule-matchers.js',
   'runtime-test-hooks.js',
   'session-feature-metadata.js',
+  'specific-color-rules.js',
   'svg-result-normalization.js',
   'svg-result-ingestion.js',
   'svg-sanitization.js',
@@ -31,11 +35,9 @@ await Promise.all(serviceNames.map(async (name) => {
 }));
 
 await mkdir(join(tempDir, 'utils'), { recursive: true });
-await writeFile(
-  join(tempDir, 'utils', 'error-normalization.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
-  'utf8'
-);
+await Promise.all(['color-utils.js', 'error-normalization.js', 'named-colors.js', 'tsv-cell.js'].map(async (name) => {
+  await writeFile(join(tempDir, 'utils', name), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', name), 'utf8'), 'utf8');
+}));
 
 const { createPreviewRuntime } = await import(pathToFileURL(join(tempDir, 'app', 'preview-runtime.js')));
 
@@ -68,6 +70,8 @@ const makeSvg = (elements) => ({
   elements,
   isConnected: true,
   querySelectorAll: () => elements,
+  // The figure has no Legend: the naming pass of a reconcile finds none.
+  querySelector: () => null,
   getElementById: (id) => elements.find((element) => element.id === id) || null
 });
 

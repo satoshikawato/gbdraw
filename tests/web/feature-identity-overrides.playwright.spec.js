@@ -375,8 +375,11 @@ for (const { session, rule, identity, color } of [
 // first-parent main 9839de8e saved one caption written in two colors as
 // `Complex IV [#ffe700]` and `Complex IV [#1f77b4]`
 // (rule-captions-with-color-id.provenance.json). Load reads each caption
-// without its own rule's color ID. Generate numbers the names, and the row keys
-// are the texts that build drew, so the Legend stroke it saved stays on its row.
+// without its own rule's color ID. The row keys are the texts that build drew,
+// so the Legend stroke it saved stays on its row. Load names the rule rows of
+// the saved figure by the loaded captions (D-19): the figure, the Legend tab,
+// and an Undo back to the loaded state show the numbered names before the
+// first Generate, as Generate draws them.
 test('a Session that saved rule captions with their color IDs loads without them and keeps its Legend row edit', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
@@ -396,17 +399,46 @@ test('a Session that saved rule captions with their color IDs loads without them
       ]))
     };
   });
-  const loaded = await read();
+  // The names the mounted figure draws and the Legend tab shows, by row key.
+  const shown = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      figure: Object.fromEntries([...app.svgContainer.querySelectorAll('svg g[data-legend-key]')]
+        .filter((row) => row.getAttribute('display') !== 'none')
+        .map((row) => [row.getAttribute('data-legend-key'), row.querySelector('text').textContent])),
+      tab: Object.fromEntries(app.legendEntries.map((entry) => [entry.caption, app.shownLegendName(entry.caption)]))
+    };
+  });
+  const expectNumberedNames = async (label) => {
+    const state = await read();
+    expect(state.rows['Complex IV [#ffe700]'], `${label}: the saved stroke stays on its row`).toEqual(['Complex IV (1)', '#d62728', 2]);
+    expect(state.rows['Complex IV [#1f77b4]'][0], label).toBe('Complex IV (2)');
+    expect(state.rows['Complex I'][0], label).toBe('Complex I');
+    const { figure, tab } = await shown();
+    for (const names of [figure, tab]) {
+      expect([names['Complex IV [#ffe700]'], names['Complex IV [#1f77b4]'], names['Complex I']], label)
+        .toEqual(['Complex IV (1)', 'Complex IV (2)', 'Complex I']);
+    }
+    expect([...Object.values(state.rows).map(([name]) => name), ...Object.values(figure), ...Object.values(tab)]
+      .filter((name) => name.includes(' [#')), `${label}: no name carries a color ID`).toEqual([]);
+    return state;
+  };
+  const loaded = await expectNumberedNames('after Load, before Generate');
   expect(loaded.captions).toEqual(['Complex IV', 'Complex IV', 'Complex I']);
-  expect(loaded.rows['Complex IV [#ffe700]'].slice(1)).toEqual(['#d62728', 2]);
+  // A Legend edit and its Undo return the loaded figure, not the saved texts.
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'Complex I'));
+  });
+  await settle(page);
+  expect((await shown()).tab['Complex I']).toBeUndefined();
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  await expectNumberedNames('after a Legend edit and its Undo');
   await generateAndWaitForResult(page);
   await settle(page);
-  const generated = await read();
+  const generated = await expectNumberedNames('after Generate');
   expect(generated.captions).toEqual(loaded.captions);
-  expect(generated.rows['Complex IV [#ffe700]']).toEqual(['Complex IV (1)', '#d62728', 2]);
-  expect(generated.rows['Complex IV [#1f77b4]'][0]).toBe('Complex IV (2)');
-  expect(generated.rows['Complex I'][0]).toBe('Complex I');
-  expect(Object.values(generated.rows).filter(([name]) => name.includes(' [#'))).toEqual([]);
 });
 
 test('a Session 33 without a feature catalog keeps its feature edits', async ({ page }) => {
