@@ -78,6 +78,22 @@ def test_a_default_track_row_another_source_shares_stays_for_that_source():
     assert list(table) == ["GC content"]
 
 
+def test_numbers_follow_the_order_the_legend_draws_solid_rows_then_gradient_rows():
+    """A gradient row is drawn after every solid row (render/groups/*/legend.py), wherever the table holds it."""
+    table = LegendTable()
+    table.add("CDS", solid("#47b8f8", "gray", 1))
+    table.add("Pairwise match identity", {"type": "gradient", "min_color": "#ffe7e7", "max_color": "#ff7272"})
+    table.add_source("Pairwise match identity", solid("#88aaff", "#404040", 1.5))
+
+    # The table keeps its order and its keys; the solid row, drawn first, takes the first number.
+    assert list(table) == ["CDS", "Pairwise match identity", "Pairwise match identity (2)"]
+    assert table.names() == {
+        "CDS": ("CDS", "CDS"),
+        "Pairwise match identity": ("Pairwise match identity", "Pairwise match identity (2)"),
+        "Pairwise match identity (2)": ("Pairwise match identity", "Pairwise match identity (1)"),
+    }
+
+
 def test_a_plain_mapping_is_read_as_rows_named_by_their_keys():
     names = legend_row_names({"CDS": solid("#47b8f8"), "GC content (2)": solid("#808080")})
     assert names == {"CDS": ("CDS", "CDS"), "GC content (2)": ("GC content (2)", "GC content (2)")}

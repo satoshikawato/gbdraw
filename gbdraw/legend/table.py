@@ -184,14 +184,18 @@ class LegendTable(Mapping[str, LegendEntry]):
         return tuple(key for key in dict.fromkeys(self._shared_keys) if key not in self._rows)
 
     def names(self) -> dict[str, LegendRowNames]:
-        """Each row's name and drawn name, by key, in legend order."""
+        """Each row's name and drawn name, by key.
 
-        rows = list(self._rows.values())
-        drawn = drawn_legend_names([(row.name, row.swatch) for row in rows])
-        return {
-            key: LegendRowNames(row.name, text)
-            for (key, row), text in zip(self._rows.items(), drawn)
-        }
+        The names are numbered in the order the legends draw the rows: the
+        solid rows, then the gradient rows (the block beside or below them),
+        each in table order. The Web app numbers the rows of a Result in the
+        order it shows them, so both give one answer.
+        """
+
+        solid_first = sorted(self._rows.items(), key=lambda item: item[1].swatch[0] == "gradient")
+        drawn = drawn_legend_names([(row.name, row.swatch) for _, row in solid_first])
+        texts = {key: text for (key, _), text in zip(solid_first, drawn)}
+        return {key: LegendRowNames(row.name, texts[key]) for key, row in self._rows.items()}
 
     def __getitem__(self, key: str) -> LegendEntry:
         return self._rows[key].entry
