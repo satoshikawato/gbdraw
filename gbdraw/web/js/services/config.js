@@ -314,7 +314,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
-/** @import { RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
+/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { DiagramMode } from '../state.js' */
 
 /** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
@@ -3141,8 +3141,9 @@ const serializeFileValue = async (value) => (
 );
 
 /**
- * What `deserializeFile` gives for a stored value: a file slot's value, or a list of them for a stored list.
- * @typedef {File | SessionResourceFileView | null | DeserializedFile[]} DeserializedFile
+ * What `deserializeFile` gives for a stored value: a file slot's value (`FileLike`: a `File` or a Session
+ * resource view) or `null`, or a list of them for a stored list.
+ * @typedef {FileLike | null | DeserializedFile[]} DeserializedFile
  */
 // `entry` keeps its implicit type: a legacy `files` entry's `name`, `type` and `lastModified` go unconverted
 // into `new File(...)` below, which the true type (`unknown`) does not allow without a cast of those leaves.
