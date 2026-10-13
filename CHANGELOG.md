@@ -228,12 +228,13 @@ write-up of a release.
   values the request format does not define: a comparison table path at any
   request schema; `null` or another kind of value where a field holds text, a
   flag or a name; and, at request schema 9, anything outside
-  `describe_canonical_request()`, including other spellings of the comparison
-  mode settings, `conservationReference`, `pairwiseMatchStyle` and
-  `generatedProteinComparison.mode`. A fractional annotation `lane`, `start` or
-  `end` still reads as its integer part. A Session whose stored request holds a
-  refused value still loads in the web app, and its Generate shows "An input
-  value is invalid". A record display selector with non-ASCII digits is
+  `describe_canonical_request()`, other spellings of the comparison mode
+  settings, and other spellings of `conservationReference`,
+  `pairwiseMatchStyle` and `generatedProteinComparison.mode`. A fractional
+  annotation `lane`, `start` or `end` still reads as its integer part. A
+  Session whose stored request holds a value that earlier versions read and
+  this reader refuses still loads in the web app, and its Generate shows "An
+  input value is invalid". A record display selector with non-ASCII digits is
   refused, as the web app already did (OV-324, OV-528, OV-596, OV-611, OV-631,
   OV-632, OV-651).
 - Fixed: the records of one multi-record File were named differently in

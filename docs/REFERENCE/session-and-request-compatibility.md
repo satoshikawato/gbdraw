@@ -34,11 +34,12 @@ hatch `cross`. From schema 9 it also refuses another case, outer spaces or
 older schemas also read another case, outer spaces, `-` for `_`, an alias, or
 `""`. An annotation `lane`, `start` or `end` may hold a fraction, which reads
 as its integer part. Writers store a track slot's `renderer` and `side` as
-names, and the reader still reads another spelling. The reader's message names
-the refused path. The Web app still loads a Session that holds a refused form;
-until the Web repairs it at Load, Generate and any re-render of the stored
-request (label reflow, alignment, record transform) show "An input value is
-invalid" (`INPUT_INVALID`, field `schema`).
+names, and the reader still reads another spelling. For a form listed here
+that earlier versions read, the reader's message names the refused path. The
+Web app still loads a Session that holds such a form; until the Web repairs it
+at Load, Generate and any re-render of the stored request (label reflow,
+alignment, record transform) show "An input value is invalid"
+(`INPUT_INVALID`, field `schema`).
 
 Sessions 46 and 47 keep the Web app's settings and edits of each diagram mode in its
 own slice, `modes.circular` and `modes.linear`:
