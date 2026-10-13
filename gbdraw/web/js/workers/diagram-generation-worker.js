@@ -592,10 +592,19 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     fileRoles: [],
     run: (pyodide, payload) => fontRegistryFor(pyodide).register(payload.fonts)
   },
-  [DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT]: {
-    keys: ['filename'],
+  // The fonts an export carries (custom fonts D-05): @font-face CSS for an
+  // SVG, and the TrueType faces of a PDF's text runs (fonts by file name).
+  [DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS]: {
+    keys: ['svg'],
     fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(pyodide, 'read_pdf_font', [String(payload.filename || '')])
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'svg_font_embedding_json', [String(payload.svg || '')])
+  },
+  [DIAGRAM_HELPER_OPERATIONS.PDF_FONTS]: {
+    keys: ['runs', 'known'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'pdf_fonts_json', [
+      jsonArgument(payload.runs, []), jsonArgument(payload.known, [])
+    ])
   },
   [DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES]: {
     keys: [

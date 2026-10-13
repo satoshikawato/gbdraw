@@ -5560,13 +5560,24 @@ export const createAppSetup = () => {
       if (typeof exportMethod !== 'function') {
         throw new Error('The export service did not provide the requested action.');
       }
-      const result = await exportMethod(snapshot, {
-        loadPdfFont: async (filename) => {
-          const result = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT, { filename });
-          return result.result.base64;
-        }
-      });
+      // Custom fonts in exports (D-05): the Worker holds the fonts of this
+      // page, so an export embeds only when one is loaded and Embed font in
+      // exported SVG is on; a PDF always registers the faces its text uses.
+      /** @type {import('../services/export.js').ExportFontPorts} */
+      const fontPorts = {
+        embedFonts: fontSettings.embedInExports.value && state.loadedFonts.value.length > 0
+          ? async (svg) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS, { svg })).result
+          : null,
+        resolvePdfFonts: async (runs, known) => (
+          await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PDF_FONTS, { runs, known })
+        ).result
+      };
+      /** @type {import('../services/export.js').ExportOutcome} */
+      const result = await exportMethod(snapshot, fontPorts);
       if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
+      if (result.fontWarnings.length > 0) {
+        showNotice({ text: `Exported ${result.filename}. Find it in your browser's downloads.`, items: result.fontWarnings });
+      }
       return result;
     } catch (error) {
       const normalized = normalizeUserFacingError(error, { operation, stage: 'export-capture' });

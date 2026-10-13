@@ -261,7 +261,7 @@ test('PDF text flattening places each curved-label character by its UTF-16 index
     try {
       await downloadPDF(
         { svg: live.cloneNode(true), name: 'flatten.svg' },
-        { loadPdfFont: () => Promise.reject(new Error('font not needed')) }
+        { resolvePdfFonts: () => Promise.reject(new Error('font not needed')) }
       );
     } catch {
       // The flattened text is captured before fonts are loaded.

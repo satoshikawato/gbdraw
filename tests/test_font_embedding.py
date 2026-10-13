@@ -22,6 +22,7 @@ from gbdraw.core import fonts
 from gbdraw.exceptions import ValidationError
 from gbdraw.linear import linear_main
 from gbdraw.render import font_embedding
+from gbdraw.web_support import export_fonts
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "gbdraw" / "data"
 FONT_FACE = re.compile(r"@font-face\s*\{([^}]*)\}")
@@ -278,6 +279,23 @@ def test_a_truetype_font_comes_back_as_its_own_outlines(tmp_path: Path) -> None:
     assert "glyf" in converted and len(converted.getGlyphOrder()) == len(TTFont(str(path)).getGlyphOrder())
 
 
+@pytest.mark.parametrize("kind", ["cff", "ttf"])
+def test_a_pdf_face_without_a_postscript_name_gets_one(tmp_path: Path, kind: str) -> None:
+    # jsPDF reads name ID 6 (the PostScript name) of every font it embeds and
+    # fails the export without one; _cff_font has none, like some real fonts.
+    if kind == "cff":
+        path = _cff_font(tmp_path / "c.otf", "Gbdraw Pdf No Ps")
+    else:
+        path = _renamed_font("LiberationSans-Regular", "Gbdraw Pdf No Ps", tmp_path / "t.ttf")
+        font = TTFont(str(path))
+        font["name"].names = [record for record in font["name"].names if record.nameID != 6]
+        font.save(str(path))
+
+    converted = TTFont(io.BytesIO(font_embedding.truetype_bytes_for_pdf(path)))
+
+    assert converted["name"].getDebugName(6) == "GbdrawPdfNoPs-Regular"
+
+
 def test_a_font_that_cannot_convert_is_a_font_file_error(tmp_path: Path) -> None:
     broken = tmp_path / "broken.otf"
     broken.write_bytes(b"OTTO" + b"\x00" * 64)
@@ -286,6 +304,93 @@ def test_a_font_that_cannot_convert_is_a_font_file_error(tmp_path: Path) -> None
         font_embedding.truetype_bytes_for_pdf(broken)
 
     assert caught.value.diagnostic == {"code": "INPUT_INVALID", "reason": "FONT_FILE"}
+
+
+def _pdf_faces(choice: font_embedding.PdfFonts) -> list[tuple[str, str]]:
+    return [(face.family, face.file) for face in choice.faces]
+
+
+def test_pdf_fonts_name_the_bundled_face_of_each_run_as_jspdf_registers_it() -> None:
+    choice = font_embedding.pdf_fonts(
+        [
+            ("'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif", True, False),
+            ("serif", False, True),
+            ("'Courier New', monospace", True, True),
+        ],
+        known=("LiberationSerif-Italic.ttf",),
+    )
+
+    assert _pdf_faces(choice) == [
+        ("LiberationSans", "LiberationSans-Bold.ttf"),
+        ("LiberationSerif", "LiberationSerif-Italic.ttf"),
+        ("LiberationMono", "LiberationMono-BoldItalic.ttf"),
+    ]
+    # Only the files the caller does not hold yet, byte for byte the bundled files.
+    assert set(choice.fonts) == {"LiberationSans-Bold.ttf", "LiberationMono-BoldItalic.ttf"}
+    assert choice.fonts["LiberationSans-Bold.ttf"] == (DATA_DIR / "LiberationSans-Bold.ttf").read_bytes()
+    assert choice.substitutions == ()
+
+
+def test_pdf_fonts_draw_a_registered_cff_face_with_truetype_outlines_sent_once(tmp_path: Path) -> None:
+    registered = fonts.register_font_file(_cff_font(tmp_path / "c.otf", "Gbdraw Pdf Run"))
+    name = registered.face.measurement_name
+    regular = ("'Gbdraw Pdf Run', sans-serif", False, False)
+
+    choice = font_embedding.pdf_fonts([regular, ("'Gbdraw Pdf Run', sans-serif", True, False)], known=())
+
+    # The one face draws both runs (CSS matching), under one jsPDF family.
+    assert _pdf_faces(choice) == [(name.rsplit("-", 1)[0], f"{name}.ttf")] * 2
+    assert choice.fonts == {f"{name}.ttf": font_embedding.truetype_bytes_for_pdf(registered.face)}
+    assert "glyf" in TTFont(io.BytesIO(choice.fonts[f"{name}.ttf"]))
+    assert font_embedding.pdf_fonts([regular], known=(f"{name}.ttf",)).fonts == {}
+
+
+def test_pdf_fonts_substitute_the_nearest_liberation_face_and_name_the_font(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fonts.register_font_file(
+        _renamed_font("LiberationSans-Regular", "Gbdraw Pdf Restricted", tmp_path / "x.ttf", fs_type=0x0002)
+    )
+    broken = fonts.register_font_file(_renamed_font("LiberationMono-Regular", "Gbdraw Pdf Broken", tmp_path / "b.ttf"))
+    real = font_embedding._truetype_bytes
+
+    def failing(face: fonts.FontFace) -> bytes:
+        if face == broken.face:
+            raise ValidationError("cannot convert", diagnostic={"code": "INPUT_INVALID", "reason": "FONT_FILE"})
+        return real(face)
+
+    monkeypatch.setattr(font_embedding, "_truetype_bytes", failing)
+
+    choice = font_embedding.pdf_fonts(
+        [("'Gbdraw Pdf Restricted', serif", False, False), ("'Gbdraw Pdf Broken', monospace", True, False)], known=()
+    )
+
+    assert _pdf_faces(choice) == [
+        ("LiberationSerif", "LiberationSerif-Regular.ttf"),
+        ("LiberationMono", "LiberationMono-Bold.ttf"),
+    ]
+    assert choice.substitutions == (
+        font_embedding.PdfFontSubstitution("Gbdraw Pdf Restricted", "Liberation Serif", "license"),
+        font_embedding.PdfFontSubstitution("Gbdraw Pdf Broken", "Liberation Mono", "font-file"),
+    )
+
+
+def test_the_web_export_helpers_reply_in_json(tmp_path: Path) -> None:
+    registered = fonts.register_font_file(
+        _renamed_font("LiberationSerif-Regular", "Gbdraw Web Export", tmp_path / "w.ttf")
+    )
+    svg = _svg(("'Gbdraw Web Export', serif", "normal", "Web"))
+
+    reply = json.loads(export_fonts.svg_font_embedding_json(svg))
+    assert reply == {"css": font_embedding.svg_font_embedding(svg).css, "refusedFamilies": []}
+
+    name = registered.face.measurement_name
+    pdf = json.loads(export_fonts.pdf_fonts_json(
+        json.dumps([{"fontFamily": "'Gbdraw Web Export', serif", "bold": False, "italic": False}]), "[]"
+    ))
+    assert pdf["faces"] == [{"family": name.rsplit("-", 1)[0], "file": f"{name}.ttf"}]
+    assert base64.b64decode(pdf["fonts"][f"{name}.ttf"]) == font_embedding.truetype_bytes_for_pdf(registered.face)
+    assert pdf["substitutions"] == []
 
 
 # ---- CLI ----
@@ -457,6 +562,18 @@ def test_ov688_a_session_saved_again_warns_that_it_keeps_only_the_font_name(
 
     assert "The Session stores the font name 'Gbdraw Resave Serif' but not the font file" in caplog.text
     assert "@font-face" not in (tmp_path / "second.gbdraw-session.json").read_text(encoding="utf-8")
+
+
+def test_a_web_svg_embedding_failure_names_the_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken(_svg: str) -> font_embedding.FontEmbedding:
+        raise RuntimeError("subsetter failed")
+
+    monkeypatch.setattr(export_fonts, "svg_font_embedding", broken)
+
+    with pytest.raises(ValidationError) as caught:
+        export_fonts.svg_font_embedding_json("<svg/>")
+
+    assert caught.value.diagnostic == {"code": "INPUT_INVALID", "reason": "FONT_EMBEDDING"}
 
 
 def test_gbdraw_render_takes_font_files_and_no_font_embedding(tmp_path: Path) -> None:

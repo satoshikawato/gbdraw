@@ -133,6 +133,12 @@ class FontFamilyResolution:
         return bool(self.missing)
 
     @property
+    def nearest(self) -> str:
+        """The family text is drawn with: the first named family of
+        ``effective`` (``effective`` itself when it names only generics)."""
+        return next((name for name in parse_font_family_list(self.effective) if not _is_generic(name)), self.effective)
+
+    @property
     def message(self) -> Optional[str]:
         """The warning for a substitution; None when nothing was replaced."""
         if not self.missing:
@@ -147,12 +153,8 @@ class FontFamilyResolution:
             parts.append(
                 f"{noun} {_css_family_list(self.unchecked)} could not be checked because fontconfig did not answer"
             )
-        replacement = next(
-            (name for name in parse_font_family_list(self.effective) if not _is_generic(name)),
-            self.effective,
-        )
         return (
-            f"{'; '.join(parts)}; text uses {css_family_token(replacement)} instead "
+            f"{'; '.join(parts)}; text uses {css_family_token(self.nearest)} instead "
             f"(font-family: {self.effective})."
         )
 

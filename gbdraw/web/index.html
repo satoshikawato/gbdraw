@@ -4550,6 +4550,16 @@
                             <p v-if="fontSettings.loading.value" class="text-[10px] text-slate-500" role="status">Loading the font…</p>
                             <p v-if="fontSettings.loadError.value" class="text-[10px] text-red-600" role="alert" data-font-load-error>{{ fontSettings.loadError.value }}</p>
                             <p v-if="fontSettings.customFontSelected.value" class="text-[10px] text-amber-700" data-font-custom-note><i class="ph ph-warning" aria-hidden="true"></i> This font is not part of gbdraw. A saved Session keeps only its name, not the font file: to open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.</p>
+                            <div v-if="fontSettings.customFontSelected.value" class="space-y-1" data-font-embedding data-history-ignore>
+                                <div class="flex items-center text-xs">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="fontSettings.embedInExports.value" aria-describedby="help-font-embedding" class="form-checkbox">
+                                        <span>Embed font in exported SVG</span>
+                                    </label>
+                                    <help-tip id="help-font-embedding" text="SVG and Interactive SVG exports carry the characters they use of this font, so they show it on computers without it; PNG export draws with them. Fonts whose license forbids embedding are not embedded. Turned off, the files keep only the font name, and a PNG draws this font only if it is installed on this computer (a font loaded from a file is replaced with the browser's default font). PDF export embeds this font whatever this setting, unless its license forbids embedding."></help-tip>
+                                </div>
+                                <p class="text-[10px] text-slate-500">Applies to exports (SVG, Interactive SVG, PNG), not to Generate.</p>
+                            </div>
                         </div>
                     </details>
                 </div>

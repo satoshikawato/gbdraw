@@ -15,6 +15,9 @@ again (a Session never stores font data, D-02).
 
 ``truetype_bytes_for_pdf`` gives a face's glyphs as TrueType outlines, which
 a PDF embeds; CFF and CFF2 outlines are converted with ``cu2qu``.
+``pdf_fonts`` chooses the face the Web PDF export draws each text run with
+(the face the text was measured with) and falls back to the nearest
+Liberation face, by name, when a custom face cannot be embedded.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from typing import Dict, Optional, Union
+from typing import Collection, Dict, Literal, Optional, Sequence, Union
 from xml.sax.saxutils import escape
 
 from fontTools.ttLib import TTFont
@@ -268,9 +271,10 @@ def _to_quadratic(font: TTFont) -> None:
 def _truetype_bytes(face: fonts.FontFace) -> bytes:
     try:
         data = fonts.face_source_bytes(face)
-        if not face.index and not face.instance and data[:4] == b"\x00\x01\x00\x00":
-            return data
         font = TTFont(io.BytesIO(data), fontNumber=face.index, recalcTimestamp=False)
+        named = _ensure_postscript_name(font)
+        if not face.index and not face.instance and data[:4] == b"\x00\x01\x00\x00" and named:
+            return data
         if "fvar" in font:
             from fontTools.varLib import instancer
 
@@ -294,6 +298,21 @@ def _truetype_bytes(face: fonts.FontFace) -> bytes:
         ) from exc
 
 
+def _ensure_postscript_name(font: TTFont) -> bool:
+    """Give ``font`` a PostScript name (name ID 6) when it has none, from its
+    family and style; jsPDF reads it from every font a PDF embeds. Returns
+    whether the font already had one."""
+    names = font["name"]
+    if names.getDebugName(6):
+        return True
+    family = names.getDebugName(16) or names.getDebugName(1) or "Font"
+    style = names.getDebugName(17) or names.getDebugName(2) or "Regular"
+    # PostScript names are printable ASCII without spaces and []{}<>()/%.
+    postscript = re.sub(r"[^!-~]|[\[\]{}<>()/%]", "", f"{family}-{style}")[:63]
+    names.setName(postscript, 6, 3, 1, 0x409)
+    return False
+
+
 def truetype_bytes_for_pdf(face_or_path: Union[fonts.FontFace, str, os.PathLike[str]]) -> bytes:
     """One face as a TrueType-outline font file, for a PDF to embed.
 
@@ -308,9 +327,107 @@ def truetype_bytes_for_pdf(face_or_path: Union[fonts.FontFace, str, os.PathLike[
     return _truetype_bytes(face)
 
 
+PdfSubstitutionReason = Literal["license", "font-file"]
+
+
+@dataclass(frozen=True)
+class PdfFontFace:
+    """The font a PDF text run is drawn with, as jsPDF registers it: the
+    ``family`` (the face's measurement name without its style) and the
+    TrueType ``file`` (the measurement name; one per face, so it identifies the
+    bytes)."""
+
+    family: str
+    file: str
+
+
+@dataclass(frozen=True)
+class PdfFontSubstitution:
+    """A custom ``family`` the PDF draws with ``substitute`` instead, and why:
+    its license forbids embedding, or its file cannot become TrueType."""
+
+    family: str
+    substitute: str
+    reason: PdfSubstitutionReason
+
+
+@dataclass(frozen=True)
+class PdfFonts:
+    """``faces``: one per run, in order. ``fonts``: the TrueType bytes of
+    each file the caller does not hold yet. ``substitutions``: each custom
+    family drawn with a Liberation face instead, once."""
+
+    faces: tuple[PdfFontFace, ...]
+    fonts: Dict[str, bytes]
+    substitutions: tuple[PdfFontSubstitution, ...]
+
+
+PdfFontRun = tuple[str, bool, bool]  # font-family list, bold, italic
+
+
+def _pdf_font_face(face: fonts.FontFace) -> PdfFontFace:
+    name = face.measurement_name
+    return PdfFontFace(family=name.rsplit("-", 1)[0], file=f"{name}.ttf")
+
+
+def _nearest_bundled(font_family: str, weight: int, style: str) -> tuple[str, fonts.FontFace]:
+    """The Liberation family and face a list falls back to without its
+    custom families (the nearest font, as at Session load)."""
+    resolution = fonts.resolve_font_family_among(font_family, ())
+    face = fonts.resolve_font_face(resolution.effective, weight, style)
+    assert face is not None
+    return resolution.nearest, face
+
+
+def pdf_fonts(runs: Sequence[PdfFontRun], *, known: Collection[str]) -> PdfFonts:
+    """The faces a PDF draws its text runs with, and the TrueType bytes of
+    those not in ``known``.
+
+    A run is drawn with the face its text was measured with
+    (``resolve_font_face``). A custom face whose license (OS/2 ``fsType``)
+    forbids embedding, or that cannot become TrueType outlines, is replaced
+    with the nearest Liberation face and named in ``substitutions``.
+    """
+    faces: list[PdfFontFace] = []
+    data: Dict[str, bytes] = {}
+    substitutions: list[PdfFontSubstitution] = []
+    for font_family, bold, italic in runs:
+        weight, style = (700 if bold else 400), ("italic" if italic else "normal")
+        family, face = fonts.resolve_named_font_face(font_family, weight, style)
+        if face is None:
+            face = fonts.resolve_font_face(font_family, weight, style)
+        assert face is not None
+        chosen = _pdf_font_face(face)
+        if chosen.file not in known and chosen.file not in data:
+            reason: Optional[PdfSubstitutionReason] = None
+            font = fonts.load_font(face)
+            if font is not None and not fonts.is_bundled_face(face) and _embedding_refused(font):
+                reason = "license"
+            else:
+                try:
+                    data[chosen.file] = truetype_bytes_for_pdf(face)
+                except ValidationError:
+                    reason = "font-file"
+            if reason is not None:
+                substitute, face = _nearest_bundled(font_family, weight, style)
+                substitution = PdfFontSubstitution(family or font_family, substitute, reason)
+                if substitution not in substitutions:
+                    substitutions.append(substitution)
+                chosen = _pdf_font_face(face)
+                if chosen.file not in known and chosen.file not in data:
+                    data[chosen.file] = truetype_bytes_for_pdf(face)
+        faces.append(chosen)
+    return PdfFonts(faces=tuple(faces), fonts=data, substitutions=tuple(substitutions))
+
+
 __all__ = [
     "EMBEDDED_FONTS_ID",
     "FontEmbedding",
+    "PdfFontFace",
+    "PdfFontRun",
+    "PdfFontSubstitution",
+    "PdfFonts",
+    "pdf_fonts",
     "embed_font_css",
     "remove_embedded_font_css",
     "svg_font_embedding",

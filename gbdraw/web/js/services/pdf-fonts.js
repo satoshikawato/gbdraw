@@ -15,32 +15,36 @@
  */
 
 /**
- * Reads the base64 bytes of one packaged font file.
- * @typedef {(filename: string) => Promise<string> | string} PdfFontLoader
+ * A text run of the PDF: the CSS font-family list its text was drawn with,
+ * and its jsPDF style slot.
+ * @typedef {{ fontFamily: string, bold: boolean, italic: boolean }} PdfFontRun
  */
-
-/** @type {Record<PdfFontStyle, string>} */
-const styles = { normal: 'Regular', bold: 'Bold', italic: 'Italic', bolditalic: 'BoldItalic' };
-/** @type {Map<string, Promise<string>>} */
-const payloads = new Map();
 
 /**
- * @param {string} filename
- * @param {PdfFontLoader | undefined} loadFont
- * @returns {Promise<string>}
+ * A custom font the PDF draws with a Liberation face instead: its license
+ * forbids embedding, or its file cannot become TrueType outlines.
+ * @typedef {{ family: string, substitute: string, reason: 'license' | 'font-file' }} PdfFontSubstitution
  */
-const fontPayload = (filename, loadFont) => {
-  if (!payloads.has(filename)) {
-    // PDF export always passes the loader; a missing one rejects here as a TypeError.
-    const pending = Promise.resolve().then(() => /** @type {PdfFontLoader} */ (loadFont)(filename)).catch((error) => {
-      payloads.delete(filename);
-      throw error;
-    });
-    payloads.set(filename, pending);
-  }
-  // The entry was set above when it was missing.
-  return /** @type {Promise<string>} */ (payloads.get(filename));
-};
+
+/**
+ * Python's `pdf_fonts` (gbdraw/render/font_embedding.py) in the Worker: per
+ * run, the jsPDF family and the TrueType file of the face its text was
+ * measured with; the base64 bytes of each file not in `known`; and the custom
+ * fonts drawn with a substitute.
+ * @typedef {object} PdfFontsReply
+ * @property {{ family: string, file: string }[]} faces
+ * @property {Record<string, string>} fonts
+ * @property {PdfFontSubstitution[]} substitutions
+ * @typedef {(runs: PdfFontRun[], known: string[]) => Promise<PdfFontsReply>} ResolvePdfFonts
+ */
+
+/**
+ * The base64 TrueType bytes of each font file the PDF export received, by file
+ * name. A name is a face's measurement name, which identifies its bytes
+ * (a custom face's name holds the hash of its file).
+ * @type {Map<string, string>}
+ */
+const payloads = new Map();
 
 /**
  * @param {CSSStyleDeclaration} style
@@ -53,39 +57,24 @@ const fontStyle = (style) => {
   return /** @type {PdfFontStyle} */ (`${bold ? 'bold' : ''}${italic ? 'italic' : ''}` || 'normal');
 };
 
-/** @param {string} family */
-const fontFamily = (family) => {
-  const first = family.split(',')[0].replaceAll(/['"]/g, '').trim().toLowerCase();
-  if (/mono|courier/.test(first)) return 'LiberationMono';
-  if (/serif|times/.test(first) && !first.includes('sans')) return 'LiberationSerif';
-  return 'LiberationSans';
-};
+/**
+ * @param {PdfFontSubstitution} substitution
+ * @returns {string}
+ */
+const substitutionWarning = ({ family, substitute, reason }) => (reason === 'license'
+  ? `Font ${family} is not embedded in the PDF: its license (OS/2 fsType) does not allow embedding. Its text is drawn in ${substitute}.`
+  : `Font ${family} could not be prepared for the PDF. Its text is drawn in ${substitute}.`);
 
-// jsPDF's built-in PDF fonts use WinAnsi. Register Unicode fonts explicitly,
-// from the existing Python package before svg2pdf resolves any text metrics.
+// jsPDF's built-in PDF fonts use WinAnsi. Register the Unicode TrueType face
+// each text was measured with (a Liberation font, or a custom font loaded in
+// this page) before svg2pdf resolves any text metrics.
 /**
  * @param {PdfFontDocument} doc
  * @param {Element} svg
- * @param {PdfFontLoader | undefined} loadFont The loader; PDF export passes it, and a missing one fails the first font read.
+ * @param {ResolvePdfFonts | undefined} resolveFonts The Worker's `pdfFonts` helper; PDF export passes it, and a missing one fails here.
+ * @returns {Promise<string[]>} One warning per custom font drawn with a substitute.
  */
-export const preparePdfFonts = async (doc, svg, loadFont) => {
-  /** @type {Map<string, PdfFont>} */
-  const fonts = new Map();
-  /**
-   * @param {string} family
-   * @param {PdfFontStyle} style
-   */
-  const register = async (family, style) => {
-    const key = `${family}:${style}`;
-    if (!fonts.has(key)) {
-      const filename = `${family}-${styles[style]}.ttf`;
-      doc.addFileToVFS(filename, await fontPayload(filename, loadFont));
-      doc.addFont(filename, family, style);
-      fonts.set(key, doc.getFont(family, style));
-    }
-    // The key was set above when it was missing.
-    return /** @type {PdfFont} */ (fonts.get(key));
-  };
+export const preparePdfFonts = async (doc, svg, resolveFonts) => {
   /** @type {Array<Node & { parentElement: HTMLElement, textContent: string }>} */
   const nodes = [];
   const walker = document.createTreeWalker(svg, NodeFilter.SHOW_TEXT);
@@ -97,10 +86,49 @@ export const preparePdfFonts = async (doc, svg, loadFont) => {
   // Capture computed styles before replacing inherited font families.
   const runs = nodes.map((node) => {
     const style = getComputedStyle(node.parentElement);
-    return { node, family: fontFamily(style.fontFamily), style: fontStyle(style) };
+    return { node, fontFamily: style.fontFamily, style: fontStyle(style) };
   });
-  for (const { node, family, style } of runs) {
-    const primary = await register(family, style);
+  /** @type {Map<string, number>} */
+  const runIndex = new Map();
+  /** @type {PdfFontRun[]} */
+  const requested = [];
+  for (const run of runs) {
+    const key = `${run.style}\n${run.fontFamily}`;
+    if (!runIndex.has(key)) {
+      runIndex.set(key, requested.length);
+      requested.push({ fontFamily: run.fontFamily, bold: run.style.startsWith('bold'), italic: run.style.endsWith('italic') });
+    }
+  }
+  if (requested.length === 0) return [];
+  // PDF export always passes the helper; a missing one rejects here as a TypeError.
+  const reply = await /** @type {ResolvePdfFonts} */ (resolveFonts)(requested, [...payloads.keys()]);
+  Object.entries(reply.fonts).forEach(([file, base64]) => payloads.set(file, base64));
+
+  /** @type {Set<string>} */
+  const files = new Set();
+  /** @type {Map<string, PdfFont>} */
+  const fonts = new Map();
+  /**
+   * @param {{ family: string, file: string }} face
+   * @param {PdfFontStyle} style
+   */
+  const register = (face, style) => {
+    const key = `${face.family}:${style}`;
+    if (!fonts.has(key)) {
+      if (!files.has(face.file)) {
+        // Python sent the bytes of every file this page did not hold.
+        doc.addFileToVFS(face.file, /** @type {string} */ (payloads.get(face.file)));
+        files.add(face.file);
+      }
+      doc.addFont(face.file, face.family, style);
+      fonts.set(key, doc.getFont(face.family, style));
+    }
+    // The key was set above when it was missing.
+    return /** @type {PdfFont} */ (fonts.get(key));
+  };
+  for (const { node, fontFamily, style } of runs) {
+    const face = reply.faces[/** @type {number} */ (runIndex.get(`${style}\n${fontFamily}`))];
+    const primary = register(face, style);
     for (const character of node.textContent) {
       // Iterating a string yields characters that each hold a code point.
       if (!/\s/.test(character) && !primary.metadata.characterToGlyph(/** @type {number} */ (character.codePointAt(0)))) {
@@ -108,6 +136,7 @@ export const preparePdfFonts = async (doc, svg, loadFont) => {
       }
     }
     // The parent controls anchor and metrics even when its content has tspans.
-    node.parentElement.setAttribute('font-family', family);
+    node.parentElement.setAttribute('font-family', face.family);
   }
+  return reply.substitutions.map(substitutionWarning);
 };

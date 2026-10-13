@@ -78,6 +78,13 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
   /** @type {((faces: InstalledFontData[] | null) => void) | null} */
   let answerInstalledPicker = null;
   const localFontsSupported = typeof /** @type {{ queryLocalFonts?: unknown }} */ (globalThis).queryLocalFonts === 'function';
+  /**
+   * Embed font in exported SVG (D-05): whether SVG, Interactive SVG, and PNG
+   * exports carry the fonts gbdraw does not bundle. On by default; page state
+   * like the loaded fonts, so a Session does not keep it and changing it is
+   * no History step (exports record none).
+   */
+  const embedInExports = ref(true);
 
   /** @returns {readonly WebFontEntry[]} */
   const loadedFonts = () => state.loadedFonts.value;
@@ -351,6 +358,7 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
     choices,
     selectedChoice,
     customFontSelected,
+    embedInExports,
     localFontsSupported,
     loading,
     loadError,

@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
 const { resolve } = require('node:path');
 const { readFileSync, writeFileSync } = require('node:fs');
 const {
@@ -27,6 +28,86 @@ for name_id, value in ((1, sys.argv[1]), (2, "Regular"), (4, sys.argv[1] + " Reg
 font.save(sys.argv[2])
 `, FAMILY, target], { cwd: resolve('.'), stdio: 'pipe' });
   return target;
+};
+
+// Fonts built from Liberation Serif with its metrics, so Python lays out the
+// diagram exactly as with Liberation Serif: "box" draws every glyph as its
+// bounding box (unmistakable in a raster), "cff" has the same outlines in CFF
+// (an OpenType .otf that a PDF needs converted to TrueType).
+const builtFont = (target, family, kind) => {
+  execFileSync('python', ['-c', `
+import sys
+from fontTools.fontBuilder import FontBuilder
+from fontTools.pens.boundsPen import BoundsPen
+from fontTools.pens.t2CharStringPen import T2CharStringPen
+from fontTools.pens.ttGlyphPen import TTGlyphPen
+from fontTools.ttLib import TTFont
+family, target, kind = sys.argv[1:4]
+font = TTFont("gbdraw/data/LiberationSerif-Regular.ttf")
+order = font.getGlyphOrder()
+glyphs = font.getGlyphSet()
+if kind == "box":
+    bounds = {}
+    for name in order:
+        pen = BoundsPen(glyphs)
+        glyphs[name].draw(pen)
+        bounds[name] = pen.bounds
+    for name in order:
+        pen = TTGlyphPen(None)
+        if bounds[name]:
+            x0, y0, x1, y1 = bounds[name]
+            pen.moveTo((x0, y0)); pen.lineTo((x0, y1)); pen.lineTo((x1, y1)); pen.lineTo((x1, y0)); pen.closePath()
+        font["glyf"][name] = pen.glyph()
+    names = font["name"]
+    names.names = [record for record in names.names if record.nameID not in {1, 2, 4, 6, 16, 17}]
+    for name_id, value in ((1, family), (2, "Regular"), (4, family + " Regular"), (6, family.replace(" ", "")), (16, family)):
+        names.setName(value, name_id, 3, 1, 0x409)
+    font.save(target)
+else:
+    charstrings = {}
+    for name in order:
+        pen = T2CharStringPen(font["hmtx"][name][0], glyphs)
+        glyphs[name].draw(pen)
+        charstrings[name] = pen.getCharString()
+    builder = FontBuilder(font["head"].unitsPerEm, isTTF=False)
+    builder.setupGlyphOrder(order)
+    builder.setupCharacterMap(font.getBestCmap())
+    builder.setupCFF(family.replace(" ", ""), {"FullName": family}, charstrings, {})
+    builder.setupHorizontalMetrics({name: font["hmtx"][name] for name in order})
+    builder.setupHorizontalHeader(ascent=font["hhea"].ascent, descent=font["hhea"].descent)
+    builder.setupNameTable({"familyName": family, "styleName": "Regular"})
+    os2 = font["OS/2"]
+    builder.setupOS2(usWeightClass=400, fsType=0, panose=os2.panose, sTypoAscender=os2.sTypoAscender,
+                     sTypoDescender=os2.sTypoDescender, usWinAscent=os2.usWinAscent, usWinDescent=os2.usWinDescent)
+    builder.setupPost()
+    builder.save(target)
+`, family, target, kind], { cwd: resolve('.'), stdio: 'pipe' });
+  return target;
+};
+
+// Load the Session, load a font file in Font (it becomes the drawing's font), and Generate.
+const generateWithFontFile = async (page, fontFile, family) => {
+  await openApp(page);
+  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(SESSION);
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
+  await loadFontFile(page, fontFile, family);
+  await generateAndWaitForResult(page);
+};
+
+const loadFontFile = async (page, fontFile, family) => {
+  const select = page.locator('[data-font-select]');
+  await reveal(select);
+  const chooser = page.waitForEvent('filechooser');
+  await select.selectOption('load-file');
+  await (await chooser).setFiles(fontFile);
+  await expect(select.locator('option:checked')).toHaveText(family, { timeout: 180_000 });
+};
+
+/** Run an export action and return its outcome and the downloaded bytes. */
+const exported = async (page, action) => {
+  const pending = page.waitForEvent('download');
+  const outcome = await page.evaluate((name) => window.__GBDRAW_APP__[name](), action);
+  return { outcome, bytes: readFileSync(await (await pending).path()) };
 };
 
 const drawnFonts = (page) => page.evaluate(() => {
@@ -134,4 +215,81 @@ test('a Session with a font that is not available asks first, and Load with the 
   await expect(page.locator('[data-app-notice] li')).toHaveText([
     'The Session keeps the font name Garamond Premier Pro, not the font file. To open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.'
   ]);
+});
+
+// Receipt 〔書き出し〕 (D-05): SVG export carries a subset of the chosen font,
+// which a page without the font shows; PNG export draws with it; with Embed
+// font in exported SVG off, both keep the name only.
+test('SVG and PNG exports carry the chosen font, and the checkbox turns it off', async ({ page, browser }, testInfo) => {
+  test.setTimeout(300_000);
+  const BOX = 'Gbdraw Box Serif';
+  await generateWithFontFile(page, builtFont(testInfo.outputPath('box.ttf'), BOX, 'box'), BOX);
+  const embed = page.getByRole('checkbox', { name: 'Embed font in exported SVG' });
+  await expect(embed).toBeChecked();
+
+  const svg = await exported(page, 'downloadSVG');
+  expect(svg.outcome).toMatchObject({ fontWarnings: [] });
+  const text = svg.bytes.toString('utf8');
+  expect(text).toMatch(new RegExp(`^<svg[^>]*><defs id="gbdraw-embedded-fonts"><style type="text/css">@font-face \\{ font-family: '${BOX}'; font-weight: 400; font-style: normal; src: url\\(data:font/ttf;base64,`));
+  expect(text.match(/@font-face/g)).toHaveLength(1);
+  const fresh = await browser.newPage();
+  await fresh.setContent(`<!doctype html><body>${text}</body>`);
+  const faces = await fresh.evaluate(async (family) => {
+    await document.fonts.ready;
+    return [...document.fonts].filter((face) => face.family.replace(/["']/g, '') === family).map((face) => face.status);
+  }, BOX);
+  expect(faces).toEqual(['loaded']);
+  await fresh.close();
+
+  const ink = (bytes) => page.evaluate(async (base64) => {
+    const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], { type: 'image/png' }));
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext('2d');
+    context.drawImage(bitmap, 0, 0);
+    const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+    let dark = 0;
+    for (let index = 0; index < data.length; index += 4) if (data[index] + data[index + 1] + data[index + 2] < 192) dark += 1;
+    return dark;
+  }, bytes.toString('base64'));
+  const embeddedPng = await exported(page, 'downloadPNG');
+  expect(embeddedPng.outcome).toMatchObject({ fontWarnings: [] });
+
+  await embed.uncheck();
+  const plainSvg = await exported(page, 'downloadSVG');
+  expect(plainSvg.bytes.toString('utf8')).not.toContain('gbdraw-embedded-fonts');
+  const plainPng = await exported(page, 'downloadPNG');
+  // Box glyphs ink far more than the browser's substitute serif.
+  expect(await ink(embeddedPng.bytes)).toBeGreaterThan(1.5 * await ink(plainPng.bytes));
+  // The checkbox is page state and records no History step: Undo leaves it off.
+  await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(embed).not.toBeChecked();
+});
+
+// Receipt 〔書き出し〕 "PDF も選んだ font で描く": a custom TrueType face, and an
+// OpenType (CFF) face converted to TrueType outlines in the Worker.
+test('PDF export embeds a custom TrueType face and a converted OpenType CFF face', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const BOX = 'Gbdraw Box Serif';
+  const CFF = 'Gbdraw Cff Serif';
+  // jsPDF names a face by the identity of its file: user-<16 hex of its SHA-256>.
+  const pdfFontName = (file) => `/BaseFont /user-${createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 16)}`;
+  const boxFile = builtFont(testInfo.outputPath('box.ttf'), BOX, 'box');
+  await generateWithFontFile(page, boxFile, BOX);
+  const ttf = await exported(page, 'downloadPDF');
+  expect(ttf.outcome).toMatchObject({ fontWarnings: [] });
+  const ttfText = ttf.bytes.toString('latin1');
+  expect(ttfText).toContain(pdfFontName(boxFile));
+  expect(ttfText).toContain('/FontFile2');
+  expect(ttfText).not.toMatch(/\/BaseFont \/LiberationSerif/);
+
+  const cffFile = builtFont(testInfo.outputPath('cff.otf'), CFF, 'cff');
+  await loadFontFile(page, cffFile, CFF);
+  await generateAndWaitForResult(page);
+  const cff = await exported(page, 'downloadPDF');
+  expect(cff.outcome).toMatchObject({ fontWarnings: [] });
+  const cffText = cff.bytes.toString('latin1');
+  expect(cffText).toContain(pdfFontName(cffFile));
+  expect(cffText).toContain('/FontFile2');
+  await expect(page.locator('[data-app-notice]', { hasText: 'Exported' })).toHaveCount(0);
 });

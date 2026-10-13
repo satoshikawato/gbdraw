@@ -20,6 +20,7 @@ from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure, label_fit_mode
+from gbdraw.web_support.export_fonts import pdf_fonts_json, svg_font_embedding_json
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -29,18 +30,6 @@ _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
 # The last figure of each mode drawn with crossing label leaders, for the rows
 # the label fit dialog computes later (OD-F14).
 _WEB_LABEL_FIT_SEARCHES = LabelFitRowSearches()
-
-def read_pdf_font(filename):
-    import base64
-    from importlib.resources import files
-    allowed = {
-        f"Liberation{family}-{style}.ttf"
-        for family in ("Sans", "Serif", "Mono")
-        for style in ("Regular", "Bold", "Italic", "BoldItalic")
-    }
-    if filename not in allowed:
-        raise ValueError("Unknown PDF font")
-    return json.dumps({"base64": base64.b64encode(files("gbdraw.data").joinpath(filename).read_bytes()).decode("ascii")})
 
 def _web_losatp_cache_by_name(name):
     if name == "filtered":
@@ -1761,7 +1750,8 @@ _WEB_JSON_HELPERS = {
     "compute_label_fit_row_json": (compute_label_fit_row_json, "computeLabelFitRow"),
     "resolve_similarity_alignment_json": (resolve_similarity_alignment_json, "resolveSimilarityAlignment"),
     "evaluate_rules_json": (evaluate_rules_json, "evaluateRules"),
-    "read_pdf_font": (read_pdf_font, "readPdfFont"),
+    "svg_font_embedding_json": (svg_font_embedding_json, "embedFonts"),
+    "pdf_fonts_json": (pdf_fonts_json, "pdfFonts"),
     "validate_web_config_overrides_json": (validate_web_config_overrides_json, "validateConfigOverrides"),
     "extract_first_fasta": (extract_first_fasta, "extractFirstFasta"),
     "extract_cds_protein_fasta": (extract_cds_protein_fasta, "extractCdsProteinFasta"),

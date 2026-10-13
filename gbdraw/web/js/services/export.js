@@ -8,6 +8,7 @@ import {
 import { stripResultBaseAttributes } from './result-paint-bases.js';
 import { downloadBlob } from './text-download.js';
 import { preparePdfFonts } from './pdf-fonts.js';
+/** @import { ResolvePdfFonts } from './pdf-fonts.js' */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XML_NS = 'http://www.w3.org/XML/1998/namespace';
@@ -74,6 +75,71 @@ const loadPdfLibraries = () => {
 /** @import { StandaloneInteractivityOptions } from './standalone-interactivity.js' */
 
 /**
+ * The fonts an SVG carries (custom fonts D-05): Python's `svg_font_embedding`
+ * in the Worker. `css` holds an `@font-face` rule with a subset of each face
+ * gbdraw does not bundle ("" for none); `refusedFamilies` names the fonts whose
+ * license forbids embedding.
+ * @typedef {{ css: string, refusedFamilies: string[] }} FontEmbedding
+ * @typedef {(svgText: string) => Promise<FontEmbedding>} EmbedFonts
+ */
+
+/**
+ * The Worker's font helpers an export uses. `embedFonts` is null when the
+ * export embeds no font (Embed font in exported SVG off, or no font loaded in
+ * this page); SVG, Interactive SVG, and PNG then keep the font names only.
+ * @typedef {object} ExportFontPorts
+ * @property {EmbedFonts | null} [embedFonts]
+ * @property {ResolvePdfFonts} [resolvePdfFonts]
+ */
+
+/**
+ * What a finished export reports: the file name, and one warning per font the
+ * file does not carry as chosen (shown in the export notice).
+ * @typedef {{ filename: string, fontWarnings: string[] }} ExportOutcome
+ */
+
+// The block Python's `embed_font_css` writes (gbdraw/render/font_embedding.py).
+const EMBEDDED_FONTS_ID = 'gbdraw-embedded-fonts';
+
+/**
+ * The one place an export adds embedded fonts: Python's `embed_font_css`
+ * block, `<defs id="gbdraw-embedded-fonts"><style>`, first in the root.
+ * @param {SVGSVGElement} svg
+ * @param {string} css
+ */
+const insertEmbeddedFontCss = (svg, css) => {
+  if (!css) return;
+  const defs = document.createElementNS(SVG_NS, 'defs');
+  defs.setAttribute('id', EMBEDDED_FONTS_ID);
+  const style = document.createElementNS(SVG_NS, 'style');
+  style.setAttribute('type', 'text/css');
+  style.textContent = css;
+  defs.appendChild(style);
+  svg.insertBefore(defs, svg.firstChild);
+};
+
+/**
+ * The fonts an export clone carries, computed from its text before any other
+ * change (Interactive SVG adds its script and styles afterwards, as Python
+ * computes the embedding of the plain SVG).
+ * @param {SVGSVGElement} clone
+ * @param {EmbedFonts | null | undefined} embedFonts
+ * @returns {Promise<FontEmbedding>}
+ */
+const fontEmbeddingOf = async (clone, embedFonts) => (
+  embedFonts ? embedFonts(new XMLSerializer().serializeToString(clone)) : { css: '', refusedFamilies: [] }
+);
+
+/**
+ * @param {readonly string[]} families
+ * @param {'SVG' | 'PNG'} format
+ * @returns {string[]}
+ */
+const refusedFontWarnings = (families, format) => families.map((family) => (format === 'PNG'
+  ? `Font ${family} is not embedded: its license (OS/2 fsType) does not allow embedding. The PNG draws its text with a substitute font unless ${family} is installed.`
+  : `Font ${family} is not embedded: its license (OS/2 fsType) does not allow embedding. The SVG shows it only where ${family} is installed.`));
+
+/**
  * @typedef {object} ExportSnapshot The captured preview an export action reads.
  * @property {string} name
  * @property {SVGSVGElement | null} [svg]
@@ -124,15 +190,34 @@ const getCurrentSvgString = (snapshot) => (
   new XMLSerializer().serializeToString(getCurrentSvgClone(snapshot))
 );
 
-/** @param {ExportSnapshot} snapshot */
-const getInteractiveSvgString = async (snapshot) => {
+/**
+ * The exported SVG text with its embedded fonts.
+ * @param {ExportSnapshot} snapshot
+ * @param {EmbedFonts | null | undefined} embedFonts
+ * @returns {Promise<{ svgString: string, refusedFamilies: string[] }>}
+ */
+const getEmbeddedSvgString = async (snapshot, embedFonts) => {
+  const clone = getCurrentSvgClone(snapshot);
+  const { css, refusedFamilies } = await fontEmbeddingOf(clone, embedFonts);
+  insertEmbeddedFontCss(clone, css);
+  return { svgString: new XMLSerializer().serializeToString(clone), refusedFamilies };
+};
+
+/**
+ * @param {ExportSnapshot} snapshot
+ * @param {EmbedFonts | null | undefined} embedFonts
+ * @returns {Promise<{ svgString: string, refusedFamilies: string[] }>}
+ */
+const getInteractiveSvgString = async (snapshot, embedFonts) => {
   const { enrichSvgWithStandaloneInteractivity } = await loadStandaloneInteractivity();
   const clone = getCurrentSvgClone(snapshot);
+  const { css, refusedFamilies } = await fontEmbeddingOf(clone, embedFonts);
   const enriched = enrichSvgWithStandaloneInteractivity(clone, snapshot.interactivity);
   if (!enriched) {
     throw new Error('Interactive SVG export requires the committed feature catalog.');
   }
-  return new XMLSerializer().serializeToString(clone);
+  insertEmbeddedFontCss(clone, css);
+  return { svgString: new XMLSerializer().serializeToString(clone), refusedFamilies };
 };
 
 /**
@@ -370,22 +455,40 @@ const downloadSvgString = (svgString, filename) => {
   downloadBlob(new Blob([svgString], { type: 'image/svg+xml' }), filename);
 };
 
-/** @param {ExportSnapshot} snapshot */
-export const downloadSVG = (snapshot) => {
-  const svgString = getCurrentSvgString(snapshot);
-  downloadSvgString(svgString, getDownloadName(snapshot, 'svg'));
+/**
+ * @param {ExportSnapshot} snapshot
+ * @param {ExportFontPorts} [ports]
+ * @returns {Promise<ExportOutcome>}
+ */
+export const downloadSVG = async (snapshot, { embedFonts } = {}) => {
+  const filename = getDownloadName(snapshot, 'svg');
+  const { svgString, refusedFamilies } = await getEmbeddedSvgString(snapshot, embedFonts);
+  downloadSvgString(svgString, filename);
+  return { filename, fontWarnings: refusedFontWarnings(refusedFamilies, 'SVG') };
 };
 
-/** @param {ExportSnapshot} snapshot */
-export const downloadInteractiveSVG = async (snapshot) => {
-  const svgString = await getInteractiveSvgString(snapshot);
-  downloadSvgString(svgString, getDownloadName(snapshot, 'interactive.svg'));
+/**
+ * @param {ExportSnapshot} snapshot
+ * @param {ExportFontPorts} [ports]
+ * @returns {Promise<ExportOutcome>}
+ */
+export const downloadInteractiveSVG = async (snapshot, { embedFonts } = {}) => {
+  const filename = getDownloadName(snapshot, 'interactive.svg');
+  const { svgString, refusedFamilies } = await getInteractiveSvgString(snapshot, embedFonts);
+  downloadSvgString(svgString, filename);
+  return { filename, fontWarnings: refusedFontWarnings(refusedFamilies, 'SVG') };
 };
 
-/** @param {ExportSnapshot} snapshot */
-export const downloadPNG = async (snapshot) => {
+/**
+ * The browser rasterizes the exported SVG as an image, which sees the
+ * embedded fonts and the installed fonts, not the fonts of this page.
+ * @param {ExportSnapshot} snapshot
+ * @param {ExportFontPorts} [ports]
+ * @returns {Promise<ExportOutcome>}
+ */
+export const downloadPNG = async (snapshot, { embedFonts } = {}) => {
   const filename = getDownloadName(snapshot, 'png');
-  const svgString = getCurrentSvgString(snapshot);
+  const { svgString, refusedFamilies } = await getEmbeddedSvgString(snapshot, embedFonts);
   const svg = getSvgFromString(svgString);
   if (!svg) {
     throw new Error('The current SVG could not be parsed for PNG export.');
@@ -433,17 +536,15 @@ export const downloadPNG = async (snapshot) => {
   } finally {
     URL.revokeObjectURL(url);
   }
+  return { filename, fontWarnings: refusedFontWarnings(refusedFamilies, 'PNG') };
 };
 
 /**
- * @typedef {{ loadPdfFont?: (filename: string) => Promise<string> | string }} PdfExportOptions
- */
-
-/**
  * @param {ExportSnapshot} snapshot
- * @param {PdfExportOptions} [options]
+ * @param {ExportFontPorts} [ports]
+ * @returns {Promise<ExportOutcome>}
  */
-export const downloadPDF = async (snapshot, { loadPdfFont } = {}) => {
+export const downloadPDF = async (snapshot, { resolvePdfFonts } = {}) => {
   const filename = getDownloadName(snapshot, 'pdf');
   const svgString = getCurrentSvgString(snapshot);
 
@@ -476,7 +577,7 @@ export const downloadPDF = async (snapshot, { loadPdfFont } = {}) => {
       format: [page.width, page.height]
     });
 
-    await preparePdfFonts(doc, pdfSvg, loadPdfFont);
+    const fontWarnings = await preparePdfFonts(doc, pdfSvg, resolvePdfFonts);
 
     // 4. Convert SVG to PDF
     await doc.svg(pdfSvg, {
@@ -487,6 +588,7 @@ export const downloadPDF = async (snapshot, { loadPdfFont } = {}) => {
     });
     // 5. Save File
     doc.save(filename);
+    return { filename, fontWarnings };
   } finally {
     cleanup();
   }

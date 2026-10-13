@@ -1,5 +1,5 @@
 // @ts-check
-const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame',
+const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
   'promoteLegacyLosatpCache', 'readComparisonSequence', 'readFeatureOverrideTable', 'registerFonts', 'resolveLegacyProteinReferences',
@@ -133,6 +133,7 @@ const REASONS = Object.freeze({
   EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',
   FASTA_IN_GENBANK: 'This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.',
   FONT_FILE: 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.',
+  FONT_EMBEDDING: 'Turn off Embed font in exported SVG in Font to export without the font, or choose another font.',
   FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.'
 });
 /**
