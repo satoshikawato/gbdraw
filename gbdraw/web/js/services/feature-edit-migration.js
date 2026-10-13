@@ -74,17 +74,6 @@ export const RENDERED_ID_FEATURE_EDIT_FIELDS = Object.freeze([
   'labelTextFeatureOverrideSources'
 ]);
 
-/** @param {number} count */
-export const FEATURE_EDIT_MIGRATION_WARNING = (count) => (
-  `${count} feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.`
-);
-
-/** @param {number} count */
-export const FEATURE_VISIBILITY_NARROWED_NOTICE = (count) => (
-  `${count} Feature visibility edit(s) from an older Session hid every feature with the same hash, such as each copy`
-  + ' of a duplicated record. Each now applies only to the feature that was edited, so the next Generate draws the others.'
-);
-
 /**
  * The input of a Session feature-edit migration. `catalog` is the Session's
  * saved catalog (schema 3, 4, or 5), unvalidated.
@@ -415,14 +404,6 @@ const hashFrameChanged = (record) => {
  */
 export const hasHashColorRules = (rules) => Array.isArray(rules)
   && rules.some((rule) => text(rule?.qual).toLowerCase() === 'hash');
-
-/** @param {number} count */
-export const HASH_SELECTOR_UNMAPPED_NOTICE = (count) => (
-  `${count} hash= value(s) from an older Session could not be renamed to the hash of a feature in its source record:`
-  + ' the saved diagram drew a cropped or reverse-complemented record, and the value names features of several'
-  + ' source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source'
-  + ' record, so each may now match another feature or none.'
-);
 
 /**
  * S6 of the one feature-hash builder: the `hash` color rules (`rules`, `qual`

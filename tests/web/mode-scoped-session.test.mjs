@@ -35,9 +35,11 @@ const save = async (title) => {
   assert.equal(result.status, 'saved', result.error?.message);
   return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
 };
+// The Load dialogs asked (BA-D25); the port answers [Load].
+const loadDialogs = [];
 const load = (session) => importSession({
   target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-});
+}, { confirmLoadRepairs: async (dialog) => { loadDialogs.push(dialog); return true; } });
 const resetDrawings = () => {
   for (const mode of MODES) {
     Object.assign(state.drawings[mode].form, createDefaultForm());
@@ -208,7 +210,7 @@ test('named Legend and stroke colors load as their CSS hex values (OV-160)', asy
 });
 
 // D-43 (OV-300): a stored Legend entry whose color lies outside the Default
-// colors (-d) domain is dropped at Load and named in the Load notice; a named
+// colors (-d) domain is dropped at Load and named in the Load dialog; a named
 // color is stored as its table hex and a hex as written (D-30). It holds for a
 // Session 46 mode slice and for the top-level editorState of an older Session.
 test('a stored Legend entry color outside the Default colors domain is dropped and named at Load (OV-300)', async () => {
@@ -226,12 +228,14 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   current.modes.circular.editorState.legend.entries = structuredClone(stored);
   current.modes.circular.editorState.legend.deletedEntries = [{ caption: 'W', color: 'currentColor', featureIds: [] }];
   alerts.length = 0;
+  loadDialogs.length = 0;
   const loaded = await load(current);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(shownRows(state.drawings.circular), kept);
   assert.deepEqual(state.drawings.circular.deletedLegendEntries.value, []);
-  assert.deepEqual(loaded.warnings,
-    ['Legend: entries "X", "W" (deleted) had a color the app does not accept and were dropped.']);
+  assert.deepEqual(loadDialogs.map(({ items }) => items),
+    [['Legend: entries "X", "W" (deleted) had a color the app does not accept and were dropped.']]);
+  assert.deepEqual(loaded.notices, []);
   assert.deepEqual(alerts, []);
 
   const older = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/settings-only.v42.json.gz', import.meta.url))));
@@ -239,11 +243,12 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   older.editorState.legend.entries = [{ caption: 'Z', color: 'notacolor', featureIds: [] }, ...structuredClone(stored)];
   resetDrawings();
   alerts.length = 0;
+  loadDialogs.length = 0;
   const loadedOlder = await load(older);
   assert.equal(loadedOlder.status, 'ok', JSON.stringify(loadedOlder.error));
   assert.deepEqual(shownRows(state.activeDrawing()), kept);
-  assert.deepEqual(loadedOlder.warnings,
-    ['Legend: entry "X" had a color the app does not accept and was dropped.']);
+  assert.deepEqual(loadDialogs.map(({ items }) => items),
+    [['Legend: entry "X" had a color the app does not accept and was dropped.']]);
   assert.deepEqual(alerts, []);
 });
 

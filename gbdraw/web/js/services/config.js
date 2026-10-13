@@ -1,5 +1,6 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { describeLoadRepairs, loadRepair } from '../utils/load-repairs.js';
 import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { normalizeDefaultColor, normalizeOptionalHexColor, normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
 import {
@@ -56,8 +57,10 @@ import {
 } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
-  drawnLegendSideOfMode,
   legendPositionOrDefault,
+  readDrawnLegendSideOfMode,
+  readLegendPositionOfMode,
+  storedLegendPositionRepairs,
   normalizeCircularPlotTitlePosition,
   normalizeLayoutPreferences,
   replaceLayoutPreferences,
@@ -72,9 +75,6 @@ import {
 import { canonicalFeatureOverrides, featureDraftMap } from './feature-placement.js';
 import {
   ANNOTATION_TARGET_MIGRATION_NOTICE,
-  FEATURE_EDIT_MIGRATION_WARNING,
-  FEATURE_VISIBILITY_NARROWED_NOTICE,
-  HASH_SELECTOR_UNMAPPED_NOTICE,
   RENDERED_ID_FEATURE_EDIT_FIELDS,
   hasHashColorRules,
   hasRenderedIdFeatureEdits,
@@ -100,8 +100,6 @@ import {
   canonicalLinearRecordLayout,
   draftFieldsForConfigValues,
   featureEditsOverProjection,
-  legacyTableRowsNotice,
-  legendColorDropNotice,
   linearDefinitionVisibilityOf,
   managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
@@ -145,7 +143,7 @@ import {
   validateFeatureCatalog,
   validateFeatureCatalogForImport
 } from './feature-catalog.js';
-import { bindRecordDisplayDrafts, migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
+import { bindRecordDisplayDrafts, migrateLegacyRecordDisplayDrafts, validateRecordDisplayDrafts } from './record-display-model.js';
 import {
   buildOrthogroupFeatureIndex,
   enrichFeaturesWithOrthogroups,
@@ -315,6 +313,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { DiagnosticContext, UserFacingError } from '../utils/error-normalization.js' */
+/** @import { ConfirmLoadRepairs, LoadRepair, Repaired } from '../utils/load-repairs.js' */
 /** @import { DownloadChoicePort } from './text-download.js' */
 
 // The Session document's types are generated from gbdraw/session_contract.py:
@@ -357,6 +356,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  * @typedef {object} LegacyResultSvgData
  * @property {{ legendSide: string, titleSide: string, userDeltas: Record<string, number[] | null> } | null} composition
  * @property {'circular' | 'linear'} mode
+ * @property {LoadRepair[] | null} repairs Collects what the transform cannot restore, for the Load dialog.
+ * @property {string} path Where the Result's set is in the file.
  */
 
 /**
@@ -870,15 +871,15 @@ const normalizeHexColor = (value, fallback = '#4e79a7') => {
 };
 
 // A stored entry color is read with the Default colors domain (D-41). An entry
-// whose color lies outside it is dropped and, when `droppedLegendColors` is
-// given, listed there for the Load notice (D-43). A list holds one entry per
-// row key (Session 47: two rows may show one name).
+// whose color lies outside it is dropped and, when `repairs` is given, listed
+// there for the Load dialog (D-43) under `path`, the stored Legend. A list
+// holds one entry per row key (Session 47: two rows may show one name).
 /**
  * @param {unknown} entries
  * @param {'entries' | 'dormantEntries' | 'deletedEntries'} list
- * @param {{ list: string, caption: string }[] | null} droppedLegendColors
+ * @param {{ repairs: LoadRepair[] | null, path: string }} load
  */
-const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
+const normalizeSessionLegendEntries = (entries, list, { repairs, path }) => {
   if (!Array.isArray(entries)) return [];
   /** @type {Record<string, unknown>[]} */
   const normalized = [];
@@ -910,7 +911,9 @@ const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
     });
   });
   // A row that a later entry with a valid color keeps is shown, not dropped.
-  dropped.filter(({ key }) => !keys.has(key)).forEach(({ list: from, caption }) => droppedLegendColors?.push({ list: from, caption }));
+  dropped.filter(({ key }) => !keys.has(key)).forEach(({ list: from, caption }) => repairs?.push(loadRepair({
+    code: 'legend-color-dropped', path: `${path}.${from}`, effect: 'dropped', label: caption
+  })));
   return normalized;
 };
 
@@ -1255,10 +1258,10 @@ export const buildEditorStateData = (drawing) => ({
 
 /**
  * @param {Record<string, any>} [editorState]
- * @param {{ featureCatalog?: unknown, droppedLegendColors?: { list: string, caption: string }[] | null }} [options]
- *   `droppedLegendColors` collects the Legend entries dropped for their color.
+ * @param {{ featureCatalog?: unknown, repairs?: LoadRepair[] | null, path?: string }} [options]
+ *   `repairs` collects what Load cannot restore of the editor state stored at `path`.
  */
-const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined, droppedLegendColors = null } = {}) => {
+const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined, repairs = null, path = 'editorState' } = {}) => {
   const defaults = defaultEditorStateData();
   const source = isPlainObject(editorState) ? editorState : {};
   const legend = isPlainObject(source.legend) ? source.legend : {};
@@ -1266,16 +1269,17 @@ const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined
   const originalSvgStroke = isPlainObject(source.originalSvgStroke) ? source.originalSvgStroke : {};
   // A Session 46 slice lists the renamed rows its Result does not draw
   // (OV-120) after the shown rows, marked `dormant`.
-  const entries = normalizeSessionLegendEntries(legend.entries, 'entries', droppedLegendColors);
+  const legendLoad = { repairs, path: `${path}.legend` };
+  const entries = normalizeSessionLegendEntries(legend.entries, 'entries', legendLoad);
   const dormantEntries = [
-    ...normalizeSessionLegendEntries(legend.dormantEntries, 'dormantEntries', droppedLegendColors),
+    ...normalizeSessionLegendEntries(legend.dormantEntries, 'dormantEntries', legendLoad),
     ...entries.filter((entry) => entry.dormant === true)
   ].map(({ dormant: _dormant, ...entry }) => entry);
 
   return {
     legend: {
       entries: entries.filter((entry) => entry.dormant !== true),
-      deletedEntries: normalizeSessionLegendEntries(legend.deletedEntries, 'deletedEntries', droppedLegendColors),
+      deletedEntries: normalizeSessionLegendEntries(legend.deletedEntries, 'deletedEntries', legendLoad),
       dormantEntries,
       originalOrder: normalizeStringArray(legend.originalOrder),
       originalColors: normalizeLegendColorOverrides(legend.originalColors),
@@ -1502,23 +1506,21 @@ const overlayModeSliceConfig = (projectedConfig, sliceConfig) => {
 /**
  * @param {DrawingState} drawing
  * @param {'circular' | 'linear'} mode
- * @param {Record<string, any>} slice
+ * @param {Record<string, any>} slice Its `editorState` is read already (`normalizeEditorStateData`).
  * @param {{ projectedConfig?: Record<string, any> | null, resolveTrackPlacements?: boolean, applyCanvasPadding?: boolean,
- *   droppedLegendColors?: { list: string, caption: string }[] | null,
  *   legendRekeys?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
  *   `applyCanvasPadding: false` leaves the padding to the caller (Load pads the shown Result after it mounts).
  *   `legendRekeys`: the rule rows whose key the reading of the saved captions changes (`savedLegendRekeys`, F2);
  *   their Legend records move to the new keys, and per-feature color edits are read as the rules are.
  */
 const applyModeSliceData = (drawing, mode, slice, {
-  projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true, droppedLegendColors = null,
-  legendRekeys = new Map()
+  projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true, legendRekeys = new Map()
 } = {}) => {
   const config = overlayModeSliceConfig(projectedConfig, slice.config);
   if (Object.keys(config).length) applyConfigData(drawing, config, { resolveTrackPlacements });
   const features = isPlainObject(slice.features) ? slice.features : {};
   applyDrawingFeatureData(drawing, { ...features, featureColorOverrides: savedFeatureColorEdits(features.featureColorOverrides) });
-  const editorState = normalizeEditorStateData(isPlainObject(slice.editorState) ? slice.editorState : {}, { droppedLegendColors });
+  const editorState = slice.editorState;
   applyDrawingEditorData(drawing, { ...editorState, legend: rekeyLegendRecords(editorState.legend, legendRekeys) });
   const ui = isPlainObject(slice.ui) ? slice.ui : {};
   if (isPlainObject(ui.layoutPreferences)) {
@@ -1537,8 +1539,8 @@ const applyModeSliceData = (drawing, mode, slice, {
 
 const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
 
-/** @param {{ list: string, caption: string }[] | null} droppedLegendColors */
-const normalizeSessionData = (data, droppedLegendColors) => {
+/** @param {LoadRepair[]} repairs */
+const normalizeSessionData = (data, repairs) => {
   const version = data.version;
   if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION && Object.prototype.hasOwnProperty.call(data, 'files')) {
     throw new Error(
@@ -1556,7 +1558,7 @@ const normalizeSessionData = (data, droppedLegendColors) => {
 
   return {
     ...data,
-    editorState: normalizeEditorStateData(data.editorState, { droppedLegendColors })
+    editorState: normalizeEditorStateData(data.editorState, { repairs })
   };
 };
 
@@ -1793,12 +1795,20 @@ const isLegacyConfigPayload = (data) =>
   // The cast: a plain object (the first test).
   Object.keys(/** @type {Record<string, unknown>} */ (data)).some((key) => LEGACY_CONFIG_KEYS.has(key));
 
-/** @param {DrawingState} drawing */
-const applyLegacyConfigPayload = (drawing, data) => {
-  const circularSlotSchema = data?.adv?.circular_track_slots_schema_version;
+// A legacy configuration file, read into the configuration Load applies
+// before anything changes (OV-710). Malformed record display settings are
+// dropped and listed (BA-D15, OV-569); a track slot that does not read
+// refuses the file.
+/** @param {Record<string, unknown>} data A legacy configuration (`isLegacyConfigPayload`). @returns {Repaired<Record<string, unknown>>} */
+const readLegacyConfigPayload = (data) => {
+  /** @type {LoadRepair[]} */
+  const repairs = [];
+  const circularSlotSchema = isPlainObject(data.adv)
+    ? /** @type {Record<string, unknown>} */ (data.adv).circular_track_slots_schema_version : undefined;
   const migratedOptions = circularSlotSchema === CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
     ? data
     : migratePersistedWebOptionValues(data);
+  /** @type {Record<string, unknown>} */
   const migrated = migrateLegacyFeatureRenderingConfig(
     migrateImportedLinearTrackSlots(
       migrateImportedCircularTrackSlots(migratedOptions)
@@ -1807,8 +1817,23 @@ const applyLegacyConfigPayload = (drawing, data) => {
   );
   validateImportedCircularTrackSlots(migrated);
   validateImportedLinearTrackSlots(migrated);
-  state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(drawing, migrated.form);
-  applyConfigData(drawing, migrated);
+  if (Object.hasOwn(migrated, 'recordDisplayDrafts')) {
+    try {
+      validateRecordDisplayDrafts(migrated.recordDisplayDrafts);
+    } catch {
+      delete migrated.recordDisplayDrafts;
+      repairs.push(loadRepair({ code: 'record-display-drafts-dropped', path: 'recordDisplayDrafts', effect: 'dropped' }));
+    }
+  }
+  return { value: migrated, repairs };
+};
+
+/** @param {DrawingState} drawing @param {Record<string, unknown>} config What `readLegacyConfigPayload` read. */
+const applyLegacyConfigPayload = (drawing, config) => {
+  state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
+    drawing, /** @type {UnvalidatedFields<'multi_record_canvas'>} */ (config.form)
+  );
+  applyConfigData(drawing, config);
   restorePaletteStateAfterConfigImport(drawing);
 };
 
@@ -1996,8 +2021,8 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
   });
 };
 
-/** @param {{ list: string, caption: string }[]} droppedLegendColors Collects the Legend entries dropped for their color. */
-const preflightSessionImport = async (sessionData, droppedLegendColors) => {
+/** @param {LoadRepair[]} repairs Collects what Load cannot restore. */
+const preflightSessionImport = async (sessionData, repairs) => {
   const sourceSessionVersion = readSessionInput(sessionData).version;
   // A Session before 47 stored the Legend edits under the shown caption; every
   // reader below reads them by row key (PD-OI-061 revision 5). What the reading
@@ -2033,7 +2058,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
     recordSessionLifecycleEvent('editor-state-normalization-start');
     normalizedEditorState = normalizeEditorStateData(rawData.editorState, {
       featureCatalog: validatedFeatureCatalog,
-      droppedLegendColors
+      repairs
     });
     recordSessionLifecycleEvent('editor-state-normalization-end');
     recordSessionLifecycleEvent('resource-table-adoption-start');
@@ -2046,7 +2071,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
       : rawData;
   } else {
     validateSessionAuthorityInventory(rawData, sourceSessionVersion);
-    normalizedData = normalizeSessionData(rawData, droppedLegendColors);
+    normalizedData = normalizeSessionData(rawData, repairs);
     migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   }
 
@@ -2139,6 +2164,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
         adoptCanonicalPayloads: currentSession
       })
     : null;
+  repairs.push(...(canonicalProjection?.legacyTableRepairs || []));
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-end');
   if (canonicalProjection?.pipelineState?.legacySimilarityAlignment) {
     const promotedRequest = promoteCanonicalRenderRequestToCurrent(data.renderRequest, {
@@ -2452,11 +2478,11 @@ const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedF
  *   savedEdits?: SavedResultEdits | null, legacy?: LegacyResultNormalization | null,
  *   restoredSequenceSources: Record<string, any>[], resources: Record<string, any>,
  *   resourceTable: any, webFiles: any, retainedBytes: number,
- *   droppedLegendColors: { list: string, caption: string }[] }} options
+ *   repairs: LoadRepair[] | null }} options `repairs` collects what Load cannot restore of the set's editor state.
  */
 const buildLoadedArtifactSlot = (set, {
   featureCatalog, admittedResults = null, savedEdits = null, legacy = null, restoredSequenceSources, resources, resourceTable,
-  webFiles, retainedBytes, droppedLegendColors
+  webFiles, retainedBytes, repairs
 }) => {
   const mode = set.renderRequest.mode === 'linear' ? 'linear' : 'circular';
   const results = admittedResults || admitLoadedSetResults(normalizeLogicalResults(set.results.map(
@@ -2468,12 +2494,14 @@ const buildLoadedArtifactSlot = (set, {
   const features = featureStateFromCatalog(featureCatalog, { mode });
   const editorState = normalizeEditorStateData(
     isPlainObject(set.editorState) ? /** @type {Record<string, any>} */ (set.editorState) : {},
-    { featureCatalog, droppedLegendColors }
+    { featureCatalog, repairs, path: 'otherModeResult.editorState' }
   );
   // The set's generated inventory and colors under the keys its rows have after Load (F2).
   const keptLegend = rekeyLegendRecords(editorState.legend, savedEdits?.legendRekeys ?? new Map());
   const ui = isPlainObject(set.ui) ? /** @type {Record<string, any>} */ (set.ui) : {};
   const runMetadata = isPlainObject(set.runMetadata) ? /** @type {Record<string, any>} */ (set.runMetadata) : {};
+  const generatedLegend = readLegendPositionOfMode(ui.generatedLegendPosition, mode, 'otherModeResult.ui.generatedLegendPosition');
+  repairs?.push(...generatedLegend.repairs);
   return createArtifactSlot({
     mode,
     values: {
@@ -2491,7 +2519,7 @@ const buildLoadedArtifactSlot = (set, {
       annotationWarnings: cloneJsonData(runMetadata.annotationWarnings || []),
       featureIdentityNotices: cloneJsonData(runMetadata.featureIdentityNotices || []),
       comparisonWarnings: cloneJsonData(runMetadata.comparisonWarnings || []),
-      generatedLegendPosition: legendPositionOrDefault(ui.generatedLegendPosition, mode),
+      generatedLegendPosition: generatedLegend.value,
       generatedMode: mode,
       generatedMultiRecordCanvas: Boolean(ui.generatedMultiRecordCanvas),
       generatedCircularPlotTitlePosition: hasStoredLayoutValue(ui.generatedCircularPlotTitlePosition)
@@ -5412,15 +5440,29 @@ const importSessionDocument = async (e, options = {}) => {
     await assertSafeObjectKeysForImport(data, 'Session');
     if (isLegacyConfigPayload(data)) {
       // A legacy configuration names no mode: it is the shown mode's settings.
-      applyLegacyConfigPayload(state.drawings[state.mode.value === 'linear' ? 'linear' : 'circular'], data);
-      return { status: 'legacy' };
+      // It is read, confirmed and then applied as one step that a failure
+      // rolls back (OV-710); its History is not restarted.
+      const legacyConfig = readLegacyConfigPayload(data);
+      const legacyDialog = describeLoadRepairs(legacyConfig.repairs);
+      if (legacyDialog) {
+        const confirmLoadRepairs = /** @type {ConfirmLoadRepairs} */ (options.confirmLoadRepairs);
+        if (!await confirmLoadRepairs(legacyDialog) || !options.isCurrent()) return { status: 'canceled' };
+      }
+      rollbackSnapshot = captureSessionImportSnapshot();
+      if (typeof rollbackStateExtension?.capture === 'function') {
+        rollbackExtensionSnapshot = rollbackStateExtension.capture();
+      }
+      commitStarted = true;
+      applyLegacyConfigPayload(state.drawings[state.mode.value === 'linear' ? 'linear' : 'circular'], legacyConfig.value);
+      return { status: 'legacy', repairs: Object.freeze([...legacyConfig.repairs]) };
     }
 
     recordSessionLifecycleEvent('current-session-preflight-start');
-    // The Legend entries Load drops for their color, for the Load notice (D-43).
-    /** @type {{ list: string, caption: string }[]} */
-    const droppedLegendColors = [];
-    const preflight = await preflightSessionImport(data, droppedLegendColors);
+    // What Load cannot restore as stored, listed in the dialog before the
+    // commit (BA-D25); frozen there, so no step after the commit adds one.
+    /** @type {LoadRepair[]} */
+    const repairs = [];
+    const preflight = await preflightSessionImport(data, repairs);
     await validateSimilarityAlignmentResetReceipt(
       data.editorState?.alignmentResetReceipt,
       { renderRequest: data.renderRequest, resources: data.resources }
@@ -5466,6 +5508,11 @@ const importSessionDocument = async (e, options = {}) => {
         }
       : (data.ui || {});
     const candidateMode = ui.mode === 'linear' ? 'linear' : 'circular';
+    const generatedMode = (committedMode || ui.mode) === 'linear' ? 'linear' : 'circular';
+    // The legend position the shown Result was drawn with (OV-652, BA-D11).
+    const generatedLegend = ui.generatedLegendPosition
+      ? readLegendPositionOfMode(ui.generatedLegendPosition, generatedMode, 'ui.generatedLegendPosition') : null;
+    if (generatedLegend) repairs.push(...generatedLegend.repairs);
     // PD-OI-086: each mode's drawing gets its own draft. A Session 46 keeps it
     // in its slice; the committed mode's slice lies over its request's
     // projection (`restoredConfig`, plan 4.1). A Session 27-44 has one flat
@@ -5578,10 +5625,13 @@ const importSessionDocument = async (e, options = {}) => {
     const transformLegacyResultSvg = options.transformLegacyResultSvg;
     // A Result of `mode`; `composition` is the legacy composition of the
     // committed set (null for the other set, which has none).
+    // A Result's set is the top-level one (`results`) or the other mode's.
     /** @param {'circular' | 'linear'} mode @param {LegacyResultSvgData['composition']} composition */
     const loadedResultTransform = (mode, composition) => (/** @type {SVGSVGElement} */ svg) => {
       const legendGroupsChanged = composition ? normalizeLegacyLegendEntryGroups(svg) : false;
-      const legacyResultChanged = transformLegacyResultSvg(svg, { composition, mode });
+      const legacyResultChanged = transformLegacyResultSvg(svg, {
+        composition, mode, repairs, path: mode === committedDraftMode ? 'results' : 'otherModeResult.results'
+      });
       return legendGroupsChanged || legacyResultChanged;
     };
     /** @param {'circular' | 'linear'} mode @param {LegacyResultSvgData['composition']} composition @returns {LegacyResultNormalization | null} */
@@ -5591,11 +5641,14 @@ const importSessionDocument = async (e, options = {}) => {
           applies: (content) => transformLegacyResultSvg.appliesToContent(content, mode, Boolean(composition))
         }
       : null);
+    // The side a Session 31+ stored for the mode, or that a Session 27-30
+    // stored in its form, read through the Result's mode (OV-671); a side
+    // outside it is listed when a Result is drawn with it (BA-D26).
+    const legacyDrawnSide = readDrawnLegendSideOfMode(restoredConfig?.form?.legend, committedDraftMode, 'config.form.legend');
+    if (!committedLayout && logicalImportedResults.length > 0) repairs.push(...legacyDrawnSide.repairs);
     /** @type {LegacyResultSvgData['composition']} */
     const committedLegacyComposition = {
-      // The side a Session 31+ stored for the mode, or that a Session 27-30
-      // stored in its form, read through the Result's mode (OV-671).
-      legendSide: committedLayout?.legend ?? drawnLegendSideOfMode(restoredConfig?.form?.legend, committedDraftMode),
+      legendSide: committedLayout?.legend ?? legacyDrawnSide.value,
       titleSide: committedLayout?.plotTitlePosition
         || restoredConfig?.adv?.plot_title_position || 'none',
       userDeltas: {
@@ -5660,7 +5713,7 @@ const importSessionDocument = async (e, options = {}) => {
       / Math.max(1, otherResultCharacters + resultCharacters(data.results))) : 0;
     const topSetCharacters = Math.max(0, candidate.characters - otherSetCharacters);
     const slotOptions = {
-      resources: data.resources, resourceTable: currentResourceTable, webFiles: data.webFiles, droppedLegendColors
+      resources: data.resources, resourceTable: currentResourceTable, webFiles: data.webFiles
     };
     const otherSavedEdits = otherModeResult
       ? savedResultEdits(data, otherSetMode, otherModeResult.editorState, sourceSessionVersion, draftConfigOf(otherSetMode)?.rules)
@@ -5676,6 +5729,7 @@ const importSessionDocument = async (e, options = {}) => {
           featureCatalog: otherModeCatalogAdmitted,
           savedEdits: otherSavedEdits,
           legacy: loadedResultNormalization(otherSetMode, null),
+          repairs,
           restoredSequenceSources: (await restoreLoadedSetSequenceSources({
             ...setSequenceSourceOptions,
             mode: otherSetMode,
@@ -5717,10 +5771,7 @@ const importSessionDocument = async (e, options = {}) => {
     // saved rendered-ID edits are mapped through its saved catalog, or without
     // one through its sources read again with its crops and orientations (the
     // saved metadata when they cannot be read), once (design Q4 4.3).
-    let droppedFeatureEditCount = 0;
-    let narrowedFeatureVisibilityCount = 0;
     let migratedAnnotationTargetCount = 0;
-    let unmappedHashSelectorCount = 0;
     if (sourceSessionVersion < MODE_SCOPED_SESSION_VERSION) {
       const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
       const sessionMode = data.renderRequest?.mode || candidateMode;
@@ -5741,8 +5792,15 @@ const importSessionDocument = async (e, options = {}) => {
         features, mode: sessionMode, catalog: validatedSessionCatalog, legacy
       });
       features = migration.features;
-      droppedFeatureEditCount = migration.droppedCount;
-      narrowedFeatureVisibilityCount = migration.narrowedVisibilityCount;
+      if (migration.droppedCount > 0) {
+        repairs.push(loadRepair({ code: 'feature-edit-unmatched', path: 'features', effect: 'dropped', count: migration.droppedCount }));
+      }
+      if (migration.narrowedVisibilityCount > 0) {
+        repairs.push(loadRepair({
+          code: 'feature-visibility-narrowed', path: 'features.featureVisibilityOverrides', effect: 'changed',
+          count: migration.narrowedVisibilityCount
+        }));
+      }
       // S6: a `hash` color rule of a Session 44 or older names its features by
       // their source hash (OV-401, release D-39). A Session before 31 has no
       // request: its Linear cards give the records.
@@ -5757,7 +5815,9 @@ const importSessionDocument = async (e, options = {}) => {
           records: ruleRecords
         });
         restoredConfig.rules = hashRules.rules;
-        unmappedHashSelectorCount = hashRules.unmappedCount;
+        if (hashRules.unmappedCount > 0) {
+          repairs.push(loadRepair({ code: 'hash-selector-unmapped', path: 'config.rules', effect: 'changed', count: hashRules.unmappedCount }));
+        }
       }
       // R-7: an annotation's `hash=` target moves to its source feature only
       // where the saved catalog makes the figure certain.
@@ -5858,13 +5918,34 @@ const importSessionDocument = async (e, options = {}) => {
     const modeConfigs = {
       circular: {}, linear: {}
     };
+    // Each drawing's editor edits, read here so what they lose is listed.
+    /** @type {Record<'circular' | 'linear', ReturnType<typeof normalizeEditorStateData>>} */
+    const modeEditorStates = {
+      circular: normalizeEditorStateData({}), linear: normalizeEditorStateData({})
+    };
+    // The legend positions of the drafts' layouts: a Session 46 slice holds
+    // its mode's slot; a Session 27-44 keeps one set in `ui` (OV-652).
+    if (modeScopedSession) {
+      SLICE_MODES.forEach((mode) => repairs.push(...storedLegendPositionRepairs(modeSlices[mode].ui, `modes.${mode}.ui`, { slotOf: mode })));
+    } else {
+      repairs.push(...storedLegendPositionRepairs(ui, 'ui'));
+    }
     for (const mode of SLICE_MODES) {
+      const storedEditorState = modeSlices[mode].editorState;
+      modeEditorStates[mode] = normalizeEditorStateData(isPlainObject(storedEditorState) ? storedEditorState : {}, {
+        repairs, path: modeScopedSession ? `modes.${mode}.editorState` : 'editorState'
+      });
       const committed = mode === committedDraftMode;
       modeConfigs[mode] = modeScopedSession
         ? (committed && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, modeSlices[mode].config))
         : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, modeSlices[mode].config);
       // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
       if (Array.isArray(modeConfigs[mode].rules)) modeConfigs[mode].rules = savedSpecificRules(modeConfigs[mode].rules);
+      // The form's legend position is the drawing's layout slot (state.js), which reads it in its mode.
+      if (isPlainObject(modeConfigs[mode].form)) {
+        repairs.push(...readLegendPositionOfMode(modeConfigs[mode].form.legend, mode,
+          `${modeScopedSession ? `modes.${mode}.config` : 'config'}.form.legend`).repairs);
+      }
       // A saved unmanaged override is checked against its own drawing's mode (PD-OI-009, OV-106).
       const savedOverrides = modeSlices[mode].config?.unmanagedConfigOverrides;
       if (isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
@@ -5873,9 +5954,38 @@ const importSessionDocument = async (e, options = {}) => {
         });
       }
     }
+    // The top-level set, built like the other set, waits in its mode when the
+    // Session opens on the other set's mode. The stash starts again with the
+    // loaded Session. Its editor state is the one read above.
+    const topArtifactSlot = opensOtherSet && validatedSessionCatalog
+      ? buildLoadedArtifactSlot({
+          renderRequest: data.renderRequest,
+          results: data.results,
+          editorState: data.editorState,
+          ui,
+          runMetadata: projectionResult?.artifactState?.runMetadata
+        }, {
+          ...slotOptions,
+          featureCatalog: validatedSessionCatalog,
+          admittedResults: committedImportedResults,
+          restoredSequenceSources: restoredFileSequenceSources,
+          retainedBytes: topSetCharacters * 2,
+          repairs: null
+        })
+      : null;
     recordSessionLifecycleEvent('session-candidate-prepared');
+    // BA-D25: what the candidate could not restore is listed before anything
+    // changes; Cancel leaves the settings, Results, inputs, History and screen
+    // as they are.
+    const repairDialog = describeLoadRepairs(repairs);
+    if (repairDialog) {
+      const confirmLoadRepairs = /** @type {ConfirmLoadRepairs} */ (options.confirmLoadRepairs);
+      if (!await confirmLoadRepairs(repairDialog) || !options.isCurrent()) return { status: 'canceled' };
+    }
+    Object.freeze(repairs);
     // Custom fonts (receipt 〔読み込むとき〕): a font either drawing names that
     // this page cannot draw asks before anything is replaced; Cancel loads nothing.
+    // It asks after the repair list, so a Cancel there loads no font either.
     /** @type {SessionFontConfirmation | undefined} */
     const confirmSessionFonts = options.confirmSessionFonts;
     if (confirmSessionFonts && !await confirmSessionFonts(SLICE_MODES.map((mode) => modeConfigs[mode]?.adv?.font_family))) {
@@ -5923,12 +6033,8 @@ const importSessionDocument = async (e, options = {}) => {
     } else {
       state.featurePanelTab.value = 'colors';
     }
-    state.generatedMode.value = (committedMode || ui.mode) === 'linear' ? 'linear' : 'circular';
-    if (ui.generatedLegendPosition) {
-      state.generatedLegendPosition.value = legendPositionOrDefault(
-        ui.generatedLegendPosition, state.generatedMode.value
-      );
-    }
+    state.generatedMode.value = generatedMode;
+    if (generatedLegend) state.generatedLegendPosition.value = generatedLegend.value;
     state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);
     state.generatedCircularPlotTitlePosition.value = hasStoredLayoutValue(ui.generatedCircularPlotTitlePosition)
       ? normalizeCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition)
@@ -5948,10 +6054,11 @@ const importSessionDocument = async (e, options = {}) => {
       // it has none (OV-220).
       const features = mode === committedDraftMode && canonicalSession && !settingsOnly
         ? { features: featureEditsOverProjection(modeSlices[mode].features, projectionResult.renderState) } : {};
-      applyModeSliceData(state.drawings[mode], mode, { ...modeSlices[mode], ...features, config: modeConfigs[mode] }, {
+      applyModeSliceData(state.drawings[mode], mode, {
+        ...modeSlices[mode], ...features, config: modeConfigs[mode], editorState: modeEditorStates[mode]
+      }, {
         resolveTrackPlacements: !settingsOnly && !storedSlice,
         applyCanvasPadding: mode !== displayMode,
-        droppedLegendColors,
         legendRekeys: legendRekeysOf(mode)
       });
     }
@@ -6134,24 +6241,6 @@ const importSessionDocument = async (e, options = {}) => {
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
     {
-      // The top-level set, built like the other set, waits in its mode when the
-      // Session opens on the other set's mode. The stash starts again with the
-      // loaded Session.
-      const topArtifactSlot = opensOtherSet && validatedSessionCatalog
-        ? buildLoadedArtifactSlot({
-            renderRequest: data.renderRequest,
-            results: data.results,
-            editorState: data.editorState,
-            ui,
-            runMetadata: projectionResult?.artifactState?.runMetadata
-          }, {
-            ...slotOptions,
-            featureCatalog: validatedSessionCatalog,
-            admittedResults: committedImportedResults,
-            restoredSequenceSources: restoredFileSequenceSources,
-            retainedBytes: topSetCharacters * 2
-          })
-        : null;
       /** @type {{ installLoadedArtifactSlots?: (slots: Record<string, any>) => void }} */ (options)
         .installLoadedArtifactSlots?.(opensOtherSet
         ? { opening: otherArtifactSlot, stashed: topArtifactSlot }
@@ -6222,15 +6311,10 @@ const importSessionDocument = async (e, options = {}) => {
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     return {
       status: 'ok',
-      // What the load changed, for the caller's notice; one line each.
-      warnings: [
-        droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
-        narrowedFeatureVisibilityCount > 0 ? FEATURE_VISIBILITY_NARROWED_NOTICE(narrowedFeatureVisibilityCount) : '',
-        migratedAnnotationTargetCount > 0 ? ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount) : '',
-        unmappedHashSelectorCount > 0 ? HASH_SELECTOR_UNMAPPED_NOTICE(unmappedHashSelectorCount) : '',
-        legacyTableRowsNotice(canonicalProjection?.legacyTableRepairs),
-        legendColorDropNotice(droppedLegendColors)
-      ].filter(Boolean),
+      // What the load changed without a loss, for the caller's notice; what
+      // it could not restore was listed before the load (`repairs`).
+      notices: migratedAnnotationTargetCount > 0 ? [ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount)] : [],
+      repairs,
       data,
       decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),
@@ -6425,20 +6509,24 @@ export const exportSession = (titleOverride = null, options = {}) => {
  */
 /**
  * What the composition root passes to `importSession`: the Save and Load availability (as `SessionSaveOptions`
- * has it) and a step to run before the Load starts, both read here; every other option is passed on to
+ * has it) and a step to run before the Load starts, both read here; the required Load port
+ * `confirmLoadRepairs`, which shows the list of what the file cannot fully restore and answers [Load] or
+ * [Cancel] (every caller that loads decides; there is no default); every other option is passed on to
  * `importSessionDocument` unread.
- * @typedef {Pick<SessionSaveOptions, 'availability'> & { beforeImport?: () => void | Promise<void> }
- *   & Record<string, unknown>} SessionLoadOptions
+ * @typedef {Pick<SessionSaveOptions, 'availability'> & { beforeImport?: () => void | Promise<void>,
+ *   confirmLoadRepairs: ConfirmLoadRepairs } & Record<string, unknown>} SessionLoadOptions
  */
 /**
  * @param {SessionFileInput} event
- * @param {SessionLoadOptions} [options]
+ * @param {SessionLoadOptions} options
  */
-export const importSession = async (event, options = {}) => {
+export const importSession = async (event, options) => {
   const input = event?.target;
   const file = input?.files?.[0];
   if (!file) return { status: 'skipped' };
-  const { availability = sessionOperationAvailability } = options;
+  // A caller without the port loads a file Load restores fully; a file with
+  // repairs fails its Load (the port is required).
+  const { availability = sessionOperationAvailability } = options ?? {};
   const busy = availability('load');
   if (busy) {
     input.value = '';
@@ -6450,7 +6538,7 @@ export const importSession = async (event, options = {}) => {
   state.sessionImportPending.value = true;
   recordSessionLifecycleEvent('session-import-pending-published');
   try {
-    await options.beforeImport?.();
+    await options?.beforeImport?.();
     if (!isCurrent()) return { status: 'canceled' };
     const result = await importSessionDocument({ target: { files: [file], value: input.value } }, {
       ...options, isCurrent, signal: operation.controller.signal

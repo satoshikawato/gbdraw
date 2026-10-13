@@ -5,9 +5,10 @@ import {
   replaceLeadingTranslate
 } from '../../services/svg-transform.js';
 import { planLegendComposition } from '../../services/legend-layout.js';
-import { legendPositionOfMode, legendPositionOrDefault } from '../../services/layout-preferences.js';
+import { legendPositionOfMode, readLegendPositionOfMode } from '../../services/layout-preferences.js';
 import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
 /** @import { LayoutBox, CompositionSpacingPx, CompositionOverlayPolicy } from '../../services/legend-layout.js' */
+/** @import { LoadRepair } from '../../utils/load-repairs.js' */
 
 /**
  * Bounds as the metadata and the editor hold them.
@@ -512,14 +513,16 @@ export const parseCompositionMetadata = (svg) => {
 /**
  * Gives a loaded Result's stored composition metadata a legend side of the
  * Result's mode: a side outside the mode's positions reads as the mode's
- * default legend position, and case and outer spaces read as the position
- * (OV-672, BA-D26). Metadata that is not a JSON object stays for
+ * default legend position, listed in `load.repairs` at `load.path` for the
+ * Load dialog, and case and outer spaces read as the position (OV-672,
+ * BA-D26). Metadata that is not a JSON object stays for
  * `parseCompositionMetadata` to refuse. Returns whether it rewrote the side.
  * @param {Element} svg The root SVG element of a loaded Result.
  * @param {'circular' | 'linear'} mode The Result's mode.
+ * @param {{ repairs: LoadRepair[] | null, path: string }} [load]
  * @returns {boolean}
  */
-export const normalizeStoredLegendSide = (svg, mode) => {
+export const normalizeStoredLegendSide = (svg, mode, load = { repairs: null, path: '' }) => {
   const raw = svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE);
   /** @type {unknown} */
   let source = null;
@@ -529,8 +532,9 @@ export const normalizeStoredLegendSide = (svg, mode) => {
     return false;
   }
   if (!isPlainObject(source)) return false;
-  const legendSide = legendPositionOrDefault(source.legendSide, mode);
+  const { value: legendSide, repairs } = readLegendPositionOfMode(source.legendSide, mode, load.path, 'legend-side-defaulted');
   if (source.legendSide === legendSide) return false;
+  load.repairs?.push(...repairs);
   svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify({ ...source, legendSide }));
   return true;
 };

@@ -1,7 +1,7 @@
 // OV-671 and OV-672 (BA-D26): the side a loaded Result's Legend is laid out
 // with is read through the positions of the Result's mode. A side outside
-// them reads as the mode's default legend position; case and outer spaces
-// read as the position. A Result saved without composition metadata (Session
+// them reads as the mode's default legend position, listed in the Load dialog
+// (BA-D25, PLAN 12.7 (4)); case and outer spaces read as the position. A Result saved without composition metadata (Session
 // 27 to 30) whose Session stored no side keeps `none`.
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
@@ -62,10 +62,12 @@ const load = async (session) => {
     transformed.push({ svg, side: storedSide(svg), data });
     return changed;
   }, { appliesToContent: (...args) => transformLegacyResultSvg.appliesToContent(...args) });
+  /** @type {string[][]} */
+  const dialogs = [];
   const outcome = await importSession({
     target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  }, { transformLegacyResultSvg: port });
-  return { outcome, transformed };
+  }, { transformLegacyResultSvg: port, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  return { outcome, transformed, dialogs };
 };
 
 // A valid, a cased and spaced, an empty, and an outside value in each mode.
@@ -77,6 +79,14 @@ const CASES = {
   circular: [['upper_left', 'upper_left'], [' Upper_Left ', 'upper_left'], ['', 'none'], ['banana', 'left'],
     [true, 'left'], [null, 'none'], [0, 'none']]
 };
+// BA-D26, BA-D25: the Load dialog lists a stored side outside the mode, once,
+// before the Load; case, outer spaces and an unset side are no row.
+const sideRows = (stored, expected, path) => (
+  stored && !(typeof stored === 'string' && stored.trim() === '') && expected !== String(stored).trim().toLowerCase()
+    ? [[`Legend of a saved Result: the side "${stored}" (${path}) is not one of its mode's positions; the Result is read with ${expected}.`]]
+    : []
+);
+
 // Sessions 27 to 30: no stored request, a Result without composition metadata.
 const LEGACY = {
   linear: 'scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz',
@@ -90,10 +100,11 @@ for (const [mode, cases] of Object.entries(CASES)) {
       assert.equal(session.version, 30);
       assert.equal(session.ui.mode, mode);
       session.config.form.legend = stored;
-      const { outcome, transformed } = await load(session);
+      const { outcome, transformed, dialogs } = await load(session);
       assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
       assert.equal(transformed.length, 1);
       assert.equal(transformed[0].side, expected);
+      assert.deepEqual(dialogs, sideRows(stored, expected, 'config.form.legend'));
     });
   }
 }
@@ -126,8 +137,9 @@ for (const [mode, cases] of Object.entries(METADATA_CASES)) {
       const session = fixture(CURRENT[mode]);
       assert.equal(session.renderRequest.mode, mode);
       session.results[0].content = withStoredSide(session.results[0].content, stored);
-      const { outcome, transformed } = await load(session);
+      const { outcome, transformed, dialogs } = await load(session);
       assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+      assert.deepEqual(dialogs, sideRows(stored, expected, 'results'));
       if (stored === expected) {
         // A side of the mode's positions is admitted as written, unparsed.
         assert.equal(transformed.length, 0);
@@ -165,7 +177,8 @@ test('OV-672: the other mode\'s Result set reads a stored side outside its mode 
   ], { encoding: 'utf8', cwd: fileURLToPath(REPO), maxBuffer: 1 << 30 }));
   assert.equal(session.otherModeResult.renderRequest.mode, 'linear');
   session.otherModeResult.results[0].content = withStoredSide(session.otherModeResult.results[0].content, 'upper_left');
-  const { outcome, transformed } = await load(session);
+  const { outcome, transformed, dialogs } = await load(session);
   assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
   assert.deepEqual(transformed.map(({ side, data }) => [data.mode, data.composition, side]), [['linear', null, 'bottom']]);
+  assert.deepEqual(dialogs, sideRows('upper_left', 'bottom', 'otherModeResult.results'));
 });

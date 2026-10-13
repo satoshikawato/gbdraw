@@ -2,7 +2,9 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync, gzipSync } = require('node:zlib');
-const { openApp, expectSessionLoadedWithoutWarnings, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const {
+  openApp, expectSessionLoadedWithoutWarnings, generateAndWaitForResult, answerLoadRepairs
+} = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -186,31 +188,51 @@ test('session loading is painted before import work and prevents duplicate adopt
 
 // OV-40: the Session 39 Web writer stored a Label whitelist keyword typed with a
 // tab as an extra cell (tests/fixtures/sessions/whitelist-tab-keyword.provenance.json).
-// Load reads the row as the current writer writes it and names it in the notice.
-test('a Session 39 table row with extra cells loads with a notice that names it', async ({
+// BA-D25: Load lists the row it reads as the current writer writes it in one
+// dialog before it changes anything. Cancel leaves the loaded Session, its
+// notice, and History as they were; [Load] then loads the file.
+test('a lossy Session asks before it loads: Cancel changes nothing, Load loads it', async ({
   page
 }) => {
   test.setTimeout(180_000);
   await openApp(page);
+  await loadBaselineSession(page);
   const dialogs = [];
   page.on('dialog', async (dialog) => {
     dialogs.push(dialog.message());
     await dialog.accept();
   });
+  const before = await importSnapshot(page);
+  const visible = () => page.evaluate(() => ({
+    notice: document.querySelector('[data-app-notice]')?.textContent?.trim() || '',
+    filterMode: window.__GBDRAW_APP__.filterMode,
+    canUndo: Boolean(window.__GBDRAW_APP__.canUndoHistory)
+  }));
+  const shownBefore = await visible();
+  const lossy = join(repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz');
+  const repairLines = ['Label whitelist: line 1 had extra cells, joined into the last column with one space.'];
+  await page.locator(sessionInputSelector).setInputFiles(lossy);
+  await answerLoadRepairs(page, repairLines, 'cancel');
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
+  // The Cancel click leaves the pointer over the preview: a hover leaves an
+  // empty style attribute behind, which is no change of the Result.
+  await page.mouse.move(0, 0);
+  await expect.poll(() => page.locator('[data-gbdraw-hover-opacity]').count()).toBe(0);
+  const after = await importSnapshot(page);
+  expect({ ...after, previewHtml: after.previewHtml.replaceAll(' style=""', '') }).toEqual(before);
+  expect(await visible()).toEqual(shownBefore);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+
   await installLifecycleProbe(page);
-  await page.locator(sessionInputSelector).setInputFiles(join(
-    repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
-  ));
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await page.locator(sessionInputSelector).setInputFiles(lossy);
+  await answerLoadRepairs(page, repairLines, 'load');
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => (
     window.__GBDRAW_SESSION_LOADING_EVENTS__.some(({ name }) => name === 'interactiveReady')
     && window.__GBDRAW_APP__?.sessionImportPending === false
   ), null, { timeout: 120_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   expect(dialogs).toEqual([]);
-  await expect(page.locator('[data-app-notice] li')).toHaveText(['Some table rows of this older Session were read '
-    + 'as the current version writes them. Label whitelist: line 1 had extra cells, joined into the last column '
-    + 'with one space.']);
   expect(await page.evaluate(() => ({
     filterMode: window.__GBDRAW_APP__.filterMode,
     whitelist: JSON.parse(JSON.stringify(window.__GBDRAW_APP__.manualWhitelist))

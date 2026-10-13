@@ -835,6 +835,18 @@ const answerChoicePrompt = async (page, title, action, { timeout = 120_000 } = {
   await prompt.locator(`[data-choice-prompt-action="${action}"]`).click();
 };
 
+// BA-D25: a Load that cannot restore everything lists what it cannot in one
+// dialog before it changes anything. The spec names the lines it expects and
+// answers `load` or `cancel`.
+const answerLoadRepairs = async (page, items, answer = 'load', { timeout = 120_000 } = {}) => {
+  const prompt = page.locator('[data-choice-prompt]');
+  await expect(prompt.getByRole('heading', { name: 'Load this file?', exact: true })).toBeVisible({ timeout });
+  await expect(prompt.locator('li')).toHaveText(items);
+  if (answer === 'load') await prompt.locator('[data-choice-prompt-action="load"]').click();
+  else await prompt.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(prompt).toHaveCount(0);
+};
+
 // The local static server can reset a connection under CI load (OV-713).
 // Browser tests fetch a routed request through this helper, which retries once
 // on a connection error and rethrows any other error unchanged.
@@ -867,6 +879,7 @@ const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', 
 module.exports = {
   answerChoicePrompt,
   expectSessionLoadedWithoutWarnings,
+  answerLoadRepairs,
   CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,
   CURRENT_SESSION_VERSION,

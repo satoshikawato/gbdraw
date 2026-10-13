@@ -394,7 +394,7 @@ const COMPOSITION_ROOT_ATTRIBUTE = new RegExp(`\\s(?:${COMPOSITION_SCHEMA_ATTRIB
 // side of its mode (OV-672). The saved bytes carry the saved edits. A Session
 // 40+ Result takes it only when `appliesToContent` (OV-273).
 /** @type {LegacyResultSvgTransform} */
-export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement} */ svg, /** @type {LegacyResultSvgData} */ { composition, mode }) => {
+export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement} */ svg, /** @type {LegacyResultSvgData} */ { composition, mode, repairs, path }) => {
   if (
     svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
     && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
@@ -403,7 +403,7 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
     normalizeLegacyComposition(svg, composition);
     return true;
   }
-  return normalizeStoredLegendSide(svg, mode);
+  return normalizeStoredLegendSide(svg, mode, { repairs, path });
 }, {
   /** @param {unknown} content @param {'circular' | 'linear'} mode @param {boolean} composes */
   appliesToContent: (content, mode, composes) => {
@@ -3475,15 +3475,17 @@ export const createAppSetup = () => {
   );
   let nextSessionPreviewToken = 1;
   // A loaded Session says so in the notice banner, with what the load changed
-  // as a list.
+  // without a loss as a list; what it could not restore was listed in the
+  // Load dialog before.
   /** @param {SessionFileInput} event */
   const importSession = async (event) => {
     const name = String(event?.target?.files?.[0]?.name || '');
-    // The notice of an earlier operation does not stand for this load.
-    if (name) noticeBanner.dismiss();
     const result = await loadSessionFromFile(event);
+    // The notice of an earlier operation does not stand for this load; a
+    // Load the user canceled changed nothing, the notice included.
+    if (name && !['canceled', 'skipped', 'stale'].includes(String(result?.status))) noticeBanner.dismiss();
     if (result?.status === 'ok') {
-      showNotice({ text: name ? `Session loaded: ${name}` : 'Session loaded.', items: result.warnings || [] });
+      showNotice({ text: name ? `Session loaded: ${name}` : 'Session loaded.', items: result.notices || [] });
     } else if (result?.status === 'legacy') {
       showNotice({ text: 'Configuration loaded from an older gbdraw. Save Session to keep it in the current format.' });
     }
@@ -3495,6 +3497,12 @@ export const createAppSetup = () => {
     // Before the Session replaces the current one: a font it names that this
     // page cannot draw asks first (receipt 〔読み込むとき〕); Cancel loads nothing.
     confirmSessionFonts: fontSettings.confirmSessionFonts,
+    // BA-D25: one question before a Load that cannot restore everything.
+    confirmLoadRepairs: async (dialog) => {
+      const load = await askChoice({ ...dialog, actions: [{ id: 'load', label: 'Load', tone: 'primary' }] }) === 'load';
+      if (load) noticeBanner.dismiss();
+      return load;
+    },
     transformLegacyResultSvg,
     beforeImport: async () => {
       await nextTick();
