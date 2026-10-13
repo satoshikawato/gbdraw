@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const zlib = require('node:zlib');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, openLinearFileCards, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
@@ -24,6 +24,7 @@ const generateFromControl = async (page) => {
 };
 
 const expandLinearRecordControls = async (page) => {
+  await openLinearFileCards(page);
   for (const disclosure of await page.locator('[data-linear-source-records]').all()) {
     if (!await disclosure.evaluate((element) => element.open)) {
       await disclosure.locator(':scope > summary').click();

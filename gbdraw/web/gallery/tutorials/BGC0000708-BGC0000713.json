@@ -140,7 +140,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 420; const card = document.querySelector('section[aria-label=\"Linear input file 1\"]'); const header = card?.firstElementChild; const uploader = card?.querySelector(':scope > .space-y-2'); const names = card?.querySelector(':scope > [data-linear-record-names]'); if (!card || !header || !uploader || !names) throw new Error('BGC File 1 card was not found.'); header.setAttribute('data-capture', 'bgc-file1-header'); uploader.setAttribute('data-capture', 'bgc-file1-upload'); names.setAttribute('data-capture', 'bgc-file1-names'); card.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 420; const card = document.querySelector('section[aria-label=\"Linear input file 1\"]'); const fold = card?.querySelector(':scope > [data-linear-source-fold]'); const header = fold?.querySelector(':scope > summary'); const uploader = fold?.querySelector(':scope > .space-y-2'); const names = fold?.querySelector(':scope > [data-linear-record-names]'); if (!card || !header || !uploader || !names) throw new Error('BGC File 1 card was not found.'); header.setAttribute('data-capture', 'bgc-file1-header'); uploader.setAttribute('data-capture', 'bgc-file1-upload'); names.setAttribute('data-capture', 'bgc-file1-names'); card.scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "wait",
@@ -281,7 +281,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 420; const card = document.querySelector('section[aria-label=\"Linear input file 5\"]'); const header = card?.firstElementChild; const uploader = card?.querySelector(':scope > .space-y-2'); const names = card?.querySelector(':scope > [data-linear-record-names]'); if (!card || !header || !uploader || !names) throw new Error('BGC File 5 card was not found.'); header.setAttribute('data-capture', 'bgc-file5-header'); uploader.setAttribute('data-capture', 'bgc-file5-upload'); names.setAttribute('data-capture', 'bgc-file5-names'); const add = document.querySelector('button[aria-label=\"Add sequence\"]'); if (!add) throw new Error('Add sequence was not found.'); add.setAttribute('data-capture', 'bgc-add-sequence'); card.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 420; const card = document.querySelector('section[aria-label=\"Linear input file 5\"]'); const fold = card?.querySelector(':scope > [data-linear-source-fold]'); const header = fold?.querySelector(':scope > summary'); const uploader = fold?.querySelector(':scope > .space-y-2'); const names = fold?.querySelector(':scope > [data-linear-record-names]'); if (!card || !header || !uploader || !names) throw new Error('BGC File 5 card was not found.'); header.setAttribute('data-capture', 'bgc-file5-header'); uploader.setAttribute('data-capture', 'bgc-file5-upload'); names.setAttribute('data-capture', 'bgc-file5-names'); const add = document.querySelector('button[aria-label=\"Add sequence\"]'); if (!add) throw new Error('Add sequence was not found.'); add.setAttribute('data-capture', 'bgc-add-sequence'); card.scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "wait",
@@ -681,7 +681,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const seq = app.linearSeqs[4]; if (seq?.uid !== 'record-5') throw new Error('BGC0000713 record was not restored as sequence 5.'); const row = document.querySelector('[data-linear-record-card=\"record-5\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-5\"]'); if (!row || !options) throw new Error('BGC0000713 Record options were not found.'); options.open = true; const card = row.closest('[data-linear-source-card]'); const uploader = card?.querySelector(':scope > .space-y-2'); if (!card || !uploader) throw new Error('BGC0000713 file card was not found.'); uploader.setAttribute('data-capture', 'bgc0713-file'); row.setAttribute('data-capture', 'bgc0713-record'); card.scrollIntoView({ block: 'start' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const seq = app.linearSeqs[4]; if (seq?.uid !== 'record-5') throw new Error('BGC0000713 record was not restored as sequence 5.'); const row = document.querySelector('[data-linear-record-card=\"record-5\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-5\"]'); if (!row || !options) throw new Error('BGC0000713 Record options were not found.'); options.open = true; const card = row.closest('[data-linear-source-card]'); const fold = card?.querySelector(':scope > [data-linear-source-fold]'); const uploader = fold?.querySelector(':scope > .space-y-2'); if (!card || !uploader) throw new Error('BGC0000713 file card was not found.'); uploader.setAttribute('data-capture', 'bgc0713-file'); row.setAttribute('data-capture', 'bgc0713-record'); card.scrollIntoView({ block: 'start' });"
               },
               {
                 "type": "evaluate",

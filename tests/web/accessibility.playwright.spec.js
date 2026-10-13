@@ -216,6 +216,29 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
+// A Linear File card's header line is a native disclosure: its name is the same
+// folded and open, and the move buttons on it keep their own names (R12).
+test('linear File card header lines keep their names folded and open', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await loadMode(page, 'linear');
+  await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());
+  const folds = page.locator('[data-linear-source-fold]');
+  const names = () => folds.locator(':scope > summary')
+    .evaluateAll((headers) => headers.map((header) => header.getAttribute('aria-label')));
+  await expect.poll(names).toEqual(['File 1: HmmtDNA.gbk', 'File 2: No file']);
+  await reveal(folds.first().locator(':scope > summary'));
+  await folds.first().locator(':scope > summary').click();
+  await expect(folds.first()).toHaveJSProperty('open', false);
+  await expect(folds.last()).toHaveJSProperty('open', true);
+  expect(await names()).toEqual(['File 1: HmmtDNA.gbk', 'File 2: No file']);
+  const audit = await auditButtons(page);
+  expect(audit.problems, 'buttons without a stable author-provided name').toEqual([]);
+  await expect(page.getByRole('button', { name: 'Move File 1 down', exact: true })).toBeVisible();
+  expect(await auditStateNames(page), 'button names that change with state').toEqual([]);
+  expect((await auditPage(page)).danglingDescriptions, 'aria-describedby without a target').toEqual([]);
+});
+
 // Each Legend editor row names its caption field and its icon buttons by its
 // caption, so two rows never share a name (R12, gui-fix UI-04).
 test('Legend editor rows name their controls by the row caption', async ({ browser }) => {

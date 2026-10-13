@@ -299,6 +299,11 @@ const orthogroupSortMode = ref('id');
 const showRightDrawer = ref(false);
 const rightDrawerTab = ref('features'); // 'legend' | 'features' | 'orthogroups'
 const linearReorderNotice = ref('');
+// The Linear File cards folded to their header line, by source uid: app-level
+// view state. Its transitions are in services/linear-sources.js.
+/** @import { FoldedLinearSources } from './services/linear-sources.js' */
+/** @type {FoldedLinearSources} */
+const linearFoldedSources = reactive(new Set());
 const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
 /** @import { CircularRecordDiscovery } from './services/record-discovery.js' */
 /** @type {CircularRecordDiscovery} */
@@ -1135,6 +1140,7 @@ export const state = {
   showRightDrawer,
   rightDrawerTab,
   linearReorderNotice,
+  linearFoldedSources,
   circularRecordList,
   circularRecordDiscovery,
   paletteDefinitions,

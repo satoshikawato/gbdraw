@@ -82,6 +82,14 @@ which gives the diagram about 265 px more width in a 1600 px window. **Expand
 settings** brings the full panel back. The browser remembers this choice per site
 address (with `gbdraw gui`, until the local server stops).
 
+The Linear file list is shorter after you load a Session: each File card folds to
+one line with its file name. Click the line, or press Enter or Space on it, to
+open the card; **Show in settings** opens the card it points into. A folded
+line still shows a file that could not be read, a missing file, and Gencode
+required. The fold is not saved in a Session, and Undo does not change it. A
+long file name in a file input now ends with an ellipsis instead of being cut
+at both ends.
+
 Each change of a checkbox, radio button, or button is one **Undo** step. Undo
 and Redo are unavailable while Generate runs, and the header says why. Error
 messages name the field, track row, Depth series, table line, or setting

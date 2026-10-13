@@ -78,6 +78,64 @@ export const isPristineLinearSource = (source) => {
   );
 };
 
+// The Linear File cards shown folded to their header line, by source uid, so
+// the state follows a card through Move up and Move down. It is view state:
+// no Session, History step, Undo, or Reset Settings holds or changes it.
+/** @typedef {Set<string>} FoldedLinearSources */
+/** @typedef {LinearSourceView & { uid: string }} FoldableLinearSource */
+
+/**
+ * What a card's disclosure reports: the user's press on the header line, or a
+ * path that opened the card to show a setting.
+ * @param {FoldedLinearSources} folded
+ * @param {string} uid
+ * @param {boolean} isFolded
+ */
+export const setLinearSourceFolded = (folded, uid, isFolded) => {
+  if (isFolded) folded.add(uid);
+  else folded.delete(uid);
+};
+
+/**
+ * The fold state a Session load that was rolled back returns to.
+ * @param {FoldedLinearSources} folded
+ * @param {readonly string[]} uids
+ */
+export const restoreFoldedLinearSources = (folded, uids) => {
+  folded.clear();
+  uids.forEach((uid) => folded.add(uid));
+};
+
+/** @typedef {'gb' | 'gff' | 'fasta'} LinearFileField */
+
+/**
+ * The file slots a File card shows for an input type, in the order of its
+ * uploaders.
+ * @param {string} inputType
+ * @returns {readonly LinearFileField[]}
+ */
+export const linearCardFileFields = (inputType) => (inputType === 'gff' ? ['gff', 'fasta'] : ['gb']);
+
+/**
+ * A card holds its input when every slot it shows has a file. The folded line
+ * and the load rule read this one answer.
+ * @param {LinearSourceView} source
+ * @param {string} inputType
+ */
+export const linearCardInputComplete = (source, inputType) => linearCardFileFields(inputType)
+  .every((field) => Boolean(source.sequence?.[field]));
+
+/**
+ * The one rule of which cards a loaded Session shows folded: those that hold
+ * their input. A card without a file, or with a slot still empty, stays open.
+ * @param {FoldedLinearSources} folded
+ * @param {readonly FoldableLinearSource[]} sources
+ * @param {string} inputType
+ */
+export const foldLoadedLinearSources = (folded, sources, inputType) => restoreFoldedLinearSources(
+  folded, sources.filter((source) => linearCardInputComplete(source, inputType)).map(({ uid }) => uid)
+);
+
 /**
  * @typedef {{ allowed: false, reason: string, sourceIndex?: number }
  *   | { allowed: true, intent: string, sourceIndex: number, insertionIndex: number,
