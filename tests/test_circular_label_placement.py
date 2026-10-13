@@ -3485,3 +3485,43 @@ def test_tobacco_14pt_outer_labels_that_overlap_are_not_drawn(monkeypatch: pytes
     assert len(fitted) == 140
     assert _count_overlaps(fitted, total_length) == 0
     assert leader_crossing_count(fitted) == 0
+
+
+def _smallest_row_gap_px(labels: list[dict], total_length: int) -> float:
+    """Smallest vertical gap between two labels whose boxes share an x range."""
+
+    smallest = math.inf
+    for index, first in enumerate(labels):
+        first_x = circular_labels_module._label_x_bounds(first, 0.0)
+        first_y = circular_labels_module._label_y_bounds(first, total_length, 0.0)
+        for second in labels[index + 1:]:
+            second_x = circular_labels_module._label_x_bounds(second, 0.0)
+            if first_x[1] <= second_x[0] or second_x[1] <= first_x[0]:
+                continue
+            second_y = circular_labels_module._label_y_bounds(second, total_length, 0.0)
+            smallest = min(smallest, max(second_y[0] - first_y[1], first_y[0] - second_y[1]))
+    return smallest
+
+
+@pytest.mark.circular
+def test_dense_outer_label_rows_follow_circular_label_spacing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-479: maps with 50 or more outer labels keep ``labels.spacing.circular`` between rows."""
+
+    record = SeqIO.read(str(Path(__file__).parent / "test_inputs" / "MjeNMV.gbk"), "genbank")
+    total_length = len(record.seq)
+    drawn = _drawn_outer_labels(monkeypatch)
+    gaps: dict[float, float] = {}
+    for spacing in (0.5, 3.0):
+        config_dict = modify_config_dict(
+            load_config_toml("gbdraw.data", "config.toml"),
+            {
+                "labels.circular.scope": "outer",
+                "canvas.strandedness": True,
+                "labels.spacing.circular": spacing,
+            },
+        )
+        assemble_circular_diagram_from_record(record, cfg=GbdrawConfig.from_dict(config_dict), legend="none")
+        assert len(drawn[-1]) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
+        gaps[spacing] = _smallest_row_gap_px(drawn[-1], total_length)
+
+    assert gaps[3.0] > gaps[0.5] + 1.0

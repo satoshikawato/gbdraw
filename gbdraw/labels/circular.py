@@ -2370,12 +2370,15 @@ def _legacy_place_labels_on_arc_fc(
     start_angle: float,
     end_angle: float,
     total_length: int,
+    *,
+    spacing_px: float,
 ) -> list[dict]:
     """
     Legacy placement strategy (from pre-93dc098 implementation).
 
     This remains as a fallback for dense cases where the new optimizer leaves
-    unresolved overlaps.
+    unresolved overlaps. ``spacing_px`` is the circular label spacing: the
+    vertical gap kept between neighbouring labels.
     """
 
     def move_label(label: dict, angle: float) -> tuple[float, float]:
@@ -2418,7 +2421,7 @@ def _legacy_place_labels_on_arc_fc(
         label["start_x"], label["start_y"] = calculate_coordinates(
             center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
         )
-        while rearranged_labels and check_overlap(label, rearranged_labels[-1], total_length, 0.1):
+        while rearranged_labels and check_overlap(label, rearranged_labels[-1], total_length, spacing_px):
             new_angle += 0.01
             label["start_x"], label["start_y"] = calculate_coordinates(
                 center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
@@ -2440,7 +2443,8 @@ def _legacy_improved_label_placement_fc(
     total_length: int,
     start_angle: float,
     end_angle: float,
-    y_margin: float = 0.1,
+    *,
+    y_margin: float,
     max_iterations: int = 10000,
 ) -> list[dict]:
     """
@@ -4295,6 +4299,7 @@ def rearrange_labels_fc(
             start_angle,
             end_angle,
             total_length,
+            spacing_px=label_spacing_px,
         )
         candidate_legacy = _legacy_improved_label_placement_fc(
             candidate_legacy,
@@ -4306,6 +4311,7 @@ def rearrange_labels_fc(
             total_length,
             start_angle,
             end_angle,
+            y_margin=label_spacing_px,
         )
         candidate_legacy = sort_labels(candidate_legacy)
         return _refine_labels_to_preferred_hemisphere(
