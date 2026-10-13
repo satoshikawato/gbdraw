@@ -4,7 +4,9 @@
 // draws (OV-63, OV-80), and Legend renames (OV-62). The matrix of edit kinds is
 // in live-generate-parity.playwright.spec.js.
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { execFileSync } = require('node:child_process');
+const { readFileSync, writeFileSync } = require('node:fs');
+const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const {
   diffSemanticSnapshots, expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult
@@ -1321,3 +1323,158 @@ test('OV-293: a batch Result displayed after a stroked Legend row is deleted sho
   expect(rowStrokedFeatures(await semanticSnapshot(page)), 'Result 2 shows the delete').toEqual([]);
   await expectLiveEqualsGenerate(page, { label: 'a batch Result displayed after the delete of a stroked row' });
 });
+
+// One naming rule on every surface (PD-OI-042 scenario revision 2, PD-OI-095).
+// After the Legend operations of a pass the executor writes every shown row's
+// text from the Web mirror of the rule (services/legend-row-names.js over the
+// names and swatches the rows show), also on rows no operation touched. So on a
+// Result as Python drew it the mirror must answer what Python wrote: the same
+// texts, in the order the Legend draws its rows (the solid rows, then the
+// gradient rows). Each figure is drawn here by the repository's Python and read
+// in a browser DOM the way the executor reads a Result.
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const FORCED_TO_LOCTEST_BLAST = [['FORCEDLBL', 'LOCTEST', '85.0', '300', '0', '0', '101', '400', '301', '600', '1e-50', '200']];
+const RING_BLAST = [['RING', 'FORCEDLBL', '85.0', '300', '0', '0', '1', '300', '101', '400', '1e-50', '200']];
+const REGION_COLUMNS = ['set_id', 'id', 'mark', 'record', 'start', 'end', 'label', 'legend_label', 'fill', 'hatch_angle', 'hatch_spacing', 'hatch_color'];
+const region = (id, start, legendLabel, fill, hatch = ['', '', '']) => (
+  ['regions', id, 'band', 'FORCEDLBL', String(start), String(start + 500), id, legendLabel, fill, ...hatch]
+);
+const LINEAR_PAIR = [SINGLE_FIXTURE, 'tests/fixtures/feature_location_search.gb'];
+// `rows`: each row Python drew, in document order, as [key, data-legend-name (null: the key is the name), text].
+const PYTHON_NAMED_RESULTS = [{
+  name: 'a hatch row and a plain row of one name',
+  mode: 'circular',
+  inputs: [SINGLE_FIXTURE],
+  files: { 'regions.tsv': [REGION_COLUMNS, region('a', 100, 'Island', '#88aaff', ['45', '4', '#202020']), region('b', 1000, 'Island', '#88aaff'), region('c', 2000, 'Plain', '#ffaa88')] },
+  args: ['--annotation_table', 'regions.tsv'],
+  rows: [
+    ['CDS', null, 'CDS'], ['repeat_region', null, 'repeat_region'],
+    ['GC content', null, 'GC content'], ['GC skew (+)', null, 'GC skew (+)'], ['GC skew (-)', null, 'GC skew (-)'],
+    ['Island', null, 'Island (1)'], ['Island (2)', 'Island', 'Island (2)'], ['Plain', null, 'Plain']
+  ]
+}, {
+  name: 'a gradient row in the two copies of a Linear Legend',
+  mode: 'linear',
+  inputs: LINEAR_PAIR,
+  files: { 'pair.blast': FORCED_TO_LOCTEST_BLAST },
+  args: ['-b', 'pair.blast'],
+  rows: [['CDS', null, 'CDS'], ['repeat_region', null, 'repeat_region'], ['tRNA', null, 'tRNA'], ['Pairwise match identity', null, 'Pairwise match identity']]
+}, {
+  name: 'a solid row and a gradient row of one name (Linear, a region annotation)',
+  mode: 'linear',
+  inputs: LINEAR_PAIR,
+  files: { 'pair.blast': FORCED_TO_LOCTEST_BLAST, 'regions.tsv': [REGION_COLUMNS, region('a', 100, 'Pairwise match identity', '#88aaff')] },
+  args: ['-b', 'pair.blast', '--annotation_table', 'regions.tsv'],
+  // The table holds the gradient row first; the Legend draws it last.
+  rows: [
+    ['CDS', null, 'CDS'], ['repeat_region', null, 'repeat_region'], ['tRNA', null, 'tRNA'],
+    ['Pairwise match identity (2)', 'Pairwise match identity', 'Pairwise match identity (1)'],
+    ['Pairwise match identity', null, 'Pairwise match identity (2)']
+  ]
+}, {
+  name: 'a solid row and a gradient row of one name (Circular, a color rule)',
+  mode: 'circular',
+  inputs: [SINGLE_FIXTURE],
+  files: { 'ring.blast': RING_BLAST, 'rules.tsv': [['CDS', 'locus_tag', 'FL1', '#ff0000', 'Conservation identity']] },
+  args: ['--conservation_blast', 'ring.blast', '-t', 'rules.tsv'],
+  rows: [
+    ['Conservation identity', null, 'Conservation identity (1)'], ['other proteins', null, 'other proteins'], ['repeat_region', null, 'repeat_region'],
+    ['GC content', null, 'GC content'], ['GC skew (+)', null, 'GC skew (+)'], ['GC skew (-)', null, 'GC skew (-)'],
+    ['Conservation identity (2)', 'Conservation identity', 'Conservation identity (2)']
+  ]
+}, {
+  name: 'a caption in two colors in the two copies of a Linear Legend',
+  mode: 'linear',
+  inputs: LINEAR_PAIR,
+  files: {
+    'pair.blast': FORCED_TO_LOCTEST_BLAST,
+    'rules.tsv': [['CDS', 'locus_tag', 'FL1', '#ff0000', 'Group'], ['CDS', 'locus_tag', 'LOC_0001', '#00ff00', 'Group']]
+  },
+  args: ['-b', 'pair.blast', '-t', 'rules.tsv'],
+  rows: [
+    ['Group [#ff0000]', 'Group', 'Group (1)'], ['Group [#00ff00]', 'Group', 'Group (2)'], ['other proteins', null, 'other proteins'],
+    ['repeat_region', null, 'repeat_region'], ['tRNA', null, 'tRNA'], ['Pairwise match identity', null, 'Pairwise match identity']
+  ]
+}, {
+  name: 'a caption in two colors and a rule named like a feature type row',
+  mode: 'circular',
+  inputs: ['tests/fixtures/feature_location_search.gb'],
+  files: { 'rules.tsv': [
+    ['CDS', 'locus_tag', 'LOC_0001', '#ff0000', 'Group'], ['CDS', 'locus_tag', 'LOC_0002', '#00ff00', 'Group'],
+    ['CDS', 'locus_tag', 'LOC_0003', '#0000ff', 'tRNA']
+  ] },
+  args: ['-t', 'rules.tsv'],
+  rows: [
+    ['Group [#ff0000]', 'Group', 'Group (1)'], ['Group [#00ff00]', 'Group', 'Group (2)'],
+    ['tRNA [#0000ff]', 'tRNA', 'tRNA (1)'], ['tRNA', null, 'tRNA (2)'],
+    ['GC content', null, 'GC content'], ['GC skew (+)', null, 'GC skew (+)'], ['GC skew (-)', null, 'GC skew (-)']
+  ]
+}, {
+  name: 'tracks of one label in one color and in two, and a track named like a feature type row',
+  mode: 'circular',
+  inputs: [SINGLE_FIXTURE],
+  args: [
+    'features:features', 'gc_content:dinucleotide_content', 'gc_content_2:dinucleotide_content', 'gc_skew:dinucleotide_skew',
+    'gc_skew_2:dinucleotide_skew@positive_color=#00ff00', 'cds_named:dinucleotide_skew@legend_label=CDS,positive_color=#123456,negative_color=#123456'
+  ].flatMap((slot) => ['--circular_track_slot', slot]),
+  rows: [
+    ['CDS', null, 'CDS (1)'], ['repeat_region', null, 'repeat_region'], ['GC content', null, 'GC content'],
+    ['GC skew (+)', null, 'GC skew (+) (1)'], ['GC skew (-)', null, 'GC skew (-)'],
+    ['GC skew (+) (2)', 'GC skew (+)', 'GC skew (+) (2)'], ['CDS (2)', 'CDS', 'CDS (2)']
+  ]
+}];
+
+const drawWithPython = (testInfo, { mode, inputs, files = {}, args = [] }) => {
+  Object.entries(files).forEach(([name, rows]) => {
+    writeFileSync(testInfo.outputPath(name), `${rows.map((row) => row.join('\t')).join('\n')}\n`);
+  });
+  execFileSync(process.env.PYTHON || 'python', [
+    '-m', 'gbdraw.cli', mode, '--gbk', ...inputs.map((input) => path.resolve(REPO_ROOT, input)),
+    ...args.map((arg) => (arg in files ? testInfo.outputPath(arg) : arg)), '-o', testInfo.outputPath('figure'), '-f', 'svg'
+  ], { cwd: REPO_ROOT, stdio: 'pipe' });
+  return readFileSync(testInfo.outputPath('figure.svg'), 'utf8');
+};
+
+// A document of the app's origin with its sanitizer and without the app: the
+// executor is a module of DOM functions.
+const EXECUTOR_PAGE = '/gbdraw/web/legend-names-executor.html';
+const openExecutorPage = async (page) => {
+  await page.route(`**${EXECUTOR_PAGE}`, (route) => route.fulfill({
+    contentType: 'text/html', body: '<!doctype html><script src="/gbdraw/web/vendor/dompurify/purify.min.js"></script>'
+  }));
+  await page.goto(EXECUTOR_PAGE);
+};
+
+// The rows of each Legend of a Result (a Linear Result holds a horizontal and
+// a vertical copy) as Python wrote them, as the admitted Result holds them,
+// and after the executor's reconcile without an operation.
+const namedByExecutor = (page, content) => page.evaluate(async (svgText) => {
+  const { createEmptySvgMutationPlan, reconcileMountedResult } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
+  const { sanitizeSvgContent } = await import('/gbdraw/web/js/services/svg-sanitization.js');
+  const parse = (text) => new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+  const legends = (svg) => {
+    const copies = Array.from(svg.querySelectorAll('#legend_horizontal, #legend_vertical'));
+    return (copies.length ? copies : [svg.querySelector('#legend')]).map((legend) => (
+      Array.from(legend.querySelectorAll('g[data-legend-key]')).map((row) => [
+        row.getAttribute('data-legend-key'), row.getAttribute('data-legend-name'), row.querySelector('text').textContent
+      ])
+    ));
+  };
+  const result = parse(sanitizeSvgContent(svgText));
+  const admitted = legends(result);
+  const outcome = reconcileMountedResult(result, createEmptySvgMutationPlan(1).operationsByResult[0]);
+  return { python: legends(parse(svgText)), admitted, outcome, named: legends(result) };
+}, content);
+
+for (const figure of PYTHON_NAMED_RESULTS) {
+  test(`the naming pass keeps the names Python drew: ${figure.name} (${figure.mode})`, async ({ page }, testInfo) => {
+    const content = drawWithPython(testInfo, figure);
+    await openExecutorPage(page);
+    const { python, admitted, outcome, named } = await namedByExecutor(page, content);
+    expect(python, 'what Python drew').toEqual(Array(figure.mode === 'linear' ? 2 : 1).fill(figure.rows));
+    expect(admitted, 'the sanitized Result keeps each row\'s key, name, and text').toEqual(python);
+    expect(named, 'the naming pass rewrites no row').toEqual(python);
+    expect(outcome).toEqual({ changed: false, legendChanged: false });
+    expect(python.flat().filter(([, , text]) => text.includes(' [#')), 'no drawn name is a row key').toEqual([]);
+  });
+}
