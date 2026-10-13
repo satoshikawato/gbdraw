@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import copy
-from contextlib import contextmanager
-from contextvars import ContextVar
 import hashlib
 import json
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from time import perf_counter
@@ -31,10 +31,6 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite import Drawing
 
-from gbdraw.analysis.protein_artifacts import (
-    is_current_derived_protein_artifact,
-    validate_current_derived_protein_artifacts,
-)
 from gbdraw.analysis.collinearity import (
     CollinearityResult,
     LosslessCollinearityParameters,
@@ -44,19 +40,9 @@ from gbdraw.analysis.depth_tracks import (
     depth_track_count,
     normalize_depth_tracks,
 )
-from gbdraw.exceptions import ValidationError
-from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
-from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids
-from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat
-from gbdraw.io.comparison_sequences import ComparisonSequenceFile, read_comparison_sequence_file
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_placement import resolve_record_row_positions
-from gbdraw.layout.similarity_alignment import (
-    SimilarityAlignmentCandidate,
-    SimilarityAlignmentPlan,
-    SimilarityAlignmentReference,
-    SimilarityAlignmentReferenceError,
-    resolve_similarity_alignment,
+from gbdraw.analysis.protein_artifacts import (
+    is_current_derived_protein_artifact,
+    validate_current_derived_protein_artifacts,
 )
 from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
@@ -70,51 +56,19 @@ from gbdraw.analysis.protein_colinearity import (
     validate_protein_identity_manifest,
     validate_protein_raw_entry_references,
 )
-from gbdraw.features.visibility import (
-    read_feature_visibility_file,
-    resolve_candidate_feature_types,
-)
 from gbdraw.annotations import (
-    AnnotationOptions, CoordinateSpan, FeatureIdentitySpan, ResolvedAnnotationBundle, ResolutionWarning,
-    read_annotation_table, resolve_annotations,
+    AnnotationOptions,
+    CoordinateSpan,
+    FeatureIdentitySpan,
+    ResolutionWarning,
+    ResolvedAnnotationBundle,
+    read_annotation_table,
+    resolve_annotations,
 )
-from gbdraw.io.comparisons import COMPARISON_COLUMNS
-from gbdraw.io.colors import load_default_colors, read_color_table
-from gbdraw.labels.fit import LabelFitReport
-from gbdraw.labels.filtering import (
-    read_filter_list_file,
-    read_label_override_file,
-    read_qualifier_priority_file,
-)
-from gbdraw.render.interactive_context import (
-    build_interactive_svg_context,
-    require_interactive_svg_metadata,
-)
-from gbdraw.render.interactive_svg import InteractiveSvgContext
-from gbdraw.render.formats import resolve_output_paths
-from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload
-
-from .diagram import (
-    DEFAULT_SELECTED_FEATURES,
-    LinearDiagramBuildResult,
-    LinearDiagramMetadata,
-    build_circular_diagram,
-    build_circular_multi_diagram,
-    build_linear_diagram_result,
-    label_fit_report,
-)
-from gbdraw.io.genome import parse_gff_fasta
-from .io import load_gbks
-from .options import (
-    ColorOptions,
-    CircularDiagramOptions,
-    CircularMultiRecordOptions,
-    LinearDiagramOptions,
-    LinearMultiRecordOptions,
-    LinearRecordTranslation,
-    LosatSearchOptions,
-    losatp_analysis_mode,
-)
+from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat
+from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
+from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids
+from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import (
     FeatureIdentityNotice,
     FeatureOverride,
@@ -131,7 +85,61 @@ from gbdraw.features.source import (
     SourceFeatureIdentity,
     build_source_feature_catalog,
 )
+from gbdraw.features.visibility import (
+    read_feature_visibility_file,
+    resolve_candidate_feature_types,
+)
+from gbdraw.io.colors import load_default_colors, read_color_table
+from gbdraw.io.comparison_sequences import (
+    ComparisonSequenceFile,
+    read_comparison_sequence_file,
+)
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.genome import parse_gff_fasta
+from gbdraw.labels.fit import LabelFitReport
+from gbdraw.labels.filtering import (
+    read_filter_list_file,
+    read_label_override_file,
+    read_qualifier_priority_file,
+)
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_placement import resolve_record_row_positions
+from gbdraw.layout.similarity_alignment import (
+    SimilarityAlignmentCandidate,
+    SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
+    SimilarityAlignmentReferenceError,
+    resolve_similarity_alignment,
+)
+from gbdraw.render.formats import resolve_output_paths
+from gbdraw.render.interactive_context import (
+    build_interactive_svg_context,
+    require_interactive_svg_metadata,
+)
+from gbdraw.render.interactive_svg import InteractiveSvgContext
+from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload
 
+from .diagram import (
+    DEFAULT_SELECTED_FEATURES,
+    LinearDiagramBuildResult,
+    LinearDiagramMetadata,
+    build_circular_diagram,
+    build_circular_multi_diagram,
+    build_linear_diagram_result,
+    label_fit_report,
+    resolve_feature_inputs,
+)
+from .io import load_gbks
+from .options import (
+    CircularDiagramOptions,
+    CircularMultiRecordOptions,
+    ColorOptions,
+    LinearDiagramOptions,
+    LinearMultiRecordOptions,
+    LinearRecordTranslation,
+    LosatSearchOptions,
+    losatp_analysis_mode,
+)
 from .prepared import (
     ParsedRecordInputs,
     PreparedResourceIdentity,
@@ -144,25 +152,24 @@ from .prepared import (
     prepared_resource_identity,
     prepared_resource_value_identity,
     register_prepared_resource_value,
-    resolve_feature_inputs,
 )
 from .record_planning import (
-    project_source_bound_comparisons,
     ResolvedRecordCollection,
     ResolvedRecordDisplay,
-    _detected_topology,
     ResolvedRecordProvenance,
+    _detected_topology,
     _gff_feature_types,
     _load_source_records,
     _prepared_source_cache_spec,
+    _similarity_candidate_from_orthogroup_member,
+    project_similarity_alignment_centers,
+    project_source_bound_comparisons,
     resolve_circular_batch_outputs,
     resolve_circular_options,
     resolve_implicit_record_output_prefix,
     resolve_linear_options,
     resolve_record_inputs,
-    project_similarity_alignment_centers,
     similarity_alignment_evidence_edges,
-    _similarity_candidate_from_orthogroup_member,
 )
 from .render import preflight_output_paths, save_figure_to
 from .requests import (
@@ -1152,22 +1159,13 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
     feature_visibility_table = _visibility_table(options)
     colors = options.colors
     default_colors = colors.default_colors if colors is not None else None
-    if default_colors is None:
+    palette = colors.default_colors_palette if colors is not None else "default"
+    load_comparison = isinstance(request, LinearDiagramRequest) and _linear_request_uses_comparisons(request)
+    if default_colors is None and colors is not None and colors.default_colors_file:
         default_colors = load_default_colors(
-            user_defined_default_colors=(
-                colors.default_colors_file
-                if colors is not None and colors.default_colors_file
-                else ""
-            ),
-            palette=(
-                colors.default_colors_palette
-                if colors is not None
-                else "default"
-            ),
-            load_comparison=(
-                isinstance(request, LinearDiagramRequest)
-                and _linear_request_uses_comparisons(request)
-            ),
+            user_defined_default_colors=colors.default_colors_file,
+            palette=palette,
+            load_comparison=load_comparison,
         )
     has_gff_source = any(
         isinstance(record_input.source, GffFastaInputSource)
@@ -1195,6 +1193,8 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
             color_table=color_table,
             default_colors=default_colors,
             feature_visibility_table=feature_visibility_table,
+            default_colors_palette=palette,
+            load_comparison_colors=load_comparison,
         ),
         gff_candidate_features=tuple(sorted(candidate_features)),
         gff_keep_all_features=keep_all_features,

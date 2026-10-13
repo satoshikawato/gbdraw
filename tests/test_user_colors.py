@@ -22,7 +22,7 @@ from svgwrite.data.typechecker import Full11TypeChecker
 from gbdraw import cli
 from gbdraw.analysis.conservation import conservation_track_gradient_colors
 from gbdraw.analysis.depth_tracks import clone_depth_config
-from gbdraw.api.prepared import resolve_feature_inputs
+from gbdraw.api.diagram import resolve_feature_inputs
 from gbdraw.api.request_render import _prepare_diagram_inputs
 from gbdraw.config.modify import validate_config_overrides
 from gbdraw.exceptions import ValidationError
@@ -140,7 +140,7 @@ def test_accepted_colors_pass_every_entry_point(value: str) -> None:
     defaults = load_default_colors("")
     defaults.loc[defaults["feature_type"] == "CDS", "color"] = value
     # A color table without captions writes its colors as given; captions need
-    # a name or hex color (`_check_caption_colors`, gbdraw/api/prepared.py).
+    # a name or hex color (`_check_caption_colors`, gbdraw/api/diagram.py).
     table = DataFrame(
         [["CDS", "product", "kinase", value]],
         columns=["feature_type", "qualifier_key", "value", "color"],

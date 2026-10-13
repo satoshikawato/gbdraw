@@ -17,49 +17,15 @@ import re
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Optional, Sequence, Mapping, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite import Drawing
-from gbdraw.svg.elements import Group
 
-from gbdraw.analysis.depth import depth_df as build_depth_df
-from gbdraw.analysis.gc import circular_dinucleotide_content_df
-from gbdraw.analysis.depth_tracks import (
-    DepthTrackData,
-    DepthTrackSpec,
-    build_depth_track_dataframes,
-    depth_track_count,
-    depth_track_data_count,
-    depth_track_heights as _depth_track_heights_from_specs,
-    depth_track_indices,
-    index_depth_track_row,
-    normalize_depth_tracks,
-    representative_depth_tracks,
-)
-from gbdraw.analysis.conservation import (
-    ConservationLoadResult,
-    ConservationTrack,
-    load_conservation_sources,
-    normalize_conservation_reference,
-    normalize_conservation_tracks_for_record,
-)
-from gbdraw.analysis.protein_colinearity import (
-    LosatpCacheManager,
-    OrthogroupMembershipMode,
-    OrthogroupResult,
-    OrthogroupGraphResult,
-    ProteinBlastpResult,
-    ProteinExtractionResult,
-    ProteinBlastpMode,
-    build_pairwise_protein_blastp_comparisons,
-    build_rbh_orthogroup_protein_blastp_comparisons,
-    normalize_orthogroup_membership_mode,
-)
 from gbdraw.analysis.collinearity import (
-    CollinearityBlock,
     CollinearityAnchorMode,
+    CollinearityBlock,
     CollinearityColorMode,
     CollinearityResult,
     CollinearitySearchScope,
@@ -71,13 +37,45 @@ from gbdraw.analysis.collinearity import (
     normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
 )
-from gbdraw.config.models.objects import (
-    normalize_pairwise_match_style,
-)
 from gbdraw.analysis.collinearity_units import CollinearityUnitMode
+from gbdraw.analysis.conservation import (
+    ConservationLoadResult,
+    ConservationTrack,
+    load_conservation_sources,
+    normalize_conservation_reference,
+    normalize_conservation_tracks_for_record,
+)
+from gbdraw.analysis.depth import depth_df as build_depth_df
+from gbdraw.analysis.depth_tracks import (
+    DepthTrackData,
+    DepthTrackSpec,
+    build_depth_track_dataframes,
+    depth_track_count,
+    depth_track_data_count,
+    depth_track_indices,
+    index_depth_track_row,
+    normalize_depth_tracks,
+    representative_depth_tracks,
+)
+from gbdraw.analysis.depth_tracks import (
+    depth_track_heights as _depth_track_heights_from_specs,
+)
+from gbdraw.analysis.gc import circular_dinucleotide_content_df
+from gbdraw.analysis.protein_colinearity import (
+    LosatpCacheManager,
+    OrthogroupGraphResult,
+    OrthogroupMembershipMode,
+    OrthogroupResult,
+    ProteinBlastpMode,
+    ProteinBlastpResult,
+    ProteinExtractionResult,
+    build_pairwise_protein_blastp_comparisons,
+    build_rbh_orthogroup_protein_blastp_comparisons,
+    normalize_orthogroup_membership_mode,
+)
 from gbdraw.analysis.skew import skew_df
+from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.api.config import apply_config_overrides
-from gbdraw.auto_sizes import depth_sliding_window, determine_length_parameter, sliding_window
 from gbdraw.api.options import (
     AnnotationOptions,
     CircularDiagramOptions,
@@ -91,36 +89,23 @@ from gbdraw.api.options import (
     resolve_circular_diagram_options,
     resolve_linear_diagram_options,
 )
-from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
-from gbdraw.linear_comparison import ComparisonRecordIdWarning, LinearComparison
-from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
-from gbdraw.layout.record_placement import resolve_record_row_positions
+from gbdraw.auto_sizes import (
+    depth_sliding_window,
+    determine_length_parameter,
+    sliding_window,
+)
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
+from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
 from gbdraw.config.models import (
     CircularRenderProfile,
     GbdrawConfig,
     LinearRenderProfile,
 )
 from gbdraw.config.models.labels import LabelsFilteringConfig
+from gbdraw.config.models.objects import (
+    normalize_pairwise_match_style,
+)
 from gbdraw.config.modify import with_config_overrides
-from gbdraw.diagrams.circular.positioning import _parse_svg_number
-from gbdraw.labels.circular_fit import (
-    CircularLabelFitSearch,
-    CircularLabelVerification,
-    CircularOuterLabelLayout,
-    check_circular_label_fit,
-)
-from gbdraw.labels.fit import LabelFitReport, LabelFitRow, LabelFitRowKind
-from gbdraw.io.colors import load_default_colors, read_color_table
-from gbdraw.labels.filtering import (
-    DERIVED_LABEL_FILTERING_KEYS,
-    read_filter_list_file,
-    read_label_override_file,
-    read_qualifier_priority_file,
-)
-from gbdraw.features.visibility import read_feature_visibility_file
 from gbdraw.configurators import (
     BlastMatchConfigurator,
     DepthConfigurator,
@@ -129,18 +114,44 @@ from gbdraw.configurators import (
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
+from gbdraw.core.color import normalize_hex_color
 from gbdraw.core.fonts import resolve_font_family
-from gbdraw.core.sequence import create_dict_for_sequence_lengths
 from gbdraw.core.numeric import compensated_sum
+from gbdraw.core.sequence import create_dict_for_sequence_lengths
 from gbdraw.diagrams.circular.assemble import (
     CircularAssemblyResult,
     _assemble_circular_diagram_result,
     build_circular_legend_table,
     plan_circular_annotation_slots,
 )
+from gbdraw.diagrams.circular.positioning import _parse_svg_number
 from gbdraw.diagrams.linear import assemble_linear_diagram
-from gbdraw.features.placement import ResolvedRecordFeatureInputs
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.colors import build_default_color_map, build_specific_color_rules
+from gbdraw.features.placement import ResolvedRecordFeatureInputs
+from gbdraw.features.visibility import (
+    compile_feature_visibility_rules,
+    read_feature_visibility_file,
+)
+from gbdraw.io.colors import (
+    check_user_color,
+    load_default_colors,
+    read_color_table,
+    resolve_color_to_hex,
+)
+from gbdraw.labels.circular_fit import (
+    CircularLabelFitSearch,
+    CircularLabelVerification,
+    CircularOuterLabelLayout,
+    check_circular_label_fit,
+)
+from gbdraw.labels.filtering import (
+    DERIVED_LABEL_FILTERING_KEYS,
+    read_filter_list_file,
+    read_label_override_file,
+    read_qualifier_priority_file,
+)
+from gbdraw.labels.fit import LabelFitReport, LabelFitRow, LabelFitRowKind
 from gbdraw.layout.composition import (
     CompositionItem,
     CompositionRequest,
@@ -148,24 +159,30 @@ from gbdraw.layout.composition import (
     TitlePlacement,
     plan_composition,
 )
+from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_placement import resolve_record_row_positions
+from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.layout.spatial import Aabb
-from gbdraw.mode_profiles import (
-    CIRCULAR_MODE_PROFILE,
-    ComparisonThresholds,
-    DEFAULT_FEATURE_TYPES,
-    LINEAR_MODE_PROFILE,
-)
-from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from gbdraw.legend.table import (
     LegendTable,
     configure_pairwise_identity_legend_from_comparisons,
 )
-from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup
+from gbdraw.linear_comparison import ComparisonRecordIdWarning, LinearComparison
+from gbdraw.mode_profiles import (
+    CIRCULAR_MODE_PROFILE,
+    DEFAULT_FEATURE_TYPES,
+    LINEAR_MODE_PROFILE,
+    ComparisonThresholds,
+)
 from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
 )
+from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup
+from gbdraw.render_stages import render_stage
+from gbdraw.svg.elements import Group
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
 from gbdraw.tracks import (
     CircularTrackSlot,
@@ -181,8 +198,7 @@ from gbdraw.tracks import (
 )
 from gbdraw.tracks.parsing import slot_dinucleotide
 
-from .prepared import ResolvedFeatureInputs, resolve_feature_inputs
-
+from .prepared import ResolvedFeatureInputs
 
 if TYPE_CHECKING:
     from gbdraw.analysis.conservation import ConservationSearchResult
@@ -1333,6 +1349,104 @@ def _scale_circular_cfg(cfg: GbdrawConfig, *, scale: float) -> GbdrawConfig:
     return replace(cfg, canvas=scaled_canvas)
 
 
+def _check_feature_colors(table: DataFrame | None, label: str, *, by_row: bool) -> None:
+    """Check every color of a -t/-d table once, whether it came from a file or a DataFrame.
+
+    Rows of the specific color table carry their position; default colors are
+    named by feature type (their rows merge the palette with the user's file).
+    """
+
+    if table is None or table.empty:
+        return
+    for row, (feature_type, color) in enumerate(zip(table["feature_type"], table["color"]), start=1):
+        check_user_color(
+            color,
+            where=f"for feature type {feature_type!r} in the {label}" + (f" (row {row})" if by_row else ""),
+            diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", **({"row": row} if by_row else {})},
+        )
+
+
+def _check_caption_colors(color_table: DataFrame | None) -> None:
+    """Check the colors of a color table with captions.
+
+    A caption groups legend rows by color (``gbdraw.legend.table``), so every
+    color of such a table is none, an SVG color name, #RGB, or #RRGGBB.
+    """
+
+    if color_table is None or color_table.empty or "caption" not in color_table:
+        return
+    for row, color in enumerate((str(value).strip() for value in color_table["color"]), start=1):
+        if color.lower() == "none":
+            continue
+        try:
+            normalize_hex_color(resolve_color_to_hex(color))
+        except (ValueError, ValidationError) as exc:
+            raise ValidationError(
+                f"Invalid color {color!r} in the color table (row {row}). "
+                "A color table with captions uses none, an SVG color name, #RGB, or #RRGGBB.",
+                diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": row},
+            ) from exc
+
+
+def resolve_default_colors(
+    default_colors: DataFrame | None,
+    palette: str,
+    load_comparison: bool,
+) -> tuple[DataFrame, dict[str, str]]:
+    """Return the default-color table (the packaged palette when none is given) and its map."""
+
+    if default_colors is None:
+        default_colors = load_default_colors(
+            user_defined_default_colors="",
+            palette=palette or "default",
+            load_comparison=load_comparison,
+        )
+    return default_colors, build_default_color_map(default_colors)
+
+
+def resolve_feature_inputs(
+    *,
+    color_table: DataFrame | None,
+    default_colors: DataFrame | None,
+    feature_visibility_table: DataFrame | None,
+    default_colors_palette: str = "default",
+    load_comparison_colors: bool = False,
+) -> ResolvedFeatureInputs:
+    """Compile already-loaded feature inputs into one reusable value.
+
+    Three render stages (design 2.6, M13): color rules from the color table,
+    default colors (loading the palette when no table is given), visibility
+    rules from the visibility table.
+    """
+
+    _check_feature_colors(color_table, "color table", by_row=True)
+    default_colors, default_color_map = render_stage(
+        "default_colors",
+        resolve_default_colors,
+        default_colors,
+        default_colors_palette,
+        load_comparison_colors,
+    )
+    _check_feature_colors(default_colors, "default colors", by_row=False)
+    _check_caption_colors(color_table)
+    return ResolvedFeatureInputs(
+        color_table=color_table,
+        default_colors=default_colors,
+        feature_visibility_table=feature_visibility_table,
+        feature_visibility_rules=render_stage(
+            "visibility_rules",
+            compile_feature_visibility_rules,
+            feature_visibility_table,
+        ),
+        specific_color_rules=render_stage(
+            "color_rules",
+            build_specific_color_rules,
+            color_table,
+        ),
+        default_color_map=default_color_map,
+    )
+
+
 def _resolve_feature_render_inputs(
     *,
     color_table: DataFrame | None,
@@ -1362,9 +1476,9 @@ def _resolve_feature_render_inputs(
         feature_visibility_table = read_feature_visibility_file(
             feature_visibility_table_file
         )
-    if default_colors is None:
+    if default_colors is None and default_colors_file:
         default_colors = load_default_colors(
-            user_defined_default_colors=default_colors_file or "",
+            user_defined_default_colors=default_colors_file,
             palette=default_colors_palette or "default",
             load_comparison=load_comparison_colors,
         )
@@ -1372,6 +1486,8 @@ def _resolve_feature_render_inputs(
         color_table=color_table,
         default_colors=default_colors,
         feature_visibility_table=feature_visibility_table,
+        default_colors_palette=default_colors_palette,
+        load_comparison_colors=load_comparison_colors,
     )
 
 
