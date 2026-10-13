@@ -4885,7 +4885,13 @@ const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load'
   return true;
 };
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {{ status?: string, recoveredFeatureState?: SavedFeatureFields | null,
+ *   migratedEditorState?: Record<string, unknown> | null, warning?: string | null } | null | undefined} plan
+ *   What this reads of a feature recovery plan (`buildSessionFeatureRecoveryPlan`, or the failed plan Load builds).
+ * @param {{ generationId?: string }} [options]
+ */
 const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'session-feature-recovery' } = {}) => {
   state.featureExtractionPending.value = false;
 
@@ -6331,7 +6337,17 @@ export const exportSession = (titleOverride = null, options = {}) => {
  * The Session file input's change event, or an object with its `target`.
  * @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput
  */
-/** @param {SessionFileInput} event */
+/**
+ * What the composition root passes to `importSession`: the Save and Load availability (as `SessionSaveOptions`
+ * has it) and a step to run before the Load starts, both read here; every other option is passed on to
+ * `importSessionDocument` unread.
+ * @typedef {Pick<SessionSaveOptions, 'availability'> & { beforeImport?: () => void | Promise<void> }
+ *   & Record<string, unknown>} SessionLoadOptions
+ */
+/**
+ * @param {SessionFileInput} event
+ * @param {SessionLoadOptions} [options]
+ */
 export const importSession = async (event, options = {}) => {
   const input = event?.target;
   const file = input?.files?.[0];

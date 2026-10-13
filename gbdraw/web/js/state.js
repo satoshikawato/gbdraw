@@ -887,13 +887,14 @@ const filteredEditableLabels = computed(() => {
   });
 });
 
-/** @typedef {{ status: string, reason: string }} SessionBusy What `sessionOperationAvailability` returns while a Session operation blocks edits. */
+/** @typedef {{ status: 'busy', reason: string }} SessionBusy What `sessionOperationAvailability` returns while a Session operation blocks edits. */
 
 // Pending is owned by the existing Session lifecycle; availability stores no lock.
 // 'history' words why History rejects Undo/Redo; History decides when (D-28).
 // `preparationBusyReason` words an edit still applying, whose owners only the
 // composition root holds: it passes it for Save and Load (R13). History words
 // its own pending edit the same way, so it passes none.
+/** @returns {SessionBusy | null} */
 export const sessionOperationAvailability = (
   operation = 'mutation',
   preparationBusyReason = /** @type {(() => string | null | undefined) | null} */ (null)
