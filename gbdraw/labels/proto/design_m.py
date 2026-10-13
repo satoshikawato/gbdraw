@@ -1,27 +1,25 @@
-"""Design M: a mock of the top and bottom limit (LP-D34 to LP-D37).  A look study, not an engine.
+"""Design M: a mock of the top and bottom limit (LP-D34 to LP-D38).  A look study, not an engine.
 
 The Owner: the labels need a limit at the top end and at the bottom end; the limit is what today's parameters set
 (`--outer_label_y_radius_offset`, `--outer_label_x_radius_offset`) and the placement does not move it; leaders
-never cross; the labels at the top and bottom ends stand toward the middle (12 and 6 o'clock), not out to the side.
+never cross; the labels stay on one arc, and at the top and bottom ends they stand toward the middle (12 and 6
+o'clock).
 
 Each half of the map (right, left) is one column in the clockwise order of the features, one label per row.  The
-near ends of a column lie on one convex outline.  It starts as the smallest one there is: around the ring
-(`r_keep`) and, where a stack stands above or below the ring, up to the end row of that stack next to the vertical
-axis.  So labels stand next to the ring, and at 12 and 6 o'clock next to the axis.  The outline grows only where
-labels need it: a label that must stand farther out to be reached (see the turn below) pushes the outline there,
-and the outline becomes the smallest convex curve through those places.  It never passes today's label ellipse
-(`xcap` at the equator, the limit at the poles).  When that growth does not settle, the outline is today's ellipse.
+near ends of a column lie on one arc: today's label ellipse (`xcap` at the equator, the limit at the poles), drawn
+through the middle of the rows, so that the highest and the lowest row under the limit stand next to the vertical
+axis.  `shape` bends that arc: 2 is the ellipse, a smaller number pulls it toward its four ends.
 
 Every leader is a radial stub to the elbow radius and one straight piece that turns less than 90 degrees there.
-Pieces that run from one circle to one convex outline around it, in the same order on both and never back into the
-circle, cannot cross, and no piece reaches a label box, which lies outside the outline: that is what keeps the
-leaders apart, not a test.  A leader is then drawn as one straight line where that line leaves the feature within
-`scone` degrees of the ray and crosses no other leader (tested).
+Pieces that run from one circle to one convex arc around it, in the same order on both and never back into the
+circle, cannot cross, and no piece reaches a label box, which lies outside the arc: that is what keeps the leaders
+apart, not a test.  A leader is then drawn as one straight line where that line leaves the feature within `scone`
+degrees of the ray and crosses no other leader (tested).
 
-The rows are the cheapest ordered choice of open rows: squared distance from the height of the own feature, plus
-`wc` times the squared degrees the piece turns beyond `cone`, plus (while the outline grows) `wx` times the squared
-px a label stands outside it.  A row is open while the turn stays under the largest turn in use.  What gives way
-when the labels do not fit on today's ellipse under the limit, in this order:
+The rows are the cheapest ordered choice of open rows: squared distance from the wanted row, plus `wc` times the
+squared degrees the piece turns beyond `cone`.  The wanted row is where the feature's own ray meets the arc.  A row
+is open while the turn stays under the largest turn in use.  What gives way when the labels do not fit on the arc
+under the limit, in this order:
   1. the turn opens, from `cone` up to `conemax`;
   2. the rows of the whole figure shrink, not below `sqmin` px of ink gap;
   3. the limit moves out at that end by the least amount.  The notes then show `limit_top` / `limit_bottom` above
@@ -29,17 +27,16 @@ when the labels do not fit on today's ellipse under the limit, in this order:
 
 Options (GBDRAW_LABEL_PROTO_OPTS):
   ylim     limit: px from the map centre that no label box passes at the top and bottom   [today's: arc_y_radius + h]
-  xcap     widest outline, px from the vertical axis at the equator                       [today's: arc_x_radius]
+  xcap     the arc at the equator, px from the vertical axis                              [today's: arc_x_radius]
+  shape    exponent of the arc: 2 = ellipse                                               [2]
   rowem    ink gap of stacked rows as a fraction of the font size                         [0.22]
   rowmin   floor of that gap, px                                                          [4]
   sqmin    smallest ink gap when the rows do not fit under the limit                      [2.5]
-  inkk     ink height of a row as a fraction of the measured text height                  [0.755]
   lgap     the leader stops this far before the label                                     [2.5]
   cone     turn at the elbow that costs nothing, degrees                                  [40]
   conemax  largest turn                                                                   [88]
   scone    largest angle between a straight leader and the feature's own ray              [70]
-  wc, wx   weights of the degrees beyond `cone` and of the px outside the outline         [2, 0.3]
-  grow     0: the outline is today's ellipse from the start                               [1]
+  wc       weight of the degrees beyond `cone`                                            [2]
 """
 
 from __future__ import annotations
@@ -48,7 +45,8 @@ import math
 
 import numpy as np
 
-from .common import Ctx, Item, box_from_left, box_from_right, emit, polar, segment_min_radius, segments_cross
+from .common import Ctx, Item, polar, segment_min_radius, segments_cross
+from .design_j import _emit_ink, _ink_rel
 
 INF = float("inf")
 AXIS = 6.0            # nearest place of a near end to the vertical axis, px
@@ -100,54 +98,30 @@ def _least(fits, lo: float, hi: float, eps: float) -> float | None:
 def place(items: list[Item], ctx: Ctx) -> list[dict]:
     if not items:
         return []
-    inkk = ctx.opt("inkk", 0.755)
     gap0 = max(ctx.opt("rowmin", 4.0), ctx.opt("rowem", 0.22) * ctx.font_size - 0.1)   # as design J: em = the font size number
     lgap = ctx.opt("lgap", 2.5)
     cone, conemax, scone = ctx.opt("cone", 40.0), ctx.opt("conemax", 88.0), ctx.opt("scone", 70.0)
-    wc, wx = ctx.opt("wc", 2.0), ctx.opt("wx", 0.3)
+    wc, shape = ctx.opt("wc", 2.0), ctx.opt("shape", 2.0)
     a, re = ctx.r_keep, ctx.r_elbow
     lim0 = ctx.opt("ylim", ctx.arc_y_radius + max(i.h for i in items))
     xcap = max(a, ctx.opt("xcap", ctx.arc_x_radius))
     cols = {"R": sorted((i for i in items if math.sin(i.theta) >= 0), key=lambda i: i.theta),
             "L": sorted((i for i in items if math.sin(i.theta) < 0), key=lambda i: -i.theta)}
     cols = {side: col for side, col in cols.items() if col}
-    ink = {side: [inkk * i.h for i in col] for side, col in cols.items()}
-    tall = {side: max(v) for side, v in ink.items()}
-    pitch = min(map(min, ink.values())) + gap0
+    ink = {side: [(-top, bottom, right - left) for left, top, right, bottom in (_ink_rel(i.text, float(i.src.get("font_size", ctx.font_size)), "start") for i in col)]
+           for side, col in cols.items()}                    # per label: px of ink above and below the middle of its row, and its width
+    tall = {side: tuple(map(max, zip(*v))) for side, v in ink.items()}
+    pitch = min(u + d for v in ink.values() for u, d, _ in v) + gap0
     step = pitch / round(pitch / 0.25)                   # rows of the rule fall on the grid
-    half = int((max(lim0, 0.5 * max(sum(h + gap0 for h in v) for v in ink.values())) + 300.0) / step)
+    half = int((max(lim0, 0.5 * max(sum(u + d + gap0 for u, d, _ in v) for v in ink.values())) + 300.0) / step)
     ys = (np.arange(2 * half + 1) - half) * step
     rows = np.arange(len(ys))
 
-    def majorant(x: np.ndarray) -> np.ndarray:
-        """The least concave curve over x, between the first and the last row that holds a place (x above the axis floor)."""
-        held = np.flatnonzero(x > AXIS)
-        if len(held) < 3:
-            return x
-        first, hull = int(held[0]), []
-        part = x[first:int(held[-1]) + 1]
-        for i in range(len(part)):
-            while len(hull) > 1 and (part[hull[-1]] - part[hull[-2]]) * (i - hull[-2]) <= (part[i] - part[hull[-2]]) * (hull[-1] - hull[-2]):
-                hull.pop()
-            hull.append(i)
-        out = x.copy()
-        out[first:first + len(part)] = np.interp(np.arange(len(part)), hull, part[hull])
-        return out
-
-    def today(side: str, tops: tuple[float, float]) -> np.ndarray:
-        """x of the near end per row on today's ellipse: `xcap` wide at the equator, as high as `tops` (top, bottom)."""
-        e = np.maximum(0.0, np.abs(ys) - 0.5 * tall[side]) / np.where(ys < 0, tops[0], tops[1])
-        return np.maximum(xcap * np.sqrt(np.maximum(0.0, 1.0 - e * e)), AXIS)
-
-    def nearest(side: str, tops: tuple[float, float]) -> np.ndarray:
-        """x of the near end per row on the smallest outline: around the ring and, where the stack ends above or below
-        the ring, up to its end row next to the axis."""
-        h = tall[side]
-        x = np.maximum(np.sqrt(np.maximum(0.0, a * a - np.maximum(0.0, np.abs(ys) - 0.5 * h) ** 2)), AXIS)
-        for top, sign in zip(tops, (-1.0, 1.0)):
-            if top >= a + h:                                 # a row that stands clear of the ring at the axis
-                x[half + round(sign * (top - 0.5 * h) / step)] = AXIS + 0.01
-        return majorant(x)
+    def arc(side: str, top: float, bottom: float) -> np.ndarray:
+        """x of the near end per row on the label arc: `xcap` at the equator, on the axis in the end rows under the limits."""
+        ends = np.floor(np.where(ys < 0, top - tall[side][0], bottom - tall[side][1]) / step + 1e-6) * step   # the end rows, on the grid
+        e = np.minimum(1.0, np.abs(ys) / ends)
+        return np.maximum(xcap * (1.0 - e ** shape) ** (1.0 / shape), AXIS)
 
     def frame(it: Item, side: str) -> tuple[float, float, float, float]:
         th = it.theta if side == "R" else -it.theta              # the left column is worked in the mirror
@@ -160,18 +134,18 @@ def place(items: list[Item], ctx: Ctx) -> list[dict]:
         return np.degrees(np.arctan2(np.abs(vx * c + vy * s), vx * s - vy * c))
 
     def bounds(side: str, top: float, bottom: float) -> tuple[list[int], list[int]]:
-        return ([math.ceil((-top + 0.5 * h) / step - 1e-6) + half for h in ink[side]],
-                [math.floor((bottom - 0.5 * h) / step + 1e-6) + half for h in ink[side]])
+        return ([math.ceil((-top + u) / step - 1e-6) + half for u, _, _ in ink[side]],
+                [math.floor((bottom - d) / step + 1e-6) + half for _, d, _ in ink[side]])
 
     def seps(side: str, gap: float) -> list[int]:
-        return [math.ceil((0.5 * (p + q) + gap) / step - 1e-6) for p, q in zip(ink[side], ink[side][1:])]
+        return [math.ceil((p[1] + gap + q[0]) / step - 1e-6) for p, q in zip(ink[side], ink[side][1:])]
 
     def fits(deg: float, gap: float, top: float = lim0, bottom: float = lim0) -> bool:
-        """Every column fits on today's ellipse under these limits."""
-        return all(_first_fit([np.flatnonzero(turn(it, side, today(side, (top, bottom))) <= deg) for it in col],
+        """Every column fits on the arc under these limits."""
+        return all(_first_fit([np.flatnonzero(turn(it, side, arc(side, top, bottom)) <= deg) for it in col],
                               seps(side, gap), *bounds(side, top, bottom)) for side, col in cols.items())
 
-    # what gives way on today's ellipse, in order: the turn, the rows, the limit
+    # what gives way, in order: the turn, the rows, the limit
     gap, lims = gap0, [lim0, lim0]
     deg = _least(lambda v: fits(v, gap0), cone, conemax, 0.5) or conemax
     while gap > min(gap0, ctx.opt("sqmin", 2.5)) and not fits(deg, gap):
@@ -183,76 +157,21 @@ def place(items: list[Item], ctx: Ctx) -> list[dict]:
         lims[0] = lim0 + _least(lambda v: fits(deg, gap, lim0 + v, lim0 + even), 0.0, even, step)
         lims[1] = lim0 + _least(lambda v: fits(deg, gap, lims[0], lim0 + v), 0.0, even, step)
 
-    def rows_on(side: str, places: list[tuple[np.ndarray, np.ndarray]]) -> list[int] | None:
-        """The cheapest rows of a column; per label the turn and an extra cost per row."""
-        lo, hi = bounds(side, *lims)
-        cost = [np.where((rows >= lo[k]) & (rows <= hi[k]) & (t <= deg), (ys + a * math.cos(it.theta)) ** 2 + wc * np.maximum(0.0, t - cone) ** 2 + c, INF)
-                for k, (it, (t, c)) in enumerate(zip(cols[side], places))]
-        return _cheapest(cost, seps(side, gap))
-
-    def grown(side: str, tops: tuple[float, float]) -> list[tuple[float, float, float]] | None:
-        """Rows on the outline that starts as the smallest one and grows where labels need it; None when it does not settle."""
-        cap = today(side, (lims[0], lims[1]))
-        base = np.minimum(nearest(side, tops), cap)
-        for _ in range(16):
-            places, stand = [], []
-            for it in cols[side]:
-                s, c, ex, ey = frame(it, side)
-                at, t, extra = base, turn(it, side, base), np.zeros(len(ys))
-                for target in np.linspace(cone, deg, 6):             # stand outside the outline to turn no more than `target`
-                    lo, hi, tc = base.copy(), cap.copy(), math.tan(math.radians(90.0 - target))
-                    for sg in (1.0, -1.0):                           # the two sides of the cone: gx * (x - ex) + gy * (y - ey) >= 0
-                        gx, gy = s - sg * tc * c, -c - sg * tc * s
-                        if abs(gx) < 1e-9:
-                            lo = np.where(gy * (ys - ey) >= 0, lo, INF)
-                        elif gx > 0:
-                            lo = np.maximum(lo, ex - gy * (ys - ey) / gx + lgap)
-                        else:
-                            hi = np.minimum(hi, ex - gy * (ys - ey) / gx + lgap)
-                    new = np.where(lo <= hi, wx * (lo - base) ** 2 + wc * max(0.0, target - cone) ** 2, INF)
-                    take = new < np.where(t <= deg, wc * np.maximum(0.0, t - cone) ** 2 + extra, INF)
-                    at, t, extra = np.where(take, lo, at), np.where(take, target, t), np.where(take, wx * (lo - base) ** 2, extra)
-                places.append((t, extra))
-                stand.append(at)
-            idx = rows_on(side, places)
-            if idx is None:
-                return None
-            want = base.copy()
-            want[idx] = np.maximum(want[idx], [float(x[i]) for i, x in zip(idx, stand)])
-            if float(np.max(want - base)) < 0.25:
-                return [(float(ys[i]), float(base[i]), float(turn(it, side, base)[i])) for i, it in zip(idx, cols[side])]
-            base = np.minimum(majorant(want), cap)
-        return None
-
-    def widest(side: str, tops: tuple[float, float]) -> list[tuple[float, float, float]] | None:
-        """Rows on today's ellipse, as high as the stack."""
-        x = today(side, tops)
-        ts = [turn(it, side, x) for it in cols[side]]
-        idx = rows_on(side, [(t, np.zeros(len(ys))) for t in ts])
-        return None if idx is None else [(float(ys[i]), float(x[i]), float(t[i])) for i, t in zip(idx, ts)]
-
-    plan, how = {}, {}
-    for side in cols:
-        for way in ((grown, widest) if ctx.opt("grow", 1.0) else (widest,)):
-            tops, best = (lims[0], lims[1]), None
-            for _ in range(4):                           # the outline follows the stack, the stack the outline
-                got = way(side, tops)
-                if got is None:                          # a lower stack closes rows this column needs: keep the one before
-                    break
-                best = got
-                tops = (max([a] + [-y + 0.5 * h for (y, _, _), h in zip(best, ink[side]) if y < 0]),
-                        max([a] + [y + 0.5 * h for (y, _, _), h in zip(best, ink[side]) if y >= 0]))
-            if best is not None:
-                plan[side], how[side] = best, way.__name__
-                break
+    plan = {}
+    for side, col in cols.items():
+        x, (lo, hi) = arc(side, *lims), bounds(side, *lims)
+        ts = [turn(it, side, x) for it in col]
+        idx = _cheapest([np.where((rows >= lo[k]) & (rows <= hi[k]) & (t <= deg), (ys - ys[int(np.argmin(t))]) ** 2 + wc * np.maximum(0.0, t - cone) ** 2, INF)
+                         for k, t in enumerate(ts)], seps(side, gap))
+        plan[side] = [(float(ys[i]), float(x[i]), float(t[i])) for i, t in zip(idx, ts)]
 
     placed = []                                          # [item, box, align, leader points, turn at the elbow]
     for side, col in cols.items():
-        for it, h, (y, x0, bend) in zip(col, ink[side], plan[side]):
+        for it, (u, d, w), (y, x0, bend) in zip(col, ink[side], plan[side]):
             if side == "R":
-                box, end, align = box_from_left(x0, y, it.w, h), (x0 - lgap, y), "start"
+                box, end, align = (x0, y - u, x0 + w, y + d), (x0 - lgap, y), "start"
             else:
-                box, end, align = box_from_right(-x0, y, it.w, h), (-x0 + lgap, y), "end"
+                box, end, align = (-x0 - w, y - u, -x0, y + d), (-x0 + lgap, y), "end"
             placed.append([it, box, align, [it.anchor, polar(re, it.theta), end], bend])
 
     def crosses(pts, k: int) -> bool:
@@ -269,11 +188,10 @@ def place(items: list[Item], ctx: Ctx) -> list[dict]:
             placed[k][3] = [it.anchor, end]
     crossing = sum(1 for k, p in enumerate(placed) if crosses(p[3], k)) // 2
     ctx.notes.update(limit_asked=round(lim0, 1), limit_top=round(lims[0], 1), limit_bottom=round(lims[1], 1),
-                     gap_asked=round(gap0, 2), gap=round(gap, 2), outline=how, ring=round(a, 1), xcap=round(xcap, 1),
-                     x_widest={side: round(max(x for _, x, _ in p), 1) for side, p in plan.items()},
+                     gap_asked=round(gap0, 2), gap=round(gap, 2), shape=shape, ring=round(a, 1), xcap=round(xcap, 1),
                      x_at_ends={side: (round(p[0][1], 1), round(p[-1][1], 1)) for side, p in plan.items()},
                      turn_max=round(deg, 1), turn_free=cone,
                      straight=sum(1 for p in placed if len(p[3]) == 2), turned_over_70=sum(1 for p in placed if len(p[3]) == 3 and p[4] > 70.0),
                      crossings=crossing, arc_y_radius=round(ctx.arc_y_radius, 1), arc_x_radius=round(ctx.arc_x_radius, 1),
                      n_right=len(cols.get("R", ())), n_left=len(cols.get("L", ())))
-    return [emit(it, box, pts, align=align, tag="M") for it, box, align, pts, _ in placed]
+    return [_emit_ink(it, box, pts, align, "M", ctx.font_size) for it, box, align, pts, _ in placed]
