@@ -71,9 +71,10 @@ export const legendPositionOrDefault = (value, mode) => (
 
 /**
  * The side a Result saved without composition metadata (Session 27 to 30) is
- * laid out with: `none` when its Session stored no side (no value, or one the
- * old reader skipped: `null`, `false`, blank text), otherwise the stored
- * position of the Result's mode or the mode's default (OV-671, BA-D26).
+ * laid out with: `none` when its Session stored no side (no value, a falsy
+ * value the old `||` chain read as `none`, or blank text, which failed Load
+ * before), otherwise the stored position of the Result's mode or the mode's
+ * default (OV-671, BA-D26).
  * @param {unknown} value The Session's `config.form.legend`.
  * @param {string} mode The Result's mode.
  * @returns {string}

@@ -191,8 +191,9 @@ write-up of a release.
   Linear, or any other text) loaded, and **Generate** then failed with "Input
   validation failed". Such a position is now read as unset, so the legend takes
   the position an unset one gets; capitals and outer spaces are still accepted
-  (OV-652). The side a loaded Result's Legend was laid out with is read the
-  same way: a Linear Result saved by 0.13.0 with a corner position keeps its
+  (OV-652). The side a loaded Result's Legend was laid out with is also read
+  through its mode's positions, and a side outside them reads as the mode's
+  default: a Linear Result saved by 0.13.0 with a corner position keeps its
   figure, and its first Legend edit places the Legend below the diagram; such
   a side with capitals or spaces no longer stops the load (OV-671, OV-672).
 - Fixed: the records of one multi-record File were named differently in
