@@ -21,11 +21,13 @@ const inspectNow = page => page.evaluate(async () => {
   // retires it live as a hidden row, which the layout skips and every export
   // strips, until Python draws the Legend again (D-15-6 (2), (3); OV-313).
   const entries=svg=>[...(getVisibleFeatureLegendGroup(svg)?.querySelectorAll('g[data-legend-key]')||[])].filter(legendRowShown).map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}));
+  // The name each row draws, by its key (`caption` above is the key, which is never drawn).
+  const names=svg=>Object.fromEntries([...(getVisibleFeatureLegendGroup(svg)?.querySelectorAll('g[data-legend-key]')||[])].filter(legendRowShown).map(e=>[e.getAttribute('data-legend-key'),e.querySelector('text')?.textContent]));
   return {rules:JSON.parse(JSON.stringify(s.activeDrawing().manualSpecificRules.map(rule=>({...rule,fromFile:Boolean(rule.fromFile)})))), mounted:entries(root), result:entries(result),
     dual:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>e.getAttribute('data-legend-key'))),
     dualStyles:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}))),
-    svg:s.results.value[s.selectedResultIndex.value].content, fileName:s.files.t_color?.name,
-    notice:window.__GBDRAW_APP__.specificRuleNotice};
+    names:names(result), mountedNames:names(root),
+    svg:s.results.value[s.selectedResultIndex.value].content, fileName:s.files.t_color?.name};
 });
 const reveal = async locator => {
   for(const details of await locator.locator('xpath=ancestor::details').all()) {
@@ -38,7 +40,7 @@ const history = async (page, name) => {
 };
 
 for(const width of [1440,390]) {
-  test(`canonical multicolor captions survive live/native/edit/session/download (${width}px)`,async({browser},testInfo)=>{
+  test(`a caption written in several colors stays as written and draws numbered names through live/native/edit/session/download (${width}px)`,async({browser},testInfo)=>{
     test.setTimeout(1_800_000);
     const page=await load(browser,'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json',{width,height:1000});
     let fresh;
@@ -66,8 +68,13 @@ for(const width of [1440,390]) {
       await (await chooser).setFiles({name:'multicolor.tsv',mimeType:'text/plain',buffer:Buffer.from(source.text)});
       await page.evaluate(async()=>{const a=window.__GBDRAW_APP__;await a.waitForAuxiliaryFileImport(a.files.t_color);});
       const live=await inspect(page);
+      // PD-OI-042 scenario revision 2: the rules keep their caption; each color has
+      // its own row (the keys below, never drawn), and the Legend numbers the names.
       const captions=['Color group [#112233]','Color group [#445566]','Color group [#778899]'];
-      expect(live.rules.filter(r=>r.cap.startsWith('Color group')).map(r=>r.cap).sort()).toEqual(captions);
+      expect(live.rules.filter(r=>r.cap.startsWith('Color group')).map(r=>r.cap)).toEqual(['Color group','Color group','Color group']);
+      expect(captions.map(key=>live.names[key]).sort()).toEqual(['Color group (1)','Color group (2)','Color group (3)']);
+      expect(live.mountedNames).toEqual(live.names);
+      expect(Object.values(live.names).filter(name=>name.includes(' [#'))).toEqual([]);
       expect(live.rules.find(r=>r.val===source.ids[2]).fromFile).toBe(false);
       expect(live.rules.find(r=>r.val===source.ids[0]).fromFile).toBe(true);
       expect(live.mounted).toEqual(live.result);
@@ -90,43 +97,41 @@ for(const width of [1440,390]) {
       },captions);
       for(const extent of extents){expect(extent.inside).toBe(true);expect(extent.width).toBeGreaterThan(0);
         expect(extent.height).toBeGreaterThan(0);expect(extent.swatchWidth).toBeGreaterThan(0);expect(extent.swatchHeight).toBeGreaterThan(0);}
-      expect(live.notice).toMatch(/Updated 3/);
-      const notice=page.getByRole('status').filter({hasText:'specific-color caption'});
-      await expect(notice).toHaveAttribute('aria-live','polite');
-      await notice.scrollIntoViewIfNeeded();
-      const noticeBounds=await notice.boundingBox();
-      expect(noticeBounds.x).toBeGreaterThanOrEqual(0);
-      expect(noticeBounds.x+noticeBounds.width).toBeLessThanOrEqual(width);
-      await page.screenshot({path:testInfo.outputPath('caption-notice.png')});
+      // No caption is rewritten, so nothing is announced.
+      await expect(page.getByText('specific-color caption')).toHaveCount(0);
       await history(page,'Undo');
       expect((await inspect(page)).rules).toEqual(before.rules);
       await history(page,'Redo');
       expect((await inspect(page)).rules).toEqual(live.rules);
       await generate(page);
       const generated=await inspect(page);
+      expect(captions.map(key=>generated.names[key])).toEqual(captions.map(key=>live.names[key]));
       expect(generated.result.filter(e=>e.caption.startsWith('Color group')).sort((a,b)=>a.caption.localeCompare(b.caption))).toEqual(live.result.filter(e=>e.caption.startsWith('Color group')).sort((a,b)=>a.caption.localeCompare(b.caption)));
       // Rename/recolor acts on the canonical source rows and leaves siblings intact.
-      await page.evaluate(async()=>{
+      await page.evaluate(async id=>{
         const a=window.__GBDRAW_APP__;
-        const index=a.manualSpecificRules.findIndex(r=>r.cap==='Color group [#112233]');
+        const index=a.manualSpecificRules.findIndex(r=>r.val===id);
         await a.setSpecificRuleField(index,'cap','Primary complex');
         await a.updateLegendEntryColor(a.legendEntries.findIndex(e=>e.caption==='Primary complex'),'#224466');
         a.sortLegendEntries();
-      });
+      },source.ids[0]);
       const edited=await inspect(page);
       expect(edited.rules.find(r=>r.val===source.ids[0]).cap).toBe('Primary complex');
       expect(edited.rules.find(r=>r.val===source.ids[0]).color).toBe('#224466');
-      expect(edited.rules.find(r=>r.val===source.ids[1]).cap).toBe('Color group [#445566]');
+      expect(edited.rules.find(r=>r.val===source.ids[1]).cap).toBe('Color group');
       await generate(page);
       const final=await inspect(page);
       expect(final.result.find(e=>e.caption==='Primary complex').color).toBe('#224466');
+      // Two colors are left under the name: their rows are numbered from 1.
+      expect(captions.slice(1).map(key=>final.names[key])).toEqual(['Color group (1)','Color group (2)']);
       const pendingTsv=page.waitForEvent('download');
       await page.evaluate(()=>window.__GBDRAW_APP__.downloadSpecificRulesTsv());
       const tsvPath=testInfo.outputPath('canonical-rules.tsv');
       await (await pendingTsv).saveAs(tsvPath);
       const tsv=await fs.readFile(tsvPath,'utf8');
       expect(tsv).toContain('\tPrimary complex\n');
-      expect(tsv).toContain('\tColor group [#445566]\n');
+      expect(tsv).toContain('\t#445566\tColor group\n');
+      expect(tsv).not.toContain(' [#');
       expect(await page.evaluate(async()=>{const {readFileText}=await import('./js/services/file-content-cache.js');return readFileText(window.__GBDRAW_APP__.files.t_color);})).toBe(source.text);
       expect(final.fileName).toBe('multicolor.tsv');
       const sessionPath=testInfo.outputPath('canonical.gbdraw-session.json.gz');
@@ -159,7 +164,7 @@ with materialize_session(sys.argv[1],output_directory=sys.argv[2]) as session:
       const reimported=await inspect(page);
       expect(reimported.rules.find(r=>r.val===source.ids[0] && !r.fromFile).cap).toBe('Primary complex');
       expect(reimported.result.some(e=>e.caption==='Color group [#112233]')).toBe(false);
-      await page.evaluate(async()=>{const a=window.__GBDRAW_APP__;await a.removeSpecificRule(a.manualSpecificRules.findIndex(r=>r.cap==='Color group [#445566]'));});
+      await page.evaluate(async()=>{const a=window.__GBDRAW_APP__;await a.removeSpecificRule(a.manualSpecificRules.findIndex(r=>r.cap==='Color group' && r.color==='#445566'));});
       expect((await inspect(page)).result.some(e=>e.caption==='Color group [#445566]')).toBe(false);
       await history(page,'Undo');
       expect((await inspect(page)).rules).toEqual(reimported.rules);
@@ -235,7 +240,7 @@ test('generated-caption collisions roll back and old Session drafts normalize on
 });
 
 
-test('Linear comparison keeps both legend orientations and their swatches canonical',async({browser},testInfo)=>{
+test('Linear comparison numbers a caption written in two colors in both legend orientations',async({browser},testInfo)=>{
   test.setTimeout(1_800_000);
   const page=await load(browser,'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
   page.setDefaultTimeout(180000);
@@ -256,9 +261,18 @@ test('Linear comparison keeps both legend orientations and their swatches canoni
     for(const orientation of live.dualStyles) expect(orientation.filter(e=>e.caption.startsWith('Comparison group'))).toEqual([
       {caption:'Comparison group [#112233]',color:'#112233'}, {caption:'Comparison group [#445566]',color:'#445566'}]);
     expect(live.mounted).toEqual(live.result);
+    // The rules keep the caption; both orientations draw the numbered names.
+    expect(live.rules.filter(r=>r.cap.startsWith('Comparison group')).map(r=>r.cap)).toEqual(['Comparison group','Comparison group']);
+    const drawn=await page.evaluate(async()=>{
+      const {getAllFeatureLegendGroups}=await import('./js/services/legend-svg.js');
+      return getAllFeatureLegendGroups(window.__GBDRAW_APP__.svgContainer.querySelector('svg')).map(group=>
+        [...group.querySelectorAll('g[data-legend-key^="Comparison group"]')].map(e=>e.querySelector('text')?.textContent));
+    });
+    expect(drawn).toEqual([['Comparison group (1)','Comparison group (2)'],['Comparison group (1)','Comparison group (2)']]);
     await generate(page);
     const fresh=await inspect(page);
     expect(fresh.result.filter(e=>e.caption.startsWith('Comparison group'))).toEqual(live.result.filter(e=>e.caption.startsWith('Comparison group')));
+    expect(['Comparison group [#112233]','Comparison group [#445566]'].map(key=>fresh.names[key])).toEqual(['Comparison group (1)','Comparison group (2)']);
     const pending=page.waitForEvent('download');
     await page.evaluate(()=>window.__GBDRAW_APP__.downloadSVG());
     await (await pending).saveAs(testInfo.outputPath('comparison.svg'));
