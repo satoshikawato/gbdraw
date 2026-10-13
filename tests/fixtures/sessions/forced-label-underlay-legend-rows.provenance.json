@@ -13,6 +13,7 @@
       "wheel": "gbdraw-0.14.0-py3-none-any.whl",
       "sessionVersion": 44,
       "records": "tests/fixtures/forced_label_underlay.gb (sha256 a9e11770edd5736d727d466fac3131b88ddb991486391db543e6ba091b559ea7), Circular, labels out, one Result",
+      "recordsNote": "On 2026-10-14 (#1053) the repository file was shortened: its two CDS at one location (dup alpha, dup beta) now span 2851..2900 instead of 2701..2900, so their labels no longer overlap. The Session embeds the original bytes (the sha256 above).",
       "steps": [
         "Generate",
         "Legend editor: rename GC content to GC %",
