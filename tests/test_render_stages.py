@@ -730,3 +730,37 @@ def test_feature_inputs_report_the_color_table_error_before_the_visibility_error
             default_colors=None,
             feature_visibility_table=visibility_table,
         )
+
+
+def test_a_linear_render_compiles_the_color_table_only_in_its_stage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The linear feature passes use the configurator's compiled maps (design 2.6)."""
+
+    import gbdraw.features.colors as feature_colors
+    import gbdraw.linear
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+    from Bio.SeqRecord import SeqRecord
+
+    recompiles: list[int] = []
+
+    def counting(*args, **kwargs):
+        recompiles.append(1)
+        return compile_rules(*args, **kwargs)
+
+    compile_rules = feature_colors.build_specific_color_rules
+    monkeypatch.setattr(feature_colors, "build_specific_color_rules", counting)
+    record = SeqRecord(Seq("ATGC" * 300), id="r1", name="r1", description="r")
+    record.annotations["molecule_type"] = "DNA"
+    record.features = [SeqFeature(FeatureLocation(30, 300, strand=1), type="CDS", qualifiers={"product": ["p"]})]
+    source = tmp_path / "r1.gb"
+    SeqIO.write([record], source, "genbank")
+    table = tmp_path / "colors.tsv"
+    table.write_text("CDS\tproduct\tp\tred\tP\n", encoding="utf-8")
+    gbdraw.linear.linear_main(
+        ["--gbk", str(source), "-t", str(table), "-o", str(tmp_path / "out"), "--show_labels", "all", "-f", "svg"]
+    )
+    assert recompiles == []

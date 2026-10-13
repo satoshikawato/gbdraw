@@ -23,7 +23,6 @@ from ...config.models import (
 )
 from ...configurators import FeatureDrawingConfigurator
 from ...auto_sizes import linear_label_font_size
-from ...features.colors import preprocess_color_tables
 from ...features.factory import (
     FeatureBuildResult,
     create_feature_layers,
@@ -113,10 +112,6 @@ def _precalculate_feature_layers(
     """Build feature objects once per record for the linear assembly pipeline."""
 
     cfg = profile.config
-    color_table, default_colors = preprocess_color_tables(
-        feature_config.color_table,
-        feature_config.default_colors,
-    )
     label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
 
     feature_layers: list[FeatureBuildResult] = []
@@ -124,9 +119,9 @@ def _precalculate_feature_layers(
         compute_label_text = profile.labels_in_scope(i)
         result = create_feature_layers(
             record,
-            color_table,
+            feature_config.specific_color_rules,
             feature_config.selected_features_set,
-            default_colors,
+            feature_config.default_color_map,
             profile.strandedness,
             profile.resolve_overlaps,
             label_filtering if compute_label_text else {},
@@ -172,11 +167,6 @@ def _precalculate_label_dimensions(
     record_label_heights: list[float] = []
     normalize_length = cfg.canvas.linear.normalize_length
     label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
-    if precomputed_feature_dicts is None:
-        color_table, default_colors = preprocess_color_tables(
-            feature_config.color_table,
-            feature_config.default_colors,
-        )
 
     for i, record in enumerate(records):
         if not profile.record_has_labels(i):
@@ -193,9 +183,9 @@ def _precalculate_label_dimensions(
         else:
             feature_result = create_feature_layers(
                 record,
-                color_table,
+                feature_config.specific_color_rules,
                 feature_config.selected_features_set,
-                default_colors,
+                feature_config.default_color_map,
                 profile.strandedness,
                 profile.resolve_overlaps,
                 label_filtering,
