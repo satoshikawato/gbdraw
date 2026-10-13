@@ -756,6 +756,8 @@ const sameNumber = (left, right) => Number(left) === Number(right);
 /**
  * @param {object} options
  * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `files.linearCanonicalComparisons`.
+ *   The caller's value is untyped (`files` is a Vue reactive object), so this is not checked there; a hand-edited
+ *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
  * @param options.committedSession The committed Session (`CommittedCanonicalSession` in services/config.js), left
  *   untyped: its request may be a stored one whose leaves no reader has checked (`StoredRenderRequest`), and the reads
  *   below use them as they are (a null record throws). The true type needs checks that change that result, so the
@@ -1676,7 +1678,9 @@ export const createRunAnalysis = ({
    * @param {DrawingState} drawing
    * @param {Pick<CanonicalRenderRequest, 'mode' | 'diagramOptions'>} request The candidate's request: the one
    *   `buildCanonicalRenderRequest` built, or the committed request that `projectCommittedEditorIntent` or the record
-   *   rotation and alignment projections (`runCommittedCanonicalCandidate`) return.
+   *   rotation and alignment projections (`runCommittedCanonicalCandidate`) return. Only the first caller is checked:
+   *   the other two pass a value typed `any` (the `canonical` option, and the return of `projectCommittedEditorIntent`),
+   *   and for a loaded schema-9 request no reader checks `diagramOptions.depthTracks` yet (only its truth is read).
    */
   const unrequestedDepthCaptions = (drawing, request) => (
     request.diagramOptions?.depthTracks
