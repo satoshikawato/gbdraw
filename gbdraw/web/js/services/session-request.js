@@ -847,10 +847,10 @@ const DRAFT_FIELD_OF_FLAT_CONFIG_KEY = Object.freeze({
  * the rest to the drawing's `adv`. A path the mode does not manage, or one
  * whose draft field the drawing does not hold, is an `UNKNOWN_CONFIG_PATH`
  * error.
- * @param {Readonly<Record<string, number | string>>} values
+ * @param {Readonly<Record<string, number | string | boolean>>} values
  * @param {ModeProfileName} mode
  * @param {Readonly<Record<string, unknown>>} adv The drawing's draft, whose fields the result names.
- * @returns {{ form: Record<string, string>, adv: Record<string, number | string> }}
+ * @returns {{ form: Record<string, string>, adv: Record<string, number | string | boolean> }}
  */
 export const draftFieldsForConfigValues = (values, mode, adv) => {
   const managed = new Set(managedConfigOverridePathsForMode(mode));
@@ -859,7 +859,7 @@ export const draftFieldsForConfigValues = (values, mode, adv) => {
   // A copy of the draft fields, not the drawing's own objects.
   /** @type {Record<string, string>} */
   const formFields = {};
-  /** @type {Record<string, number | string>} */
+  /** @type {Record<string, number | string | boolean>} */
   const advFields = {};
   for (const [key, value] of Object.entries(projectCanonicalConfigOverrides(values, mode))) {
     if (key === 'label_scope') {
@@ -869,7 +869,7 @@ export const draftFieldsForConfigValues = (values, mode, adv) => {
       continue;
     }
     const field = DRAFT_FIELD_OF_FLAT_CONFIG_KEY[key] || key;
-    if (!Object.hasOwn(adv, field) || !(typeof value === 'number' || typeof value === 'string')) throw unknown();
+    if (!Object.hasOwn(adv, field) || !['number', 'string', 'boolean'].includes(typeof value)) throw unknown();
     advFields[field] = value;
   }
   if (Object.keys(formFields).length + Object.keys(advFields).length === 0) throw unknown();

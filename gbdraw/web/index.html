@@ -5208,26 +5208,26 @@
                                         <div>
                                             <label class="input-label text-[10px]">Outer X Offset</label>
                                             <auto-value-field :visible="autoValueVisible(adv.outer_label_x_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                <input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" aria-label="Outer X Offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Outer Y Offset</label>
                                             <auto-value-field :visible="autoValueVisible(adv.outer_label_y_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                <input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" aria-label="Outer Y Offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <template v-if="form.labels_mode === 'both'">
                                             <div>
                                                 <label class="input-label text-[10px]">Inner X Offset</label>
                                                 <auto-value-field :visible="autoValueVisible(adv.inner_label_x_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" aria-label="Inner X Offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                             <div>
                                                 <label class="input-label text-[10px]">Inner Y Offset</label>
                                                 <auto-value-field :visible="autoValueVisible(adv.inner_label_y_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" aria-label="Inner Y Offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </template>

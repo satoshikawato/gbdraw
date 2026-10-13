@@ -11,12 +11,12 @@ import { diagnosticError } from '../utils/error-normalization.js';
 /** @typedef {string & { readonly labelFitRowKind: unique symbol }} LabelFitRowKind A Python row kind, such as `outward_vertical`. */
 /** @typedef {string & { readonly configPath: unique symbol }} ConfigPath A dotted config path, such as `labels.spacing.circular`. */
 /** @typedef {string & { readonly labelFitRowToken: unique symbol }} LabelFitRowToken Names the drawn figure whose rows the Worker computes. */
-/** @typedef {number | string} LabelFitValue A number, or a word such as a label scope. */
+/** @typedef {number | string | boolean} LabelFitValue A number, a word such as a label scope, or a switch. */
 /**
  * @typedef {object} LabelFitSetting One control a row changes, as Python names it.
  * @property {string} name
  * @property {string} unit
- * @property {LabelFitValue} value A number, or the control's option label.
+ * @property {number | string} value A number, or the control's option label.
  */
 /**
  * @typedef {object} LabelFitRow
@@ -73,8 +73,10 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
 const isCount = (value) => Number.isSafeInteger(value) && Number(value) >= 0;
 /** @param {unknown} value @returns {value is number} */
 const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+/** @param {unknown} value @returns {value is number | string} */
+const isShown = (value) => isNumber(value) || (typeof value === 'string' && value !== '');
 /** @param {unknown} value @returns {value is LabelFitValue} */
-const isValue = (value) => isNumber(value) || (typeof value === 'string' && value !== '');
+const isValue = (value) => isShown(value) || typeof value === 'boolean';
 /** @param {unknown} value @returns {value is LabelFitRowToken | null} */
 const isToken = (value) => value === null || (typeof value === 'string' && value !== '');
 /** @param {unknown} value @returns {value is string | null} */
@@ -101,7 +103,7 @@ export const normalizeLabelFitRow = (value) => {
   if (status === 'found' && !(isObject(size) && isNumber(size.width) && isNumber(size.height))) throw invalid();
   const settings = value.settings.map((setting) => {
     if (!isObject(setting) || typeof setting.name !== 'string' || typeof setting.unit !== 'string'
-      || !isValue(setting.value)) throw invalid();
+      || !isShown(setting.value)) throw invalid();
     return Object.freeze({ name: setting.name, unit: setting.unit, value: setting.value });
   });
   return Object.freeze({

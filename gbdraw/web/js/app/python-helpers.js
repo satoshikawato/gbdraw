@@ -19,7 +19,7 @@ from gbdraw.web_support.config_overrides import validate_web_config_overrides_js
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
-from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure
+from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure, label_fit_mode
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -198,7 +198,9 @@ def run_canonical_request_wrapper(
         label_fit = label_fit_failure(e)
         if label_fit is not None:
             failure["labelFit"] = json.dumps(
-                _WEB_LABEL_FIT_SEARCHES.failure_payload(label_fit), ensure_ascii=False, separators=(",", ":")
+                _WEB_LABEL_FIT_SEARCHES.failure_payload(label_fit, label_fit_mode(payload.get("mode"))),
+                ensure_ascii=False,
+                separators=(",", ":"),
             )
         return failure
 

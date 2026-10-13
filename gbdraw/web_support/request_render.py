@@ -15,6 +15,7 @@ from gbdraw.api.request_render import (
     _capture_request_render_diagnostics,
     render_request,
 )
+from gbdraw.api.requests import DiagramRequest, LinearDiagramRequest
 from gbdraw.api.prepared import (
     PreparedBiologicalInputCache,
     PreparedResourceIdentity,
@@ -34,11 +35,15 @@ from gbdraw.web_support.feature_catalog import (
     build_feature_catalog,
     build_feature_catalog_item,
 )
-from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_report_payload
+from gbdraw.web_support.label_fit import LabelFitMode, LabelFitRowSearches, label_fit_report_payload
 
 # OD-F14: Generate on the Web draws crossing label leaders with their counts
 # only; the dialog computes the rows when the user asks for them.
 WEB_LABEL_FIT_WARN_SEARCH_SECONDS = 0.0
+
+
+def _label_fit_mode_of(request: DiagramRequest) -> LabelFitMode:
+    return "linear" if isinstance(request, LinearDiagramRequest) else "circular"
 
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -189,7 +194,7 @@ def _render_canonical_web_request(
         except LabelsDoNotFitError as error:
             # Nothing was drawn: keep the failure for the rows its bounded search did not reach.
             if label_fit_searches is not None:
-                label_fit_searches.retain_failure(str(payload.get("mode", "")), error)
+                label_fit_searches.retain_failure(_label_fit_mode_of(request), error)
             raise
     items: tuple[RequestRenderResult, ...]
     if isinstance(rendered, CircularBatchRenderResult):
@@ -304,7 +309,7 @@ def _render_canonical_web_request(
         {
             "resultIndex": result_index,
             "resultName": results[result_index]["name"],
-            "report": label_fit_report_payload(report),
+            "report": label_fit_report_payload(report, rendered.mode),
             "rowToken": row_tokens[result_index],
         }
         for result_index, item in enumerate(items)

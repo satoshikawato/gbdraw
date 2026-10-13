@@ -12,7 +12,7 @@ of each mode so the Web can compute one row through :func:`label_fit_row`.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Literal, TypedDict, cast, get_args
+from typing import Literal, TypeAlias, TypedDict, cast, get_args
 
 from svgwrite import Drawing
 
@@ -25,6 +25,7 @@ from gbdraw.labels.fit import (
     RADIAL_PLACEMENT,
     ROW_TITLES,
     SCOPE_PATH,
+    SEPARATE_FEATURES_PATH,
     SPACING_PATH,
     X_OFFSET_PATH,
     Y_OFFSET_PATH,
@@ -40,6 +41,8 @@ from gbdraw.labels.fit import (
 )
 
 LABEL_FIT_PAYLOAD_SCHEMA: Literal[1] = 1
+LabelFitMode: TypeAlias = Literal["circular", "linear"]
+_MODES: frozenset[str] = frozenset(get_args(LabelFitMode))
 
 # The Web settings a row changes: the name and unit of each control, by the
 # config path the request mapping projects it to. Paths that one control sets
@@ -52,10 +55,17 @@ _SETTING_NAMES: Mapping[str, tuple[str, str]] = {
     SCOPE_PATH: ("Label Mode", ""),
     PLACEMENT_PATH: ("Circular Label Placement", ""),
 }
-# A word value as the Web control names its option.
-_VALUE_WORDS: Mapping[tuple[str, str], str] = {
+# A control whose name differs by mode: the Circular and the Linear checkbox
+# of `canvas.resolve_overlaps`.
+_MODE_SETTING_NAMES: Mapping[tuple[LabelFitMode, str], tuple[str, str]] = {
+    ("circular", SEPARATE_FEATURES_PATH): ("Resolve Overlaps", ""),
+    ("linear", SEPARATE_FEATURES_PATH): ("Resolve Feature Overlaps", ""),
+}
+# A word or switch value as the Web control names its option.
+_VALUE_WORDS: Mapping[tuple[str, str | bool], str] = {
     (SCOPE_PATH, ALL_OUTSIDE_SCOPE): "Out",
     (PLACEMENT_PATH, RADIAL_PLACEMENT): "Radial",
+    (SEPARATE_FEATURES_PATH, True): "On",
 }
 _ROW_KINDS: frozenset[str] = frozenset(get_args(LabelFitRowKind))
 _STALE_REASON = "Generate again to compute this choice."
@@ -78,7 +88,7 @@ class LabelFitRowPayload(TypedDict):
     kind: LabelFitRowKind
     title: str
     status: LabelFitRowStatus
-    values: dict[str, float | str] | None
+    values: dict[str, bool | float | str] | None
     settings: list[LabelFitSettingPayload]
     canvasSize: LabelFitCanvasSizePayload | None
     reason: str | None
@@ -114,26 +124,36 @@ class LabelFitFailurePayload(TypedDict):
     rowToken: str | None
 
 
-def _setting(path: str, value: LabelFitValue) -> LabelFitSettingPayload:
-    if path not in _SETTING_NAMES or (isinstance(value, str) and (path, value) not in _VALUE_WORDS):
+def label_fit_mode(value: object) -> LabelFitMode:
+    """The diagram mode of a Web render, whose controls a row's settings name."""
+
+    if not isinstance(value, str) or value not in _MODES:
+        raise ValidationError(f"Unknown label fit mode: {value!r}.", diagnostic=_UNKNOWN_ROW_KIND)
+    return cast(LabelFitMode, value)
+
+
+def _setting(path: str, value: LabelFitValue, mode: LabelFitMode) -> LabelFitSettingPayload:
+    named = _MODE_SETTING_NAMES.get((mode, path)) or _SETTING_NAMES.get(path)
+    word = isinstance(value, (str, bool))
+    if named is None or (word and (path, value) not in _VALUE_WORDS):
         raise ValidationError(
             f"The label fit row sets an unknown config path or value: {path}.", diagnostic=_UNKNOWN_CONFIG_PATH
         )
-    name, unit = _SETTING_NAMES[path]
-    shown = _VALUE_WORDS[(path, value)] if isinstance(value, str) else float(value)
+    name, unit = named
+    shown = _VALUE_WORDS[(path, value)] if isinstance(value, (str, bool)) else float(value)
     return {"name": name, "unit": unit, "value": shown}
 
 
-def _settings(values: Mapping[str, LabelFitValue]) -> list[LabelFitSettingPayload]:
+def _settings(values: Mapping[str, LabelFitValue], mode: LabelFitMode) -> list[LabelFitSettingPayload]:
     settings: dict[str, LabelFitSettingPayload] = {}
     for path, value in values.items():
-        setting = _setting(path, value)
+        setting = _setting(path, value, mode)
         settings.setdefault(setting["name"], setting)
     return list(settings.values())
 
 
-def label_fit_row_payload(row: LabelFitRow) -> LabelFitRowPayload:
-    """One row with its title, the settings it changes, and its canvas size."""
+def label_fit_row_payload(row: LabelFitRow, mode: LabelFitMode) -> LabelFitRowPayload:
+    """One row with its title, the settings it changes (as the controls of ``mode`` name them), and its canvas size."""
 
     values = dict(row.values) if row.values is not None else None
     return {
@@ -141,11 +161,11 @@ def label_fit_row_payload(row: LabelFitRow) -> LabelFitRowPayload:
         "title": ROW_TITLES[row.kind],
         "status": row.status,
         "values": (
-            {path: value if isinstance(value, str) else float(value) for path, value in values.items()}
+            {path: value if isinstance(value, (str, bool)) else float(value) for path, value in values.items()}
             if values
             else None
         ),
-        "settings": _settings(values) if values else [],
+        "settings": _settings(values, mode) if values else [],
         "canvasSize": (
             {"width": float(row.canvas_size[0]), "height": float(row.canvas_size[1])}
             if row.canvas_size is not None
@@ -171,7 +191,7 @@ def _record_payload(record: LabelFitRecord) -> LabelFitRecordPayload:
     }
 
 
-def label_fit_report_payload(report: LabelFitReport) -> LabelFitReportPayload:
+def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> LabelFitReportPayload:
     """The bounded JSON form of a report: identifiers, counts, values, and Python's words."""
 
     return {
@@ -181,7 +201,7 @@ def label_fit_report_payload(report: LabelFitReport) -> LabelFitReportPayload:
         "crossingPairs": report.crossing_pairs,
         "definitionOverlaps": report.definition_overlaps,
         "records": [_record_payload(record) for record in report.records],
-        "rows": [label_fit_row_payload(row) for row in report.rows],
+        "rows": [label_fit_row_payload(row, mode) for row in report.rows],
     }
 
 
@@ -212,15 +232,15 @@ class LabelFitRowSearches:
 
     def __init__(self) -> None:
         self._generation = 0
-        self._renders: dict[str, tuple[int, dict[int, Drawing | LabelsDoNotFitError]]] = {}
+        self._renders: dict[LabelFitMode, tuple[int, dict[int, Drawing | LabelsDoNotFitError]]] = {}
 
-    def _keep(self, mode: str, sources: Sequence[Drawing | LabelsDoNotFitError | None]) -> list[str | None]:
+    def _keep(self, mode: LabelFitMode, sources: Sequence[Drawing | LabelsDoNotFitError | None]) -> list[str | None]:
         self._generation += 1
         kept = {index: source for index, source in enumerate(sources) if source is not None}
         self._renders[mode] = (self._generation, kept)
         return [f"{mode}:{self._generation}:{index}" if index in kept else None for index in range(len(sources))]
 
-    def retain(self, mode: str, drawings: Sequence[Drawing]) -> list[str | None]:
+    def retain(self, mode: LabelFitMode, drawings: Sequence[Drawing]) -> list[str | None]:
         """Keep the drawings whose report has a row not computed; one token per drawing."""
 
         def computable(drawing: Drawing) -> Drawing | None:
@@ -229,25 +249,25 @@ class LabelFitRowSearches:
 
         return self._keep(mode, [computable(drawing) for drawing in drawings])
 
-    def retain_failure(self, mode: str, error: LabelsDoNotFitError) -> str | None:
+    def retain_failure(self, mode: LabelFitMode, error: LabelsDoNotFitError) -> str | None:
         """Keep a failure whose report has a row not computed; its token."""
 
         computable = error.row_search is not None and _has_rows_to_compute(error.report)
         return self._keep(mode, [error if computable else None])[0]
 
-    def failure_payload(self, error: LabelsDoNotFitError) -> LabelFitFailurePayload:
+    def failure_payload(self, error: LabelsDoNotFitError, mode: LabelFitMode) -> LabelFitFailurePayload:
         """The failure's report and the token of its kept rows (by identity), if kept."""
 
         token = next(
             (
-                f"{mode}:{generation}:{index}"
-                for mode, (generation, kept) in self._renders.items()
+                f"{kept_mode}:{generation}:{index}"
+                for kept_mode, (generation, kept) in self._renders.items()
                 for index, source in kept.items()
                 if source is error
             ),
             None,
         )
-        return {"report": label_fit_report_payload(error.report), "rowToken": token}
+        return {"report": label_fit_report_payload(error.report, mode), "rowToken": token}
 
     def row(self, token: str, kind: str) -> LabelFitRowPayload:
         """Compute one row of a kept figure or failure (no time limit)."""
@@ -255,7 +275,8 @@ class LabelFitRowSearches:
         if kind not in _ROW_KINDS:
             raise ValidationError(f"Unknown label fit row kind: {kind}.", diagnostic=_UNKNOWN_ROW_KIND)
         row_kind = cast(LabelFitRowKind, kind)
-        mode, _, rest = token.partition(":")
+        mode_text, _, rest = token.partition(":")
+        mode = label_fit_mode(mode_text)
         generation_text, _, index_text = rest.partition(":")
         render = self._renders.get(mode)
         source = (
@@ -268,18 +289,20 @@ class LabelFitRowSearches:
         )
         row = label_fit_row(source, row_kind) if source is not None else None
         if row is None:
-            return label_fit_row_payload(LabelFitRow(row_kind, "not_computed", reason=_STALE_REASON))
-        return label_fit_row_payload(row)
+            return label_fit_row_payload(LabelFitRow(row_kind, "not_computed", reason=_STALE_REASON), mode)
+        return label_fit_row_payload(row, mode)
 
 
 __all__ = [
     "LABEL_FIT_PAYLOAD_SCHEMA",
     "LabelFitFailurePayload",
+    "LabelFitMode",
     "LabelFitRecordPayload",
     "LabelFitReportPayload",
     "LabelFitRowPayload",
     "LabelFitRowSearches",
     "label_fit_failure",
+    "label_fit_mode",
     "label_fit_report_payload",
     "label_fit_row_payload",
 ]

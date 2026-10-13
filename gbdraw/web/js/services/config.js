@@ -2562,9 +2562,10 @@ const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) =
   }));
 };
 
-// The draft fields a label fit row may write: label settings only, never a
+// The draft fields a label fit row may write: label settings and the feature
+// overlap switch of "separate overlapping features" (LP-D52), never a
 // feature-slot input (R10).
-/** @type {Readonly<Record<string, (adv: Record<string, unknown>, value: number | string) => void>>} */
+/** @type {Readonly<Record<string, (adv: Record<string, unknown>, value: number | string | boolean) => void>>} */
 const LABEL_FIT_ADV_WRITERS = Object.freeze({
   outer_label_x_offset: (adv, value) => { adv.outer_label_x_offset = value; },
   outer_label_y_offset: (adv, value) => { adv.outer_label_y_offset = value; },
@@ -2573,7 +2574,8 @@ const LABEL_FIT_ADV_WRITERS = Object.freeze({
   label_font_size: (adv, value) => { adv.label_font_size = value; },
   circular_label_spacing: (adv, value) => { adv.circular_label_spacing = value; },
   linear_label_spacing: (adv, value) => { adv.linear_label_spacing = value; },
-  circular_label_placement: (adv, value) => { adv.circular_label_placement = value; }
+  circular_label_placement: (adv, value) => { adv.circular_label_placement = value; },
+  resolve_overlaps: (adv, value) => { adv.resolve_overlaps = value; }
 });
 /** @type {Readonly<Record<string, (form: Record<string, unknown>, value: string) => void>>} */
 const LABEL_FIT_FORM_WRITERS = Object.freeze({
@@ -2587,7 +2589,7 @@ const LABEL_FIT_FORM_WRITERS = Object.freeze({
 // UNKNOWN_CONFIG_PATH error and writes nothing.
 /**
  * @param {DrawingState} drawing
- * @param {Readonly<Record<string, number | string>>} values
+ * @param {Readonly<Record<string, number | string | boolean>>} values
  * @param {'circular' | 'linear'} mode
  */
 export const applyLabelFitValues = (drawing, values, mode) => {

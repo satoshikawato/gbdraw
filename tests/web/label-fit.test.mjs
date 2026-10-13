@@ -52,6 +52,10 @@ test('the failure reader keeps Python\'s rows in order, the record counts, and t
   assert.deepEqual(parsed.rows.map((item) => [item.kind, item.status]),
     [['outward_vertical', 'found'], ['tighter_rows', 'not_found'], ['combination', 'not_computed'], ['labels_out', 'found']]);
   assert.deepEqual(parsed.rows[0].values, { [Y_OFFSET]: 1.15 });
+  const separate = normalizeLabelFitRow(row('separate_features', 'found', { values: { 'canvas.resolve_overlaps': true },
+    settings: [{ name: 'Resolve Overlaps', unit: '', value: 'On' }], canvasSize: { width: 700, height: 700 } }));
+  assert.deepEqual(separate.values, { 'canvas.resolve_overlaps': true });
+  assert.equal(separate.settings[0].value, 'On');
   assert.deepEqual(parsed.rows[0].canvasSize, { width: 1708, height: 1130 });
   assert.equal(parsed.rows[1].reason, 'No fit');
   assert.equal(normalizeLabelFitFailure(undefined), null);
@@ -69,6 +73,9 @@ test('a malformed report or row is RESULT_INVALID', () => {
   // A found row has values and a canvas size.
   assert.throws(() => normalizeLabelFitRow(row('x', 'found')), invalid);
   assert.throws(() => normalizeLabelFitRow({ ...foundRow('x', 1), values: { [Y_OFFSET]: { wide: true } } }), invalid);
+  // A setting shows a number or the option word, never a raw switch.
+  assert.throws(() => normalizeLabelFitRow({ ...foundRow('x', 1), settings: [{ name: 'Resolve Overlaps', unit: '', value: true }] }),
+    invalid);
 });
 
 test('a Result\'s report names that Result by index and name', () => {
@@ -90,6 +97,10 @@ test('a row\'s config paths become the draft fields the request mapping projects
   assert.deepEqual(draft({ 'labels.circular.scope': 'outer' }), { form: { labels_mode: 'out' }, adv: {} });
   assert.deepEqual(draft({ 'labels.circular.placement': 'radial' }),
     { form: {}, adv: { circular_label_placement: 'radial' } });
+  // "Separate overlapping features" (LP-D52) switches the mode's Resolve Overlaps control on.
+  assert.deepEqual(draft({ 'canvas.resolve_overlaps': true }), { form: {}, adv: { resolve_overlaps: true } });
+  assert.deepEqual(draftFieldsForConfigValues({ 'canvas.resolve_overlaps': true }, 'linear', state.drawings.linear.adv),
+    { form: {}, adv: { resolve_overlaps: true } });
   const unknown = (error) => error.code === 'INPUT_INVALID' && error.context.reason === 'UNKNOWN_CONFIG_PATH';
   assert.throws(() => draftFieldsForConfigValues({ 'labels.unknown': 1 }, 'circular', adv), unknown);
   assert.throws(() => draftFieldsForConfigValues({}, 'circular', adv), unknown);
