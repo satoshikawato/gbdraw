@@ -101,7 +101,9 @@ Yes. Choose it in **Font** in the web app (a font file, or an installed font in
 Chrome and Edge), or use `--font_family` with `--font_file` on the command line.
 Exported SVG embeds the characters it uses of the font, so others see it
 without installing it, unless the font's license forbids embedding; then it
-shows the font only where it is installed. A Session keeps only the font's
+shows the font only where it is installed. PNG always draws the font. PDF
+embeds it too, but draws a font whose license forbids embedding in the nearest
+Liberation font. A Session keeps only the font's
 name, so whoever opens it needs the same font or gbdraw draws the nearest
 Liberation font. See [Fonts](./REFERENCE/output-formats-and-export.md#fonts).
 

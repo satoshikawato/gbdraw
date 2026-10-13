@@ -320,10 +320,12 @@ the legend, and titles with the chosen font, and the preview shows it.
 
 For a custom font, a note says that a saved Session keeps only its name, and the
 **Save Session** notice repeats it. The checkbox **Embed font in exported SVG**
-appears when a custom font is selected. It is on by default, is a page setting
-that is not saved in Sessions, and is not an Undo step. It applies to exports
-(SVG, Interactive SVG, PNG), not to Generate. PDF export embeds the font whatever
-the checkbox. See [Fonts](output-formats-and-export.md#fonts) for what each
+appears when the selected font or the font of the shown result is a custom
+font. It is on by default, is a page setting that is not saved in Sessions, and
+is not an Undo step. It applies to SVG and Interactive SVG exports, not to
+Generate. PNG export always draws the font, and PDF export embeds it whatever
+the checkbox, except a font whose license forbids it, which the PDF draws in the
+nearest Liberation font. See [Fonts](output-formats-and-export.md#fonts) for what each
 format contains and the export notices, and
 [Session fonts](session-and-request-compatibility.md#fonts) for loading a
 Session whose font is not available.
