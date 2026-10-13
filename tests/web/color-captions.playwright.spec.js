@@ -177,14 +177,15 @@ with materialize_session(sys.argv[1],output_directory=sys.argv[2]) as session:
 }
 
 
-test('generated-caption collisions roll back and old Session drafts normalize on the next edit and Generate',async({browser},testInfo)=>{
+test('a rule row whose key is the key of another listed row is refused, and a Session draft of one caption in two colors keeps it',async({browser},testInfo)=>{
   test.setTimeout(1_800_000);
   const page=await load(browser,'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
   page.setDefaultTimeout(180000);
   let fresh;
   try {
     await generate(page);
-    // An editor row a Session holds (R15-2 retired Add legend item).
+    // An editor row a Session holds (R15-2 retired Add legend item), named like
+    // the key of the row the second rule below would draw.
     await loadEditorLegendRows(page,[['Conflict [#112233]','#abcdef']]);
     await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.legendEntries.some(e=>e.caption==='Conflict [#112233]'))).toBe(true);
     const ids=await evaluateWithRetainedPromise(page, async()=>{
@@ -194,17 +195,27 @@ test('generated-caption collisions roll back and old Session drafts normalize on
       await a.addSpecificRule();return ids;
     });
     const before=await inspect(page);
+    const errorLog=()=>page.evaluate(async()=>{const e=(await import('./js/state.js')).state.errorLog.value;return e&&{code:e.code,operation:e.operation,summary:e.summary};});
     const warningBefore=await page.evaluate(async()=>JSON.stringify((await import('./js/state.js')).state.annotationWarnings.value));
+    expect(await errorLog()).toBeNull();
+    // D-16: a second color of the caption gives each color its own row key
+    // ("Conflict [#112233]"), which the editor row above already shows. No two
+    // rows share one shown key: the commit is refused and nothing is written.
     await evaluateWithRetainedPromise(page, async id=>{
       const a=window.__GBDRAW_APP__;
       Object.assign(a.newSpecRule,{feat:'CDS',qual:'hash',val:id,color:'#112233',cap:'Conflict'});
       await a.addSpecificRule();
     },ids[1]);
     const rejected=await inspect(page);
+    await fs.writeFile(testInfo.outputPath('collision-evidence.json'),JSON.stringify({before:{...before,svg:undefined},rejected:{...rejected,svg:undefined},error:await errorLog()},null,2));
     expect(rejected.rules).toEqual(before.rules);expect(rejected.svg).toBe(before.svg);
-    expect(rejected.result).toEqual(before.result);
+    expect(rejected.result).toEqual(before.result);expect(rejected.names).toEqual(before.names);
+    expect(rejected.names['Conflict']).toBe('Conflict');expect(rejected.names['Conflict [#112233]']).toBe('Conflict [#112233]');
+    expect(await errorLog()).toEqual({code:'UNKNOWN',operation:'evaluateRules',
+      summary:'The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.'});
     expect(await page.evaluate(async()=>JSON.stringify((await import('./js/state.js')).state.annotationWarnings.value))).toBe(warningBefore);
-    // A historical draft fixture: ordinary saved strings with an unchanged preview.
+    // A draft fixture: one listed row of a caption that two rules write in two
+    // colors, with an unchanged preview.
     // The row is renamed before its name is a color rule's: a rename onto the
     // name of a color rule asks Merge / Keep both / Cancel (PD-OI-061 revision 4).
     await page.evaluate(async ids=>{
@@ -227,15 +238,23 @@ test('generated-caption collisions roll back and old Session drafts normalize on
     expect(loaded.rules.map(r=>r.cap)).toEqual(['Historical','Historical']);
     expect(loaded.result).toEqual(draft.result);expect((await getDiagramWorkerActivity(fresh)).runs).toBe(0);
     await fresh.evaluate(async id=>{await window.__GBDRAW_APP__.setSpecificRuleField(0,'val',id);},ids[0]);
-    const normalized=await inspect(fresh);
-    expect(normalized.rules.map(r=>r.cap)).toEqual(['Historical [#112233]','Historical [#445566]']);
-    expect(normalized.notice).toMatch(/Updated 2/);
-    for(const [caption,color] of [['Historical [#112233]','#112233'],['Historical [#445566]','#445566']])
-      expect(normalized.result.find(e=>e.caption===caption)?.color).toBe(color);
-    expect(normalized.result.some(e=>e.caption==='Historical')).toBe(false);
-    expect(normalized.result.find(e=>e.caption==='Conflict [#112233]').color).toBe('#abcdef');
+    const edited=await inspect(fresh);
+    await fs.writeFile(testInfo.outputPath('draft-evidence.json'),JSON.stringify({draft:{...draft,svg:undefined},loaded:{...loaded,svg:undefined},edited:{...edited,svg:undefined}},null,2));
+    // PD-OI-042 scenario revision 2: the captions stay as written; each color
+    // has its own row (the keys below, never drawn), numbered in the Legend.
+    const keys=[['Historical [#112233]','#112233'],['Historical [#445566]','#445566']];
+    expect(edited.rules.map(r=>r.cap)).toEqual(['Historical','Historical']);
+    for(const [key,color] of keys) expect(edited.result.find(e=>e.caption===key)?.color).toBe(color);
+    expect(edited.result.some(e=>e.caption==='Historical')).toBe(false);
+    expect(keys.map(([key])=>edited.names[key]).sort()).toEqual(['Historical (1)','Historical (2)']);
+    expect(edited.mountedNames).toEqual(edited.names);
+    expect(edited.result.find(e=>e.caption==='Conflict [#112233]').color).toBe('#abcdef');
+    expect(edited.names['Conflict [#112233]']).toBe('Conflict [#112233]');
     await generate(fresh);
-    expect((await inspect(fresh)).result.filter(e=>e.caption.startsWith('Historical'))).toEqual(normalized.result.filter(e=>e.caption.startsWith('Historical')));
+    const generated=await inspect(fresh);
+    expect(generated.rules.map(r=>r.cap)).toEqual(['Historical','Historical']);
+    expect(generated.result.filter(e=>e.caption.startsWith('Historical'))).toEqual(edited.result.filter(e=>e.caption.startsWith('Historical')));
+    expect(keys.map(([key])=>generated.names[key])).toEqual(keys.map(([key])=>edited.names[key]));
   } finally {await page.context().close();if(fresh)await fresh.context().close();}
 });
 
