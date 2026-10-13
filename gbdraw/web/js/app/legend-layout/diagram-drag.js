@@ -5,11 +5,7 @@ import {
   COMPOSITION_SCHEMA_ATTRIBUTE,
   compositionUserDeltas
 } from './composition-actions.js';
-import {
-  closestRecordGroup,
-  isMultiRecordCanvasSvg,
-  isRecordGroup
-} from '../record-groups.js';
+import { closestRecordGroup, isMultiRecordCanvasSvg } from '../record-groups.js';
 import { setClassToken } from '../../services/svg-serialization.js';
 
 /**
@@ -267,22 +263,35 @@ export const createDiagramDragActions = ({
     applyPlotTitleTransform(nextPlotTitleGroup);
   };
 
+  // What a press on `target` drags: its record on a Multi-Record Canvas, else
+  // every bound primary group; null when the press drags nothing.
+  /**
+   * @param {Element} target
+   * @returns {{ mode: 'record' | 'group', targets: SVGGraphicsElement[] } | null}
+   */
+  const diagramDragOf = (target) => {
+    if (isMultiRecordCanvasSvg(svgContainer.value?.querySelector('svg'))) {
+      const record = closestRecordGroup(target);
+      // Record groups are `g` elements (isRecordGroup).
+      return record ? { mode: 'record', targets: [/** @type {SVGGraphicsElement} */ (record)] } : null;
+    }
+    const group = target.closest('g[id]');
+    if (!group || isLegendOwnedGroup(group) || isLengthBarGroup(group) || isPlotTitleGroup(group)) return null;
+    // setupDiagramDrag stores the bound primary groups (or []) in `diagramElements`.
+    /** @type {SVGGraphicsElement[]} */
+    const targets = diagramElements.value;
+    return targets.length > 0 ? { mode: 'group', targets } : null;
+  };
+
+  // A primary group shows `grab` only when a press on it drags it; one that no
+  // press drags (a Linear record definition) shows no drag cursor (PD-OI-053).
   const refreshDiagramDragAffordances = () => {
     const enabled = isLayoutRepositionModeEnabled();
     /** @type {SVGGraphicsElement[]} */
     const elements = Array.isArray(diagramElements.value) ? diagramElements.value : [];
-    const hasRecordGroups = elements.some((el) => isRecordGroup(el));
 
     elements.forEach((el) => {
-      if (!enabled) {
-        setElementCursor(el, '');
-        return;
-      }
-      if (hasRecordGroups) {
-        setElementCursor(el, isRecordGroup(el) ? 'grab' : '');
-      } else {
-        setElementCursor(el, 'grab');
-      }
+      setElementCursor(el, !enabled ? '' : diagramDragOf(el)?.targets.includes(el) ? 'grab' : 'default');
     });
 
     [lengthBarElement.value, plotTitleElement.value].forEach((element) => {
@@ -371,9 +380,7 @@ export const createDiagramDragActions = ({
     ) {
       return;
     }
-    if (!svgContainer.value) return;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
+    if (!svgContainer.value?.querySelector('svg')) return;
 
     const clickedLengthBar = e.target.closest('#length_bar');
     if (clickedLengthBar) {
@@ -387,29 +394,9 @@ export const createDiagramDragActions = ({
       return;
     }
 
-    const isMultiRecordCanvas = isMultiRecordCanvasSvg(svg);
-    /** @type {SVGGraphicsElement[]} */
-    let dragTargets = [];
-
-    if (isMultiRecordCanvas) {
-      // Multi-record mode: allow dragging only the clicked record group.
-      const clickedRecordGroup = closestRecordGroup(e.target);
-      if (!clickedRecordGroup) return;
-      dragTargets = [/** @type {SVGGraphicsElement} */ (clickedRecordGroup)]; // record groups are `g` elements (isRecordGroup)
-      activeDragMode = 'record';
-    } else {
-      const clickedGroup = e.target.closest('g[id]');
-      if (!clickedGroup) return;
-
-      if (isLegendOwnedGroup(clickedGroup)) return;
-      if (isLengthBarGroup(clickedGroup)) return;
-      if (isPlotTitleGroup(clickedGroup)) return;
-
-      // setupDiagramDrag stores the bound primary groups (or []) in `diagramElements`.
-      dragTargets = /** @type {SVGGraphicsElement[]} */ (diagramElements.value);
-      if (dragTargets.length === 0) return;
-      activeDragMode = 'group';
-    }
+    const drag = diagramDragOf(e.target);
+    if (!drag) return;
+    activeDragMode = drag.mode;
 
     e.preventDefault();
     cancelDiagramDragFrame();
@@ -422,7 +409,7 @@ export const createDiagramDragActions = ({
     plotTitleDragging.value = false;
     diagramDragStart.x = e.clientX;
     diagramDragStart.y = e.clientY;
-    pressDragTargets(dragTargets);
+    pressDragTargets(drag.targets);
   };
 
   const getActiveDragStart = () => {
