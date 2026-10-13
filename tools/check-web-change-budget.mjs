@@ -389,6 +389,8 @@ const designRuleGuardRegistryPath = 'tools/web-design-rule-guards.json';
 // only until a rule references them.
 const ownerGraphRegistryPath = 'tools/web-owner-graph.json';
 const ownerGraphDetectorsPath = 'tools/web-owner-graph-detectors.mjs';
+// The twin detector (tools/twins.json is its baseline) is checker implementation.
+const twinDetectorsPath = 'tools/web-twin-detectors.mjs';
 const guardPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   productImpactPolicyPath,
@@ -397,6 +399,7 @@ const guardPaths = new Set([
   designRuleGuardRegistryPath,
   ownerGraphRegistryPath,
   ownerGraphDetectorsPath,
+  twinDetectorsPath,
   '.github/pull_request_template.md',
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
@@ -427,6 +430,7 @@ const checkerImplementationPaths = new Set([
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
   ownerGraphDetectorsPath,
+  twinDetectorsPath,
   'tools/web-architecture-evaluation.mjs',
   productImpactEvaluationPath,
   productImpactDecisionSourcePath,
@@ -658,7 +662,9 @@ const readJavaScriptLiteral = (source, symbol) => {
   const start = match.index + match[0].length;
   const rest = source.slice(start);
   const numberMatch = rest.match(/^(\d+)\s*;/);
-  if (numberMatch) return { status: 'ok', value: Number(numberMatch[1]) };
+  if (numberMatch) {
+    return { status: 'ok', value: Number(numberMatch[1]), span: [match.index, start + numberMatch[0].length] };
+  }
   const wrappers = rest.match(/^(Object\.freeze\s*\(\s*)?(new\s+Set\s*\(\s*)?/);
   const literalStart = start + wrappers[0].length;
   const opener = source[literalStart];
@@ -668,9 +674,14 @@ const readJavaScriptLiteral = (source, symbol) => {
   // Only the wrappers' closing parentheses and then `;` may follow the literal:
   // a line end does not close it (`.concat(MORE)` may start the next line).
   const closers = '\\s*\\)'.repeat(wrappers.slice(1).filter(Boolean).length);
-  if (!new RegExp(`^${closers}\\s*;`).test(masked.slice(end + 1))) return UNREADABLE_ALLOWLIST;
+  const closed = masked.slice(end + 1).match(new RegExp(`^${closers}\\s*;`));
+  if (!closed) return UNREADABLE_ALLOWLIST;
   try {
-    return { status: 'ok', value: JSON.parse(literalToJson(source.slice(literalStart, end + 1))) };
+    return {
+      status: 'ok',
+      value: JSON.parse(literalToJson(source.slice(literalStart, end + 1))),
+      span: [match.index, end + 1 + closed[0].length]
+    };
   } catch (_error) {
     return UNREADABLE_ALLOWLIST;
   }
@@ -776,7 +787,9 @@ const readPythonLiteral = (source, symbol) => {
   try {
     const result = value();
     skip();
-    return index < source.length && source[index] !== '\n' ? UNREADABLE_ALLOWLIST : { status: 'ok', value: result };
+    return index < source.length && source[index] !== '\n'
+      ? UNREADABLE_ALLOWLIST
+      : { status: 'ok', value: result, span: [declaration.index, index] };
   } catch (_error) {
     return UNREADABLE_ALLOWLIST;
   }
@@ -868,6 +881,17 @@ const designRuleRegistryEvaluation = parseDesignRuleGuardRegistry(
 );
 const designRuleGuardRegistry = designRuleRegistryEvaluation.registry;
 const designRuleRegistryErrors = designRuleRegistryEvaluation.errors;
+// Every rule's text is authority (BA-D10): a rule whose text a runtime diff
+// could change does not bind it. Checked on the candidate registry whenever it
+// changes, so the change that registers or moves a rule names an authority path.
+const candidateDesignRuleRulesPathErrors = (() => {
+  if (!changed.has(designRuleGuardRegistryPath)) return [];
+  const { registry } = parseDesignRuleGuardRegistry(readHeadFile(designRuleGuardRegistryPath));
+  return (registry?.rules || []).flatMap((rule, index) => {
+    const rulesPath = rule.rulesPath || registry.rulesPath;
+    return authorityPaths.has(rulesPath) ? [] : [`rules[${index}] ${rule.id}: rulesPath ${rulesPath} is not an authority path`];
+  });
+})();
 const designRuleAllowlistChanges = [];
 if (designRuleGuardRegistry) {
   designRuleGuardRegistry.rules.forEach((rule) => {
@@ -903,6 +927,42 @@ const designRuleAllowlistContractions = designRuleAllowlistChanges
   .filter(({ direction }) => direction === 'contraction')
   .map(({ subject }) => subject)
   .sort();
+// design-rule.count-scope: a test that holds a registered count baseline
+// counts with its own code, so a change to that code can lower the count and
+// gain room under the ceiling. A diff with production code (as for co-change)
+// may change such a test only inside its registered literals (of any kind);
+// anything else in it, or its deletion, goes to a pull request without
+// production code.
+const COUNT_ALLOWLIST_KINDS = new Set(['count', 'count-map', 'py-count', 'py-count-map']);
+const withoutAllowlistLiterals = (source, entries) => {
+  const spans = [];
+  for (const { symbol, kind } of entries) {
+    const { status, span } = (isPythonAllowlistKind(kind) ? readPythonLiteral : readJavaScriptLiteral)(source, symbol);
+    if (status !== 'ok') return null;
+    spans.push({ symbol, span });
+  }
+  return spans.sort((left, right) => right.span[0] - left.span[0])
+    .reduce((text, { symbol, span: [start, end] }) => `${text.slice(0, start)}<${symbol}>${text.slice(end)}`, source);
+};
+const changedAllowlistEntriesByPath = new Map();
+(designRuleGuardRegistry?.rules || []).forEach((rule) => rule.allowlists.forEach((entry) => {
+  if (!changed.has(entry.path) || entry.kind === 'json-entries') return;
+  changedAllowlistEntriesByPath.set(entry.path, [...(changedAllowlistEntriesByPath.get(entry.path) || []), entry]);
+}));
+const countBaselineEntriesByPath = [...changedAllowlistEntriesByPath].filter(([, entries]) => entries.some(({ kind }) => (
+  COUNT_ALLOWLIST_KINDS.has(kind) && (productionPaths.length || (isPythonAllowlistKind(kind) && pythonPackageChanged))
+)));
+const designRuleCountScopeChanges = countBaselineEntriesByPath.flatMap(([path, entries]) => {
+  const baseSource = readRevisionFile(base, path);
+  const headSource = readHeadFile(path);
+  if (baseSource === null) return [];
+  const before = withoutAllowlistLiterals(baseSource, entries);
+  // An unreadable literal is already a co-change expansion.
+  if (before === null) return [];
+  if (headSource === null) return [`${path} (deleted)`];
+  const after = withoutAllowlistLiterals(headSource, entries);
+  return after === null || after === before ? [] : [path];
+}).sort();
 const baseAcceptedViolationsSource = readRevisionFile(base, acceptedViolationsPath);
 const candidateAcceptedViolationsSource = readHeadFile(acceptedViolationsPath);
 const acceptedViolationAuthorityErrors = [];
@@ -2044,10 +2104,19 @@ if (changedCheckerImplementations.length && changedAuthorities.length) {
 blockingViolations.push(...designRuleRegistryErrors.map((error) => (
   `trusted design-rule guard registry: ${error}`
 )));
+blockingViolations.push(...candidateDesignRuleRulesPathErrors.map((error) => (
+  `candidate design-rule guard registry: ${error}`
+)));
 if (designRuleCoChangeExpansions.length) {
   blockingViolations.push(
     'design-rule.co-change: a registered design-rule allowlist expanded alongside production runtime files '
     + `(${designRuleCoChangeExpansions.join(', ')})`
+  );
+}
+if (designRuleCountScopeChanges.length) {
+  blockingViolations.push(
+    'design-rule.count-scope: a registered count-baseline test changed outside its registered literals '
+    + `alongside production runtime files (${designRuleCountScopeChanges.join(', ')})`
   );
 }
 if (unapprovedCapabilities.length) {

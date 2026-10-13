@@ -6386,6 +6386,97 @@ test('the head-registry check resolves schema 2 guards, a rule\'s own rulesPath,
   });
 });
 
+// design-rule.count-scope (BA-OD40 (d), form B): a test that holds a count
+// baseline counts with its own code, so with production code it may change
+// only inside its registered literals.
+test('a count-baseline test changes only inside its registered literals alongside runtime files', () => {
+  const countScope = (detail) => new RegExp(
+    'design-rule\\.count-scope: a registered count-baseline test changed outside its registered literals '
+    + `alongside production runtime files \\(${detail}\\)`
+  );
+  const escaped = (path) => path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // The counting code narrows (here: one more line of test code).
+  const narrowed = `${designRuleGuardTestSource()}const COUNTED = (path) => path.startsWith('app/');\nvoid COUNTED;\n`;
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, narrowed);
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, countScope(escaped(DESIGN_RULE_GUARD_TEST_PATH)));
+  });
+  withDesignRuleGuardRepository(({ execute, root, write }) => {
+    runtimeChange(write);
+    rmSync(join(root, DESIGN_RULE_GUARD_TEST_PATH));
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, countScope(`${escaped(DESIGN_RULE_GUARD_TEST_PATH)} \\(deleted\\)`));
+  });
+  // Without production code the same change is a test change; inside the
+  // literals (a lowered count) it passes with production code.
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    write(DESIGN_RULE_GUARD_TEST_PATH, narrowed);
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.doesNotMatch(result.output, /design-rule\.count-scope/);
+  });
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({ baseline: 45, throwBaseline: "{ 'app/a.js': 2 }" }));
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.doesNotMatch(result.output, /design-rule\.count-scope/);
+  });
+  // A Python count baseline: a package change counts as production; a test
+  // with set literals only is not a count-baseline test.
+  withDesignRuleGuardRepository2(({ execute, write }) => {
+    pythonProductionChange(write);
+    const source = designRuleGuardSources2();
+    write(DESIGN_RULE_PYTHON_GUARD_PATH, source[DESIGN_RULE_PYTHON_GUARD_PATH].replace(
+      '    for path in UNPROVEN_BASELINE:',
+      '    for path in [p for p in UNPROVEN_BASELINE if p.startswith("gbdraw/api/")]:'
+    ));
+    write(DESIGN_RULE_GUARD_TEST_PATH, `${source[DESIGN_RULE_GUARD_TEST_PATH]}void 0;\n`);
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, countScope(escaped(DESIGN_RULE_PYTHON_GUARD_PATH)));
+    assert.doesNotMatch(result.output, /count-scope[^\n]*design-rule-guard-fixture\.test\.mjs/);
+  });
+});
+
+// BA-D10: a rule's text is authority. The Gate checks the candidate registry
+// whenever it changes; an unchanged trusted registry is not re-checked.
+test('a candidate guard registry names only authority paths as rule files', () => {
+  const rulesPathError = /candidate design-rule guard registry: rules\[1\] TYPE-DEBT: rulesPath CLAUDE\.md is not an authority path/;
+  withDesignRuleGuardRepository2(({ execute, write }) => {
+    const unchanged = execute();
+    assert.doesNotMatch(unchanged.output, /candidate design-rule guard registry/);
+    write(DESIGN_RULE_GUARD_REGISTRY_PATH, `${designRuleGuardRegistrySource(designRuleRules2(), 2)}\n`);
+    const reformatted = execute();
+    assert.equal(reformatted.status, 1, reformatted.output);
+    assert.match(reformatted.output, rulesPathError);
+    const rules = designRuleRules2();
+    rules[1].rulesPath = 'docs/internal/WEB_CHANGE_POLICY.md';
+    write(DESIGN_RULE_GUARD_REGISTRY_PATH, designRuleGuardRegistrySource(rules, 2));
+    const moved = execute();
+    assert.doesNotMatch(moved.output, /candidate design-rule guard registry/);
+  });
+});
+
+test('the twin detector is pre-registered checker implementation and a guard path', () => {
+  const checker = readFileSync(CHANGE_BUDGET_CHECKER, 'utf8');
+  assert.match(checker, /const twinDetectorsPath = 'tools\/web-twin-detectors\.mjs';/);
+  const guardBlock = checker.match(/const guardPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  const implementationBlock = checker.match(/const checkerImplementationPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  assert.match(guardBlock, /twinDetectorsPath/);
+  assert.match(implementationBlock, /twinDetectorsPath/);
+  const result = runChangeBudgetCase((write) => {
+    write('gbdraw/web/js/services/session-file.js', 'export const readSession = () => ({ version: 2 });\n');
+    write('tools/web-twin-detectors.mjs', 'export const TWIN_DETECTOR_ID = "twin.unregistered.v1";\n');
+  });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /production runtime files and Web guard\/CI files changed together/);
+});
+
 test('the Web design rules and the guard registry are pre-registered guard and authority paths', () => {
   const checker = readFileSync(CHANGE_BUDGET_CHECKER, 'utf8');
   assert.match(checker, /const webDesignRulesPath = 'gbdraw\/web\/CLAUDE\.md';/);
