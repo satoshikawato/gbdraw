@@ -8,6 +8,7 @@
  */
 /** @typedef {EntryRecord & { caption: string, originalCaption: string }} ListedEntry A row a Result lists, under its caption and its key. */
 import { normalizeOptionalHexColor, resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
+import { diagnosticError } from '../../utils/error-normalization.js';
 import { keepBothNames, legendSwatch } from '../../services/legend-row-names.js';
 import {
   defaultLegendKeyOrder,
@@ -320,7 +321,8 @@ export const createLegendEntryActions = ({
     for (const intent of intents) {
       const existing = listed.find((entry) => entry.caption === intent.caption);
       if (existing && !owned.includes(existing) && existing.color !== normalizedColor(intent.color)) {
-        throw new Error(`Legend entry "${intent.caption}" already exists with a different color.`);
+        // OV-644: a typed refusal; its context names no row key.
+        throw diagnosticError('LEGEND_ROW_CONFLICT', {}, { stage: 'rule-validation', operation: 'evaluateRules' });
       }
     }
     const reusable = listed.filter((entry) => !owned.includes(entry) && desiredByCaption.get(entry.caption) === entry.color);

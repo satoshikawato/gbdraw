@@ -870,7 +870,8 @@ const mockLegendEntry = (caption, color, x) => {
   assert.deepEqual(listed()[1], ['New', '#00aa00']);
   await assert.rejects(
     actions.prepareFileLegendEntries([{ caption: 'tRNA', color: '#000000' }]),
-    /Legend entry "tRNA" already exists with a different color/
+    // OV-644: a typed refusal that names no row key.
+    (error) => error.code === 'LEGEND_ROW_CONFLICT' && !String(error.message).includes('tRNA')
   );
   const reused = await actions.prepareFileLegendEntries([{ caption: 'tRNA', color: '#334455' }]);
   assert.deepEqual(reused.diff.unchanged, [{ caption: 'tRNA', color: '#334455' }]);

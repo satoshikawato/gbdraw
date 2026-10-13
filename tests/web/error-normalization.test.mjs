@@ -665,3 +665,14 @@ test('a drawing with every record OFF names the fix (record selection)', () => {
   assert.equal(model.code, 'RECORD_SELECTION');
   assert.match(model.summary, /Turn on at least one record to draw\./);
 });
+
+// OV-644: a rule commit that would draw a Legend row whose key another listed
+// row of another color already holds is refused with wording the user can act
+// on, without the row key, and without a Retry that fails the same way.
+test('a refused rule commit names what to change and offers no Retry (OV-644)', () => {
+  const refused = normalizeUserFacingError(diagnosticError('LEGEND_ROW_CONFLICT', {}, { stage: 'rule-validation', operation: 'evaluateRules' }));
+  assert.deepEqual([refused.code, refused.operation, refused.stage, refused.actions],
+    ['LEGEND_ROW_CONFLICT', 'evaluateRules', 'rule-validation', ['edit-input']]);
+  assert.equal(refused.summary, 'A color rule would draw a Legend item that already exists in another color.'
+    + ' Change the rule\'s Legend name or color, or rename that Legend item.');
+});
