@@ -4556,9 +4556,9 @@
                                         <input type="checkbox" v-model="fontSettings.embedInExports.value" aria-describedby="help-font-embedding" class="form-checkbox">
                                         <span>Embed font in exported SVG</span>
                                     </label>
-                                    <help-tip id="help-font-embedding" text="SVG and Interactive SVG exports carry the characters they use of this font, so they show it on computers without it; PNG export draws with them. Fonts whose license forbids embedding are not embedded. Turned off, the files keep only the font name, and a PNG draws this font only if it is installed on this computer (a font loaded from a file is replaced with the browser's default font). PDF export embeds this font whatever this setting, unless its license forbids embedding."></help-tip>
+                                    <help-tip id="help-font-embedding" text="SVG and Interactive SVG exports carry the characters they use of this font, so they show it on computers without it. Fonts whose license forbids embedding are not embedded. Turned off, the SVG files keep only the font name. PNG export always draws this font, whatever this setting and the font's license. PDF export embeds this font whatever this setting; a font whose license forbids embedding is drawn in the nearest Liberation font."></help-tip>
                                 </div>
-                                <p class="text-[10px] text-slate-500">Applies to exports (SVG, Interactive SVG, PNG), not to Generate.</p>
+                                <p class="text-[10px] text-slate-500">Applies to SVG and Interactive SVG exports, not to Generate.</p>
                             </div>
                         </div>
                     </details>

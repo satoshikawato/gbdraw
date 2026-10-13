@@ -5560,14 +5560,16 @@ export const createAppSetup = () => {
       if (typeof exportMethod !== 'function') {
         throw new Error('The export service did not provide the requested action.');
       }
-      // Custom fonts in exports (D-05): the Worker holds the fonts of this
-      // page, so an export embeds only when one is loaded and Embed font in
-      // exported SVG is on; a PDF always registers the faces its text uses.
+      // Custom fonts in exports (D-05, D-13): the Worker holds the fonts of
+      // this page, so only a page with a loaded font embeds. SVG and
+      // Interactive SVG follow Embed font in exported SVG; a PNG always draws
+      // with the fonts, and a PDF always registers the faces its text uses.
       /** @type {import('../services/export.js').ExportFontPorts} */
       const fontPorts = {
-        embedFonts: fontSettings.embedInExports.value && state.loadedFonts.value.length > 0
-          ? async (svg) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS, { svg })).result
+        embedFonts: state.loadedFonts.value.length > 0
+          ? async (svg, kind) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS, { svg, kind })).result
           : null,
+        embedInSvg: fontSettings.embedInExports.value,
         resolvePdfFonts: async (runs, known) => (
           await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PDF_FONTS, { runs, known })
         ).result

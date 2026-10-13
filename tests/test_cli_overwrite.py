@@ -663,6 +663,23 @@ def test_session_output_override_can_disable_stored_overwrite() -> None:
     assert updated.output.overwrite is False
 
 
+@pytest.mark.parametrize(
+    "override",
+    [{"output_prefix": "mine"}, {"output_directory": "outdir"}, {"output_prefix": "mine", "output_directory": "outdir"}],
+)
+def test_s4_an_output_override_stops_naming_the_output_after_the_first_record(override) -> None:
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    request = CircularDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(record)),),
+        output=RenderOutputRequest(resolve_prefix_from_first_record=True),
+    )
+
+    updated = with_request_output(request, **override)
+
+    assert updated.output.resolve_prefix_from_first_record is False
+    assert with_request_output(request, overwrite=True).output.resolve_prefix_from_first_record is True
+
+
 @pytest.mark.parametrize("overwrite", [False, True])
 def test_canonical_session_replay_uses_current_overwrite_permission(
     overwrite: bool,

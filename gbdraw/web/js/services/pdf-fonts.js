@@ -16,8 +16,9 @@
 
 /**
  * A text run of the PDF: the CSS font-family list its text was drawn with,
- * and its jsPDF style slot.
- * @typedef {{ fontFamily: string, bold: boolean, italic: boolean }} PdfFontRun
+ * its jsPDF style slot, and the characters it draws (a custom face is sent
+ * as a subset of them, S3).
+ * @typedef {{ fontFamily: string, bold: boolean, italic: boolean, text: string }} PdfFontRun
  */
 
 /**
@@ -29,8 +30,9 @@
 /**
  * Python's `pdf_fonts` (gbdraw/render/font_embedding.py) in the Worker: per
  * run, the jsPDF family and the TrueType file of the face its text was
- * measured with; the base64 bytes of each file not in `known`; and the custom
- * fonts drawn with a substitute.
+ * measured with (a custom face: a subset of the characters drawn with it, and
+ * a file name that names them); the base64 bytes of each file not in `known`;
+ * and the custom fonts drawn with a substitute.
  * @typedef {object} PdfFontsReply
  * @property {{ family: string, file: string }[]} faces
  * @property {Record<string, string>} fonts
@@ -92,13 +94,19 @@ export const preparePdfFonts = async (doc, svg, resolveFonts) => {
   const runIndex = new Map();
   /** @type {PdfFontRun[]} */
   const requested = [];
+  /** @type {Set<string>[]} */
+  const characters = [];
   for (const run of runs) {
     const key = `${run.style}\n${run.fontFamily}`;
     if (!runIndex.has(key)) {
       runIndex.set(key, requested.length);
-      requested.push({ fontFamily: run.fontFamily, bold: run.style.startsWith('bold'), italic: run.style.endsWith('italic') });
+      requested.push({ fontFamily: run.fontFamily, bold: run.style.startsWith('bold'), italic: run.style.endsWith('italic'), text: '' });
+      characters.push(new Set());
     }
+    const drawn = characters[/** @type {number} */ (runIndex.get(key))];
+    for (const character of run.node.textContent) drawn.add(character);
   }
+  requested.forEach((run, index) => { run.text = [...characters[index]].sort().join(''); });
   if (requested.length === 0) return [];
   // PDF export always passes the helper; a missing one rejects here as a TypeError.
   const reply = await /** @type {ResolvePdfFonts} */ (resolveFonts)(requested, [...payloads.keys()]);

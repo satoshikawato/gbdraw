@@ -416,7 +416,16 @@ def register_font_file(path: Union[str, os.PathLike[str]], *, index: int = 0) ->
     Liberation Serif).
     """
     font_path = os.fspath(path)
-    return _register_face(_read_font_file(font_path), index, font_path)
+    return _register_faces([(_read_font_file(font_path), index, font_path)])[0]
+
+
+def register_font_file_batch(paths: Sequence[Union[str, os.PathLike[str]]]) -> tuple[RegisteredFont, ...]:
+    """``register_font_file`` for several files, all or none: every file is
+    read and checked before the registry changes, so a failure leaves the
+    earlier registrations, and the faces a later file would replace, as they
+    were."""
+    font_paths = [os.fspath(path) for path in paths]
+    return _register_faces([(_read_font_file(font_path), 0, font_path) for font_path in font_paths])
 
 
 def register_font_file_faces(path: Union[str, os.PathLike[str]]) -> tuple[RegisteredFont, ...]:
@@ -435,10 +444,32 @@ def register_font_file_faces(path: Union[str, os.PathLike[str]]) -> tuple[Regist
                 f"Cannot read font file {font_path}: {exc}",
                 diagnostic={"code": "INPUT_INVALID", "reason": "FONT_FILE"},
             ) from exc
-    return tuple(_register_face(data, index, font_path) for index in range(count))
+    return _register_faces([(data, index, font_path) for index in range(count)])
 
 
-def _register_face(data: bytes, index: int, font_path: str) -> RegisteredFont:
+@dataclass(frozen=True)
+class _PreparedFace:
+    """A face read and checked, not registered yet."""
+
+    data: bytes
+    font: TTFont
+    registered: RegisteredFont
+
+
+def _register_faces(sources: Sequence[tuple[bytes, int, str]]) -> tuple[RegisteredFont, ...]:
+    """Register (bytes, face index, path) sources, all or none."""
+    prepared: list[_PreparedFace] = []
+    try:
+        for data, index, font_path in sources:
+            prepared.append(_prepare_face(data, index, font_path))
+    except BaseException:
+        for face in prepared:
+            face.font.close()
+        raise
+    return tuple(_commit_face(face) for face in prepared)
+
+
+def _prepare_face(data: bytes, index: int, font_path: str) -> _PreparedFace:
     # Loaded from the bytes read once, so a later change to the file cannot
     # change what this registration measures.
     font = _read_font(io.BytesIO(data), index, font_path)
@@ -468,7 +499,13 @@ def _register_face(data: bytes, index: int, font_path: str) -> RegisteredFont:
         ),
     )
     registered = RegisteredFont(family=family, weight=weight, italic=italic, generic=generic, face=face)
-    faces = _registered.setdefault(_comparable_name(family), [])
+    return _PreparedFace(data=data, font=font, registered=registered)
+
+
+def _commit_face(prepared: _PreparedFace) -> RegisteredFont:
+    registered, font, data = prepared.registered, prepared.font, prepared.data
+    face, weight, italic = registered.face, registered.weight, registered.italic
+    faces = _registered.setdefault(_comparable_name(registered.family), [])
     for replaced in [entry for entry in faces if (entry.weight, entry.italic) == (weight, italic)]:
         faces.remove(replaced)
         if replaced.face != face:
@@ -480,19 +517,21 @@ def _register_face(data: bytes, index: int, font_path: str) -> RegisteredFont:
     _registered_data[face] = data
     faces.append(registered)
     _clear_resolution_caches()
-    _show_to_fontconfig(font_path, family)
     return registered
 
 
 _fontconfig_files: set[str] = set()
 
 
-def _show_to_fontconfig(font_path: str, family: str) -> None:
-    """Add a registered font file to fontconfig's application fonts, once,
-    so CairoSVG (PNG, PDF, EPS and PS output) draws text with it even when the
-    font is not installed. Without fontconfig, those outputs draw an installed
-    font of that name or a substitute, and a warning says so. The browser
-    draws no raster through cairo and is skipped."""
+def show_font_file_to_cairo(face: FontFace, family: str) -> None:
+    """Add a registered face's file to fontconfig's application fonts, once
+    per file, so CairoSVG draws text with it even when the font is not
+    installed. The CairoSVG export calls it for the registered faces a
+    conversion draws with (gbdraw.render.font_embedding). Without
+    fontconfig, those outputs draw an installed font of that name or a
+    substitute, and a warning (once per file) says so. The browser draws no
+    raster through cairo and is skipped."""
+    font_path = face.path
     if sys.platform == "emscripten" or font_path in _fontconfig_files:
         return
     _fontconfig_files.add(font_path)
@@ -974,11 +1013,13 @@ __all__ = [
     "named_instance",
     "parse_font_family_list",
     "register_font_file",
+    "register_font_file_batch",
     "register_font_file_faces",
     "registered_fonts",
     "resolve_font_face",
     "resolve_font_family",
     "resolve_font_family_among",
     "resolve_named_font_face",
+    "show_font_file_to_cairo",
     "unregister_font_file",
 ]

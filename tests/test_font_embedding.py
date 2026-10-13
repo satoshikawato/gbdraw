@@ -313,9 +313,9 @@ def _pdf_faces(choice: font_embedding.PdfFonts) -> list[tuple[str, str]]:
 def test_pdf_fonts_name_the_bundled_face_of_each_run_as_jspdf_registers_it() -> None:
     choice = font_embedding.pdf_fonts(
         [
-            ("'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif", True, False),
-            ("serif", False, True),
-            ("'Courier New', monospace", True, True),
+            ("'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif", True, False, "Sans"),
+            ("serif", False, True, "Serif"),
+            ("'Courier New', monospace", True, True, "Mono"),
         ],
         known=("LiberationSerif-Italic.ttf",),
     )
@@ -334,15 +334,17 @@ def test_pdf_fonts_name_the_bundled_face_of_each_run_as_jspdf_registers_it() -> 
 def test_pdf_fonts_draw_a_registered_cff_face_with_truetype_outlines_sent_once(tmp_path: Path) -> None:
     registered = fonts.register_font_file(_cff_font(tmp_path / "c.otf", "Gbdraw Pdf Run"))
     name = registered.face.measurement_name
-    regular = ("'Gbdraw Pdf Run', sans-serif", False, False)
+    regular = ("'Gbdraw Pdf Run', sans-serif", False, False, "OV")
 
-    choice = font_embedding.pdf_fonts([regular, ("'Gbdraw Pdf Run', sans-serif", True, False)], known=())
+    choice = font_embedding.pdf_fonts([regular, ("'Gbdraw Pdf Run', sans-serif", True, False, "V")], known=())
 
     # The one face draws both runs (CSS matching), under one jsPDF family.
-    assert _pdf_faces(choice) == [(name.rsplit("-", 1)[0], f"{name}.ttf")] * 2
-    assert choice.fonts == {f"{name}.ttf": font_embedding.truetype_bytes_for_pdf(registered.face)}
-    assert "glyf" in TTFont(io.BytesIO(choice.fonts[f"{name}.ttf"]))
-    assert font_embedding.pdf_fonts([regular], known=(f"{name}.ttf",)).fonts == {}
+    (face,) = set(choice.faces)
+    assert _pdf_faces(choice) == [(name.rsplit("-", 1)[0], face.file)] * 2
+    assert face.file.startswith(f"{name}-") and face.file.endswith(".ttf")
+    assert choice.fonts == {face.file: font_embedding.truetype_bytes_for_pdf(registered.face, "OV")}
+    assert "glyf" in TTFont(io.BytesIO(choice.fonts[face.file]))
+    assert font_embedding.pdf_fonts([regular], known=(face.file,)).fonts == {}
 
 
 def test_pdf_fonts_substitute_the_nearest_liberation_face_and_name_the_font(
@@ -354,15 +356,16 @@ def test_pdf_fonts_substitute_the_nearest_liberation_face_and_name_the_font(
     broken = fonts.register_font_file(_renamed_font("LiberationMono-Regular", "Gbdraw Pdf Broken", tmp_path / "b.ttf"))
     real = font_embedding._truetype_bytes
 
-    def failing(face: fonts.FontFace) -> bytes:
+    def failing(face: fonts.FontFace, characters: frozenset[str] | None) -> bytes:
         if face == broken.face:
             raise ValidationError("cannot convert", diagnostic={"code": "INPUT_INVALID", "reason": "FONT_FILE"})
-        return real(face)
+        return real(face, characters)
 
     monkeypatch.setattr(font_embedding, "_truetype_bytes", failing)
 
     choice = font_embedding.pdf_fonts(
-        [("'Gbdraw Pdf Restricted', serif", False, False), ("'Gbdraw Pdf Broken', monospace", True, False)], known=()
+        [("'Gbdraw Pdf Restricted', serif", False, False, "R"), ("'Gbdraw Pdf Broken', monospace", True, False, "B")],
+        known=(),
     )
 
     assert _pdf_faces(choice) == [
@@ -382,14 +385,17 @@ def test_the_web_export_helpers_reply_in_json(tmp_path: Path) -> None:
     svg = _svg(("'Gbdraw Web Export', serif", "normal", "Web"))
 
     reply = json.loads(export_fonts.svg_font_embedding_json(svg))
-    assert reply == {"css": font_embedding.svg_font_embedding(svg).css, "refusedFamilies": []}
+    assert reply == {
+        "block": font_embedding.embedded_fonts_block(font_embedding.svg_font_embedding(svg)), "refusedFamilies": []
+    }
 
     name = registered.face.measurement_name
     pdf = json.loads(export_fonts.pdf_fonts_json(
-        json.dumps([{"fontFamily": "'Gbdraw Web Export', serif", "bold": False, "italic": False}]), "[]"
+        json.dumps([{"fontFamily": "'Gbdraw Web Export', serif", "bold": False, "italic": False, "text": "Web"}]), "[]"
     ))
-    assert pdf["faces"] == [{"family": name.rsplit("-", 1)[0], "file": f"{name}.ttf"}]
-    assert base64.b64decode(pdf["fonts"][f"{name}.ttf"]) == font_embedding.truetype_bytes_for_pdf(registered.face)
+    [face] = pdf["faces"]
+    assert face["family"] == name.rsplit("-", 1)[0] and face["file"].startswith(f"{name}-")
+    assert base64.b64decode(pdf["fonts"][face["file"]]) == font_embedding.truetype_bytes_for_pdf(registered.face, "Web")
     assert pdf["substitutions"] == []
 
 
@@ -427,10 +433,17 @@ def _box_font(target: Path, family: str) -> Path:
 def test_a_font_file_that_is_not_installed_draws_in_cairo_raster_output(tmp_path: Path) -> None:
     # Receipt 〔書き出し〕: PNG and PDF draw the chosen font. CairoSVG finds
     # fonts through fontconfig, so a registered file must be visible there.
-    cairosvg = pytest.importorskip("cairosvg")
+    pytest.importorskip("cairosvg")
     from PIL import Image
 
-    fonts.register_font_file_faces(_box_font(tmp_path / "box.ttf", "Gbdraw Raster Box"))
+    from gbdraw.render import export as export_module
+
+    # D-13: a PNG draws the chosen font whatever its license.
+    path = _box_font(tmp_path / "box.ttf", "Gbdraw Raster Box")
+    font = TTFont(str(path))
+    font["OS/2"].fsType = 0x0002
+    font.save(str(path))
+    fonts.register_font_file_faces(path)
 
     def ink(font_family: str) -> int:
         svg = (
@@ -438,7 +451,7 @@ def test_a_font_file_that_is_not_installed_draws_in_cairo_raster_output(tmp_path
             '<rect width="400" height="80" fill="white"/>'
             f'<text x="10" y="50" font-size="40" font-family="{font_family}">Hello gbdraw</text></svg>'
         )
-        image = Image.open(io.BytesIO(cairosvg.svg2png(bytestring=svg.encode()))).convert("L")
+        image = Image.open(io.BytesIO(export_module.convert_svg_with_cairosvg(svg, "png"))).convert("L")
         return sum(1 for value in image.getdata() if value < 64)
 
     assert ink("'Gbdraw Raster Box', serif") > 1.5 * ink("'Liberation Serif', serif")
@@ -660,11 +673,200 @@ def test_a_font_file_cairo_cannot_see_is_named_in_a_warning(
     def missing(_name: str) -> None:
         raise OSError("no fontconfig")
 
+    pytest.importorskip("cairosvg")
+    from gbdraw.render import export as export_module
+
     monkeypatch.setattr(ctypes, "CDLL", missing)
     monkeypatch.setattr(ctypes.util, "find_library", lambda _name: None)
     path = _renamed_font("LiberationSerif-Regular", "Gbdraw No Fc Serif", tmp_path / "n.ttf")
+    fonts.register_font_file_faces(path)
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40">'
+        "<text x=\"5\" y=\"30\" font-family=\"'Gbdraw No Fc Serif', serif\">Fc</text></svg>"
+    )
 
+    # M2: at the CairoSVG export, once per file.
     with caplog.at_level(logging.WARNING, logger="gbdraw.core.fonts"):
-        fonts.register_font_file_faces(path)
+        export_module.convert_svg_with_cairosvg(svg, "png")
+        export_module.convert_svg_with_cairosvg(svg, "pdf")
 
-    assert "PNG, PDF, EPS and PS output draw 'Gbdraw No Fc Serif' with an installed font" in caplog.text
+    message = "PNG, PDF, EPS and PS output draw 'Gbdraw No Fc Serif' with an installed font"
+    assert caplog.text.count(message) == 1
+
+
+# ---- PR-2 review fixes (D-13): one owner decides per output kind ----
+
+# fsType values and what each output kind may do with the face (D-13).
+_FS_TYPE_CASES = {
+    "installable": (0x0000, "subset", "subset", "subset"),
+    "restricted": (0x0002, "refused", "refused", "subset"),
+    "restricted-printable": (0x0002 | 0x0004, "subset", "subset", "subset"),
+    "bitmap-only": (0x0200, "refused", "refused", "subset"),
+    "no-subsetting": (0x0100, "whole", "refused", "subset"),
+}
+
+
+@pytest.mark.parametrize("case", sorted(_FS_TYPE_CASES))
+def test_one_owner_decides_how_each_output_kind_carries_a_face(tmp_path: Path, case: str) -> None:
+    fs_type, svg, document, raster = _FS_TYPE_CASES[case]
+    font = TTFont(str(_renamed_font("LiberationSans-Regular", "Gbdraw Kind", tmp_path / "k.ttf", fs_type=fs_type)))
+
+    assert [font_embedding.face_embedding(font, kind) for kind in ("svg", "document", "raster")] == [
+        svg, document, raster
+    ]
+
+
+def test_s1_a_bitmap_only_font_is_refused_in_the_svg(tmp_path: Path) -> None:
+    fonts.register_font_file(
+        _renamed_font("LiberationSans-Regular", "Gbdraw Bitmap Only", tmp_path / "m.ttf", fs_type=0x0200)
+    )
+
+    embedding = font_embedding.svg_font_embedding(_svg(("'Gbdraw Bitmap Only', sans-serif", "normal", "No")))
+
+    assert embedding == font_embedding.FontEmbedding(css="", refused_families=("Gbdraw Bitmap Only",))
+
+
+def test_d13_a_raster_carries_every_custom_face_whatever_its_license(tmp_path: Path) -> None:
+    fonts.register_font_file(
+        _renamed_font("LiberationSans-Regular", "Gbdraw Raster Locked", tmp_path / "r.ttf", fs_type=0x0002)
+    )
+
+    embedding = font_embedding.svg_font_embedding(
+        _svg(("'Gbdraw Raster Locked', sans-serif", "normal", "Ab")), kind="raster"
+    )
+
+    assert embedding.refused_families == ()
+    (face,) = _faces(embedding.css)
+    assert set(_embedded_font(face)[1].getBestCmap()) == {ord("A"), ord("b")}
+
+
+@pytest.mark.parametrize("fs_type", [0x0002, 0x0200, 0x0100], ids=["restricted", "bitmap-only", "no-subsetting"])
+def test_s1_s2_a_pdf_draws_a_face_it_may_not_carry_in_the_nearest_liberation_face(
+    tmp_path: Path, fs_type: int
+) -> None:
+    fonts.register_font_file(
+        _renamed_font("LiberationSerif-Regular", "Gbdraw Pdf Refused", tmp_path / "x.ttf", fs_type=fs_type)
+    )
+
+    choice = font_embedding.pdf_fonts([("'Gbdraw Pdf Refused', serif", False, False, "Text")], known=())
+
+    assert _pdf_faces(choice) == [("LiberationSerif", "LiberationSerif-Regular.ttf")]
+    assert choice.substitutions == (
+        font_embedding.PdfFontSubstitution("Gbdraw Pdf Refused", "Liberation Serif", "license"),
+    )
+
+
+def test_s3_a_pdf_carries_a_subset_of_the_characters_each_custom_face_draws(tmp_path: Path) -> None:
+    registered = fonts.register_font_file(_cff_font(tmp_path / "c.otf", "Gbdraw Pdf Subset"))
+    family = "'Gbdraw Pdf Subset', sans-serif"
+
+    choice = font_embedding.pdf_fonts([(family, False, False, "O"), (family, True, False, "V ")], known=())
+
+    (file,) = set(face.file for face in choice.faces)
+    font = TTFont(io.BytesIO(choice.fonts[file]))
+    assert "glyf" in font and set(font.getBestCmap()) == {ord("O"), ord("V"), ord(" ")}
+    assert file.startswith(registered.face.measurement_name)
+    # Other characters are another file; the same characters are known.
+    other = font_embedding.pdf_fonts([(family, False, False, "OOO")], known=(file,))
+    assert other.faces[0].file != file and set(other.fonts) == {other.faces[0].file}
+    assert font_embedding.pdf_fonts([(family, False, False, "VO ")], known=(file,)).fonts == {}
+
+
+def test_s6_the_web_helper_returns_the_block_embed_font_css_inserts(tmp_path: Path) -> None:
+    fonts.register_font_file(_renamed_font("LiberationSerif-Regular", "Gbdraw Web Block", tmp_path / "w.ttf"))
+    svg = _svg(("'Gbdraw Web Block', serif", "normal", "Block"))
+
+    reply = json.loads(export_fonts.svg_font_embedding_json(svg))
+
+    embedding = font_embedding.svg_font_embedding(svg)
+    block = font_embedding.embedded_fonts_block(embedding)
+    assert reply == {"block": block, "refusedFamilies": []}
+    assert block.startswith('<defs id="gbdraw-embedded-fonts">') and "@font-face" in block
+    assert font_embedding.embed_font_css(svg, embedding).replace(block, "", 1) == svg
+    assert json.loads(export_fonts.svg_font_embedding_json(svg, "raster"))["block"] == block
+
+
+def test_m1_an_embedding_failure_names_the_cli_and_python_opt_outs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import gbdraw.api.render as render_module
+    from gbdraw.exceptions import ExportError
+
+    def broken(_svg: str) -> font_embedding.FontEmbedding:
+        raise RuntimeError("subsetter failed")
+
+    monkeypatch.setattr(render_module, "svg_font_embedding", broken)
+    drawing = svgwrite.Drawing(size=("10px", "10px"))
+
+    with pytest.raises(ExportError) as caught:
+        render_to_bytes(drawing, "svg")
+
+    assert "--no_font_embedding" in str(caught.value) and "embed_fonts=False" in str(caught.value)
+
+
+def _pdf_with(tmp_path: Path, family: str, fs_type: int, caplog: pytest.LogCaptureFixture) -> bytes:
+    pytest.importorskip("cairosvg")
+    from gbdraw.render import export as export_module
+
+    fonts.register_font_file(
+        _renamed_font("LiberationSerif-Regular", family, tmp_path / "f.ttf", fs_type=fs_type)
+    )
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60">'
+        f'<text x="5" y="40" font-size="20" font-family="\'{family}\', serif">Hello</text></svg>'
+    )
+    with caplog.at_level(logging.WARNING):
+        return export_module.convert_svg_with_cairosvg(svg, "pdf")
+
+
+@pytest.mark.parametrize("fs_type", [0x0002, 0x0200, 0x0100], ids=["restricted", "bitmap-only", "no-subsetting"])
+def test_b1_a_cairo_pdf_never_carries_a_face_whose_license_forbids_it(
+    tmp_path: Path, fs_type: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    family = f"Gbdraw Cairo Refused {fs_type:04x}"
+
+    pdf = _pdf_with(tmp_path, family, fs_type, caplog)
+
+    assert family.replace(" ", "").encode() not in pdf
+    assert b"LiberationSerif" in pdf
+    assert f"Font '{family}' is not embedded in the PDF" in caplog.text
+    assert "Its text is drawn in 'Liberation Serif'" in caplog.text
+
+
+def test_b1_a_cairo_pdf_carries_a_face_it_may_embed(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    family = "Gbdraw Cairo Allowed"
+
+    pdf = _pdf_with(tmp_path, family, 0x0000, caplog)
+
+    assert family.replace(" ", "").encode() in pdf
+    assert "not embedded" not in caplog.text
+
+
+def test_m2_registering_a_font_file_shows_nothing_to_fontconfig(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import ctypes
+
+    def refuse(_name: str) -> None:
+        raise AssertionError("fontconfig is touched at registration")
+
+    monkeypatch.setattr(ctypes, "CDLL", refuse)
+    with caplog.at_level(logging.WARNING):
+        fonts.register_font_file(_renamed_font("LiberationSerif-Regular", "Gbdraw Svg Only", tmp_path / "s.ttf"))
+
+    assert caplog.text == ""
+
+
+def test_ov744_a_font_with_a_reserved_unicode_range_bit_still_subsets(tmp_path: Path) -> None:
+    # GNU Unifont sets OS/2 Unicode range bit 123, which fontTools cannot
+    # recalculate when it prunes the ranges of a subset.
+    path = _renamed_font("LiberationSerif-Regular", "Gbdraw Range Bit", tmp_path / "r.ttf")
+    font = TTFont(str(path))
+    font["OS/2"].ulUnicodeRange4 |= 1 << (123 - 96)
+    font.save(str(path))
+    registered = fonts.register_font_file(path)
+
+    embedding = font_embedding.svg_font_embedding(_svg(("'Gbdraw Range Bit', serif", "normal", "Ok")))
+
+    assert [face["font-family"] for face in _faces(embedding.css)] == ["'Gbdraw Range Bit'"]
+    assert "glyf" in TTFont(io.BytesIO(font_embedding.truetype_bytes_for_pdf(registered.face, "Ok")))

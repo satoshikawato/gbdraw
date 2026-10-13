@@ -40,7 +40,8 @@ def _font_embedding(svg_source: str, embed_fonts: bool) -> FontEmbedding:
         embedding = svg_font_embedding(svg_source)
     except Exception as exc:
         raise ExportError(
-            f"Could not embed the fonts in the SVG: {exc}. Turn font embedding off to write it without them."
+            f"Could not embed the fonts in the SVG: {exc}. Turn font embedding off to write it without them "
+            "(--no_font_embedding on the command line, embed_fonts=False in Python)."
         ) from exc
     if embedding.refused_families:
         logger.warning(
@@ -113,8 +114,10 @@ def save_figure_to(
     :func:`gbdraw.render.export.save_figure`, explicitly requested formats are
     strict: failure to generate any one of them raises an exception.
     With ``embed_fonts``, the SVG and interactive SVG carry a subset of each
-    font they use that gbdraw does not bundle; PNG, PDF, EPS and PS use the
-    installed fonts.
+    font they use that gbdraw does not bundle. PNG, PDF, EPS and PS draw with
+    the registered and installed fonts whatever ``embed_fonts``; PDF, EPS and
+    PS draw a font whose license forbids embedding it in the nearest
+    Liberation font (``gbdraw.render.font_embedding``).
     """
 
     fmt_list = _normalize_formats(formats)

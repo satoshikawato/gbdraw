@@ -1,29 +1,36 @@
-"""The fonts an exported file carries (D-05): SVG ``@font-face`` subsets and
-TrueType outlines for PDF.
+"""The fonts an exported file carries (D-05, D-13): SVG ``@font-face``
+subsets, TrueType outlines for the Web PDF, and the faces CairoSVG draws with.
 
-This module is the one owner of font embedding. ``svg_font_embedding`` finds
-the faces an SVG draws its text with (each element's ``font-family``,
-``font-weight`` and ``font-style``, resolved by ``gbdraw.core.fonts`` as text
-was measured) and the characters each face draws, and returns ``@font-face``
-rules with a subset of every face gbdraw does not bundle, as ``data:`` URLs in
-the font's own flavour (TrueType or OpenType). A face whose OS/2 ``fsType``
-allows only restricted-license embedding is left out and named in
-``refused_families``. Two entry points share it: the Web export inserts the
-CSS itself, and the CLI and Python writers call ``embed_font_css``, which puts
-it in a ``<defs>`` of its own that ``remove_embedded_font_css`` takes out
+This module is the one owner of font embedding. ``face_embedding`` is the one
+rule of what an output kind (``svg``, ``document``, ``raster``) may do with a
+face, by its OS/2 ``fsType``; every path below asks it.
+
+``svg_font_embedding`` finds the faces an SVG draws its text with (each
+element's ``font-family``, ``font-weight`` and ``font-style``, resolved by
+``gbdraw.core.fonts`` as text was measured) and the characters each face
+draws, and returns ``@font-face`` rules with a subset of every face gbdraw
+does not bundle, as ``data:`` URLs in the font's own flavour (TrueType or
+OpenType). A face the output may not carry is left out and named in
+``refused_families``. ``embedded_fonts_block`` builds the
+``<defs id="gbdraw-embedded-fonts">`` block of those rules: the CLI and Python
+writers insert it with ``embed_font_css``, the Web export receives it from the
+Worker and only inserts it, and ``remove_embedded_font_css`` takes it out
 again (a Session never stores font data, D-02).
 
-``truetype_bytes_for_pdf`` gives a face's glyphs as TrueType outlines, which
-a PDF embeds; CFF and CFF2 outlines are converted with ``cu2qu``.
 ``pdf_fonts`` chooses the face the Web PDF export draws each text run with
-(the face the text was measured with) and falls back to the nearest
-Liberation face, by name, when a custom face cannot be embedded.
+(the face the text was measured with), as TrueType outlines of the characters
+it draws (``truetype_bytes_for_pdf``; CFF and CFF2 outlines are converted with
+``cu2qu``), and falls back to the nearest Liberation face, by name, when a
+custom face cannot be embedded. ``fonts_for_cairosvg`` does the same for the
+CLI and Python PDF, EPS and PS, and shows the registered faces a conversion
+uses to fontconfig.
 """
 
 from __future__ import annotations
 
 import base64
 import functools
+import hashlib
 import io
 import logging
 import os
@@ -38,6 +45,8 @@ from fontTools.ttLib import TTFont
 from gbdraw.core import fonts
 from gbdraw.exceptions import ValidationError
 
+logger = logging.getLogger(__name__)
+
 EMBEDDED_FONTS_ID = "gbdraw-embedded-fonts"
 
 _SVG_NAMESPACE = "{http://www.w3.org/2000/svg}"
@@ -49,6 +58,8 @@ _FS_TYPE_RESTRICTED = 0x0002
 _FS_TYPE_ALLOWED = 0x0004 | 0x0008
 # Bit 8: the font may be embedded only whole, never as a subset (D-09).
 _FS_TYPE_NO_SUBSETTING = 0x0100
+# Bit 9: only the font's bitmaps may be embedded, not its outlines.
+_FS_TYPE_BITMAP_ONLY = 0x0200
 # The root <svg ...> start tag (attribute values may hold ">").
 _ROOT_START_TAG = re.compile(r"<svg\b(?:[^>\"']|\"[^\"]*\"|'[^']*')*>")
 _EMBEDDED_DEFS = re.compile(
@@ -68,6 +79,9 @@ class FontEmbedding:
 _NO_EMBEDDING = FontEmbedding(css="", refused_families=())
 
 _FontKey = tuple[str, str, str]  # font-family, font-weight, font-style
+
+EmbeddingKind = Literal["svg", "document", "raster"]
+FaceEmbedding = Literal["subset", "whole", "refused"]
 
 
 def _local_name(tag: object) -> str:
@@ -110,14 +124,27 @@ def _drawn_characters(root: ET.Element) -> Dict[_FontKey, set[str]]:
     return drawn
 
 
-def _embedding_refused(font: TTFont) -> bool:
-    """Whether the face's license (OS/2 ``fsType``) allows no embedding."""
-    fs_type = _fs_type(font)
-    return bool(fs_type & _FS_TYPE_RESTRICTED and not fs_type & _FS_TYPE_ALLOWED)
+def face_embedding(font: TTFont, kind: EmbeddingKind) -> FaceEmbedding:
+    """How an output of ``kind`` may carry ``font``, by its OS/2 ``fsType``
+    (D-13); the one rule every export asks.
 
-
-def _fs_type(font: TTFont) -> int:
-    return int(font["OS/2"].fsType) if "OS/2" in font else 0
+    ``raster`` (PNG): a subset whatever the license; rasterizing is not
+    embedding, and the font never leaves the page or process. ``svg``
+    (SVG, Interactive SVG): refused when the license allows only
+    restricted-license embedding (0x0002 without 0x0004 or 0x0008) or only
+    bitmaps (0x0200); whole when it forbids subsetting (0x0100, D-09); else a
+    subset. ``document`` (PDF, EPS, PS, whose writers always subset): refused
+    in all three of those cases; else a subset.
+    """
+    if kind == "raster":
+        return "subset"
+    fs_type = int(font["OS/2"].fsType) if "OS/2" in font else 0
+    restricted = fs_type & _FS_TYPE_RESTRICTED and not fs_type & _FS_TYPE_ALLOWED
+    if restricted or fs_type & _FS_TYPE_BITMAP_ONLY:
+        return "refused"
+    if fs_type & _FS_TYPE_NO_SUBSETTING:
+        return "refused" if kind == "document" else "whole"
+    return "subset"
 
 
 def _face_data_url(face: fonts.FontFace, characters: set[str], *, whole: bool) -> str:
@@ -143,6 +170,10 @@ def _subset(font: TTFont, characters: set[str]) -> None:
     options.hinting = False
     options.notdef_outline = True
     options.name_IDs = [1, 2, 4, 6, 16, 17]
+    # Keep the OS/2 Unicode ranges as they are: recalculating them fails on
+    # a font that sets a reserved bit (fontTools 4: "expected 0 <= int <=
+    # 122"), and the ranges do not choose glyphs (OV-744).
+    options.prune_unicode_ranges = False
     subsetter = subset.Subsetter(options)
     subsetter.populate(unicodes={ord(char) for char in characters})
     # The subsetter reports each table it drops (for example a font editor's
@@ -156,12 +187,13 @@ def _subset(font: TTFont, characters: set[str]) -> None:
         subset_log.setLevel(level)
 
 
-def svg_font_embedding(svg_text: str) -> FontEmbedding:
+def svg_font_embedding(svg_text: str, kind: Literal["svg", "raster"] = "svg") -> FontEmbedding:
     """The ``@font-face`` rules for the custom faces ``svg_text`` draws with.
 
     Each face gets one rule with its own weight and style and a subset of the
-    characters drawn with it (the whole face when its license forbids
-    subsetting). Bundled Liberation faces are never embedded.
+    characters drawn with it, or the whole face, as ``face_embedding``
+    decides for ``kind`` (``svg`` for an SVG file, ``raster`` for the SVG the
+    Web PNG export draws). Bundled Liberation faces are never embedded.
     """
     drawn = _drawn_characters(ET.fromstring(svg_text))
     by_face: Dict[tuple[str, fonts.FontFace], set[str]] = {}
@@ -176,7 +208,8 @@ def svg_font_embedding(svg_text: str) -> FontEmbedding:
         font = fonts.load_font(face)
         if font is None:
             continue
-        if _embedding_refused(font):
+        use = face_embedding(font, kind)
+        if use == "refused":
             if family not in refused:
                 refused.append(family)
             continue
@@ -186,7 +219,7 @@ def svg_font_embedding(svg_text: str) -> FontEmbedding:
             f"font-family: {fonts.css_family_token(family)}; "
             f"font-weight: {weight}; "
             f"font-style: {'italic' if italic else 'normal'}; "
-            f"src: {_face_data_url(face, characters, whole=bool(_fs_type(font) & _FS_TYPE_NO_SUBSETTING))}; "
+            f"src: {_face_data_url(face, characters, whole=use == 'whole')}; "
             "}"
         )
     if not rules and not refused:
@@ -194,15 +227,25 @@ def svg_font_embedding(svg_text: str) -> FontEmbedding:
     return FontEmbedding(css="\n".join(rules), refused_families=tuple(refused))
 
 
-def embed_font_css(svg_text: str, embedding: FontEmbedding) -> str:
-    """``svg_text`` with ``embedding.css`` in a ``<defs>`` of its own, first
-    in the root element; unchanged when there is no CSS."""
+def embedded_fonts_block(embedding: FontEmbedding) -> str:
+    """The ``<defs id="gbdraw-embedded-fonts">`` block that carries
+    ``embedding.css``, the first child of an exported SVG's root; "" when
+    there is no CSS. The one builder of the block: ``embed_font_css`` inserts
+    it, and the Web export inserts the block the Worker returns."""
     if not embedding.css:
+        return ""
+    return f'<defs id="{EMBEDDED_FONTS_ID}"><style type="text/css">{escape(embedding.css)}</style></defs>'
+
+
+def embed_font_css(svg_text: str, embedding: FontEmbedding) -> str:
+    """``svg_text`` with ``embedded_fonts_block`` first in the root element;
+    unchanged when there is no CSS."""
+    block = embedded_fonts_block(embedding)
+    if not block:
         return svg_text
     match = _ROOT_START_TAG.search(svg_text)
     if match is None:
         raise ValueError("The SVG has no <svg> root element to embed fonts in.")
-    block = f'<defs id="{EMBEDDED_FONTS_ID}"><style type="text/css">{escape(embedding.css)}</style></defs>'
     return svg_text[: match.end()] + block + svg_text[match.end():]
 
 
@@ -267,13 +310,18 @@ def _to_quadratic(font: TTFont) -> None:
     font.sfntVersion = "\x00\x01\x00\x00"
 
 
+# Keyed by face and characters: a subset is small, and a registered face's
+# identity is its bytes. Bounded, so faces unregistered since are let go.
 @functools.lru_cache(maxsize=16)
-def _truetype_bytes(face: fonts.FontFace) -> bytes:
+def _truetype_bytes(face: fonts.FontFace, characters: Optional[frozenset[str]]) -> bytes:
     try:
         data = fonts.face_source_bytes(face)
         font = TTFont(io.BytesIO(data), fontNumber=face.index, recalcTimestamp=False)
         named = _ensure_postscript_name(font)
-        if not face.index and not face.instance and data[:4] == b"\x00\x01\x00\x00" and named:
+        if (
+            characters is None and not face.index and not face.instance
+            and data[:4] == b"\x00\x01\x00\x00" and named
+        ):
             return data
         if "fvar" in font:
             from fontTools.varLib import instancer
@@ -284,6 +332,9 @@ def _truetype_bytes(face: fonts.FontFace) -> bytes:
                 font = instancer.instantiateVariableFont(
                     font, {axis.axisTag: axis.defaultValue for axis in font["fvar"].axes}
                 )
+        if characters is not None:
+            # Before cu2qu, which then converts only the glyphs drawn (S3).
+            _subset(font, set(characters))
         if "glyf" not in font:
             if "CFF " not in font and "CFF2" not in font:
                 raise ValueError("the font has neither TrueType nor CFF outlines")
@@ -313,18 +364,23 @@ def _ensure_postscript_name(font: TTFont) -> bool:
     return False
 
 
-def truetype_bytes_for_pdf(face_or_path: Union[fonts.FontFace, str, os.PathLike[str]]) -> bytes:
+def truetype_bytes_for_pdf(
+    face_or_path: Union[fonts.FontFace, str, os.PathLike[str]],
+    characters: Optional[Collection[str]] = None,
+) -> bytes:
     """One face as a TrueType-outline font file, for a PDF to embed.
 
-    A path names the first face of a file. TrueType faces come back as they
-    are (one face of a collection, a variable font at its named instance or
-    default); CFF and CFF2 outlines are converted to quadratic TrueType
-    outlines with the same advance widths. Cached by face (a registered face's
+    A path names the first face of a file. With ``characters``, the face is
+    first subset to them (so a large CFF font converts only the glyphs a PDF
+    draws); without, TrueType faces come back as they are (one face of a
+    collection, a variable font at its named instance or default). CFF and
+    CFF2 outlines are converted to quadratic TrueType outlines with the same
+    advance widths. Cached by face and characters (a registered face's
     identity is its bytes). Raises ``ValidationError`` (``FONT_FILE``) when
     the font cannot be read or converted.
     """
     face = face_or_path if isinstance(face_or_path, fonts.FontFace) else fonts.FontFace(os.fspath(face_or_path))
-    return _truetype_bytes(face)
+    return _truetype_bytes(face, None if characters is None else frozenset(characters))
 
 
 PdfSubstitutionReason = Literal["license", "font-file"]
@@ -334,7 +390,7 @@ PdfSubstitutionReason = Literal["license", "font-file"]
 class PdfFontFace:
     """The font a PDF text run is drawn with, as jsPDF registers it: the
     ``family`` (the face's measurement name without its style) and the
-    TrueType ``file`` (the measurement name; one per face, so it identifies the
+    TrueType ``file`` (one per face and character set, so it identifies the
     bytes)."""
 
     family: str
@@ -362,12 +418,22 @@ class PdfFonts:
     substitutions: tuple[PdfFontSubstitution, ...]
 
 
-PdfFontRun = tuple[str, bool, bool]  # font-family list, bold, italic
+PdfFontRun = tuple[str, bool, bool, str]  # font-family list, bold, italic, text drawn
 
 
-def _pdf_font_face(face: fonts.FontFace) -> PdfFontFace:
+def _drawable(text: str) -> frozenset[str]:
+    return frozenset(char for char in text if char >= " ")
+
+
+def _pdf_font_face(face: fonts.FontFace, characters: Optional[frozenset[str]] = None) -> PdfFontFace:
+    """A bundled face is sent whole, under its own file name; a custom face
+    as a subset whose file name also names the characters."""
     name = face.measurement_name
-    return PdfFontFace(family=name.rsplit("-", 1)[0], file=f"{name}.ttf")
+    family = name.rsplit("-", 1)[0]
+    if characters is None:
+        return PdfFontFace(family=family, file=f"{name}.ttf")
+    digest = hashlib.sha256("".join(sorted(characters)).encode("utf-8", "surrogatepass")).hexdigest()[:12]
+    return PdfFontFace(family=family, file=f"{name}-{digest}.ttf")
 
 
 def _nearest_bundled(font_family: str, weight: int, style: str) -> tuple[str, fonts.FontFace]:
@@ -379,49 +445,155 @@ def _nearest_bundled(font_family: str, weight: int, style: str) -> tuple[str, fo
     return resolution.nearest, face
 
 
+def _refused_in_document(face: fonts.FontFace) -> bool:
+    if fonts.is_bundled_face(face):
+        return False
+    font = fonts.load_font(face)
+    return font is not None and face_embedding(font, "document") == "refused"
+
+
 def pdf_fonts(runs: Sequence[PdfFontRun], *, known: Collection[str]) -> PdfFonts:
     """The faces a PDF draws its text runs with, and the TrueType bytes of
     those not in ``known``.
 
     A run is drawn with the face its text was measured with
-    (``resolve_font_face``). A custom face whose license (OS/2 ``fsType``)
-    forbids embedding, or that cannot become TrueType outlines, is replaced
+    (``resolve_font_face``). A custom face is sent as a subset of the
+    characters all runs draw with it. A custom face a document may not carry
+    (``face_embedding``), or that cannot become TrueType outlines, is replaced
     with the nearest Liberation face and named in ``substitutions``.
     """
-    faces: list[PdfFontFace] = []
-    data: Dict[str, bytes] = {}
-    substitutions: list[PdfFontSubstitution] = []
-    for font_family, bold, italic in runs:
+    resolved: list[tuple[str, int, str, Optional[str], fonts.FontFace]] = []
+    characters: Dict[fonts.FontFace, set[str]] = {}
+    for font_family, bold, italic, text in runs:
         weight, style = (700 if bold else 400), ("italic" if italic else "normal")
         family, face = fonts.resolve_named_font_face(font_family, weight, style)
         if face is None:
             face = fonts.resolve_font_face(font_family, weight, style)
         assert face is not None
-        chosen = _pdf_font_face(face)
+        resolved.append((font_family, weight, style, family, face))
+        characters.setdefault(face, set()).update(_drawable(text))
+    faces: list[PdfFontFace] = []
+    data: Dict[str, bytes] = {}
+    substitutions: list[PdfFontSubstitution] = []
+    usable: Dict[fonts.FontFace, Optional[PdfSubstitutionReason]] = {}
+
+    def send(face: fonts.FontFace, subset: Optional[frozenset[str]]) -> PdfFontFace:
+        chosen = _pdf_font_face(face, subset)
         if chosen.file not in known and chosen.file not in data:
-            reason: Optional[PdfSubstitutionReason] = None
-            font = fonts.load_font(face)
-            if font is not None and not fonts.is_bundled_face(face) and _embedding_refused(font):
-                reason = "license"
-            else:
+            data[chosen.file] = truetype_bytes_for_pdf(face, subset)
+        return chosen
+
+    for font_family, weight, style, family, face in resolved:
+        bundled = fonts.is_bundled_face(face)
+        subset = None if bundled else frozenset(characters[face])
+        if face not in usable:
+            usable[face] = "license" if _refused_in_document(face) else None
+            if usable[face] is None:
                 try:
-                    data[chosen.file] = truetype_bytes_for_pdf(face)
+                    send(face, subset)
                 except ValidationError:
-                    reason = "font-file"
-            if reason is not None:
-                substitute, face = _nearest_bundled(font_family, weight, style)
-                substitution = PdfFontSubstitution(family or font_family, substitute, reason)
-                if substitution not in substitutions:
-                    substitutions.append(substitution)
-                chosen = _pdf_font_face(face)
-                if chosen.file not in known and chosen.file not in data:
-                    data[chosen.file] = truetype_bytes_for_pdf(face)
-        faces.append(chosen)
+                    usable[face] = "font-file"
+        reason = usable[face]
+        if reason is None:
+            faces.append(send(face, subset))
+            continue
+        substitute, fallback = _nearest_bundled(font_family, weight, style)
+        substitution = PdfFontSubstitution(family or font_family, substitute, reason)
+        if substitution not in substitutions:
+            substitutions.append(substitution)
+        faces.append(send(fallback, None))
     return PdfFonts(faces=tuple(faces), fonts=data, substitutions=tuple(substitutions))
+
+
+# ------------------------------------------------------------------
+#  CairoSVG: PNG, PDF, EPS and PS of the CLI and Python API
+# ------------------------------------------------------------------
+_CAIROSVG_KINDS: Dict[str, EmbeddingKind] = {"png": "raster", "pdf": "document", "eps": "document", "ps": "document"}
+_SVG_NAMESPACE_URI = "http://www.w3.org/2000/svg"
+
+
+def _set_font_family(element: ET.Element, font_family: str) -> None:
+    """Set ``font-family`` as an attribute, dropping a ``style`` declaration
+    of it, which would win over the attribute."""
+    style = element.get("style")
+    if style is not None and "font-family" in style:
+        kept = [part for part in style.split(";") if part.partition(":")[0].strip() != "font-family"]
+        element.set("style", ";".join(kept))
+    element.set("font-family", font_family)
+
+
+def fonts_for_cairosvg(svg_source: bytes, fmt: str) -> bytes:
+    """The SVG CairoSVG converts to ``fmt``, with the fonts it may draw (D-13).
+
+    Each registered face the text draws with is shown to fontconfig
+    (``fonts.show_font_file_to_cairo``), so PNG, PDF, EPS and PS draw it
+    when it is not installed. In PDF, EPS and PS, which carry the fonts they
+    draw with, the text of a custom face a document may not carry
+    (``face_embedding``) is set in the nearest Liberation face instead, with
+    a warning naming both, as the Web PDF does. The bytes come back
+    unchanged when nothing is rewritten.
+    """
+    kind = _CAIROSVG_KINDS.get(str(fmt).lower())
+    if kind is None:
+        return svg_source
+    try:
+        root = ET.fromstring(svg_source)
+    except ET.ParseError:
+        return svg_source
+    substitutions: list[tuple[str, str]] = []
+    checked: Dict[fonts.FontFace, bool] = {}
+
+    def refused(family: Optional[str], face: Optional[fonts.FontFace]) -> bool:
+        if family is None or face is None or fonts.is_bundled_face(face):
+            return False
+        if face not in checked:
+            checked[face] = kind == "document" and _refused_in_document(face)
+            if not checked[face] and face.content_id:
+                fonts.show_font_file_to_cairo(face, family)
+        return checked[face]
+
+    def settle(element: ET.Element, inherited: _FontKey, in_text: bool, parent_rewritten: bool) -> bool:
+        name = _local_name(element.tag)
+        key = _font_properties(element, inherited)
+        in_text = name == "text" or (in_text and name in _TEXT_CONTAINERS)
+        rewritten = False
+        changed = False
+        if in_text:
+            family, face = fonts.resolve_named_font_face(*key)
+            if refused(family, face):
+                resolution = fonts.resolve_font_family_among(key[0], ())
+                _set_font_family(element, resolution.effective)
+                if (str(family), resolution.nearest) not in substitutions:
+                    substitutions.append((str(family), resolution.nearest))
+                rewritten = changed = True
+            elif parent_rewritten:
+                _set_font_family(element, key[0])
+                changed = True
+        for child in element:
+            changed = settle(child, key, in_text, rewritten) or changed
+        return changed
+
+    if not settle(root, ("", "normal", "normal"), False, False):
+        return svg_source
+    label = str(fmt).upper()
+    for family, substitute in substitutions:
+        logger.warning(
+            "Font %s is not embedded in the %s: its license (OS/2 fsType) does not allow embedding. "
+            "Its text is drawn in %s.",
+            fonts.css_family_token(family),
+            label,
+            fonts.css_family_token(substitute),
+        )
+    try:
+        return ET.tostring(root, encoding="utf-8", xml_declaration=True, default_namespace=_SVG_NAMESPACE_URI)
+    except ValueError:
+        return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
 __all__ = [
     "EMBEDDED_FONTS_ID",
+    "EmbeddingKind",
+    "FaceEmbedding",
     "FontEmbedding",
     "PdfFontFace",
     "PdfFontRun",
@@ -429,6 +601,9 @@ __all__ = [
     "PdfFonts",
     "pdf_fonts",
     "embed_font_css",
+    "embedded_fonts_block",
+    "face_embedding",
+    "fonts_for_cairosvg",
     "remove_embedded_font_css",
     "svg_font_embedding",
     "truetype_bytes_for_pdf",

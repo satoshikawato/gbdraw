@@ -1305,9 +1305,13 @@ def with_request_output(
     from gbdraw.api.requests import CircularBatchRequest, RenderOutputRequest
 
     def updated(current: RenderOutputRequest, prefix: str) -> RenderOutputRequest:
+        # A caller's prefix or directory names the output; the stored request
+        # no longer takes its name from the first record (S4).
+        named = output_prefix is not None or output_directory is not None
         return replace(
             current,
             output_prefix=prefix,
+            resolve_prefix_from_first_record=current.resolve_prefix_from_first_record and not named,
             output_directory=(
                 output_directory
                 if output_directory is not None

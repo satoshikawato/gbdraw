@@ -50,3 +50,29 @@ def test_a_call_registers_all_of_its_files_or_none(helpers, tmp_path):
     ])
     assert reply["error"]["code"] == "INPUT_INVALID"
     assert registered_fonts() == ()
+
+
+def test_s5_a_failed_call_leaves_earlier_registrations_and_replaced_faces_as_they_were(helpers, tmp_path):
+    from fontTools.ttLib import TTFont
+
+    first = tmp_path / "v1.ttf"
+    shutil.copy(REPO_ROOT / "gbdraw/data/LiberationSerif-Regular.ttf", first)
+    second = tmp_path / "v2.ttf"
+    font = TTFont(str(first))
+    font["head"].fontRevision = 9.0  # other bytes, same family, weight and style
+    font.save(str(second))
+    broken = tmp_path / "broken.ttf"
+    broken.write_bytes(b"not a font")
+
+    assert "fonts" in _register(helpers, [{"identity": "a" * 64, "path": str(first)}])
+    before = registered_fonts()
+    reply = _register(helpers, [
+        {"identity": "b" * 64, "path": str(second)},
+        {"identity": "c" * 64, "path": str(broken)},
+    ])
+
+    assert reply["error"]["code"] == "INPUT_INVALID"
+    assert registered_fonts() == before
+    assert before[0].face.path == str(first)
+    from gbdraw.core.fonts import face_source_bytes
+    assert face_source_bytes(before[0].face) == first.read_bytes()

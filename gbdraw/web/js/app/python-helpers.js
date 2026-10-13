@@ -1673,29 +1673,21 @@ def register_web_fonts_json(fonts_json="[]"):
     layout. A call registers all of its files or none of them.
     """
     try:
-        from gbdraw.core.fonts import font_family_list_for, register_font_file, unregister_font_file
+        from gbdraw.core.fonts import font_family_list_for, register_font_file_batch
         from gbdraw.core.text import font_metrics_table
-        registered = []
-        paths = []
-        try:
-            for entry in json.loads(str(fonts_json)):
-                path = str(entry["path"])
-                font = register_font_file(path)
-                paths.append(path)
-                registered.append({
-                    "identity": str(entry["identity"]),
-                    "family": font.family,
-                    "fontFamily": font_family_list_for(font.family, font.generic),
-                    "weight": font.weight,
-                    "italic": font.italic,
-                    "generic": font.generic,
-                    "measurementName": font.face.measurement_name,
-                    "metrics": font_metrics_table(font.face),
-                })
-        except Exception:
-            for path in paths:
-                unregister_font_file(path)
-            raise
+        entries = json.loads(str(fonts_json))
+        # All or none: every file is checked before the registry changes (S5).
+        fonts = register_font_file_batch([str(entry["path"]) for entry in entries])
+        registered = [{
+            "identity": str(entry["identity"]),
+            "family": font.family,
+            "fontFamily": font_family_list_for(font.family, font.generic),
+            "weight": font.weight,
+            "italic": font.italic,
+            "generic": font.generic,
+            "measurementName": font.face.measurement_name,
+            "metrics": font_metrics_table(font.face),
+        } for entry, font in zip(entries, fonts)]
         return json.dumps({"fonts": registered})
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='registerFonts', stage="helper")})

@@ -19,6 +19,7 @@ from svgwrite import Drawing
 from gbdraw.core.text import calculate_svg_bbox_dimensions, dominant_baseline_shift_em, get_font_vertical_metrics
 from gbdraw.exceptions import GbdrawError
 from gbdraw.render.document import write_svg_document
+from gbdraw.render.font_embedding import fonts_for_cairosvg
 from gbdraw.render.formats import (
     CAIROSVG_FORMATS,
     INTERACTIVE_SVG_FORMAT,
@@ -254,7 +255,9 @@ def convert_svg_with_cairosvg(
     """Convert SVG to PNG, PDF, PS, or EPS with CairoSVG.
 
     Every CairoSVG conversion goes through this function, so raster and
-    vector exports get :func:`prepare_svg_for_cairosvg`. ``options`` are passed
+    vector exports get the fonts they may draw with
+    (:func:`gbdraw.render.font_embedding.fonts_for_cairosvg`) and
+    :func:`prepare_svg_for_cairosvg`. ``options`` are passed
     to CairoSVG (for example ``url``, ``output_width``, ``background_color``).
     Returns the converted bytes when ``write_to`` is not given.
     """
@@ -264,7 +267,7 @@ def convert_svg_with_cairosvg(
     module = cairosvg_module if cairosvg_module is not None else get_cairosvg()
     source = svg_source.encode("utf-8") if isinstance(svg_source, str) else bytes(svg_source)
     kwargs = dict(options)
-    kwargs["bytestring"] = prepare_svg_for_cairosvg(source)
+    kwargs["bytestring"] = prepare_svg_for_cairosvg(fonts_for_cairosvg(source, str(fmt).lower()))
     if write_to is not None:
         kwargs["write_to"] = write_to
     return getattr(module, converter_name)(**kwargs)
