@@ -130,6 +130,22 @@ for (const name of sessionNames) {
   }
 }
 
+// A Session 46 is admitted as the current Session: its Legend edits move from
+// the shown caption to the row key (tests/fixtures/sessions/legend-row-key-vectors.json).
+{
+  const source = structuredClone(await loadSession(sessionNames[0]));
+  const mode = source.renderRequest.mode;
+  const slice = source.modes[mode];
+  slice.editorState = { ...slice.editorState, legend: {
+    ...slice.editorState?.legend,
+    entries: [{ caption: 'Z', originalCaption: 'GC content', color: '#a0a0a0', featureIds: [] }],
+    colorOverrides: { Z: '#ff0000' }
+  } };
+  const admitted = admitGallerySession({ ...source, version: 46 });
+  assert.equal(admitted.version, CURRENT_SESSION_VERSION);
+  assert.deepEqual(admitted.modes[mode].editorState.legend.colorOverrides, { 'GC content': '#ff0000' });
+}
+
 const lambda = await loadReleasedSession('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
 const admittedLambda = admitGallerySession(lambda);
 assert.equal(admittedLambda.version, CURRENT_SESSION_VERSION);
@@ -288,7 +304,7 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 46 or historical versions 31-33\/39-44/
+    /supports current version 47 or historical versions 31-33\/39-44\/46/
   );
 }
 

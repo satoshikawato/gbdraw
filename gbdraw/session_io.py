@@ -67,18 +67,21 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 46
+CURRENT_SESSION_VERSION = 47
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
-# ``modes`` (PD-OI-086) and keys per-feature edits by source identity.
+# ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
+# version 47 keys a slice's Legend color and stroke edits by the row key
+# (``originalCaption``) instead of the shown caption (PD-OI-061 revision 5).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
+ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
 # From version 41 the record display and feature placement drafts of a flat draft are checked.
 DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
@@ -88,7 +91,9 @@ FEATURE_CATALOG_SCHEMA = 1
 FEATURE_CATALOG_ENCODING = "biological-authority-v1"
 CURRENT_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
-FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {44: 4, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA}
+FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
+    44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
+}
 # The field sets below are the keys of the Session document's declaration
 # (gbdraw.session_contract).
 # Every top-level key a Session of a supported version may hold.
@@ -607,7 +612,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         )
     if version not in SUPPORTED_SESSION_VERSIONS:
         raise ValidationError(f"Unsupported session version: {version}.")
-    if "otherModeResult" in session and version < CURRENT_SESSION_VERSION:
+    if "otherModeResult" in session and version < MODE_SCOPED_SESSION_MIN_VERSION:
         raise ValidationError(
             f"Session version {version} cannot contain otherModeResult.", diagnostic=_OTHER_MODE_RESULT_INVALID
         )
@@ -666,7 +671,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
 
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
     """Recognize the explicit document variant, never a missing-resource error."""
-    return session.get("version") in (42, 44, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
+    return session.get("version") in (42, 44, 46, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
 
 
 def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
@@ -722,9 +727,9 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") not in (41, 42, 44, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
+    if current and (session.get("version") not in (41, 42, 44, 46, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
         raise ValidationError(
-            f"Web binding schema 2 requires session 41, 42, 44, or {CURRENT_SESSION_VERSION} and c_gb."
+            f"Web binding schema 2 requires session 41, 42, 44, 46, or {CURRENT_SESSION_VERSION} and c_gb."
         )
     resources = session.get("resources", {})
 
@@ -3268,6 +3273,74 @@ def _with_normalized_editor_colors(draft: Mapping[str, Any]) -> Mapping[str, Any
     return {**draft, "editorState": changed}
 
 
+def legend_edits_by_row_key(legend: Mapping[str, Any]) -> dict[str, Any]:
+    """A Session 46 Legend (a slice's ``editorState.legend``) read as Session 47.
+
+    Session 46 stored the Legend color and stroke edits (``colorOverrides``,
+    ``strokeOverrides``) under the caption a row shows, Session 47 under the
+    row key (``originalCaption``, else the caption). An edit stored under the
+    caption of a row whose key differs moves to that key. The first entry that
+    shows a caption names its row, the listed (and dormant) entries before the
+    deleted ones, as Session 46 Load kept only that entry. Edits are moved all
+    at once, so two rows renamed to each other's caption swap theirs; an edit
+    already stored under the new key stays. Other fields are kept as they are.
+
+    The twin of ``legendEditsByRowKey`` in the Web
+    ``services/mode-scoped-migration.js`` (``rekeyLegendRecords``);
+    ``tests/fixtures/sessions/legend-row-key-vectors.json`` pins both.
+    """
+
+    rekeyed: dict[str, str] = {}
+    shown: set[str] = set()
+    for rows in ("entries", "dormantEntries", "deletedEntries"):
+        entries = legend.get(rows)
+        for entry in entries if isinstance(entries, list) else ():
+            if not isinstance(entry, Mapping):
+                continue
+            caption = _js_text(entry.get("caption") or "")
+            if not caption or caption in shown:
+                continue
+            shown.add(caption)
+            key = _js_text(entry.get("originalCaption") or entry.get("caption") or "")
+            if key and key != caption:
+                rekeyed[caption] = key
+    changed = dict(legend)
+    for store in ("colorOverrides", "strokeOverrides"):
+        record = legend.get(store)
+        if not rekeyed or not isinstance(record, Mapping):
+            continue
+        moved = {key: value for key, value in record.items() if key not in rekeyed}
+        for key, value in record.items():
+            target = rekeyed.get(key)
+            if target is not None and target not in moved:
+                moved[target] = value
+        changed[store] = moved
+    return changed
+
+
+def _with_row_keyed_legend(holder: Mapping[str, Any]) -> Mapping[str, Any]:
+    editor = holder.get("editorState")
+    legend = editor.get("legend") if isinstance(editor, Mapping) else None
+    if not isinstance(editor, Mapping) or not isinstance(legend, Mapping):
+        return holder
+    return {**holder, "editorState": {**editor, "legend": legend_edits_by_row_key(legend)}}
+
+
+def session_legend_edits_by_row_key(session: Mapping[str, Any]) -> dict[str, Any]:
+    """The fields of a Session older than 47 with each Legend's edits keyed by
+    row key (:func:`legend_edits_by_row_key`): every mode slice's, and the flat
+    draft's of a Session before 46."""
+
+    changed = dict(_with_row_keyed_legend(session))
+    modes = changed.get("modes")
+    if isinstance(modes, Mapping):
+        changed["modes"] = {
+            mode: _with_row_keyed_legend(value) if isinstance(value, Mapping) else value
+            for mode, value in modes.items()
+        }
+    return changed
+
+
 def split_draft_into_modes(
     draft: Mapping[str, Any],
     *,
@@ -5313,6 +5386,8 @@ def build_session_json(
             depth_sources=session_depth_source_widths(files_for_web),
             palette_colors=mode_split_palette_colors(payload.get("config")),
         )
+    if source_version is not None and source_version < ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
+        payload = session_legend_edits_by_row_key(payload)
     _attach_current_web_file_bindings(payload, files_for_web)
     payload.pop("files", None)
     normalize_current_session_artifacts(
@@ -7018,6 +7093,7 @@ __all__ = [
     "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "PROTEIN_LOSAT_CACHE_SCHEMA",
     "MODE_SCOPED_SESSION_MIN_VERSION",
+    "ROW_KEYED_LEGEND_SESSION_MIN_VERSION",
     "SESSION_FORMAT",
     "SUPPORTED_SESSION_VERSIONS",
     "SessionBuildContext",
@@ -7044,7 +7120,9 @@ __all__ = [
     "migrate_session_feature_edits",
     "migrate_legacy_repeat_feature_shape_args",
     "normalize_current_session_artifacts",
+    "legend_edits_by_row_key",
     "safe_embedded_filename",
+    "session_legend_edits_by_row_key",
     "serialize_file_entry",
     "session_depth_source_widths",
     "session_mode",

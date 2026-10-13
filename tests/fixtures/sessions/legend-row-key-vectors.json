@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "readsSessionVersion": 46,
+  "cases": [
+    {
+      "name": "ambiguous chain: GC skew renamed Z, then GC content renamed GC skew and colored (DESIGN 1a)",
+      "legend": {
+        "entries": [
+          {"caption": "GC skew", "originalCaption": "GC content", "color": "#a0a0a0"},
+          {"caption": "Z", "originalCaption": "GC skew", "color": "#5050f0"}
+        ],
+        "originalOrder": ["GC content", "GC skew"],
+        "originalColors": {"GC content": "#a0a0a0", "GC skew": "#5050f0"},
+        "colorOverrides": {"GC skew": "#ff0000"},
+        "strokeOverrides": {"Z": {"strokeColor": "#00aa00", "strokeWidth": 2}},
+        "addedCaptions": []
+      },
+      "expected": {
+        "entries": [
+          {"caption": "GC skew", "originalCaption": "GC content", "color": "#a0a0a0"},
+          {"caption": "Z", "originalCaption": "GC skew", "color": "#5050f0"}
+        ],
+        "originalOrder": ["GC content", "GC skew"],
+        "originalColors": {"GC content": "#a0a0a0", "GC skew": "#5050f0"},
+        "colorOverrides": {"GC content": "#ff0000"},
+        "strokeOverrides": {"GC skew": {"strokeColor": "#00aa00", "strokeWidth": 2}},
+        "addedCaptions": []
+      }
+    },
+    {
+      "name": "two rows renamed to each other's caption swap their edits",
+      "legend": {
+        "entries": [
+          {"caption": "B", "originalCaption": "A", "color": "#111111"},
+          {"caption": "A", "originalCaption": "B", "color": "#222222"}
+        ],
+        "colorOverrides": {"A": "#aa0000", "B": "#00bb00"}
+      },
+      "expected": {
+        "entries": [
+          {"caption": "B", "originalCaption": "A", "color": "#111111"},
+          {"caption": "A", "originalCaption": "B", "color": "#222222"}
+        ],
+        "colorOverrides": {"B": "#aa0000", "A": "#00bb00"}
+      }
+    },
+    {
+      "name": "a deleted renamed row keeps its edits under its row key",
+      "legend": {
+        "entries": [{"caption": "CDS", "originalCaption": "CDS", "color": "#ffcccc"}],
+        "deletedEntries": [{"caption": "W", "originalCaption": "GC skew (-)", "color": "#0000ff"}],
+        "colorOverrides": {"W": "#0000ff", "CDS": "#ff0000"},
+        "strokeOverrides": {"W": {"strokeColor": "#333333", "strokeWidth": 1}}
+      },
+      "expected": {
+        "entries": [{"caption": "CDS", "originalCaption": "CDS", "color": "#ffcccc"}],
+        "deletedEntries": [{"caption": "W", "originalCaption": "GC skew (-)", "color": "#0000ff"}],
+        "colorOverrides": {"GC skew (-)": "#0000ff", "CDS": "#ff0000"},
+        "strokeOverrides": {"GC skew (-)": {"strokeColor": "#333333", "strokeWidth": 1}}
+      }
+    },
+    {
+      "name": "a caption both a listed and a deleted row show names the listed row",
+      "legend": {
+        "entries": [{"caption": "X", "originalCaption": "tRNA", "color": "#aaaaaa"}],
+        "deletedEntries": [{"caption": "X", "originalCaption": "rRNA", "color": "#bbbbbb"}],
+        "colorOverrides": {"X": "#123456"}
+      },
+      "expected": {
+        "entries": [{"caption": "X", "originalCaption": "tRNA", "color": "#aaaaaa"}],
+        "deletedEntries": [{"caption": "X", "originalCaption": "rRNA", "color": "#bbbbbb"}],
+        "colorOverrides": {"tRNA": "#123456"}
+      }
+    },
+    {
+      "name": "a dormant renamed row (listed with dormant: true) keeps its edits under its row key",
+      "legend": {
+        "entries": [
+          {"caption": "CDS", "originalCaption": "CDS", "color": "#ffcccc"},
+          {"caption": "Y", "originalCaption": "GC content", "color": "#a0a0a0", "dormant": true}
+        ],
+        "strokeOverrides": {"Y": {"strokeColor": "#00aa00", "strokeWidth": 3}}
+      },
+      "expected": {
+        "entries": [
+          {"caption": "CDS", "originalCaption": "CDS", "color": "#ffcccc"},
+          {"caption": "Y", "originalCaption": "GC content", "color": "#a0a0a0", "dormant": true}
+        ],
+        "strokeOverrides": {"GC content": {"strokeColor": "#00aa00", "strokeWidth": 3}}
+      }
+    },
+    {
+      "name": "the first entry of a caption decides, as Session 46 Load kept only that entry",
+      "legend": {
+        "entries": [
+          {"caption": "X", "originalCaption": "X", "color": "#aaaaaa"},
+          {"caption": "X", "originalCaption": "K", "color": "#bbbbbb"}
+        ],
+        "colorOverrides": {"X": "#abcdef"}
+      },
+      "expected": {
+        "entries": [
+          {"caption": "X", "originalCaption": "X", "color": "#aaaaaa"},
+          {"caption": "X", "originalCaption": "K", "color": "#bbbbbb"}
+        ],
+        "colorOverrides": {"X": "#abcdef"}
+      }
+    },
+    {
+      "name": "rows not renamed, editor rows, and keys no row shows stay where they are",
+      "legend": {
+        "entries": [
+          {"caption": "CDS", "originalCaption": "CDS", "color": "#ffcccc"},
+          {"caption": "My row", "color": "#00ff00"},
+          {"caption": "tRNA", "color": "#0000ff"}
+        ],
+        "colorOverrides": {"CDS": "#ff0000", "My row": "#00ee00", "gone": "#999999"},
+        "strokeOverrides": {"tRNA": {"strokeColor": "#000000", "strokeWidth": 1}},
+        "addedCaptions": ["My row"]
+      },
+      "expected": {
+        "entries": [
+          {"caption": "CDS", "originalCaption": "CDS", "color": "#ffcccc"},
+          {"caption": "My row", "color": "#00ff00"},
+          {"caption": "tRNA", "color": "#0000ff"}
+        ],
+        "colorOverrides": {"CDS": "#ff0000", "My row": "#00ee00", "gone": "#999999"},
+        "strokeOverrides": {"tRNA": {"strokeColor": "#000000", "strokeWidth": 1}},
+        "addedCaptions": ["My row"]
+      }
+    },
+    {
+      "name": "a renamed row without edits changes nothing",
+      "legend": {
+        "entries": [{"caption": "Z", "originalCaption": "GC skew", "color": "#5050f0"}],
+        "deletedEntries": []
+      },
+      "expected": {
+        "entries": [{"caption": "Z", "originalCaption": "GC skew", "color": "#5050f0"}],
+        "deletedEntries": []
+      }
+    }
+  ]
+}
