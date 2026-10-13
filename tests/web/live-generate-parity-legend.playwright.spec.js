@@ -1617,3 +1617,33 @@ test('legend names: a color and a stroke stored under GC content (2) stay on the
   expect((await semanticSnapshot(page)).legend.filter(({ key }) => key.startsWith('GC content')).map(edited), 'the shared row has no edit of the second')
     .toEqual([['GC content', 'GC content', firstFill.toLowerCase(), 'none']]);
 });
+
+// Undo and Redo of a color rule commit: the rule's row returns with its name
+// beside its key, and the Legend draws the same names.
+test('legend names: Undo and Redo of a color rule commit keep the name of the rule\'s row and the drawn names (circular)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const tracks = ['GC content', 'GC skew (+)', 'GC skew (-)'].map((name) => [name, null, name]);
+  const rows = async () => (await legendNameFacts(page)).legends[0];
+  const python = await rows();
+  expect(python).toEqual([['CDS', null, 'CDS'], ['repeat_region', null, 'repeat_region'], ...tracks]);
+  const one = [
+    ['repeat_region [#e63946]', 'repeat_region', 'repeat_region (1)'], ['other proteins', null, 'other proteins'],
+    ['repeat_region', null, 'repeat_region (2)'], ...tracks
+  ];
+  const two = [one[0], ['repeat_region [#2a9d8f]', 'repeat_region', 'repeat_region (2)'], one[1], ['repeat_region', null, 'repeat_region (3)'], ...tracks];
+  await addColorRule(page, { ...RULE_ROWS[0], cap: 'repeat_region' });
+  expect(await rows(), 'a rule named like the repeat_region row').toEqual(one);
+  await history(page, 'undo');
+  expect(await rows(), 'Undo of the commit').toEqual(python);
+  await history(page, 'redo');
+  expect(await rows(), 'Redo of the commit').toEqual(one);
+  await addColorRule(page, { ...RULE_ROWS[1], cap: 'repeat_region' });
+  expect(await rows(), 'a second rule of the name').toEqual(two);
+  await history(page, 'undo');
+  expect(await rows(), 'Undo of the second commit').toEqual(one);
+  await history(page, 'redo');
+  expect(await rows(), 'Redo of the second commit').toEqual(two);
+  await expectNamesLiveAndGenerated(page, two.map(([, , text]) => text), 'after Undo and Redo');
+  expect(await rows(), 'Generate writes the same keys and names').toEqual(two);
+});
