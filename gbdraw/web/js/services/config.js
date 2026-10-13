@@ -387,8 +387,8 @@ const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && 
 
 /**
  * @template {UnvalidatedFields<string>} T
- * @param {T} colors A color map. A caller that passes a saved one passes it unvalidated, and the copy is then
- *   unvalidated too.
+ * @param {T} colors A color map. The checker gives the copy the type `{}` for every caller, so the copy does not
+ *   carry the type of `colors`: a copy of a saved, unvalidated map is still unvalidated.
  */
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
