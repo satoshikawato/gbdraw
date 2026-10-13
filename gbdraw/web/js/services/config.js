@@ -926,15 +926,9 @@ const cloneJsonArray = (value) => {
   return cloneJsonValue(value, []);
 };
 
-/**
- * @template T
- * @param {T} value An object to copy; anything else gives an empty object. A caller that passes a saved one
- *   passes it unvalidated, and the copy is then unvalidated too.
- */
 const cloneJsonObject = (value) => {
   if (!isPlainObject(value)) return {};
-  // The cast: a plain object (the line above); its leaves keep the caller's type.
-  return cloneJsonValue(/** @type {T & Record<string, unknown>} */ (value), {});
+  return cloneJsonValue(value, {});
 };
 
 /** @param {unknown} source */
