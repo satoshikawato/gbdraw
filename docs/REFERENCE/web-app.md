@@ -1005,8 +1005,11 @@ split location are separated by `; `.
 **Edit** has three groups. **Appearance** changes the current Result, as its
 heading says (**Updates the current Result**):
 **Fill Color**, **Stroke**, the **Label** row (label text, **Label visibility**,
-and **Apply Label** on one line), **Feature visibility**, and **Legend name**,
-which can also be chosen from the legend captions of the color rules. When the
+and **Apply Label** on one line), **Feature visibility**, and **Legend name**.
+The list under it (**Choose from color rules…**) names the color rules for the
+feature's type and those for every feature type (`*` in a color table), each
+once; choosing one puts the feature into that group with its name and its
+color. When the
 feature has no label, one line names the reason, for example `No label shown (Show Labels = None).
 Choose On to show it.` The **Similarity group** section follows when the
 feature belongs to one: one line with the group ID, its name, and **N genes in
@@ -1079,8 +1082,9 @@ Ctrl-click selects features for bulk color, legend-caption, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the caption of another
 entry of a different color asks you to choose **Merge into "<name>"**, **Keep
-both** (the dialog shows the numbered name the renamed entry gets), or **Cancel**. If a specific color rule already uses the caption, the entries are
-told apart as that rule describes instead. In the color scope, legend name, and
+both** (the dialog shows the numbered name the renamed entry gets), or **Cancel**. The name of a specific color rule asks the same way, also when
+the rule draws no legend entry, and **Merge** takes the color of the name you
+merge into. In the color scope, legend name, and
 **Reset fill color** dialogs, whether a fill color in the popup or the Features
 list, a popup stroke edit, or a legend rename opens them, each choice is one
 History step and **Cancel** records none. After a choice the dialog stays open with its buttons

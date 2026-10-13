@@ -200,12 +200,14 @@ test('generated-caption collisions roll back and old Session drafts normalize on
     expect(rejected.result).toEqual(before.result);
     expect(await page.evaluate(async()=>JSON.stringify((await import('./js/state.js')).state.annotationWarnings.value))).toBe(warningBefore);
     // A historical draft fixture: ordinary saved strings with an unchanged preview.
+    // The row is renamed before its name is a color rule's: a rename onto the
+    // name of a color rule asks Merge / Keep both / Cancel (PD-OI-061 revision 4).
     await page.evaluate(async ids=>{
       const a=window.__GBDRAW_APP__;
       const {manualSpecificRules,featureColorOverrides}=a;
+      await a.renameLegendEntry(a.legendEntries.findIndex(entry=>entry.caption==='Conflict'),'Historical');
       manualSpecificRules.splice(0,manualSpecificRules.length,
         ...ids.map((id,i)=>({feat:'CDS',qual:'hash',val:id,color:['#112233','#445566'][i],cap:'Historical'})));
-      await a.renameLegendEntry(a.legendEntries.findIndex(entry=>entry.caption==='Conflict'),'Historical');
       for(const override of Object.values(featureColorOverrides)) if(override.caption==='Conflict') override.caption='Historical';
       const {state:s}=await import('./js/state.js'),{serializeCleanSvg}=await import('./js/services/svg-serialization.js');
       const svg=s.svgContainer.value.querySelector('svg');

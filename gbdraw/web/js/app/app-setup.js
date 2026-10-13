@@ -37,7 +37,7 @@ import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup } from './preview-item-popup.js';
-import { legendRowRules } from '../services/specific-color-rules.js';
+import { colorRuleLegendGroups, legendRowRules } from '../services/specific-color-rules.js';
 import { drawnTracks, loadedTracks } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
@@ -3571,7 +3571,7 @@ export const createAppSetup = () => {
     handleFeatureStyleScopeChoice,
     handleLegendNameCommit,
     handleLegendRenameChoice,
-    selectLegendNameOption,
+    joinLegendGroup,
     renameLegendEntry,
     handleResetColorChoice,
     resetClickedFeatureFillColor,
@@ -4222,6 +4222,7 @@ export const createAppSetup = () => {
     };
   });
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
+  const joinLegendGroupWithHistory = undoableAction('Rename legend item', joinLegendGroup);
   // The Legend tab's grip reorders a row by drag or by the Up and Down arrow
   // keys; neither is a click, so each move records its own History step.
   const moveLegendEntryWithHistory = undoableAction('Move legend item', moveLegendEntry);
@@ -5463,27 +5464,12 @@ export const createAppSetup = () => {
   const downloadPNG = () => runExportAction('downloadPNG', 'export-png');
   const downloadPDF = () => runExportAction('downloadPDF', 'export-pdf');
 
-  const specificRuleLegendOptions = computed(() => {
-    const drawing = state.activeDrawing();
-    const byCaption = new Map();
-    for (const rule of drawing.manualSpecificRules) {
-      if (!rule) continue;
-      const caption = String(rule.cap || '').trim();
-      if (!caption) continue;
-      const key = caption.toLowerCase();
-      const isHashRule = String(rule.qual || '').toLowerCase() === 'hash';
-      const existing = byCaption.get(key);
-      if (!existing || (existing.isHashRule && !isHashRule)) {
-        byCaption.set(key, {
-          caption,
-          color: String(rule.color || '').trim(),
-          isHashRule
-        });
-      }
-    }
-    return Array.from(byCaption.values())
-      .sort((a, b) => a.caption.localeCompare(b.caption))
-      .map(({ caption, color }) => ({ caption, color }));
+  // The list under the popup's Legend name: the color-rule Legend groups of
+  // the clicked feature's type, by name (PD-OI-061 revision 4).
+  const popupLegendGroups = computed(() => {
+    const type = clickedFeature.value?.feat?.type;
+    return type === undefined ? [] : colorRuleLegendGroups(state.activeDrawing().manualSpecificRules, String(type))
+      .sort((left, right) => left.name.localeCompare(right.name));
   });
 
   const featureVisibilityFeatureSuggestions = computed(() => {
@@ -7084,12 +7070,12 @@ export const createAppSetup = () => {
     highlightClickedOrthogroup,
     clearOrthogroupHighlight,
     openClickedOrthogroupInEditor,
-    specificRuleLegendOptions,
+    popupLegendGroups,
     updateClickedFeatureColor: updateClickedFeatureColorWithHistory,
     updateClickedFeatureVisibility: updateClickedFeatureVisibilityWithHistory,
     handleFeatureVisibilityScopeChoice: handleFeatureVisibilityScopeChoiceWithHistory,
     handleLegendNameCommit: handleLegendNameCommitWithHistory,
-    selectLegendNameOption,
+    joinLegendGroup: joinLegendGroupWithHistory,
     resetClickedFeatureFillColor: resetClickedFeatureFillColorWithHistory,
     updateClickedFeatureStroke: updateClickedFeatureStrokeWithHistory,
     getFeatureStrokeColorValue,

@@ -6244,21 +6244,22 @@
                                    aria-label="Feature legend name"
                                    :placeholder="clickedFeature.label"
                                    class="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
-                            <select v-if="specificRuleLegendOptions.length > 0"
-                                    :disabled="!semanticMutationAvailable" @change="selectLegendNameOption($event.target.value); $event.target.value = ''"
+                            <select v-if="popupLegendGroups.length > 0"
+                                    :disabled="!semanticMutationAvailable" @change="joinLegendGroup(popupLegendGroups[$event.target.value]); $event.target.value = ''"
+                                    data-history-managed
                                     aria-label="Legend captions of color rules"
                                     class="mt-1 w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
                                 <option value="">Choose from color rules…</option>
-                                <option v-for="entry in specificRuleLegendOptions"
-                                        :key="`specific-rule-select-${entry.caption}`"
-                                        :value="entry.caption">
-                                    {{ entry.caption }}
+                                <option v-for="(group, index) in popupLegendGroups"
+                                        :key="`specific-rule-select-${group.name}-${group.color}`"
+                                        :value="index">
+                                    {{ group.name }}
                                 </option>
                             </select>
                             <datalist id="specific-rule-legend-name-options">
-                                <option v-for="entry in specificRuleLegendOptions"
-                                        :key="`specific-rule-cap-${entry.caption}`"
-                                        :value="entry.caption">
+                                <option v-for="group in popupLegendGroups"
+                                        :key="`specific-rule-cap-${group.name}-${group.color}`"
+                                        :value="group.name">
                                 </option>
                             </datalist>
                         </div>
@@ -7193,7 +7194,10 @@
                                 Rename "<span class="font-semibold text-slate-800">{{ legendRenameDialog.oldCaption }}</span>" to "<span class="font-semibold text-slate-800">{{ legendRenameDialog.newCaption }}</span>"?
                             </p>
                             <div v-else id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                <p v-if="!legendRenameDialog.mergeAvailable">
+                                <p v-if="legendRenameDialog.targetRuleOnly">
+                                    "{{ legendRenameDialog.newCaption }}" is the name of a color rule with another color.
+                                </p>
+                                <p v-else-if="!legendRenameDialog.mergeAvailable">
                                     "{{ legendRenameDialog.newCaption }}" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item' : 'already exists' }} and draws a different feature type, so the two cannot be merged.
                                 </p>
                                 <p v-else>

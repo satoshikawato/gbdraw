@@ -292,6 +292,55 @@ const uniqueLegendKey = (reserved, preferred) => {
  * @returns {Partial<SpecificColorRule>[] | null}
  */
 
+// The rules of one caption and one fill draw one Legend row: that pair is the
+// identity of their Legend group, for the row allocation and for the groups below.
+/** @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
+const legendGroupKey = (rule) => JSON.stringify([rule.cap, fillIdentity(rule.color)]);
+
+/**
+ * The name of a color-rule Legend group: the caption its rules carry, never
+ * the key of the row Generate draws for them (N-06).
+ * @typedef {string & { readonly __brand: 'ColorRuleGroupName' }} ColorRuleGroupName
+ */
+/**
+ * A color-rule Legend group (PD-OI-061 revision 4): the rules of one caption
+ * and one color, which share one Legend row whether a feature takes them or
+ * not. Its name and its color are its identity.
+ * @typedef {object} ColorRuleLegendGroup
+ * @property {ColorRuleGroupName} name
+ * @property {SwatchColor} color
+ * @property {readonly string[]} types The feature types of its rules, in rule order (`*`: every type).
+ */
+
+// A group takes a feature of a type one of its rules is for; a rule for every
+// type (`*`) is for each type. The popup lists the groups that take the clicked
+// feature, and a pick joins every group it lists (PD-OI-061 revision 4).
+/** @param {ColorRuleLegendGroup} group @param {string} type */
+export const colorRuleGroupTakes = (group, type) => group.types.includes(type) || group.types.includes('*');
+
+// The color-rule Legend groups of a rule table, each once, in rule order; with
+// `type`, those that take a feature of that type. The feature popup's list and
+// the target of a Legend rename read this one derivation.
+/**
+ * @param {readonly SpecificRuleInput[]} rules
+ * @param {string} [type]
+ * @returns {ColorRuleLegendGroup[]}
+ */
+export const colorRuleLegendGroups = (rules, type) => {
+  /** @type {Map<string, { name: ColorRuleGroupName, color: SwatchColor, types: string[] }>} */
+  const groups = new Map();
+  for (const rule of rules) {
+    const normalized = normalizeSpecificRule(rule);
+    if (!normalized.cap) continue;
+    const key = legendGroupKey(normalized);
+    const group = groups.get(key)
+      || { name: /** @type {ColorRuleGroupName} */ (normalized.cap), color: fillOf(normalized.color), types: [] };
+    if (!group.types.includes(normalized.feat)) group.types.push(normalized.feat);
+    groups.set(key, group);
+  }
+  return [...groups.values()].filter((group) => type === undefined || colorRuleGroupTakes(group, type));
+};
+
 /**
  * Returns rule -> the key of the Legend row Generate draws for that rule.
  * @param {Partial<SpecificColorRule>[] | null} [rules]
@@ -306,23 +355,21 @@ export const createRuleLegendCaptions = (rules = [], rendererRows = []) => {
   const reserved = new Set([...rowColors.keys(), ...normalizedRules.map((rule) => rule.cap).filter(Boolean)]);
   /** @type {Map<string, PythonLegendKey>} */
   const allocated = new Map();
-  /** @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
-  const keyOf = (rule) => JSON.stringify([rule.cap, fillIdentity(rule.color)]);
   normalizedRules
     .filter((rule) => {
       const rowColor = rule.cap ? rowColors.get(captionRowKey(rule.cap)) : undefined;
       return rowColor !== undefined && rowColor !== fillIdentity(rule.color);
     })
-    .sort((left, right) => keyOf(left).localeCompare(keyOf(right)))
+    .sort((left, right) => legendGroupKey(left).localeCompare(legendGroupKey(right)))
     .forEach((rule) => {
-      if (allocated.has(keyOf(rule))) return;
+      if (allocated.has(legendGroupKey(rule))) return;
       const caption = uniqueLegendKey(reserved, allocatedRowBase(rule));
       reserved.add(caption);
-      allocated.set(keyOf(rule), captionRowKey(caption));
+      allocated.set(legendGroupKey(rule), captionRowKey(caption));
     });
   return (rule) => {
     const normalized = normalizeSpecificRule(rule);
-    return allocated.get(keyOf(normalized)) || captionRowKey(normalized.cap);
+    return allocated.get(legendGroupKey(normalized)) || captionRowKey(normalized.cap);
   };
 };
 
