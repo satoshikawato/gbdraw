@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `47`
+- Contract revision: `48`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -38,7 +38,7 @@ Status: active Product authority
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
-  `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, and `PD-OI-095`
+  `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, and `PD-OI-096`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -885,6 +885,52 @@ Status: active Product authority
     `1` (`A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS`) as a whole. The
     scenario-1 outcome fields, its receipt, and its Acceptance IDs (`CLR-01`
     to `CLR-05`) are not carried into the record; Git history retains them.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 48 changes: `PD-OI-096` is added
+  (`B / MODE-DEFAULT-LISTED-AT-LOAD`, concern `web.legend.position-of-mode`). It comes from the
+  Product Decision Owner `satoshikawato`'s replies of `2026-10-13` on a legend
+  position that is not one of its diagram mode's positions in the Web app:
+  the Legend position setting, and the side a loaded Result's Legend was laid
+  out with. Each quotation below is the part of a reply that carries the
+  answer.
+  - Reply 1, to a report line that named three outcomes for such a setting:
+    「選択肢は、モードの集合に正規化、Load で拒否、現状維持の 3 つです。」
+    「推奨どおりでよろしくです」
+  - Reply 2, to the question 「OV-652(BA-D07)の確認: そのモードの集合に無い凡例位置(例: Linear で "upper_left" や "banana")は、どう扱いますか?」
+    with the options 「モードの既定値にする(推奨)」 (「プロットタイトル位置と同じ扱いです。集合に無い値はそのモードの既定の凡例位置になります。」)
+    and 「近い位置へ対応付ける」. The Owner selected 「モードの既定値にする(推奨)」.
+  - Reply 3, a message on loading older files:
+    「てか古いファイルを拒否するよりもさ、「これこれこういう不具合というか、バグがあるから一部完全には復元できないけどいい？次回保存するときは細心のフォーマットになるから」っていうひとことnoticeを出して読み込めるようにするのがいいんじゃないかな。」
+  - Reply 4, to four questions that confirmed Reply 3. The three answers this
+    record uses:
+    - 「一言 notice の出し方はどちらにしますか?」: the Owner selected
+      「読み込む前に確認(推奨)」 (a dialog before the load, with Load and
+      Cancel; Cancel leaves the current screen unchanged).
+    - 「拒否をやめて「読めるところだけ読んで notice」にする範囲はどこまでですか?」:
+      the Owner selected 「gbdraw のファイルなら全部(推奨)」.
+    - 「意味が変わらない自動変換(古いスキーマの昇格、"RBH" を "rbh" にするような綴りの正規化)でも notice を出しますか?」:
+      the Owner selected 「出さない(推奨)」.
+  - Reply 5, to three outcomes for the side a loaded Result's Legend was laid
+    out with when that side is not one of the Result's mode's positions (`A`,
+    `none`; `B`, the mode's default; `C`, keep the stored corner). The Owner
+    quoted the recommended line: "B (recommended): use the mode's default, so
+    the legend moves below the figure, and list it in the dialog. This is the
+    same handling as OV-652, and Sessions 31 and later already read it this
+    way."
+  - Reply 6, to the request to approve the receipt text below as written or to
+    name what to change. The request showed the nine fields of the receipt as
+    recorded below and said that one meaning differs from an earlier draft: a
+    Legend position setting outside its mode reads as an unset value does
+    (usually the mode's default).
+    「この文面のまま承認します」
+    The receipt is recorded byte for byte.
+  - `OIPC-C01` keeps its text. The values this record decides are stored in a
+    file that is being loaded, not supplied in a control or a request; the
+    receipt lists them before the load, and its Accepted residual risk states
+    the interim in which they are replaced without a notice.
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
@@ -5234,6 +5280,50 @@ Decision date: 2026-10-13
   "mustPreserve": "track と annotation の legend_label、slot の順、見本の色と線、保存済みの Session（0.13.0 を含む）が読めて、凡例の行に付けた編集が同じ track の行に残ること。",
   "mayRetire": "同じ label の 2 つ目以降の行だけに (2), (3) を付け、1 つ目を番号なしにする名前の付け方。色が同じでも行を分ける動作。",
   "acceptedResidualRisk": "0.13.0 が GC content / GC content (2) と描いた図は、色が違えば GC content (1) / GC content (2) に、色が同じなら GC content の 1 行に変わる。1 行にまとめられた 2 つ目の行に付けていた編集は使われなくなる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
+}
+```
+
+### PD-OI-096: Legend position of a diagram mode at Load
+
+- Concern key: `web.legend.position-of-mode`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / MODE-DEFAULT-LISTED-AT-LOAD`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 48 entry
+  above. The Owner approved the receipt text below as written. The receipt
+  reproduces its fields without translation or additional terms. Dependent
+  runtime requires this authority merged into its base, or merged together
+  with it through the reviewed static Product Contract co-change route; this
+  record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `f64d28435244831cadbbad3e09d6a92849729ed495379d6955b7b6f13a3a9622`.
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.position-of-mode
+Scenario revision: 1
+Choice: B / MODE-DEFAULT-LISTED-AT-LOAD
+Rationale: 0.13.0 までの版が保存したファイルにも、その mode で使えない凡例の位置（Linear の upper_left など）がありうる。拒否せずに読み込み、Generate が失敗しないようにする。直せなかった値は読み込む前に知らせる。Session 31 以降はすでに描画済みの側をこう読んでいるので、古い Session もそろえる。
+Must preserve: 〔mode の位置〕mode の集合にある位置（Circular: left、right、top、bottom、upper_left、upper_right、lower_left、lower_right、none。Linear: left、right、top、bottom、none）の読み込み、保存、Generate、History。大文字や前後の空白を含む値は小文字にして位置として読み、知らせない。〔集合の外の値〕その mode で使えない値は、設定の凡例の位置なら値がないときと同じ位置（ふつうはその mode の既定の位置。Circular は left、Linear は bottom）として、読み込んだ Result に保存された描画済みの凡例の側ならその mode の既定の位置として読み、読み込む前の確認 dialog に載せる。構成 metadata に保存された側が空のときも、その mode の既定の位置として読む。〔値がないとき〕値がないときは現在の既定の位置のまま（構成 metadata のない古い Result の描画済みの側は、空白だけの値も含めて none）。〔図〕読み込んだ直後の図は保存されたときのまま。〔CLI と Python〕CLI と Python API の検証とエラー文は変えない。
+May retire: 集合の外の凡例の位置をそのまま保持し、Generate が "Input validation failed" で失敗する動作。集合の外の描画済みの側で、最初の凡例の編集が Linear の角へ凡例を置く動作。大文字や空白を含む、または集合の外や空の描画済みの側で、読み込みや表示が失敗する動作。
+Accepted residual risk: 確認 dialog は、読み込みの修復の PR で入る。それまでの dev では、集合の外の値は知らせずに既定値になる（0.14.0 の tag の前にそろえる）。0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る（Linear を表示したまま保存した Session の場合）。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.legend.position-of-mode",
+  "scenarioRevision": 1,
+  "choice": "B / MODE-DEFAULT-LISTED-AT-LOAD",
+  "rationale": "0.13.0 までの版が保存したファイルにも、その mode で使えない凡例の位置（Linear の upper_left など）がありうる。拒否せずに読み込み、Generate が失敗しないようにする。直せなかった値は読み込む前に知らせる。Session 31 以降はすでに描画済みの側をこう読んでいるので、古い Session もそろえる。",
+  "mustPreserve": "〔mode の位置〕mode の集合にある位置（Circular: left、right、top、bottom、upper_left、upper_right、lower_left、lower_right、none。Linear: left、right、top、bottom、none）の読み込み、保存、Generate、History。大文字や前後の空白を含む値は小文字にして位置として読み、知らせない。〔集合の外の値〕その mode で使えない値は、設定の凡例の位置なら値がないときと同じ位置（ふつうはその mode の既定の位置。Circular は left、Linear は bottom）として、読み込んだ Result に保存された描画済みの凡例の側ならその mode の既定の位置として読み、読み込む前の確認 dialog に載せる。構成 metadata に保存された側が空のときも、その mode の既定の位置として読む。〔値がないとき〕値がないときは現在の既定の位置のまま（構成 metadata のない古い Result の描画済みの側は、空白だけの値も含めて none）。〔図〕読み込んだ直後の図は保存されたときのまま。〔CLI と Python〕CLI と Python API の検証とエラー文は変えない。",
+  "mayRetire": "集合の外の凡例の位置をそのまま保持し、Generate が \"Input validation failed\" で失敗する動作。集合の外の描画済みの側で、最初の凡例の編集が Linear の角へ凡例を置く動作。大文字や空白を含む、または集合の外や空の描画済みの側で、読み込みや表示が失敗する動作。",
+  "acceptedResidualRisk": "確認 dialog は、読み込みの修復の PR で入る。それまでの dev では、集合の外の値は知らせずに既定値になる（0.14.0 の tag の前にそろえる）。0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る（Linear を表示したまま保存した Session の場合）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-13"
 }
