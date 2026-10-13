@@ -20,14 +20,18 @@ from gbdraw.api.options import (
 )
 from gbdraw.contract_shapes import INTEGER, STRING, array, literal, nullable, obj, record
 from gbdraw.api.requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     InMemoryRecordSource,
     LinearDiagramRequest,
     RecordInput,
+    RenderOutputRequest,
 )
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
+    SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
     CanonicalRequestCodecError,
+    CanonicalRequestDecodingError,
     CanonicalRequestEncodingError,
     _SHARED_OPTION_WRONG_MODE_DEFAULTS,
     _option_wire_key,
@@ -513,8 +517,7 @@ def test_the_encoder_writes_a_slot_renderer_and_side_in_the_spelling_it_was_give
 
 
 # The decoder reads these keys and no writer writes them: the depth inputs of
-# older writers (the writer stores every depth input as depthTracks), and a
-# comparison table path, which the encoder refuses (a file is a resource).
+# older writers (the writer stores every depth input as depthTracks).
 _DEPTH_INPUTS_OF_OLDER_WRITERS = {
     "depthFile", "depthFiles", "depthTable", "depthTables", "depthTrackColors", "depthTrackFiles",
     "depthTrackLabels", "depthTrackLargeTickIntervals", "depthTrackSmallTickIntervals",
@@ -557,9 +560,53 @@ def test_the_description_names_every_option_key_a_writer_can_write(
     candidates = {_option_wire_key(item.name) for item in fields(_REQUEST_TYPES[mode][1])}
     decoder_keys = {key for key in candidates | set(defaults) | set(described) if decoder_names(key)}
     assert set(described) <= decoder_keys
-    assert decoder_keys - set(described) == older_depth_inputs | {_option_wire_key(table_path)}
+    assert decoder_keys - set(described) == older_depth_inputs
     with pytest.raises(CanonicalRequestEncodingError, match="comparison table"):
         encode_canonical_request(_request(mode, **{table_path: "table.tsv"}))
+
+
+def test_the_encoder_refuses_a_comparison_table_path_in_a_circular_batch() -> None:
+    request = CircularBatchRequest(
+        records=(RecordInput(source=InMemoryRecordSource(_record())),),
+        options=CircularDiagramOptions(conservation_table_file="table.tsv"),
+        outputs=(RenderOutputRequest(),),
+    )
+    with pytest.raises(CanonicalRequestEncodingError, match="Circular comparison table"):
+        encode_canonical_request(request)
+
+
+SCHEMAS = sorted(SUPPORTED_CANONICAL_REQUEST_SCHEMAS)
+
+
+def _decode_at(schema: int, request: Any, tmp_path: Path, change: Any = None) -> Any:
+    """Decode ``request`` as a payload of ``schema``, after ``change`` edits the payload."""
+
+    encoded = encode_canonical_request(request)
+    payload = codec_tests._payload_for_schema(encoded, schema)
+    if change is not None:
+        change(payload)
+    return decode_canonical_request(
+        payload,
+        resource_paths=codec_tests._materialize_resources(encoded, tmp_path / f"resources-{schema}"),
+        output_directory=tmp_path / "output",
+    )
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_the_decoder_refuses_a_comparison_table_path_at_every_schema(
+    mode: str, schema: int, tmp_path: Path
+) -> None:
+    """No writer wrote a table path: the Web never, the encoder refuses it (OV-324)."""
+
+    key = _option_wire_key(_DECODER_ONLY_OPTIONS[mode][0])
+    _decode_at(schema, _request(mode), tmp_path)
+
+    def add_path(payload: dict[str, Any]) -> None:
+        payload["diagramOptions"][key] = "table.tsv"
+
+    with pytest.raises(CanonicalRequestDecodingError, match=key):
+        _decode_at(schema, _request(mode), tmp_path, add_path)
 
 
 def test_every_described_field_is_held_by_a_request_or_named_by_the_decoder(

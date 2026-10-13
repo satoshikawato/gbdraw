@@ -527,6 +527,9 @@ _DEPTH_COMPATIBILITY_FIELDS = frozenset(
     }
 )
 _ALL_DEPTH_INPUT_FIELDS = _DEPTH_COMPATIBILITY_FIELDS | {"depth_tracks"}
+# A comparison table path: encode_canonical_request refuses it (call
+# resolve_request first) and no request of any schema holds it (OV-324).
+_TABLE_PATH_FIELDS = frozenset({"conservation_table_file", "comparison_table_file"})
 
 _TYPED_TREE_CLASSES = {
     cls.__name__: cls
@@ -644,9 +647,9 @@ def _encode_canonical_request(
     if isinstance(request, CircularDiagramRequest):
         if request.output.resolve_prefix_from_first_record:
             unresolved_reasons.append("record-derived output prefix")
+    if isinstance(request, (CircularDiagramRequest, CircularBatchRequest)):
         if request.options.conservation_table_file is not None:
             unresolved_reasons.append("Circular comparison table")
-    if isinstance(request, (CircularDiagramRequest, CircularBatchRequest)):
         ring_search = request.options.losat_search
         if ring_search is not None:
             unresolved_reasons.append(f"{ring_search.program} ring search")
@@ -1830,6 +1833,7 @@ def _decode_diagram_options(
         if item.name not in _COMPARISON_FIELDS
         and item.name not in _PLACEMENT_INPUT_FIELDS
         and item.name not in _RING_SEARCH_FIELDS
+        and item.name not in _TABLE_PATH_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
@@ -4983,11 +4987,10 @@ def describe_canonical_request() -> dict[str, Any]:
         | _OPTIONAL_FILE_SEQUENCE_FIELDS
     )
     # The decoder also reads the depth inputs of older writers (the writer
-    # stores every depth input as depthTracks) and a comparison table path,
-    # which encode_canonical_request refuses to write.
+    # stores every depth input as depthTracks).
     unwritten = (
         _COMPARISON_FIELDS | _PLACEMENT_INPUT_FIELDS | _RING_SEARCH_FIELDS | _DEPTH_COMPATIBILITY_FIELDS
-        | {"conservation_table_file", "comparison_table_file"}
+        | _TABLE_PATH_FIELDS
     )
 
     def option(name: str, hint: object, mode: Literal["circular", "linear"]) -> Shape:
