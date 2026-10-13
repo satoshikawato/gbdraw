@@ -115,11 +115,12 @@ and two readings keep older files usable:
   ID, from a saved Session and from a color table file, also when you typed
   that name yourself. The Web app, the CLI `--session` replay, and the Python
   Session readers read it so in a Session of any version.
-- Release 0.13.0 drew two tracks with one legend label as `GC content` and
-  `GC content (2)`. Its Sessions load, and their legend row edits stay on the
-  rows of the same tracks. The rows are now drawn `GC content (1)` and
-  `GC content (2)` when their colors differ. With equal colors they are one
-  `GC content` row, and the edits saved for the second row are not used.
+- Release 0.13.0 drew two tracks with one legend label as `Coverage` and
+  `Coverage (2)`. Its Sessions load, and their legend row edits stay on the
+  rows of the same tracks. The rows are now drawn `Coverage (1)` and
+  `Coverage (2)` when their colors differ. With equal colors they are one
+  `Coverage` row, and the edits saved for the second row are not used. Two
+  GC content tracks always have equal colors.
 
 A Session 46 can also hold `otherModeResult`: the Result set of the diagram
 mode that the top-level set does not draw (Circular or Linear), written when

@@ -173,10 +173,11 @@ the Web app:
 The rule covers every row: specific rules that give one caption several
 colors, a used specific rule whose caption equals a generated row (a feature
 type such as `tRNA`, an `other <feature type>s` row, or a track row), and
-track and region-annotation rows with one `legend_label`. Two GC content
-tracks labelled `GC content` draw one row when their colors are equal, and
-`GC content (1)` and `GC content (2)` when they differ. Release 0.13.0 drew
-`GC content` and `GC content (2)` in both cases.
+track and region-annotation rows with one `legend_label`. Two depth tracks
+labelled `Coverage` draw one row when their colors are equal, and
+`Coverage (1)` and `Coverage (2)` when they differ. Release 0.13.0 drew
+`Coverage` and `Coverage (2)` in both cases. Two GC content tracks always have
+the palette's GC content color, so they draw one `GC content` row.
 
 The numbers belong to the drawn legend only. They follow the legend order, so
 they change when a row is added, removed, or moved, and a name left with one

@@ -842,8 +842,9 @@ Status: active Product authority
     「凡例に色のIDがつくのは許されないので直して。Ownership couplingとか境界型付けの問題でもあると思う。」
   - Reply 2, to the question on one Legend name written with several colors,
     asked with three outcomes: `A`, one row per color, each drawn with the
-    name as written; `B`, numbered names (`name (1)`, `name (2)`); `C`, one
-    row with a swatch per color.
+    name as written; `B`, numbered names (`name (1)`, `name (2)`), which the
+    question described as still rewriting the names and the rule captions;
+    `C`, one row with a swatch per color.
     「1 つの名前に複数の色があるとき(PD-OI-042 改訂 2):色が違う場合はB.色が一緒の場合はマージ。てかそうだったでしょ今まで？前はPharokkaでもできたんだから。」
   - Reply 3, on the report that two mechanisms make a Legend name unique
     (numbers and color IDs): 「これはだめだろ。」
@@ -876,7 +877,9 @@ Status: active Product authority
   - The two receipts recorded below are the first and the second of those
     three texts, byte for byte. Option `A` of 選択 1 is in the Accepted
     residual risk of the `PD-OI-042` receipt (「読み込むときにその ID を外す」).
-    The third text is not recorded by this revision: `PD-OI-061` keeps its
+    Unlike the description of `B` in the question of Reply 2, the
+    `PD-OI-042` receipt keeps a rule's caption as written
+    (「rule の caption は書かれたとおりに保つ」). The third text is not recorded by this revision: `PD-OI-061` keeps its
     text and its scenario revision `4`.
   - Scope: scenario revision `2` of `PD-OI-042` replaces scenario revision
     `1` (`A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS`) as a whole. The

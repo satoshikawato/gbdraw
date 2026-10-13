@@ -496,10 +496,12 @@ Some older figures can change:
 - Every Circular figure drawn with the web app's default **Multi-Record
   Canvas** changes: it no longer reserves an empty depth slot, and its legend
   now lists custom slot labels, skew slots, annotations, and Depth labels.
-- Legend rows that share a name are numbered by one rule. Two tracks with one
-  legend label, which 0.13.0 drew as `GC content` and `GC content (2)`, now
-  draw `GC content (1)` and `GC content (2)` when their colors differ and one
-  `GC content` row when the colors are equal. Legend row edits of a 0.13.0
+- Legend rows that share a name are numbered by one rule. Two depth tracks
+  labelled `Coverage`, which 0.13.0 drew as `Coverage` and `Coverage (2)`, now
+  draw `Coverage (1)` and `Coverage (2)` when their colors differ and one
+  `Coverage` row when the colors are equal. Two GC content tracks always share
+  the palette's GC content color, so they now draw one `GC content` row
+  instead of `GC content` and `GC content (2)`. Legend row edits of a 0.13.0
   Session stay on the rows of the same tracks; edits saved for a second row
   that now shares the first row are not used.
 - Label, Legend, and title widths use the font's kerning, so text measures as

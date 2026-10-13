@@ -32,9 +32,11 @@ write-up of a release.
   colors and of a rule named like a generated row (now `tRNA (1)` and
   `tRNA (2)`), and it covers track and region-annotation rows with one
   `legend_label`.
-  - Changed drawing: a figure that 0.13.0 drew with `GC content` and
-    `GC content (2)` now draws `GC content (1)` and `GC content (2)` when the
-    two colors differ, and one `GC content` row when they are equal. A 0.13.0
+  - Changed drawing: two depth tracks labelled `Coverage`, which 0.13.0 drew
+    as `Coverage` and `Coverage (2)`, now draw `Coverage (1)` and
+    `Coverage (2)` when their colors differ and one `Coverage` row when they
+    are equal. Two GC content tracks always have the palette's GC content
+    color, so 0.13.0's `GC content` and `GC content (2)` are now one row. A 0.13.0
     Session still loads, and its legend row edits stay on the rows of the same
     tracks; edits saved for a second row that now shares the first row are not
     used.
