@@ -4794,7 +4794,7 @@ def _prepare_label_list_today(
                     inner_labels.append(label_entry)
 
     _proto_design = _proto_design_from_env()
-    if _proto_design and _proto_design[0] in "BCDEFGHIJKM" and not _PROTO_STATE["bypass"]:
+    if _proto_design and _proto_design[0] in "BCDEFGHIJKMN" and not _PROTO_STATE["bypass"]:
         from .proto import run_design
 
         _arc = cfg.labels
