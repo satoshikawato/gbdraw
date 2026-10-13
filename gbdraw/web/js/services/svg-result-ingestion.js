@@ -16,10 +16,12 @@ import {
 import {
   getAllFeatureLegendGroups,
   getLegendEntrySwatch as legendSwatch,
+  legendEntryKey,
   legendRowFeatureIds,
   legendRowName,
   legendRowShown,
   legendRowSwatch,
+  LEGEND_MERGED_ROW,
   namedLegends,
   moveLegendEntryToAnchor,
   orderLegendEntries,
@@ -670,13 +672,37 @@ const paintElementKind = (element) => {
 // revision 2): after the Legend operations of a pass, each shown row's text is
 // the naming rule's answer (legend-row-names.js) for the rows the Legend shows,
 // by their names and the swatches they show. No operation writes a row's text;
-// Python's own texts are this rule's answer for the rows it drew. Returns
-// whether a text changed.
+// Python's own texts are this rule's answer for the rows it drew. Rows of one
+// name and one swatch are one row (D-28): the later of them is hidden under
+// `LEGEND_MERGED_ROW`, which holds the key of the earlier row (D-35,
+// `legendRowKeys`), and shows again on the pass that finds its name or
+// swatch different (a delete or a retirement of a merged row first shows it,
+// `unmergeLegendRow`). Returns whether a text or a merge changed.
 /** @param {Parameters<typeof namedLegends>[0]} svg */
 const nameLegendRows = (svg) => {
   let changed = false;
+  const displayRecord = resultBaseAttribute('display');
   namedLegends(svg).forEach((legend) => {
-    const rows = Array.from(legend.querySelectorAll('g[data-legend-key]')).filter(legendRowShown);
+    const all = Array.from(legend.querySelectorAll('g[data-legend-key]'));
+    const merged = new Map(all.filter((row) => row.hasAttribute(LEGEND_MERGED_ROW))
+      .map((row) => [row, row.getAttribute(LEGEND_MERGED_ROW)]));
+    merged.forEach((_, row) => {
+      row.removeAttribute(LEGEND_MERGED_ROW);
+      if (!row.hasAttribute(displayRecord)) row.removeAttribute('display');
+    });
+    /** @type {Map<string, string>} A name and swatch, and the key of the row that draws them. */
+    const seen = new Map();
+    const rows = all.filter(legendRowShown).filter((row) => {
+      const identity = JSON.stringify([legendRowName(row), legendRowSwatch(row)]);
+      const into = seen.get(identity);
+      if (into === undefined) return Boolean(seen.set(identity, pythonLegendKey(row)));
+      row.setAttribute('display', 'none');
+      row.setAttribute(LEGEND_MERGED_ROW, into);
+      if (merged.get(row) !== into) changed = true;
+      merged.delete(row);
+      return false;
+    });
+    if (merged.size > 0) changed = true;
     const drawn = drawnLegendNames(rows.map((row) => ({ name: legendRowName(row), swatch: legendRowSwatch(row) })));
     rows.forEach((row, at) => {
       const label = row.querySelector('text');
@@ -686,6 +712,15 @@ const nameLegendRows = (svg) => {
     });
   });
   return changed;
+};
+
+// A row the naming pass merged shows again, so an operation that hides it
+// hides a shown row (D-28).
+/** @param {Element} row */
+const unmergeLegendRow = (row) => {
+  if (!row.hasAttribute(LEGEND_MERGED_ROW)) return;
+  row.removeAttribute(LEGEND_MERGED_ROW);
+  row.removeAttribute('display');
 };
 
 // An added row's key and name: `data-legend-name` only where the name is not
@@ -953,7 +988,7 @@ const applyLegendOperations = (index, operations, {
       moveLegendEntryToAnchor(row, xPos, yPos);
       const later = new Set(operations.legendAdds.slice(addIndex + 1).map((add) => add.caption));
       const next = rows.find((entry) => (before
-        ? text(entry.getAttribute('data-legend-key')) === before
+        ? pythonLegendKey(entry) === before
         : !ifAbsent && isEditorRow(entry) && later.has(text(entry.getAttribute('data-legend-key')))));
       if (next?.parentElement) next.parentElement.insertBefore(row, next);
       else group.appendChild(row);
@@ -999,6 +1034,7 @@ const applyLegendOperations = (index, operations, {
   // Python draws the Legend again.
   operations.legendDeletes.forEach(({ caption, allowMissing, retire = false }) => {
     requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
+      unmergeLegendRow(entry);
       changed = (retire ? setAttributeIfDifferent(entry, 'display', 'none') : setPaintAttribute(index, entry, 'display', 'none'))
         || changed;
     });
@@ -1050,12 +1086,7 @@ const restoreLegendStructure = (index, operations, domains) => {
       /** @type {unknown} */
       let order = null;
       try { order = JSON.parse(recorded); } catch { order = null; }
-      const shownKeys = new Map(Array.from(group.querySelectorAll('g[data-legend-key]'))
-        .filter((entry) => !isEditorRow(entry))
-        .map((entry) => [pythonLegendKey(entry), text(entry.getAttribute('data-legend-key'))]));
-      if (Array.isArray(order)) {
-        changed = orderLegendGroup(group, order.map((key) => shownKeys.get(text(key)) || ''), false) || changed;
-      }
+      if (Array.isArray(order)) changed = orderLegendGroup(group, order.map(text), false) || changed;
       // The record's removal is a change, so the stored Result loses it too.
       group.removeAttribute(LEGEND_ORDER_RECORD);
       changed = true;
@@ -1242,24 +1273,24 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
   const rows = index.legends().entries;
   // A swatch shows its Legend color; its record keeps Python's, which is the
   // color the row's stroke reaches by (OV-288), so the records come first.
-  Object.entries(edits.legendColorOverrides).forEach(([caption, color]) => {
-    const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
-    const original = edits.originalLegendColors[text(entry?.originalCaption) || caption];
+  // Both stores are keyed by the row's key.
+  Object.entries(edits.legendColorOverrides).forEach(([key, color]) => {
+    const original = edits.originalLegendColors[key];
     if (original === undefined) return;
-    (rows.get(caption) || []).forEach((row) => {
+    (rows.get(key) || []).forEach((row) => {
       const swatch = legendSwatch(row);
       if (swatch) record(swatch, 'fill', color, original);
     });
   });
   /** @type {Array<[string, SavedStrokeEdit]>} */
   const strokedRows = Object.entries(edits.legendStrokeOverrides).filter(([, edit]) => setsFeatureStroke(edit));
-  strokedRows.forEach(([caption, edit]) => {
-    const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
-    const row = rows.get(caption)?.[0];
+  strokedRows.forEach(([key, edit]) => {
+    const entry = edits.legendEntries.find((row) => legendEntryKey(row) === key);
+    const row = rows.get(key)?.[0];
     /** @type {LegendRowReach} */
     const reach = {
       listedIds: /** @type {RenderedFeatureId[]} */ ((Array.isArray(entry?.featureIds) ? entry.featureIds : []).map(text).filter(Boolean)),
-      namedIds: namedIdsByCaption.get(caption) || [],
+      namedIds: namedIdsByCaption.get(key) || [],
       ownStrokeIds,
       draftColor: null
     };

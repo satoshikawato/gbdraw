@@ -10,6 +10,7 @@ import {
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
+import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
 import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
@@ -165,7 +166,7 @@ import { convertMainSessionComparisonFrames } from './main-session-comparison-fr
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
-import { rekeyLegendRecords } from './legend-svg.js';
+import { legendEntryKey, rekeyLegendRecords } from './legend-svg.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
   buildValidatedProteinIdentityIndex,
@@ -254,6 +255,7 @@ import {
 import {
   SLICE_MODES,
   sessionDepthSourceWidths,
+  sessionLegendEditsByRowKey,
   splitDraftIntoModes,
   unscopedDraftRows,
   validateModeSliceFields
@@ -867,7 +869,8 @@ const normalizeHexColor = (value, fallback = '#4e79a7') => {
 
 // A stored entry color is read with the Default colors domain (D-41). An entry
 // whose color lies outside it is dropped and, when `droppedLegendColors` is
-// given, listed there for the Load notice (D-43).
+// given, listed there for the Load notice (D-43). A list holds one entry per
+// row key (Session 47: two rows may show one name).
 /**
  * @param {unknown} entries
  * @param {'entries' | 'dormantEntries' | 'deletedEntries'} list
@@ -877,18 +880,20 @@ const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
   if (!Array.isArray(entries)) return [];
   /** @type {Record<string, unknown>[]} */
   const normalized = [];
-  const captions = new Set();
-  /** @type {{ list: string, caption: string }[]} */
+  /** @type {Set<string>} */
+  const keys = new Set();
+  /** @type {{ list: string, caption: string, key: string }[]} */
   const dropped = [];
   entries.forEach((entry) => {
     if (!isPlainObject(entry)) return;
     const caption = String(entry.caption || '').trim();
+    const key = legendEntryKey(entry);
     const color = normalizeDefaultColor(entry.color);
-    if (caption && !color && !captions.has(caption)) {
-      dropped.push({ list: entry.dormant === true ? 'dormantEntries' : list, caption });
+    if (caption && !color && !keys.has(key)) {
+      dropped.push({ list: entry.dormant === true ? 'dormantEntries' : list, caption, key });
     }
-    if (!caption || !color || captions.has(caption)) return;
-    captions.add(caption);
+    if (!caption || !color || keys.has(key)) return;
+    keys.add(key);
     // `showStroke`, the Stroke options disclosure that earlier Sessions saved,
     // is view state (OV-157).
     const stored = cloneJsonData(entry);
@@ -902,16 +907,9 @@ const normalizeSessionLegendEntries = (entries, list, droppedLegendColors) => {
         : []
     });
   });
-  // A caption that a later row with a valid color keeps is shown, not dropped.
-  dropped.filter(({ caption }) => !captions.has(caption)).forEach((drop) => droppedLegendColors?.push(drop));
+  // A row that a later entry with a valid color keeps is shown, not dropped.
+  dropped.filter(({ key }) => !keys.has(key)).forEach(({ list: from, caption }) => droppedLegendColors?.push({ list: from, caption }));
   return normalized;
-};
-
-/** @param {unknown} value */
-const normalizeStrokeWidth = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
 };
 
 /**
@@ -927,77 +925,6 @@ const cloneJsonArray = (value) => {
 const cloneJsonObject = (value) => {
   if (!isPlainObject(value)) return {};
   return cloneJsonValue(value, {});
-};
-
-/** @param {unknown} source */
-const normalizeLegendColorOverrides = (source) => {
-  /** @type {Record<string, string>} */
-  const normalized = {};
-  if (!isPlainObject(source)) return normalized;
-  // The cast: a plain object (the line above).
-  Object.entries(/** @type {Record<string, unknown>} */ (source)).forEach(([key, value]) => {
-    const caption = String(key || '').trim();
-    const color = normalizeOptionalHexColor(value);
-    if (!caption || !color) return;
-    normalized[caption] = color;
-  });
-  return normalized;
-};
-
-/**
- * A saved stroke override as it is read: unvalidated.
- * @typedef {NonNullable<UnvalidatedFields<'strokeColor' | 'strokeWidth' | 'originalStrokeColor'
- *   | 'originalStrokeWidth'>>} StrokeOverrideFields
- */
-/**
- * @param {unknown} source
- * @param {{ requireOverride?: boolean }} [options]
- */
-const normalizeStrokeOverride = (source, { requireOverride = false } = {}) => {
-  if (!isPlainObject(source)) return null;
-  const normalized = {};
-  // The casts below: `source` is a plain object (the first line).
-  const strokeColor = normalizeOptionalHexColor(/** @type {StrokeOverrideFields} */ (source).strokeColor);
-  const strokeWidth = normalizeStrokeWidth(/** @type {StrokeOverrideFields} */ (source).strokeWidth);
-  const originalStrokeColor = normalizeOptionalHexColor(/** @type {StrokeOverrideFields} */ (source).originalStrokeColor);
-  const originalStrokeWidth = normalizeStrokeWidth(/** @type {StrokeOverrideFields} */ (source).originalStrokeWidth);
-
-  if (strokeColor !== null) normalized.strokeColor = strokeColor;
-  if (strokeWidth !== null) normalized.strokeWidth = strokeWidth;
-  if (Object.prototype.hasOwnProperty.call(source, 'originalStrokeColor')) {
-    normalized.originalStrokeColor = originalStrokeColor;
-  }
-  if (Object.prototype.hasOwnProperty.call(source, 'originalStrokeWidth')) {
-    normalized.originalStrokeWidth = originalStrokeWidth;
-  }
-
-  if (
-    requireOverride &&
-    !Object.prototype.hasOwnProperty.call(normalized, 'strokeColor') &&
-    !Object.prototype.hasOwnProperty.call(normalized, 'strokeWidth')
-  ) {
-    return null;
-  }
-  return Object.keys(normalized).length > 0 ? normalized : null;
-};
-
-/**
- * @param {unknown} source
- * @param {{ requireOverride?: boolean }} [options]
- */
-const normalizeStrokeOverrideMap = (source, { requireOverride = false } = {}) => {
-  /** @type {Record<string, NonNullable<ReturnType<typeof normalizeStrokeOverride>>>} */
-  const normalized = {};
-  if (!isPlainObject(source)) return normalized;
-  // The cast: a plain object (the line above).
-  Object.entries(/** @type {Record<string, unknown>} */ (source)).forEach(([key, value]) => {
-    const normalizedKey = String(key || '').trim();
-    if (!normalizedKey) return;
-    const override = normalizeStrokeOverride(value, { requireOverride });
-    if (!override) return;
-    normalized[normalizedKey] = override;
-  });
-  return normalized;
 };
 
 /** @param {unknown} source */
@@ -2035,7 +1962,11 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
 /** @param {{ list: string, caption: string }[]} droppedLegendColors Collects the Legend entries dropped for their color. */
 const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   const sourceSessionVersion = readSessionInput(sessionData).version;
-  const rawData = await convertMainSessionComparisonFrames(sessionData);
+  // A Session before 47 stored the Legend edits under the shown caption; every
+  // reader below reads them by row key (PD-OI-061 revision 5). What the reading
+  // moved or dropped is returned before Load commits (`legendEditRekeys`).
+  const legendRead = sessionLegendEditsByRowKey(await convertMainSessionComparisonFrames(sessionData), sourceSessionVersion);
+  const rawData = legendRead.session;
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
@@ -2119,7 +2050,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   }
   // A Session 41-44 placement row reached both modes; the migration names
   // its mode (Main rows both), and the Session 46 split moves it there (R2).
-  if (sourceSessionVersion < SESSION_VERSION && isPlainObject(currentStoredConfig)
+  if (sourceSessionVersion < MODE_SCOPED_SESSION_VERSION && isPlainObject(currentStoredConfig)
     && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'featurePlacementOverrides')) {
     currentStoredConfig = {
       ...currentStoredConfig,
@@ -2338,6 +2269,7 @@ const preflightSessionImport = async (sessionData, droppedLegendColors) => {
   return {
     data,
     sourceSessionVersion,
+    legendEditRekeys: legendRead.outcomes,
     canonicalProjection,
     restoredConfig,
     projectionResult,
@@ -5705,7 +5637,7 @@ const importSessionDocument = async (e, options = {}) => {
     let narrowedFeatureVisibilityCount = 0;
     let migratedAnnotationTargetCount = 0;
     let unmappedHashSelectorCount = 0;
-    if (sourceSessionVersion < SESSION_VERSION) {
+    if (sourceSessionVersion < MODE_SCOPED_SESSION_VERSION) {
       const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
       const sessionMode = data.renderRequest?.mode || candidateMode;
       const hashColorRules = sourceSessionVersion <= DRAWN_HASH_RULE_SESSION_MAX_VERSION

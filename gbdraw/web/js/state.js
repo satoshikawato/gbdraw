@@ -499,6 +499,10 @@ const featureStyleScopeDialog = reactive({
   displayLabelSiblingCount: 0, // Number of other features sharing display label
   annotationLabel: null, // Feature's source annotation label (product/gene/locus_tag)
   annotationLabelSiblingCount: 0, // Number of other features sharing source annotation label
+  // OV-648: whether each label scope selects other features than the Legend
+  // item scope (the annotation label also than the display label scope).
+  displayLabelOffered: false,
+  annotationLabelOffered: false,
   existingCaptionRule: null, // Existing hash rule for same caption (already colored)
   existingCaptionColor: null, // Color of existing caption rule
   defaultColorType: null, // D-15: the feature type whose default color "Apply to all" sets
@@ -539,9 +543,12 @@ const resetColorDialog = reactive({
 const legendRenameDialog = reactive({
   show: false,
   mode: 'scope', // 'scope' | 'target'
-  oldCaption: '',
+  // The key of the renamed row and of the target row ('' for a color rule's
+  // name that no row shows); the dialog shows each row's drawn name.
+  sourceKey: /** @type {PythonLegendKey | ''} */ (''),
   newCaption: '',
-  targetCaption: '',
+  targetKey: /** @type {PythonLegendKey | ''} */ (''),
+  targetCaption: '', // the name a Merge adopts
   targetColor: '',
   currentColor: '',
   siblingCount: 0,
@@ -552,7 +559,14 @@ const legendRenameDialog = reactive({
   // PD-OI-061 revision 4: the new caption is the name of a color rule that no
   // Legend row shows.
   targetRuleOnly: false,
-  suffixCaption: '', // the name "Keep both" gives the renamed row
+  // PD-OI-061 scenario revision 5: the name the renamed row is drawn with
+  // after "Keep both", and the target row's drawn name after it ('' when the
+  // target is not drawn or its drawn name stays).
+  keepBothName: '',
+  targetNameAfter: '',
+  // D-28: "Keep both" onto a deleted row in the renamed row's color restores
+  // that row first, as Merge does: rows of one name and one swatch are one row.
+  keepBothRestores: false,
   pendingRequest: null
 });
 

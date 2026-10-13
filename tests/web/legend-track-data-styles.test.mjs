@@ -62,11 +62,11 @@ test('a change that keeps every caption retires nothing', () => {
 });
 
 // OV-87: names follow the caption as styles do. The rename of a row whose caption
-// the data stops naming is retired with the styles stored under the new name.
-test('a data change retires the Legend rename of a caption it stops naming, and the styles of the new name', () => {
+// the data stops naming is retired with the styles stored under its key (D-25).
+test('a data change retires the Legend rename of a caption it stops naming, and the styles of its row', () => {
   const named = new Set(['depth', 'Region X']);
-  const legendColorOverrides = { Coverage: '#7b2cbf', 'Region Y': '#111111', CDS: '#222222' };
-  const legendStrokeOverrides = { Coverage: { strokeWidth: 2 } };
+  const legendColorOverrides = { depth: '#7b2cbf', 'Region X': '#111111', CDS: '#222222' };
+  const legendStrokeOverrides = { depth: { strokeWidth: 2 } };
   const entries = [
     { caption: 'CDS', originalCaption: 'CDS', color: '#222222' },
     { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf' },
@@ -85,7 +85,7 @@ test('a data change retires the Legend rename of a caption it stops naming, and 
   assert.deepEqual(legendEntries.value.map(({ originalCaption, caption }) => `${originalCaption}=>${caption}`),
     ['CDS=>CDS', 'depth=>depth', 'Region X=>Region Y']);
   assert.equal(legendEntries.value[1].color, '#7b2cbf', 'the entry keeps what the displayed row shows');
-  assert.deepEqual(legendColorOverrides, { 'Region Y': '#111111', CDS: '#222222' });
+  assert.deepEqual(legendColorOverrides, { 'Region X': '#111111', CDS: '#222222' });
   assert.deepEqual(legendStrokeOverrides, {});
   assert.equal(projections, 1, 'the displayed Result shows the retired rename');
   assert.equal(entries[1].caption, 'Coverage', 'the History step keeps the entries it captured');
@@ -111,8 +111,8 @@ test('a new name that the new data names keeps its styles when the rename is ret
 // removing its data retires the waiting rename and its styles like a shown one.
 test('a data change retires a waiting Legend rename of a caption it stops naming (OV-120)', () => {
   const named = new Set(['depth', 'Region X']);
-  const legendColorOverrides = { Coverage: '#7b2cbf', 'Region Y': '#111111' };
-  const legendStrokeOverrides = { Coverage: { strokeWidth: 2 } };
+  const legendColorOverrides = { depth: '#7b2cbf', 'Region X': '#111111' };
+  const legendStrokeOverrides = { depth: { strokeWidth: 2 } };
   const dormantLegendEntries = {
     value: [
       { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf' },
@@ -129,6 +129,6 @@ test('a data change retires a waiting Legend rename of a caption it stops naming
   });
   retire(() => named.delete('depth'));
   assert.deepEqual(dormantLegendEntries.value, [{ caption: 'Region Y', originalCaption: 'Region X', color: '#111111' }]);
-  assert.deepEqual(legendColorOverrides, { 'Region Y': '#111111' });
+  assert.deepEqual(legendColorOverrides, { 'Region X': '#111111' });
   assert.deepEqual(legendStrokeOverrides, {});
 });

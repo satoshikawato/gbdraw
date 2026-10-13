@@ -1873,6 +1873,10 @@ export const createAppSetup = () => {
     setDefaultColor: resultsManager.setDefaultColor,
     legendRowIsNamed: legendActions.legendRowIsNamed,
     legendRowName: legendActions.legendRowName,
+    findLegendRowNamed: legendActions.findLegendRowNamed,
+    keepBothNamesOf: legendActions.keepBothNamesOf,
+    legendEntryName: legendActions.legendEntryName,
+    writeLegendRowColor: legendActions.writeLegendRowColor,
     shownLegendName: legendActions.shownLegendName,
     askChoice,
     showNotice,
@@ -4266,17 +4270,11 @@ export const createAppSetup = () => {
   );
   // The label scopes the Color/Stroke Change Scope dialog offers; a
   // label that repeats the Legend name, or the other label, is not offered.
-  const featureStyleScopeLabelOptions = computed(() => {
-    const text = (/** @type {unknown} */ value) => String(value || '').trim().toLowerCase();
-    const dialog = featureStyleScopeDialog;
-    const legend = text(dialog.legendName);
-    const display = text(dialog.displayLabel);
-    const annotation = text(dialog.annotationLabel);
-    return {
-      displayLabel: dialog.displayLabelSiblingCount > 0 && display !== '' && display !== legend,
-      annotationLabel: dialog.annotationLabelSiblingCount > 0 && annotation !== '' && annotation !== legend && annotation !== display
-    };
-  });
+  // OV-648: the color owner decides which label scopes select other features.
+  const featureStyleScopeLabelOptions = computed(() => ({
+    displayLabel: featureStyleScopeDialog.displayLabelOffered === true,
+    annotationLabel: featureStyleScopeDialog.annotationLabelOffered === true
+  }));
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
   const joinLegendGroupWithHistory = undoableAction('Rename legend item', joinLegendGroup);
   // The Legend tab's grip reorders a row by drag or by the Up and Down arrow
@@ -4335,10 +4333,13 @@ export const createAppSetup = () => {
   // R15-3 (OV-285): the Merge of a rename onto a deleted row's caption is the
   // Restore of that row (by its Python key), then the merge, in one History
   // checkpoint: the merge's rule commit joins it, so one Undo returns both.
+  // Keep both onto a deleted row in the renamed row's color restores it the
+  // same way: the two are one row (D-28).
   /** @param {string} choice */
   const chooseLegendRename = (choice) => {
     const key = legendRenameDialog.deletedTargetKey;
-    if (choice !== 'merge' || !key) return handleLegendRenameChoice(choice);
+    const restores = choice === 'merge' || (choice === 'keep-both' && legendRenameDialog.keepBothRestores);
+    if (!restores || !key) return handleLegendRenameChoice(choice);
     return history.runUndoableCheckpoint('Rename legend item', async () => {
       const deleted = state.activeDrawing().deletedLegendEntries.value;
       const index = deleted.findIndex((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === key);
@@ -7197,6 +7198,8 @@ export const createAppSetup = () => {
     // Redo show through the port and lay out as Python does, canvas included
     // (OV-125). The deleted row's stroke leaves its features (OV-293).
     shownLegendName: legendActions.shownLegendName,
+    shownLegendEntryName: legendActions.shownLegendEntryName,
+    legendEntryMerged: legendActions.legendEntryMerged,
     deleteLegendEntry: editEditorIntent('Delete legend item', deleteLegendEntry, { domains: [...LEGEND_STRUCTURE_DOMAINS, ...STROKE_DOMAINS] }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.

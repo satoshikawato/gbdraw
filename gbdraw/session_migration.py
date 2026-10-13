@@ -17,6 +17,7 @@ from gbdraw.session_io import (
     FLAT_DRAFT_TOP_LEVEL_FIELDS,
     MODE_SCOPED_SESSION_MIN_VERSION,
     RETIRED_RENDERED_ID_FEATURE_FIELDS,
+    ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SessionDraftMigration,
     _project_web_file_binding,
     empty_protein_identity_manifest,
@@ -25,6 +26,7 @@ from gbdraw.session_io import (
     migrate_session_flat_draft,
     mode_split_palette_colors,
     session_depth_source_widths,
+    session_legend_edits_by_row_key,
     session_mode,
     split_draft_into_modes,
     unmapped_hash_selector_warning,
@@ -527,24 +529,28 @@ def _split_session_adjunct(
     session: Mapping[str, Any],
     source_version: int,
 ) -> dict[str, Any]:
-    """Move an older source's flat draft into the Session 46 mode slices.
+    """Move an older source's flat draft into the mode slices, with the
+    Legend edits keyed by row key (Session 47).
 
-    A Session 46 source keeps its ``modes`` (and ``otherModeResult``) as they
-    are. Each mode's Depth sources are counted in the source's bindings.
+    A Session 46 source keeps its ``modes`` (and ``otherModeResult``); only its
+    Legend edits move. Each mode's Depth sources are counted in the source's
+    bindings.
     """
 
-    if source_version >= MODE_SCOPED_SESSION_MIN_VERSION:
+    if source_version >= ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
         return adjunct
+    if source_version >= MODE_SCOPED_SESSION_MIN_VERSION:
+        return session_legend_edits_by_row_key(adjunct)[0]
     web_files = session.get("webFiles")
     bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else None
-    return split_draft_into_modes(
+    return session_legend_edits_by_row_key(split_draft_into_modes(
         adjunct,
         committed_mode=session_mode(session),
         depth_sources=session_depth_source_widths(
             bindings if isinstance(bindings, Mapping) else session.get("files")
         ),
         palette_colors=mode_split_palette_colors(adjunct.get("config")),
-    )
+    ))[0]
 
 
 def with_current_artifacts(

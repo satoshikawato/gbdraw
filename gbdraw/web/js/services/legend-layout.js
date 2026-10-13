@@ -55,7 +55,9 @@ const OVERLAY_SIDES = new Set(['upper_left', 'upper_right', 'lower_left', 'lower
 /**
  * One Legend row of Python's legend table, in table order.
  * @typedef {object} LegendLayoutRow
- * @property {string} key The caption.
+ * @property {string} key The row key, which places the row's layout.
+ * @property {string} name The name the row draws, which the layout measures (Python measures
+ *   `drawn_names[key].drawn`); a renamed row keeps its key and draws its new name.
  * @property {'solid' | 'gradient'} type
  * @property {string} [stroke] The swatch stroke color, `none` for no stroke.
  * @property {number} [strokeWidth]
@@ -372,7 +374,7 @@ const linearGradientLayout = (rows, measure, rect, lineHeight) => {
   const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
   const minLabelText = minGradientLabelText(gradients[0].minValue ?? 0);
   if (gradients.length > 1) {
-    const labelWidth = Math.max(...gradients.map((row) => measure(row.key).width));
+    const labelWidth = Math.max(...gradients.map((row) => measure(row.name).width));
     const barX = labelWidth + (GRADIENT_LABEL_GAP_RATIO * rect);
     const entries = gradients.map((row, index) => ({
       key: row.key,
@@ -390,7 +392,7 @@ const linearGradientLayout = (rows, measure, rect, lineHeight) => {
     };
   }
   const row = gradients[0];
-  const barY = measure(row.key).height + (rect / 2.0);
+  const barY = measure(row.name).height + (rect / 2.0);
   const scaleLabelY = barY + (rect / 2.0) + 2.0;
   const scaleLabelHeight = Math.max(measure(minLabelText).height, measure('100%').height);
   return {
@@ -423,7 +425,7 @@ export const buildLinearLegendLayout = (rows, options, metrics) => {
   const offset = LEGEND_TEXT_OFFSET_RATIO * rect;
   const measure = measurer(metrics, options);
   const solids = rows.filter((row) => row.type === 'solid')
-    .map((row) => ({ row, textWidth: measure(row.key).width }));
+    .map((row) => ({ row, textWidth: measure(row.name).width }));
   const gradient = linearGradientLayout(rows, measure, rect, lineHeight);
   const gradientWidth = gradient ? gradient.width : 0.0;
 
@@ -619,7 +621,7 @@ const circularGradientLayout = (gradients, measure, rect) => {
     };
   }
   const entry = gradients[0];
-  const title = measure(entry.key);
+  const title = measure(entry.row.name);
   const barY = title.height + (rect / 2);
   const scaleLabelY = barY + (rect / 2) + 2;
   const labelHeight = measure('100%').height;
@@ -659,7 +661,7 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
   const gradients = [];
   rows.forEach((row) => {
     if (row.type !== 'solid' && row.type !== 'gradient') return;
-    const textWidth = measure(row.key).width;
+    const textWidth = measure(row.name).width;
     const measured = { row, key: row.key, textWidth, entryWidth: textWidth + (2 * xMargin) };
     (row.type === 'gradient' ? gradients : solids).push(measured);
   });

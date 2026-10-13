@@ -26,6 +26,7 @@ from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     CANONICAL_SESSION_MIN_VERSION,
     DEPTH_FILE_ENCODING,
+    MODE_SCOPED_SESSION_MIN_VERSION,
     SESSION_FORMAT,
     _read_session_text,
     _attach_current_web_file_bindings,
@@ -36,6 +37,7 @@ from gbdraw.session_io import (
     materialize_embedded_file,
     normalize_current_session_artifacts,
     safe_embedded_filename,
+    session_legend_edits_by_row_key,
     validate_session,
 )
 from gbdraw.session_drawings import (
@@ -1151,7 +1153,9 @@ def upgrade_session_document(
 ) -> SessionUpgrade:
     """Return a Session in the current version without rendering it.
 
-    A current document is returned unchanged. A Session 31-44 gets the
+    A current document is returned unchanged. A Session 46 keeps its
+    drawings and gets its Legend color and stroke edits keyed by row key
+    (:func:`gbdraw.session_io.legend_edits_by_row_key`). A Session 31-44 gets the
     migrations a CLI re-save applies: its request is decoded, adapted to
     current typed state (comparison frames, similarity alignment, LOSAT
     artifacts) and encoded again with the same resource IDs, and its
@@ -1170,6 +1174,10 @@ def upgrade_session_document(
     loaded = load_session_document(document)
     if loaded.version == CURRENT_SESSION_VERSION:
         return SessionUpgrade(loaded)
+    if loaded.version == MODE_SCOPED_SESSION_MIN_VERSION:
+        # Session 47 differs only in the keys of each slice's Legend edits.
+        keyed, _outcomes = session_legend_edits_by_row_key(loaded._data)
+        return SessionUpgrade(SessionDocument({**keyed, "version": CURRENT_SESSION_VERSION}))
     if loaded.version < CANONICAL_SESSION_MIN_VERSION:
         raise SessionVersionError(
             "Sessions version 27 through 30 have no canonical request; replay one with "

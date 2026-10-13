@@ -1,0 +1,884 @@
+{
+  "schemaVersion": 1,
+  "readsSessionVersion": 46,
+  "cases": [
+    {
+      "name": "ambiguous chain: GC skew renamed Z, then GC content renamed GC skew (DESIGN 1a): an edit under the shown caption GC skew is the GC content row's",
+      "legend": {
+        "entries": [
+          {
+            "caption": "GC skew",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0"
+          },
+          {
+            "caption": "Z",
+            "originalCaption": "GC skew",
+            "color": "#5050f0"
+          }
+        ],
+        "originalOrder": [
+          "GC content",
+          "GC skew"
+        ],
+        "originalColors": {
+          "GC content": "#a0a0a0",
+          "GC skew": "#5050f0"
+        },
+        "colorOverrides": {
+          "GC skew": "#ff0000"
+        },
+        "strokeOverrides": {
+          "Z": {
+            "strokeColor": "#00aa00",
+            "strokeWidth": 2
+          },
+          "GC skew": {
+            "strokeColor": "#0000ff",
+            "strokeWidth": 1
+          }
+        },
+        "addedCaptions": []
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "GC skew",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0"
+          },
+          {
+            "caption": "Z",
+            "originalCaption": "GC skew",
+            "color": "#5050f0"
+          }
+        ],
+        "originalOrder": [
+          "GC content",
+          "GC skew"
+        ],
+        "originalColors": {
+          "GC content": "#a0a0a0",
+          "GC skew": "#5050f0"
+        },
+        "colorOverrides": {
+          "GC content": "#ff0000"
+        },
+        "strokeOverrides": {
+          "GC content": {
+            "strokeColor": "#0000ff",
+            "strokeWidth": 1
+          },
+          "GC skew": {
+            "strokeColor": "#00aa00",
+            "strokeWidth": 2
+          }
+        },
+        "addedCaptions": []
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "GC skew",
+          "toKey": "GC content",
+          "outcome": "moved"
+        },
+        {
+          "store": "strokeOverrides",
+          "fromKey": "GC skew",
+          "toKey": "GC content",
+          "outcome": "moved"
+        },
+        {
+          "store": "strokeOverrides",
+          "fromKey": "Z",
+          "toKey": "GC skew",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "two rows renamed to each other's caption swap their edits",
+      "legend": {
+        "entries": [
+          {
+            "caption": "B",
+            "originalCaption": "A",
+            "color": "#111111"
+          },
+          {
+            "caption": "A",
+            "originalCaption": "B",
+            "color": "#222222"
+          }
+        ],
+        "colorOverrides": {
+          "A": "#aa0000",
+          "B": "#00bb00"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "B",
+            "originalCaption": "A",
+            "color": "#111111"
+          },
+          {
+            "caption": "A",
+            "originalCaption": "B",
+            "color": "#222222"
+          }
+        ],
+        "colorOverrides": {
+          "B": "#aa0000",
+          "A": "#00bb00"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "A",
+          "toKey": "B",
+          "outcome": "moved"
+        },
+        {
+          "store": "colorOverrides",
+          "fromKey": "B",
+          "toKey": "A",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "a deleted renamed row keeps its edits under its row key, where Restore in Session 46 applied them",
+      "legend": {
+        "entries": [
+          {
+            "caption": "CDS",
+            "originalCaption": "CDS",
+            "color": "#ffcccc"
+          }
+        ],
+        "deletedEntries": [
+          {
+            "caption": "W",
+            "originalCaption": "GC skew (-)",
+            "color": "#0000ff"
+          }
+        ],
+        "colorOverrides": {
+          "W": "#0000ff",
+          "CDS": "#ff0000"
+        },
+        "strokeOverrides": {
+          "W": {
+            "strokeColor": "#333333",
+            "strokeWidth": 1
+          }
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "CDS",
+            "originalCaption": "CDS",
+            "color": "#ffcccc"
+          }
+        ],
+        "deletedEntries": [
+          {
+            "caption": "W",
+            "originalCaption": "GC skew (-)",
+            "color": "#0000ff"
+          }
+        ],
+        "colorOverrides": {
+          "GC skew (-)": "#0000ff",
+          "CDS": "#ff0000"
+        },
+        "strokeOverrides": {
+          "GC skew (-)": {
+            "strokeColor": "#333333",
+            "strokeWidth": 1
+          }
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "W",
+          "toKey": "GC skew (-)",
+          "outcome": "moved"
+        },
+        {
+          "store": "strokeOverrides",
+          "fromKey": "W",
+          "toKey": "GC skew (-)",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "a caption both a listed and a deleted row show names the listed row",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "tRNA",
+            "color": "#aaaaaa"
+          }
+        ],
+        "deletedEntries": [
+          {
+            "caption": "X",
+            "originalCaption": "rRNA",
+            "color": "#bbbbbb"
+          }
+        ],
+        "colorOverrides": {
+          "X": "#123456"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "tRNA",
+            "color": "#aaaaaa"
+          }
+        ],
+        "deletedEntries": [
+          {
+            "caption": "X",
+            "originalCaption": "rRNA",
+            "color": "#bbbbbb"
+          }
+        ],
+        "colorOverrides": {
+          "tRNA": "#123456"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "X",
+          "toKey": "tRNA",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "a dormant renamed row (listed with dormant: true) keeps its edits under its row key",
+      "legend": {
+        "entries": [
+          {
+            "caption": "CDS",
+            "originalCaption": "CDS",
+            "color": "#ffcccc"
+          },
+          {
+            "caption": "Y",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0",
+            "dormant": true
+          }
+        ],
+        "strokeOverrides": {
+          "Y": {
+            "strokeColor": "#00aa00",
+            "strokeWidth": 3
+          }
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "CDS",
+            "originalCaption": "CDS",
+            "color": "#ffcccc"
+          },
+          {
+            "caption": "Y",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0",
+            "dormant": true
+          }
+        ],
+        "strokeOverrides": {
+          "GC content": {
+            "strokeColor": "#00aa00",
+            "strokeWidth": 3
+          }
+        }
+      },
+      "outcomes": [
+        {
+          "store": "strokeOverrides",
+          "fromKey": "Y",
+          "toKey": "GC content",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "the first entry of a caption decides, as Session 46 Load kept only that entry",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "X",
+            "color": "#aaaaaa"
+          },
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#bbbbbb"
+          }
+        ],
+        "colorOverrides": {
+          "X": "#abcdef"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "X",
+            "color": "#aaaaaa"
+          },
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#bbbbbb"
+          }
+        ],
+        "colorOverrides": {
+          "X": "#abcdef"
+        }
+      },
+      "outcomes": []
+    },
+    {
+      "name": "rows not renamed and editor rows keep their edits; a key no row shows or holds stays, reported unmatched",
+      "legend": {
+        "entries": [
+          {
+            "caption": "CDS",
+            "originalCaption": "CDS",
+            "color": "#ffcccc"
+          },
+          {
+            "caption": "My row",
+            "color": "#00ff00"
+          },
+          {
+            "caption": "tRNA",
+            "color": "#0000ff"
+          }
+        ],
+        "colorOverrides": {
+          "CDS": "#ff0000",
+          "My row": "#00ee00",
+          "gone": "#999999"
+        },
+        "strokeOverrides": {
+          "tRNA": {
+            "strokeColor": "#000000",
+            "strokeWidth": 1
+          }
+        },
+        "addedCaptions": [
+          "My row"
+        ]
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "CDS",
+            "originalCaption": "CDS",
+            "color": "#ffcccc"
+          },
+          {
+            "caption": "My row",
+            "color": "#00ff00"
+          },
+          {
+            "caption": "tRNA",
+            "color": "#0000ff"
+          }
+        ],
+        "colorOverrides": {
+          "CDS": "#ff0000",
+          "My row": "#00ee00",
+          "gone": "#999999"
+        },
+        "strokeOverrides": {
+          "tRNA": {
+            "strokeColor": "#000000",
+            "strokeWidth": 1
+          }
+        },
+        "addedCaptions": [
+          "My row"
+        ]
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "gone",
+          "toKey": "gone",
+          "outcome": "unmatched"
+        }
+      ]
+    },
+    {
+      "name": "a dormant row whose key a listed row shows is not a row (Session 46 left it out): its caption's edit stays, unmatched",
+      "legend": {
+        "entries": [
+          {
+            "caption": "GC content",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0"
+          }
+        ],
+        "dormantEntries": [
+          {
+            "caption": "Y",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0"
+          }
+        ],
+        "colorOverrides": {
+          "Y": "#123456"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "GC content",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0"
+          }
+        ],
+        "dormantEntries": [
+          {
+            "caption": "Y",
+            "originalCaption": "GC content",
+            "color": "#a0a0a0"
+          }
+        ],
+        "colorOverrides": {
+          "Y": "#123456"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "Y",
+          "toKey": "Y",
+          "outcome": "unmatched"
+        }
+      ]
+    },
+    {
+      "name": "an entry Session 46 Load left out (no usable color) shows no caption: its caption's edit stays, unmatched",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "bogus"
+          }
+        ],
+        "colorOverrides": {
+          "X": "#111111"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "bogus"
+          }
+        ],
+        "colorOverrides": {
+          "X": "#111111"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "X",
+          "toKey": "X",
+          "outcome": "unmatched"
+        }
+      ]
+    },
+    {
+      "name": "an edit under the key of a renamed row that no row shows paints that row, as Session 46 painted Python's key",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "K",
+          "toKey": "K",
+          "outcome": "unshown"
+        }
+      ]
+    },
+    {
+      "name": "two edits that reach one row: the later wins, as Session 46 painted it last; the earlier is a collision (caption first)",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "X": "#111111",
+          "K": "#222222"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "X",
+          "toKey": null,
+          "outcome": "collision",
+          "rowKey": "K"
+        },
+        {
+          "store": "colorOverrides",
+          "fromKey": "K",
+          "toKey": "K",
+          "outcome": "unshown"
+        }
+      ]
+    },
+    {
+      "name": "two edits that reach one row: the later wins, as Session 46 painted it last; the earlier is a collision (key first)",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222",
+          "X": "#111111"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#111111"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "K",
+          "toKey": null,
+          "outcome": "collision",
+          "rowKey": "K"
+        },
+        {
+          "store": "colorOverrides",
+          "fromKey": "X",
+          "toKey": "K",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "two strokes that reach one row combine field by field: a field the later stroke lacks keeps the earlier value, so its collision names the row (review L-5)",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "strokeOverrides": {
+          "X": {
+            "strokeColor": "#00aa00",
+            "strokeWidth": 2
+          },
+          "K": {
+            "strokeColor": "#333333"
+          }
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "strokeOverrides": {
+          "K": {
+            "strokeColor": "#333333",
+            "strokeWidth": 2
+          }
+        }
+      },
+      "outcomes": [
+        {
+          "store": "strokeOverrides",
+          "fromKey": "X",
+          "toKey": "K",
+          "outcome": "collision",
+          "rowKey": "K"
+        },
+        {
+          "store": "strokeOverrides",
+          "fromKey": "K",
+          "toKey": "K",
+          "outcome": "unshown"
+        }
+      ]
+    },
+    {
+      "name": "strokes are applied in the order Session 46 walked them: keys with a color edit first, in the color edits' order",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222"
+        },
+        "strokeOverrides": {
+          "X": {
+            "strokeColor": "#00aa00",
+            "strokeWidth": 2
+          },
+          "K": {
+            "strokeWidth": 5
+          }
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222"
+        },
+        "strokeOverrides": {
+          "K": {
+            "strokeColor": "#00aa00",
+            "strokeWidth": 2
+          }
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "K",
+          "toKey": "K",
+          "outcome": "unshown"
+        },
+        {
+          "store": "strokeOverrides",
+          "fromKey": "K",
+          "toKey": null,
+          "outcome": "collision",
+          "rowKey": "K"
+        },
+        {
+          "store": "strokeOverrides",
+          "fromKey": "X",
+          "toKey": "K",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "edits are read as Session 46 Load read them: a color name resolved, a value without a usable color or width left out",
+      "legend": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "X": "Red",
+          "K": "not a color"
+        },
+        "strokeOverrides": {
+          "X": {
+            "strokeColor": "",
+            "strokeWidth": 3
+          },
+          "K": {
+            "strokeColor": ""
+          }
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "X",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#ff0000"
+        },
+        "strokeOverrides": {
+          "K": {
+            "strokeWidth": 3
+          }
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "X",
+          "toKey": "K",
+          "outcome": "moved"
+        },
+        {
+          "store": "strokeOverrides",
+          "fromKey": "X",
+          "toKey": "K",
+          "outcome": "moved"
+        }
+      ]
+    },
+    {
+      "name": "edits are applied in JavaScript's key order: an integer-like caption comes first",
+      "legend": {
+        "entries": [
+          {
+            "caption": "1",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222",
+          "1": "#111111"
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "1",
+            "originalCaption": "K",
+            "color": "#aaaaaa"
+          }
+        ],
+        "colorOverrides": {
+          "K": "#222222"
+        }
+      },
+      "outcomes": [
+        {
+          "store": "colorOverrides",
+          "fromKey": "1",
+          "toKey": null,
+          "outcome": "collision",
+          "rowKey": "K"
+        },
+        {
+          "store": "colorOverrides",
+          "fromKey": "K",
+          "toKey": "K",
+          "outcome": "unshown"
+        }
+      ]
+    },
+    {
+      "name": "a renamed row without edits changes nothing",
+      "legend": {
+        "entries": [
+          {
+            "caption": "Z",
+            "originalCaption": "GC skew",
+            "color": "#5050f0"
+          }
+        ],
+        "deletedEntries": []
+      },
+      "expected": {
+        "entries": [
+          {
+            "caption": "Z",
+            "originalCaption": "GC skew",
+            "color": "#5050f0"
+          }
+        ],
+        "deletedEntries": []
+      },
+      "outcomes": []
+    }
+  ],
+  "outcomes": {
+    "moved": "stored under the caption a renamed row shows; now under that row's key (lossless)",
+    "unmatched": "no row shows or holds the key; kept under it, where Session 46 applied it to Python's row of that name, if any",
+    "unshown": "the key of a renamed row that no row shows; kept under it: Session 46 applied it to that row through Python's key",
+    "collision": "a later edit of the store reached the same row (rowKey) and Session 46 applied it over this one; dropped, except a stroke field (strokeColor, strokeWidth) that no later edit has, which stays in the kept value"
+  }
+}
