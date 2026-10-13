@@ -14,22 +14,25 @@ test.describe.configure({ retries: 0 });
 const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json';
 const DRAG = { x: 24, y: 12 };
 
+// A point where the pointer hits the first drawn element of `selector`.
+const hitPoint = (page, selector) => page.evaluate((query) => {
+  const element = [...document.querySelectorAll(`.gbdraw-preview-surface ${query}`)]
+    .find((candidate) => candidate.getBoundingClientRect().width > 0);
+  if (!element) return null;
+  const box = element.getBoundingClientRect();
+  // The middle first, then outwards: another element may cover a part.
+  for (let step = 0; step <= 40; step += 1) {
+    const x = box.x + box.width * (0.5 + (step % 2 ? 1 : -1) * Math.ceil(step / 2) * 0.01);
+    const y = box.y + box.height / 2;
+    if (element.contains(document.elementFromPoint(x, y))) return { x, y, hit: true };
+  }
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2, hit: false };
+}, selector);
+
 // Pans the first drawn element of `selector` to the canvas centre and returns
 // a point where the pointer hits it.
 const pointOn = async (page, selector) => {
-  const centre = () => page.evaluate((query) => {
-    const element = [...document.querySelectorAll(`.gbdraw-preview-surface ${query}`)]
-      .find((candidate) => candidate.getBoundingClientRect().width > 0);
-    if (!element) return null;
-    const box = element.getBoundingClientRect();
-    // The middle first, then outwards: another element may cover a part.
-    for (let step = 0; step <= 40; step += 1) {
-      const x = box.x + box.width * (0.5 + (step % 2 ? 1 : -1) * Math.ceil(step / 2) * 0.01);
-      const y = box.y + box.height / 2;
-      if (element.contains(document.elementFromPoint(x, y))) return { x, y, hit: true };
-    }
-    return { x: box.x + box.width / 2, y: box.y + box.height / 2, hit: false };
-  }, selector);
+  const centre = () => hitPoint(page, selector);
   const found = await centre();
   expect(found, selector).not.toBeNull();
   await page.evaluate(({ x, y }) => {
@@ -141,7 +144,15 @@ const expectPressAndDrag = async (page, targets) => {
     await page.mouse.move(point.x + DRAG.x, point.y + DRAG.y, { steps: 6 });
     await page.mouse.up();
     await settle(page);
-    expect(await cursorAt(page, { x: point.x + DRAG.x, y: point.y + DRAG.y }), 'after the drag').toBe('grab');
+    // Back on the target where it rests now (the notice of a record drag that
+    // clears an alignment moves the figure), not on the canvas, which shows
+    // `grab` too.
+    const rest = await hitPoint(page, selector);
+    await page.mouse.move(rest.x, rest.y);
+    expect(await page.evaluate(({ x, y }) => {
+      const element = document.elementFromPoint(x, y);
+      return { onTarget: Boolean(element.closest('[data-gbdraw-composition-role]')), cursor: getComputedStyle(element).cursor };
+    }, rest), 'after the drag').toEqual({ onTarget: true, cursor: 'grab' });
     return undo;
   };
 
