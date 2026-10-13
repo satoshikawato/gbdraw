@@ -212,6 +212,8 @@ import {
 /** @import { CircularConservationLike } from '../services/conservation-series.js' */
 /** @import { LegendEntry } from '../state.js' */
 /** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
+/** @import { RequestCanonicalComparison } from '../services/session-request.js' */
+/** @import { CanonicalFeatureOverride, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
@@ -728,16 +730,16 @@ const sameNumber = (left, right) => Number(left) === Number(right);
 /**
  * @typedef {object} ResolvedProteinReuseActive The settings of this Generate that the committed Session must match.
  * @property {string} featureVisibility
- * @property {unknown} featureOverrides
+ * @property {CanonicalFeatureOverride[]} featureOverrides The draft's Feature visibility rows of the compared records.
  * @property {string} mode
  * @property {string | number} [bitscore]
  * @property {string | number} [evalue]
  * @property {string | number} [identity]
  * @property {string | number} [alignmentLength]
- * @property {unknown} candidateLimit
+ * @property {number | null} candidateLimit
  * @property {number} maxHits
  * @property {string} orthogroupMembershipMode
- * @property {unknown} memberMaxHits
+ * @property {number | null} memberMaxHits
  * @property {number} minAnchors
  * @property {number} maxUnitGap
  * @property {number} maxDiagonalDrift
@@ -752,26 +754,14 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  */
 
 /**
- * @typedef {object} ResolvedProteinComparison A committed or persisted comparison, as far as the reuse check reads it.
- * @property {string} [kind]
- * @property {string} [mode]
- * @property {{
- *   proteinBlastpCandidateLimit?: unknown, proteinBlastpMaxHits?: unknown,
- *   orthogroupMembershipMode?: unknown, orthogroupMemberMaxHits?: unknown,
- *   collinearityParams?: { parameters?: Record<string, unknown> },
- *   collinearityUnitMode?: unknown, collinearityAnchorMode?: unknown, collinearityColorMode?: unknown,
- *   collinearitySearchScope?: unknown, collinearInferOrthogroups?: unknown,
- *   collinearMaxParalogLinksPerOrthogroup?: unknown
- * }} [settings]
- */
-
-/**
- * @param {{
- *   canonicalComparisons: unknown,
- *   committedSession: NonNullable<ReturnType<NonNullable<RunAnalysisOptions['getCommittedCanonicalSession']>>> | null,
- *   sequences: LinearSeq[],
- *   active: ResolvedProteinReuseActive
- * }} options
+ * @param {object} options
+ * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `files.linearCanonicalComparisons`.
+ * @param options.committedSession The committed Session (`CommittedCanonicalSession` in services/config.js), left
+ *   untyped: its request may be a stored one whose leaves no reader has checked (`StoredRenderRequest`), and the reads
+ *   below use them as they are (a null record throws). The true type needs checks that change that result, so the
+ *   member stays an implicit `any` until Load promotes the stored request.
+ * @param {LinearSeq[]} options.sequences
+ * @param {ResolvedProteinReuseActive} options.active
  */
 const canReuseResolvedProteinArtifacts = ({
   canonicalComparisons,
@@ -780,9 +770,7 @@ const canReuseResolvedProteinArtifacts = ({
   active
 }) => {
   const committedRequest = committedSession?.renderRequest || null;
-  /** @type {(ResolvedProteinComparison | null | undefined)[]} */
   const persisted = Array.isArray(canonicalComparisons) ? canonicalComparisons : [];
-  /** @type {ResolvedProteinComparison[]} */
   const committed = Array.isArray(committedRequest?.comparisons)
     ? committedRequest.comparisons
     : [];
@@ -1686,14 +1674,16 @@ export const createRunAnalysis = ({
   // the Depth rows a Legend style may still address; the draft names them (OV-81).
   /**
    * @param {DrawingState} drawing
-   * @param {Record<string, { mode?: string, diagramOptions?: { depthTracks?: unknown } }>} canonical the built or projected request, which `buildCanonicalRenderRequest` and `projectCommittedEditorIntent` return untyped
+   * @param {Pick<CanonicalRenderRequest, 'mode' | 'diagramOptions'>} request The candidate's request: the one
+   *   `buildCanonicalRenderRequest` built, or the committed request that `projectCommittedEditorIntent` or the record
+   *   rotation and alignment projections (`runCommittedCanonicalCandidate`) return.
    */
-  const unrequestedDepthCaptions = (drawing, canonical) => (
-    canonical.renderRequest.diagramOptions?.depthTracks
+  const unrequestedDepthCaptions = (drawing, request) => (
+    request.diagramOptions?.depthTracks
       ? []
       : depthSeriesLegendCaptions({
           depthTracks: drawing.adv.depth_tracks,
-          slots: canonical.renderRequest.mode === 'linear' ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots
+          slots: request.mode === 'linear' ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots
         })
   );
   // A target-record transform and a label reflow draw the committed Results
@@ -5195,7 +5185,7 @@ export const createRunAnalysis = ({
           dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: drawing.addedLegendCaptions.value,
-          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: candidateRules
@@ -5788,7 +5778,7 @@ export const createRunAnalysis = ({
           dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: drawing.addedLegendCaptions.value,
-          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: drawing.manualSpecificRules
@@ -6166,7 +6156,7 @@ export const createRunAnalysis = ({
           dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: drawing.addedLegendCaptions.value,
-          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: candidateRules
