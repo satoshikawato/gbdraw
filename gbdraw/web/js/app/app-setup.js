@@ -115,8 +115,10 @@ import { resetLayoutState, resetSettings as resetSettingsState } from '../servic
 import {
   DIAGRAM_HELPER_OPERATIONS,
   disposeDiagramGenerationWorker,
-  runDiagramHelperOperation
+  runDiagramHelperOperation,
+  setDiagramWorkerFontSource
 } from '../services/diagram-generation.js';
+import { createFontSettings } from './font-settings.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -418,6 +420,8 @@ export const createAppSetup = () => {
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
     payload
   ));
+  // A new diagram Worker registers the page's fonts, and a Generate names those it uses.
+  setDiagramWorkerFontSource(() => state.loadedFonts.value);
   setMainSessionComparisonFrameConverter((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.CONVERT_MAIN_SESSION_COMPARISON_FRAME,
     payload
@@ -1651,6 +1655,14 @@ export const createAppSetup = () => {
   }));
   // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
+  // The Font section: the drawing's text font and the fonts loaded in this page.
+  const fontSettings = createFontSettings({
+    state,
+    runUndoable: history.runUndoable,
+    registerFontsInWorker: async (fonts) => (await runDiagramHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.REGISTER_FONTS, { fonts }
+    )).result
+  });
   // Confirmations ask with the app's choice dialog, and an
   // operation's outcome shows in the notice banner (no native confirm or alert).
   const choicePrompt = createChoicePrompt({ reactive });
@@ -1988,6 +2000,7 @@ export const createAppSetup = () => {
     disposePanZoom();
     setUnmanagedConfigOverrideValidator(null);
     setMainSessionComparisonFrameConverter(null);
+    setDiagramWorkerFontSource(() => []);
     disposeSessionOperations();
     disposeDiagramGenerationWorker();
   });
@@ -6507,6 +6520,7 @@ export const createAppSetup = () => {
   });
 
   return {
+    fontSettings,
     defaultColorGroups,
     recordDisplayControls,
     featureRecordRotationDraft: featureRecordRotation.draft,

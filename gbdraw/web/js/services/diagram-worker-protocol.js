@@ -2,6 +2,7 @@
 export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   EVALUATE_RULES: 'evaluateRules',
   READ_PDF_FONT: 'readPdfFont',
+  REGISTER_FONTS: 'registerFonts',
   BUILD_PROTEIN_LOSAT_CACHE_KEYS: 'buildProteinLosatCacheKeys',
   COMPUTE_LABEL_FIT_ROW: 'computeLabelFitRow',
   CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD: 'convertLosatpPairsToGenomicPayload',

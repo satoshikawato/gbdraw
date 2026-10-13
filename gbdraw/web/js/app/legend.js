@@ -15,6 +15,7 @@ import {
 } from '../services/legend-svg.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../services/feature-visibility.js';
+import { registeredLegendFaces } from '../services/font-store.js';
 
 /**
  * @typedef {object} LegendManagerOptions
@@ -50,7 +51,9 @@ export const createLegendManager = ({
   legendRowNames,
   showLegendStructure
 }) => {
-  const layoutActions = createLegendLayoutActions();
+  const layoutActions = createLegendLayoutActions({
+    readRegisteredFontFaces: () => registeredLegendFaces(state.loadedFonts.value)
+  });
   const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor, legendRowNames });
   const sortActions = createLegendSortActions({ state, showLegendStructure });
   const strokeActions = createLegendStrokeActions({ state });

@@ -1713,22 +1713,24 @@ const withoutLegacyNullCircularSlotSpacing = (configData) => {
  * Session 46 slice's `config`) with the preserved overrides that are now
  * settings moved into them (`adoptPromotedPreservedOverrides`), read once
  * before anything validates or splits the drafts.
- * @param {Record<string, any>} data
- * @returns {Record<string, any>}
+ * @template {object} T
+ * @param {T} data
+ * @returns {T}
  */
 const adoptPromotedPreservedSettings = (data) => {
-  /** @type {Record<string, any>} */
-  let adopted = data;
-  if (isPlainObject(data.config)) {
-    const config = adoptPromotedPreservedOverrides(data.config);
-    if (config !== data.config) adopted = { ...adopted, config };
+  const document = /** @type {{ config?: unknown, modes?: unknown }} */ (data);
+  /** @type {{ config?: unknown, modes?: unknown }} */
+  let adopted = document;
+  if (isPlainObject(document.config)) {
+    const config = adoptPromotedPreservedOverrides(document.config);
+    if (config !== document.config) adopted = { ...adopted, config };
   }
-  if (isPlainObject(data.modes)) {
-    /** @type {Record<string, any>} */
-    const modes = { ...data.modes };
+  if (isPlainObject(document.modes)) {
+    // The cast: `isPlainObject(document.modes)` above.
+    const modes = { .../** @type {Record<string, unknown>} */ (document.modes) };
     let changed = false;
     for (const mode of SLICE_MODES) {
-      const slice = modes[mode];
+      const slice = /** @type {{ config?: unknown }} */ (modes[mode]);
       if (!isPlainObject(slice) || !isPlainObject(slice.config)) continue;
       const config = adoptPromotedPreservedOverrides(slice.config);
       if (config === slice.config) continue;
@@ -1737,7 +1739,7 @@ const adoptPromotedPreservedSettings = (data) => {
     }
     if (changed) adopted = { ...adopted, modes };
   }
-  return adopted;
+  return /** @type {T} */ (adopted);
 };
 
 /**

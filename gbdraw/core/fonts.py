@@ -26,7 +26,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from importlib import resources
-from typing import Dict, Iterator, Literal, Optional, Sequence, Union
+from typing import Callable, Dict, Iterable, Iterator, Literal, Optional, Sequence, Union
 
 from fontTools.ttLib import TTCollection, TTFont
 
@@ -659,18 +659,14 @@ def _nearest_generic(generics: list[str], missing: tuple[str, ...]) -> str:
     return "sans-serif"
 
 
-def resolve_font_family(font_family: str) -> FontFamilyResolution:
-    """Decide which requested families a drawing can use, and the nearest
-    substitute when none of the named ones is available.
-
-    Generic keywords are kept. A named family is kept when it resolves (bundled,
-    registered, fontconfig, or a platform font folder). When a family is
-    dropped and no named family remains, the Liberation family of the list's
-    generic (else of a guess from the missing names: mono, code, courier,
-    consol -> Mono; serif without sans, times, georgia, garamond, mincho,
-    ming, song, roman -> Serif; else Sans) is inserted before the first
-    generic, and that generic is added when the list has none. A list whose
-    families all resolve comes back unchanged.
+def _resolve_font_family_with(
+    font_family: str, lookup: Callable[[str], tuple[bool, bool]]
+) -> FontFamilyResolution:
+    """``resolve_font_family`` with ``lookup`` answering, for a named
+    (non-generic) family, whether it resolves and whether that could not be
+    checked. The Web runs a port of this rule
+    (gbdraw/web/js/services/font-families.js) on the vectors of
+    tests/fixtures/font_family_resolution_vectors.json.
     """
     requested = str(font_family)
     kept: list[str] = []
@@ -680,8 +676,8 @@ def resolve_font_family(font_family: str) -> FontFamilyResolution:
         if _is_generic(family):
             kept.append(family)
             continue
-        face, family_unchecked = _lookup_family(family, 400, False)
-        if face is not None:
+        available, family_unchecked = lookup(family)
+        if available:
             kept.append(family)
             continue
         missing.append(family)
@@ -715,6 +711,57 @@ def custom_font_families(font_family: str) -> tuple[str, ...]:
         for family in parse_font_family_list(font_family)
         if not _is_generic(family) and _comparable_name(family) not in _BUNDLED_FONT_FAMILY_ALIASES
     )
+
+
+def resolve_font_family(font_family: str) -> FontFamilyResolution:
+    """Decide which requested families a drawing can use, and the nearest
+    substitute when none of the named ones is available.
+
+    Generic keywords are kept. A named family is kept when it resolves (bundled,
+    registered, fontconfig, or a platform font folder). When a family is
+    dropped and no named family remains, the Liberation family of the list's
+    generic (else of a guess from the missing names: mono, code, courier,
+    consol -> Mono; serif without sans, times, georgia, garamond, mincho,
+    ming, song, roman -> Serif; else Sans) is inserted before the first
+    generic, and that generic is added when the list has none. A list whose
+    families all resolve comes back unchanged.
+    """
+
+    def lookup(family: str) -> tuple[bool, bool]:
+        face, unchecked = _lookup_family(family, 400, False)
+        return face is not None, unchecked
+
+    return _resolve_font_family_with(font_family, lookup)
+
+
+def resolve_font_family_among(font_family: str, registered_families: Iterable[str]) -> FontFamilyResolution:
+    """``resolve_font_family`` where only the bundled fonts and the named
+    registered families are available, without fontconfig: what the Web app
+    (Pyodide, fonts registered in the page) resolves.
+    """
+    registered = {_comparable_name(family) for family in registered_families}
+    return _resolve_font_family_with(
+        font_family,
+        lambda family: (
+            _comparable_name(family) in _BUNDLED_FONT_FAMILY_ALIASES or _comparable_name(family) in registered,
+            False,
+        ),
+    )
+
+
+def font_family_rules() -> dict[str, object]:
+    """The data of the family rules above, for the Web port
+    (tools/generate_legend_font_metrics.py writes it to
+    gbdraw/web/js/utils/font-family-rules.generated.js).
+    """
+    return {
+        "bundledFamilyAliases": dict(sorted(_BUNDLED_FONT_FAMILY_ALIASES.items())),
+        "genericFamilies": sorted(_CSS_GENERIC_FAMILIES),
+        "liberationFamilyByGeneric": dict(sorted(_LIBERATION_FAMILY_BY_GENERIC.items())),
+        "monospaceNameHints": list(_MONOSPACE_NAME_HINTS),
+        "serifNameHints": list(_SERIF_NAME_HINTS),
+        "fallbackFace": _FALLBACK_PREFIX,
+    }
 
 
 # ------------------------------------------------------------------
@@ -766,6 +813,7 @@ __all__ = [
     "complete_font_family",
     "custom_font_families",
     "font_family_list_for",
+    "font_family_rules",
     "font_generic_family",
     "load_font",
     "parse_font_family_list",
@@ -773,5 +821,6 @@ __all__ = [
     "registered_fonts",
     "resolve_font_face",
     "resolve_font_family",
+    "resolve_font_family_among",
     "unregister_font_file",
 ]

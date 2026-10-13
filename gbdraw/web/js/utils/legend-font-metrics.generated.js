@@ -16,29 +16,12 @@
  */
 /**
  * @typedef {object} LegendFontMetricsTable
- * @property {Readonly<Record<string, string>>} familyAliases Python's _BUNDLED_FONT_FAMILY_ALIASES.
  * @property {readonly string[]} bundledFaces Every bundled face stem, sorted.
  * @property {Readonly<Record<string, LegendFontFaceTable>>} faces The measured faces, by stem.
  */
 
 /** @type {LegendFontMetricsTable} */
 export const LEGEND_FONT_METRICS = Object.freeze({
-  familyAliases: Object.freeze({
-    "arial": "LiberationSans",
-    "courier": "LiberationMono",
-    "couriernew": "LiberationMono",
-    "helvetica": "LiberationSans",
-    "liberationmono": "LiberationMono",
-    "liberationsans": "LiberationSans",
-    "liberationserif": "LiberationSerif",
-    "monospace": "LiberationMono",
-    "nimbussansl": "LiberationSans",
-    "sans-serif": "LiberationSans",
-    "sansserif": "LiberationSans",
-    "serif": "LiberationSerif",
-    "times": "LiberationSerif",
-    "timesnewroman": "LiberationSerif"
-  }),
   bundledFaces: Object.freeze([
     "LiberationMono-Bold",
     "LiberationMono-BoldItalic",

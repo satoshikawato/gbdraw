@@ -4532,6 +4532,41 @@
                     </details>
                 </div>
 
+                <div v-settings-section="'font'" class="card">
+                    <details>
+                        <summary aria-label="Font"><settings-section-title section="font"></settings-section-title> <help-tip text="The font of all diagram text: labels, titles, legend, and scale."></help-tip></summary>
+                        <p class="apply-note mt-2" data-applies-on-generate="font"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
+                        <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
+                            <label class="block">
+                                <span class="input-label text-[10px] mb-1">Font</span>
+                                <select v-model="fontSettings.selectedChoice.value" class="form-select form-input-compact" aria-label="Font" data-font-select
+                                    :disabled="!semanticMutationAvailable || fontSettings.loading.value"
+                                    @change="$event.target.value === 'load-file' ? ($refs.fontFileInput.click(), $event.target.value = fontSettings.selectedChoice.value)
+                                        : $event.target.value === 'installed' ? (fontSettings.openInstalledFonts(), $event.target.value = fontSettings.selectedChoice.value) : null">
+                                    <option v-for="choice in fontSettings.choices.value" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                                </select>
+                            </label>
+                            <input ref="fontFileInput" type="file" accept=".ttf,.otf,font/ttf,font/otf" class="hidden" aria-label="Load font file" data-history-managed data-font-file-input @change="fontSettings.loadFontFiles($event)">
+                            <p v-if="!fontSettings.localFontsSupported" class="text-[10px] text-slate-500" data-font-installed-unavailable>Installed fonts can be chosen in Chrome and Edge. Use Load font file in this browser.</p>
+                            <p v-if="fontSettings.loading.value" class="text-[10px] text-slate-500" role="status">Loading the font…</p>
+                            <p v-if="fontSettings.loadError.value" class="text-[10px] text-red-600" role="alert" data-font-load-error>{{ fontSettings.loadError.value }}</p>
+                            <p v-if="fontSettings.customFontSelected.value" class="text-[10px] text-amber-700" data-font-custom-note><i class="ph ph-warning" aria-hidden="true"></i> This font is not part of gbdraw. A saved Session keeps only its name, not the font file: to open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.</p>
+                            <div v-if="fontSettings.installedPicker.open" class="border border-slate-200 rounded p-2 space-y-2" role="dialog" aria-label="Choose installed font" data-font-installed-picker>
+                                <p v-if="fontSettings.installedPicker.error" class="text-[10px] text-red-600" role="alert">{{ fontSettings.installedPicker.error }}</p>
+                                <template v-else>
+                                    <input type="search" v-model="fontSettings.installedPicker.query" class="form-input form-input-compact" aria-label="Search installed fonts" placeholder="Search fonts" data-history-ignore>
+                                    <ul class="max-h-48 overflow-y-auto text-xs" aria-label="Installed font families">
+                                        <li v-for="entry in fontSettings.filteredInstalledFamilies.value" :key="entry.family">
+                                            <button type="button" class="w-full text-left px-1 py-0.5 hover:bg-slate-100" :style="{ fontFamily: JSON.stringify(entry.family) }" data-history-managed @click="fontSettings.chooseInstalledFamily(entry.family)">{{ entry.family }} <span class="text-slate-400">({{ entry.faces.length }})</span></button>
+                                        </li>
+                                    </ul>
+                                </template>
+                                <button type="button" class="btn-secondary text-xs" data-history-ignore @click="fontSettings.closeInstalledFonts()">Cancel</button>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
                 <div v-settings-section="'titles'" class="card">
                     <details>
                         <summary aria-label="Titles and Record Labels"><settings-section-title section="titles"></settings-section-title> <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>

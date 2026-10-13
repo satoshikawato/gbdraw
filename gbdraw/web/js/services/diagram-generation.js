@@ -16,10 +16,12 @@ import { createDiagramResourceTransport } from './diagram-resource-staging.js';
 import { markCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { normalizeLabelFitFailure } from './label-fit.js';
 /** @import { LabelFitFailure } from './label-fit.js' */
+import { webFontIdentitiesFor } from './font-store.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
 /** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
+/** @import { WebFontEntry } from './font-store.js' */
 
 /**
  * The fingerprint of the artifact a Generate returned.
@@ -298,11 +300,37 @@ const resourceTransport = createDiagramResourceTransport();
 /** @type {ReadonlySet<string>} */
 const diagramHelperOperationNames = new Set(DIAGRAM_HELPER_OPERATION_NAMES);
 
+/** @type {() => readonly WebFontEntry[]} */
+let readWorkerFonts = () => [];
+
+/**
+ * Name the fonts registered in the page (the font store's), so a new Worker
+ * registers them all at start and a Generate names those its request uses.
+ * @param {() => readonly WebFontEntry[]} readFonts
+ */
+export const setDiagramWorkerFontSource = (readFonts) => {
+  readWorkerFonts = readFonts;
+};
+
+/** @param {readonly WebFontEntry[]} fonts */
+const workerFontFiles = (fonts) => fonts.map((font) => ({ identity: font.identity, label: font.label, bytes: font.bytes.slice(0) }));
+
+/**
+ * The page's fonts a canonical request's text font names.
+ * @param {unknown} request
+ */
+const requestFontIdentities = (request) => {
+  const options = /** @type {{ diagramOptions?: { configOverrides?: Record<string, unknown>, config?: { objects?: { text?: { font_family?: unknown } } } } } | null} */ (request)?.diagramOptions;
+  const fontFamily = options?.configOverrides?.['objects.text.font_family'] ?? options?.config?.objects?.text?.font_family;
+  return fontFamily ? webFontIdentitiesFor(readWorkerFonts(), fontFamily) : [];
+};
+
 /** @param {string} id */
 const buildInitPayload = (id) => {
   return {
     type: 'init',
     id,
+    fonts: workerFontFiles(readWorkerFonts()),
     ...buildPyodideAssetManifest()
   };
 };
@@ -543,7 +571,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
       const workerPayload = {
         request: payload.request,
         resourceManifest: preparedResources.resourceManifest,
-        stagedResources: preparedResources.stagedResources
+        stagedResources: preparedResources.stagedResources,
+        fontIdentities: requestFontIdentities(payload.request)
       };
 
       const cleanup = () => {

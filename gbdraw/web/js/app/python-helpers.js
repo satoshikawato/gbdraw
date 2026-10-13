@@ -1675,6 +1675,31 @@ def list_gff_fasta_records(gff_path, fasta_path):
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='listGffFastaRecords', stage="helper")})
 
+def register_web_fonts_json(fonts_json="[]"):
+    """Register font files written into the Worker's file system (custom fonts, PR-2).
+
+    Each entry is {identity, path}; the reply lists, in order, what Python read
+    from each file and the face's metrics table for the Web Legend layout.
+    """
+    try:
+        from gbdraw.core.fonts import register_font_file
+        from gbdraw.core.text import font_metrics_table
+        registered = []
+        for entry in json.loads(str(fonts_json)):
+            font = register_font_file(str(entry["path"]))
+            registered.append({
+                "identity": str(entry["identity"]),
+                "family": font.family,
+                "weight": font.weight,
+                "italic": font.italic,
+                "generic": font.generic,
+                "measurementName": font.face.measurement_name,
+                "metrics": font_metrics_table(font.face),
+            })
+        return json.dumps({"fonts": registered})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='registerFonts', stage="helper")})
+
 def measure_legend_text_json(caption, font_family="Arial", font_size=14, config_json="null", overrides_json="{}"):
     """Measure one legend caption at the DPI the renderer resolves from the request config."""
     try:
@@ -1740,6 +1765,7 @@ _WEB_JSON_HELPERS = {
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
     "read_feature_override_table_json": (read_feature_override_table_json, "readFeatureOverrideTable"),
     "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),
+    "register_web_fonts_json": (register_web_fonts_json, "registerFonts"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),
     "extract_features_from_gff_fasta": (extract_features_from_gff_fasta, "feature-extraction"),
 }

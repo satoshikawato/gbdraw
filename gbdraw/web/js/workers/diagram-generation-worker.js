@@ -281,6 +281,43 @@ const initializeRuntime = async ({
   }
 };
 
+// Fonts registered in this Worker's Python (custom fonts): their files stay
+// in FONT_DIRECTORY for the Worker's life, and each identity is the SHA-256 of
+// the bytes. The main thread replays every font of the page when it
+// recreates the Worker (init `fonts`), and a Generate names the fonts it needs.
+const FONT_DIRECTORY = '/gbdraw-web-fonts';
+const FONT_IDENTITY_RE = /^[0-9a-f]{64}$/;
+const registeredFontIdentities = new Set();
+
+const registerFontsInRuntime = async (pyodide, fonts) => {
+  if (!Array.isArray(fonts)) throw { code: 'HELPER_PROTOCOL', stage: 'request-validation' };
+  if (!pyodide.FS.analyzePath(FONT_DIRECTORY).exists) pyodide.FS.mkdir(FONT_DIRECTORY);
+  const entries = [];
+  for (const font of fonts) {
+    const identity = String(font?.identity || '');
+    const bytes = bytesForDigest(font?.bytes);
+    if (!FONT_IDENTITY_RE.test(identity) || !bytes || await hexDigest(bytes) !== identity) {
+      throw { code: 'RESOURCE_INVALID', stage: 'resource-staging', context: { field: 'font_family' } };
+    }
+    const path = `${FONT_DIRECTORY}/${identity}`;
+    pyodide.FS.writeFile(path, bytes);
+    entries.push({ identity, path });
+  }
+  const result = callJsonHelper(pyodide, 'register_web_fonts_json', [JSON.stringify(entries)]);
+  entries.forEach(({ identity }) => registeredFontIdentities.add(identity));
+  return result.fonts;
+};
+
+// A Generate draws only with the fonts it names; a font the Worker lost
+// (a failed replay) fails the Generate instead of falling back.
+const requireRegisteredFonts = (fontIdentities) => {
+  const missing = (Array.isArray(fontIdentities) ? fontIdentities : [])
+    .filter((identity) => !registeredFontIdentities.has(String(identity)));
+  if (missing.length > 0) {
+    throw { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'font_family', reason: 'FONT_NOT_LOADED' } };
+  }
+};
+
 const HELPER_FILE_NAMES = Object.freeze({
   source: 'source.bin',
   gff: 'source.gff',
@@ -573,6 +610,11 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     run: (pyodide, payload) => callJsonHelper(pyodide, 'compute_label_fit_row_json', [
       String(payload.rowToken || ''), String(payload.kind || '')
     ])
+  },
+  [DIAGRAM_HELPER_OPERATIONS.REGISTER_FONTS]: {
+    keys: ['fonts'],
+    fileRoles: [],
+    run: (pyodide, payload) => registerFontsInRuntime(pyodide, payload.fonts)
   },
   [DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT]: {
     keys: ['filename'],
@@ -884,6 +926,7 @@ const runGeneration = async ({
   request,
   resourceManifest,
   stagedResources,
+  fontIdentities = [],
   requestId,
   testLifecycleEnabled = false
 } = {}) => {
@@ -892,6 +935,11 @@ const runGeneration = async ({
   }
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     throw serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' });
+  }
+  try {
+    requireRegisteredFonts(fontIdentities);
+  } catch (error) {
+    throw serializeError(error, { operation: 'generate', stage: 'request-validation' });
   }
   const { pyodide } = runtime;
   const runWrapper = pyodide.globals.get('run_canonical_request_wrapper');
@@ -1160,6 +1208,15 @@ const handleWorkerMessage = async (data) => {
   try {
     if (type === 'init') {
       const initialized = await initializeRuntime(data);
+      // The replay of the page's fonts into a new Worker. A font that fails
+      // stays unregistered, and a Generate that names it fails (FONT_NOT_LOADED).
+      if (Array.isArray(data.fonts) && data.fonts.length > 0) {
+        try {
+          await registerFontsInRuntime(initialized.pyodide, data.fonts);
+        } catch (_error) {
+          // Reported by the Generate that needs the font.
+        }
+      }
       self.postMessage({
         id,
         type: 'init',

@@ -18,7 +18,7 @@ import {
   measureTextBox,
   planLegendComposition,
   pythonFloatSum,
-  resolveBundledFontFace
+  resolveLegendFontFace
 } from '../../gbdraw/web/js/services/legend-layout.js';
 import { LEGEND_FONT_METRICS } from '../../gbdraw/web/js/utils/legend-font-metrics.generated.js';
 
@@ -155,7 +155,7 @@ test('the vectors cover every Gallery Legend, its edits, and the synthetic branc
 
 test('text measurement equals calculate_bbox_dimensions', () => {
   vectors.measurement.forEach((vector, index) => {
-    assert.equal(resolveBundledFontFace(metrics, vector.fontFamily), vector.fontFile, `measurement[${index}] face`);
+    assert.equal(resolveLegendFontFace(metrics, vector.fontFamily), vector.fontFile, `measurement[${index}] face`);
     const measured = measureTextBox(metrics, vector);
     assertExact(measured, vector.expected, `measurement[${index}] ${JSON.stringify(vector.text)} ${vector.fontFile} ${vector.fontSize}`);
   });
