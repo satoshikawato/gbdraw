@@ -98,7 +98,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/result-normalization.js': 1,
   'services/right-drawer-state.js': 8,
   'services/rule-matchers.js': 10,
-  'services/session-active-config-contract.js': 24,
+  'services/session-active-config-contract.js': 23,
   'services/session-authority.js': 17,
   'services/session-file.js': 1,
   'services/session-request.js': 38,
