@@ -37,7 +37,7 @@ import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup } from './preview-item-popup.js';
-import { colorRuleLegendGroups, legendRowRules } from '../services/specific-color-rules.js';
+import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules } from '../services/specific-color-rules.js';
 import { drawnTracks, loadedTracks } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
@@ -5510,11 +5510,17 @@ export const createAppSetup = () => {
   const downloadPDF = () => runExportAction('downloadPDF', 'export-pdf');
 
   // The list under the popup's Legend name: the color-rule Legend groups of
-  // the clicked feature's type, by name (PD-OI-061 revision 4).
+  // the clicked feature's type, by name (PD-OI-061 revision 4). Each is shown
+  // as the Legend shows its row: by the row's drawn name, and a group that
+  // draws no row by its name as written, never by a key.
   const popupLegendGroups = computed(() => {
     const type = clickedFeature.value?.feat?.type;
-    return type === undefined ? [] : colorRuleLegendGroups(state.activeDrawing().manualSpecificRules, String(type))
-      .sort((left, right) => left.name.localeCompare(right.name));
+    if (type === undefined) return [];
+    const drawing = state.activeDrawing();
+    const rowKeyOf = groupLegendRowKeys(displayedLegendRowContext(state, drawing));
+    return colorRuleLegendGroups(drawing.manualSpecificRules, String(type))
+      .map((group) => ({ group, shownName: legendActions.shownLegendName(rowKeyOf(group)) }))
+      .sort((left, right) => left.group.name.localeCompare(right.group.name) || left.shownName.localeCompare(right.shownName));
   });
 
   const featureVisibilityFeatureSuggestions = computed(() => {

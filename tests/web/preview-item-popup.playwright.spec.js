@@ -259,6 +259,13 @@ test('two color rules of one caption: the popups and the deleted list show names
   });
   const nameField = page.getByLabel('Feature legend name', { exact: true });
   await expect(nameField).toHaveValue(names[keys[0]]);
+  // D-11 (OV-587): the field suggests no group; the list under it is the only place that offers one.
+  expect.soft(await nameField.getAttribute('list')).toBeNull();
+  expect.soft(await page.locator('#specific-rule-legend-name-options').count()).toBe(0);
+  // The list shows each group as the Legend shows its row: by the drawn name, never by the key.
+  const offered = () => page.getByLabel('Legend captions of color rules', { exact: true }).locator('option').allTextContents()
+    .then((texts) => texts.map((text) => text.trim()).slice(1).filter((text) => text.startsWith('Shared')).sort());
+  expect.soft(await offered()).toEqual(['Shared (1)', 'Shared (2)']);
 
   // OV-640: a color for this feature only names its row by the feature, never by the key of the row it leaves.
   await evaluateWithRetainedPromise(page, async () => {
@@ -292,4 +299,17 @@ test('two color rules of one caption: the popups and the deleted list show names
   await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
   await expect.soft(page.locator('.right-drawer').getByRole('button', { name: 'Restore Shared', exact: true })).toBeVisible();
   await expect.soft(page.locator('.right-drawer').getByText(' [#')).toHaveCount(0);
+
+  // The Legend numbers only the rows it draws: one row is left, drawn without a number, and the group
+  // of the deleted row draws none, so the list shows that group by its name as written. The two
+  // groups read the same here; how to tell them apart is an open Owner question (P-4).
+  expect.soft(await page.evaluate(() => [...document.querySelectorAll('.gbdraw-preview-surface g[data-legend-key]')]
+    .filter((row) => row.getAttribute('display') !== 'none').map((row) => row.querySelector('text')?.textContent)
+    .filter((name) => name.startsWith('Shared')))).toEqual(['Shared']);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => /cytochrome/i.test(feature.product)), null);
+    await window.Vue.nextTick();
+  });
+  expect.soft(await offered()).toEqual(['Shared', 'Shared']);
 });

@@ -398,6 +398,17 @@ export const ruleLegendCaptions = (context) => {
   };
 };
 
+// The key of the Legend row each color-rule group of `context.rules` is drawn
+// in: a group is the rules of one caption and one color, which share that row.
+/**
+ * @param {LegendRowContext} context
+ * @returns {(group: Pick<ColorRuleLegendGroup, 'name' | 'color'>) => PythonLegendKey}
+ */
+export const groupLegendRowKeys = (context) => {
+  const rowOf = ruleLegendCaptions(context);
+  return (group) => rowOf({ cap: group.name, color: group.color });
+};
+
 // The Legend rows of a rule table: one per row key, for the rules `draws`
 // admits (a commit: those a displayed feature takes). The keys are allocated
 // from the whole table, as Python allocates them, whichever rules draw a row.

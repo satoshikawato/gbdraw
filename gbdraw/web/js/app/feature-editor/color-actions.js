@@ -17,7 +17,7 @@ import {
   setsFeatureStroke
 } from '../../services/legend-svg.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
-import { colorRuleGroupTakes, colorRuleLegendGroups, ruleLegendCaptions } from '../../services/specific-color-rules.js';
+import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys } from '../../services/specific-color-rules.js';
 import { isAutoFeatureUnderlay } from '../../services/feature-dom.js';
 import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
@@ -1093,15 +1093,19 @@ export const createFeatureColorActions = ({
     // row's own caption), which the composition root's Restore acts on.
     const group = request.joinGroup || null;
     // A picked group's row is the row the allocation draws for it (N-06), never the row of its name.
-    const groupRowKey = group && ruleLegendCaptions(displayedLegendRowContext(state, drawing))({ cap: group.name, color: group.color });
+    const groupRowKey = group && groupLegendRowKeys(displayedLegendRowContext(state, drawing))(group);
     /** @param {LegendEntry[]} entries */
     const rowOf = (entries) => (group
       ? entries.find((entry) => legendEntryKey(entry) === groupRowKey) || null : entryByCaption(entries, newCaption));
     const listedTarget = rowOf(drawing.legendEntries.value);
     const deletedTarget = listedTarget ? null : rowOf(drawing.deletedLegendEntries.value);
     const targetRow = listedTarget || deletedTarget;
-    const targetGroup = group || (targetRow ? null
-      : colorRuleLegendGroups(drawing.manualSpecificRules).find((candidate) => captionsMatch(candidate.name, newCaption)) || null);
+    // A typed name that no row shows is a color-rule group's: of the groups
+    // of that name, the one in the renamed row's color (one name and one
+    // color share a Legend row), else the first.
+    const namedGroups = group || targetRow ? []
+      : colorRuleLegendGroups(drawing.manualSpecificRules).filter((candidate) => captionsMatch(candidate.name, newCaption));
+    const targetGroup = group || namedGroups.find((candidate) => colorsMatch(candidate.color, currentColor)) || namedGroups[0] || null;
     /** @param {readonly ColorFeature[]} rowFeatures */
     const featureTypes = (rowFeatures) => new Set(rowFeatures.map((feature) => feature?.type));
     // The name and the color a Merge adopts, and the feature types the target

@@ -1214,6 +1214,19 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const twinPick = ruleRows({ rules: twins });
   await twinPick.renameActions.joinLegendGroup(colorRuleLegendGroups(twins, 'tRNA')[1]);
   assert.deepEqual(committedFor(twinPick, 't1'), [['t1', 'Twin', '#222222']]);
+  // A typed name that two groups carry is the group in the renamed row's
+  // color (one name and one color share a Legend row), not the first group of
+  // the name: nothing to ask. In a third color it asks, with the first group.
+  const twinTyped = ruleRows({
+    rules: twins, entries: [{ caption: 'tRNA', color: '#222222', featureIds: ['t1'] }], order: ['tRNA'], features: [t1]
+  });
+  await twinTyped.renameActions.renameLegendEntry(0, 'Twin');
+  assert.notEqual(twinTyped.legendRenameDialog.show, true, 'the typed name and the row\'s color are a group\'s: nothing to ask');
+  assert.deepEqual(committedFor(twinTyped, 't1'), [['t1', 'Twin', '#222222']]);
+  const twinAsked = ruleRows({ rules: twins });
+  await twinAsked.renameActions.renameLegendEntry(0, 'Twin');
+  assert.deepEqual([twinAsked.legendRenameDialog.show, twinAsked.legendRenameDialog.targetColor, twinAsked.legendRenameDialog.targetRuleOnly],
+    [true, '#111111', true], 'in another color the first group of the name is the target');
   // Other features share the feature's row: the scope question stays, and
   // neither answer is followed by the conflict dialog.
   for (const [scope, ids] of [['single', ['t1']], ['group', ['t1', 't3']]]) {

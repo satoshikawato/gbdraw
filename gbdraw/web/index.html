@@ -6287,15 +6287,15 @@
                                    :placeholder="clickedFeature.label"
                                    class="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
                             <select v-if="popupLegendGroups.length > 0"
-                                    :disabled="!semanticMutationAvailable" @change="joinLegendGroup(popupLegendGroups[$event.target.value]); $event.target.value = ''"
+                                    :disabled="!semanticMutationAvailable" @change="joinLegendGroup(popupLegendGroups[$event.target.value].group); $event.target.value = ''"
                                     data-history-managed
                                     aria-label="Legend captions of color rules"
                                     class="mt-1 w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
                                 <option value="">Choose from color rules…</option>
-                                <option v-for="(group, index) in popupLegendGroups"
+                                <option v-for="({ group, shownName }, index) in popupLegendGroups"
                                         :key="`specific-rule-select-${group.name}-${group.color}`"
                                         :value="index">
-                                    {{ group.name }}
+                                    {{ shownName }}
                                 </option>
                             </select>
                         </div>
