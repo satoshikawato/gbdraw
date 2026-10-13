@@ -415,20 +415,22 @@ export const createPreviewItemPopup = ({
 
   // A rename may ask a choice first (a name another row has) and may change
   // the row's key. Once the choice is answered, the open popup follows the
-  // row: it stays on a row that kept its name (Cancel), else moves to the name
-  // the rename added (a rename, or Keep both), else to the row it joined (Merge).
+  // row by its key: it stays on a row that kept its key (Cancel, a Legend-only
+  // rename, or Keep both of such a row), else moves to the one key the rename
+  // added (a rule row's rename), else to the row it joined, which has the
+  // typed name (Merge).
   /** @param {number} index @param {string} caption */
   const renameLegendEntry = async (index, caption) => {
     const opened = state.clickedPairwiseMatch.value;
     const before = legendEntries();
-    const oldCaption = text(before[index]?.caption);
-    const known = new Set(before.map((entry) => text(entry.caption)));
+    const renamedKey = before[index] ? text(legendEntryKey(before[index])) : '';
+    const known = new Set(before.map((entry) => text(legendEntryKey(entry))));
     const result = await renameLegendRow(index, caption);
     await legendRenameSettled();
     if (state.clickedPairwiseMatch.value !== opened || opened?.previewItem?.kind !== 'legend-entry') return result;
     const entries = legendEntries();
-    const added = entries.filter((entry) => !known.has(text(entry.caption)));
-    const entry = entries.find((row) => text(row.caption) === oldCaption)
+    const added = entries.filter((entry) => !known.has(text(legendEntryKey(entry))));
+    const entry = entries.find((row) => text(legendEntryKey(row)) === renamedKey)
       || (added.length === 1 ? added[0] : null)
       || entries.find((row) => text(row.caption) === text(caption));
     if (entry) opened.previewItem = { kind: 'legend-entry', key: text(legendEntryKey(entry)) };

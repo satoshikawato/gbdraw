@@ -158,8 +158,10 @@ import {
  * the name the renamed row is drawn with, and the target row's drawn name after the rename when the
  * target is drawn and that name changes, else null. `renamedKey` is the row renamed in place; null
  * for features split off their row, which are placed right after `targetKey` (D-29) in `color`.
- * @typedef {(rename: { name: string, renamedKey: PythonLegendKey | null, targetKey: PythonLegendKey | null, color: string })
- *   => { keepBothName: string, targetNameAfter: string | null }} KeepBothNamesPort
+ * `restores`: Keep both restores the deleted target `deletedKey` first, as the two rows have one
+ * swatch and so are one row (D-28).
+ * @typedef {(rename: { name: string, renamedKey: PythonLegendKey | null, targetKey: PythonLegendKey | null, color: string,
+ *   deletedKey?: PythonLegendKey | null }) => { keepBothName: string, targetNameAfter: string | null, restores: boolean }} KeepBothNamesPort
  */
 /**
  * The tracks of the request that drew the displayed Result (`drawnTracks`), which give a track's
@@ -190,7 +192,7 @@ export const createFeatureColorActions = ({
       .find((/** @type {LegendEntry} */ entry) => String(entry.caption).toLowerCase() === typed.toLowerCase());
     return named ? legendEntryKey(named) : null;
   },
-  keepBothNamesOf = ({ name }) => ({ keepBothName: name, targetNameAfter: null })
+  keepBothNamesOf = ({ name }) => ({ keepBothName: name, targetNameAfter: null, restores: false })
 }) => {
   const {
     extractedFeatures,
@@ -1087,10 +1089,12 @@ export const createFeatureColorActions = ({
     const resolution = request.targetResolution || (group && mergeAllowed && !deletedTarget ? 'merge' : null);
 
     // A chosen Merge adopts the target's color, also once a Restore made a
-    // deleted target a listed one.
+    // deleted target a listed one. A row that joins a target of its color
+    // without asking takes the target's name, never a typed drawn name such
+    // as `Shared (2)` (review M-3).
     if (featureOrRuleRename && resolution !== 'merge' && (!target || (!deletedTarget && mergeAllowed && sameColor))) {
       await applyLegendRenameRequest(drawing, { ...request, currentColor, features,
-        finalCaption: newCaption, finalColor: currentColor });
+        finalCaption: target ? target.caption : newCaption, finalColor: currentColor });
       clearLegendRenameDialog(drawing);
       return;
     }
@@ -1099,8 +1103,9 @@ export const createFeatureColorActions = ({
     // every row of the name is numbered in legend order. A row renamed whole
     // keeps its place; features split off their row go right after the target
     // row (D-29). Rows of one name and one swatch are one row (D-28): onto a
-    // deleted target in the renamed row's color, Keep both restores the target
-    // first (the composition root, as for Merge), so the row shows.
+    // deleted target with the renamed row's swatch (the Legend owner's
+    // `restores`), Keep both restores the target first (the composition root,
+    // as for Merge), so the row shows.
     const splitsRow = !takesWholeRow(request.sourceKey, features);
     const keepBothAfter = splitsRow && listedTarget ? legendEntryKey(listedTarget) : undefined;
     if (target && (deletedTarget || !mergeAllowed || !sameColor)) {
@@ -1110,11 +1115,11 @@ export const createFeatureColorActions = ({
           target,
           mergeAllowed,
           deletedTarget ? legendEntryKey(deletedTarget) : '',
-          {
-            ...keepBothNamesOf({ name: newCaption, renamedKey: splitsRow ? null : request.sourceKey,
-              targetKey: listedTarget ? legendEntryKey(listedTarget) : null, color: currentColor }),
-            keepBothRestores: Boolean(deletedTarget) && sameColor
-          }
+          (({ restores, ...names }) => ({ ...names, keepBothRestores: restores }))(keepBothNamesOf({
+            name: newCaption, renamedKey: splitsRow ? null : request.sourceKey,
+            targetKey: listedTarget ? legendEntryKey(listedTarget) : null, color: currentColor,
+            deletedKey: deletedTarget ? legendEntryKey(deletedTarget) : null
+          }))
         );
         return;
       }

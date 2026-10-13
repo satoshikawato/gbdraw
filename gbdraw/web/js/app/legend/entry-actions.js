@@ -184,19 +184,18 @@ export const createLegendEntryActions = ({
   // the displayed Result draws. The row renamed whole keeps its place and its
   // swatch; features split off their row (`renamedKey` null) are a row placed
   // right after the target row (D-29), drawn in `color` with the Result's
-  // block stroke, as Python draws a color rule's row.
+  // block stroke, as Python draws a color rule's row. A deleted target
+  // (`deletedKey`) is restored first when the two would be one row (D-28):
+  // the swatch its hidden row holds is the renamed row's (review L-1).
   /** @type {import('../feature-editor/color-actions.js').KeepBothNamesPort} */
-  const keepBothNamesOf = ({ name, renamedKey, targetKey, color }) => {
+  const keepBothNamesOf = ({ name, renamedKey, targetKey, color, deletedKey = null }) => {
     const rows = [...legendRowNames.value].filter(([, names]) => names.shown)
       .map(([key, names]) => ({ key, name: names.name, swatch: names.swatch }));
     const renamed = rows.find((row) => row.key === renamedKey);
     const block = renamed ? null : drawnBlockStroke(svgContainer.value?.querySelector?.('svg') || null);
-    return keepBothNames(rows, {
-      name: /** @type {LegendRowName} */ (name),
-      swatch: renamed?.swatch ?? legendSwatch({ fill: color, stroke: block?.color, width: block?.width }),
-      renamedKey: renamed ? renamed.key : null,
-      targetKey
-    });
+    const swatch = renamed?.swatch ?? legendSwatch({ fill: color, stroke: block?.color, width: block?.width });
+    const names = keepBothNames(rows, { name: /** @type {LegendRowName} */ (name), swatch, renamedKey: renamed ? renamed.key : null, targetKey });
+    return { ...names, restores: deletedKey !== null && legendRowNames.value.get(deletedKey)?.swatch === swatch };
   };
 
   /** @param {(options?: { commit?: boolean }) => unknown} handler The root's refresh of the Legend geometry. */

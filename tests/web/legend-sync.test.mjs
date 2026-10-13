@@ -1133,3 +1133,39 @@ const mockLegendEntry = (caption, color, x) => {
     [['Alpha', 'Alpha'], ['Beta', 'Alpha'], ['Gamma', 'Gamma']]);
   assert.deepEqual(state.dormantLegendEntries.value, []);
 }
+
+// Review L-1 (D-37): Keep both onto a deleted row restores it only when the
+// two rows would be one row: the same name and the whole swatch, as the
+// naming pass compares them (D-28), not the fill alone.
+{
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  featureLegend.appendChild(mockLegendEntry('Alpha', '#112233', 0));
+  const deleted = mockLegendEntry('Beta', '#112233', 70);
+  deleted.setAttribute('display', 'none');
+  const deletedSwatch = deleted.querySelector('path');
+  deletedSwatch.setAttribute('stroke', '#000000');
+  deletedSwatch.setAttribute('stroke-width', '2');
+  featureLegend.appendChild(deleted);
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const state = {
+    results: ref([]), selectedResultIndex: ref(0), svgContainer: ref({ querySelector: () => svg }), adv: {},
+    legendEntries: ref([{ caption: 'Alpha', originalCaption: 'Alpha', color: '#112233', featureIds: [] }]),
+    deletedLegendEntries: ref([{ caption: 'Beta', originalCaption: 'Beta', color: '#112233', featureIds: [] }]),
+    dormantLegendEntries: ref([]), originalLegendOrder: ref(['Alpha', 'Beta']), originalLegendColors: ref({}),
+    legendStrokeOverrides: {}, legendColorOverrides: {}, manualSpecificRules: [], skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({ state: withDrawings(state), readShownLegendColor: (entry) => entry?.color });
+  const keepBoth = () => {
+    actions.readLegendRowNames();
+    return actions.keepBothNamesOf({ name: 'Beta', renamedKey: 'Alpha', targetKey: null, color: '#112233', deletedKey: 'Beta' });
+  };
+  assert.deepEqual(keepBoth(), { keepBothName: 'Beta', targetNameAfter: null, restores: false },
+    'one fill, another line: two rows, so Keep both leaves the deleted row deleted');
+  deletedSwatch.removeAttribute('stroke');
+  deletedSwatch.removeAttribute('stroke-width');
+  assert.deepEqual(keepBoth(), { keepBothName: 'Beta', targetNameAfter: null, restores: true }, 'one swatch: one row, restored');
+}

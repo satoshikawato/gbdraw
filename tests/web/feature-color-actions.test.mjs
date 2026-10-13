@@ -975,6 +975,19 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     numbered.legendRenameDialog.targetColor], [true, 'target', true, '#445566'], 'a shown numbered name targets its row');
   await numbered.renameActions.handleLegendRenameChoice('merge');
   assert.deepEqual(numbered.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Shared', '#445566']], 'Merge adopts the name, not the key');
+  // Review M-3 (D-37): with that row's color and feature type no dialog asks,
+  // and the row joins it under its name, never the typed numbered name.
+  const sameRow = build({
+    entries: [...sharedRows.entries, { caption: 'tRNA', color: '#445566', featureIds: ['t1'] }],
+    order: [...sharedRows.order, 'tRNA'],
+    features: [{ ...trna, legendCaption: 'tRNA' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'Shared [#445566]' }],
+    findLegendRowNamed: (typed) => ({ 'Shared (1)': 'Shared [#112233]', 'Shared (2)': 'Shared [#445566]' })[typed] ?? null,
+    legendRowName: (key) => (/^Shared \[/.test(key) ? 'Shared' : key)
+  });
+  await sameRow.renameActions.renameLegendEntry(2, 'Shared (2)');
+  assert.notEqual(sameRow.legendRenameDialog.show, true, 'one color and one type: no dialog');
+  assert.deepEqual(sameRow.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Shared', '#445566']],
+    'a typed shown numbered name joins that row under its name');
 
   // PV-02: a renamed renderer-generated row keeps its generated identity, so
   // Generate replays the rename.
@@ -1120,12 +1133,12 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const names = [];
   const keepBothNamesOf = (rename) => {
     names.push(rename);
-    return { keepBothName: 'Leu B (1)', targetNameAfter: 'Leu B (2)' };
+    return { keepBothName: 'Leu B (1)', targetNameAfter: 'Leu B (2)', restores: false };
   };
   const whole = build({ ...{ entries: [{ caption: 'Leu A', color: '#e8b441', featureIds: ['t1'] }, { caption: 'Leu B', color: '#71ee7d', featureIds: ['t2'] }],
     order: ['Leu A', 'Leu B'], features: [{ ...trna, legendCaption: 'Leu A' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'Leu B' }] }, keepBothNamesOf });
   await whole.renameActions.renameLegendEntry(0, 'Leu B');
-  assert.deepEqual(names.at(-1), { name: 'Leu B', renamedKey: 'Leu A', targetKey: 'Leu B', color: '#e8b441' });
+  assert.deepEqual(names.at(-1), { name: 'Leu B', renamedKey: 'Leu A', targetKey: 'Leu B', color: '#e8b441', deletedKey: null });
   assert.deepEqual([whole.legendRenameDialog.keepBothName, whole.legendRenameDialog.targetNameAfter], ['Leu B (1)', 'Leu B (2)']);
   await whole.renameActions.handleLegendRenameChoice('keep-both');
   assert.deepEqual(whole.committed.at(-1).map(({ cap }) => cap), ['Leu B'], 'the typed name, not the drawn one');
@@ -1137,7 +1150,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   await split.renameActions.handleLegendNameCommit();
   await split.renameActions.handleLegendRenameChoice('single');
   assert.equal(split.legendRenameDialog.mode, 'target');
-  assert.deepEqual(names.at(-1), { name: 'Leu B', renamedKey: null, targetKey: 'Leu B', color: '#e8b441' }, 'a split row is named as placed after the target');
+  assert.deepEqual(names.at(-1), { name: 'Leu B', renamedKey: null, targetKey: 'Leu B', color: '#e8b441', deletedKey: null }, 'a split row is named as placed after the target');
   await split.renameActions.handleLegendRenameChoice('keep-both');
   assert.deepEqual(split.commitOptions.at(-1).legendPlacement, { name: 'Leu B', color: '#e8b441', at: 'Leu B' }, 'D-29: right after the target row');
 
@@ -1378,12 +1391,20 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   // listed row. The dialog names the deleted row by its Python key; the merge
   // goes into that row once the composition root restored it, so this owner
   // alone refuses it like a Merge it does not offer.
+  // The Legend owner answers whether the deleted row has the renamed row's
+  // swatch (review L-1); here, whether it has its color.
+  /** @type {unknown[]} */
+  const asks = [];
   const ontoDeleted = (deletedColor) => build({
     entries: [{ caption: 'Leu A', color: '#e8b441', featureIds: ['t1'] }],
     deleted: [{ caption: 'Leu B', originalCaption: 'tRNA', color: deletedColor, featureIds: ['t2'] }],
     order: ['tRNA'],
     // A feature's Legend item is its row's key: the deleted row's is `tRNA`.
-    features: [{ ...trna, legendCaption: 'Leu A' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'tRNA' }]
+    features: [{ ...trna, legendCaption: 'Leu A' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'tRNA' }],
+    keepBothNamesOf: (rename) => {
+      asks.push(rename.deletedKey);
+      return { keepBothName: rename.name, targetNameAfter: null, restores: deletedColor === '#e8b441' };
+    }
   });
   for (const deletedColor of ['#71ee7d', '#e8b441']) {
     const asked = ontoDeleted(deletedColor);
@@ -1404,7 +1425,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   for (const [deletedColor, restores] of [['#71ee7d', false], ['#e8b441', true]]) {
     const asked = ontoDeleted(deletedColor);
     await asked.renameActions.renameLegendEntry(0, 'Leu B');
-    assert.equal(asked.legendRenameDialog.keepBothRestores, restores, `Keep both restores the deleted row of one color only (${deletedColor})`);
+    assert.equal(asked.legendRenameDialog.keepBothRestores, restores, `Keep both restores the deleted row of one swatch only (${deletedColor})`);
+    assert.equal(asks.at(-1), 'tRNA', 'the Legend owner is asked about the deleted row by its key');
     assert.equal(asked.legendRenameDialog.targetNameAfter, '', 'a deleted target gets no sentence');
   }
   const restored = ontoDeleted('#71ee7d');

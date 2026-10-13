@@ -164,26 +164,28 @@ test('the legend popup follows its row when a rename changes the row key', async
 test('the legend popup follows its row through the name-conflict choice', async () => {
   const conflict = (choice) => {
     let answer;
+    // The target row comes first, so a lookup by the typed name finds the target.
     const entries = [
-      { caption: 'Regulatory genes', originalCaption: 'Regulatory genes' },
-      { caption: 'Core biosynthetic genes', originalCaption: 'Core biosynthetic genes' }
+      { caption: 'Core biosynthetic genes', originalCaption: 'Core biosynthetic genes' },
+      { caption: 'Regulatory genes', originalCaption: 'Regulatory genes' }
     ];
     const settled = new Promise((resolve) => { answer = resolve; });
     const created = createPopup({ entries, renameLegendRow: async () => true, legendRenameSettled: () => settled });
     created.state.clickedPairwiseMatch.value = { previewItem: { kind: 'legend-entry', key: 'Regulatory genes' }, matchesReady: true };
-    const renamed = created.popup.renameLegendRow(0, 'Core biosynthetic genes');
+    const renamed = created.popup.renameLegendRow(1, 'Core biosynthetic genes');
     const choose = async () => {
       assert.equal(created.popup.view.value.title, 'Regulatory genes', 'the popup waits for the choice');
-      if (choice === 'keep both') Object.assign(entries[0], { caption: 'Core biosynthetic genes 2', originalCaption: 'Core biosynthetic genes 2' });
-      if (choice === 'merge') entries.splice(0, 1);
+      // PD-OI-061 scenario revision 5: Keep both keeps the row's key and writes the typed name.
+      if (choice === 'keep both') Object.assign(entries[1], { caption: 'Core biosynthetic genes' });
+      if (choice === 'merge') entries.splice(1, 1);
       answer();
       await renamed;
-      return created.popup.view.value.title;
+      return created.state.clickedPairwiseMatch.value.previewItem.key;
     };
     return choose;
   };
   assert.equal(await (conflict('cancel'))(), 'Regulatory genes');
-  assert.equal(await (conflict('keep both'))(), 'Core biosynthetic genes 2');
+  assert.equal(await (conflict('keep both'))(), 'Regulatory genes', 'Keep both stays on the renamed row, by its key');
   assert.equal(await (conflict('merge'))(), 'Core biosynthetic genes');
 });
 
