@@ -191,7 +191,6 @@ const loadDocumentFaces = async (sources, FontFaceClass) => {
  * @typedef {object} LoadedWebFonts
  * @property {WebFontEntry[]} added The entries registered by this load.
  * @property {WebFontEntry[]} chosen The entry of each source's identity, in source order (stored or added).
- * @property {WebFontEntry[]} entries The page's fonts after the load.
  */
 
 /**
@@ -229,8 +228,7 @@ export const loadWebFonts = async (sources, {
   added.forEach((entry) => stored.set(entry.identity, entry));
   return {
     added,
-    chosen: identified.map((source) => /** @type {WebFontEntry} */ (stored.get(source.identity))),
-    entries: mergeWebFonts(known, added)
+    chosen: identified.map((source) => /** @type {WebFontEntry} */ (stored.get(source.identity)))
   };
 };
 

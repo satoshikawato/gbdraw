@@ -136,14 +136,26 @@ test('loading a font already in the store registers nothing and selects the stor
   assert.equal(calls[0][0].bytes, bytes, 'the Worker request carries the store bytes, not a copy');
   assert.equal(first.chosen[0].bytes, bytes);
   assert.deepEqual(fontSet.faces.map((face) => [face.family, face.weight, face.style]), [['Gbdraw Test Serif', '400', 'normal']]);
+  assert.deepEqual(Object.keys(first), ['added', 'chosen'], 'the caller merges `added` with mergeWebFonts');
   const again = await loadWebFonts([{ bytes: bytesOf('one font'), source: 'file', label: 'copy.ttf' }], {
-    known: first.entries, registerInWorker, fontSet, FontFaceClass: FakeFontFace
+    known: first.added, registerInWorker, fontSet, FontFaceClass: FakeFontFace
   });
   assert.equal(calls.length, 1, 'no second registration');
   assert.equal(fontSet.faces.length, 1, 'one FontFace per identity');
   assert.deepEqual(again.added, []);
   assert.equal(again.chosen[0], first.chosen[0]);
-  assert.deepEqual(again.entries, first.entries);
+});
+
+// M1: the one merge of a load into the page's fonts. A reloaded font (after
+// the Worker lost it) replaces its entry; the other fonts keep their order.
+test('mergeWebFonts replaces a reloaded entry and keeps the order of the rest', () => {
+  const entry = (identity, label) => ({ identity, label });
+  const merged = mergeWebFonts(
+    [entry('a', 'a.ttf'), entry('b', 'b.ttf'), entry('c', 'c.ttf')],
+    [entry('b', 'b-again.ttf'), entry('d', 'd.ttf')]
+  );
+  assert.deepEqual(merged.map((item) => item.label), ['a.ttf', 'c.ttf', 'b-again.ttf', 'd.ttf']);
+  assert.deepEqual(mergeWebFonts([entry('a', 'a.ttf')], []).map((item) => item.label), ['a.ttf']);
 });
 
 // R7 (OV-687): the browser checks the font before Python registers it, so the
