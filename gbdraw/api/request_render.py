@@ -103,6 +103,7 @@ from .diagram import (
     build_linear_diagram_result,
     label_fit_report,
 )
+from gbdraw.labels.fit import WARN_SEARCH_SECONDS
 from gbdraw.io.genome import parse_gff_fasta
 from .io import load_gbks
 from .options import (
@@ -801,7 +802,9 @@ class CircularRequestPlan:
 
         _preflight_render_output(self.request.output)
 
-    def build(self) -> Drawing:
+    def build(self, *, label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS) -> Drawing:
+        """Build the drawing; crossing label leaders search rows for the given seconds."""
+
         shared_kwargs: dict[str, Any] = (
             {"_resolved_feature_inputs": self.inputs.features}
             if self.inputs is not None
@@ -810,6 +813,7 @@ class CircularRequestPlan:
         if self.inputs is not None and self.inputs.record_features:
             shared_kwargs["_resolved_record_features"] = self.inputs.record_features
         shared_kwargs["_resolved_annotations"] = self.resolved_annotations
+        shared_kwargs["_label_fit_warn_search_seconds"] = label_fit_warn_search_seconds
         if self.layout is None:
             depth_kwargs: dict[str, Any] = dict(shared_kwargs)
             if self.precomputed_depth_track_specs is not None:
@@ -2638,6 +2642,7 @@ def build_request_plan_diagram(
     plan: CircularBatchRequestPlan,
     *,
     artifacts: CurrentRequestArtifacts | None = None,
+    label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> PreparedCircularBatchRequest: ...
 
 
@@ -2646,6 +2651,7 @@ def build_request_plan_diagram(
     plan: CircularRequestPlan | LinearRequestPlan,
     *,
     artifacts: CurrentRequestArtifacts | None = None,
+    label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> PreparedDiagramRequest: ...
 
 
@@ -2654,6 +2660,7 @@ def build_request_plan_diagram(
     plan: DiagramRequestPlan,
     *,
     artifacts: CurrentRequestArtifacts | None = None,
+    label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> PreparedDiagramRequest | PreparedCircularBatchRequest: ...
 
 
@@ -2661,10 +2668,20 @@ def build_request_plan_diagram(
     plan: DiagramRequestPlan,
     *,
     artifacts: CurrentRequestArtifacts | None = None,
+    label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
-    """Build a previously resolved plan without loading or planning it again."""
+    """Build a previously resolved plan without loading or planning it again.
 
-    return _build_request_plan_diagram(plan, artifacts=artifacts)
+    ``label_fit_warn_search_seconds`` bounds the label fit search of a
+    Circular figure drawn with crossing leaders (0: counts only, every row
+    ``not_computed``).
+    """
+
+    return _build_request_plan_diagram(
+        plan,
+        artifacts=artifacts,
+        label_fit_warn_search_seconds=label_fit_warn_search_seconds,
+    )
 
 
 def _build_request_plan_diagram(
@@ -2672,6 +2689,7 @@ def _build_request_plan_diagram(
     *,
     artifacts: CurrentRequestArtifacts | None,
     protein_extraction: ProteinExtractionResult | None = None,
+    label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
     """Build ``plan``; ``protein_extraction`` is one its caller already ran on it."""
 
@@ -2694,7 +2712,9 @@ def _build_request_plan_diagram(
                     mode="circular",
                     request=item_plan.request,
                     records=item_plan.records,
-                    drawing=item_plan.build(),
+                    drawing=item_plan.build(
+                        label_fit_warn_search_seconds=label_fit_warn_search_seconds
+                    ),
                     inputs=item_plan.inputs,
                     transforms=item_plan.transforms,
                     # Filled by CircularRequestPlan.__post_init__.
@@ -2721,7 +2741,7 @@ def _build_request_plan_diagram(
     linear_metadata: LinearDiagramMetadata | None = None
     if isinstance(plan, CircularRequestPlan):
         with _request_render_diagnostic_phase("drawing"):
-            drawing = plan.build()
+            drawing = plan.build(label_fit_warn_search_seconds=label_fit_warn_search_seconds)
         losat_cache_entries = _merged_losat_entries(
             current_artifacts.losat_cache_entries, plan.losat_cache_entries
         )
@@ -3140,8 +3160,14 @@ def render_request(
     *,
     artifacts: CurrentRequestArtifacts | None = None,
     include_feature_catalog: bool = False,
+    label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> RequestRenderResult | CircularBatchRenderResult:
-    """Build and save one typed request from current typed artifacts."""
+    """Build and save one typed request from current typed artifacts.
+
+    ``label_fit_warn_search_seconds`` bounds the label fit search of a
+    Circular figure drawn with crossing leaders; the Web passes 0 and computes
+    rows on demand (OD-F14).
+    """
 
     if isinstance(request, LinearDiagramRequest) and isinstance(
         request.similarity_alignment,
@@ -3152,7 +3178,11 @@ def render_request(
     plan = plan_request(request)
     batch_outputs_preflighted = isinstance(plan, CircularBatchRequestPlan)
     plan.preflight_outputs()
-    prepared = build_request_plan_diagram(plan, artifacts=artifacts)
+    prepared = build_request_plan_diagram(
+        plan,
+        artifacts=artifacts,
+        label_fit_warn_search_seconds=label_fit_warn_search_seconds,
+    )
     return render_prepared_request(
         prepared,
         batch_outputs_preflighted=batch_outputs_preflighted,

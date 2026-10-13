@@ -119,6 +119,7 @@ from gbdraw.labels.linear import (
 )
 from gbdraw.labels.fit import (
     FITS,
+    WARN_SEARCH_SECONDS,
     LabelFitReport,
     LabelFitRow,
     LabelFitRowKind,
@@ -3242,12 +3243,17 @@ def _drawing_size(drawing: Drawing) -> tuple[float, float]:
     )
 
 
-def _checked_circular_drawing(assemble: Callable[[Mapping[str, LabelFitValue]], Drawing]) -> Drawing:
+def _checked_circular_drawing(
+    assemble: Callable[[Mapping[str, LabelFitValue]], Drawing],
+    *,
+    warn_search_seconds: float,
+) -> Drawing:
     """Assemble a Circular figure and apply the label fit check to it.
 
     Overlapping labels (or radial labels without room) raise
     ``LabelsDoNotFitError``; crossing leaders or labels over the definition
-    text alone keep the drawing, warn, and attach the report and its search.
+    text alone keep the drawing, warn, and attach the report and its search
+    (rows searched for ``warn_search_seconds``).
     """
 
     started = time.monotonic()
@@ -3268,7 +3274,10 @@ def _checked_circular_drawing(assemble: Callable[[Mapping[str, LabelFitValue]], 
         )
 
     checked = check_circular_label_fit(
-        _circular_label_layouts(drawing), verify, assembly_seconds=assembly_seconds
+        _circular_label_layouts(drawing),
+        verify,
+        assembly_seconds=assembly_seconds,
+        warn_search_seconds=warn_search_seconds,
     )
     if checked is not None:
         setattr(drawing, _LABEL_FIT_ATTR, checked)
@@ -3334,6 +3343,7 @@ def build_circular_diagram(
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
+    _label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> Drawing:
     """Build a circular diagram using mode-specific typed options."""
 
@@ -3411,7 +3421,9 @@ def build_circular_diagram(
             _record_transform=_record_transform,
         )
 
-    return _checked_circular_drawing(assemble)
+    return _checked_circular_drawing(
+        assemble, warn_search_seconds=_label_fit_warn_search_seconds
+    )
 
 
 def _build_linear_diagram(
@@ -3626,6 +3638,7 @@ def build_circular_multi_diagram(
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
+    _label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> Drawing:
     """Build a circular grid using mode-specific typed options."""
 
@@ -3711,7 +3724,9 @@ def build_circular_multi_diagram(
             _record_transforms=_record_transforms,
         )
 
-    return _checked_circular_drawing(assemble)
+    return _checked_circular_drawing(
+        assemble, warn_search_seconds=_label_fit_warn_search_seconds
+    )
 
 
 __all__ = [
