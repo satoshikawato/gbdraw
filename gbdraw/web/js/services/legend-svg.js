@@ -500,9 +500,11 @@ export const legendEntryAnchor = (entryGroup) => {
 /**
  * A row of a Result's shown feature Legend group, as the Result holds it.
  * @typedef {object} ResultLegendRow
+ * @property {PythonLegendKey} key The row's key: Python's (the record a rename keeps), else an editor row's own.
  * @property {ShownLegendKey} shownKey The key the row shows.
  * @property {LegendRowName} name The row's name (`legendRowName`).
  * @property {DrawnLegendName} drawnName The name the Legend draws for it.
+ * @property {LegendSwatchIdentity} swatch The swatch it shows (`legendRowSwatch`).
  * @property {PythonLegendKey | null} recordedKey Python's key that a rename keeps as a record; null without one.
  * @property {boolean} editor A row the Legend editor added.
  * @property {boolean} pythonShown Python drew it shown: a row a rule commit retired is not.
@@ -525,8 +527,10 @@ export const resultLegendRows = (svg) => {
     const anchor = legendEntryAnchor(row);
     const recordedKey = row.getAttribute(resultBaseAttribute('data-legend-key'));
     return [{
+      key: /** @type {PythonLegendKey} */ (pythonLegendKey(row)),
       shownKey,
       name: legendRowName(row),
+      swatch: legendRowSwatch(row),
       drawnName: drawnLegendRowName(row),
       recordedKey: recordedKey === null ? null : /** @type {PythonLegendKey} */ (recordedKey),
       editor: row.getAttribute('data-legend-owner') === 'direct-editor',
@@ -546,17 +550,25 @@ export const resultLegendRows = (svg) => {
 
 /**
  * What the editor shows for a Legend row instead of its key: the row's name,
- * and the name the Legend draws for it (its name while the row is hidden).
- * @typedef {{ name: LegendRowName, drawnName: DrawnLegendName }} ShownLegendRowNames
+ * and the name the Legend draws for it (its name while the row is hidden);
+ * and what a typed name is matched with: whether the row shows, and its
+ * swatch and fill.
+ * @typedef {{ name: LegendRowName, drawnName: DrawnLegendName, shown: boolean, swatch: LegendSwatchIdentity, color: SwatchColor }} ShownLegendRowNames
  */
 
-// The names of the rows of a Result's shown feature Legend group, by the key
-// each row shows. The Legend tab, the popups, and the dialogs show a row by
-// its drawn name, never by its key (PD-OI-042 scenario revision 2).
-/** @param {SVGSVGElement | null | undefined} svg @returns {Map<string, ShownLegendRowNames>} */
+// The names of the rows of a Result's shown feature Legend group, by each
+// row's key, in legend order. The Legend tab, the popups, and the dialogs show
+// a row by its drawn name, never by its key (PD-OI-042 scenario revision 2).
+/** @param {SVGSVGElement | null | undefined} svg @returns {Map<PythonLegendKey, ShownLegendRowNames>} */
 export const shownLegendRowNames = (svg) => new Map((resultLegendRows(svg) || []).map((row) => [
-  row.shownKey,
-  { name: row.name, drawnName: row.shown && row.drawnName ? row.drawnName : /** @type {DrawnLegendName} */ (/** @type {string} */ (row.name)) }
+  row.key,
+  {
+    name: row.name,
+    drawnName: row.shown && row.drawnName ? row.drawnName : /** @type {DrawnLegendName} */ (/** @type {string} */ (row.name)),
+    shown: row.shown,
+    swatch: row.swatch,
+    color: row.color
+  }
 ]));
 
 /**

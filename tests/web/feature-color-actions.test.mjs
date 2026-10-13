@@ -884,7 +884,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       querySelectorAll: () => []
     };
   };
-  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null, legendRowIsNamed }) => {
+  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null, legendRowIsNamed,
+    legendRowName, findLegendRowNamed }) => {
     // Each derivation of the Legend row colors reads the displayed Result once.
     const derivations = { count: 0 };
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
@@ -899,7 +900,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const originalOrder = ref([...order]);
     const featureList = ref(features);
     const renameState = { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
-    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], legendRowIsNamed,
+    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], legendRowIsNamed, legendRowName, findLegendRowNamed,
       state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
@@ -951,6 +952,21 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const otherName = build(sharedRows);
   await otherName.renameActions.renameLegendEntry(0, 'Packaging');
   assert.equal(otherName.stateLegendEntries.value[0].caption, 'Packaging');
+  // PD-OI-061 scenario revision 5: a shown numbered name (`Shared (2)`) names
+  // that row, which the Legend owner finds by its drawn name; a Merge adopts
+  // the row's name, never its key (OV-640).
+  const numbered = build({
+    entries: [...sharedRows.entries, { caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }],
+    order: [...sharedRows.order, 'tRNA'],
+    features: [{ ...trna, legendCaption: 'tRNA' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'Shared [#445566]' }],
+    findLegendRowNamed: (typed) => ({ 'Shared (1)': 'Shared [#112233]', 'Shared (2)': 'Shared [#445566]' })[typed] ?? null,
+    legendRowName: (key) => (/^Shared \[/.test(key) ? 'Shared' : key)
+  });
+  await numbered.renameActions.renameLegendEntry(2, 'Shared (2)');
+  assert.deepEqual([numbered.legendRenameDialog.show, numbered.legendRenameDialog.mode, numbered.legendRenameDialog.mergeAvailable,
+    numbered.legendRenameDialog.targetColor], [true, 'target', true, '#445566'], 'a shown numbered name targets its row');
+  await numbered.renameActions.handleLegendRenameChoice('merge');
+  assert.deepEqual(numbered.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Shared', '#445566']], 'Merge adopts the name, not the key');
 
   // PV-02: a renamed renderer-generated row keeps its generated identity, so
   // Generate replays the rename.
@@ -1302,7 +1318,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     entries: [{ caption: 'Leu A', color: '#e8b441', featureIds: ['t1'] }],
     deleted: [{ caption: 'Leu B', originalCaption: 'tRNA', color: deletedColor, featureIds: ['t2'] }],
     order: ['tRNA'],
-    features: [{ ...trna, legendCaption: 'Leu A' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'Leu B' }]
+    // A feature's Legend item is its row's key: the deleted row's is `tRNA`.
+    features: [{ ...trna, legendCaption: 'Leu A' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'tRNA' }]
   });
   for (const deletedColor of ['#71ee7d', '#e8b441']) {
     const asked = ontoDeleted(deletedColor);

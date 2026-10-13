@@ -101,7 +101,8 @@ import {
  * What a rename collides with: a listed or deleted Legend row, or a color-rule
  * group that draws no row. `caption` and `color` are what a Merge adopts.
  * @typedef {object} RenameTarget
- * @property {string} caption
+ * @property {PythonLegendKey | null} key The target row's key; null for a color rule's name that no row shows.
+ * @property {string} caption The name a Merge adopts.
  * @property {string} color
  * @property {ReadonlySet<string | undefined>} types The feature types it draws.
  * @property {boolean} ruleOnly A color rule's name that no Legend row shows.
@@ -123,6 +124,8 @@ import {
  * @property {ReadDrawnTracksPort} readDrawnTracks
  * @property {LegendRowIsNamedPort} [legendRowIsNamed]
  * @property {LegendRowNamePort} [legendRowName]
+ * @property {FindLegendRowNamedPort} [findLegendRowNamed]
+ * @property {LegendEntryNamePort} [legendEntryName]
  */
 
 /**
@@ -137,6 +140,16 @@ import {
  * @typedef {(caption: string) => LegendRowName} LegendRowNamePort
  */
 
+/**
+ * The name of a row of the drawing's Legend lists (the Legend owner's `legendEntryName`).
+ * @typedef {(entry: LegendEntry) => LegendRowName} LegendEntryNamePort
+ */
+/**
+ * The key of the Legend row a typed name names (the Legend owner's `findLegendRowNamed`, PD-OI-061
+ * scenario revision 5): by the name the Legend draws for it, else by its name, the row in `color`
+ * first; null when no listed or deleted row has the name.
+ * @typedef {(typed: string, color: string) => PythonLegendKey | null} FindLegendRowNamedPort
+ */
 /**
  * The tracks of the request that drew the displayed Result (`drawnTracks`), which give a track's
  * Legend row its color (OV-484).
@@ -157,7 +170,15 @@ export const createFeatureColorActions = ({
   setDefaultColor,
   readDrawnTracks,
   legendRowIsNamed = (caption, typed) => caption === typed,
-  legendRowName = (caption) => /** @type {LegendRowName} */ (String(caption ?? ''))
+  legendRowName = (caption) => /** @type {LegendRowName} */ (String(caption ?? '')),
+  legendEntryName = (entry) => legendRowName(entry.caption),
+  // Without a Legend owner (a test of this owner), a row is named by its caption.
+  findLegendRowNamed = (typed) => {
+    const drawing = state.activeDrawing();
+    const named = [...drawing.legendEntries.value, ...drawing.deletedLegendEntries.value]
+      .find((/** @type {LegendEntry} */ entry) => String(entry.caption).toLowerCase() === typed.toLowerCase());
+    return named ? legendEntryKey(named) : null;
+  }
 }) => {
   const {
     extractedFeatures,
@@ -1092,11 +1113,12 @@ export const createFeatureColorActions = ({
     // caption only detects the conflict: the row is its Python key (an editor
     // row's own caption), which the composition root's Restore acts on.
     const group = request.joinGroup || null;
-    // A picked group's row is the row the allocation draws for it (N-06), never the row of its name.
-    const groupRowKey = group && groupLegendRowKeys(displayedLegendRowContext(state, drawing))(group);
+    // A picked group's row is the row the allocation draws for it (N-06), never the row of its name; a
+    // typed name's row is the one the Legend owner finds by its drawn name, else by its name (PD-OI-061
+    // scenario revision 5: a shown numbered name such as `CDS (2)` names that row).
+    const targetKey = group ? groupLegendRowKeys(displayedLegendRowContext(state, drawing))(group) : findLegendRowNamed(newCaption, currentColor);
     /** @param {LegendEntry[]} entries */
-    const rowOf = (entries) => (group
-      ? entries.find((entry) => legendEntryKey(entry) === groupRowKey) || null : entryByCaption(entries, newCaption));
+    const rowOf = (entries) => entries.find((entry) => legendEntryKey(entry) === targetKey) || null;
     const listedTarget = rowOf(drawing.legendEntries.value);
     const deletedTarget = listedTarget ? null : rowOf(drawing.deletedLegendEntries.value);
     const targetRow = listedTarget || deletedTarget;
@@ -1110,16 +1132,18 @@ export const createFeatureColorActions = ({
     const featureTypes = (rowFeatures) => new Set(rowFeatures.map((feature) => feature?.type));
     // The name and the color a Merge adopts, and the feature types the target
     // draws: a group's own (a picked one also when its row is listed), else
-    // the row's caption, the color it shows (OV-282: the palette's for a row
-    // the palette colors), and the types of the features that take its caption.
+    // the row's name (never its key, OV-640), the color it shows (OV-282: the
+    // palette's for a row the palette colors), and the types of the features
+    // of its row. The renamed row itself is no target.
     /** @type {RenameTarget | null} */
-    const target = targetRow && captionsMatch(targetRow.caption, oldCaption) ? null : targetRow ? {
-      caption: group ? group.name : targetRow.caption,
+    const target = targetRow && legendEntryKey(targetRow) === request.sourceKey ? null : targetRow ? {
+      key: legendEntryKey(targetRow),
+      caption: group ? group.name : legendEntryName(targetRow),
       color: group ? group.color : String((deletedTarget
         ? displayedLegendRowColors(state, drawing, readDrawnTracks()).deleted(deletedTarget) : listedRowColor(drawing, listedTarget)) || ''),
-      types: featureTypes(getFeaturesForLegendCaption(targetRow.caption)),
+      types: featureTypes(getFeaturesForLegendCaption(legendEntryKey(targetRow))),
       ruleOnly: false
-    } : targetGroup && { caption: targetGroup.name, color: targetGroup.color, types: new Set(targetGroup.types), ruleOnly: true };
+    } : targetGroup && { key: null, caption: targetGroup.name, color: targetGroup.color, types: new Set(targetGroup.types), ruleOnly: true };
     const featureOrRuleRename = features.length > 0 || getLegendRowRules(request.sourceKey).length > 0;
     // OV-62 (PD-OI-061 amended): two rows merge only when each draws features of
     // one type and the type is the same. A row without features (GC content,

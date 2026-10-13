@@ -646,6 +646,40 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
   assert.deepEqual(['Shared [#112233]', 'Shared [#445566]'].map(owner.legendRowName), ['Shared', 'Shared']);
 });
 
+// PD-OI-061 scenario revision 5: the Legend owner names each row by its key,
+// also a renamed one, and finds the row a typed name names: a drawn name
+// (a shown numbered name names that row), else a name, the row in the given
+// color first, else the first in legend order.
+test('the Legend owner finds the row a typed name names, by its key', async () => {
+  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
+  const mounted = buildSvgRoot();
+  const rule = (color) => ({ caption: `Shared [${color}]`, name: 'Shared', color, xPos: null, yPos: null, ifAbsent: true });
+  const two = { ...createEmptySvgMutationPlan(1).operationsByResult[0], legendAdds: [rule('#112233'), rule('#445566')] };
+  const legendEntries = { value: ['CDS', 'Shared [#112233]', 'Shared [#445566]'].map((caption) => ({ caption, originalCaption: caption, color: caption === 'CDS' ? '#54bcf8' : caption.slice(8, 15) })) };
+  const owner = createLegendEntryActions({
+    state: {
+      results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
+      originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
+      activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] } })
+    },
+    readShownLegendColor: (entry) => String(entry?.color || ''),
+    legendRowNames: { value: new Map() }
+  });
+  reconcileMountedResult(mounted, two);
+  owner.readLegendRowNames();
+  assert.deepEqual(['Shared (2)', 'shared (1)', 'Shared', 'SHARED', 'Nothing'].map((typed) => owner.findLegendRowNamed(typed, '#445566')),
+    ['Shared [#445566]', 'Shared [#112233]', 'Shared [#445566]', 'Shared [#445566]', null]);
+  assert.equal(owner.findLegendRowNamed('Shared', '#000000'), 'Shared [#112233]', 'no row in the color: the first in legend order');
+  // A renamed row is shown and found by its key.
+  reconcileMountedResult(mounted, { ...two, legendRenames: [{ from: 'CDS', to: 'Gamma', allowMissing: false }] });
+  legendEntries.value[0].caption = 'Gamma';
+  owner.readLegendRowNames();
+  assert.deepEqual(['CDS', 'Gamma'].map(owner.shownLegendName), ['Gamma', 'Gamma']);
+  assert.equal(owner.legendRowIsNamed('CDS', 'Gamma'), true);
+  assert.equal(owner.findLegendRowNamed('gamma', '#000000'), 'CDS');
+  assert.deepEqual(legendEntries.value.map(owner.shownLegendEntryName), ['Gamma', 'Shared (1)', 'Shared (2)']);
+});
+
 // OV-345: a reconcile says whether it changed the Result, so a display,
 // History restore, or Reset that changes nothing keeps the Result's bytes.
 test('a reconcile reports whether it changed the Result and whether the Legend rows changed', () => {

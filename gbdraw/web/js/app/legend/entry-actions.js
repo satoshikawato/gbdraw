@@ -61,7 +61,7 @@ const entriesInOrder = (entries, captions, { keepFollowed = false } = {}) => {
  * @property {import('../candidate-render.js').LegendRowColorOf} readShownLegendColor
  *   The color a listed row shows (`displayedLegendRowColors`, OV-282), read
  *   from the composition root's derivation the Legend panel shows.
- * @property {{ value: ReadonlyMap<string, import('../../services/legend-svg.js').ShownLegendRowNames> }} [legendRowNames]
+ * @property {{ value: ReadonlyMap<PythonLegendKey, import('../../services/legend-svg.js').ShownLegendRowNames> }} [legendRowNames]
  *   The root's reactive holder of the names the displayed Result shows for its rows;
  *   this owner is its one writer.
  */
@@ -98,10 +98,9 @@ export const createLegendEntryActions = ({
   /** @type {Set<string>} */
   const replayedInventoryResults = new Set();
 
-  // The names the displayed Result shows for its Legend rows, by the key each
-  // row shows: read when the rows are listed and after the executor named
-  // them. A row's key (`caption`) is never shown; every surface shows
-  // `shownLegendName` of it.
+  // The names the displayed Result shows for its Legend rows, by each row's
+  // key: read when the rows are listed and after the executor named them. A
+  // row's key is never shown; every surface shows `shownLegendName` of it.
   const readLegendRowNames = () => {
     legendRowNames.value = shownLegendRowNames(svgContainer.value?.querySelector?.('svg') || null);
   };
@@ -112,21 +111,64 @@ export const createLegendEntryActions = ({
   // Every write of a caption that was read as a row takes this name (OV-640).
   /** @param {unknown} caption @returns {LegendRowName} */
   const legendRowName = (caption) => {
-    const key = String(caption ?? '');
+    const key = /** @type {PythonLegendKey} */ (String(caption ?? ''));
     return /** @type {LegendRowName} */ (legendRowNames.value.get(key)?.name
-      ?? legendRowRules(/** @type {PythonLegendKey} */ (key), displayedLegendRowContext(state, state.activeDrawing()))[0]?.cap
+      ?? legendRowRules(key, displayedLegendRowContext(state, state.activeDrawing()))[0]?.cap
       ?? key);
   };
-  /** @param {unknown} caption The key a row shows. @returns {string} The name the Legend draws for it. */
-  const shownLegendName = (caption) => legendRowNames.value.get(String(caption ?? ''))?.drawnName ?? legendRowName(caption);
-  // Whether `typed` names the row that shows `caption`: its key, its name, or
+  /** @param {unknown} caption A row's key. @returns {string} The name the Legend draws for it. */
+  const shownLegendName = (caption) => legendRowNames.value.get(/** @type {PythonLegendKey} */ (String(caption ?? '')))?.drawnName
+    ?? legendRowName(caption);
+  // The name of a row of the drawing's lists: the displayed Result's name of
+  // its key, else its caption where a rename gave it one, else the name of
+  // its key (a deleted editor row, or a row the Result does not hold).
+  /** @param {EntryRecord} entry @returns {LegendRowName} */
+  const legendEntryName = (entry) => {
+    const key = legendEntryKey(entry);
+    const caption = legendCaption(entry);
+    return legendRowNames.value.get(key)?.name ?? (caption && caption !== key ? /** @type {LegendRowName} */ (caption) : legendRowName(key));
+  };
+  // The name the Legend tab shows for a row of the drawing's lists.
+  /** @param {EntryRecord} entry @returns {string} */
+  const shownLegendEntryName = (entry) => legendRowNames.value.get(legendEntryKey(entry))?.drawnName ?? legendEntryName(entry);
+  // Whether `typed` names the row of the key `caption`: its key, its name, or
   // its drawn name. Typing one of them into the row's name field is no rename.
   /** @param {unknown} caption @param {unknown} typed */
   const legendRowIsNamed = (caption, typed) => {
-    const key = String(caption ?? '').trim();
+    const key = /** @type {PythonLegendKey} */ (String(caption ?? '').trim());
     const text = String(typed ?? '').trim();
     const names = legendRowNames.value.get(key);
     return text === key || (Boolean(names) && (text === names?.name || text === names?.drawnName));
+  };
+  // PD-OI-061 scenario revision 5: the row a typed name names, by its key. A
+  // listed row the Legend draws whose drawn name is the text, exactly, then
+  // ignoring case (a shown numbered name such as `CDS (2)` names that row);
+  // else a listed or deleted row whose name is the text ignoring case, the one
+  // in `color` first, else the first in legend order. Null when no row has
+  // the name (a color rule's name that no row shows is the rule owner's).
+  /** @param {unknown} typed @param {unknown} color @returns {PythonLegendKey | null} */
+  const findLegendRowNamed = (typed, color) => {
+    const text = String(typed ?? '').trim();
+    if (!text) return null;
+    const lower = text.toLowerCase();
+    const drawing = state.activeDrawing();
+    /** @type {EntryRecord[]} */
+    const listed = drawing.legendEntries?.value || [];
+    /** @type {EntryRecord[]} */
+    const deleted = drawing.deletedLegendEntries?.value || [];
+    const drawn = listed.flatMap((entry) => {
+      const names = legendRowNames.value.get(legendEntryKey(entry));
+      return names?.shown ? [{ key: legendEntryKey(entry), drawnName: String(names.drawnName) }] : [];
+    });
+    const byDrawn = drawn.find((row) => row.drawnName === text) || drawn.find((row) => row.drawnName.toLowerCase() === lower);
+    if (byDrawn) return byDrawn.key;
+    const wanted = normalizedColor(color);
+    const named = [
+      ...listed.map((entry) => ({ entry, color: readShownLegendColor(/** @type {Parameters<typeof readShownLegendColor>[0]} */ (entry)) })),
+      ...deleted.map((entry) => ({ entry, color: entry.color }))
+    ].filter(({ entry }) => String(legendEntryName(entry)).toLowerCase() === lower);
+    const found = named.find((row) => normalizedColor(row.color) === wanted) || named[0];
+    return found ? legendEntryKey(found.entry) : null;
   };
 
   /** @param {(options?: { commit?: boolean }) => unknown} handler The root's refresh of the Legend geometry. */
@@ -713,6 +755,8 @@ export const createLegendEntryActions = ({
     captureResultInventory,
     deleteLegendEntry,
     extractLegendEntries,
+    findLegendRowNamed,
+    legendEntryName,
     legendRowIsNamed,
     legendRowName,
     onLegendGeometryChanged,
@@ -721,6 +765,7 @@ export const createLegendEntryActions = ({
     rememberResultInventory,
     restoreDeletedLegendEntries,
     setLegendGeometryChangedHandler,
+    shownLegendEntryName,
     shownLegendName,
     updateLegendEntryColor
   };

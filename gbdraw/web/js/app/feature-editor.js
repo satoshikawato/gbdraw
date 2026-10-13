@@ -3,7 +3,7 @@
 /** @import { PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort, ShownLegendNamePort } from './feature-editor/svg-actions.js' */
-/** @import { LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
+/** @import { FindLegendRowNamedPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
@@ -64,6 +64,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {SetDefaultColorPort} setDefaultColor
  * @property {LegendRowIsNamedPort} [legendRowIsNamed]
  * @property {LegendRowNamePort} [legendRowName]
+ * @property {FindLegendRowNamedPort} [findLegendRowNamed]
+ * @property {LegendEntryNamePort} [legendEntryName]
  * @property {ShownLegendNamePort} [shownLegendName]
  * @property {AskChoice} askChoice The root's choice dialog.
  * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there.
@@ -101,6 +103,8 @@ export const createFeatureEditor = ({
   setDefaultColor,
   legendRowIsNamed,
   legendRowName,
+  findLegendRowNamed,
+  legendEntryName,
   shownLegendName,
   askChoice,
   showNotice,
@@ -139,7 +143,9 @@ export const createFeatureEditor = ({
     setDefaultColor,
     readDrawnTracks,
     legendRowIsNamed,
-    legendRowName
+    legendRowName,
+    findLegendRowNamed,
+    legendEntryName
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature
