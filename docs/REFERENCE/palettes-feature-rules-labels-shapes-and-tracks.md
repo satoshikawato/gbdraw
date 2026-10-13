@@ -161,11 +161,32 @@ restores it. Other feature types use `other <feature type>s` for the same remain
 a **This feature only** color edit creates a specific rule: the default caption
 changes because its category now contains only the remaining members.
 
-A used specific rule whose caption equals a generated legend row (a feature
-type, an `other <feature type>s` row, or a GC content, skew, or depth row)
-keeps its color. The generated row keeps its name and the rule row gets the
-lowercase hex suffix, for example `rRNA [#ff0000]`. A rule with the same color
-as the generated row shares that row.
+Legend rows that have one name follow one rule in the CLI, the Python API, and
+the Web app:
+
+- Rows with the same name and the same swatch (fill and line) are one legend
+  row.
+- When two or more rows with the same name and different swatches are drawn,
+  every one of them is numbered in legend order, for example `Packaging (1)`
+  and `Packaging (2)`. A name drawn once has no number.
+
+The rule covers every row: specific rules that give one caption several
+colors, a used specific rule whose caption equals a generated row (a feature
+type such as `tRNA`, an `other <feature type>s` row, or a track row), and
+track and region-annotation rows with one `legend_label`. Two GC content
+tracks labelled `GC content` draw one row when their colors are equal, and
+`GC content (1)` and `GC content (2)` when they differ. Release 0.13.0 drew
+`GC content` and `GC content (2)` in both cases.
+
+The numbers belong to the drawn legend only. They follow the legend order, so
+they change when a row is added, removed, or moved, and a name left with one
+row loses its number. gbdraw does not rewrite a rule's caption: the color
+table, the Web app's rule list and popup, the downloaded color-table TSV, and
+a saved Session keep it as written, and no legend name carries a color ID.
+One compatibility reading applies when a color table or a saved Session is
+read: a caption that ends in its own rule's color ID, such as
+`Packaging [#ffe700]` on a rule colored `#ffe700`, loses that ID, also when
+you typed that name yourself.
 
 Whitelist and blacklist label filters are mutually exclusive. An ordinary
 label override cannot restore a label removed by the active filter. Exact-match

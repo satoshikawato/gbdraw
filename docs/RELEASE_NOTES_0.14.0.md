@@ -496,6 +496,12 @@ Some older figures can change:
 - Every Circular figure drawn with the web app's default **Multi-Record
   Canvas** changes: it no longer reserves an empty depth slot, and its legend
   now lists custom slot labels, skew slots, annotations, and Depth labels.
+- Legend rows that share a name are numbered by one rule. Two tracks with one
+  legend label, which 0.13.0 drew as `GC content` and `GC content (2)`, now
+  draw `GC content (1)` and `GC content (2)` when their colors differ and one
+  `GC content` row when the colors are equal. Legend row edits of a 0.13.0
+  Session stay on the rows of the same tracks; edits saved for a second row
+  that now shares the first row are not used.
 - Label, Legend, and title widths use the font's kerning, so text measures as
   browsers draw it. PNG, PDF, EPS, and PS export place circular tick labels and
   mixed italic and roman captions where browsers do. Web PDF pages are 75% of
