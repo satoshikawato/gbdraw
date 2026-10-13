@@ -5,13 +5,17 @@
       "requested": "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
       "registered": [],
       "effective": "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
-      "missing": []
+      "missing": [],
+      "custom": []
     },
     {
       "requested": "'DejaVu Serif', serif",
       "registered": [],
       "effective": "'Liberation Serif', serif",
       "missing": [
+        "DejaVu Serif"
+      ],
+      "custom": [
         "DejaVu Serif"
       ]
     },
@@ -21,7 +25,10 @@
         "DejaVu Serif"
       ],
       "effective": "'DejaVu Serif', serif",
-      "missing": []
+      "missing": [],
+      "custom": [
+        "DejaVu Serif"
+      ]
     },
     {
       "requested": "\"DejaVu Serif\", serif",
@@ -29,7 +36,10 @@
         "dejavu  serif"
       ],
       "effective": "\"DejaVu Serif\", serif",
-      "missing": []
+      "missing": [],
+      "custom": [
+        "DejaVu Serif"
+      ]
     },
     {
       "requested": "DejaVuSerif, serif",
@@ -37,13 +47,19 @@
         "DejaVu Serif"
       ],
       "effective": "DejaVuSerif, serif",
-      "missing": []
+      "missing": [],
+      "custom": [
+        "DejaVuSerif"
+      ]
     },
     {
       "requested": "'Noto Sans JP', sans-serif",
       "registered": [],
       "effective": "'Liberation Sans', sans-serif",
       "missing": [
+        "Noto Sans JP"
+      ],
+      "custom": [
         "Noto Sans JP"
       ]
     },
@@ -53,6 +69,9 @@
       "effective": "'Liberation Sans', sans-serif",
       "missing": [
         "Comic Sans MS"
+      ],
+      "custom": [
+        "Comic Sans MS"
       ]
     },
     {
@@ -61,19 +80,26 @@
       "effective": "'Liberation Sans', cursive",
       "missing": [
         "Comic Sans MS"
+      ],
+      "custom": [
+        "Comic Sans MS"
       ]
     },
     {
       "requested": "'Times New Roman', serif",
       "registered": [],
       "effective": "'Times New Roman', serif",
-      "missing": []
+      "missing": [],
+      "custom": []
     },
     {
       "requested": "Georgia",
       "registered": [],
       "effective": "'Liberation Serif', serif",
       "missing": [
+        "Georgia"
+      ],
+      "custom": [
         "Georgia"
       ]
     },
@@ -83,6 +109,9 @@
       "effective": "'Liberation Mono', monospace",
       "missing": [
         "Source Code Pro"
+      ],
+      "custom": [
+        "Source Code Pro"
       ]
     },
     {
@@ -90,6 +119,9 @@
       "registered": [],
       "effective": "'Courier New', monospace",
       "missing": [
+        "Fira Code"
+      ],
+      "custom": [
         "Fira Code"
       ]
     },
@@ -99,6 +131,9 @@
       "effective": "'Liberation Serif', serif",
       "missing": [
         "Missing Serif Display"
+      ],
+      "custom": [
+        "Missing Serif Display"
       ]
     },
     {
@@ -106,6 +141,9 @@
       "registered": [],
       "effective": "'Liberation Sans', sans-serif",
       "missing": [
+        "Missing Sans Serif"
+      ],
+      "custom": [
         "Missing Sans Serif"
       ]
     },
@@ -116,6 +154,10 @@
       "missing": [
         "Gone A",
         "Gone B"
+      ],
+      "custom": [
+        "Gone A",
+        "Gone B"
       ]
     },
     {
@@ -123,6 +165,9 @@
       "registered": [],
       "effective": "'Liberation Mono'",
       "missing": [
+        "Gone A"
+      ],
+      "custom": [
         "Gone A"
       ]
     },
@@ -134,6 +179,10 @@
       "effective": "'Font B', sans-serif",
       "missing": [
         "Font A"
+      ],
+      "custom": [
+        "Font A",
+        "Font B"
       ]
     },
     {
@@ -141,6 +190,9 @@
       "registered": [],
       "effective": "'Liberation Sans', sans-serif",
       "missing": [
+        "O\\'Brien Sans"
+      ],
+      "custom": [
         "O\\'Brien Sans"
       ]
     },
@@ -150,55 +202,68 @@
         "O'Brien Sans"
       ],
       "effective": "\"O'Brien Sans\", sans-serif",
-      "missing": []
+      "missing": [],
+      "custom": [
+        "O'Brien Sans"
+      ]
     },
     {
       "requested": "serif",
       "registered": [],
       "effective": "serif",
-      "missing": []
+      "missing": [],
+      "custom": []
     },
     {
       "requested": "monospace, serif",
       "registered": [],
       "effective": "monospace, serif",
-      "missing": []
+      "missing": [],
+      "custom": []
     },
     {
       "requested": "system-ui",
       "registered": [],
       "effective": "system-ui",
-      "missing": []
+      "missing": [],
+      "custom": []
     },
     {
       "requested": "",
       "registered": [],
       "effective": "",
-      "missing": []
+      "missing": [],
+      "custom": []
     },
     {
       "requested": " , ,",
       "registered": [],
       "effective": " , ,",
-      "missing": []
+      "missing": [],
+      "custom": []
     },
     {
       "requested": "'Liberation Serif', serif",
       "registered": [],
       "effective": "'Liberation Serif', serif",
-      "missing": []
+      "missing": [],
+      "custom": []
     },
     {
       "requested": "Courier",
       "registered": [],
       "effective": "Courier",
-      "missing": []
+      "missing": [],
+      "custom": []
     },
     {
       "requested": "'Ming Light'",
       "registered": [],
       "effective": "'Liberation Serif', serif",
       "missing": [
+        "Ming Light"
+      ],
+      "custom": [
         "Ming Light"
       ]
     },
@@ -207,6 +272,9 @@
       "registered": [],
       "effective": "'Liberation Serif', fantasy",
       "missing": [
+        "Garamond Premier"
+      ],
+      "custom": [
         "Garamond Premier"
       ]
     }

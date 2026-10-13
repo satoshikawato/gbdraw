@@ -2,7 +2,7 @@
 /** @import { LegendFontFaceTable } from '../utils/legend-font-metrics.generated.js' */
 /** @import { RegisteredLegendFace } from './legend-layout.js' */
 /** @import { FontFamilyList, FontFamilyName, GenericFontFamily } from './font-families.js' */
-import { comparableFamilyName, fontFamilyListFor, parseFontFamilyList } from './font-families.js';
+import { comparableFamilyName, parseFontFamilyList } from './font-families.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
 // The fonts registered in this page (custom-fonts D-01): the one record of
@@ -22,7 +22,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {number} weight The OS/2 weight class.
  * @property {boolean} italic
  * @property {GenericFontFamily} generic
- * @property {FontFamilyList} fontFamily The stored list for the family (`font_family_list_for`).
+ * @property {FontFamilyList} fontFamily The stored list for the family, as Python wrote it (`font_family_list_for`).
  * @property {FontMeasurementName} measurementName
  * @property {'file' | 'local'} source A loaded font file (A) or an installed font (B, Local Font Access).
  * @property {string} label The file name, or the installed face's full name.
@@ -39,10 +39,16 @@ import { diagnosticError } from '../utils/error-normalization.js';
  */
 
 /**
+ * A font source with the identity of its bytes.
+ * @typedef {WebFontSource & { identity: FontIdentity }} IdentifiedFontSource
+ */
+
+/**
  * What the Worker's `registerFonts` helper returns per font, in request order.
  * @typedef {object} RegisteredFontFacts
  * @property {FontIdentity} identity
  * @property {string} family
+ * @property {FontFamilyList} fontFamily
  * @property {number} weight
  * @property {boolean} italic
  * @property {string} generic
@@ -67,6 +73,7 @@ const isFontFacts = (value) => {
   if (!value || typeof value !== 'object') return false;
   const facts = /** @type {Record<string, unknown>} */ (value);
   return typeof facts.identity === 'string' && typeof facts.family === 'string' && facts.family.trim() !== ''
+    && typeof facts.fontFamily === 'string' && facts.fontFamily.trim() !== ''
     && Number.isInteger(facts.weight) && typeof facts.italic === 'boolean'
     && ['serif', 'sans-serif', 'monospace'].includes(String(facts.generic))
     && typeof facts.measurementName === 'string' && Boolean(facts.metrics) && typeof facts.metrics === 'object';
@@ -102,20 +109,32 @@ export const standardInstalledFaces = (faces) => {
 };
 
 /**
- * Register font files with Python and return their entries, in source order.
- * Identical bytes are registered once.
+ * The sources with the identities of their bytes, each identity once, in
+ * source order.
  * @param {readonly WebFontSource[]} sources
+ * @returns {Promise<IdentifiedFontSource[]>}
+ */
+export const identifyWebFontSources = async (sources) => {
+  /** @type {Map<FontIdentity, IdentifiedFontSource>} */
+  const byIdentity = new Map();
+  for (const source of sources) {
+    const identity = await fontIdentityOf(source.bytes);
+    if (!byIdentity.has(identity)) byIdentity.set(identity, { ...source, identity });
+  }
+  return [...byIdentity.values()];
+};
+
+/**
+ * Register font files with Python and return their entries, in source order.
+ * The Worker request carries the store's bytes: `postMessage` makes the one
+ * copy the Worker needs.
+ * @param {readonly IdentifiedFontSource[]} sources Each identity once.
  * @param {RegisterFontsInWorker} registerInWorker
  * @returns {Promise<WebFontEntry[]>}
  */
 export const registerWebFonts = async (sources, registerInWorker) => {
-  /** @type {Map<FontIdentity, WebFontSource>} */
-  const byIdentity = new Map();
-  for (const source of sources) {
-    const identity = await fontIdentityOf(source.bytes);
-    if (!byIdentity.has(identity)) byIdentity.set(identity, source);
-  }
-  const requested = Array.from(byIdentity, ([identity, source]) => ({ identity, label: source.label, bytes: source.bytes.slice(0) }));
+  if (sources.length === 0) return [];
+  const requested = sources.map(({ identity, label, bytes }) => ({ identity, label, bytes }));
   /** @type {unknown} */
   const reply = await registerInWorker(requested);
   /** @type {unknown[]} */
@@ -127,14 +146,14 @@ export const registerWebFonts = async (sources, registerInWorker) => {
     if (!isFontFacts(fact) || fact.identity !== requested[index].identity) {
       throw diagnosticError('RESULT_INVALID', { field: 'font_family' }, { stage: 'result-admission', operation: 'registerFonts' });
     }
-    const source = /** @type {WebFontSource} */ (byIdentity.get(fact.identity));
+    const source = sources[index];
     return Object.freeze({
       identity: fact.identity,
       family: fact.family,
       weight: fact.weight,
       italic: fact.italic,
       generic: fact.generic,
-      fontFamily: fontFamilyListFor(fact.family, fact.generic),
+      fontFamily: fact.fontFamily,
       measurementName: fact.measurementName,
       source: source.source,
       label: source.label,
@@ -142,6 +161,77 @@ export const registerWebFonts = async (sources, registerInWorker) => {
       metrics: fact.metrics
     });
   });
+};
+
+/**
+ * The browser's check of each font before Python registers it: a FontFace
+ * per identity, loaded under a placeholder family until Python names it.
+ * @param {readonly IdentifiedFontSource[]} sources
+ * @param {typeof FontFace} FontFaceClass
+ * @returns {Promise<Map<FontIdentity, FontFace>>}
+ */
+const loadDocumentFaces = async (sources, FontFaceClass) => {
+  /** @type {Map<FontIdentity, FontFace>} */
+  const faces = new Map();
+  for (const source of sources) {
+    // FontFace copies the bytes it is given.
+    const face = new FontFaceClass(`gbdraw-font-${source.identity}`, source.bytes);
+    try {
+      await face.load();
+    } catch (_error) {
+      throw diagnosticError('INPUT_INVALID', { field: 'font_family', reason: 'FONT_FILE' }, { stage: 'font-validation', operation: 'registerFonts' });
+    }
+    faces.set(source.identity, face);
+  }
+  return faces;
+};
+
+/**
+ * The result of loading font sources into the page.
+ * @typedef {object} LoadedWebFonts
+ * @property {WebFontEntry[]} added The entries registered by this load.
+ * @property {WebFontEntry[]} chosen The entry of each source's identity, in source order (stored or added).
+ * @property {WebFontEntry[]} entries The page's fonts after the load.
+ */
+
+/**
+ * Load font sources into the page: the browser checks each new font first
+ * (FontFace), then Python registers it, then the preview gets its face, so
+ * the store, Python, and the preview never disagree (OV-687). A font already
+ * in the store (by the SHA-256 of its bytes) is not registered or added again.
+ * @param {readonly WebFontSource[]} sources
+ * @param {object} options
+ * @param {readonly WebFontEntry[]} options.known The page's fonts.
+ * @param {RegisterFontsInWorker} options.registerInWorker
+ * @param {{ add: (face: FontFace) => unknown } | null} [options.fontSet] The document's fonts.
+ * @param {typeof FontFace | null} [options.FontFaceClass]
+ * @returns {Promise<LoadedWebFonts>}
+ */
+export const loadWebFonts = async (sources, {
+  known,
+  registerInWorker,
+  fontSet = globalThis.document?.fonts ?? null,
+  FontFaceClass = typeof FontFace === 'function' ? FontFace : null
+}) => {
+  const identified = await identifyWebFontSources(sources);
+  const stored = new Map(known.map((entry) => [entry.identity, entry]));
+  const fresh = identified.filter((source) => !stored.has(source.identity));
+  const faces = fontSet && FontFaceClass ? await loadDocumentFaces(fresh, FontFaceClass) : null;
+  const added = await registerWebFonts(fresh, registerInWorker);
+  added.forEach((entry) => {
+    const face = faces?.get(entry.identity);
+    if (!face || !fontSet) return;
+    face.family = entry.family;
+    face.weight = String(entry.weight);
+    face.style = entry.italic ? 'italic' : 'normal';
+    fontSet.add(face);
+  });
+  added.forEach((entry) => stored.set(entry.identity, entry));
+  return {
+    added,
+    chosen: identified.map((source) => /** @type {WebFontEntry} */ (stored.get(source.identity))),
+    entries: mergeWebFonts(known, added)
+  };
 };
 
 /**
@@ -194,22 +284,4 @@ export const registeredLegendFaces = (entries) => entries.map((entry) => ({
 export const webFontIdentitiesFor = (entries, fontFamily) => {
   const named = new Set(parseFontFamilyList(fontFamily).map(comparableFamilyName));
   return entries.filter((entry) => named.has(comparableFamilyName(entry.family))).map((entry) => entry.identity);
-};
-
-/**
- * Make each entry drawable in the inline preview, which uses the document's fonts.
- * @param {readonly WebFontEntry[]} entries
- * @param {FontFaceSet | null | undefined} [fontSet]
- * @returns {Promise<void>}
- */
-export const addWebFontsToDocument = async (entries, fontSet = globalThis.document?.fonts) => {
-  if (!fontSet || typeof FontFace !== 'function') return;
-  for (const entry of entries) {
-    const face = new FontFace(entry.family, entry.bytes.slice(0), {
-      weight: String(entry.weight),
-      style: entry.italic ? 'italic' : 'normal'
-    });
-    await face.load();
-    fontSet.add(face);
-  }
 };

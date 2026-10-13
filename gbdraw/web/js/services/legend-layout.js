@@ -211,8 +211,8 @@ const normalFace = (faces) => {
 
 /**
  * The face Python measures a font family with for the default weight and style
- * (`resolve_font_face` in a browser: bundled aliases, then the fonts registered
- * in the page; no fontconfig): the first family of the list that resolves,
+ * (`resolve_font_face` in a browser: the fonts registered in the page, then
+ * bundled aliases; no fontconfig): the first family of the list that resolves,
  * else Liberation Sans.
  * @param {LegendFontMetrics} metrics
  * @param {string} fontFamily A CSS-style list ("'Liberation Sans', Arial, sans-serif").
@@ -225,15 +225,12 @@ export const resolveLegendFontFace = (metrics, fontFamily) => {
     return metrics.bundledFaces.includes(stem) ? stem : null;
   };
   for (const family of parseFontFamilyList(fontFamily)) {
+    // A family loaded in the page wins over the bundled font of the same alias name (OV-685).
+    const registered = isGenericFamily(family) ? undefined : normalFace(metrics.registeredFamilies.get(comparableFamilyName(family)) || []);
+    if (registered) return registered.measurementName;
     const prefix = bundledFacePrefix(family);
-    if (prefix) {
-      const face = regular(prefix);
-      if (face) return face;
-      continue;
-    }
-    if (isGenericFamily(family)) continue;
-    const face = normalFace(metrics.registeredFamilies.get(comparableFamilyName(family)) || []);
-    if (face) return face.measurementName;
+    const face = prefix ? regular(prefix) : null;
+    if (face) return face;
   }
   return regular(FALLBACK_FACE_PREFIX) || metrics.bundledFaces[0];
 };

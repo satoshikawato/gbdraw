@@ -47,19 +47,22 @@ const cssFamilyToken = (family) => {
 };
 
 /**
- * Python's `font_family_list_for`: the stored list for one family.
- * @param {FontFamilyName} family
- * @param {GenericFontFamily} generic
- * @returns {FontFamilyList}
- */
-export const fontFamilyListFor = (family, generic) => `${cssFamilyToken(family)}, ${cssFamilyToken(generic)}`;
-
-/**
  * The bundled face prefix a family name is an alias of ("LiberationSerif"), or null.
  * @param {string} family
  * @returns {string | null}
  */
 export const bundledFacePrefix = (family) => FONT_FAMILY_RULES.bundledFamilyAliases[comparableFamilyName(family)] ?? null;
+
+/**
+ * Python's `custom_font_families`: the named families of a list that gbdraw
+ * does not bundle. A Session stores only their names (D-02), so the note under
+ * Font and the Save Session notice name them. The one rule of "custom font".
+ * @param {unknown} fontFamily
+ * @returns {readonly FontFamilyName[]}
+ */
+export const customFontFamilies = (fontFamily) => Object.freeze(
+  parseFontFamilyList(fontFamily).filter((family) => !isGenericFamily(family) && bundledFacePrefix(family) === null)
+);
 
 /** The bundled face prefix of a list that resolves to nothing. */
 export const FALLBACK_FACE_PREFIX = FONT_FAMILY_RULES.fallbackFace;

@@ -4541,28 +4541,15 @@
                                 <span class="input-label text-[10px] mb-1">Font</span>
                                 <select v-model="fontSettings.selectedChoice.value" class="form-select form-input-compact" aria-label="Font" data-font-select
                                     :disabled="!semanticMutationAvailable || fontSettings.loading.value"
-                                    @change="$event.target.value === 'load-file' ? ($refs.fontFileInput.click(), $event.target.value = fontSettings.selectedChoice.value)
-                                        : $event.target.value === 'installed' ? (fontSettings.openInstalledFonts(), $event.target.value = fontSettings.selectedChoice.value) : null">
+                                    @change="$event.target.value === 'load-file' ? ($event.target.value = fontSettings.selectedChoice.value, fontSettings.loadFontFile())
+                                        : $event.target.value === 'installed' ? ($event.target.value = fontSettings.selectedChoice.value, fontSettings.openInstalledFonts()) : null">
                                     <option v-for="choice in fontSettings.choices.value" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
                                 </select>
                             </label>
-                            <input ref="fontFileInput" type="file" accept=".ttf,.otf,font/ttf,font/otf" class="hidden" aria-label="Load font file" data-history-managed data-font-file-input @change="fontSettings.loadFontFiles($event)">
                             <p v-if="!fontSettings.localFontsSupported" class="text-[10px] text-slate-500" data-font-installed-unavailable>Installed fonts can be chosen in Chrome and Edge. Use Load font file in this browser.</p>
                             <p v-if="fontSettings.loading.value" class="text-[10px] text-slate-500" role="status">Loading the font…</p>
                             <p v-if="fontSettings.loadError.value" class="text-[10px] text-red-600" role="alert" data-font-load-error>{{ fontSettings.loadError.value }}</p>
                             <p v-if="fontSettings.customFontSelected.value" class="text-[10px] text-amber-700" data-font-custom-note><i class="ph ph-warning" aria-hidden="true"></i> This font is not part of gbdraw. A saved Session keeps only its name, not the font file: to open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.</p>
-                            <div v-if="fontSettings.installedPicker.open" class="border border-slate-200 rounded p-2 space-y-2" role="dialog" aria-label="Choose installed font" data-font-installed-picker>
-                                <p v-if="fontSettings.installedPicker.error" class="text-[10px] text-red-600" role="alert">{{ fontSettings.installedPicker.error }}</p>
-                                <template v-else>
-                                    <input type="search" v-model="fontSettings.installedPicker.query" class="form-input form-input-compact" aria-label="Search installed fonts" placeholder="Search installed fonts" data-history-ignore>
-                                    <ul class="max-h-48 overflow-y-auto text-xs" aria-label="Installed font families">
-                                        <li v-for="entry in fontSettings.filteredInstalledFamilies.value" :key="entry.family">
-                                            <button type="button" class="w-full text-left px-1 py-0.5 hover:bg-slate-100" :style="{ fontFamily: JSON.stringify(entry.family) }" data-history-managed @click="fontSettings.chooseInstalledFamily(entry.family)">{{ entry.family }} <span class="text-slate-400">({{ entry.faces.length }})</span></button>
-                                        </li>
-                                    </ul>
-                                </template>
-                                <button type="button" class="btn btn-secondary btn-sm" data-history-ignore @click="fontSettings.closeInstalledFonts()">Cancel</button>
-                            </div>
                         </div>
                     </details>
                 </div>
@@ -8561,6 +8548,27 @@
                     <i class="ph ph-push-pin" aria-hidden="true"></i>
                     <span>Keep current layout</span>
                 </button>
+            </div>
+        </choice-dialog>
+        <!-- The installed-font picker (Local Font Access): Choose installed font… in Font, and Use installed font… of the Session font question. -->
+        <choice-dialog v-if="fontSettings.installedPicker.open" labelledby="installed-font-picker-title"
+             data-font-installed-picker
+             @cancel="fontSettings.closeInstalledFonts()" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="installed-font-picker-title" class="text-base font-bold text-slate-800">Choose installed font</h2>
+            <div class="mt-2 space-y-2">
+                <p v-if="fontSettings.installedPicker.error" class="text-sm text-red-600" role="alert">{{ fontSettings.installedPicker.error }}</p>
+                <template v-else>
+                    <input type="search" v-model="fontSettings.installedPicker.query" class="form-input form-input-compact" aria-label="Search installed fonts" placeholder="Search installed fonts" data-history-ignore>
+                    <ul class="max-h-64 overflow-y-auto text-xs" aria-label="Installed font families">
+                        <li v-for="entry in fontSettings.filteredInstalledFamilies.value" :key="entry.family">
+                            <button type="button" class="w-full text-left px-1 py-0.5 hover:bg-slate-100" :style="{ fontFamily: JSON.stringify(entry.family) }" data-history-managed @click="fontSettings.chooseInstalledFamily(entry.family)">{{ entry.family }} <span class="text-slate-400">({{ entry.faces.length }})</span></button>
+                        </li>
+                    </ul>
+                </template>
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button type="button" class="btn btn-secondary btn-sm" data-history-ignore @click="fontSettings.closeInstalledFonts()">Cancel</button>
             </div>
         </choice-dialog>
         <!-- The notice banner's live region: always rendered, so a screen reader announces each new notice. -->

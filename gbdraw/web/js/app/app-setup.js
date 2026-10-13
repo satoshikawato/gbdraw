@@ -119,6 +119,8 @@ import {
   setDiagramWorkerFontSource
 } from '../services/diagram-generation.js';
 import { createFontSettings } from './font-settings.js';
+import { customFontSaveWarnings } from '../services/session-fonts.js';
+import { SLICE_MODES } from '../services/mode-scoped-migration.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -420,8 +422,6 @@ export const createAppSetup = () => {
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
     payload
   ));
-  // A new diagram Worker registers the page's fonts, and a Generate names those it uses.
-  setDiagramWorkerFontSource(() => state.loadedFonts.value);
   setMainSessionComparisonFrameConverter((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.CONVERT_MAIN_SESSION_COMPARISON_FRAME,
     payload
@@ -1655,20 +1655,30 @@ export const createAppSetup = () => {
   }));
   // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
-  // The Font section: the drawing's text font and the fonts loaded in this page.
-  const fontSettings = createFontSettings({
-    state,
-    runUndoable: history.runUndoable,
-    registerFontsInWorker: async (fonts) => (await runDiagramHelperOperation(
-      DIAGRAM_HELPER_OPERATIONS.REGISTER_FONTS, { fonts }
-    )).result
-  });
   // Confirmations ask with the app's choice dialog, and an
   // operation's outcome shows in the notice banner (no native confirm or alert).
   const choicePrompt = createChoicePrompt({ reactive });
   const noticeBanner = createNoticeBanner({ reactive });
   const askChoice = choicePrompt.ask;
   const showNotice = noticeBanner.show;
+  // The Font section: the drawing's text font and the fonts loaded in this page.
+  const fontSettings = createFontSettings({
+    state,
+    runUndoable: history.runUndoable,
+    registerFontsInWorker: async (fonts) => (await runDiagramHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.REGISTER_FONTS, { fonts }
+    )).result,
+    askChoice
+  });
+  // A new diagram Worker registers the page's fonts, and a Generate names
+  // those it uses; a font the new Worker could not register again is named (OV-686).
+  setDiagramWorkerFontSource({
+    readFonts: () => state.loadedFonts.value,
+    onFontsLost: (lost) => showNotice({
+      text: 'Fonts loaded in this page could not be prepared again for drawing. Load them again in Font, or choose another font.',
+      items: lost.map((font) => font.label)
+    })
+  });
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor,
@@ -2000,7 +2010,7 @@ export const createAppSetup = () => {
     disposePanZoom();
     setUnmanagedConfigOverrideValidator(null);
     setMainSessionComparisonFrameConverter(null);
-    setDiagramWorkerFontSource(() => []);
+    setDiagramWorkerFontSource(null);
     disposeSessionOperations();
     disposeDiagramGenerationWorker();
   });
@@ -3476,6 +3486,9 @@ export const createAppSetup = () => {
   /** @param {SessionFileInput} event */
   const loadSessionFromFile = (event) => importSessionFromFile(event, {
     availability: sessionSaveLoadAvailability,
+    // Before the Session replaces the current one: a font it names that this
+    // page cannot draw asks first (receipt 〔読み込むとき〕); Cancel loads nothing.
+    confirmSessionFonts: fontSettings.confirmSessionFonts,
     transformLegacyResultSvg,
     beforeImport: async () => {
       await nextTick();
@@ -5653,7 +5666,11 @@ export const createAppSetup = () => {
     // The notice names the file the download started.
     onSaved: (/** @type {{ filename: string }} */ { filename }) => {
       history.markSavePoint();
-      showNotice({ text: `Session saved: ${filename}. Find it in your browser's downloads.` });
+      // D-02: a font gbdraw does not bundle is saved by name only (receipt 〔警告〕).
+      showNotice({
+        text: `Session saved: ${filename}. Find it in your browser's downloads.`,
+        items: customFontSaveWarnings(SLICE_MODES.map((drawingMode) => state.drawings[drawingMode].adv.font_family))
+      });
     }
   });
 

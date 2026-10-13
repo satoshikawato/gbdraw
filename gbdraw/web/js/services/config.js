@@ -5377,10 +5377,17 @@ const exportSessionDocument = async (
 };
 
 /**
+ * Asks, before a Session replaces the current one, about the fonts its
+ * drawings name (each drawing's `adv.font_family`); false loads nothing.
+ * @typedef {(fontFamilies: readonly unknown[]) => Promise<boolean>} SessionFontConfirmation
+ */
+
+/**
  * @param {{ target: { files: ArrayLike<File>, value?: string } }} e
  * @param {Record<string, any>} [options] The options of `importSession` with
  * `isCurrent` and `signal`; `transformLegacyResultSvg` is the composition
- * root's `LegacyResultSvgTransform` port.
+ * root's `LegacyResultSvgTransform` port, and `confirmSessionFonts` its
+ * `SessionFontConfirmation` port.
  */
 const importSessionDocument = async (e, options = {}) => {
   const file = e.target.files[0];
@@ -5867,6 +5874,13 @@ const importSessionDocument = async (e, options = {}) => {
       }
     }
     recordSessionLifecycleEvent('session-candidate-prepared');
+    // Custom fonts (receipt 〔読み込むとき〕): a font either drawing names that
+    // this page cannot draw asks before anything is replaced; Cancel loads nothing.
+    /** @type {SessionFontConfirmation | undefined} */
+    const confirmSessionFonts = options.confirmSessionFonts;
+    if (confirmSessionFonts && !await confirmSessionFonts(SLICE_MODES.map((mode) => modeConfigs[mode]?.adv?.font_family))) {
+      return { status: 'canceled' };
+    }
     // The admitted candidate is still private. Let the browser handle input
     // after SVG sanitation, before the one atomic live-state transaction.
     await new Promise((resolve) => setTimeout(resolve, 0));

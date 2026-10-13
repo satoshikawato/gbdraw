@@ -413,21 +413,16 @@ await test('a request whose Circular slot objects name a renderer by alias loads
 
 // Before the Font setting, a Web Session kept the diagram font as a preserved
 // override (PD-OI-009) in its draft and its request. Load moves it into the
-// setting, so no preserved override names a path the GUI manages.
-await test('a Session 44 that preserved objects.text.font_family loads it into the Font setting', async () => {
-  const session = JSON.parse(gunzipSync(await readFile(path.join(
-    root, 'tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'
-  ))));
-  const font = "'DejaVu Serif', serif";
-  session.config.unmanagedConfigOverrides = { 'objects.text.font_family': font };
-  session.renderRequest.diagramOptions.configOverrides = {
-    ...session.renderRequest.diagramOptions.configOverrides, 'objects.text.font_family': font
-  };
-  const result = await load(Buffer.from(JSON.stringify(session)));
-  assert.equal(result.status, 'ok', JSON.stringify(result.error));
-  assert.equal(state.drawings.circular.adv.font_family, font);
-  assert.deepEqual({ ...state.drawings.circular.unmanagedConfigOverrides }, {});
-});
+// setting, so no preserved override names a path the GUI manages. The
+// fixtures were written by first-parent main (font-family-preserved.provenance.json).
+for (const [version, file] of [[44, 'font-family-preserved.v44.gbdraw-session.json.gz'], [46, 'font-family-preserved.v46.gbdraw-session.json.gz']]) {
+  await test(`a Session ${version} of main that preserved objects.text.font_family loads it into the Font setting`, async () => {
+    const result = await load(gunzipSync(await readFile(path.join(root, 'tests/fixtures/sessions', file))));
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    assert.equal(state.drawings.circular.adv.font_family, "'DejaVu Serif', serif");
+    assert.deepEqual({ ...state.drawings.circular.unmanagedConfigOverrides }, {});
+  });
+}
 
 // A Session 27 to 30 has no request, so Load records the track settings its
 // Result was drawn with; a Session with a request records none.

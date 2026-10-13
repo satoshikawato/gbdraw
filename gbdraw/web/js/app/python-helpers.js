@@ -1679,23 +1679,34 @@ def register_web_fonts_json(fonts_json="[]"):
     """Register font files written into the Worker's file system (custom fonts, PR-2).
 
     Each entry is {identity, path}; the reply lists, in order, what Python read
-    from each file and the face's metrics table for the Web Legend layout.
+    from each file, the stored font-family list of its family
+    (font_family_list_for), and the face's metrics table for the Web Legend
+    layout. A call registers all of its files or none of them.
     """
     try:
-        from gbdraw.core.fonts import register_font_file
+        from gbdraw.core.fonts import font_family_list_for, register_font_file, unregister_font_file
         from gbdraw.core.text import font_metrics_table
         registered = []
-        for entry in json.loads(str(fonts_json)):
-            font = register_font_file(str(entry["path"]))
-            registered.append({
-                "identity": str(entry["identity"]),
-                "family": font.family,
-                "weight": font.weight,
-                "italic": font.italic,
-                "generic": font.generic,
-                "measurementName": font.face.measurement_name,
-                "metrics": font_metrics_table(font.face),
-            })
+        paths = []
+        try:
+            for entry in json.loads(str(fonts_json)):
+                path = str(entry["path"])
+                font = register_font_file(path)
+                paths.append(path)
+                registered.append({
+                    "identity": str(entry["identity"]),
+                    "family": font.family,
+                    "fontFamily": font_family_list_for(font.family, font.generic),
+                    "weight": font.weight,
+                    "italic": font.italic,
+                    "generic": font.generic,
+                    "measurementName": font.face.measurement_name,
+                    "metrics": font_metrics_table(font.face),
+                })
+        except Exception:
+            for path in paths:
+                unregister_font_file(path)
+            raise
         return json.dumps({"fonts": registered})
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='registerFonts', stage="helper")})

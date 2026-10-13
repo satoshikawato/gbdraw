@@ -300,20 +300,41 @@ const resourceTransport = createDiagramResourceTransport();
 /** @type {ReadonlySet<string>} */
 const diagramHelperOperationNames = new Set(DIAGRAM_HELPER_OPERATION_NAMES);
 
-/** @type {() => readonly WebFontEntry[]} */
-let readWorkerFonts = () => [];
+/**
+ * A font the replay into a new Worker could not register (OV-686).
+ * @typedef {{ identity: string, label: string }} LostWorkerFont
+ */
+
+/**
+ * Where the Worker's fonts come from: the page's font store, and who is told
+ * of a font a new Worker could not register again.
+ * @typedef {object} DiagramWorkerFontSource
+ * @property {() => readonly WebFontEntry[]} readFonts
+ * @property {(lost: readonly LostWorkerFont[]) => void} onFontsLost
+ */
+
+/** @type {DiagramWorkerFontSource} */
+const NO_FONT_SOURCE = Object.freeze({ readFonts: () => [], onFontsLost: () => {} });
+/** @type {DiagramWorkerFontSource} */
+let workerFontSource = NO_FONT_SOURCE;
 
 /**
  * Name the fonts registered in the page (the font store's), so a new Worker
  * registers them all at start and a Generate names those its request uses.
- * @param {() => readonly WebFontEntry[]} readFonts
+ * @param {DiagramWorkerFontSource | null} source Null when the app unmounts.
  */
-export const setDiagramWorkerFontSource = (readFonts) => {
-  readWorkerFonts = readFonts;
+export const setDiagramWorkerFontSource = (source) => {
+  workerFontSource = source || NO_FONT_SOURCE;
 };
 
+// The store's bytes: postMessage makes the one copy the Worker needs.
 /** @param {readonly WebFontEntry[]} fonts */
-const workerFontFiles = (fonts) => fonts.map((font) => ({ identity: font.identity, label: font.label, bytes: font.bytes.slice(0) }));
+const workerFontFiles = (fonts) => fonts.map((font) => ({ identity: font.identity, label: font.label, bytes: font.bytes }));
+
+/** @param {unknown} lost @returns {LostWorkerFont[]} */
+const lostWorkerFonts = (lost) => (Array.isArray(lost) ? lost : []).map((font) => ({
+  identity: String(font?.identity || ''), label: String(font?.label || '')
+}));
 
 /**
  * The page's fonts a canonical request's text font names.
@@ -322,7 +343,7 @@ const workerFontFiles = (fonts) => fonts.map((font) => ({ identity: font.identit
 const requestFontIdentities = (request) => {
   const options = /** @type {{ diagramOptions?: { configOverrides?: Record<string, unknown>, config?: { objects?: { text?: { font_family?: unknown } } } } } | null} */ (request)?.diagramOptions;
   const fontFamily = options?.configOverrides?.['objects.text.font_family'] ?? options?.config?.objects?.text?.font_family;
-  return fontFamily ? webFontIdentitiesFor(readWorkerFonts(), fontFamily) : [];
+  return fontFamily ? webFontIdentitiesFor(workerFontSource.readFonts(), fontFamily) : [];
 };
 
 /** @param {string} id */
@@ -330,7 +351,7 @@ const buildInitPayload = (id) => {
   return {
     type: 'init',
     id,
-    fonts: workerFontFiles(readWorkerFonts()),
+    fonts: workerFontFiles(workerFontSource.readFonts()),
     ...buildPyodideAssetManifest()
   };
 };
@@ -457,6 +478,8 @@ const ensureWorkerInitialized = (onStep = null) => {
         return;
       }
       workerInitialized = true;
+      const lost = lostWorkerFonts(data.lostFonts);
+      if (lost.length > 0) workerFontSource.onFontsLost(lost);
       resolveInit(currentWorker);
       return;
     }

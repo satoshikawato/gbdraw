@@ -6,9 +6,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { fontFamilyListFor, resolveWebFontFamily } from '../../gbdraw/web/js/services/font-families.js';
+import { customFontFamilies, resolveWebFontFamily } from '../../gbdraw/web/js/services/font-families.js';
 import {
   fontIdentityOf,
+  identifyWebFontSources,
+  loadWebFonts,
   mergeWebFonts,
   registerWebFonts,
   registeredLegendFaces,
@@ -37,9 +39,13 @@ test('the port resolves every Python vector exactly', () => {
   });
 });
 
-test('a stored list quotes the family as Python does', () => {
-  assert.equal(fontFamilyListFor('DejaVu Serif', 'serif'), "'DejaVu Serif', serif");
-  assert.equal(fontFamilyListFor("O'Brien Sans", 'sans-serif'), "\"O'Brien Sans\", sans-serif");
+// R3 (b): one rule says which fonts a Session cannot carry, Python's
+// `custom_font_families`, for the note under Font and the Save notice.
+test('the port finds the families gbdraw does not bundle as Python does', () => {
+  vectors.vectors.forEach((vector, index) => {
+    assert.ok(Array.isArray(vector.custom), `vector ${index} has Python's custom families`);
+    assert.deepEqual([...customFontFamilies(vector.requested)], vector.custom, `vector ${index}: ${vector.requested}`);
+  });
 });
 
 const bytesOf = (text) => new TextEncoder().encode(text).buffer;
@@ -48,6 +54,7 @@ const SERIF_TABLE = LEGEND_FONT_METRICS.faces['LiberationSerif-Regular'];
 const fakeWorker = (weightOf = () => 400) => async (fonts) => fonts.map((font, index) => ({
   identity: font.identity,
   family: 'Gbdraw Test Serif',
+  fontFamily: "'Gbdraw Test Serif', serif",
   weight: weightOf(index),
   italic: false,
   generic: 'serif',
@@ -61,7 +68,7 @@ test('the store keys fonts by the SHA-256 of their bytes and registers identical
   assert.match(identity, /^[0-9a-f]{64}$/);
   let requested = 0;
   const entries = await registerWebFonts(
-    [{ bytes, source: 'file', label: 'a.ttf' }, { bytes: bytesOf('font bytes'), source: 'file', label: 'b.ttf' }],
+    await identifyWebFontSources([{ bytes, source: 'file', label: 'a.ttf' }, { bytes: bytesOf('font bytes'), source: 'file', label: 'b.ttf' }]),
     async (fonts) => { requested = fonts.length; return fakeWorker()(fonts); }
   );
   assert.equal(requested, 1);
@@ -77,14 +84,93 @@ test('the store keys fonts by the SHA-256 of their bytes and registers identical
 
 test('a malformed Worker reply is refused', async () => {
   await assert.rejects(
-    registerWebFonts([{ bytes: bytesOf('x'), source: 'file', label: 'x.ttf' }], async () => [{ identity: 'other' }]),
+    registerWebFonts(await identifyWebFontSources([{ bytes: bytesOf('x'), source: 'file', label: 'x.ttf' }]), async () => [{ identity: 'other' }]),
     (error) => error.code === 'RESULT_INVALID'
   );
 });
 
+// R3 (a): the stored list of a family is the one Python wrote
+// (`font_family_list_for`), not a JS copy of that rule.
+test('an entry keeps the font-family list of the Python reply, and a reply without one is refused', async () => {
+  const sources = await identifyWebFontSources([{ bytes: bytesOf('python list'), source: 'file', label: 'p.ttf' }]);
+  const [entry] = await registerWebFonts(sources, async (fonts) => (await fakeWorker()(fonts))
+    .map((fact) => ({ ...fact, fontFamily: '"Gbdraw Test Serif", serif' })));
+  assert.equal(entry.fontFamily, '"Gbdraw Test Serif", serif');
+  await assert.rejects(
+    registerWebFonts(sources, async (fonts) => (await fakeWorker()(fonts)).map(({ fontFamily: _list, ...fact }) => fact)),
+    (error) => error.code === 'RESULT_INVALID'
+  );
+});
+
+// A FontFace stand-in: `load()` rejects bytes that start with "bad".
+class FakeFontFace {
+  constructor(family, bytes, descriptors = {}) {
+    this.family = family;
+    this.bytes = bytes;
+    this.weight = descriptors.weight || 'normal';
+    this.style = descriptors.style || 'normal';
+  }
+
+  async load() {
+    if (new TextDecoder().decode(this.bytes).startsWith('bad')) throw new Error('rejected by the browser');
+    return this;
+  }
+}
+const fakeFontSet = () => ({ faces: [], add(face) { this.faces.push(face); } });
+
+// R4: a font already in the store is not read, sent, or added again; the
+// Worker gets the store's bytes (cloned once by postMessage, not sliced first).
+test('loading a font already in the store registers nothing and selects the stored entry', async () => {
+  const fontSet = fakeFontSet();
+  /** @type {unknown[][]} */
+  const calls = [];
+  const registerInWorker = async (fonts) => { calls.push(fonts); return fakeWorker()(fonts); };
+  const bytes = bytesOf('one font');
+  const first = await loadWebFonts([{ bytes, source: 'file', label: 'one.ttf' }], {
+    known: [], registerInWorker, fontSet, FontFaceClass: FakeFontFace
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0].bytes, bytes, 'the Worker request carries the store bytes, not a copy');
+  assert.equal(first.chosen[0].bytes, bytes);
+  assert.deepEqual(fontSet.faces.map((face) => [face.family, face.weight, face.style]), [['Gbdraw Test Serif', '400', 'normal']]);
+  const again = await loadWebFonts([{ bytes: bytesOf('one font'), source: 'file', label: 'copy.ttf' }], {
+    known: first.entries, registerInWorker, fontSet, FontFaceClass: FakeFontFace
+  });
+  assert.equal(calls.length, 1, 'no second registration');
+  assert.equal(fontSet.faces.length, 1, 'one FontFace per identity');
+  assert.deepEqual(again.added, []);
+  assert.equal(again.chosen[0], first.chosen[0]);
+  assert.deepEqual(again.entries, first.entries);
+});
+
+// R7 (OV-687): the browser checks the font before Python registers it, so the
+// store, Python, and the preview never disagree about a rejected font.
+test('a font the browser rejects is not registered in Python', async () => {
+  const fontSet = fakeFontSet();
+  let registered = 0;
+  await assert.rejects(
+    loadWebFonts([{ bytes: bytesOf('bad font'), source: 'file', label: 'bad.ttf' }], {
+      known: [], registerInWorker: async (fonts) => { registered += 1; return fakeWorker()(fonts); }, fontSet, FontFaceClass: FakeFontFace
+    }),
+    (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'FONT_FILE' && error.stage === 'font-validation'
+  );
+  assert.equal(registered, 0);
+  assert.equal(fontSet.faces.length, 0);
+});
+
+// OV-685: a family the user loads wins over the bundled font of the same alias
+// name (Times New Roman, Arial, Helvetica, Courier): it is measured with its own face.
+test('OV-685: a loaded family that is a bundled alias is measured with the loaded face', () => {
+  const metrics = withRegisteredFontFaces(createLegendFontMetrics(LEGEND_FONT_METRICS), [{
+    family: 'Times New Roman', weight: 400, italic: false, measurementName: 'user-0123456789abcdef-Regular', table: SERIF_TABLE
+  }]);
+  assert.equal(resolveLegendFontFace(metrics, "'Times New Roman', serif"), 'user-0123456789abcdef-Regular');
+  assert.equal(resolveLegendFontFace(createLegendFontMetrics(LEGEND_FONT_METRICS), "'Times New Roman', serif"), 'LiberationSerif-Regular');
+});
+
 test('the Legend measures a registered family with its face, and an unknown face by family (OV-683)', async () => {
   const entries = await registerWebFonts(
-    [{ bytes: bytesOf('light'), source: 'local', label: 'Light' }, { bytes: bytesOf('regular'), source: 'local', label: 'Regular' }],
+    await identifyWebFontSources([{ bytes: bytesOf('light'), source: 'local', label: 'Light' }, { bytes: bytesOf('regular'), source: 'local', label: 'Regular' }]),
     fakeWorker((index) => (index === 0 ? 300 : 400))
   );
   const metrics = withRegisteredFontFaces(createLegendFontMetrics(LEGEND_FONT_METRICS), registeredLegendFaces(entries));

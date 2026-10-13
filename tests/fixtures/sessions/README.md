@@ -226,3 +226,12 @@ caption's own color ID (PD-OI-042 scenario revision 2):
 `feature-identity-overrides.playwright.spec.js` loads the Session. The
 Session's decompressed SHA-256 is
 `0e986cee60a78fab2dffa49b9ea0eebcff34039be512ec26aa5d2397a658ffab`.
+
+`font-family-preserved.v44.gbdraw-session.json.gz` and
+`font-family-preserved.v46.gbdraw-session.json.gz` are Sessions written by
+first-parent `main` commits `fe6861f06d0eaaecac0ba4ee6b1c3095019789df`
+(Session 44) and `9839de8ee` (Session 46): the Python API wrote a request whose
+config overrides name `objects.text.font_family`, and the Web app of the same
+commit loaded it and saved it again, keeping that path as a preserved override
+in its draft. `font-family-preserved.provenance.json` records the writers and
+the decompressed SHA-256 values.

@@ -117,7 +117,9 @@ def render_legend_font_metrics_module() -> str:
 
 
 # Requested lists and the families registered in the page, each resolved by
-# Python's rule with the Web's availability (bundled + registered).
+# Python's rule with the Web's availability (bundled + registered), with the
+# families of the list that gbdraw does not bundle (``custom_font_families``,
+# the rule of the custom-font warnings).
 RESOLUTION_CASES = (
     ("'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif", ()),
     ("'DejaVu Serif', serif", ()),
@@ -202,6 +204,7 @@ def render_resolution_vectors() -> str:
             "registered": list(registered),
             "effective": resolution.effective,
             "missing": list(resolution.missing),
+            "custom": list(gbdraw_fonts.custom_font_families(requested)),
         })
     face_match = []
     for faces in FACE_MATCH_CASES:
