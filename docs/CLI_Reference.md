@@ -596,7 +596,9 @@ GC-content and Depth axes and ticks are unaffected. User-explicit
 remains visible and causes a warning when combined with `--hide_scale`; omit or
 disable that slot to hide the scale.
 
-If labels would overlap, or radial labels need more room than the circular
+Small overlaps and crossings of horizontal outer labels, up to 100 per record,
+are first repaired by moving the labels involved slightly.
+If labels would still overlap, or radial labels need more room than the circular
 tracks leave, `gbdraw circular` draws nothing, prints settings that fit (such
 as `--outer_label_y_radius_offset`, `--label_font_size`, `--labels out`,
 `--label_placement radial`, or `--resolve_overlaps`), and exits with status 1. If only leader lines

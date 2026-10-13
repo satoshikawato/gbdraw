@@ -265,6 +265,15 @@ intersect; lines that only touch do not cross. A Circular label with a leader
 covers the definition text in the centre when its box overlaps a line of that
 text by more than 0.5 px in both directions.
 
+Before the check, gbdraw repairs small defects of horizontal Circular outer
+labels. When a record has 1 to 100 overlapping label pairs, crossing leader
+pairs, and labels over the definition text in total, gbdraw moves the labels
+involved by up to 24 px, bends their leader lines by up to 12 px, and may move
+the point where a leader meets its label. The order of the labels does not
+change. The repaired layout is kept only if it leaves no defect; otherwise the
+record keeps its layout and the rules below apply. Records without a defect,
+and records with radial labels, are not changed.
+
 - If any labels overlap, or radial labels need more room than the circular
   tracks leave, nothing is drawn. The command line prints `ERROR:` with the
   message and exits with status 1. Python raises `LabelsDoNotFitError`, a

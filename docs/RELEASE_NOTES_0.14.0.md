@@ -322,7 +322,11 @@ from the command line, Python, and a Session; the web app draws and saves it
 but cannot edit it yet. See
 [Region annotations](./CLI_Reference.md#region-annotations).
 
-Labels that would overlap are no longer drawn: Circular outer, inner, and
+Small overlaps, crossing leader lines, and labels over the definition text of
+horizontal Circular outer labels, up to 100 per record, are now repaired by
+moving the labels involved slightly; a record is changed only when the repair
+clears all of them.
+Labels that would still overlap are no longer drawn: Circular outer, inner, and
 embedded labels in either placement, and Linear labels. The command line exits
 with an error and Python raises `LabelsDoNotFitError`; the message lists
 settings that fit, such as a larger outer-label offset, a smaller font, all
@@ -456,8 +460,9 @@ internal function `gbdraw.render.export.save_figure` now warns with
    shows GC content and GC skew by default, Linear hides them, and new repeat
    regions are drawn behind other features. Set these explicitly when the
    earlier look matters.
-   A figure whose labels overlapped in 0.13 now stops with an error; rerun it
-   with one of the settings the message lists.
+   A figure whose labels overlapped in 0.13 now has those labels moved
+   slightly or stops with an error; rerun it with one of the settings the
+   message lists.
 4. Keep a copy of an old Session before you open it and save it again in
    0.14.0. Let gbdraw update the file; do not edit version numbers or resource
    IDs by hand. A Circular slot whose spacing an earlier release stored as a
