@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from collections.abc import Iterable, Mapping as MappingABC, Sequence as SequenceABC
-from dataclasses import asdict, fields, is_dataclass
+from dataclasses import asdict, fields, is_dataclass, replace
 from functools import lru_cache
 from numbers import Integral, Real
 from types import UnionType
@@ -129,8 +129,17 @@ def with_config_overrides(
 
     if not overrides:
         return config
-    return GbdrawConfig.from_dict(
+    overridden = GbdrawConfig.from_dict(
         _apply_validated_config_overrides(config_to_raw_dict(config), overrides)
+    )
+    if any(path.startswith("labels.filtering") for path, _ in validate_config_overrides(overrides)):
+        return overridden
+    # Untouched label filtering keeps its objects: its tables keep their prepared
+    # identity, so a render stage that takes them (label filter maps) stays
+    # keyable. Nothing writes into this mapping (M3).
+    return replace(
+        overridden,
+        labels=replace(overridden.labels, filtering=config.labels.filtering),
     )
 
 

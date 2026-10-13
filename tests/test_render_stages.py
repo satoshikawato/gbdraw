@@ -393,6 +393,20 @@ def test_label_filter_maps_leave_the_config_mapping_unchanged() -> None:
     assert raw == before
 
 
+def test_a_label_fit_override_keeps_the_label_filtering_objects() -> None:
+    # The label fit verification draws with overrides; the label tables in
+    # labels.filtering keep their prepared identity there (no deep copy).
+    from gbdraw.config.modify import with_config_overrides
+
+    config = _config()
+    fitted = with_config_overrides(config, {"labels.spacing.circular": 0.5})
+    assert fitted.labels.spacing.circular == 0.5
+    assert fitted.labels.filtering is config.labels.filtering
+    filtered = with_config_overrides(config, {"labels.filtering.blacklist_keywords": ["x"]})
+    assert filtered.labels.filtering is not config.labels.filtering
+    assert filtered.labels.filtering.blacklist_keywords == ["x"]
+
+
 # --- review fixes (REVIEW-PR2-MECHANISM.md) ----------------------------------
 
 
