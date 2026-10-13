@@ -6,6 +6,7 @@ from typing import Literal, Mapping
 from ..core.text import calculate_bbox_dimensions
 from .circular_layout import min_gradient_label_text
 from .metrics import legend_line_height, legend_text_x_offset
+from .table import legend_row_names
 
 
 GRADIENT_BAR_WIDTH_RATIO = 10
@@ -98,12 +99,13 @@ def _measure_solid_entries(
     font_size: float,
     dpi: int,
 ) -> tuple[_MeasuredSolidEntry, ...]:
+    drawn_names = legend_row_names(legend_table)
     return tuple(
         _MeasuredSolidEntry(
             key=str(key),
             properties=properties,
             text_width=calculate_bbox_dimensions(
-                str(key),
+                drawn_names[str(key)].drawn,
                 font_family,
                 font_size,
                 dpi,
@@ -131,6 +133,7 @@ def _build_gradient_layout(
     if not gradient_entries:
         return None
 
+    drawn_names = legend_row_names(legend_table)
     bar_width = GRADIENT_BAR_WIDTH_RATIO * color_rect_size
     min_label_text = min_gradient_label_text(
         gradient_entries[0][1].get("min_value", 0)
@@ -138,7 +141,7 @@ def _build_gradient_layout(
     if len(gradient_entries) > 1:
         label_width = max(
             calculate_bbox_dimensions(
-                key,
+                drawn_names[key].drawn,
                 font_family,
                 font_size,
                 dpi,
@@ -190,7 +193,7 @@ def _build_gradient_layout(
 
     key, properties = gradient_entries[0]
     title_height = calculate_bbox_dimensions(
-        key,
+        drawn_names[key].drawn,
         font_family,
         font_size,
         dpi,

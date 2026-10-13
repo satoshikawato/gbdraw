@@ -10,6 +10,7 @@ from typing import Mapping, cast
 from ..core.text import calculate_bbox_dimensions
 from ..core.numeric import compensated_sum
 from .metrics import legend_line_height, legend_text_x_offset
+from .table import legend_row_names
 
 
 GRADIENT_BAR_WIDTH_RATIO = 10
@@ -85,6 +86,7 @@ class CircularLegendLayout:
 @dataclass(frozen=True)
 class _MeasuredLegendEntry:
     key: str
+    text: str
     properties: Mapping[str, object]
     text_width: float
     entry_width: float
@@ -108,16 +110,19 @@ def _measure_entries(
 ) -> tuple[tuple[_MeasuredLegendEntry, ...], tuple[_MeasuredLegendEntry, ...]]:
     solid_entries: list[_MeasuredLegendEntry] = []
     gradient_entries: list[_MeasuredLegendEntry] = []
+    drawn_names = legend_row_names(legend_table)
     for key, properties in legend_table.items():
         normalized_key = str(key)
+        text = drawn_names[normalized_key].drawn
         text_width, _ = calculate_bbox_dimensions(
-            normalized_key,
+            text,
             font_family,
             font_size,
             dpi,
         )
         measured = _MeasuredLegendEntry(
             key=normalized_key,
+            text=text,
             properties=properties,
             text_width=float(text_width),
             entry_width=float(text_width) + (2 * float(x_margin)),
@@ -198,7 +203,7 @@ def _build_gradient_layout(
 
     entry = gradient_entries[0]
     title_width, title_height = calculate_bbox_dimensions(
-        entry.key,
+        entry.text,
         font_family,
         font_size,
         dpi,

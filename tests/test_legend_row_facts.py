@@ -24,6 +24,7 @@ from gbdraw.api import (
     CircularDiagramRequest,
     CircularMultiRecordOptions,
     CircularOutputOptions,
+    CircularTrackOptions,
     ColorOptions,
     InMemoryRecordSource,
     LinearDiagramOptions,
@@ -35,7 +36,7 @@ from gbdraw.api.request_render import render_request
 from gbdraw.legend.row_facts import collect_legend_row_facts
 from gbdraw.diagrams.circular.assemble import _sync_legend_table_for_circular_slots
 from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
-from gbdraw.legend.table import _generated_legend_fills
+from gbdraw.legend.table import LegendTable, _generated_legend_fills
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, _decode_track_slots
 from gbdraw.tracks.circular import parse_circular_track_slots
 from gbdraw.tracks.linear import parse_linear_track_slots
@@ -109,6 +110,30 @@ def test_hiding_every_feature_of_a_type_suppresses_its_row(tmp_path):
     assert "repeat_region" not in facts["drawn"]
     assert "repeat_region" in facts["suppressed"]
     assert "CDS" in facts["drawn"]
+
+
+def test_a_track_whose_row_another_track_draws_reports_its_key_suppressed(tmp_path):
+    """Two tracks of one label and one swatch share a row; the second keeps its key (0.13.0 Sessions hold it)."""
+    slots = [
+        "features:features",
+        "gc_content:dinucleotide_content",
+        "gc_content_2:dinucleotide_content",
+        "gc_skew:dinucleotide_skew",
+        "gc_skew_2:dinucleotide_skew@positive_color=#00ff00",
+    ]
+    [(facts, svg_keys)] = _render(
+        _circular(tmp_path, tracks=CircularTrackOptions(circular_track_slots=slots)), tmp_path
+    )
+    assert facts["drawn"] == svg_keys
+    assert {"GC content", "GC skew (+)", "GC skew (-)", "GC skew (+) (2)"} <= set(facts["drawn"])
+    assert {"GC content (2)", "GC skew (-) (2)"} <= set(facts["suppressed"])
+    assert not set(facts["drawn"]) & set(facts["suppressed"])
+    svg = (tmp_path / "facts.svg").read_text(encoding="utf-8")
+    names = dict(re.findall(r'data-legend-key="([^"]*)" data-legend-name="([^"]*)"', svg))
+    assert names["GC skew (+) (2)"] == "GC skew (+)"
+    for text in ["GC content", "GC skew (+) (1)", "GC skew (+) (2)", "GC skew (-)"]:
+        assert f">{text}</text>" in svg
+    assert ">GC content (1)</text>" not in svg and ">GC skew (-) (1)</text>" not in svg
 
 
 def test_a_type_outside_the_selection_is_suppressed_not_stale(tmp_path):
@@ -320,7 +345,7 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
     skew_config = track(palette["skew_high"], palette["skew_low"])
     # The request's entries (spec strings or slot objects), read as a render reads them.
     entries = list(_decode_track_slots(case["slots"], mode=case["mode"], schema=CANONICAL_REQUEST_SCHEMA, path="slots"))
-    table = {key: {"fill": fill} for key, fill in case.get("legend", [])}
+    table = LegendTable({key: {"fill": fill} for key, fill in case.get("legend", [])})
     if case["mode"] == "circular":
         table = _sync_legend_table_for_circular_slots(
             table, circular_track_slots=parse_circular_track_slots(entries), gc_config=gc_config, skew_config=skew_config,
@@ -332,8 +357,10 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
             gc_config=gc_config, skew_config=skew_config, depth_config=None,
             show_gc=True, show_skew=True, show_depth=False,
         )
-        table.update({key: {"fill": fill} for key, fill in defaults.items()})
+        for key, fill in defaults.items():
+            table.add(key, {"fill": fill})
         table = _sync_legend_table_for_linear_slots(
             table, linear_track_slots=parse_linear_track_slots(entries), skew_config=skew_config, depth_tracks=None,
         )
     assert [[key, row["fill"]] for key, row in table.items()] == [[key, fill] for key, _, _, fill in case["rows"]]
+    assert list(table.shared_keys) == case.get("shared", [])

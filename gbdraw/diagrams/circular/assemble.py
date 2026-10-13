@@ -81,7 +81,7 @@ from ...layout.composition import (
 )
 from ...layout.spatial import Aabb, union_aabbs
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
-from ...legend.table import _unique_legend_key, prepare_legend_table
+from ...legend.table import LegendTable, prepare_legend_table
 from ...tracks import (
     CircularTrackSlot,
     ScalarSpec,
@@ -1397,7 +1397,7 @@ def _slot_legend_label(slot: CircularTrackSlot, fallback: str) -> str:
 
 
 def _sync_legend_table_for_circular_slots(
-    legend_table: dict,
+    out: LegendTable,
     *,
     circular_track_slots: list[CircularTrackSlot] | None,
     gc_config: GcContentConfigurator,
@@ -1408,12 +1408,11 @@ def _sync_legend_table_for_circular_slots(
     cfg: GbdrawConfig,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float | None = None,
-) -> dict:
+) -> LegendTable:
     """Replace singleton numeric legend entries with slot-aware entries."""
     if circular_track_slots is None:
-        return legend_table
+        return out
 
-    out = dict(legend_table)
     default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
     removable = {
         "Depth",
@@ -1425,7 +1424,7 @@ def _sync_legend_table_for_circular_slots(
         f"{default_nt} skew (-)",
     }
     for key in removable:
-        out.pop(key, None)
+        out.discard(key)
 
     depth_by_index = index_depth_track_row(depth_tracks or ())
     for slot in circular_track_slots:
@@ -1442,69 +1441,69 @@ def _sync_legend_table_for_circular_slots(
                 if track is None:
                     continue
                 label = _slot_legend_label(slot, track.label)
-                out[_unique_legend_key(out, label)] = {
+                out.add_source(label, {
                     "type": "solid",
                     "fill": track.config.fill_color,
                     "stroke": track.config.stroke_color,
                     "width": track.config.stroke_width,
-                }
+                })
                 continue
             if depth_config is None or depth_df is None:
                 continue
             label = _slot_legend_label(slot, "Depth")
-            out[_unique_legend_key(out, label)] = {
+            out.add_source(label, {
                 "type": "solid",
                 "fill": depth_config.fill_color,
                 "stroke": depth_config.stroke_color,
                 "width": depth_config.stroke_width,
-            }
+            })
         elif renderer == "dinucleotide_content":
             nt = slot_dinucleotide(slot.params, default_nt)
             label = _slot_legend_label(slot, f"{nt} content")
             if gc_config.high_fill_color == gc_config.low_fill_color:
-                out[_unique_legend_key(out, label)] = {
+                out.add_source(label, {
                     "type": "solid",
                     "fill": gc_config.high_fill_color,
                     "stroke": gc_config.stroke_color,
                     "width": gc_config.stroke_width,
-                }
+                })
             else:
-                out[_unique_legend_key(out, f"{label} (+)")] = {
+                out.add_source(f"{label} (+)", {
                     "type": "solid",
                     "fill": gc_config.high_fill_color,
                     "stroke": gc_config.stroke_color,
                     "width": gc_config.stroke_width,
-                }
-                out[_unique_legend_key(out, f"{label} (-)")] = {
+                })
+                out.add_source(f"{label} (-)", {
                     "type": "solid",
                     "fill": gc_config.low_fill_color,
                     "stroke": gc_config.stroke_color,
                     "width": gc_config.stroke_width,
-                }
+                })
         elif renderer == "dinucleotide_skew":
             nt = slot_dinucleotide(slot.params, default_nt)
             label = _slot_legend_label(slot, f"{nt} skew")
             slot_skew_config = _slot_skew_config(skew_config, slot, nt)
             if slot_skew_config.high_fill_color == slot_skew_config.low_fill_color:
-                out[_unique_legend_key(out, label)] = {
+                out.add_source(label, {
                     "type": "solid",
                     "fill": slot_skew_config.high_fill_color,
                     "stroke": slot_skew_config.stroke_color,
                     "width": slot_skew_config.stroke_width,
-                }
+                })
             else:
-                out[_unique_legend_key(out, f"{label} (+)")] = {
+                out.add_source(f"{label} (+)", {
                     "type": "solid",
                     "fill": slot_skew_config.high_fill_color,
                     "stroke": slot_skew_config.stroke_color,
                     "width": slot_skew_config.stroke_width,
-                }
-                out[_unique_legend_key(out, f"{label} (-)")] = {
+                })
+                out.add_source(f"{label} (-)", {
                     "type": "solid",
                     "fill": slot_skew_config.low_fill_color,
                     "stroke": slot_skew_config.stroke_color,
                     "width": slot_skew_config.stroke_width,
-                }
+                })
     if conservation_tracks:
         if any(track.track_color for track in conservation_tracks):
             for conservation_track in conservation_tracks:
@@ -1513,23 +1512,23 @@ def _sync_legend_table_for_circular_slots(
                     default_min_color=cfg.objects.conservation.min_color,
                     default_max_color=cfg.objects.conservation.max_color,
                 )
-                out[_unique_legend_key(out, conservation_track.track_label)] = {
+                out.add_source(conservation_track.track_label, {
                     "type": "gradient",
                     "min_color": min_color,
                     "max_color": max_color,
                     "stroke": "none",
                     "width": 0,
                     "min_value": float(conservation_min_identity or 0.0),
-                }
+                })
         else:
-            out[_unique_legend_key(out, "Conservation identity")] = {
+            out.add_source("Conservation identity", {
                 "type": "gradient",
                 "min_color": cfg.objects.conservation.min_color,
                 "max_color": cfg.objects.conservation.max_color,
                 "stroke": "none",
                 "width": 0,
                 "min_value": float(conservation_min_identity or 0.0),
-            }
+            })
     return out
 
 
@@ -2788,7 +2787,7 @@ def build_circular_legend_table(
     annotations: ResolvedAnnotationBundle | None = None,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float = 0.0,
-) -> dict:
+) -> LegendTable:
     """Build the one Circular legend table for the records drawn on a canvas.
 
     Single-record and Multi-Record Canvas output both call this owner, so slot
@@ -2933,7 +2932,7 @@ def _assemble_circular_diagram_result(
         record_transform=record_transform,
     )
 
-    legend_table: dict = {}
+    legend_table = LegendTable()
     legend_measurement = legend_config.measure_legend(
         legend_table,
         placement=canvas_config.legend_position,

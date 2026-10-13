@@ -1,7 +1,8 @@
-"""Caption allocation and real native rules/legend/request parity."""
+"""Color-rule captions: kept as written, with row keys and drawn names derived from them."""
 
 import json
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
@@ -26,11 +27,8 @@ from gbdraw.api.requests import (
     RecordInput,
     RenderOutputRequest,
 )
-from gbdraw.features.colors import (
-    normalize_specific_color_captions,
-    get_color_with_info,
-)
-from gbdraw.web_support.rule_matching import evaluate_rules_json
+from gbdraw.features.colors import get_color_with_info
+from gbdraw.legend.table import _legend_fill_identity, rule_legend_keys
 
 
 def table(rows):
@@ -39,73 +37,42 @@ def table(rows):
     )
 
 
-@pytest.mark.parametrize(
-    "colors,captions",
-    [
-        (["#112233", "#112233"], ["Shared", "Shared"]),
-        (["red", "#FF0000"], ["Shared", "Shared"]),
-        (["#123", "#445566"], ["Shared [#112233]", "Shared [#445566]"]),
-    ],
-)
-def test_shared_caption_color_domain(colors, captions):
-    source = table(
-        [
-            ["CDS", "gene", gene, color, "Shared"]
-            for gene, color in zip(["a", "b"], colors)
-        ]
-    )
-    result = normalize_specific_color_captions(source)
-    assert list(result.caption) == captions
-    assert source.caption.tolist() == ["Shared", "Shared"]
-    pd.testing.assert_frame_equal(normalize_specific_color_captions(result), result)
+RULE_KEYS = json.loads(
+    (Path(__file__).parent / "fixtures" / "legend_rule_keys.json").read_text(encoding="utf-8")
+)["cases"]
 
 
-def test_literal_reservations_reorder_blank_and_source_identity():
-    source = table(
-        [
-            ["CDS", "gene", "a", "#123", "Shared"],
-            ["CDS", "gene", "b", "#445566", "Shared"],
-            ["CDS", "gene", "c", "#abcdef", "Shared [#112233]"],
-            ["CDS", "gene", "d", "#abcdef", "Shared [#112233] (2)"],
-            ["CDS", "gene", "empty", "#445566", ""],
-            ["CDS", "gene", "blank", "#123", ""],
-        ]
-    )
-    result = normalize_specific_color_captions(source)
-    assert result.caption.tolist() == [
-        "Shared [#112233] (3)",
-        "Shared [#445566]",
-        "Shared [#112233]",
-        "Shared [#112233] (2)",
-        "",
-        "",
-    ]
-    assert result.drop(columns="caption").equals(source.drop(columns="caption"))
-    shuffled = normalize_specific_color_captions(source.iloc[::-1])
-    assert dict(zip(shuffled.value, shuffled.caption)) == dict(
-        zip(result.value, result.caption)
-    )
-    pd.testing.assert_frame_equal(normalize_specific_color_captions(result), result)
-    browser = [
-        dict(
-            feat=row.feature_type,
-            qual=row.qualifier_key,
-            val=row.value,
-            color=row.color,
-            cap=row.caption,
-            fromFile=True,
+def legend_rows(svg_path):
+    """Each legend row of an SVG by key: its name, the text it draws, and its swatch fill."""
+    rows = {}
+    for node in ET.fromstring(svg_path.read_text()).iter():
+        key = node.get("data-legend-key")
+        if key is None:
+            continue
+        text = "".join(
+            child.text or "" for child in node.iter() if child.tag.endswith("text")
         )
-        for row in source.itertuples()
-    ]
-    normalized = json.loads(
-        evaluate_rules_json("[]", json.dumps(browser), "color-captions")
-    )["rules"]
-    assert [r["cap"] for r in normalized] == result.caption.tolist()
-    assert all(r["fromFile"] for r in normalized)
+        fill = next(
+            (child.get("fill") for child in node.iter() if child.tag.endswith("path")),
+            None,
+        )
+        rows[key] = (node.get("data-legend-name"), text, fill)
+    return rows
+
+
+@pytest.mark.parametrize("case", RULE_KEYS, ids=[case["name"] for case in RULE_KEYS])
+def test_rule_row_keys_answer_the_shared_fixture(case):
+    """The Web app allocates the same keys (tests/web/specific-color-actions.test.mjs)."""
+    rules = [(rule["cap"], rule["color"]) for rule in case["rules"]]
+    keys = rule_legend_keys(rules, dict(case["renderer_rows"]))
+    assert [
+        keys.get((caption, _legend_fill_identity(color)), "") for caption, color in rules
+    ] == case["keys"]
+    assert rule_legend_keys(rules[::-1], dict(case["renderer_rows"])) == keys
 
 
 @pytest.mark.parametrize("mode", ["circular", "grid", "batch", "linear"])
-def test_real_render_request_legend_and_colors_use_canonical_rows(mode, tmp_path):
+def test_a_caption_in_two_colors_is_kept_and_its_rows_are_numbered(mode, tmp_path):
     record = SeqRecord(
         Seq("ATGC" * 250),
         id="record",
@@ -154,28 +121,15 @@ def test_real_render_request_legend_and_colors_use_canonical_rows(mode, tmp_path
         request = request_type(records=records, options=options, output=output)
     result = render_request(request, include_feature_catalog=True)
     canonical = result.request.options.colors.color_table
-    assert canonical.caption.tolist() == [
-        "Shared [#112233]",
-        "Shared [#445566]",
-        "",
-        "Shared [#778899]",
-    ]
-    assert result.request.options.colors.color_table_file is None
+    assert canonical.caption.tolist() == ["Shared", "Shared", "", "Shared"]
     assert path.read_bytes() == original
-    svg = ET.fromstring(result.output_paths[0].read_text())
-    entries = {
-        node.get("data-legend-key"): node
-        for node in svg.iter()
-        if node.get("data-legend-key")
-    }
-    assert set(entries) >= {"Shared [#112233]", "Shared [#445566]"}
-    assert "Shared [#778899]" not in entries
-    assert "" not in entries
-    for caption, color in [
-        ("Shared [#112233]", "#112233"),
-        ("Shared [#445566]", "#445566"),
-    ]:
-        assert any(node.get("fill") == color for node in entries[caption].iter())
+    rows = legend_rows(result.output_paths[0])
+    # The key keeps the color ID as an identity; the name and the text never carry it.
+    assert rows["Shared [#112233]"] == ("Shared", "Shared (1)", "#112233")
+    assert rows["Shared [#445566]"] == ("Shared", "Shared (2)", "#445566")
+    assert "Shared [#778899]" not in rows
+    assert "" not in rows
+    assert not any("[#" in text or "[#" in name for name, text, _ in rows.values())
     prepared = resolve_feature_inputs(
         color_table=source,
         default_colors=pd.DataFrame(
@@ -188,17 +142,17 @@ def test_real_render_request_legend_and_colors_use_canonical_rows(mode, tmp_path
         prepared.specific_color_rules,
         prepared.default_color_map,
         "record",
-    ) == ("#112233", "Shared [#112233]")
+    ) == ("#112233", "Shared")
     assert get_color_with_info(
         record.features[1],
         prepared.specific_color_rules,
         prepared.default_color_map,
         "record",
-    ) == ("#445566", "Shared [#445566]")
+    ) == ("#445566", "Shared")
 
 
 @pytest.mark.parametrize("caption", ["CDS", "GC content", "GC skew (+)"])
-def test_normalized_specific_rows_preserve_default_and_numeric_legend_names(
+def test_a_caption_in_two_colors_naming_a_renderer_row_numbers_all_three_rows(
     caption, tmp_path
 ):
     record = SeqRecord(
@@ -233,27 +187,23 @@ def test_normalized_specific_rows_preserve_default_and_numeric_legend_names(
             ),
         )
     )
-    svg = ET.fromstring(result.output_paths[0].read_text())
-    entries = {
-        node.get("data-legend-key"): node
-        for node in svg.iter()
-        if node.get("data-legend-key")
-    }
+    rows = legend_rows(result.output_paths[0])
     for name in ["CDS", "GC content", "GC skew (+)"]:
-        assert name in entries
+        assert rows[name][0] == name
     for color in ["#112233", "#445566"]:
-        assert any(
-            node.get("fill") == color for node in entries[f"{caption} [{color}]"].iter()
-        )
-    assert result.request.options.colors.color_table.caption.tolist() == [
-        f"{caption} [#112233]",
-        f"{caption} [#445566]",
+        assert rows[f"{caption} [{color}]"][::2] == (caption, color)
+    assert sorted(text for name, text, _ in rows.values() if name == caption) == [
+        f"{caption} (1)",
+        f"{caption} (2)",
+        f"{caption} (3)",
     ]
+    assert all(text == name for name, text, _ in rows.values() if name != caption)
+    assert result.request.options.colors.color_table.caption.tolist() == [caption, caption]
 
 
 @pytest.mark.parametrize("rule_color", ["#ff0000", "red"])
 def test_rule_caption_equal_to_a_default_type_keeps_the_rule_color(rule_color, tmp_path):
-    """N-06: a rule caption equal to a default legend name keeps its own row."""
+    """A rule named like a renderer row of another color keeps its own row; both are numbered."""
     from gbdraw.io.colors import load_default_colors
 
     record = SeqRecord(
@@ -284,27 +234,15 @@ def test_rule_caption_equal_to_a_default_type_keeps_the_rule_color(rule_color, t
             ),
         )
     )
-    svg = ET.fromstring(result.output_paths[0].read_text())
-    fills = {
-        node.get("data-legend-key"): next(
-            (
-                child.get("fill").lower()
-                for child in node.iter()
-                if child.get("fill") not in (None, "none")
-            ),
-            None,
-        )
-        for node in svg.iter()
-        if node.get("data-legend-key")
-    }
+    rows = legend_rows(result.output_paths[0])
     defaults = load_default_colors("", palette="default")
     default_rrna = str(
         defaults.loc[defaults["feature_type"] == "rRNA", "color"].iloc[0]
-    ).lower()
+    )
 
-    assert fills["rRNA"] == default_rrna
-    assert fills["rRNA [#ff0000]"] == ("#ff0000" if rule_color.startswith("#") else "red")
-    assert list(fills).count("rRNA") == 1
+    # The rule's row comes first in the legend; both rows of the name are numbered.
+    assert rows["rRNA [#ff0000]"] == ("rRNA", "rRNA (1)", rule_color)
+    assert rows["rRNA"] == ("rRNA", "rRNA (2)", default_rrna)
 
 
 def test_rule_caption_equal_to_a_default_type_with_the_same_color_shares_one_row():
@@ -335,3 +273,4 @@ def test_rule_caption_equal_to_a_default_type_with_the_same_color_shares_one_row
     )
 
     assert list(legend) == ["rRNA"]
+    assert legend.names()["rRNA"] == ("rRNA", "rRNA")

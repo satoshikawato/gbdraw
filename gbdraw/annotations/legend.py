@@ -9,20 +9,19 @@ from gbdraw.annotations.models import (
     annotation_track_params_from_mapping,
     effective_annotation_style,
 )
-from gbdraw.legend.table import _unique_legend_key
+from gbdraw.legend.table import LegendTable
 from gbdraw.render.patterns import hatch_pattern_paint
 
 
 def sync_annotation_legend_entries(
-    legend_table: dict,
+    out: LegendTable,
     bundle: ResolvedAnnotationBundle,
     slots: Sequence[object] | None,
-) -> dict:
-    """Append explicit annotation legend labels, deduplicated by caption and style."""
+) -> LegendTable:
+    """Append explicit annotation legend labels, one source per caption and style."""
 
     if not slots or not bundle.annotations:
-        return legend_table
-    out = dict(legend_table)
+        return out
     seen: set[tuple[object, ...]] = set()
     for slot in slots:
         if not getattr(slot, "enabled", True) or str(getattr(slot, "renderer", "")) != "annotations":
@@ -52,8 +51,7 @@ def sync_annotation_legend_entries(
             if signature in seen:
                 continue
             seen.add(signature)
-            caption = str(annotation.legend_label)
-            out[_unique_legend_key(out, caption)] = {
+            out.add_source(str(annotation.legend_label), {
                 "type": "solid",
                 "fill": hatch_pattern_paint(hatch) if hatch else (
                     style.fill
@@ -62,7 +60,7 @@ def sync_annotation_legend_entries(
                 "stroke": style.stroke,
                 "width": style.stroke_width,
                 "annotation_hatch": hatch,
-            }
+            })
     return out
 
 

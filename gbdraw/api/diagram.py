@@ -147,6 +147,7 @@ from gbdraw.mode_profiles import (
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from gbdraw.legend.table import (
+    LegendTable,
     configure_pairwise_identity_legend_from_comparisons,
 )
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup
@@ -2909,7 +2910,7 @@ def assemble_circular_diagram_from_records(
         row_gap_px=row_gap_px,
     )
 
-    legend_table: dict = {}
+    legend_table = LegendTable()
     legend_target: Group | None = None
     legend_bounds: Aabb | None = None
     plot_title_group: Group | None = None

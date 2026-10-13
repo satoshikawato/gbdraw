@@ -13,11 +13,12 @@ from typing import Any, Callable, Hashable, Iterator, Mapping, MutableMapping
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+from gbdraw.core.color import normalize_hex_color
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.colors import normalize_specific_color_captions, preprocess_color_tables
+from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.source import SourceFeatureIdentity
 from gbdraw.features.visibility import compile_feature_visibility_rules
-from gbdraw.io.colors import check_user_color
+from gbdraw.io.colors import check_user_color, resolve_color_to_hex
 
 
 @dataclass(frozen=True)
@@ -799,6 +800,28 @@ def _check_feature_colors(table: DataFrame | None, label: str, *, by_row: bool) 
         )
 
 
+def _check_caption_colors(color_table: DataFrame | None) -> None:
+    """Check the colors of a color table with captions.
+
+    A caption groups legend rows by color (``gbdraw.legend.table``), so every
+    color of such a table is none, an SVG color name, #RGB, or #RRGGBB.
+    """
+
+    if color_table is None or color_table.empty or "caption" not in color_table:
+        return
+    for row, color in enumerate((str(value).strip() for value in color_table["color"]), start=1):
+        if color.lower() == "none":
+            continue
+        try:
+            normalize_hex_color(resolve_color_to_hex(color))
+        except (ValueError, ValidationError) as exc:
+            raise ValidationError(
+                f"Invalid color {color!r} in the color table (row {row}). "
+                "A color table with captions uses none, an SVG color name, #RGB, or #RRGGBB.",
+                diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": row},
+            ) from exc
+
+
 def resolve_feature_inputs(
     *,
     color_table: DataFrame | None,
@@ -809,7 +832,7 @@ def resolve_feature_inputs(
 
     _check_feature_colors(color_table, "color table", by_row=True)
     _check_feature_colors(default_colors, "default colors", by_row=False)
-    color_table = normalize_specific_color_captions(color_table)
+    _check_caption_colors(color_table)
     specific_color_rules, default_color_map = preprocess_color_tables(
         color_table,
         default_colors,
