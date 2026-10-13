@@ -634,14 +634,18 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
 
   // Resolve the effective legend item label used by current SVG coloring
   // priority: a rule's feature belongs to the row Generate draws for it (N-06).
-  // One reader serves a pass over many features (OV-193).
-  /** @returns {(feat: Record<string, any> | null | undefined) => string} */
+  // One reader serves a pass over many features (OV-193). It answers "which
+  // row" with the row's key; a caption written from it is the row's name
+  // (the Legend owner's `legendRowName`, OV-640).
+  /** @returns {(feat: Record<string, any> | null | undefined) => PythonLegendKey} */
   const effectiveLegendCaptions = () => {
     const drawing = state.activeDrawing();
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
     const legendCaption = ruleLegendCaptions(displayedLegendRowContext(state, drawing));
+    /** @param {unknown} caption A row whose key is its caption. */
+    const rowOf = (caption) => /** @type {PythonLegendKey} */ (normalizeCaption(caption));
     return (feat) => {
-      if (!feat) return '';
+      if (!feat) return rowOf('');
       const rule = ruleMatches.first(feat);
       if (rule && normalizeCaption(rule.cap)) return legendCaption(rule);
 
@@ -651,7 +655,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       const overrideCaption = normalizeCaption(override?.caption);
       if (overrideCaption) return legendCaption({ cap: overrideCaption, color: override.color });
 
-      return normalizeCaption(feat.type) || normalizeCaption(getIndividualFeatureLabel(feat));
+      return rowOf(normalizeCaption(feat.type) || getIndividualFeatureLabel(feat));
     };
   };
   /** @param {ColorFeature | null | undefined} feat */

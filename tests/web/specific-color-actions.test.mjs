@@ -821,13 +821,13 @@ for (const [kind, later] of Object.entries(afterHeldPattern)) {
 // builds its rules from the table at its turn, so a write never drops a
 // pending Add. A pattern keystroke or a drawer close cancels only pattern
 // commits, never a pending color edit.
-const popupFor=(s)=>{
+const popupFor=(s,ports={})=>{
   Object.assign(s.state,{clickedFeature:{value:null},svgContainer:{value:null},biologicalFeatures:{value:[]},
     featureStyleScopeDialog:{},resetColorDialog:{},legendRenameDialog:{},originalLegendOrder:{value:[]},
     originalLegendColors:{value:{}},deletedLegendEntries:{value:[]},legendStrokeOverrides:{},featureStrokeOverrides:{},
     selectedResultIndex:{value:0},appliedPaletteColors:{value:{CDS:'#cccccc'}}});
   return createFeatureColorActions({state:s.state,ruleActions:s.actions,getFeatureElements:()=>[],getFeatureFillElements:()=>[],
-    readUserDefaultColor:()=>null,setDefaultColor:()=>{}});
+    readUserDefaultColor:()=>null,setDefaultColor:()=>{},...ports});
 };
 test('a popup recolor of a rule made while an Add is pending applies after it (OV-444)', () => withDocument(async () => {
   const {s,held,table}=queuedRuleWrites();
@@ -924,3 +924,44 @@ for (const { name, rules, renderer_rows: rendererRows, rule_stroke: ruleStroke =
     assert.deepEqual(rules.map(lazy), keys);
   });
 }
+
+// OV-640 (D-15): a feature's row is read by its key ("Shared [#112233]" for a
+// caption written in two colors). A caption written from that reading is the
+// row's name, taken through the Legend owner's port; no rule is captioned
+// with a key, and "Reset all" resets the rules of the row, not of the name.
+const twoColorPopup=()=>{
+  const s=setup();
+  s.state.errorLog={value:null};
+  s.state.manualSpecificRules.push(...rules.map(rule=>({...rule})));
+  const [a,b]=s.state.extractedFeatures.value;
+  recordRuleMatches([a,b],s.state.manualSpecificRules.map(ruleKey),index=>({matched:[index],priorities:[0],declined:[]}));
+  s.setLegendPreparation(async()=>{});
+  const popup=popupFor(s,{legendRowName:caption=>(/^Shared \[#[0-9a-f]{6}\]$/.test(caption)?'Shared':caption)});
+  const table=()=>s.state.manualSpecificRules.map(rule=>`${rule.qual} ${rule.color} ${rule.cap}`);
+  return {s,a,b,popup,table};
+};
+test('a color for one feature of a keyed row captions its rule with a name, never the row key (OV-640)', () => withDocument(async () => {
+  const {s,a,popup,table}=twoColorPopup();
+  assert.equal(s.actions.effectiveLegendCaptions()(a),'Shared [#112233]');
+  Object.assign(s.state.featureStyleScopeDialog,{show:true,kind:'fill',feat:a,color:'#c83366',legendName:'Shared [#112233]',
+    matchingRule:s.state.manualSpecificRules[0],siblingCount:0,ruleMatchCount:2});
+  await popup.handleColorScopeChoice('single');
+  assert.deepEqual(table().filter(row=>row.includes(' [#')),[],'no caption is a row key');
+  assert.deepEqual(table().filter(row=>row.startsWith('hash ')).map(row=>row.split(' ')[1]),['#c83366']);
+  assert.equal(table().filter(row=>row.endsWith(' Shared')).length,2,'the feature left its rule\'s row: it is named by itself');
+}));
+test('the existing color of a keyed row and a hollow fill caption the feature with the row\'s name (OV-640)', () => withDocument(async () => {
+  const {s,a,popup,table}=twoColorPopup();
+  Object.assign(s.state.featureStyleScopeDialog,{show:true,kind:'fill',feat:a,color:'#c83366',legendName:'Shared [#445566]',
+    existingCaptionColor:'#445566',matchingRule:null,siblingCount:0,ruleMatchCount:0});
+  await popup.handleColorScopeChoice('useExisting');
+  assert.deepEqual(table().filter(row=>row.startsWith('hash ')),['hash #445566 Shared']);
+  await popup.setFeatureColorValue(a,'none');
+  assert.deepEqual(table().filter(row=>row.startsWith('hash ')),['hash none Shared']);
+}));
+test('Reset all on a keyed row removes the rules of that row only (OV-640)', () => withDocument(async () => {
+  const {s,a,popup,table}=twoColorPopup();
+  s.state.clickedFeature.value={feat:a,svg_id:a.svg_id};
+  await popup.handleResetColorChoice('all');
+  assert.deepEqual(table(),['gene #445566 Shared']);
+}));

@@ -622,13 +622,17 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
   const owner = createLegendEntryActions({
     state: {
       results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
-      originalLegendOrder: { value: [] }, originalLegendColors: { value: {} }
+      originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
+      activeDrawing: () => ({ manualSpecificRules: ['#112233', '#445566'].map((color) => ({ feat: 'CDS', qual: 'gene', val: color, color, cap: 'Shared' })) })
     },
     readShownLegendColor: (entry) => String(entry?.color || ''),
     legendRowNames
   });
   reconcileMountedResult(mounted, two);
-  assert.equal(owner.shownLegendName('Shared [#112233]'), 'Shared [#112233]', 'not read yet: the key is all it has');
+  // A row the displayed Result does not hold (not read yet, deleted, or dormant)
+  // is named as the color rules that draw it are captioned, never by its key (D-15).
+  assert.deepEqual(['Shared [#112233]', 'Shared [#445566]', 'No such row'].map(owner.shownLegendName), ['Shared', 'Shared', 'No such row']);
+  assert.deepEqual(['Shared [#112233]', 'Typed name'].map(owner.legendRowName), ['Shared', 'Typed name']);
   owner.readLegendRowNames();
   assert.deepEqual(['CDS', 'Shared [#112233]', 'Shared [#445566]', 'No such row'].map(owner.shownLegendName),
     ['CDS', 'Shared (1)', 'Shared (2)', 'No such row']);
@@ -639,6 +643,7 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
   reconcileMountedResult(mounted, { ...two, legendDeletes: [{ caption: 'Shared [#445566]', allowMissing: true, retire: true }] });
   owner.readLegendRowNames();
   assert.deepEqual(['Shared [#112233]', 'Shared [#445566]'].map(owner.shownLegendName), ['Shared', 'Shared']);
+  assert.deepEqual(['Shared [#112233]', 'Shared [#445566]'].map(owner.legendRowName), ['Shared', 'Shared']);
 });
 
 // OV-345: a reconcile says whether it changed the Result, so a display,

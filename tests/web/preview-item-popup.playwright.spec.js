@@ -219,3 +219,77 @@ test('a Legend popup rename onto another name follows the row through the choice
   await settle(page);
   await expect(page.getByRole('dialog', { name: `Legend item: ${suffix}`, exact: true })).toBeVisible();
 });
+
+// PD-OI-042 scenario revision 2 (D-01): a caption written in two colors has two
+// Legend rows, whose keys carry a color ID. No popup, list, or dialog shows a
+// key, and no edit writes one as a name (OV-640).
+test('two color rules of one caption: the popups and the deleted list show names, and a color edit writes no row key', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSessionFile(page, HMMT_SESSION);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    for (const [val, color] of [['NADH', '#112233'], ['(?i)cytochrome', '#445566']]) {
+      Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'product', val, color, cap: 'Shared' });
+      await app.addSpecificRule();
+    }
+  });
+  await settle(page);
+  const keys = ['Shared [#112233]', 'Shared [#445566]'];
+  const drawnNames = () => page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll('.gbdraw-preview-surface g[data-legend-key]')]
+      .map((row) => [row.getAttribute('data-legend-key'), row.querySelector('text')?.textContent])
+  ));
+  const names = await drawnNames();
+  expect(keys.map((key) => names[key]).sort()).toEqual(['Shared (1)', 'Shared (2)']);
+
+  // The Legend item popup is titled and filled with the drawn name.
+  await clickCentre(legendRow(page, keys[0]).locator('path').first());
+  const legendDialog = page.getByRole('dialog', { name: `Legend item: ${names[keys[0]]}`, exact: true });
+  await expect(legendDialog).toBeVisible();
+  await expect(legendDialog.getByLabel('Legend name', { exact: true })).toHaveValue(names[keys[0]]);
+  await page.keyboard.press('Escape');
+  await expect(popup(page)).toHaveCount(0);
+
+  // The feature popup shows the drawn name of the feature's row.
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => /NADH/.test(feature.product)), null);
+    await window.Vue.nextTick();
+  });
+  const nameField = page.getByLabel('Feature legend name', { exact: true });
+  await expect(nameField).toHaveValue(names[keys[0]]);
+
+  // OV-640: a color for this feature only names its row by the feature, never by the key of the row it leaves.
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.updateClickedFeatureColor('#c83366');
+    if (!app.featureStyleScopeDialog.show) throw new Error('no Color Change Scope dialog');
+  });
+  await expect.soft(page.getByRole('button', { name: `Legend item "${names[keys[0]]}"`, exact: false })).toBeVisible();
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleFeatureStyleScopeChoice('single'));
+  await settle(page);
+  const written = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      captions: app.manualSpecificRules.map((rule) => rule.cap),
+      edits: Object.values(app.featureColorOverrides).map((edit) => edit?.caption).filter(Boolean)
+    };
+  });
+  expect.soft(written.captions.filter((caption) => caption.includes(' [#'))).toEqual([]);
+  expect.soft(written.edits.filter((caption) => caption.includes(' [#'))).toEqual([]);
+  expect.soft(written.captions.filter((caption) => caption === 'Shared')).toHaveLength(2);
+  expect.soft(written.captions).toHaveLength(3);
+  expect.soft(Object.values(await drawnNames()).filter((name) => name.includes(' [#'))).toEqual([]);
+  await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+
+  // A deleted row the Result no longer holds is listed by its name (D-15), never by its key.
+  await clickCentre(legendRow(page, keys[1]).locator('path').first());
+  await popup(page).getByRole('button', { name: 'Remove from legend', exact: true }).click();
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.deletedLegendEntries.map((entry) => entry.caption))).toContain(keys[1]);
+  if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
+  await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
+  await expect.soft(page.locator('.right-drawer').getByRole('button', { name: 'Restore Shared', exact: true })).toBeVisible();
+  await expect.soft(page.locator('.right-drawer').getByText(' [#')).toHaveCount(0);
+});

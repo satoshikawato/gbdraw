@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../../state.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from '../../services/legend-svg.js' */
+/** @import { LegendRowName } from '../../services/legend-row-names.js' */
 /** @import { ColorRuleLegendGroup, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { DrawnTrack } from '../../services/track-legend-rows.js' */
 import { displayedLegendRowColors, draftLegendRowColors, draftLegendRows, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
@@ -36,7 +37,8 @@ import {
  * @property {(feature: Record<string, any>, caption?: string | null) => Record<string, any>[]} findFeaturesWithSameLegendItem
  * @property {(feature: Record<string, any>) => Record<string, any> | null} findMatchingRegexRule
  * @property {(feature: Record<string, any>) => string} getDisplayedFeatureLabel
- * @property {() => (feature: Record<string, any>) => string} effectiveLegendCaptions
+ * @property {() => (feature: Record<string, any>) => PythonLegendKey} effectiveLegendCaptions
+ *   The rule owner's reader of a feature's Legend row, by the row's key (never a name to write).
  *   The Legend item of a feature, read for a pass over many features.
  * @property {(feature: Record<string, any>) => string} getIndividualFeatureLabel
  * @property {(feature: Record<string, any>) => { qual: string, val: string } | null} getFeatureQualifier
@@ -120,6 +122,7 @@ import {
  * @property {SetDefaultColorPort} setDefaultColor
  * @property {ReadDrawnTracksPort} readDrawnTracks
  * @property {LegendRowIsNamedPort} [legendRowIsNamed]
+ * @property {LegendRowNamePort} [legendRowName]
  */
 
 /**
@@ -127,6 +130,11 @@ import {
  * the Legend draws for it (the Legend owner's reading of the displayed Result). Typing one of them
  * into the row's name field is no rename.
  * @typedef {(caption: string, typed: string) => boolean} LegendRowIsNamedPort
+ */
+/**
+ * The name a caption stands for (the Legend owner's `legendRowName`): the name of the row it is the
+ * key of, else the caption itself. A caption read as a row is written as this name (OV-640).
+ * @typedef {(caption: string) => LegendRowName} LegendRowNamePort
  */
 
 /**
@@ -148,7 +156,8 @@ export const createFeatureColorActions = ({
   readUserDefaultColor,
   setDefaultColor,
   readDrawnTracks,
-  legendRowIsNamed = (caption, typed) => caption === typed
+  legendRowIsNamed = (caption, typed) => caption === typed,
+  legendRowName = (caption) => /** @type {LegendRowName} */ (String(caption ?? ''))
 }) => {
   const {
     extractedFeatures,
@@ -1175,7 +1184,7 @@ export const createFeatureColorActions = ({
   /**
    * @param {DrawingState} drawing
    * @param {readonly ColorFeature[]} features
-   * @param {string} caption
+   * @param {LegendRowName} caption The name the features' rules are captioned with (never a row key, OV-640).
    * @param {string} color
    * @param {{ preferLabelRules?: boolean }} [options]
    */
@@ -1274,7 +1283,7 @@ export const createFeatureColorActions = ({
           clickedFeature.value.legendName = scope.requestedCaption;
         }
       }
-      await setFeatureColor(drawing, feat, color, scope.legendName);
+      await setFeatureColor(drawing, feat, color, legendRowName(scope.legendName));
     });
   };
 
@@ -1443,7 +1452,7 @@ export const createFeatureColorActions = ({
         setDefaultColor(drawing, defaultColorType, color);
       } else if (!(await applyColorToLegendSpecificRules(drawing, /** @type {PythonLegendKey} */ (targetLegendName), color))) {
         const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
-        await applyColorToFeatureGroup(drawing, [feat, ...siblings], targetLegendName, color);
+        await applyColorToFeatureGroup(drawing, [feat, ...siblings], legendRowName(targetLegendName), color);
       }
     } else if (choice === 'displayLabel') {
       const displayLabel =
@@ -1454,13 +1463,16 @@ export const createFeatureColorActions = ({
       }
       const displaySiblings = findFeaturesWithSameDisplayedLabel(feat, displayLabel);
       const allFeatures = [feat, ...displaySiblings];
-      await applyColorToFeatureGroup(drawing, allFeatures, displayLabel, color, { preferLabelRules: true });
+      await applyColorToFeatureGroup(drawing, allFeatures, legendRowName(displayLabel), color, { preferLabelRules: true });
     } else if (choice === 'single') {
-      let singleCaption = legendName;
+      // The dialog holds the feature's row (a key) or a typed name: the name
+      // is compared and written, so a feature that leaves its rule's row is
+      // named by itself, never by the key of the row it leaves (OV-640).
+      let singleCaption = legendRowName(legendName);
       if (featureStyleScopeDialog.siblingCount > 0 || (matchingRule && featureStyleScopeDialog.ruleMatchCount > 1)) {
-        const ruleCaption = matchingRule ? (matchingRule.cap || matchingRule.val) : legendName;
-        if (legendName === ruleCaption) {
-          singleCaption = getIndividualFeatureLabel(feat);
+        const ruleCaption = matchingRule ? (matchingRule.cap || matchingRule.val) : singleCaption;
+        if (singleCaption === ruleCaption) {
+          singleCaption = legendRowName(getIndividualFeatureLabel(feat));
         }
       }
       await setFeatureColor(drawing, feat, color, singleCaption);
@@ -1473,11 +1485,11 @@ export const createFeatureColorActions = ({
       }
       const annotationSiblings = findFeaturesWithSameIndividualLabel(feat, annotationLabel);
       const allFeatures = [feat, ...annotationSiblings];
-      await applyColorToFeatureGroup(drawing, allFeatures, annotationLabel, color, { preferLabelRules: true });
+      await applyColorToFeatureGroup(drawing, allFeatures, legendRowName(annotationLabel), color, { preferLabelRules: true });
     } else if (choice === 'useExisting') {
       if (existingCaptionColor) {
         const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
-        await setFeatureColor(drawing, feat, existingCaptionColor, targetLegendName);
+        await setFeatureColor(drawing, feat, existingCaptionColor, legendRowName(targetLegendName));
       }
     }
 
@@ -1677,12 +1689,14 @@ export const createFeatureColorActions = ({
     // The reset color is the palette default of the feature being reset.
     const color = appliedFeatureColorOf(state, feature.type);
     // A type without a palette color has nothing to reset to.
-    if (choice === 'this_with_legend') return color ? setFeatureColor(drawing, feature, color, caption) : false;
+    if (choice === 'this_with_legend') return color ? setFeatureColor(drawing, feature, color, legendRowName(caption)) : false;
+    // "Reset all" resets the features of the row: the rules that draw it, by its key.
+    const rowRules = new Set(getLegendRowRules(caption));
     /** @type {SpecificRuleBuild} */
     const reset = (current) => {
       /** @type {Partial<SpecificColorRule>[]} */
       const rules = current.filter(rule => (choice === 'all'
-        ? rule.cap !== caption : !hashRuleTargetsFeatureExactly(rule, feature)));
+        ? !rowRules.has(rule) : !hashRuleTargetsFeatureExactly(rule, feature)));
       if (choice === 'this' && rules.some(rule => ruleMatchesFeature(feature, rule))) {
         const qualifier = getFeatureQualifier(feature);
         if (qualifier && color) rules.push({ feat: feature.type, ...qualifier, color,
@@ -1715,7 +1729,7 @@ export const createFeatureColorActions = ({
     const targetColor = resolveColorToHex(color) || String(color || '').trim();
     const targetCaption = normalizeCaption(caption);
     if (targetFeatures.length === 0 || !targetColor || !targetCaption) return false;
-    await applyColorToFeatureGroup(drawing, targetFeatures, targetCaption, targetColor);
+    await applyColorToFeatureGroup(drawing, targetFeatures, legendRowName(targetCaption), targetColor);
     return true;
   };
 
@@ -1830,18 +1844,18 @@ export const createFeatureColorActions = ({
    * @param {DrawingState} drawing
    * @param {Record<string, any>} feature
    * @param {string} color
-   * @param {string | null} [customCaption]
+   * @param {LegendRowName | null} [customCaption] The name to caption the feature's rule with.
    */
   const setFeatureColor = async (drawing, feature, color, customCaption = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!feature || !getFeatureQualifier(feature)) return false;
-    const caption = normalizeCaption(customCaption || getIndividualFeatureLabel(feature));
+    const caption = legendRowName(normalizeCaption(customCaption || getIndividualFeatureLabel(feature)));
     if (!caption || featureColorAssignmentMatches(drawing, feature, color, caption)) return false;
     return applyColorToFeatureGroup(drawing, [feature], caption, resolveColorToHex(color) || color);
   };
 
-  /** @param {DrawingState} drawing @param {ColorFeature} feature @param {string | null} value @param {string | null} [customCaption] */
+  /** @param {DrawingState} drawing @param {ColorFeature} feature @param {string | null} value @param {LegendRowName | null} [customCaption] */
   const setFeatureColorValue = async (drawing, feature, value, customCaption = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1850,7 +1864,7 @@ export const createFeatureColorActions = ({
       return commitRuleWrite((current) => current.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color', { drawing });
     }
     if (String(value).trim().toLowerCase() === 'none') {
-      return applyColorToFeatureGroup(drawing, [feature], normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type), 'none');
+      return applyColorToFeatureGroup(drawing, [feature], legendRowName(normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type)), 'none');
     }
     return setFeatureColor(drawing, feature, value, customCaption);
   };

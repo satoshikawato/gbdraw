@@ -1,5 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
+/** @import { LegendRowName } from '../../services/legend-row-names.js' */
+/** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /**
  * A Legend row record as the editor lists, restores, and compares it.
  * @typedef {{ caption?: string, originalCaption?: string, color?: string, featureIds?: unknown[], xPos?: number, yPos?: number }} EntryRecord
@@ -102,8 +104,20 @@ export const createLegendEntryActions = ({
   const readLegendRowNames = () => {
     legendRowNames.value = shownLegendRowNames(svgContainer.value?.querySelector?.('svg') || null);
   };
+  // The name a caption stands for (D-15): the name of the row it is the key
+  // of, as the displayed Result shows it, else as the color rules that draw the
+  // row are captioned (a deleted or dormant row the Result does not hold),
+  // else the caption itself (a row whose key is its name, or a typed name).
+  // Every write of a caption that was read as a row takes this name (OV-640).
+  /** @param {unknown} caption @returns {LegendRowName} */
+  const legendRowName = (caption) => {
+    const key = String(caption ?? '');
+    return /** @type {LegendRowName} */ (legendRowNames.value.get(key)?.name
+      ?? legendRowRules(/** @type {PythonLegendKey} */ (key), displayedLegendRowContext(state, state.activeDrawing()))[0]?.cap
+      ?? key);
+  };
   /** @param {unknown} caption The key a row shows. @returns {string} The name the Legend draws for it. */
-  const shownLegendName = (caption) => legendRowNames.value.get(String(caption ?? ''))?.drawnName ?? String(caption ?? '');
+  const shownLegendName = (caption) => legendRowNames.value.get(String(caption ?? ''))?.drawnName ?? legendRowName(caption);
   // Whether `typed` names the row that shows `caption`: its key, its name, or
   // its drawn name. Typing one of them into the row's name field is no rename.
   /** @param {unknown} caption @param {unknown} typed */
@@ -641,6 +655,7 @@ export const createLegendEntryActions = ({
     deleteLegendEntry,
     extractLegendEntries,
     legendRowIsNamed,
+    legendRowName,
     onLegendGeometryChanged,
     prepareFileLegendEntries,
     readLegendRowNames,
