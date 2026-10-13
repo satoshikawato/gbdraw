@@ -48,6 +48,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
 )
+from gbdraw.layout.composition import LegendPlacement
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.mode_profiles import (
     ComparisonThresholds,
@@ -437,16 +438,14 @@ CircularTrackOptions = CircularRequestTrackOptions
 LinearTrackOptions = LinearRequestTrackOptions
 
 
-# The legend positions of each mode, in the order the message names them. The
-# output options check them, and tools/generate_web_contracts.py writes them
-# into the Web's contracts/schema.generated.js.
+# The legend positions of each mode: the layout's placements, without the
+# corner (overlay) ones in Linear. The output options check them, and
+# tools/generate_web_contracts.py writes them into the Web's
+# contracts/schema.generated.js.
 LEGEND_POSITIONS: Mapping[DiagramMode, tuple[str, ...]] = MappingProxyType(
     {
-        "circular": (
-            "left", "right", "top", "bottom",
-            "upper_left", "upper_right", "lower_left", "lower_right", "none",
-        ),
-        "linear": ("left", "right", "top", "bottom", "none"),
+        "circular": tuple(placement.value for placement in LegendPlacement),
+        "linear": tuple(placement.value for placement in LegendPlacement if not placement.is_overlay),
     }
 )
 

@@ -126,14 +126,6 @@ def test_the_legend_positions_of_a_mode_have_one_python_owner(
         "upper_left, upper_right, lower_left, lower_right, none.",
         "Linear legend must be one of: left, right, top, bottom, none.",
     ]
-    # The composition's placements are the Circular positions; Linear has no corner (overlay) placement.
-    from gbdraw.layout.composition import LegendPlacement
-
-    assert dict(options.LEGEND_POSITIONS) == {
-        "circular": tuple(placement.value for placement in LegendPlacement),
-        "linear": tuple(placement.value for placement in LegendPlacement if not placement.is_overlay),
-    }
-
     monkeypatch.setattr(
         options,
         "LEGEND_POSITIONS",
