@@ -278,6 +278,8 @@ def test_web_render_draws_crossing_leaders_with_counts_only_and_computes_rows_la
     assert entry["resultIndex"] == 0 and entry["resultName"] == "fit.svg"
     report = entry["report"]
     assert report["drawn"] is True and report["overlapPairs"] == 0 and report["crossingPairs"] > 0
+    # Python owns the notice bar's words (the Owner's Q8 wording).
+    assert report["notice"] == [f"Leader lines cross ({report['crossingPairs']} pairs)."]
     # OD-F14: Generate searched no row.
     assert [row["kind"] for row in report["rows"]] == list(ROW_KINDS[:6])
     assert {row["status"] for row in report["rows"]} == {"not_computed"}
@@ -524,3 +526,13 @@ def test_a_failed_render_keeps_the_shown_results_rows_computable() -> None:
         searches.retain("circular", [])
     assert searches.row(drawn, "outward_vertical")["status"] == "not_computed"
     assert searches.failure_payload(failure, "circular")["rowToken"] is None
+
+
+def test_the_notice_bar_words_are_pythons_with_one_plural_rule() -> None:
+    def notice(crossing: int, covering: int) -> list[str]:
+        record = LabelFitRecord("NC_1", "circular_outer", 80, 14.0, LabelFit(0, crossing, covering))
+        return label_fit_report_payload(LabelFitReport((record,), (), drawn=True), "circular")["notice"]
+
+    assert notice(1, 0) == ["Leader lines cross (1 pair)."]
+    assert notice(2, 3) == ["Leader lines cross (2 pairs).", "Labels cover the definition text (3)."]
+    assert notice(0, 1) == ["Labels cover the definition text (1)."]

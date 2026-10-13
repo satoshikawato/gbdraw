@@ -5789,8 +5789,7 @@
                      role="status" aria-live="polite" aria-atomic="true" data-testid="label-fit-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
                     <p class="flex flex-wrap items-center gap-2">
-                        <span v-if="labelFitNotice.report.crossingPairs" class="font-semibold">Leader lines cross ({{ labelFitNotice.report.crossingPairs }} {{ labelFitNotice.report.crossingPairs === 1 ? 'pair' : 'pairs' }}).</span>
-                        <span v-if="labelFitNotice.report.definitionOverlaps" class="font-semibold">Labels cover the definition text ({{ labelFitNotice.report.definitionOverlaps }}).</span>
+                        <span v-for="(sentence, index) in labelFitNotice.report.notice" :key="index" class="font-semibold">{{ sentence }}</span>
                         <button type="button" data-history-ignore class="btn btn-secondary text-xs h-7 px-2" @click="openLabelFitNotice">Choose a fix</button>
                     </p>
                 </div>

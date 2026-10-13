@@ -53,6 +53,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {number} overlapPairs
  * @property {number} crossingPairs
  * @property {number} definitionOverlaps Labels over the definition text.
+ * @property {readonly string[]} notice Python's sentences for the notice bar over a drawn figure.
  * @property {readonly LabelFitRecord[]} records
  * @property {readonly LabelFitRow[]} rows In the dialog order.
  */
@@ -142,6 +143,7 @@ export const normalizeLabelFitRow = (value) => {
 const normalizeLabelFitReport = (parsed) => {
   if (!isObject(parsed) || parsed.schema !== 1 || typeof parsed.drawn !== 'boolean'
     || !isCount(parsed.overlapPairs) || !isCount(parsed.crossingPairs) || !isCount(parsed.definitionOverlaps)
+    || !Array.isArray(parsed.notice) || !parsed.notice.every((sentence) => typeof sentence === 'string')
     || !Array.isArray(parsed.records) || !Array.isArray(parsed.rows)) throw invalid();
   const records = parsed.records.map((record) => {
     if (!isObject(record) || typeof record.recordId !== 'string' || typeof record.labelKind !== 'string'
@@ -168,6 +170,7 @@ const normalizeLabelFitReport = (parsed) => {
     overlapPairs: parsed.overlapPairs,
     crossingPairs: parsed.crossingPairs,
     definitionOverlaps: parsed.definitionOverlaps,
+    notice: Object.freeze([...parsed.notice]),
     records: Object.freeze(records),
     rows: Object.freeze(parsed.rows.map(normalizeLabelFitRow))
   });

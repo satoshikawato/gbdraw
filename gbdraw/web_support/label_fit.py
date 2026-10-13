@@ -36,6 +36,7 @@ from gbdraw.labels.fit import (
     LabelFitRowStatus,
     LabelFitValue,
     LabelKind,
+    label_fit_notice,
     label_fit_record_counts,
     label_kind_words,
     row_note,
@@ -115,6 +116,7 @@ class LabelFitReportPayload(TypedDict):
     overlapPairs: int
     crossingPairs: int
     definitionOverlaps: int
+    notice: list[str]
     records: list[LabelFitRecordPayload]
     rows: list[LabelFitRowPayload]
 
@@ -204,6 +206,7 @@ def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> Labe
         "overlapPairs": report.overlap_pairs,
         "crossingPairs": report.crossing_pairs,
         "definitionOverlaps": report.definition_overlaps,
+        "notice": list(label_fit_notice(report)),
         "records": [_record_payload(record) for record in report.records],
         "rows": [label_fit_row_payload(row, mode) for row in report.rows],
     }

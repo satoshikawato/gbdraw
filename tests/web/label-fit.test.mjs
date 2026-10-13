@@ -32,6 +32,7 @@ const foundRow = (kind, value) => row(kind, 'found', {
 });
 const report = (rows, { drawn = false } = {}) => ({
   schema: 1, drawn, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0,
+  notice: drawn ? ['Leader lines cross (5 pairs).'] : [],
   records: [{ recordId: 'NC_1', labelKind: 'circular_outer', labelKindTitle: 'outer labels',
     labelCount: 80, fontSize: 18, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0,
     refused: false, counts: '3 label pairs overlap, 5 leader pairs cross' }],
@@ -61,6 +62,20 @@ test('the failure reader keeps Python\'s rows in order, the record counts, and t
   assert.equal(parsed.rows[1].reason, 'No fit');
   assert.equal(normalizeLabelFitFailure(undefined), null);
   assert.ok(Object.isFrozen(parsed.rows[0].values));
+});
+
+test('the notice bar shows Python\'s sentences and has no wording of its own', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const parsed = normalizeReport(report([], { drawn: true }));
+  assert.deepEqual(parsed.notice, ['Leader lines cross (5 pairs).']);
+  assert.ok(Object.isFrozen(parsed.notice));
+  const invalid = (error) => error.code === 'RESULT_INVALID';
+  assert.throws(() => normalizeReport({ ...report([]), notice: [5] }), invalid);
+  assert.throws(() => normalizeReport({ ...report([]), notice: undefined }), invalid);
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const bar = html.slice(html.indexOf('data-testid="label-fit-notice"'), html.indexOf('Choose a fix</button>'));
+  assert.match(bar, /labelFitNotice\.report\.notice/);
+  assert.doesNotMatch(bar, /Leader lines cross|definition text|'pairs'/);
 });
 
 const noticeRow = () => row('separate_features', 'found_with_notice', { values: { 'canvas.resolve_overlaps': true },

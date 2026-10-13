@@ -488,6 +488,17 @@ def row_note(row: LabelFitRow) -> str | None:
     return " and ".join(notes) or None
 
 
+def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
+    """The notice bar's sentences over a drawn figure (the Owner's Q8 wording)."""
+
+    sentences: list[str] = []
+    if report.crossing_pairs:
+        sentences.append(f"Leader lines cross ({_counted(report.crossing_pairs, 'pair', 'pairs')}).")
+    if report.definition_overlaps:
+        sentences.append(f"Labels cover the definition text ({report.definition_overlaps}).")
+    return tuple(sentences)
+
+
 def label_fit_record_counts(record: LabelFitRecord) -> str:
     """A record's counts as the report states them, or why radial labels were refused."""
 
@@ -624,6 +635,7 @@ __all__ = [
     "crossing_pairs",
     "fit_counts",
     "format_label_fit_report",
+    "label_fit_notice",
     "label_fit_outcome",
     "label_fit_record_counts",
     "label_fits_by_kind",
