@@ -5049,10 +5049,11 @@ def describe_canonical_request() -> dict[str, Any]:
     data(HatchStyle)
     data(RegionAnnotationStyle)
     data(FeatureSelector)
-    data(CoordinateSpan, kind="coordinateSpan")
+    # A Web writer wrote a fraction at lane, start and end (OV-630, BA-OD74);
+    # the decoder reads its integer part.
+    data(CoordinateSpan, kind="coordinateSpan", replace={"start": NUMBER, "end": NUMBER})
     data(FeatureSpan, kind="featureSpan")
     data(FeatureIdentitySpan, kind="featureIdentity")
-    # A Web writer wrote a fraction at lane (OV-630); the decoder reads its integer part.
     data(RegionAnnotation, replace={"lane": nullable(NUMBER)})
     data(AnnotationSet)
     data(AnnotationOptions, files=frozenset({"table_file"}))

@@ -308,6 +308,9 @@ _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalCircularRenderRequest.output": ("an array",),
     "CanonicalCircularRenderRequest.records": ("an array",),
     "CanonicalCollinearityResultComparison.resourceId": ("another string",),
+    # 0.5 is below 1; a fraction from 1 reads as its integer part (_FRACTIONS).
+    "CanonicalCoordinateSpan.end": ("a fraction",),
+    "CanonicalCoordinateSpan.start": ("a fraction",),
     "CanonicalFeatureSpan.selectors": ("an array",),
     "CanonicalFileRef.resourceId": ("another string",),
     "CanonicalGenbankRecordSource.resourceId": ("another string",),
@@ -747,20 +750,28 @@ def test_the_decoder_refuses_a_value_of_another_kind_at_every_schema(
         _decode_at(schema, request, tmp_path, change)
 
 
+# The Web's Lane, Start and End number inputs write fractions at every schema
+# (OV-630, BA-OD74); Python reads the integer part.
+_FRACTIONS: tuple[tuple[tuple[str | int, ...], str, float, int], ...] = (
+    (_COORDINATES, "lane", 0.5, 0),
+    ((*_COORDINATES, "target"), "start", 2.5, 2),
+    ((*_COORDINATES, "target"), "end", 20.5, 20),
+)
+
+
 @pytest.mark.parametrize("schema", SCHEMAS)
-def test_a_fraction_at_an_annotation_lane_reads_as_its_integer_part_at_every_schema(
-    schema: int, tmp_path: Path
+@pytest.mark.parametrize(("path", "key", "fraction", "integer"), _FRACTIONS)
+def test_a_fraction_at_an_annotation_number_reads_as_its_integer_part_at_every_schema(
+    path: tuple[str | int, ...], key: str, fraction: float, integer: int, schema: int, tmp_path: Path
 ) -> None:
-    """The Web's Lane input wrote fractions at every schema (OV-630); Python draws lane 0."""
-
-    def fraction(payload: dict[str, Any]) -> None:
+    def change(payload: dict[str, Any]) -> None:
         holder: Any = payload
-        for step in _COORDINATES:
+        for step in path:
             holder = holder[step]
-        holder["lane"] = 0.5
+        holder[key] = fraction
 
-    decoded = _decode_at(schema, _annotated_request("linear"), tmp_path, fraction)
-    assert decoded.options.annotations.sets[0].annotations[0].lane == 0
+    annotation = _decode_at(schema, _annotated_request("linear"), tmp_path, change).options.annotations.sets[0].annotations[0]
+    assert {"lane": annotation.lane, **vars(annotation.target)}[key] == integer
 
 
 def test_the_encoder_writes_a_boolean_where_a_coordinate_span_wraps_the_origin(tmp_path: Path) -> None:
