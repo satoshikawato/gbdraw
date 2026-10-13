@@ -53,7 +53,10 @@ class PreparedResourceIdentity:
 class _PreparedCacheEntry:
     value: Any
     resource_identities: frozenset[PreparedResourceIdentity]
+    # The full stamp walks every feature; the structure stamp stops at the
+    # feature list (D-05). Both are taken when the entry is built.
     owner_stamp: Hashable
+    structure_stamp: Hashable
     retained_bytes: int
 
 
@@ -264,7 +267,7 @@ def _feature_stamp(feature: Any) -> Hashable:
     )
 
 
-def _record_stamp(record: SeqRecord) -> Hashable:
+def _record_stamp(record: SeqRecord, *, walk_features: bool) -> Hashable:
     features = getattr(record, "features", ())
     annotations = getattr(record, "annotations", None)
     return (
@@ -275,7 +278,11 @@ def _record_stamp(record: SeqRecord) -> Hashable:
         len(record.seq),
         id(features),
         len(features),
-        tuple(_feature_stamp(feature) for feature in features),
+        (
+            tuple(_feature_stamp(feature) for feature in features)
+            if walk_features
+            else None
+        ),
         _shallow_value_stamp(annotations),
     )
 
@@ -293,13 +300,23 @@ def _records_from_value(value: Any) -> tuple[SeqRecord, ...] | None:
     return None
 
 
-def _owner_stamp(value: Any) -> Hashable:
+def _owner_stamp(value: Any, *, walk_features: bool) -> Hashable:
+    """Stamp a cached value; ``walk_features=False`` gives the structure stamp.
+
+    The structure stamp keeps every record field but the per-feature walk:
+    record object, id, name, sequence and feature-list identity and length,
+    and the annotations one level deep. Values without records have one stamp.
+    """
+
     records = _records_from_value(value)
     if records is not None:
         provenance = getattr(value, "provenance", None)
         return (
             "records",
-            tuple(_record_stamp(record) for record in records),
+            tuple(
+                _record_stamp(record, walk_features=walk_features)
+                for record in records
+            ),
             _shallow_value_stamp(provenance),
         )
     if all(
@@ -498,6 +515,11 @@ class PreparedBiologicalInputCache:
     feature counts, qualifier counts, and interactive-context payloads without
     serializing them. Worker termination releases the cache with the Python
     runtime.
+
+    Ownership guard (D-05): a reused entry is checked by structure when it is
+    read and in full, every feature, when the transaction commits, so a change
+    to a cached record fails the same request. After a transaction that did not
+    commit, the next one checks in full when it reads, too.
     """
 
     def __init__(self) -> None:
@@ -507,6 +529,9 @@ class PreparedBiologicalInputCache:
             "resolved": OrderedDict(),
             "interactive": OrderedDict(),
         }
+        # A transaction that did not commit may have changed what it read, so
+        # the next one checks owners in full at entry, not only at commit.
+        self._previous_transaction_failed = False
 
     def _evict(
         self,
@@ -573,6 +598,11 @@ class PreparedBiologicalInputCache:
         try:
             yield
             self._commit(transaction)
+        except BaseException:
+            self._previous_transaction_failed = True
+            raise
+        else:
+            self._previous_transaction_failed = False
         finally:
             self._set_retained_metric(transaction)
             _ACTIVE_PREPARED_TRANSACTION.reset(token)
@@ -589,19 +619,40 @@ class PreparedBiologicalInputCache:
         entry = self._layers[layer].get(key)
         if entry is None:
             return None
-        current_stamp = _owner_stamp(entry.value)
-        if current_stamp != entry.owner_stamp:
-            _record_metric(
-                transaction,
-                "preparedInputCacheMutationViolationCount",
-            )
-            self._evict(layer, key, transaction)
-            raise ValidationError(
-                f"Cached {layer} biological input ownership was mutated "
-                f"({_owner_mutation_detail(entry.owner_stamp, current_stamp)})."
-            )
+        # D-05: the structure here, every feature at commit; in full here too
+        # after a transaction that did not commit.
+        self._verify_owner(
+            layer,
+            key,
+            entry,
+            transaction,
+            walk_features=self._previous_transaction_failed,
+        )
         self._layers[layer].move_to_end(key)
         return entry
+
+    def _verify_owner(
+        self,
+        layer: str,
+        key: Hashable,
+        entry: _PreparedCacheEntry,
+        transaction: _PreparedCacheTransaction,
+        *,
+        walk_features: bool,
+    ) -> None:
+        expected = entry.owner_stamp if walk_features else entry.structure_stamp
+        current_stamp = _owner_stamp(entry.value, walk_features=walk_features)
+        if current_stamp == expected:
+            return
+        _record_metric(
+            transaction,
+            "preparedInputCacheMutationViolationCount",
+        )
+        self._evict(layer, key, transaction)
+        raise ValidationError(
+            f"Cached {layer} biological input ownership was mutated "
+            f"({_owner_mutation_detail(expected, current_stamp)})."
+        )
 
     def get_or_build(
         self,
@@ -633,7 +684,8 @@ class PreparedBiologicalInputCache:
         entry = _PreparedCacheEntry(
             value=value,
             resource_identities=resource_identities,
-            owner_stamp=_owner_stamp(value),
+            owner_stamp=_owner_stamp(value, walk_features=True),
+            structure_stamp=_owner_stamp(value, walk_features=False),
             retained_bytes=(
                 _retained_bytes(value)
                 + sum(identity.size for identity in resource_identities)
@@ -661,17 +713,13 @@ class PreparedBiologicalInputCache:
                 )
                 if entry is None:
                     continue
-                current_stamp = _owner_stamp(entry.value)
-                if current_stamp != entry.owner_stamp:
-                    _record_metric(
-                        transaction,
-                        "preparedInputCacheMutationViolationCount",
-                    )
-                    self._evict(layer, key, transaction)
-                    raise ValidationError(
-                        f"Cached {layer} biological input ownership was mutated "
-                        f"({_owner_mutation_detail(entry.owner_stamp, current_stamp)})."
-                    )
+                self._verify_owner(
+                    layer,
+                    key,
+                    entry,
+                    transaction,
+                    walk_features=True,
+                )
                 retained[key] = entry
             replacements[layer] = retained
         for layer, replacement in replacements.items():

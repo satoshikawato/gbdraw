@@ -39,6 +39,7 @@ from gbdraw.annotations import (
     RegionAnnotation,
 )
 from gbdraw.exceptions import ValidationError
+import gbdraw.api.prepared as prepared_module
 import gbdraw.api.request_render as request_render_module
 from gbdraw.api.request_render import normalize_request_records, plan_request
 from gbdraw.features.overrides import FeatureOverride
@@ -866,3 +867,218 @@ def test_mutation_guard_rejects_changed_cached_owners(tmp_path: Path) -> None:
                 lambda: pytest.fail("a mutated owner must not be reused"),
             )
     assert _metrics(diagnostics)["preparedInputCacheMutationViolationCount"] == 1
+
+
+def _parsed_source_cache(
+    tmp_path: Path,
+    sources: dict[str, tuple[SeqRecord, ...]],
+) -> tuple[PreparedBiologicalInputCache, Path, PreparedResourceIdentity]:
+    path = tmp_path / "resource.bin"
+    path.write_bytes(b"resource")
+    identity = PreparedResourceIdentity(
+        resource_id="record-1",
+        cache_token="render-resource-1",
+        size=8,
+    )
+    cache = PreparedBiologicalInputCache()
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        for name, records in sources.items():
+            get_or_build_parsed_source(
+                (name, identity),
+                frozenset({identity}),
+                lambda records=records: records,
+            )
+    return cache, path, identity
+
+
+def _replace_first_feature(records: tuple[SeqRecord, ...]) -> None:
+    """Change a cached record without changing its feature count (D-05)."""
+
+    records[0].features[0] = SeqFeature(
+        FeatureLocation(33, 180, strand=1),
+        type="CDS",
+        qualifiers={"locus_tag": ["replacement"]},
+    )
+
+
+def test_structural_stamp_rejects_a_resized_feature_list_at_entry(
+    tmp_path: Path,
+) -> None:
+    records = (_record("resized"),)
+    cache, path, identity = _parsed_source_cache(tmp_path, {"source": records})
+    records[0].features.append(SeqFeature(FeatureLocation(400, 450), type="misc_feature"))
+
+    diagnostics: dict[str, object] = {"metrics": {}}
+    reached_render = False
+    with pytest.raises(ValidationError, match="ownership was mutated .*feature count"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            get_or_build_parsed_source(
+                ("source", identity),
+                frozenset({identity}),
+                lambda: pytest.fail("a mutated owner must not be reused"),
+            )
+            reached_render = True
+    assert reached_render is False
+    assert _metrics(diagnostics)["preparedInputCacheMutationViolationCount"] == 1
+
+
+def test_feature_replaced_at_the_same_length_fails_at_commit_of_the_same_request(
+    tmp_path: Path,
+) -> None:
+    # D-05 (R2-8): the structural check at entry passes, the render runs, and
+    # the full check at commit fails the same request.
+    records = (_record("replaced"),)
+    cache, path, identity = _parsed_source_cache(tmp_path, {"source": records})
+    _replace_first_feature(records)
+
+    diagnostics: dict[str, object] = {"metrics": {}}
+    reached_render = False
+    with pytest.raises(ValidationError, match="ownership was mutated .*feature 0"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            assert get_or_build_parsed_source(
+                ("source", identity),
+                frozenset({identity}),
+                lambda: pytest.fail("the entry check is structural"),
+            ) is records
+            reached_render = True
+    assert reached_render is True
+    assert _metrics(diagnostics)["preparedInputCacheMutationViolationCount"] == 1
+
+    rebuilt = (_record("rebuilt"),)
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        assert get_or_build_parsed_source(
+            ("source", identity),
+            frozenset({identity}),
+            lambda: rebuilt,
+        ) is rebuilt
+
+
+def test_request_after_a_mutation_error_checks_every_owner_in_full_at_entry(
+    tmp_path: Path,
+) -> None:
+    first = (_record("first"),)
+    second = (_record("second"),)
+    cache, path, identity = _parsed_source_cache(
+        tmp_path,
+        {"first": first, "second": second},
+    )
+    _replace_first_feature(first)
+    _replace_first_feature(second)
+
+    with pytest.raises(ValidationError, match="ownership was mutated"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            for name in ("first", "second"):
+                get_or_build_parsed_source(
+                    (name, identity),
+                    frozenset({identity}),
+                    lambda: pytest.fail("the entry check is structural"),
+                )
+
+    # The commit stopped at the first changed owner; the other is still cached
+    # and is now found before the render.
+    reached_render = False
+    with pytest.raises(ValidationError, match="ownership was mutated .*feature 0"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            for name in ("first", "second"):
+                # The evicted owner is rebuilt; the other one fails at entry.
+                get_or_build_parsed_source(
+                    (name, identity),
+                    frozenset({identity}),
+                    lambda: (_record("rebuilt"),),
+                )
+            reached_render = True
+    assert reached_render is False
+
+
+def test_request_after_a_failed_render_checks_owners_in_full_at_entry(
+    tmp_path: Path,
+) -> None:
+    # D-05 (R2-8): when the render fails for another reason first, that request
+    # shows the render's error, and the next request finds the change at entry.
+    records = (_record("failed-render"),)
+    cache, path, identity = _parsed_source_cache(tmp_path, {"source": records})
+    _replace_first_feature(records)
+
+    failed_diagnostics: dict[str, object] = {"metrics": {}}
+    with pytest.raises(RuntimeError, match="render failed"):
+        with cache.transaction(
+            resource_paths={path: identity},
+            diagnostics=failed_diagnostics,
+        ):
+            get_or_build_parsed_source(
+                ("source", identity),
+                frozenset({identity}),
+                lambda: pytest.fail("the entry check is structural"),
+            )
+            raise RuntimeError("render failed")
+    assert _metrics(failed_diagnostics)["preparedInputCacheMutationViolationCount"] == 0
+
+    diagnostics: dict[str, object] = {"metrics": {}}
+    reached_render = False
+    with pytest.raises(ValidationError, match="ownership was mutated .*feature 0"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            get_or_build_parsed_source(
+                ("source", identity),
+                frozenset({identity}),
+                lambda: pytest.fail("a mutated owner must not be reused"),
+            )
+            reached_render = True
+    assert reached_render is False
+    metrics = _metrics(diagnostics)
+    assert metrics["preparedInputCacheMutationViolationCount"] == 1
+    assert metrics["preparedInputCacheEvictionCount"] == 1
+
+    # After a successful transaction the entry check is structural again.
+    rebuilt = (_record("rebuilt"),)
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        get_or_build_parsed_source(
+            ("source", identity),
+            frozenset({identity}),
+            lambda: rebuilt,
+        )
+    _replace_first_feature(rebuilt)
+    reached_render = False
+    with pytest.raises(ValidationError, match="ownership was mutated .*feature 0"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            get_or_build_parsed_source(
+                ("source", identity),
+                frozenset({identity}),
+                lambda: pytest.fail("the entry check is structural"),
+            )
+            reached_render = True
+    assert reached_render is True
+
+
+def test_warm_request_walks_each_cached_feature_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("walk-record"),))
+    cache = PreparedBiologicalInputCache()
+    document = _document(source, title="Walk count")
+    _render(tmp_path, cache, document, request_id=1)
+
+    walked: list[int] = []
+    original = prepared_module._feature_stamp
+
+    def counting(feature: object) -> object:
+        walked.append(id(feature))
+        return original(feature)
+
+    monkeypatch.setattr(prepared_module, "_feature_stamp", counting)
+    _result, diagnostics = _render(tmp_path, cache, document, request_id=2)
+
+    metrics = _metrics(diagnostics)
+    assert metrics["parsedSourceCacheHitCount"] == 1
+    assert metrics["resolvedRecordCacheHitCount"] == 1
+    assert metrics["preparedInputCacheMutationViolationCount"] == 0
+    # One full walk per cached entry that holds records: the one at commit.
+    cached_features = sum(
+        len(record.features)
+        for entries in cache._layers.values()
+        for entry in entries.values()
+        for record in prepared_module._records_from_value(entry.value) or ()
+    )
+    assert cached_features > 0
+    assert len(walked) == cached_features

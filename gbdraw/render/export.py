@@ -18,6 +18,7 @@ from svgwrite import Drawing
 
 from gbdraw.core.text import calculate_svg_bbox_dimensions, dominant_baseline_shift_em, get_font_vertical_metrics
 from gbdraw.exceptions import GbdrawError
+from gbdraw.render.document import write_svg_document
 from gbdraw.render.formats import (
     CAIROSVG_FORMATS,
     INTERACTIVE_SVG_FORMAT,
@@ -295,11 +296,14 @@ def save_figure(
     svg_filename = resolve_format_output_path(base_filename, SVG_FORMAT)
 
     # 1. Always save SVG
-    canvas.saveas(svg_filename)
+    canvas.filename = svg_filename
+    with open(svg_filename, "w", encoding="utf-8") as svg_file:
+        document = write_svg_document(canvas)
+        document.write(svg_file)
     logger.info(f"Generated SVG: {svg_filename}")
 
     classification = classify_formats(list_of_formats)
-    svg_source = canvas.tostring()
+    svg_source = document.body
 
     if classification.interactive:
         interactive_filename = resolve_format_output_path(

@@ -410,3 +410,31 @@ def test_display_frame_bound_rows_of_a_main_session_draw_once_and_resave_as_stor
     drawn_svg = _replay(display, tmp_path / "display", "--session_output", str(sidecar))
     assert drawn_svg == _replay(search, tmp_path / "search")
     assert _stored_comparison_table(sidecar) == _stored_comparison_table(display)
+
+
+@pytest.mark.linear
+def test_linear_plan_projects_bound_rows_once_for_its_validation_and_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The plan validates the source bindings by projecting them (OV-399) and
+    # its build draws those rows; it does not project them a second time.
+    import gbdraw.api.request_render as request_render_module
+
+    request = _bound_row_request(tmp_path)
+    calls: list[bool] = []
+    original = request_render_module.project_source_bound_comparisons
+
+    def counting(*args, **kwargs):
+        calls.append(bool(kwargs.get("search_frame", False)))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(request_render_module, "project_source_bound_comparisons", counting)
+    plan = request_render_module.plan_linear_request(request)
+    built = plan.build()
+
+    assert calls == [False]
+    (given,) = plan.request.options.linear_comparisons
+    assert "subject_view_feature_svg_id" not in given.matches.columns
+    (drawn,) = built.metadata.linear_comparisons
+    assert drawn.matches.loc[0, ["sstart", "send"]].tolist() == [141, 170]
