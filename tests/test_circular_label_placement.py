@@ -235,6 +235,56 @@ def test_circular_label_reach_boxes_keep_every_overlapping_peer() -> None:
 
 
 @pytest.mark.circular
+def test_circular_moved_label_overlap_count_equals_the_full_recount() -> None:
+    """The cluster relaxation counts a candidate from the current pairs; it must equal a full recount."""
+    module = circular_labels_module
+    checked = 0
+    for seed in range(80):
+        rng = random.Random(1000 + seed)
+        # Odd seeds use tiny labels, where only the reach pad keeps a margin-wide gap covered.
+        sizes = {"widths": (0.5, 2.0, 6.0), "heights": (0.5, 2.0, 5.0)} if seed % 2 else {}
+        labels, total_length, _ = _random_label_set(seed, max_labels=40, **sizes)
+        margins = {
+            (i, j): module.minimum_bbox_gap_px(labels[i], labels[j], base_margin_px=rng.choice([0.1, 1.5, 4.0]))
+            for i in range(len(labels))
+            for j in range(i + 1, len(labels))
+        }
+        max_margin = max(margins.values(), default=0.0)
+
+        def overlaps(label_i: dict, label_j: dict, i: int, j: int) -> bool:
+            margin = margins[(i, j)]
+            return module.y_overlap(label_i, label_j, total_length, margin) and module.x_overlap(
+                label_i, label_j, minimum_margin=margin
+            )
+
+        def pairs(label_list: list[dict]) -> list[tuple[int, int]]:
+            candidates = module._candidate_label_pairs(label_list, total_length, padding=max_margin)
+            return [(i, j) for i, j in sorted(candidates) if overlaps(label_list[i], label_list[j], i, j)]
+
+        counter = module._MovedLabelOverlaps(labels, pairs(labels), overlaps, module._reach_pad(max_margin))
+        for _ in range(12):
+            start = rng.randrange(len(labels))
+            span = range(start, min(len(labels), start + rng.randint(1, 8)))
+            picked = set(span) | {rng.randrange(len(labels)) for _ in range(rng.randint(0, 2))}
+            moved = {}
+            for idx in picked:
+                label = dict(labels[idx])
+                shift = 25.0 if seed % 2 == 0 else 4.0
+                label["start_x"] += rng.gauss(0, shift)
+                label["start_y"] += rng.gauss(0, shift)
+                if rng.random() < 0.03:
+                    label["start_x"] = float("nan")
+                moved[idx] = label
+            full = len(pairs([moved.get(idx, label) for idx, label in enumerate(labels)]))
+            checked += full
+            assert counter.count_after_move(moved) == full
+            for cap in {0, max(full - 1, 0), full, full + 1}:
+                capped = counter.count_after_move(moved, cap=cap)
+                assert capped == full if full <= cap else capped > cap
+    assert checked > 0
+
+
+@pytest.mark.circular
 @pytest.mark.parametrize("seed", [0, 1, 2, 9])
 def test_circular_label_peer_pruning_keeps_every_count(seed: int, monkeypatch: pytest.MonkeyPatch) -> None:
     """The reach-box peer pruning must not change a count: same placements as scanning every label."""

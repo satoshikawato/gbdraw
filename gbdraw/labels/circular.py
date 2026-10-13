@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import lru_cache
-from typing import Literal, TypeAlias
+from typing import Literal, TypeAlias, cast
 
 from ..features.coordinates import get_strand
 from .filtering import preprocess_label_filtering
@@ -32,6 +32,7 @@ from ..layout.circular import (
 )
 from ..layout.spatial import (
     Aabb,
+    AabbIndex,
     bounding_aabb,
     candidate_aabb_pairs,
     touching_aabb_indices,
@@ -1123,6 +1124,76 @@ def _count_local_label_overlaps(
             if cap is not None and overlap_count > cap:
                 break
     return overlap_count
+
+
+class _MovedLabelOverlaps:
+    """Count the overlapping pairs of a label set after some labels move, from the pairs before.
+
+    Only pairs with a moved label can change. `overlaps(label_i, label_j, i, j)` (i < j) is the pair
+    predicate; it must be false for labels whose reach boxes at `reach_pad` (see `_reach_pad`) do
+    not touch, so the peers of a moved label come from the reach boxes.
+    """
+
+    def __init__(
+        self,
+        labels: Sequence[dict],
+        overlapping_pairs: Iterable[tuple[int, int]],
+        overlaps: Callable[[dict, dict, int, int], bool],
+        reach_pad: float,
+    ) -> None:
+        self._labels = labels
+        self._overlaps = overlaps
+        self._reach_pad = reach_pad
+        self._partners: list[list[int]] = [[] for _ in labels]
+        self.count = 0
+        for idx, jdx in overlapping_pairs:
+            self._partners[idx].append(jdx)
+            self._partners[jdx].append(idx)
+            self.count += 1
+        self._boxes = [_label_reach_box(label, reach_pad) for label in labels]
+        self._unknown = [idx for idx, box in enumerate(self._boxes) if box is None]
+        finite = [box for box in self._boxes if box is not None]
+        self._index = AabbIndex(bucket_size=_label_aabb_bucket_size(finite, 0.0))
+        for idx, box in enumerate(self._boxes):
+            if box is not None:
+                self._index.insert(idx, box)
+
+    def count_after_move(self, moved: Mapping[int, dict], cap: int | None = None) -> int:
+        """Overlapping pairs once each label `idx` in `moved` is replaced by `moved[idx]`.
+
+        With `cap` the count may stop once it exceeds `cap`: exact up to `cap`, above it otherwise.
+        """
+        total = self.count
+        for idx in moved:
+            for partner in self._partners[idx]:
+                if partner not in moved or partner > idx:
+                    total -= 1
+        if cap is not None and total > cap:
+            return total
+        labels = self._labels
+        overlaps = self._overlaps
+        moved_ids = sorted(moved)
+        moved_boxes = [_label_reach_box(moved[idx], self._reach_pad) for idx in moved_ids]
+        for position, idx in enumerate(moved_ids):
+            label = moved[idx]
+            box = moved_boxes[position]
+            nearby = None if box is None else cast("list[int]", self._index.query(box)) + self._unknown
+            for peer in touching_aabb_indices(self._boxes, box, candidates=nearby):
+                if peer in moved:
+                    continue
+                if overlaps(labels[peer], label, peer, idx) if peer < idx else overlaps(label, labels[peer], idx, peer):
+                    total += 1
+                    if cap is not None and total > cap:
+                        return total
+            for later in range(position + 1, len(moved_ids)):
+                peer = moved_ids[later]
+                if touching_aabb_indices(moved_boxes, box, candidates=(later,)) and overlaps(
+                    label, moved[peer], idx, peer
+                ):
+                    total += 1
+                    if cap is not None and total > cap:
+                        return total
+        return total
 
 
 def _resolve_label_leader_line_collisions(
@@ -3044,29 +3115,22 @@ def improved_label_placement_fc(
                 changed = True
         return changed
 
-    def count_remaining_overlaps() -> int:
-        overlap_count_all = 0
-        for i, j in sorted(_candidate_label_pairs(labels, total_length, padding=max_pair_margin)):
-            if check_overlap(labels[i], labels[j], total_length, pair_margin(i, j)):
-                overlap_count_all += 1
-        return overlap_count_all
+    def overlapping_pairs() -> list[tuple[int, int]]:
+        return [
+            (i, j)
+            for i, j in sorted(_candidate_label_pairs(labels, total_length, padding=max_pair_margin))
+            if check_overlap(labels[i], labels[j], total_length, pair_margin(i, j))
+        ]
 
-    def count_overlaps_for_label_list(label_list: list[dict], overlap_cap: int | None = None) -> int:
-        overlap_count_all = 0
-        for i, j in sorted(_candidate_label_pairs(label_list, total_length, padding=max_pair_margin)):
-            if check_overlap(label_list[i], label_list[j], total_length, pair_margin(i, j)):
-                overlap_count_all += 1
-                if overlap_cap is not None and overlap_count_all > overlap_cap:
-                    return overlap_count_all
-        return overlap_count_all
+    def count_remaining_overlaps() -> int:
+        return len(overlapping_pairs())
 
     def find_overlap_components() -> list[list[int]]:
         n_labels = len(labels)
         adjacency: dict[int, set[int]] = {i: set() for i in range(n_labels)}
-        for i, j in sorted(_candidate_label_pairs(labels, total_length, padding=max_pair_margin)):
-            if check_overlap(labels[i], labels[j], total_length, pair_margin(i, j)):
-                adjacency[i].add(j)
-                adjacency[j].add(i)
+        for i, j in overlapping_pairs():
+            adjacency[i].add(j)
+            adjacency[j].add(i)
 
         components: list[list[int]] = []
         visited: set[int] = set()
@@ -3131,8 +3195,21 @@ def improved_label_placement_fc(
             cluster_end = min(n_labels - 1, component[-1] + cluster_padding)
             cluster_indices = list(range(cluster_start, cluster_end + 1))
 
+            # Candidates are counted from the current pairs: only pairs with a label that moves can change.
+            current_overlaps = _MovedLabelOverlaps(
+                labels,
+                overlapping_pairs(),
+                lambda label_i, label_j, i, j: check_overlap(label_i, label_j, total_length, pair_margin(i, j)),
+                _reach_pad(max_pair_margin),
+            )
+            current_angles = [float(label["angle_unwrapped"]) for label in labels]
+            # A label whose stored position is not the one its angle gives moves in every candidate.
+            at_angle = [
+                move_label(label, angle) == (label["start_x"], label["start_y"])
+                for label, angle in zip(labels, current_angles)
+            ]
             current_score = (
-                count_remaining_overlaps(),
+                current_overlaps.count,
                 abs(labels[component_center]["angle_unwrapped"] - labels[component_center]["target_angle_unwrapped"]),
                 sum(abs(labels[idx]["angle_unwrapped"] - labels[idx]["target_angle_unwrapped"]) for idx in cluster_indices),
             )
@@ -3160,7 +3237,7 @@ def improved_label_placement_fc(
                     spread = step * angle_step
                     for shift_step in center_shift_steps:
                         center_shift = shift_step * angle_step
-                        ordered = [float(labels[i]["angle_unwrapped"]) for i in range(n_labels)]
+                        ordered = list(current_angles)
 
                         for idx in cluster_indices:
                             rel = idx - center_idx
@@ -3195,24 +3272,20 @@ def improved_label_placement_fc(
                         if violates_budget:
                             continue
 
-                        temp_labels = [label.copy() for label in labels]
-                        for idx in range(n_labels):
-                            temp_labels[idx]["angle_unwrapped"] = ordered[idx]
-                            temp_labels[idx]["start_x"], temp_labels[idx]["start_y"] = move_label(
-                                temp_labels[idx], ordered[idx]
-                            )
-
                         center_delta = abs(
-                            temp_labels[component_center]["angle_unwrapped"]
-                            - temp_labels[component_center]["target_angle_unwrapped"]
+                            ordered[component_center] - labels[component_center]["target_angle_unwrapped"]
                         )
                         if center_delta > center_delta_cap:
                             continue
 
-                        overlap_total = count_overlaps_for_label_list(
-                            temp_labels,
-                            overlap_cap=best_score[0],
-                        )
+                        moved: dict[int, dict] = {}
+                        for idx in range(n_labels):
+                            if ordered[idx] != current_angles[idx] or not at_angle[idx]:
+                                moved_label = labels[idx].copy()
+                                moved_label["angle_unwrapped"] = ordered[idx]
+                                moved_label["start_x"], moved_label["start_y"] = move_label(moved_label, ordered[idx])
+                                moved[idx] = moved_label
+                        overlap_total = current_overlaps.count_after_move(moved, cap=best_score[0])
                         if overlap_total > best_score[0]:
                             continue
 
@@ -3220,10 +3293,7 @@ def improved_label_placement_fc(
                             overlap_total,
                             center_delta,
                             sum(
-                                abs(
-                                    temp_labels[idx]["angle_unwrapped"]
-                                    - temp_labels[idx]["target_angle_unwrapped"]
-                                )
+                                abs(ordered[idx] - labels[idx]["target_angle_unwrapped"])
                                 for idx in cluster_indices
                             ),
                         )
