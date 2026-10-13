@@ -315,6 +315,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { GbdrawSession, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
 /** @import { RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
+/** @import { DiagramMode } from '../state.js' */
 
 /** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
 
@@ -925,9 +926,15 @@ const cloneJsonArray = (value) => {
   return cloneJsonValue(value, []);
 };
 
+/**
+ * @template T
+ * @param {T} value An object to copy; anything else gives an empty object. A caller that passes a saved one
+ *   passes it unvalidated, and the copy is then unvalidated too.
+ */
 const cloneJsonObject = (value) => {
   if (!isPlainObject(value)) return {};
-  return cloneJsonValue(value, {});
+  // The cast: a plain object (the line above); its leaves keep the caller's type.
+  return cloneJsonValue(/** @type {T & Record<string, unknown>} */ (value), {});
 };
 
 /** @param {unknown} source */
@@ -1391,6 +1398,12 @@ export const setUnmanagedConfigOverrideValidator = (validator) => {
     : null;
 };
 
+/**
+ * @param {{ mode: DiagramMode, config?: unknown, configOverrides?: unknown, requireUnmanagedOnly?: boolean }} options
+ *   `mode`: a slice's mode, or the mode of a Session's projection (the projection refuses another value; a
+ *   settings-only Session's is checked with its draft). `config` and `configOverrides` are saved values,
+ *   unvalidated: the validator service checks them.
+ */
 const validateUnmanagedConfigOverrides = async ({
   mode,
   config = null,
@@ -1401,7 +1414,8 @@ const validateUnmanagedConfigOverrides = async ({
   const overrides = isPlainObject(configOverrides)
     ? cloneJsonData(configOverrides)
     : configOverrides;
-  const overridePaths = isPlainObject(overrides) ? Object.keys(overrides) : [];
+  // The cast: `isPlainObject(overrides)` in the same expression.
+  const overridePaths = isPlainObject(overrides) ? Object.keys(/** @type {Record<string, unknown>} */ (overrides)) : [];
   if (
     config === null
     && overridePaths.length === 0
@@ -1845,10 +1859,17 @@ const shouldSuppressCircularMultiRecordDefaults = (drawing, incomingForm) => {
   return drawing.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
 };
 
+/**
+ * @param {unknown} stored Unvalidated; anything that is not a plain object counts as empty.
+ * @param {unknown} canonical As `stored`.
+ * @returns {Record<string, unknown>}
+ */
 const overlayCanonicalObject = (stored, canonical) => {
-  const merged = isPlainObject(stored) ? cloneJsonData(stored) : {};
+  // The casts: `isPlainObject` in the same expression (`stored`) and on the line above (`canonical`).
+  /** @type {Record<string, unknown>} */
+  const merged = isPlainObject(stored) ? cloneJsonData(/** @type {Record<string, unknown>} */ (stored)) : {};
   if (!isPlainObject(canonical)) return merged;
-  Object.entries(canonical).forEach(([key, value]) => {
+  Object.entries(/** @type {Record<string, unknown>} */ (canonical)).forEach(([key, value]) => {
     if (['__proto__', 'constructor', 'prototype'].includes(key)) return;
     merged[key] = isPlainObject(value)
       ? overlayCanonicalObject(merged[key], value)
