@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 from Bio.Seq import Seq
@@ -164,14 +165,36 @@ def test_writer_matches_svgwrite_with_empty_top_level_groups(
 
 
 def _count_serializations(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Record each serialization: a call of the owner, or an svgwrite call outside it."""
+
     calls: list[int] = []
-    original = Drawing.tostring
+    owner = api_render.write_svg_document
+    original_tostring = Drawing.tostring
+    original_write = Drawing.write
+    inside_owner = False
 
-    def counting(self: Drawing) -> str:
-        calls.append(id(self))
-        return original(self)
+    def counting_owner(drawing: Drawing) -> SvgDocument:
+        nonlocal inside_owner
+        calls.append(id(drawing))
+        inside_owner = True
+        try:
+            return owner(drawing)
+        finally:
+            inside_owner = False
 
-    monkeypatch.setattr(Drawing, "tostring", counting)
+    def direct_tostring(self: Drawing) -> str:
+        if not inside_owner:
+            calls.append(id(self))
+        return original_tostring(self)
+
+    def direct_write(self: Drawing, *args: Any, **kwargs: Any) -> Any:
+        if not inside_owner:
+            calls.append(id(self))
+        return original_write(self, *args, **kwargs)
+
+    monkeypatch.setattr(api_render, "write_svg_document", counting_owner)
+    monkeypatch.setattr(Drawing, "tostring", direct_tostring)
+    monkeypatch.setattr(Drawing, "write", direct_write)
     return calls
 
 

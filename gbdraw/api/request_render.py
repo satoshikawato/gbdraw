@@ -1887,20 +1887,20 @@ def plan_linear_request(
             collection,
             cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
         )
-    # The plan checks the source bindings of the comparison rows when it is
-    # built, so a Session writer rejects them; the request keeps the rows as
-    # given (OV-399).
-    return LinearRequestPlan(
-        request=materialized_request,
-        records=collection.records,
-        layout=resolved_layout,
-        inputs=inputs,
-        provenance=collection.provenance,
-        displays=collection.displays,
-        transforms=collection.transforms,
-        alignment_anchor_centers=alignment_anchor_centers,
-        losat_cache_entries=losat_cache_entries,
-    )
+        # The plan checks the source bindings of the comparison rows when it is
+        # built, so a Session writer rejects them; the request keeps the rows as
+        # given (OV-399). Building it here keeps that projection in `preparation`.
+        return LinearRequestPlan(
+            request=materialized_request,
+            records=collection.records,
+            layout=resolved_layout,
+            inputs=inputs,
+            provenance=collection.provenance,
+            displays=collection.displays,
+            transforms=collection.transforms,
+            alignment_anchor_centers=alignment_anchor_centers,
+            losat_cache_entries=losat_cache_entries,
+        )
 
 
 def _resolve_nucleotide_losat(
