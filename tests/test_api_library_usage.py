@@ -757,6 +757,13 @@ def test_diagram_options_forward_circular_only_non_default_values(
         CircularDiagramOptions(**{field_name: value}),
     )
 
+    if field_name == "conservation_blast_files":
+        # Read once before assembly (OV-720): each file arrives as its rows or the reason it was unreadable.
+        forwarded = captured[field_name]
+        assert isinstance(forwarded, tuple)
+        assert [(table.name, table.rows) for table in forwarded] == [("conservation.tsv", None)]
+        assert "does not exist" in str(forwarded[0].reason)
+        return
     _assert_forwarded_value(captured[field_name], value)
 
 

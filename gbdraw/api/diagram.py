@@ -43,6 +43,7 @@ from gbdraw.analysis.conservation import (
     ConservationLoadResult,
     ConservationTrack,
     load_conservation_sources,
+    read_conservation_inputs,
     normalize_conservation_reference,
     normalize_conservation_tracks_for_record,
 )
@@ -198,7 +199,7 @@ from .prepared import ResolvedFeatureInputs, resolve_feature_inputs
 
 
 if TYPE_CHECKING:
-    from gbdraw.analysis.conservation import ConservationSearchResult
+    from gbdraw.analysis.conservation import ConservationInput
 
 
 DEFAULT_SELECTED_FEATURES = DEFAULT_FEATURE_TYPES
@@ -500,7 +501,7 @@ def _build_circular_dinucleotide_skew_dataframes(
 
 
 def _has_conservation_inputs(
-    conservation_blast_files: Sequence[str | ConservationSearchResult] | None,
+    conservation_blast_files: Sequence[ConservationInput] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
 ) -> bool:
     return bool(conservation_blast_files or conservation_dataframes)
@@ -530,7 +531,7 @@ def _build_conservation_blast_config(
 def _load_conservation_result(
     records: Sequence[SeqRecord],
     *,
-    conservation_blast_files: Sequence[str | ConservationSearchResult] | None,
+    conservation_blast_files: Sequence[ConservationInput] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
     conservation_labels: Sequence[str] | None,
     conservation_colors: Sequence[str] | None,
@@ -2070,7 +2071,7 @@ def assemble_circular_diagram_from_record(
     gb_record: SeqRecord,
     *,
     cfg: GbdrawConfig,
-    conservation_blast_files: Sequence[str | ConservationSearchResult] | None = None,
+    conservation_blast_files: Sequence[ConservationInput] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
     conservation_labels: Sequence[str] | None = None,
@@ -2521,7 +2522,7 @@ def assemble_circular_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
     cfg: GbdrawConfig,
-    conservation_blast_files: Sequence[str | ConservationSearchResult] | None = None,
+    conservation_blast_files: Sequence[ConservationInput] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
     conservation_labels: Sequence[str] | None = None,
@@ -3354,6 +3355,10 @@ def build_circular_diagram(
     tracks = options.tracks
 
     cfg = _resolve_diagram_options_config(options)
+    # Read once: the label fit rows reassemble the figure without the files (OV-720).
+    conservation_inputs = read_conservation_inputs(
+        options.conservation_search_results or options.conservation_blast_files
+    )
 
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_record(
@@ -3385,9 +3390,7 @@ def build_circular_diagram(
             depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
             depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
             depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
-            conservation_blast_files=(
-                options.conservation_search_results or options.conservation_blast_files
-            ),
+            conservation_blast_files=conservation_inputs,
             conservation_dataframes=options.conservation_dataframes,
             conservation_reference=options.conservation_reference,
             conservation_labels=options.conservation_labels,
@@ -3652,14 +3655,16 @@ def build_circular_multi_diagram(
     output = options.output
     tracks = options.tracks
     cfg = _resolve_diagram_options_config(options)
+    # Read once: the label fit rows reassemble the figure without the files (OV-720).
+    conservation_inputs = read_conservation_inputs(
+        options.conservation_search_results or options.conservation_blast_files
+    )
 
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_records(
             records,
             cfg=with_config_overrides(cfg, overrides),
-            conservation_blast_files=(
-                options.conservation_search_results or options.conservation_blast_files
-            ),
+            conservation_blast_files=conservation_inputs,
             conservation_dataframes=options.conservation_dataframes,
             conservation_reference=options.conservation_reference,
             conservation_labels=options.conservation_labels,
