@@ -17,21 +17,26 @@ and keep the saved preview until the next Generate. Schema 9 adds
 [Feature identity overrides](typed-requests.md#feature-identity-overrides));
 a schema-8 request reads as one without overrides.
 
-A schema-9 request must match the request description,
-`describe_canonical_request()`: readers refuse a key outside it, such as an
-older writer's `depthTrack*` input, and a value of another kind. At every
-request schema they refuse `conservationTableFile` and `comparisonTableFile`
-(a table is stored as a resource), and `null`, a number or an array where an
-annotation id, label, legend label, selector key or value, fill, `wrapsOrigin`,
-hatch `cross`, `generatedProteinComparison.mode`, `conservationReference` or
-`pairwiseMatchStyle` holds text, a flag or a name. An annotation `lane` may
-hold a fraction, which reads as its integer part. From schema 9 the five
-comparison mode settings (`collinearityUnitMode`, `collinearityAnchorMode`,
-`collinearitySearchScope`, `collinearityColorMode`,
-`orthogroupMembershipMode`) hold one of their names; older schemas also read
-another case, outer spaces, `-` for `_`, an alias, or `""`. Writers store a
-track slot's `renderer` and `side` as names, and readers still read another
-spelling.
+The Python reader (`gbdraw ... --session` and the Python API) checks a
+schema-9 request against `describe_canonical_request()`: it refuses a key
+outside it, such as an older writer's `depthTrack*` input, and a value of
+another kind, such as `true` or `false` where a number belongs. At every
+request schema it refuses `conservationTableFile` and `comparisonTableFile`
+(a table is stored as a resource); anything but text (or `null` where a
+field is optional) at an annotation id, label, legend label, selector key or
+value, fill,
+`generatedProteinComparison.mode`, `conservationReference` or
+`pairwiseMatchStyle`; and anything but `true` or `false` at `wrapsOrigin` or
+hatch `cross`. From schema 9 it also refuses another case, outer spaces or
+`""` in these three names, and the five comparison mode settings
+(`collinearityUnitMode`, `collinearityAnchorMode`, `collinearitySearchScope`,
+`collinearityColorMode`, `orthogroupMembershipMode`) hold one of their names;
+older schemas also read another case, outer spaces, `-` for `_`, an alias, or
+`""`. An annotation `lane`, `start` or `end` may hold a fraction, which reads
+as its integer part. Writers store a track slot's `renderer` and `side` as
+names, and the reader still reads another spelling. The Web app still loads a
+Session that holds a refused form; until the Web repairs it at Load, Generate
+reports the field.
 
 Sessions 46 and 47 keep the Web app's settings and edits of each diagram mode in its
 own slice, `modes.circular` and `modes.linear`:
