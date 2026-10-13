@@ -480,7 +480,47 @@ def _register_face(data: bytes, index: int, font_path: str) -> RegisteredFont:
     _registered_data[face] = data
     faces.append(registered)
     _clear_resolution_caches()
+    _show_to_fontconfig(font_path, family)
     return registered
+
+
+_fontconfig_files: set[str] = set()
+
+
+def _show_to_fontconfig(font_path: str, family: str) -> None:
+    """Add a registered font file to fontconfig's application fonts, once,
+    so CairoSVG (PNG, PDF, EPS and PS output) draws text with it even when the
+    font is not installed. Without fontconfig, those outputs draw an installed
+    font of that name or a substitute, and a warning says so. The browser
+    draws no raster through cairo and is skipped."""
+    if sys.platform == "emscripten" or font_path in _fontconfig_files:
+        return
+    _fontconfig_files.add(font_path)
+    import ctypes
+    import ctypes.util
+
+    added = 0
+    # The soname first: it is the library cairo already loaded, and finding
+    # it needs no search (``find_library`` runs a subprocess).
+    for soname in ("libfontconfig.so.1", None):
+        library_path = soname or ctypes.util.find_library("fontconfig")
+        if not library_path:
+            continue
+        try:
+            add_file = ctypes.CDLL(library_path).FcConfigAppFontAddFile
+        except (OSError, AttributeError):
+            continue
+        add_file.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        add_file.restype = ctypes.c_int
+        added = add_file(None, os.fsencode(os.path.abspath(font_path)))
+        break
+    if not added:
+        logger.warning(
+            "Font file %s could not be made available to CairoSVG (fontconfig is missing or refused it): "
+            "PNG, PDF, EPS and PS output draw %s with an installed font of that name or a substitute.",
+            font_path,
+            css_family_token(family),
+        )
 
 
 def unregister_font_file(path: Union[str, os.PathLike[str]]) -> tuple[RegisteredFont, ...]:

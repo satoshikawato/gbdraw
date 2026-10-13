@@ -396,6 +396,56 @@ def test_the_web_export_helpers_reply_in_json(tmp_path: Path) -> None:
 # ---- CLI ----
 
 
+def _box_font(target: Path, family: str) -> Path:
+    """Liberation Serif with every glyph drawn as its bounding box: the same
+    metrics, unmistakable ink."""
+    from fontTools.pens.boundsPen import BoundsPen
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+
+    path = _renamed_font("LiberationSerif-Regular", family, target)
+    font = TTFont(str(path))
+    glyphs = font.getGlyphSet()
+    boxes = {}
+    for name in font.getGlyphOrder():
+        bounds = BoundsPen(glyphs)
+        glyphs[name].draw(bounds)
+        boxes[name] = bounds.bounds
+    for name, box in boxes.items():
+        pen = TTGlyphPen(None)
+        if box:
+            x0, y0, x1, y1 = box
+            pen.moveTo((x0, y0))
+            pen.lineTo((x0, y1))
+            pen.lineTo((x1, y1))
+            pen.lineTo((x1, y0))
+            pen.closePath()
+        font["glyf"][name] = pen.glyph()
+    font.save(str(path))
+    return path
+
+
+def test_a_font_file_that_is_not_installed_draws_in_cairo_raster_output(tmp_path: Path) -> None:
+    # Receipt 〔書き出し〕: PNG and PDF draw the chosen font. CairoSVG finds
+    # fonts through fontconfig, so a registered file must be visible there.
+    cairosvg = pytest.importorskip("cairosvg")
+    from PIL import Image
+
+    fonts.register_font_file_faces(_box_font(tmp_path / "box.ttf", "Gbdraw Raster Box"))
+
+    def ink(font_family: str) -> int:
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="80">'
+            '<rect width="400" height="80" fill="white"/>'
+            f'<text x="10" y="50" font-size="40" font-family="{font_family}">Hello gbdraw</text></svg>'
+        )
+        image = Image.open(io.BytesIO(cairosvg.svg2png(bytestring=svg.encode()))).convert("L")
+        return sum(1 for value in image.getdata() if value < 64)
+
+    assert ink("'Gbdraw Raster Box', serif") > 1.5 * ink("'Liberation Serif', serif")
+
+
+
+
 def _font_faces_in(svg_path: Path) -> list[dict[str, str]]:
     return _faces(svg_path.read_text(encoding="utf-8"))
 
@@ -599,3 +649,22 @@ def test_gbdraw_render_takes_font_files_and_no_font_embedding(tmp_path: Path) ->
     plain = (tmp_path / "plain.svg").read_text(encoding="utf-8")
     assert plain == (tmp_path / "font.svg").read_text(encoding="utf-8")
     assert font_embedding.remove_embedded_font_css(embedded) == plain
+
+
+def test_a_font_file_cairo_cannot_see_is_named_in_a_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import ctypes
+    import ctypes.util
+
+    def missing(_name: str) -> None:
+        raise OSError("no fontconfig")
+
+    monkeypatch.setattr(ctypes, "CDLL", missing)
+    monkeypatch.setattr(ctypes.util, "find_library", lambda _name: None)
+    path = _renamed_font("LiberationSerif-Regular", "Gbdraw No Fc Serif", tmp_path / "n.ttf")
+
+    with caplog.at_level(logging.WARNING, logger="gbdraw.core.fonts"):
+        fonts.register_font_file_faces(path)
+
+    assert "PNG, PDF, EPS and PS output draw 'Gbdraw No Fc Serif' with an installed font" in caplog.text
