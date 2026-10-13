@@ -3,7 +3,8 @@
 // mounted SVG as they were (OV-608). A drag that moves is one step, leaves no
 // inline opacity behind, and Undo restores the stored Result of before it.
 // The pointer shows `grab` on a target, `grabbing` while it is pressed, and
-// `grab` after, also on a Legend row and a record definition (OV-603, OV-604).
+// `grab` after, also on a Legend row and a record definition (OV-603, OV-604);
+// a record definition that no press drags shows no `grab` (OV-625).
 const { test, expect } = require('@playwright/test');
 const { BATCH_FIXTURE, HMMT_SESSION, loadSessionFile, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
@@ -221,4 +222,17 @@ test('Linear: an unmoved press commits nothing and a drag is one clean step', as
     'plot title': '#plot_title text',
     'Linear scale': '#length_bar text'
   });
+
+  // A record definition is no drag target here: it shows no grab, and a
+  // press on it moves nothing and opens nothing (OV-625).
+  const definition = await pointOn(page, '[data-gbdraw-role="record-definition"] text');
+  await page.mouse.move(definition.x, definition.y);
+  expect(await cursorAt(page, definition)).toBe('default');
+  const undo = await remember(page);
+  await page.mouse.down();
+  await page.mouse.move(definition.x + DRAG.x, definition.y + DRAG.y, { steps: 6 });
+  await page.mouse.up();
+  await settle(page);
+  expect(await observe(page)).toMatchObject({ undo, storedDifference: null, mountedDifference: null });
+  await expect(page.locator('[data-preview-item-popup]')).toHaveCount(0);
 });
