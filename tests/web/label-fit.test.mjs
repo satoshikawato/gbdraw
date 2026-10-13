@@ -166,7 +166,7 @@ test('a row may write exactly the config paths Python\'s rows send, in the mode 
   }
 });
 
-const dialogHarness = ({ computeRow = async () => ({}) } = {}) => {
+const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {}) => {
   const steps = [];
   const writes = [];
   const generates = [];
@@ -175,7 +175,7 @@ const dialogHarness = ({ computeRow = async () => ({}) } = {}) => {
   const dialog = createLabelFitDialog({
     reactive: (value) => value,
     computeRow,
-    writeRowSettings: (values, mode) => writes.push({ values, mode }),
+    writeRowSettings: (values, mode) => { writes.push({ values, mode }); onWrite(); },
     withHistory: (label, handler, cancel) => async (choice) => {
       if (choice === 'cancel') return cancel();
       steps.push(label());
@@ -189,6 +189,60 @@ const dialogHarness = ({ computeRow = async () => ({}) } = {}) => {
   });
   return { dialog, steps, writes, generates };
 };
+
+test('while Apply writes, the dialog is busy and Escape (its Cancel) does nothing (PD-OI-088)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const escapes = [];
+  let harness;
+  harness = dialogHarness({ onWrite: () => {
+    escapes.push(harness.dialog.resolveLabelFitChoice('cancel'));
+    escapes.push(harness.dialog.labelFitDialog.show);
+  } });
+  const { dialog, steps, writes, generates } = harness;
+  await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2)])), { mode: 'circular' });
+  await dialog.resolveLabelFitChoice('apply');
+  assert.equal(escapes.length, 2);
+  assert.equal(await escapes[0], undefined);
+  assert.equal(escapes[1], true, 'the Escape during Apply left the dialog open');
+  // One step, the row's settings, one Generate: the Escape during Apply wrote and closed nothing.
+  assert.deepEqual(steps, ['Fit labels: smaller font']);
+  assert.equal(writes.length, 1);
+  assert.equal(generates.length, 1);
+  // The dialog is the shared choice dialog bound to the choice in progress: aria-busy,
+  // its controls disabled, and Escape emits the Cancel that waits.
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const open = html.match(/<choice-dialog v-if="labelFitDialog\.show"[^>]*>/s)?.[0] || '';
+  assert.match(open, /:busy="dialogChoicePending"/);
+  assert.match(open, /@cancel="resolveLabelFitChoice\('cancel'\)"/);
+  const template = html.slice(html.indexOf('id="choice-dialog-template"'), html.indexOf('</script>', html.indexOf('id="choice-dialog-template"')));
+  assert.match(template, /@keydown\.esc\.prevent\.stop="\$emit\('cancel'\)"/);
+  assert.match(template, /:aria-busy="busy \? 'true' : null"/);
+  assert.match(template, /<fieldset :disabled="busy"/);
+  const setup = await readFile(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
+  assert.match(setup, /const dialogChoicePending = dialogChoice\.pending;/);
+  assert.match(setup, /choicePending: \(\) => dialogChoice\.pending\.value,/);
+});
+
+test('only a Generate that drew nothing or the notice bar opens the dialog; a rerender failure does not', async () => {
+  const { readFile, readdir } = await import('node:fs/promises');
+  const root = new URL('../../gbdraw/web/js/', import.meta.url);
+  const files = (await readdir(root, { recursive: true })).filter((name) => name.endsWith('.js'));
+  const calls = [];
+  for (const name of files) {
+    const text = await readFile(new URL(name, root), 'utf8');
+    for (const match of text.matchAll(/openLabelFitDialog\(/g)) calls.push(`${name}:${text.slice(0, match.index).split('\n').length}`);
+  }
+  assert.equal(calls.length, 2, calls.join(', '));
+  const setup = await readFile(new URL('app/app-setup.js', root), 'utf8');
+  // Generate's own outcome (afterGenerate), and the notice bar's "Choose a fix".
+  assert.match(setup, /if \(result\?\.status === 'error' && result\.labelFit\) \{\n\s*void openLabelFitDialog\(result\.labelFit\.report/);
+  assert.match(setup, /const openLabelFitNotice = \(\) => \{[^}]*return openLabelFitDialog\(entry\.report/s);
+  // A label reflow (the rerender of an edit) that fails reports a live-edit failure, not a label fit.
+  const run = await readFile(new URL('app/run-analysis.js', root), 'utf8');
+  const reflow = run.slice(run.indexOf('const runLabelReflowCandidate = async'), run.indexOf('} catch (e) {', run.indexOf('const runLabelReflowCandidate = async')));
+  assert.match(reflow, /labelReflowLastError\.value = liveEditFailure\(error\);\n\s*return \{ status: 'error', error \};/);
+  assert.doesNotMatch(reflow, /labelFit:/);
+});
 
 test('Apply writes the chosen row as one History step, closes, and Generates; Cancel writes nothing', async () => {
   const rows = [row('outward_vertical', 'not_found', { reason: 'No fit' }), foundRow('smaller_font', 1.2)];
