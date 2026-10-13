@@ -57,7 +57,7 @@ const registerFontsInWorker = async (fonts) => fonts.map((font) => {
   };
 });
 
-const setup = ({ fontFamily = null, loaded = [], answers = [] } = {}) => {
+const setup = ({ fontFamily = null, loaded = [], answers = [], committed = null, register = registerFontsInWorker } = {}) => {
   const adv = { font_family: fontFamily };
   const state = { loadedFonts: { value: loaded }, activeDrawing: () => ({ adv }) };
   /** @type {object[]} */
@@ -66,8 +66,9 @@ const setup = ({ fontFamily = null, loaded = [], answers = [] } = {}) => {
   const settings = createFontSettings({
     state,
     runUndoable: async (label, fn) => { steps.push(label); return fn(); },
-    registerFontsInWorker,
-    askChoice: async (request) => { questions.push(request); return answers.shift() || 'cancel'; }
+    registerFontsInWorker: register,
+    askChoice: async (request) => { questions.push(request); return answers.shift() || 'cancel'; },
+    committedFontFamily: () => committed
   });
   return { settings, state, adv, questions, steps };
 };
@@ -148,4 +149,56 @@ test('Load font file… in the question asks again, naming the family loaded, un
   assert.deepEqual(questions[1].items, ['The loaded font is DejaVu Sans, not Garamond Premier Pro.']);
   assert.deepEqual(steps, [], 'loading fonts for a Session is no History step');
   assert.equal(adv.font_family, null, 'the current drawing keeps its font');
+});
+
+test('OV-742: the custom-font note and checkbox also follow the font of the shown Result', () => {
+  assert.equal(setup({ committed: "'DejaVu Serif', serif" }).settings.customFontSelected.value, true,
+    'a Liberation draft over a Result drawn with a custom font still embeds it');
+  assert.equal(setup({ committed: "'Liberation Serif', serif" }).settings.customFontSelected.value, false);
+  assert.equal(setup({ fontFamily: "'DejaVu Serif', serif", committed: null }).settings.customFontSelected.value, true);
+});
+
+test('OV-740: a font the Worker lost is registered again when the same file is loaded again', async () => {
+  const { createWorkerFontRegistry } = await import('../../gbdraw/web/js/workers/worker-font-registry.js');
+  const files = new Map();
+  const fs = {
+    analyzePath: (path) => ({ exists: path === '/gbdraw-web-fonts' || files.has(path) }),
+    mkdir: () => {},
+    writeFile: (path, bytes) => { files.set(path, new TextDecoder().decode(bytes)); },
+    unlink: (path) => { files.delete(path); }
+  };
+  let pythonFails = false;
+  // Python's facts per file, as `register_web_fonts_json` replies.
+  const registerInPython = (entries) => {
+    if (pythonFails) throw { code: 'INPUT_INVALID', stage: 'helper' };
+    return {
+      fonts: entries.map(({ identity, path }) => {
+        const family = files.get(path).replace(/^family:/, '');
+        return {
+          identity, family, fontFamily: quoted(family), weight: 400, italic: false, generic: 'serif',
+          measurementName: `user-${identity.slice(0, 16)}-Regular`, metrics: SERIF_TABLE
+        };
+      })
+    };
+  };
+  let worker = createWorkerFontRegistry({ fs, registerInPython });
+  const { settings, state } = setup({ register: async (fonts) => worker.register(fonts) });
+  nextFiles = [{ name: 'lost.ttf', text: 'family:Gbdraw Lost Serif' }];
+  await settings.loadFontFile();
+  const [entry] = state.loadedFonts.value;
+
+  // The Worker is replaced and the replay of the font fails (OV-686).
+  files.clear();
+  worker = createWorkerFontRegistry({ fs, registerInPython });
+  pythonFails = true;
+  const lost = await worker.replay(state.loadedFonts.value);
+  pythonFails = false;
+  assert.deepEqual(lost.map((font) => font.identity), [entry.identity]);
+  settings.markFontsLost(lost.map((font) => font.identity));
+
+  nextFiles = [{ name: 'lost.ttf', text: 'family:Gbdraw Lost Serif' }];
+  await settings.loadFontFile();
+  assert.equal(settings.loadError.value, '');
+  assert.doesNotThrow(() => worker.requireRegistered([entry.identity]));
+  assert.equal(state.loadedFonts.value.length, 1, 'the store keeps one entry for the bytes');
 });

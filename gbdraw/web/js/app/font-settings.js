@@ -2,7 +2,7 @@
 /** @import { WebFontEntry, WebFontSource, RegisterFontsInWorker } from '../services/font-store.js' */
 /** @import { FontFamilyList, FontFamilyName } from '../services/font-families.js' */
 /** @import { AskChoice } from './app-messages.js' */
-import { loadWebFonts, standardInstalledFaces, webFontFamilies, webFontFamilyNames } from '../services/font-store.js';
+import { loadWebFonts, mergeWebFonts, standardInstalledFaces, webFontFamilies, webFontFamilyNames } from '../services/font-store.js';
 import {
   bundledFacePrefix,
   comparableFamilyName,
@@ -67,10 +67,12 @@ const BUNDLED_CHOICES = Object.freeze([
  * @property {(label: string, fn: () => unknown) => Promise<unknown>} runUndoable History's one step (R11).
  * @property {RegisterFontsInWorker} registerFontsInWorker The Worker's `registerFonts` helper.
  * @property {AskChoice} askChoice The app's choice dialog (the Session font question).
+ * @property {() => unknown} committedFontFamily The text font of the shown Result's committed
+ *   request (`requestFontFamily`), which its exports carry (OV-742).
  */
 
 /** @param {FontSettingsOptions} options */
-export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, askChoice }) => {
+export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, askChoice, committedFontFamily }) => {
   const loadError = ref('');
   const loading = ref(false);
   /** @type {{ open: boolean, query: string, families: { family: string, faces: InstalledFontData[] }[], error: string }} */
@@ -85,6 +87,12 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
    * no History step (exports record none).
    */
   const embedInExports = ref(true);
+  /**
+   * The fonts the diagram Worker lost (OV-686): they stay listed (D-10 (6)),
+   * and loading the same bytes again registers them again (OV-740).
+   * @type {Set<string>}
+   */
+  const lostIdentities = new Set();
 
   /** @returns {readonly WebFontEntry[]} */
   const loadedFonts = () => state.loadedFonts.value;
@@ -155,10 +163,22 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
   });
 
   /**
-   * Whether the drawing's font names a family a Session cannot carry
-   * (`customFontFamilies`, the rule of the Save Session warning too; D-02 note).
+   * Whether the drawing's font, or the font of the shown Result, names a
+   * family a Session cannot carry (`customFontFamilies`, the rule of the Save
+   * Session warning too; D-02 note). The Result's font counts because its
+   * exports carry it until the next Generate (OV-742).
    */
-  const customFontSelected = computed(() => customFontFamilies(draftFontFamily(), loadedFamilies()).length > 0);
+  const customFontSelected = computed(() => [draftFontFamily(), committedFontFamily()]
+    .some((fontFamily) => customFontFamilies(fontFamily, loadedFamilies()).length > 0));
+
+  /**
+   * Mark fonts the diagram Worker could not register again (OV-686), so
+   * loading their bytes again registers them (OV-740).
+   * @param {readonly string[]} identities
+   */
+  const markFontsLost = (identities) => {
+    identities.forEach((identity) => lostIdentities.add(identity));
+  };
 
   /**
    * Load font sources into the page: the browser checks them, Python
@@ -167,8 +187,10 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
    * @returns {Promise<WebFontEntry[]>} The entry of each source, in order.
    */
   const loadSources = async (sources) => {
-    const loaded = await loadWebFonts(sources, { known: loadedFonts(), registerInWorker: registerFontsInWorker });
-    state.loadedFonts.value = loaded.entries;
+    const known = loadedFonts().filter((entry) => !lostIdentities.has(entry.identity));
+    const loaded = await loadWebFonts(sources, { known, registerInWorker: registerFontsInWorker });
+    loaded.added.forEach((entry) => lostIdentities.delete(entry.identity));
+    state.loadedFonts.value = mergeWebFonts(loadedFonts(), loaded.added);
     return loaded.chosen;
   };
 
@@ -359,6 +381,7 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
     selectedChoice,
     customFontSelected,
     embedInExports,
+    markFontsLost,
     localFontsSupported,
     loading,
     loadError,

@@ -293,3 +293,15 @@ export const webFontIdentitiesFor = (entries, fontFamily) => {
   const named = new Set(parseFontFamilyList(fontFamily).map(comparableFamilyName));
   return entries.filter((entry) => named.has(comparableFamilyName(entry.family))).map((entry) => entry.identity);
 };
+
+/**
+ * The text font a canonical render request names (`objects.text.font_family`,
+ * as an override or in its config), or null: what a Generate needs registered
+ * and what the shown Result was drawn with.
+ * @param {unknown} request
+ * @returns {unknown}
+ */
+export const requestFontFamily = (request) => {
+  const options = /** @type {{ diagramOptions?: { configOverrides?: Record<string, unknown>, config?: { objects?: { text?: { font_family?: unknown } } } } } | null} */ (request)?.diagramOptions;
+  return options?.configOverrides?.['objects.text.font_family'] ?? options?.config?.objects?.text?.font_family ?? null;
+};

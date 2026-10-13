@@ -16,7 +16,7 @@ import { createDiagramResourceTransport } from './diagram-resource-staging.js';
 import { markCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { normalizeLabelFitFailure } from './label-fit.js';
 /** @import { LabelFitFailure } from './label-fit.js' */
-import { webFontIdentitiesFor } from './font-store.js';
+import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
 /** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
@@ -341,8 +341,7 @@ const lostWorkerFonts = (lost) => (Array.isArray(lost) ? lost : []).map((font) =
  * @param {unknown} request
  */
 const requestFontIdentities = (request) => {
-  const options = /** @type {{ diagramOptions?: { configOverrides?: Record<string, unknown>, config?: { objects?: { text?: { font_family?: unknown } } } } } | null} */ (request)?.diagramOptions;
-  const fontFamily = options?.configOverrides?.['objects.text.font_family'] ?? options?.config?.objects?.text?.font_family;
+  const fontFamily = requestFontFamily(request);
   return fontFamily ? webFontIdentitiesFor(workerFontSource.readFonts(), fontFamily) : [];
 };
 

@@ -120,7 +120,7 @@ import {
 } from '../services/diagram-generation.js';
 import { createFontSettings } from './font-settings.js';
 import { customFontSaveWarnings } from '../services/session-fonts.js';
-import { webFontFamilyNames } from '../services/font-store.js';
+import { requestFontFamily, webFontFamilyNames } from '../services/font-store.js';
 import { SLICE_MODES } from '../services/mode-scoped-migration.js';
 import {
   recordSessionLifecycleEvent,
@@ -1669,16 +1669,21 @@ export const createAppSetup = () => {
     registerFontsInWorker: async (fonts) => (await runDiagramHelperOperation(
       DIAGRAM_HELPER_OPERATIONS.REGISTER_FONTS, { fonts }
     )).result,
-    askChoice
+    askChoice,
+    committedFontFamily: () => requestFontFamily(getCommittedCanonicalRenderRequest())
   });
   // A new diagram Worker registers the page's fonts, and a Generate names
-  // those it uses; a font the new Worker could not register again is named (OV-686).
+  // those it uses; a font the new Worker could not register again is named
+  // (OV-686), and loading it again registers it again (OV-740).
   setDiagramWorkerFontSource({
     readFonts: () => state.loadedFonts.value,
-    onFontsLost: (lost) => showNotice({
-      text: 'Fonts loaded in this page could not be prepared again for drawing. Load them again in Font, or choose another font.',
-      items: lost.map((font) => font.label)
-    })
+    onFontsLost: (lost) => {
+      fontSettings.markFontsLost(lost.map((font) => font.identity));
+      showNotice({
+        text: 'Fonts loaded in this page could not be prepared again for drawing. Load them again in Font, or choose another font.',
+        items: lost.map((font) => font.label)
+      });
+    }
   });
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor,
@@ -5683,8 +5688,13 @@ export const createAppSetup = () => {
       // D-02: a font gbdraw does not bundle is saved by name only (receipt 〔警告〕).
       showNotice({
         text: `Session saved: ${filename}. Find it in your browser's downloads.`,
+        // Each drawing's font, and the font of the shown Result, whose committed
+        // request the Session saves too (OV-742).
         items: customFontSaveWarnings(
-          SLICE_MODES.map((drawingMode) => state.drawings[drawingMode].adv.font_family),
+          [
+            ...SLICE_MODES.map((drawingMode) => state.drawings[drawingMode].adv.font_family),
+            requestFontFamily(getCommittedCanonicalRenderRequest())
+          ],
           webFontFamilyNames(state.loadedFonts.value)
         )
       });
