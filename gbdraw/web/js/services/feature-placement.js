@@ -26,16 +26,13 @@ import { cloneJsonData } from './json-clone.js';
 /** @import { CanonicalCircularFeaturePlacement, CanonicalFeatureOverride, CanonicalLinearFeaturePlacement, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 /**
- * Where a feature is drawn: the main track, or one lane beside it. A lane has a side of its mode.
- * @typedef {(CanonicalCircularFeaturePlacement | CanonicalLinearFeaturePlacement)['placement']} FeaturePlacementTarget
+ * A request row of `diagramOptions.featurePlacements`, of either mode.
+ * @typedef {CanonicalCircularFeaturePlacement | CanonicalLinearFeaturePlacement} FeaturePlacementRow
  */
 
 /**
- * A request row of `diagramOptions.featurePlacements`.
- * @typedef {object} FeaturePlacementRow
- * @property {string} recordKey
- * @property {string} biologicalFeatureId
- * @property {FeaturePlacementTarget} placement
+ * Where a feature is drawn: the main track, or one lane beside it. A lane has a side of its mode.
+ * @typedef {FeaturePlacementRow['placement']} FeaturePlacementTarget
  */
 
 /**
