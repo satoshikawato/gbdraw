@@ -3482,7 +3482,7 @@ def test_tobacco_14pt_outer_labels_that_overlap_are_not_drawn() -> None:
         options=CircularDiagramOptions(config=with_config_overrides(cfg, vertical.values)),
     )
     (layout,) = _circular_label_layouts(fitted)
-    assert layout.outer_label_count == 140
+    assert layout.label_counts["circular_outer"] == 140
     assert layout.fit == LabelFit(overlap_pairs=0, crossing_pairs=0)
 
 

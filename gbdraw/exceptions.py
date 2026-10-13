@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Mapping
 
 if TYPE_CHECKING:
-    from gbdraw.labels.fit import LabelFitReport
+    from gbdraw.labels.fit import LabelFitReport, LabelFitRows
 
 
 class GbdrawError(Exception):
@@ -77,18 +77,27 @@ def _label_fit_diagnostic(report: LabelFitReport) -> dict[str, object]:
 
 
 class LabelsDoNotFitError(GbdrawError):
-    """Labels would overlap, so nothing was drawn.
+    """Labels would overlap, or radial labels have no room, so nothing was drawn.
 
-    ``report`` names the failing records and the settings that fit.
+    ``report`` names the failing records and the settings that fit;
+    ``row_search``, when given, computes a row the report left
+    ``not_computed``.
     """
 
-    def __init__(self, message: str, *, report: LabelFitReport) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        report: LabelFitReport,
+        row_search: LabelFitRows | None = None,
+    ) -> None:
         super().__init__(message, diagnostic=_label_fit_diagnostic(report))
         self.report = report
+        self.row_search = row_search
 
 
 class LabelLeadersCrossWarning(UserWarning):
-    """Label leaders cross; the figure was drawn anyway.
+    """Label leaders cross or labels cover the definition text; the figure was drawn anyway.
 
     ``report`` names the records and the settings that remove the crossings.
     """

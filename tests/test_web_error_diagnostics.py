@@ -423,10 +423,13 @@ def test_output_prefix_length_limit_counts_utf8_bytes():
     assert RenderOutputRequest(output_prefix="é" * 100).output_prefix == "é" * 100
 
 
-def test_radial_inner_label_fit_failure_reports_the_fixed_track_row(tmp_path: Path):
+def test_radial_inner_labels_without_room_report_the_label_fit(tmp_path: Path):
+    # LP-D49 RADIAL-JOIN: radial labels that fixed rows leave no room for stop
+    # with the label fit error and its rows, not a Track row error.
     from gbdraw.circular import _get_args, run_circular_from_namespace
+    from gbdraw.exceptions import LabelsDoNotFitError
 
-    with pytest.raises(ValidationError) as caught:
+    with pytest.raises(LabelsDoNotFitError) as caught:
         run_circular_from_namespace(_get_args([
             "--gbk", str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"),
             "-o", str(tmp_path / "radial"),
@@ -434,10 +437,10 @@ def test_radial_inner_label_fit_failure_reports_the_fixed_track_row(tmp_path: Pa
             "--circular_track_slot", "features:features@r=330px,w=40px",
             "--circular_track_slot", "gc_content:dinucleotide_content@side=inside,r=290px,w=40px",
         ]))
-    assert str(caught.value).startswith("radial inner labels cannot fit the fixed circular geometry")
-    payload = _web(caught.value)
-    assert payload["code"] == "TRACK_LAYOUT"
-    assert payload["context"] == {"reason": "CANNOT_FIT", "slotIndex": 0}
+    (record,) = caught.value.report.records
+    assert (record.label_kind, record.refused) == ("circular_inner", True)
+    assert [row.kind for row in caught.value.report.rows] == ["smaller_font", "labels_out"]
+    assert _web(caught.value)["code"] == "LABEL_LAYOUT"
 
 
 def test_specific_color_table_failure_reports_row_without_value(tmp_path: Path):

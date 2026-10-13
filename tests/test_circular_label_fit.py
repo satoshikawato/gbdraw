@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import sys
@@ -11,32 +12,41 @@ from pathlib import Path
 
 import pytest
 from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
+import gbdraw.diagrams.linear.assemble as linear_assemble_module
+from gbdraw.api.diagram import label_fit_row
 from gbdraw.circular import circular_main
 from gbdraw.config.models import GbdrawConfig
 import gbdraw.labels.circular_fit as circular_fit_module
 from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
+from gbdraw.layout.spatial import Aabb
 from gbdraw.labels.circular_fit import (
+    CircularLabelLayout,
+    CircularLabelPlacement,
+    CircularLabelVerification,
+    check_circular_label_fit,
+)
+from gbdraw.labels.fit import (
     FONT_SIZE_PATHS,
+    PLACEMENT_PATH,
+    SCOPE_PATH,
     SPACING_PATH,
     X_OFFSET_PATH,
     Y_OFFSET_PATH,
-    CircularLabelVerification,
-    CircularOuterLabelLayout,
-    check_circular_label_fit,
-    format_circular_label_fit_report,
-)
-from gbdraw.labels.fit import (
     LabelFit,
     LabelFitRecord,
     LabelFitReport,
     LabelFitRow,
-    label_box_overlap_count,
+    LabelShape,
+    format_label_fit_report,
     label_fit_outcome,
+    label_fits_by_kind,
+    overlapping_pairs,
     polyline_crossing_count,
 )
-from gbdraw.layout.spatial import Aabb
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
 FITS = LabelFit(0, 0)
@@ -59,20 +69,21 @@ def _layout(
     *,
     fit: LabelFit = OVERLAPS,
     probes: list[Mapping[str, float]] | None = None,
-) -> CircularOuterLabelLayout:
+) -> CircularLabelLayout:
     def probe(values: Mapping[str, float]) -> LabelFit:
         if probes is not None:
             probes.append(dict(values))
         return FITS if fits(*_settings(values)) else OVERLAPS
 
-    return CircularOuterLabelLayout(
+    return CircularLabelLayout(
         record_id=record_id,
-        outer_label_count=111,
+        placement="horizontal",
         font_size=14.0,
+        label_counts={"circular_outer": 111},
+        kind_fits={"circular_outer": fit},
         x_radius_offset=1.0,
         y_radius_offset=1.0,
         label_spacing=3.0,
-        fit=fit,
         probe=probe,
     )
 
@@ -106,8 +117,12 @@ def test_outcome_is_one_decision_point() -> None:
 def test_fit_counts_take_plain_boxes_and_polylines() -> None:
     """Boxes that touch overlap (closed boxes); leaders that only touch do not cross."""
 
-    boxes = [Aabb(0, 0, 10, 5), Aabb(10, 5, 20, 9), Aabb(10.01, 9.5, 20, 12), Aabb(300, 300, 310, 305)]
-    assert label_box_overlap_count(boxes) == 1
+    def box(min_x: float, min_y: float, max_x: float, max_y: float) -> tuple[tuple[float, float], ...]:
+        return ((min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y))
+
+    boxes = [(box(0, 0, 10, 5),), (box(10, 5, 20, 9),), (box(10.01, 9.5, 20, 12),), (box(300, 300, 310, 305),)]
+    assert overlapping_pairs(boxes, touching=True) == [(0, 1)]
+    assert overlapping_pairs(boxes, touching=False) == []
     crossing = [((0.0, 0.0), (5.0, 5.0), (10.0, 5.0)), ((0.0, 5.0), (5.0, 0.0))]
     touching = [((0.0, 0.0), (5.0, 5.0)), ((5.0, 5.0), (10.0, 0.0))]
     assert polyline_crossing_count(crossing) == 1
@@ -244,7 +259,7 @@ def test_wording_lists_fitting_rows_and_names_the_others() -> None:
         drawn=False,
     )
 
-    assert format_circular_label_fit_report(report) == (
+    assert format_label_fit_report(report) == (
         "111 outer labels do not fit at 14 pt (20 label pairs overlap, 21 leader pairs cross). "
         "Nothing was drawn.\n"
         "Run again with one of:\n"
@@ -299,6 +314,181 @@ def test_overlaps_compute_every_row_without_a_time_limit(monkeypatch: pytest.Mon
         check_circular_label_fit([_layout("P1", slow)], verify)
 
     assert "not_computed" not in {row.status for row in raised.value.report.rows}
+
+
+# --- inner, radial, definition text and Linear labels (LP-D48 SCOPE-ALL-LABELS, LP-D49) ------------
+
+
+def _inner_layout(*, placement: CircularLabelPlacement = "horizontal", refused: bool = False, inner: int = 54) -> CircularLabelLayout:
+    counts = {"circular_outer": 80, "circular_inner": inner} if inner else {"circular_outer": 80}
+    kind = "circular_inner" if inner else "circular_outer"
+    return CircularLabelLayout(
+        record_id="P1",
+        placement=placement,
+        font_size=14.0,
+        label_counts=counts,
+        kind_fits={} if refused else {kind: LabelFit(3, 2, 1)},
+        x_radius_offset=1.0,
+        y_radius_offset=1.0,
+        label_spacing=3.0,
+        refused=refused,
+    )
+
+
+def _assembly(fits: Callable[[Mapping[str, object]], bool]):
+    calls: list[dict[str, object]] = []
+
+    def verify(values: Mapping[str, object]) -> CircularLabelVerification:
+        calls.append(dict(values))
+        if fits(values):
+            return CircularLabelVerification(True, (1000.0, 900.0))
+        return CircularLabelVerification(False, None, LabelFit(1, 0))
+
+    return verify, calls
+
+
+def _p1_inner(values: Mapping[str, object]) -> bool:
+    """P1 at 14 pt: inner labels fit at 12 pt and from 10 pt down, not at 11 pt (not monotone)."""
+
+    font = values.get(FONT_SIZE_PATHS[0])
+    return isinstance(font, float) and (font == 12.0 or font <= 10.0)
+
+
+def test_inner_rows_verify_the_switches_first_then_scan_the_font_down() -> None:
+    """INNER-3, SWITCHES-FIRST: the font row is the first font from the top that fits."""
+
+    verify, calls = _assembly(_p1_inner)
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_inner_layout()], verify)
+
+    assert calls == [
+        {SCOPE_PATH: "outer"},
+        {PLACEMENT_PATH: "radial"},
+        *({path: font for path in FONT_SIZE_PATHS} for font in (13.5, 13.0, 12.5, 12.0)),
+    ]
+    rows = raised.value.report.rows
+    assert [row.kind for row in rows] == ["smaller_font", "labels_out", "radial"]
+    assert rows[0].values == {path: 12.0 for path in FONT_SIZE_PATHS}
+    assert [row.status for row in rows] == ["found", "not_found", "not_found"]
+    assert rows[1].reason == "Labels still do not fit (1 label pair overlaps, 0 leader pairs cross)"
+    assert str(raised.value) == (
+        "54 inner labels do not fit at 14 pt (3 label pairs overlap, 2 leader pairs cross, "
+        "1 label covers the definition text). Nothing was drawn.\n"
+        "Run again with one of:\n"
+        "  --label_font_size 12   (smaller font)\n"
+        "All labels outside and radial labels do not fit this map."
+    )
+
+
+def test_outer_levers_do_not_move_inner_labels() -> None:
+    layouts = [
+        _layout("A", _p1_like),
+        _inner_layout(),
+    ]
+    verify, _calls = _assembly(lambda values: values.get(SCOPE_PATH) == "outer")
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit(layouts, verify)
+
+    rows = {row.kind: row for row in raised.value.report.rows}
+    assert list(rows) == list(circular_fit_module.ROW_KINDS)
+    assert rows["labels_out"].status == "found"
+    assert rows["outward_vertical"].reason == "Does not move inner or radial labels"
+    assert "--labels out   (all labels outside)" in str(raised.value)
+
+
+def test_radial_labels_without_room_stop_and_offer_the_font_row_only_without_inner_labels() -> None:
+    """RADIAL-JOIN: the record is refused; labels_out applies only when inner labels exist."""
+
+    verify, _calls = _assembly(lambda values: False)
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_inner_layout(placement="radial", refused=True, inner=0)], verify)
+
+    report = raised.value.report
+    (record,) = report.records
+    assert record.refused and record.label_kind == "circular_outer"
+    assert [row.kind for row in report.rows] == ["smaller_font"]
+    assert str(raised.value).startswith(
+        "80 radial outer labels do not fit at 14 pt (they need more room than the circular tracks leave). "
+        "Nothing was drawn.\n"
+    )
+
+
+def test_the_font_scan_stops_after_its_limit_and_a_row_is_computed_from_the_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The scan runs for FONT_SCAN_SECONDS when nothing is drawn; the error computes the rest."""
+
+    monkeypatch.setattr(circular_fit_module, "FONT_SCAN_SECONDS", 0.0)
+    verify, calls = _assembly(_p1_inner)
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_inner_layout()], verify)
+
+    rows = {row.kind: row for row in raised.value.report.rows}
+    assert rows["smaller_font"].status == "not_computed"
+    assert len(calls) == 2
+    assert str(raised.value).splitlines()[-1] == "Not searched within 30 s: a smaller font."
+    row = label_fit_row(raised.value, "smaller_font")
+    assert row is not None and row.values == {path: 12.0 for path in FONT_SIZE_PATHS}
+
+
+def test_a_verification_that_would_overrun_the_limit_is_not_started(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
+
+    def slow(values: Mapping[str, object]) -> CircularLabelVerification:
+        clock[0] += 4.0
+        return CircularLabelVerification(False, None, LabelFit(0, 1))
+
+    crossing = dataclasses.replace(_inner_layout(), kind_fits={"circular_inner": LabelFit(0, 2)})
+    with pytest.warns(LabelLeadersCrossWarning) as caught:
+        checked = check_circular_label_fit([crossing], slow, assembly_seconds=4.0)
+
+    assert checked is not None
+    # The first switch starts (0 + 4 < 5 s); the next would end after the limit.
+    assert [row.status for row in checked[0].rows] == ["not_computed", "not_found", "not_computed"]
+    assert str(caught[0].message).splitlines()[-1].startswith("Not searched within 5 s: ")
+
+
+def test_labels_count_once_by_kind_and_leaders_count_against_the_definition_text() -> None:
+    def box(min_x: float, min_y: float, max_x: float, max_y: float) -> tuple[tuple[float, float], ...]:
+        return ((min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y))
+
+    shapes = [
+        LabelShape("circular_outer", (box(0, 0, 10, 5),), ((5.0, 6.0), (5.0, 20.0))),
+        LabelShape("circular_inner", (box(8, 0, 18, 5),), ((12.0, 6.0), (12.0, 20.0))),
+        LabelShape("circular_inner", (box(100, 100, 110, 105),), ((105.0, 99.0), (105.0, 90.0))),
+        LabelShape("circular_embedded", (box(100, 100, 120, 105),)),
+    ]
+    definition = [Aabb(99.0, 99.0, 130.0, 104.0)]
+
+    fits = label_fits_by_kind(shapes, definition_text=definition)
+
+    assert fits == {
+        "circular_inner": LabelFit(2, 0, 1),
+        "circular_outer": LabelFit(0, 0, 0),
+        "circular_embedded": LabelFit(0, 0, 0),
+    }
+
+
+def test_linear_guard_stops_on_overlapping_linear_labels() -> None:
+    def label(start: float, middle_y: float) -> dict:
+        return {
+            "start": start, "middle": start + 20.0, "middle_x": start + 20.0, "width_px": 40.0, "height_px": 10.0,
+            "middle_y": middle_y, "feature_middle_y": 50.0, "is_embedded": False,
+            "leader_line": False,
+        }
+
+    record = SeqRecord(Seq("A"), id="rec")
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        linear_assemble_module._check_linear_label_fit([record], [[label(0.0, 20.0), label(10.0, 22.0)]], 8.0)
+
+    assert str(raised.value).startswith("2 Linear labels do not fit at 8 pt (1 label pair overlaps")
+    assert raised.value.report.rows == ()
+    linear_assemble_module._check_linear_label_fit([record], [[label(0.0, 20.0), label(50.0, 20.0)]], 8.0)
 
 
 # --- engine and CLI -------------------------------------------------------------------------------

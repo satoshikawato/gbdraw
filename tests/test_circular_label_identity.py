@@ -52,6 +52,9 @@ def test_labels_resolve_all_parts_and_disambiguate_equal_source_hashes(
             "labels.rendering": rendering,
             "labels.filtering.blacklist_keywords": [],
             "canvas.show_gc": False, "canvas.show_skew": False,
+            # The duplicate gets its own track, so its embedded label does not
+            # overlap the original's (overlapping labels are not drawn, LP-D49).
+            "canvas.resolve_overlaps": True,
         })),
     )
     drawing = plan_request(request).build()

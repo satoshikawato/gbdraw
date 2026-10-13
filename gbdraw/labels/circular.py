@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from functools import lru_cache
 from typing import Literal, TypeAlias
 
@@ -16,7 +16,7 @@ from .filtering import preprocess_label_filtering
 from .circular_candidates import build_circular_label_candidates
 from .circular_leaders import leader_polyline
 from .circular_radial import place_radial_labels
-from .fit import LabelFit, label_fit
+from .fit import FITS, LabelFit, LabelKind, LabelShape, Polygon, label_fits_by_kind
 from ..config.models import (
     CircularRenderProfile,
     GbdrawConfig,
@@ -47,6 +47,8 @@ FULL_SCAN_LABEL_LIMIT = 70
 MAX_EXPANDED_SHIFT_DEG = 90.0
 RELAX_CENTER_DELTA_CAP_DEG = 35.0
 LEGACY_PLACEMENT_LABEL_THRESHOLD = 50
+# An embedded label's sector is counted in parts this wide or narrower (nearly flat).
+EMBEDDED_LABEL_PART_DEG = 5.0
 # Smallest row gap of the dense legacy packer: the y margin of the overlap count.
 LEGACY_MIN_ROW_GAP_PX = 0.1
 DenseOuterRows: TypeAlias = Literal["spaced", "legacy"]
@@ -252,23 +254,73 @@ def circular_label_font_size(cfg: GbdrawConfig, total_length: int) -> float:
     return float(cfg.labels.font_size.for_length_param(length_param))
 
 
-def _label_fit_box(label: dict, total_length: int) -> Aabb:
-    """A drawn label's box for the fit count, with the overlap margins (x 1.0 px, y 0.1 px)."""
+def _label_fit_box(label: dict, total_length: int) -> Polygon:
+    """A horizontal label's box for the fit count, with the overlap margins (x 1.0 px, y 0.1 px)."""
 
     min_x, max_x = _label_x_bounds(label, 1.0)
     min_y, max_y = _label_y_bounds(label, total_length, 0.1)
-    return Aabb(min_x, min_y, max_x, max_y)
+    return ((min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y))
 
 
-def circular_label_fit(labels: list[dict], total_length: int) -> LabelFit:
-    """Count overlapping boxes and crossing leaders of the drawn outer labels."""
+def _embedded_label_parts(label: dict, total_length: int) -> tuple[Polygon, ...]:
+    """An embedded label as the annular sector its text path covers, cut into nearly flat parts."""
 
-    outer_labels = [
-        label for label in labels if not label.get("is_embedded") and not label.get("is_inner")
+    radius = float(label["feature_center_radius_px"])
+    half_height = 0.5 * float(label["height_px"])
+    if radius <= half_height:
+        return ()
+    center_deg = 360.0 * (float(label["middle"]) / total_length) - 90.0
+    half_span_deg = math.degrees(0.5 * float(label["width_px"]) / radius)
+    steps = max(1, math.ceil(2.0 * half_span_deg / EMBEDDED_LABEL_PART_DEG))
+    angles = [
+        math.radians(center_deg - half_span_deg + 2.0 * half_span_deg * index / steps)
+        for index in range(steps + 1)
     ]
-    return label_fit(
-        [_label_fit_box(label, total_length) for label in outer_labels],
-        [leader_polyline(label) for label in outer_labels],
+    inner, outer = radius - half_height, radius + half_height
+    return tuple(
+        (
+            (inner * math.cos(start), inner * math.sin(start)),
+            (outer * math.cos(start), outer * math.sin(start)),
+            (outer * math.cos(end), outer * math.sin(end)),
+            (inner * math.cos(end), inner * math.sin(end)),
+        )
+        for start, end in zip(angles, angles[1:])
+    )
+
+
+def circular_label_shapes(labels: Sequence[dict], total_length: int) -> list[LabelShape]:
+    """The drawn labels of one record as the fit count sees them.
+
+    Horizontal labels are their boxes, radial labels their rotated text boxes,
+    and embedded labels the sector of their text path; outer and inner labels
+    carry the leader the label drawer draws.
+    """
+
+    shapes: list[LabelShape] = []
+    for label in labels:
+        if label.get("is_embedded"):
+            shapes.append(LabelShape("circular_embedded", _embedded_label_parts(label, total_length)))
+            continue
+        corners = label.get("oriented_corners")
+        parts = (tuple(corners),) if corners else (_label_fit_box(label, total_length),)
+        kind: LabelKind = "circular_inner" if label.get("is_inner") else "circular_outer"
+        shapes.append(LabelShape(kind, parts, leader_polyline(label)))
+    return [shape for shape in shapes if shape.parts]
+
+
+def circular_label_fits(
+    labels: Sequence[dict],
+    total_length: int,
+    *,
+    definition_text: Sequence[Aabb] = (),
+) -> dict[LabelKind, LabelFit]:
+    """The fit of one record's drawn labels by kind (horizontal labels touch with their margins)."""
+
+    radial = any(label.get("oriented_corners") for label in labels)
+    return label_fits_by_kind(
+        circular_label_shapes(labels, total_length),
+        touching=not radial,
+        definition_text=definition_text,
     )
 
 
@@ -5440,7 +5492,7 @@ def prepare_label_list(
             if dense_outer_rows == "legacy":
                 raise
             continue
-        if circular_label_fit(attempt_labels, total_length).fits:
+        if circular_label_fits(attempt_labels, total_length).get("circular_outer", FITS).fits:
             return embedded_labels + attempt_labels
         if dense_outer_rows == "legacy":
             legacy_labels = attempt_labels
@@ -5451,7 +5503,8 @@ __all__ = [
     "minimum_bbox_gap_px",
     "CircularLabelProbeStopped",
     "calculate_angle_degrees",
-    "circular_label_fit",
+    "circular_label_fits",
+    "circular_label_shapes",
     "circular_label_font_size",
     "calculate_angle_for_y",
     "calculate_coordinates",

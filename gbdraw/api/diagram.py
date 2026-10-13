@@ -14,6 +14,7 @@ import copy
 import logging
 import math
 import re
+import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -108,11 +109,11 @@ from gbdraw.config.modify import with_config_overrides
 from gbdraw.diagrams.circular.positioning import _parse_svg_number
 from gbdraw.labels.circular_fit import (
     CircularLabelFitSearch,
+    CircularLabelLayout,
     CircularLabelVerification,
-    CircularOuterLabelLayout,
     check_circular_label_fit,
 )
-from gbdraw.labels.fit import LabelFitReport, LabelFitRow, LabelFitRowKind
+from gbdraw.labels.fit import FITS, LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitValue
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.labels.filtering import (
     DERIVED_LABEL_FILTERING_KEYS,
@@ -140,7 +141,7 @@ from gbdraw.diagrams.circular.assemble import (
 )
 from gbdraw.diagrams.linear import assemble_linear_diagram
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import GbdrawError, LabelsDoNotFitError, ValidationError
 from gbdraw.layout.composition import (
     CompositionItem,
     CompositionRequest,
@@ -2500,7 +2501,7 @@ def assemble_circular_diagram_from_record(
         title_bounds=title_bounds,
         title_placement=title_placement,
     )
-    _attach_circular_label_layouts(result.drawing, [result.outer_label_layout])
+    _attach_circular_label_layouts(result.drawing, [result.label_layout])
     return result.drawing
 
 
@@ -3186,7 +3187,7 @@ def assemble_circular_diagram_from_records(
     )
 
     _attach_circular_label_layouts(
-        merged_canvas, [result.outer_label_layout for result in record_results]
+        merged_canvas, [result.label_layout for result in record_results]
     )
     if track_slot_geometry_records:
         setattr(
@@ -3209,7 +3210,7 @@ _LABEL_FIT_ATTR = "_gbdraw_label_fit"
 
 def _attach_circular_label_layouts(
     drawing: Drawing,
-    layouts: Sequence[CircularOuterLabelLayout | None],
+    layouts: Sequence[CircularLabelLayout | None],
 ) -> None:
     setattr(
         drawing,
@@ -3218,9 +3219,9 @@ def _attach_circular_label_layouts(
     )
 
 
-def _circular_label_layouts(drawing: Drawing) -> tuple[CircularOuterLabelLayout, ...]:
+def _circular_label_layouts(drawing: Drawing) -> tuple[CircularLabelLayout, ...]:
     layouts = getattr(drawing, _CIRCULAR_LABEL_LAYOUTS_ATTR, ())
-    return tuple(layout for layout in layouts if isinstance(layout, CircularOuterLabelLayout))
+    return tuple(layout for layout in layouts if isinstance(layout, CircularLabelLayout))
 
 
 def _drawing_size(drawing: Drawing) -> tuple[float, float]:
@@ -3230,23 +3231,34 @@ def _drawing_size(drawing: Drawing) -> tuple[float, float]:
     )
 
 
-def _checked_circular_drawing(assemble: Callable[[Mapping[str, float]], Drawing]) -> Drawing:
-    """Assemble a Circular figure and apply the outer-label fit check to it.
+def _checked_circular_drawing(assemble: Callable[[Mapping[str, LabelFitValue]], Drawing]) -> Drawing:
+    """Assemble a Circular figure and apply the label fit check to it.
 
-    Overlapping labels raise ``LabelsDoNotFitError``; crossing leaders alone
-    keep the drawing, warn, and attach the report and its search to it.
+    Overlapping labels (or radial labels without room) raise
+    ``LabelsDoNotFitError``; crossing leaders or labels over the definition
+    text alone keep the drawing, warn, and attach the report and its search.
     """
 
+    started = time.monotonic()
     drawing = assemble({})
+    assembly_seconds = time.monotonic() - started
 
-    def verify(overrides: Mapping[str, float]) -> CircularLabelVerification:
-        verified = assemble(overrides)
+    def verify(overrides: Mapping[str, LabelFitValue]) -> CircularLabelVerification:
+        try:
+            verified = assemble(overrides)
+        except GbdrawError as error:
+            # A setting the engine cannot draw (for example a radial layout error) does not fit.
+            return CircularLabelVerification(fits=False, canvas_size=None, reason=str(error))
+        layouts = _circular_label_layouts(verified)
         return CircularLabelVerification(
-            fits=all(layout.fit.fits for layout in _circular_label_layouts(verified)),
+            fits=all(layout.fits for layout in layouts),
             canvas_size=_drawing_size(verified),
+            fit=sum((layout.fit for layout in layouts), FITS),
         )
 
-    checked = check_circular_label_fit(_circular_label_layouts(drawing), verify)
+    checked = check_circular_label_fit(
+        _circular_label_layouts(drawing), verify, assembly_seconds=assembly_seconds
+    )
     if checked is not None:
         setattr(drawing, _LABEL_FIT_ATTR, checked)
     return drawing
@@ -3266,14 +3278,18 @@ def label_fit_report(drawing: Drawing) -> LabelFitReport | None:
     return checked[0] if checked is not None else None
 
 
-def label_fit_row(drawing: Drawing, kind: LabelFitRowKind) -> LabelFitRow | None:
-    """Compute one row of a drawn figure's report without a time limit.
+def label_fit_row(source: Drawing | LabelsDoNotFitError, kind: LabelFitRowKind) -> LabelFitRow | None:
+    """Compute one row of a report without a time limit.
 
-    Rows that the bounded search did not reach are ``not_computed`` in the
-    report; this returns the computed row (rows found earlier cost nothing).
+    ``source`` is a figure drawn with a report or the error of a figure that
+    was not drawn. Rows that the bounded search did not reach are
+    ``not_computed`` in the report; this returns the computed row (rows found
+    earlier cost nothing).
     """
 
-    checked = _label_fit(drawing)
+    if isinstance(source, LabelsDoNotFitError):
+        return source.row_search.row(kind) if source.row_search is not None else None
+    checked = _label_fit(source)
     return checked[1].row(kind) if checked is not None else None
 
 
@@ -3318,7 +3334,7 @@ def build_circular_diagram(
 
     cfg = _resolve_diagram_options_config(options)
 
-    def assemble(overrides: Mapping[str, float]) -> Drawing:
+    def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_record(
             gb_record,
             cfg=with_config_overrides(cfg, overrides),
@@ -3578,7 +3594,7 @@ def build_circular_multi_diagram(
     tracks = options.tracks
     cfg = _resolve_diagram_options_config(options)
 
-    def assemble(overrides: Mapping[str, float]) -> Drawing:
+    def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_records(
             records,
             cfg=with_config_overrides(cfg, overrides),

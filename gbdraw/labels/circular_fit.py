@@ -1,48 +1,64 @@
-"""Circular outer-label fit check and the search for settings that fit.
+"""Circular label fit check and the search for settings that fit.
 
 The labels' fit and the one decision point live in :mod:`gbdraw.labels.fit`:
-overlapping labels stop the run (LP-D42), crossing leaders alone draw as
-before and warn (LP-D46 ``CROSS-WARN``). Both outcomes carry one report: the
-failing records and six rows of settings, each the mildest value of one lever
-that fits, found with fit probes and verified with the full assembly. When the
-figure is drawn anyway the search stops after ``WARN_SEARCH_SECONDS``
-(LP-D48 ``SEARCH-BOUNDED-5S``); a row it did not reach can be computed later
-with :meth:`CircularLabelFitSearch.row`.
+overlapping labels stop the run (LP-D42), crossing leaders or labels over the
+centre definition text alone draw as before and warn (LP-D46 ``CROSS-WARN``,
+LP-D49 ``DEF-WARN``), and radial labels without room stop like overlaps
+(LP-D49 ``RADIAL-JOIN``). Every outcome carries one report: the failing
+records by side and the rows of settings that apply to them, each the
+mildest value of one lever that makes every record fit, verified with the
+full assembly.
+
+Outer labels have six rows, searched with fit probes (fit is monotone along
+each lever). Inner labels and radial labels have the font row, scanned down
+with the full assembly because fit is not monotone along the font there,
+and two switches, all labels outside and radial labels (LP-D49 ``INNER-3``),
+which are verified first (``SWITCHES-FIRST``). When the figure is drawn anyway
+the search stops after ``WARN_SEARCH_SECONDS`` (LP-D48
+``SEARCH-BOUNDED-5S``); when nothing is drawn the inner font scan stops after
+``FONT_SCAN_SECONDS``. A row not reached is computed later with
+:meth:`CircularLabelFitSearch.row`.
 """
 
 from __future__ import annotations
 
 import math
 import time
-import warnings
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
-from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
 from .fit import (
+    ALL_OUTSIDE_SCOPE,
+    FITS,
+    FONT_SCAN_SECONDS,
+    FONT_SIZE_PATHS,
+    PLACEMENT_PATH,
+    RADIAL_PLACEMENT,
+    SCOPE_PATH,
+    SPACING_PATH,
+    WARN_SEARCH_SECONDS,
+    X_OFFSET_PATH,
+    Y_OFFSET_PATH,
     LabelFit,
     LabelFitRecord,
     LabelFitReport,
     LabelFitRow,
     LabelFitRowKind,
+    LabelFitValue,
+    LabelKind,
+    fit_counts,
     label_fit_outcome,
+    raise_or_warn,
 )
-
-X_OFFSET_PATH = "labels.unified_adjustment.outer_labels.x_radius_offset"
-Y_OFFSET_PATH = "labels.unified_adjustment.outer_labels.y_radius_offset"
-# ``--label_font_size`` sets both size classes; a row writes them the same way.
-FONT_SIZE_PATHS = ("labels.font_size.short", "labels.font_size.long")
-SPACING_PATH = "labels.spacing.circular"
 
 OFFSET_STEP = 0.025
 OFFSET_LIMIT = 2.0
 FONT_STEP_PT = 0.5
 FONT_LIMIT_PT = 6.0
 TIGHTER_ROW_GRID_PX = (2.5, 2.0, 1.5, 1.0, 0.5, 0.25, 0.1)
-WARN_SEARCH_SECONDS = 5.0
 
-# The dialog order of the rows.
+# The dialog order of the rows; a report has the rows that apply to its records.
 ROW_KINDS: tuple[LabelFitRowKind, ...] = (
     "outward_both",
     "outward_vertical",
@@ -50,9 +66,14 @@ ROW_KINDS: tuple[LabelFitRowKind, ...] = (
     "smaller_font",
     "tighter_rows",
     "combination",
+    "labels_out",
+    "radial",
 )
-# The search order: vertical bounds both directions and the combination, and
-# the combination starts from the font row's value.
+_OUTER_ROWS: frozenset[LabelFitRowKind] = frozenset(ROW_KINDS[:6])
+_INNER_ROWS: frozenset[LabelFitRowKind] = frozenset({"smaller_font", "labels_out", "radial"})
+_RADIAL_ROWS: frozenset[LabelFitRowKind] = frozenset({"smaller_font", "labels_out"})
+# The search order of outer rows: vertical bounds both directions and the
+# combination, and the combination starts from the font row's value.
 _SEARCH_ORDER: tuple[LabelFitRowKind, ...] = (
     "outward_vertical",
     "outward_both",
@@ -61,38 +82,87 @@ _SEARCH_ORDER: tuple[LabelFitRowKind, ...] = (
     "tighter_rows",
     "combination",
 )
+# With inner or radial labels failing, the two switches come first (SWITCHES-FIRST).
+_SWITCHES_FIRST_ORDER: tuple[LabelFitRowKind, ...] = ("labels_out", "radial", *_SEARCH_ORDER)
+_SWITCH_VALUES: Mapping[LabelFitRowKind, Mapping[str, LabelFitValue]] = {
+    "labels_out": {SCOPE_PATH: ALL_OUTSIDE_SCOPE},
+    "radial": {PLACEMENT_PATH: RADIAL_PLACEMENT},
+}
+_OUTER_LEVER_REASON = "Does not move inner or radial labels"
 
-CircularLabelFitProbe: TypeAlias = Callable[[Mapping[str, float]], LabelFit]
+CircularLabelPlacement: TypeAlias = Literal["horizontal", "radial"]
+CircularLabelFitProbe: TypeAlias = Callable[[Mapping[str, LabelFitValue]], LabelFit]
 
 
 @dataclass(frozen=True)
-class CircularOuterLabelLayout:
-    """One record's drawn horizontal outer labels and a probe for changed settings.
+class CircularLabelLayout:
+    """One record's drawn labels: their fit by kind, and a probe for the outer rows.
 
-    ``probe`` places the record's labels again with config overrides (dotted
-    config paths) and returns their fit. It may stop early on a layout that
-    cannot fit; its answer is a hint that the full assembly verifies.
+    ``refused`` marks radial labels that could not be placed in the room the
+    tracks leave. ``probe`` (horizontal records with outer labels) places the
+    record's labels again with config overrides and returns the outer labels'
+    fit; it may stop early on a layout that cannot fit, so its answer is a
+    hint that the full assembly verifies.
     """
 
     record_id: str
-    outer_label_count: int
+    placement: CircularLabelPlacement
     font_size: float
+    label_counts: Mapping[LabelKind, int]
+    kind_fits: Mapping[LabelKind, LabelFit]
     x_radius_offset: float
     y_radius_offset: float
     label_spacing: float
-    fit: LabelFit
-    probe: CircularLabelFitProbe = field(compare=False, repr=False)
+    refused: bool = False
+    probe: CircularLabelFitProbe | None = field(default=None, compare=False, repr=False)
+
+    @property
+    def fit(self) -> LabelFit:
+        return sum(self.kind_fits.values(), FITS)
+
+    @property
+    def fits(self) -> bool:
+        return not self.refused and self.fit.fits
+
+    @property
+    def failing_kinds(self) -> tuple[LabelKind, ...]:
+        """The sides that do not fit; a refused radial record names its inner or outer side."""
+
+        failing = tuple(kind for kind, fit in self.kind_fits.items() if not fit.fits)
+        if failing or not self.refused:
+            return failing
+        return ("circular_inner",) if self.label_counts.get("circular_inner") else ("circular_outer",)
+
+    @property
+    def outer_only(self) -> bool:
+        """Only horizontal outer labels fail: the six outer rows search with probes."""
+
+        return (
+            self.placement == "horizontal"
+            and not self.refused
+            and self.failing_kinds == ("circular_outer",)
+            and self.probe is not None
+        )
 
 
 @dataclass(frozen=True)
 class CircularLabelVerification:
-    """The full assembly with a row's settings: whether every record fits, and its canvas size."""
+    """The full assembly with a row's settings.
+
+    ``fits`` when every record fits; ``canvas_size`` is the figure's size,
+    ``fit`` its labels' fit over every record, and ``reason`` why the
+    assembly failed when it raised.
+    """
 
     fits: bool
-    canvas_size: tuple[float, float]
+    canvas_size: tuple[float, float] | None
+    fit: LabelFit | None = None
+    reason: str | None = None
 
 
-CircularLabelFitVerifier: TypeAlias = Callable[[Mapping[str, float]], CircularLabelVerification]
+CircularLabelFitVerifier: TypeAlias = Callable[
+    [Mapping[str, LabelFitValue]], CircularLabelVerification
+]
 
 
 class _SearchStopped(Exception):
@@ -131,7 +201,7 @@ def _spacing_grid(current: float) -> list[float]:
     return [value for value in TIGHTER_ROW_GRID_PX if value < current - 1e-9]
 
 
-def _font_values(font_size: float) -> dict[str, float]:
+def _font_values(font_size: float) -> dict[str, LabelFitValue]:
     return {path: font_size for path in FONT_SIZE_PATHS}
 
 
@@ -207,46 +277,75 @@ def _mildest_fitting_index(
     return _bisect(fits, grid, low, high)
 
 
-def _settings_key(values: Mapping[str, float]) -> tuple[tuple[str, float], ...]:
+def _settings_key(values: Mapping[str, LabelFitValue]) -> tuple[tuple[str, LabelFitValue], ...]:
     return tuple(sorted(values.items()))
 
 
 @dataclass(frozen=True)
 class _Lever:
     grid: list[float]
-    values_for: Callable[[float], dict[str, float]]
+    values_for: Callable[[float], dict[str, LabelFitValue]]
     reason: str
     bound: float | None = None
     limit_first: bool = True
     downward: bool = False
 
 
+def _applicable_rows(layouts: Sequence[CircularLabelLayout]) -> frozenset[LabelFitRowKind]:
+    """The rows of the failing sides: outer labels six, inner labels three, radial labels two."""
+
+    kinds: set[LabelFitRowKind] = set()
+    for layout in layouts:
+        if layout.placement == "radial":
+            kinds |= _RADIAL_ROWS
+            continue
+        failing = layout.failing_kinds
+        if "circular_outer" in failing:
+            kinds |= _OUTER_ROWS
+        if any(kind != "circular_outer" for kind in failing):
+            kinds |= _INNER_ROWS
+    if not any(layout.label_counts.get("circular_inner") for layout in layouts):
+        kinds.discard("labels_out")
+    return frozenset(kinds)
+
+
 class CircularLabelFitSearch:
     """The rows for one figure's failing records.
 
-    Each row is the mildest grid value that every failing record's probe
-    accepts (the strongest of their answers), verified with the full assembly
-    and stepped one grid value stronger until verification fits. Probe and
+    When only horizontal outer labels fail, each row is the mildest grid value
+    that every failing record's probe accepts (the strongest of their
+    answers), verified with the full assembly and stepped one grid value
+    stronger until verification fits. Otherwise the switches are one full
+    assembly each, the font is scanned down with the full assembly (the first
+    value that fits), and the outer levers have no value. Probe and
     verification answers are kept, so rows share them and a row asked for
-    again costs nothing.
+    again, or after its deadline, costs only what is new.
     """
 
     def __init__(
         self,
-        layouts: Sequence[CircularOuterLabelLayout],
+        layouts: Sequence[CircularLabelLayout],
         verify: CircularLabelFitVerifier,
+        *,
+        assembly_seconds: float = 0.0,
     ) -> None:
         self.layouts = tuple(layouts)
+        self.row_kinds = _applicable_rows(self.layouts)
+        self._outer_only = all(layout.outer_only for layout in self.layouts)
         self._verify_assembly = verify
+        # A verification starts only if one more assembly fits before the deadline.
+        self._assembly_seconds = float(assembly_seconds)
         # Multi-record rows start from the strongest current value among the failing records.
         self._x_offset = max(layout.x_radius_offset for layout in self.layouts)
         self._y_offset = max(layout.y_radius_offset for layout in self.layouts)
         self._font_size = min(layout.font_size for layout in self.layouts)
         self._spacing = min(layout.label_spacing for layout in self.layouts)
-        self._probe_answers: list[dict[tuple[tuple[str, float], ...], bool]] = [
+        self._probe_answers: list[dict[tuple[tuple[str, LabelFitValue], ...], bool]] = [
             {} for _ in self.layouts
         ]
-        self._verifications: dict[tuple[tuple[str, float], ...], CircularLabelVerification] = {}
+        self._verifications: dict[
+            tuple[tuple[str, LabelFitValue], ...], CircularLabelVerification
+        ] = {}
         self._rows: dict[LabelFitRowKind, tuple[LabelFitRow, float | None]] = {}
         self._deadline: float | None = None
 
@@ -261,39 +360,96 @@ class CircularLabelFitSearch:
         finally:
             self._deadline = None
 
-    def rows(self, *, deadline: float | None = None) -> tuple[LabelFitRow, ...]:
-        """All six rows in the dialog order."""
+    def rows(
+        self,
+        *,
+        deadline: float | None = None,
+        font_scan_seconds: float | None = None,
+    ) -> tuple[LabelFitRow, ...]:
+        """The rows that apply, in the dialog order.
 
-        found = {kind: self.row(kind, deadline=deadline) for kind in _SEARCH_ORDER}
-        return tuple(found[kind] for kind in ROW_KINDS)
+        ``font_scan_seconds`` bounds the full-assembly font scan of inner and
+        radial labels when nothing else is bounded.
+        """
+
+        found: dict[LabelFitRowKind, LabelFitRow] = {}
+        order = _SEARCH_ORDER if self._outer_only else _SWITCHES_FIRST_ORDER
+        for kind in order:
+            if kind not in self.row_kinds:
+                continue
+            row_deadline = deadline
+            if kind == "smaller_font" and not self._outer_only and font_scan_seconds is not None:
+                scan_deadline = time.monotonic() + font_scan_seconds
+                row_deadline = scan_deadline if deadline is None else min(deadline, scan_deadline)
+            found[kind] = self.row(kind, deadline=row_deadline)
+        return tuple(found[kind] for kind in ROW_KINDS if kind in found)
 
     # --- probes ---
 
-    def _check_deadline(self) -> None:
-        if self._deadline is not None and time.monotonic() >= self._deadline:
+    def _check_deadline(self, expected_seconds: float = 0.0) -> None:
+        if self._deadline is not None and time.monotonic() + expected_seconds >= self._deadline:
             raise _SearchStopped
 
-    def _probe_fits(self, index: int, values: Mapping[str, float]) -> bool:
+    def _probe_fits(self, index: int, values: Mapping[str, LabelFitValue]) -> bool:
         answers = self._probe_answers[index]
         key = _settings_key(values)
         if key not in answers:
             self._check_deadline()
-            answers[key] = self.layouts[index].probe(values).fits
+            probe = self.layouts[index].probe
+            if probe is None:  # pragma: no cover - outer rows search only records with a probe
+                raise ValueError("an outer row searched a record without a probe")
+            answers[key] = probe(values).fits
         return answers[key]
 
-    def _verify(self, values: Mapping[str, float]) -> CircularLabelVerification:
+    def _verify(self, values: Mapping[str, LabelFitValue]) -> CircularLabelVerification:
         key = _settings_key(values)
         if key not in self._verifications:
-            self._check_deadline()
+            self._check_deadline(self._assembly_seconds)
+            started = time.monotonic()
             self._verifications[key] = self._verify_assembly(values)
+            self._assembly_seconds = time.monotonic() - started
         return self._verifications[key]
 
     # --- rows ---
 
     def _row(self, kind: LabelFitRowKind) -> tuple[LabelFitRow, float | None]:
         if kind not in self._rows:
-            self._rows[kind] = self._search(kind, self._lever(kind))
+            self._rows[kind] = self._compute(kind)
         return self._rows[kind]
+
+    def _compute(self, kind: LabelFitRowKind) -> tuple[LabelFitRow, float | None]:
+        if kind in _SWITCH_VALUES:
+            return self._switch(kind), None
+        if self._outer_only:
+            return self._search(kind, self._lever(kind))
+        if kind == "smaller_font":
+            return self._font_scan()
+        return LabelFitRow(kind, "not_found", reason=_OUTER_LEVER_REASON), None
+
+    def _switch(self, kind: LabelFitRowKind) -> LabelFitRow:
+        values = _SWITCH_VALUES[kind]
+        verification = self._verify(values)
+        if verification.fits:
+            return LabelFitRow(kind, "found", values, verification.canvas_size)
+        if verification.reason is not None:
+            reason = verification.reason
+        elif verification.fit is not None and not verification.fit.fits:
+            reason = f"Labels still do not fit ({fit_counts(verification.fit)})"
+        else:
+            reason = "Labels still do not fit"
+        return LabelFitRow(kind, "not_found", reason=reason)
+
+    def _font_scan(self) -> tuple[LabelFitRow, float | None]:
+        """The largest smaller font that fits, trying each step down (fit is not monotone)."""
+
+        for value in _font_grid(self._font_size):
+            values = _font_values(value)
+            verification = self._verify(values)
+            if verification.fits:
+                return LabelFitRow("smaller_font", "found", values, verification.canvas_size), value
+        return LabelFitRow(
+            "smaller_font", "not_found", reason=f"Does not fit down to {FONT_LIMIT_PT:g} pt"
+        ), None
 
     def _lever(self, kind: LabelFitRowKind) -> _Lever:
         y_offset = self._y_offset
@@ -337,7 +493,7 @@ class CircularLabelFitSearch:
         drop = max(FONT_STEP_PT, _round_half_pt((self._font_size - (font_value or FONT_LIMIT_PT)) / 2.0))
         combined_font = max(FONT_LIMIT_PT, self._font_size - drop)
 
-        def combined_values(value: float) -> dict[str, float]:
+        def combined_values(value: float) -> dict[str, LabelFitValue]:
             values = _font_values(combined_font)
             if value != y_offset:
                 values[Y_OFFSET_PATH] = value
@@ -385,149 +541,69 @@ class CircularLabelFitSearch:
         return not_found
 
 
+def _fit_records(layouts: Sequence[CircularLabelLayout]) -> tuple[LabelFitRecord, ...]:
+    return tuple(
+        LabelFitRecord(
+            record_id=layout.record_id,
+            label_kind=kind,
+            label_count=int(layout.label_counts.get(kind, 0)),
+            font_size=layout.font_size,
+            fit=layout.kind_fits.get(kind, FITS),
+            refused=layout.refused,
+        )
+        for layout in layouts
+        for kind in layout.failing_kinds
+    )
+
+
 def check_circular_label_fit(
-    layouts: Sequence[CircularOuterLabelLayout],
+    layouts: Sequence[CircularLabelLayout],
     verify: CircularLabelFitVerifier,
+    *,
+    warn_search_seconds: float = WARN_SEARCH_SECONDS,
+    assembly_seconds: float = 0.0,
 ) -> tuple[LabelFitReport, CircularLabelFitSearch] | None:
     """Raise, warn, or pass for a drawn figure's records.
 
     Returns ``None`` when every record fits. Raises ``LabelsDoNotFitError``
-    with every row when labels overlap. When only leaders cross, warns with
-    ``LabelLeadersCrossWarning`` and returns the report (rows searched for
-    ``WARN_SEARCH_SECONDS``) and the search that computes the other rows.
+    when labels overlap or radial labels have no room; its rows are computed
+    (the inner font scan for ``FONT_SCAN_SECONDS``) and ``row_search``
+    computes a row not reached. When only leaders cross or labels cover the
+    definition text, warns with ``LabelLeadersCrossWarning`` and returns the
+    report (rows searched for ``warn_search_seconds``; 0 leaves every row
+    ``not_computed``) and the search that computes the other rows.
+    ``assembly_seconds`` is the time of one full assembly, so a verification
+    that would overrun a deadline is not started.
     """
 
-    outcome = label_fit_outcome([layout.fit for layout in layouts])
+    outcome = label_fit_outcome(
+        [layout.fit for layout in layouts], refused=any(layout.refused for layout in layouts)
+    )
     if outcome == "fits":
         return None
-    failing = tuple(layout for layout in layouts if not layout.fit.fits)
-    search = CircularLabelFitSearch(failing, verify)
+    failing = tuple(layout for layout in layouts if not layout.fits)
+    search = CircularLabelFitSearch(failing, verify, assembly_seconds=assembly_seconds)
     drawn = outcome == "warn"
     report = LabelFitReport(
-        records=tuple(
-            LabelFitRecord(
-                record_id=layout.record_id,
-                label_kind="circular_outer",
-                label_count=layout.outer_label_count,
-                font_size=layout.font_size,
-                fit=layout.fit,
-            )
-            for layout in failing
+        records=_fit_records(failing),
+        rows=(
+            search.rows(deadline=time.monotonic() + warn_search_seconds)
+            if drawn
+            else search.rows(font_scan_seconds=FONT_SCAN_SECONDS)
         ),
-        rows=search.rows(deadline=time.monotonic() + WARN_SEARCH_SECONDS if drawn else None),
         drawn=drawn,
     )
-    message = format_circular_label_fit_report(report)
-    if not drawn:
-        raise LabelsDoNotFitError(message, report=report)
-    warnings.warn(LabelLeadersCrossWarning(message, report=report), stacklevel=3)
+    raise_or_warn(report, row_search=search)
     return report, search
 
 
-# --- wording --------------------------------------------------------------------------------------
-
-_CLI_OPTIONS: Mapping[str, str] = {
-    X_OFFSET_PATH: "--outer_label_x_radius_offset",
-    Y_OFFSET_PATH: "--outer_label_y_radius_offset",
-    FONT_SIZE_PATHS[0]: "--label_font_size",
-    SPACING_PATH: "--circular_label_spacing",
-}
-_ROW_TITLES: Mapping[LabelFitRowKind, str] = {
-    "outward_both": "outward, both directions",
-    "outward_vertical": "outward, vertical only",
-    "outward_horizontal": "outward, horizontal only",
-    "smaller_font": "smaller font",
-    "tighter_rows": "tighter rows",
-    "combination": "combination",
-}
-_ROW_NAMES: Mapping[LabelFitRowKind, str] = {
-    "outward_both": "outward in both directions",
-    "outward_vertical": "outward vertical only",
-    "outward_horizontal": "outward horizontal only",
-    "smaller_font": "a smaller font",
-    "tighter_rows": "tighter rows",
-    "combination": "the combination",
-}
-
-
-def _counted(count: int, singular: str, plural: str) -> str:
-    return f"{count} {singular if count == 1 else plural}"
-
-
-def _fit_counts(fit: LabelFit) -> str:
-    return (
-        f"{_counted(fit.overlap_pairs, 'label pair overlaps', 'label pairs overlap')}, "
-        f"{_counted(fit.crossing_pairs, 'leader pair crosses', 'leader pairs cross')}"
-    )
-
-
-def _cli_arguments(values: Mapping[str, float]) -> str:
-    return " ".join(
-        f"{option} {values[path]:g}" for path, option in _CLI_OPTIONS.items() if path in values
-    )
-
-
-def _joined(names: Sequence[str]) -> str:
-    if len(names) <= 1:
-        return "".join(names)
-    return ", ".join(names[:-1]) + " and " + names[-1]
-
-
-def format_circular_label_fit_report(report: LabelFitReport) -> str:
-    """The CLI and Python text of the error and the warning (OD-F5, OD-F8)."""
-
-    outcome = "Drawn anyway." if report.drawn else "Nothing was drawn."
-    if len(report.records) == 1:
-        (record,) = report.records
-        first = (
-            f"{record.label_count} outer labels do not fit at {record.font_size:g} pt "
-            f"({_fit_counts(record.fit)}). {outcome}"
-        )
-    else:
-        records = "; ".join(
-            f"{record.record_id} ({record.label_count} labels at {record.font_size:g} pt: "
-            f"{_fit_counts(record.fit)})"
-            for record in report.records
-        )
-        first = f"Outer labels do not fit in {len(report.records)} records: {records}. {outcome}"
-    lines = [first]
-    fitting = [(row, row.values) for row in report.rows if row.values is not None]
-    if fitting:
-        arguments = [_cli_arguments(values) for _, values in fitting]
-        width = max(len(argument) for argument in arguments) + 3
-        lines.append("Run again with one of:")
-        lines.extend(
-            f"  {argument:<{width}}({_ROW_TITLES[row.kind]})"
-            for argument, (row, _) in zip(arguments, fitting)
-        )
-    missing = [row.kind for row in report.rows if row.status == "not_found"]
-    skipped = [row.kind for row in report.rows if row.status == "not_computed"]
-    if missing and (fitting or skipped):
-        names = _joined([_ROW_NAMES[kind] for kind in missing])
-        verb = "do" if len(missing) > 1 or missing == ["tighter_rows"] else "does"
-        lines.append(f"{names[0].upper()}{names[1:]} {verb} not fit this map.")
-    elif missing:
-        lines.append("No single change of the label offsets, font size or label spacing fits this map.")
-    if skipped:
-        lines.append(
-            f"Not searched within {WARN_SEARCH_SECONDS:g} s: "
-            f"{_joined([_ROW_NAMES[kind] for kind in skipped])}."
-        )
-    return "\n".join(lines)
-
-
 __all__ = [
-    "FONT_SIZE_PATHS",
     "ROW_KINDS",
-    "SPACING_PATH",
-    "WARN_SEARCH_SECONDS",
-    "X_OFFSET_PATH",
-    "Y_OFFSET_PATH",
     "CircularLabelFitProbe",
     "CircularLabelFitSearch",
     "CircularLabelFitVerifier",
+    "CircularLabelLayout",
+    "CircularLabelPlacement",
     "CircularLabelVerification",
-    "CircularOuterLabelLayout",
     "check_circular_label_fit",
-    "format_circular_label_fit_report",
 ]

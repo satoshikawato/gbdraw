@@ -21,12 +21,14 @@ from ..layout.linear import (
 )
 from ..layout.spatial import Aabb, AabbIndex, Interval, IntervalIndex
 from ..layout.text_geometry import (
+    Point,
     aabb_from_points,
     anchor_x_bounds,
     convex_polygons_intersect,
     text_box_corner_offsets,
     translate_points,
 )
+from .fit import LabelShape
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -693,10 +695,42 @@ def prepare_label_list_linear(
     return embedded_labels + external_labels
 
 
+def linear_leader_polyline(label: dict) -> tuple[Point, ...]:
+    """The leader the record drawer draws for a Linear label (empty for an embedded label)."""
+
+    if label.get("leader_line"):
+        return (
+            (label["leader_start_x"], label["leader_start_y"]),
+            (label["leader_end_x"], label["leader_end_y"]),
+        )
+    if label["is_embedded"]:
+        return ()
+    label_middle_y = float(label["middle_y"])
+    label_height = float(label["height_px"])
+    if label_middle_y >= float(label["feature_middle_y"]):
+        # Label is below the feature track, so connect to its upper edge.
+        label_edge_y = label_middle_y - (0.45 * label_height)
+    else:
+        # Label is above the feature track, so connect to its lower edge.
+        label_edge_y = label_middle_y + (0.45 * label_height)
+    return ((label["middle"], label["feature_middle_y"]), (label["middle"], label_edge_y))
+
+
+def linear_label_shapes(labels: list[dict]) -> list[LabelShape]:
+    """One record's drawn Linear labels as the fit count sees them."""
+
+    return [
+        LabelShape("linear", (tuple(_label_corners(label)),), linear_leader_polyline(label))
+        for label in labels
+    ]
+
+
 __all__ = [
     "calculate_label_bounds",
     "calculate_label_y_bounds",
     "check_label_overlap",
     "find_lowest_available_track",
+    "linear_label_shapes",
+    "linear_leader_polyline",
     "prepare_label_list_linear",
 ]
