@@ -12,7 +12,12 @@ import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
+from gbdraw.api.options import (
+    CircularDiagramOptions,
+    CircularRequestTrackOptions,
+    LinearDiagramOptions,
+    LinearRequestTrackOptions,
+)
 from gbdraw.contract_shapes import INTEGER, STRING, array, literal, nullable, obj, record
 from gbdraw.api.requests import (
     CircularDiagramRequest,
@@ -30,6 +35,7 @@ from gbdraw.session_request_codec import (
     describe_canonical_request,
     encode_canonical_request,
 )
+from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
 from tests import test_session_request_codec as codec_tests
 from tests.utils.contract_shape_check import load_json, stored_json_files, violations
 
@@ -207,9 +213,13 @@ def _request(mode: str, **options: object) -> Any:
     )
 
 
-def _smallest_request(mode: str, tmp_path: Path) -> Encoded:
-    encoded = encode_canonical_request(_request(mode))
+def _encoded(request: Any, tmp_path: Path) -> Encoded:
+    encoded = encode_canonical_request(request)
     return encoded.payload, codec_tests._materialize_resources(encoded, tmp_path / "resources")
+
+
+def _smallest_request(mode: str, tmp_path: Path) -> Encoded:
+    return _encoded(_request(mode), tmp_path)
 
 
 # Where one change cannot show that the decoder and the description agree, and why.
@@ -263,6 +273,15 @@ _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]
 # values the field takes and the description types it ``string``. The type is
 # wider than Python there, as the Linear slot scalar was (OV-530, OV-597); a
 # field joins this list only with a reason it cannot be a literal union.
+# - A legend position: the Web writer writes the text its state holds, which a
+#   stored Session can set to any text (OV-652); what it writes then is not
+#   decided.
+# - A slot's renderer and side: the encoder writes them as its caller gave
+#   them, and the track planner reads other spellings of a name
+#   (_SLOT_SPELLINGS, OV-653).
+# - The five comparison mode settings: the decoder reads other spellings of a
+#   name (OV-651) and the Web's Session Load does not check them; they narrow
+#   with the Load check of stage 1d PR-C.
 _NAMES_TYPED_STRING: tuple[str, ...] = (
     "CanonicalCircularOutputOptions.legend",
     "CanonicalCircularTrackSlot.renderer",
@@ -458,6 +477,39 @@ def test_the_decoder_agrees_with_the_description_at_every_position(
     differences, reached = _differences(encoded_requests, tmp_path)
     assert differences == _EXPECTED_DIFFERENCES
     assert {label for label, _shape in OBJECTS} - reached == set()
+
+
+# A slot is written as its caller built it (_encode_track_slot), and the track
+# planner reads these spellings of a renderer and of a side. So a request the
+# encoder wrote can hold one, and the description cannot name the values of
+# either field while that is so (_NAMES_TYPED_STRING, OV-653).
+_SLOT_SPELLINGS: dict[str, tuple[Any, Any, tuple[tuple[str, str, str], ...]]] = {
+    "circular": (CircularTrackSlot, CircularRequestTrackOptions, (
+        ("features", "Features", " OUTSIDE "), ("gc_content", "gc_content", "INSIDE"),
+    )),
+    "linear": (LinearTrackSlot, LinearRequestTrackOptions, (
+        ("features", " FEATURES ", "Above"), ("gc_content", "GC_CONTENT", "BELOW"),
+    )),
+}
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_the_encoder_writes_a_slot_renderer_and_side_in_the_spelling_it_was_given(
+    mode: str, tmp_path: Path
+) -> None:
+    slot_type, tracks_type, spellings = _SLOT_SPELLINGS[mode]
+    tracks = tracks_type(**{
+        f"{mode}_track_slots": tuple(
+            slot_type(id=slot_id, renderer=renderer, side=side) for slot_id, renderer, side in spellings
+        ),
+        f"{mode}_track_axis_index": 1,
+    })
+    payload, resources = _encoded(_request(mode, tracks=tracks), tmp_path)
+    written = payload["diagramOptions"]["tracks"][f"{mode}TrackSlots"]
+    assert [(slot["id"], slot["renderer"], slot["side"]) for slot in written] == list(spellings)
+    assert _problems(payload, ROOT) == []
+    decoded = decode_canonical_request(payload, resource_paths=resources, output_directory=tmp_path / "output")
+    assert decoded.options.tracks == tracks
 
 
 # The decoder reads these keys and no writer writes them: the depth inputs of
