@@ -2753,7 +2753,9 @@ def _compose_circular_plot(
         if title_target is not None and title_bounds is not None
         else None
     )
-    plan = plan_composition(
+    plan = render_stage(
+        "composition_plan",
+        plan_composition,
         CompositionRequest(
             primary=CompositionItem("primary", plot.source_content_bounds),
             legend=legend_item,
@@ -2761,7 +2763,7 @@ def _compose_circular_plot(
             legend_placement=legend_placement,
             title_placement=resolved_title_placement,
             overlay_obstacles=plot.source_overlay_obstacles,
-        )
+        ),
     )
 
     apply_composition_plan(

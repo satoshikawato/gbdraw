@@ -3237,12 +3237,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
         legend_table,
     )
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(
-        canvas_config,
-        legend_measurement,
-        legend_table,
-        cfg=cfg,
-    )
+    legend_group = LegendGroup(legend_measurement, legend_table)
     drawing.add(legend_group.get_group())
     svg_text = drawing.tostring()
 
@@ -3265,7 +3260,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
         "Collinear",
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_group.dpi,
+        legend_measurement.dpi,
     )
     assert bar_x == pytest.approx(
         label_width + 0.2 * legend_measurement.color_rect_size
@@ -3298,12 +3293,7 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
         legend_table,
     )
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(
-        canvas_config,
-        legend_measurement,
-        legend_table,
-        cfg=cfg,
-    )
+    legend_group = LegendGroup(legend_measurement, legend_table)
     drawing.add(legend_group.get_group())
     root = ET.fromstring(drawing.tostring())
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -3343,7 +3333,7 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
         feature_key,
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_group.dpi,
+        legend_measurement.dpi,
     )
     text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width
@@ -3388,12 +3378,7 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
         legend_table,
     )
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(
-        canvas_config,
-        legend_measurement,
-        legend_table,
-        cfg=cfg,
-    )
+    legend_group = LegendGroup(legend_measurement, legend_table)
     drawing.add(legend_group.get_group())
     root = ET.fromstring(drawing.tostring())
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -3418,7 +3403,7 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
         feature_key,
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_group.dpi,
+        legend_measurement.dpi,
     )
     text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width

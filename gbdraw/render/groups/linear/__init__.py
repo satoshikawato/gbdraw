@@ -11,8 +11,8 @@ from .feature_identity import (
     build_linear_feature_dom_index,
 )
 from .pairwise_match import PairWiseMatchGroup
-from .legend import LegendGroup
-from .plot_title import PlotTitleGroup
+from .legend import LegendGroup, linear_legend_content
+from .plot_title import PlotTitleContent, plot_title_content
 
 __all__ = [
     "DefinitionGroup",
@@ -23,8 +23,10 @@ __all__ = [
     "LengthBarGroup",
     "LinearFeatureDomIndex",
     "PairWiseMatchGroup",
-    "PlotTitleGroup",
+    "PlotTitleContent",
     "SeqRecordGroup",
     "build_linear_feature_dom_index",
+    "linear_legend_content",
+    "plot_title_content",
 ]
 

@@ -5,7 +5,6 @@ from collections.abc import Mapping
 
 from gbdraw.svg.elements import Group, LinearGradient, Path
 
-from ....config.models import GbdrawConfig
 from ....configurators.legend import LegendMeasurement
 from ....legend.linear_layout import (
     LinearFeatureLegendLayout,
@@ -13,6 +12,7 @@ from ....legend.linear_layout import (
     LinearOrientationLegendLayout,
 )
 from ....legend.table import LegendRowKey, write_legend_row_names
+from ....render.group_content import GroupContent
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
 
@@ -22,15 +22,10 @@ class LegendGroup:
 
     def __init__(
         self,
-        canvas_config,
         legend_measurement: LegendMeasurement,
         legend_table,
-        *,
-        cfg: GbdrawConfig,
     ):
         self.legend_group = Group(id="legend")
-        self._cfg = cfg
-        self.canvas_config = canvas_config
         self.legend_measurement = legend_measurement
         self.legend_table = legend_table
         self._name_entry = write_legend_row_names(legend_table)
@@ -38,8 +33,6 @@ class LegendGroup:
         self.font_weight: str = legend_measurement.font_weight
         self.font_size: float = legend_measurement.font_size
         self.rect_size: float = legend_measurement.color_rect_size
-        self.legend_position = self.canvas_config.legend_position
-        self.dpi: int = cfg.canvas.dpi
         self.layout = legend_measurement.linear_layout
         if self.layout is None:
             if legend_table:
@@ -307,4 +300,10 @@ class LegendGroup:
         return self.vertical_legend_width, self.vertical_legend_height
 
 
-__all__ = ["LegendGroup"]
+def linear_legend_content(legend_measurement: LegendMeasurement, legend_table) -> GroupContent:
+    """The ``legend_content`` stage of a Linear canvas."""
+
+    return GroupContent.of(LegendGroup(legend_measurement, legend_table).get_group())
+
+
+__all__ = ["LegendGroup", "linear_legend_content"]

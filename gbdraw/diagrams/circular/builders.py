@@ -461,11 +461,7 @@ def add_legend_group_on_canvas(
     Returns:
     Drawing: The updated SVG drawing with the legend group added.
     """
-    legend_group = LegendGroup(
-        canvas_config,
-        legend_measurement,
-        legend_table,
-    ).get_group()
+    legend_group = LegendGroup(legend_measurement, legend_table).get_group()
     setattr(legend_group, "_gbdraw_local_bounds", legend_measurement.local_bounds)
     canvas.add(legend_group)
 

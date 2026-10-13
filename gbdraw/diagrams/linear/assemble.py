@@ -56,7 +56,13 @@ from ...configurators import (
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...core.text import calculate_bbox_dimensions
-from ...render.groups.linear import LengthBarGroup, LegendGroup, PlotTitleGroup
+from ...render.group_content import CANVAS_SCOPE, GroupKey, GroupKind, place_content
+from ...render.groups.linear import (
+    LengthBarGroup,
+    PlotTitleContent,
+    linear_legend_content,
+    plot_title_content,
+)
 from ...render.groups.linear.length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
@@ -1914,12 +1920,15 @@ def assemble_linear_diagram(
     if normalized_plot_title_position not in {"center", "top", "bottom"}:
         raise ValueError("plot_title_position must be one of: center, top, bottom")
 
-    plot_title_obj: PlotTitleGroup | None = None
+    title_content: PlotTitleContent | None = None
     if normalized_plot_title:
-        plot_title_obj = PlotTitleGroup(
+        title_content = render_stage(
+            "plot_title_content",
+            plot_title_content,
             normalized_plot_title,
+            font_family=cfg.objects.text.font_family,
             font_size=float(plot_title_font_size),
-            cfg=cfg,
+            dpi=int(cfg.canvas.dpi),
         )
 
     legacy_comparison_frames = _load_linear_comparison_dataframes(
@@ -3064,17 +3073,18 @@ def assemble_linear_diagram(
             legend_measurement.local_bounds.width > 0.0
             and legend_measurement.local_bounds.height > 0.0
         ):
-            legend_target = LegendGroup(
-                canvas_config,
-                legend_measurement,
-                legend_table,
-                cfg=cfg,
-            ).get_group()
+            legend_target = place_content(
+                canvas,
+                render_stage(
+                    "legend_content", linear_legend_content, legend_measurement, legend_table
+                ),
+                GroupKey(CANVAS_SCOPE, GroupKind.LEGEND),
+            )
             canvas.add(legend_target)
 
     title_target = (
-        plot_title_obj.get_group()
-        if plot_title_obj is not None
+        place_content(canvas, title_content.content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE))
+        if title_content is not None
         else None
     )
     if title_target is not None:
@@ -3086,7 +3096,9 @@ def assemble_linear_diagram(
         if title_target is not None
         else TitlePlacement.NONE
     )
-    composition_plan = plan_composition(
+    composition_plan = render_stage(
+        "composition_plan",
+        plan_composition,
         CompositionRequest(
             primary=CompositionItem("primary", source_primary_bounds),
             legend=(
@@ -3095,13 +3107,13 @@ def assemble_linear_diagram(
                 else None
             ),
             title=(
-                CompositionItem("title", plot_title_obj.local_bounds)
-                if title_target is not None and plot_title_obj is not None
+                CompositionItem("title", title_content.local_bounds)
+                if title_target is not None and title_content is not None
                 else None
             ),
             legend_placement=legend_placement,
             title_placement=title_placement,
-        )
+        ),
     )
     apply_composition_plan(
         canvas,

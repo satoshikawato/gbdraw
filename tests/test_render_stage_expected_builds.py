@@ -77,8 +77,12 @@ P1_P2_OPTIONS: Mapping[str, frozenset[str]] = {
     "L3": frozenset(("align_center (rows)", "track_layout (rows)")),
 }
 
-_LEGEND = frozenset({"legend_table", "legend_measurement"})
-_LEGEND_LAYOUT = frozenset({"legend_measurement"})
+_LEGEND = frozenset({"legend_table", "legend_measurement", "legend_content"})
+_LEGEND_LAYOUT = frozenset({"legend_measurement", "legend_content"})
+_TITLE = frozenset({"plot_title_content"})
+# The composition plan is keyed by the bounds of the primary content, the
+# legend and the title, which every P1 or P2 option may move.
+_COMPOSITION = frozenset({"composition_plan"})
 _FEATURE_PLACEMENT = frozenset({"feature_layers", "feature_dom_index"})
 _LABEL_FILTER = _FEATURE_PLACEMENT | {"label_filter_maps"}
 _FEATURE_EDIT = _FEATURE_PLACEMENT | _LEGEND | {"catalog_normalization", "interactive_context"}
@@ -123,10 +127,11 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     "conservation_labels": _LEGEND,
     # The pairwise identity legend is computed from the filtered comparisons.
     **dict.fromkeys(("evalue", "bitscore", "alignment_length"), _LEGEND),
+    **dict.fromkeys(("plot_title", "plot_title_font_size"), _TITLE),
 }
 
 def allowed_builds(option_id: str) -> frozenset[str]:
-    return EXPECTED_BUILDS.get(option_id, frozenset())
+    return EXPECTED_BUILDS.get(option_id, frozenset()) | _COMPOSITION
 
 
 def p1_p2_variants(case_id: str, *, include_slow: bool) -> list[tuple[OptionSpec, Variant]]:

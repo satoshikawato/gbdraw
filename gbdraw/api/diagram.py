@@ -185,7 +185,9 @@ from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
 )
-from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup
+from gbdraw.render.group_content import CANVAS_SCOPE, GroupContent, GroupKey, GroupKind, place_content
+from gbdraw.render.groups.circular import DefinitionGroup
+from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
@@ -3103,6 +3105,7 @@ def assemble_circular_diagram_from_records(
 
     legend_table = LegendTable()
     legend_target: Group | None = None
+    legend_content: GroupContent | None = None
     legend_bounds: Aabb | None = None
     plot_title_group: Group | None = None
     plot_title_bounds: Aabb | None = None
@@ -3210,11 +3213,9 @@ def assemble_circular_diagram_from_records(
                 wrap_width=grid_layout.bounds.width,
             )
             legend_bounds = legend_measurement.local_bounds
-            legend_target = LegendGroup(
-                legend_canvas_config,
-                legend_measurement,
-                legend_table,
-            ).get_group()
+            legend_content = render_stage(
+                "legend_content", circular_legend_content, legend_measurement, legend_table
+            )
 
     legend_row_facts = LegendRowFacts(records=records, sources=legend_sources, legend_table=legend_table)
 
@@ -3286,7 +3287,10 @@ def assemble_circular_diagram_from_records(
 
     if plot_title_group is not None:
         merged_canvas.add(plot_title_group)
-    if legend_target is not None:
+    if legend_content is not None:
+        legend_target = place_content(
+            merged_canvas, legend_content, GroupKey(CANVAS_SCOPE, GroupKind.LEGEND)
+        )
         merged_canvas.add(legend_target)
 
     legend_placement = LegendPlacement(str(legend_effective))
@@ -3295,7 +3299,9 @@ def assemble_circular_diagram_from_records(
         if plot_title_group is not None
         else TitlePlacement.NONE
     )
-    composition_plan = plan_composition(
+    composition_plan = render_stage(
+        "composition_plan",
+        plan_composition,
         CompositionRequest(
             primary=CompositionItem("primary", grid_layout.bounds),
             legend=(
@@ -3311,7 +3317,7 @@ def assemble_circular_diagram_from_records(
             legend_placement=legend_placement,
             title_placement=title_placement,
             overlay_obstacles=tuple(grid_overlay_obstacles),
-        )
+        ),
     )
     apply_composition_plan(
         merged_canvas,
