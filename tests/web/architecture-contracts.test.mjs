@@ -6489,6 +6489,7 @@ test('a count-baseline test keeps its registered literals readable alongside run
 const COUNTING_CODE_PATHS = Object.freeze([
   'tests/web/helpers/count-baseline.mjs',
   'tests/web/types/tsconfig.json',
+  'tests/web/types/web-globals.d.ts',
   'tools/report-web-owner-graph.mjs'
 ]);
 test('the counting code of the count baselines does not change alongside runtime files', () => {
@@ -6553,6 +6554,24 @@ test('every count-baseline test counts only with counting code or guard paths', 
     }
   }
   assert.ok(seen.has('tests/web/helpers/count-baseline.mjs') && seen.has('tools/report-web-owner-graph.mjs'));
+  // The type ratchets count with tsc (explicit-any-ratchet's TSCONFIG,
+  // no-implicit-any-ratchet's RATCHET_CONFIG and what it extends): every file
+  // their configs include outside the package (a declaration file can type a
+  // read as `any`) is counting code, and no glob there reaches outside it.
+  const typeConfigs = ['tests/web/types/tsconfig.json', 'tests/web/types/tsconfig.no-implicit-any.json'];
+  const included = [];
+  for (let config = typeConfigs.pop(); config; config = typeConfigs.pop()) {
+    const parsed = JSON.parse(readFileSync(join(REPOSITORY_ROOT, config), 'utf8'));
+    const resolveEntry = (entry) => posix.join(posix.dirname(config), entry);
+    if (parsed.extends) typeConfigs.push(resolveEntry(parsed.extends));
+    included.push(...[...(parsed.include || []), ...(parsed.files || [])].map(resolveEntry));
+  }
+  const outsidePackage = included.filter((path) => !path.startsWith('gbdraw/'));
+  assert.ok(outsidePackage.length, included.join(', '));
+  outsidePackage.forEach((path) => {
+    assert.doesNotMatch(path, /[*?]/, `${path}: a type-ratchet glob reaches outside the package`);
+    assert.ok(COUNTING_CODE_PATHS.includes(path), `${path} is included by a type-ratchet config but is not counting code`);
+  });
 });
 
 // F3 (remedy b): a runtime move that a count-baseline test follows by path

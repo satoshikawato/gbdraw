@@ -938,6 +938,7 @@ const COUNT_ALLOWLIST_KINDS = new Set(['count', 'count-map', 'py-count', 'py-cou
 const COUNTING_CODE_PATHS = new Set([
   'tests/web/helpers/count-baseline.mjs',
   'tests/web/types/tsconfig.json',
+  'tests/web/types/web-globals.d.ts',
   'tools/report-web-owner-graph.mjs'
 ]);
 const withoutAllowlistLiterals = (source, entries) => {
