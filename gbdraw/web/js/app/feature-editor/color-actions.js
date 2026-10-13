@@ -188,8 +188,7 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog,
     resetColorDialog,
     legendRenameDialog,
-    originalLegendOrder,
-    originalLegendColors
+    originalLegendOrder
   } = state;
 
   const {
@@ -430,14 +429,18 @@ export const createFeatureColorActions = ({
     })?.[1] || null;
   };
 
-  /** @param {LegendEntry[]} entries @param {string} caption @returns {LegendEntry | null} */
-  const entryByCaption = (entries, caption) => {
-    const normalizedCaption = normalizeCaptionKey(caption);
-    if (!normalizedCaption) return null;
-    return entries.find((entry) => normalizeCaptionKey(entry?.caption) === normalizedCaption) || null;
+  // The listed row a feature's Legend item names: the row of that key (a
+  // feature's Legend item is its row's key), else, for a typed name, the
+  // first listed row of that name.
+  /** @param {DrawingState} drawing @param {unknown} keyOrName @returns {LegendEntry | null} */
+  const findLegendRow = (drawing, keyOrName) => {
+    const text = normalizeCaption(keyOrName);
+    if (!text) return null;
+    /** @type {LegendEntry[]} */
+    const entries = drawing.legendEntries.value;
+    return entries.find((entry) => legendEntryKey(entry) === text)
+      || entries.find((entry) => captionsMatch(entry?.caption, text)) || null;
   };
-  /** @param {DrawingState} drawing @param {string} caption */
-  const findLegendEntryByCaption = (drawing, caption) => entryByCaption(drawing.legendEntries.value, caption);
   // OV-282 (D-26): the color a listed row shows, the palette's for a row the
   // palette colors; never the color the row recorded at the last Generate.
   // Without a row, nothing is derived (review L4).
@@ -454,7 +457,7 @@ export const createFeatureColorActions = ({
       };
     }
 
-    const legendEntry = findLegendEntryByCaption(drawing, caption);
+    const legendEntry = findLegendRow(drawing, caption);
     const legendColor = listedRowColor(drawing, legendEntry);
     if (legendEntry && legendColor) {
       return {
@@ -622,68 +625,9 @@ export const createFeatureColorActions = ({
     }
     if (!liveFeatureColorMatches(feature, color)) return false;
     if (!requireLegend) return true;
-    const legendEntry = findLegendEntryByCaption(drawing, caption);
+    const legendEntry = findLegendRow(drawing, caption);
     return Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), color));
   };
-
-  /** @param {Readonly<Record<string, unknown>> | null | undefined} store @param {unknown} caption */
-  const findCaptionKey = (store, caption) => {
-    if (!store) return null;
-    return Object.keys(store).find((key) => captionsMatch(key, caption)) || null;
-  };
-
-  /** @param {Record<string, unknown> | null | undefined} store @param {string} oldCaption @param {string} newCaption */
-  const moveCaptionStateKey = (store, oldCaption, newCaption) => {
-    if (!store || !oldCaption || !newCaption || oldCaption === newCaption) return;
-    const oldKey = findCaptionKey(store, oldCaption);
-    if (!oldKey) return;
-    const newKey = findCaptionKey(store, newCaption);
-    if (!newKey || newKey === oldKey) {
-      store[newCaption] = store[oldKey];
-    }
-    if (oldKey !== newCaption) {
-      delete store[oldKey];
-    }
-  };
-
-
-  /** @param {DrawingState} drawing @param {string} oldCaption @param {string} newCaption */
-  const moveAddedLegendCaption = (drawing, oldCaption, newCaption) => {
-    if (!oldCaption || !newCaption || oldCaption === newCaption) return;
-    let matchedCaption = null;
-    for (const caption of drawing.addedLegendCaptions.value) {
-      if (captionsMatch(caption, oldCaption)) {
-        matchedCaption = caption;
-        break;
-      }
-    }
-    if (!matchedCaption) return;
-    drawing.addedLegendCaptions.value.delete(matchedCaption);
-    drawing.addedLegendCaptions.value.add(newCaption);
-  };
-
-
-  /** @param {string} oldCaption @param {string} newCaption @param {string | null} [color] */
-  const syncOriginalLegendMetadataRename = (oldCaption, newCaption, color = null) => {
-    if (!oldCaption || !newCaption || oldCaption === newCaption) return;
-
-    const orderIdx = originalLegendOrder.value.findIndex((/** @type {string} */ caption) => captionsMatch(caption, oldCaption));
-    if (orderIdx >= 0) {
-      originalLegendOrder.value.splice(orderIdx, 1, newCaption);
-    }
-
-    const oldColorKey = findCaptionKey(originalLegendColors.value, oldCaption);
-    if (!oldColorKey) return;
-
-    const newColorKey = findCaptionKey(originalLegendColors.value, newCaption);
-    if (!newColorKey || newColorKey === oldColorKey) {
-      originalLegendColors.value[newCaption] = color || originalLegendColors.value[oldColorKey];
-    }
-    if (oldColorKey !== newCaption) {
-      delete originalLegendColors.value[oldColorKey];
-    }
-  };
-
 
   /** @param {ColorFeature | null | undefined} feat @param {string} caption @param {string | null} [color] */
   const updateClickedFeatureLegendState = (feat, caption, color = null) => {
@@ -718,8 +662,9 @@ export const createFeatureColorActions = ({
 
     legendRenameDialog.show = false;
     legendRenameDialog.mode = 'scope';
-    legendRenameDialog.oldCaption = '';
+    legendRenameDialog.sourceKey = '';
     legendRenameDialog.newCaption = '';
+    legendRenameDialog.targetKey = '';
     legendRenameDialog.targetCaption = '';
     legendRenameDialog.targetColor = '';
     legendRenameDialog.currentColor = '';
@@ -945,33 +890,16 @@ export const createFeatureColorActions = ({
   };
 
   // The rename of a Legend row without rules or features writes the intent
-  // (U3a gap 3): the row's styles move to the new caption, a row of Python's
-  // keeps its generated caption, so Generate and the port rename it
-  // (`legendRenames`, PV-02), and an editor row is identified by its caption,
-  // so the port removes the old row and adds the new one with its styles, in
-  // its place in the order. The text control's open step holds the edit.
-  /** @param {DrawingState} drawing @param {string} oldCaption @param {string} newCaption */
-  const renameLegendRow = (drawing, oldCaption, newCaption) => {
-    const legendEntry = drawing.legendEntries.value.find((/** @type {LegendEntry} */ entry) => captionsMatch(entry?.caption, oldCaption));
+  // (U3a gap 3): the row keeps its key, under which its styles stay (D-25),
+  // and takes the new name; Generate and the port rename a row of Python's
+  // (`legendRenames`, PV-02) and name an editor row (`legendAdds`), in its
+  // place in the order. The text control's open step holds the edit.
+  /** @param {DrawingState} drawing @param {PythonLegendKey} sourceKey @param {string} newCaption */
+  const renameLegendRow = (drawing, sourceKey, newCaption) => {
+    const legendEntry = drawing.legendEntries.value.find((/** @type {LegendEntry} */ entry) => legendEntryKey(entry) === sourceKey);
     if (!legendEntry) return false;
-    // The renamed row takes the caption: a style that an earlier row left under
-    // that caption does not follow it, as Generate would otherwise apply it (OV-60).
-    if (!findLegendEntryByCaption(drawing, newCaption)) {
-      for (const store of [drawing.legendColorOverrides, drawing.legendStrokeOverrides]) {
-        const staleKey = findCaptionKey(store, newCaption);
-        if (staleKey) delete store[staleKey];
-      }
-    }
-    moveCaptionStateKey(drawing.legendColorOverrides, oldCaption, newCaption);
-    moveCaptionStateKey(drawing.legendStrokeOverrides, oldCaption, newCaption);
-    moveAddedLegendCaption(drawing, oldCaption, newCaption);
-    const generatedRow = originalLegendOrder.value.some(
-      (/** @type {string} */ caption) => captionsMatch(caption, legendEntry.originalCaption || legendEntry.caption)
-    );
-    if (!generatedRow) {
-      syncOriginalLegendMetadataRename(oldCaption, newCaption);
-      legendEntry.originalCaption = newCaption;
-    }
+    // An entry without a key record (an older editor row) records its key first.
+    legendEntry.originalCaption = sourceKey;
     legendEntry.caption = newCaption;
     showEditorIntent?.({ domains: RENAMED_ROW_DOMAINS });
     return true;
@@ -983,7 +911,6 @@ export const createFeatureColorActions = ({
   const applyLegendRenameRequest = (drawing, request) => withTargetRules(drawing, [], () => applyPreparedLegendRename(drawing, request));
   /** @param {DrawingState} drawing @param {LegendRenameRequest} request */
   const applyPreparedLegendRename = async (drawing, request) => {
-    const oldCaption = normalizeCaption(request.oldCaption);
     const caption = normalizeCaption(request.finalCaption || request.newCaption);
     const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
     if (!caption) return false;
@@ -995,38 +922,32 @@ export const createFeatureColorActions = ({
         ? (current, revise) => current.map(rule => (sourceRules.includes(rule) ? revise(rule, { cap: caption, color }) : rule))
         : (current) => featureRuleCandidate(current, features, color, caption);
       const selected = new Set(features.map(feature => feature.svg_id));
-      const retireOld = features.length > 0 && getFeaturesForLegendCaption(oldCaption)
+      const retireOld = features.length > 0 && getFeaturesForLegendCaption(request.sourceKey)
         .every(feature => selected.has(feature.svg_id));
-      const oldEntry = findLegendEntryByCaption(drawing, oldCaption);
+      const oldEntry = drawing.legendEntries.value.find((/** @type {LegendEntry} */ entry) => legendEntryKey(entry) === request.sourceKey);
       return commitRuleWrite(rules, 'Rename legend item', {
         drawing,
-        previousLegendIntents: retireOld && oldEntry ? [{ caption: oldCaption, color: oldEntry.color }] : [],
-        // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place;
-        // a row that joins another row keeps that row's place.
-        legendPlacement: retireOld && oldEntry && !findLegendEntryByCaption(drawing, caption)
-          ? { caption, at: oldEntry.caption } : null,
+        previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: oldEntry.color }] : [],
+        // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
+        // and every record stored under its key; a row that joins another row
+        // keeps that row's place.
+        legendPlacement: retireOld && oldEntry ? { name: caption, color, at: request.sourceKey, replaces: true } : null,
         afterCommit: () => {
-          if (retireOld && !sourceRules.length) {
-            const adoptedCaption = getEffectiveLegendCaption(features[0]);
-            moveCaptionStateKey(drawing.legendColorOverrides, oldCaption, adoptedCaption);
-            moveCaptionStateKey(drawing.legendStrokeOverrides, oldCaption, adoptedCaption);
-            moveAddedLegendCaption(drawing, oldCaption, adoptedCaption);
-            syncOriginalLegendMetadataRename(oldCaption, adoptedCaption, color);
-          }
           const committedCaptionOf = effectiveLegendCaptions();
           for (const feature of features) updateClickedFeatureLegendState(feature, committedCaptionOf(feature), color);
         }
       });
     }
-    return renameLegendRow(drawing, oldCaption, caption);
+    return renameLegendRow(drawing, request.sourceKey, caption);
   };
 
   /** @param {LegendRenameRequest} request @param {number} siblingCount */
   const openLegendRenameScopeDialog = (request, siblingCount) => {
     legendRenameDialog.show = true;
     legendRenameDialog.mode = 'scope';
-    legendRenameDialog.oldCaption = request.oldCaption;
+    legendRenameDialog.sourceKey = request.sourceKey;
     legendRenameDialog.newCaption = request.newCaption;
+    legendRenameDialog.targetKey = '';
     legendRenameDialog.targetCaption = '';
     legendRenameDialog.targetColor = '';
     legendRenameDialog.currentColor = request.currentColor || '';
@@ -1046,8 +967,9 @@ export const createFeatureColorActions = ({
   const openLegendRenameTargetDialog = (request, target, mergeAvailable, deletedTargetKey, suffixCaption) => {
     legendRenameDialog.show = true;
     legendRenameDialog.mode = 'target';
-    legendRenameDialog.oldCaption = request.oldCaption;
+    legendRenameDialog.sourceKey = request.sourceKey;
     legendRenameDialog.newCaption = request.newCaption;
+    legendRenameDialog.targetKey = target.key ?? '';
     legendRenameDialog.targetCaption = target.caption;
     legendRenameDialog.targetColor = target.color;
     legendRenameDialog.currentColor = request.currentColor || '';
@@ -1072,12 +994,12 @@ export const createFeatureColorActions = ({
 
     const currentColor =
       resolveColorToHex(request.currentColor) ||
-      (request.feat ? getCurrentFeatureFillColor(drawing, request.feat) : resolveColorToHex(listedRowColor(drawing, findLegendEntryByCaption(drawing, oldCaption)))) ||
+      (request.feat ? getCurrentFeatureFillColor(drawing, request.feat) : resolveColorToHex(listedRowColor(drawing, findLegendRow(drawing, request.sourceKey)))) ||
       '#cccccc';
 
     let features = Array.isArray(request.features) ? request.features.filter(Boolean) : [];
     if (!request.sourceScope) {
-      const availableFeatures = request.source === 'popup' ? getFeaturesForLegendCaption(oldCaption) : features;
+      const availableFeatures = request.source === 'popup' ? getFeaturesForLegendCaption(request.sourceKey) : features;
       const siblingCount = Math.max(0, availableFeatures.length - 1);
       if (request.source === 'popup' && siblingCount > 0) {
         openLegendRenameScopeDialog(
@@ -1098,7 +1020,7 @@ export const createFeatureColorActions = ({
     if (request.sourceScope === 'single') {
       features = request.feat ? [request.feat] : [];
     } else if (request.sourceScope === 'group') {
-      features = features.length > 0 ? features : getFeaturesForLegendCaption(oldCaption);
+      features = features.length > 0 ? features : getFeaturesForLegendCaption(request.sourceKey);
     } else {
       features = [];
     }
@@ -1218,7 +1140,7 @@ export const createFeatureColorActions = ({
    */
   const applyColorToFeatureGroup = async (drawing, features, caption, color, options = {}) => {
     if (!features?.length || !normalizeCaption(caption)) return false;
-    const existingEntry = findLegendEntryByCaption(drawing, caption);
+    const existingEntry = findLegendRow(drawing, caption);
     const contributors = getFeaturesForLegendCaption(caption);
     const captionOf = effectiveLegendCaptions();
     const selectedIds = new Set(features.map(feature => feature.svg_id));
@@ -1228,10 +1150,11 @@ export const createFeatureColorActions = ({
     return commitRuleWrite((current) => featureRuleCandidate(current, features, color, normalizeCaption(caption), options), 'Change feature color', {
       drawing,
       previousLegendIntents: replacesExistingGroup
-        ? [{ caption: existingEntry.caption, color: existingEntry.color }] : [],
-      afterCommit: (/** @type {Array<{ caption: string, color: string }>} */ intents) => {
+        ? [{ caption: legendEntryKey(existingEntry), color: existingEntry.color }] : [],
+      afterCommit: (/** @type {Array<{ caption: string, name?: string, color: string }>} */ intents) => {
         if (replacesExistingGroup) {
-          const intent = intents.find(entry => captionsMatch(entry.caption, caption)
+          // An intent's `caption` is its row's key; its `name` the rule's caption.
+          const intent = intents.find(entry => captionsMatch(entry.name ?? entry.caption, caption)
             && colorsMatch(entry.color, color));
           if (intent) drawing.legendColorOverrides[intent.caption] = intent.color;
         }
@@ -1437,7 +1360,7 @@ export const createFeatureColorActions = ({
     if (!entry) return;
 
     const requestedCaption = normalizeCaption(newCaption);
-    if (!requestedCaption || legendRowIsNamed(normalizeCaption(entry.caption), requestedCaption)) {
+    if (!requestedCaption || requestedCaption === normalizeCaption(entry.caption) || legendRowIsNamed(legendEntryKey(entry), requestedCaption)) {
       drawing.legendEntries.value = [...drawing.legendEntries.value];
       return;
     }
@@ -1449,8 +1372,8 @@ export const createFeatureColorActions = ({
       sourceKey: legendEntryKey(entry),
       newCaption: requestedCaption,
       currentColor: resolveColorToHex(shownColor) || shownColor || '#cccccc',
-      features: getFeaturesForLegendCaption(entry.caption),
-      sourceScope: getFeaturesForLegendCaption(entry.caption).length > 0 ? 'group' : 'manual'
+      features: getFeaturesForLegendCaption(legendEntryKey(entry)),
+      sourceScope: getFeaturesForLegendCaption(legendEntryKey(entry)).length > 0 ? 'group' : 'manual'
     });
   };
 
@@ -1797,7 +1720,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {string} caption @param {string} strokeColor @param {unknown} strokeWidth */
   const applyStrokeToLegendEntry = (drawing, caption, strokeColor, strokeWidth) => {
-    const targetLegendEntry = findLegendEntryByCaption(drawing, caption);
+    const targetLegendEntry = findLegendRow(drawing, caption);
     const svg = getCurrentSvg();
     if (!targetLegendEntry || !svg) return false;
 
@@ -1805,7 +1728,7 @@ export const createFeatureColorActions = ({
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (!normalizedStrokeColor && normalizedStrokeWidth === null) return false;
 
-    const overrideKey = targetLegendEntry.caption;
+    const overrideKey = legendEntryKey(targetLegendEntry);
     const previousOverride = drawing.legendStrokeOverrides[overrideKey] || {};
     const nextOverride = { ...previousOverride };
     if (

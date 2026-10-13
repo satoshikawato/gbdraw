@@ -680,6 +680,52 @@ test('the Legend owner finds the row a typed name names, by its key', async () =
   assert.deepEqual(legendEntries.value.map(owner.shownLegendEntryName), ['Gamma', 'Shared (1)', 'Shared (2)']);
 });
 
+// PR 3 (D-25): the Legend owner stores a row's color, stroke, and open Stroke
+// options under the row's key, so two rows of one name keep their own edits;
+// a deleted row returns in the color stored under its key.
+test('the Legend owner keeps the edits of two rows of one name under their keys', async () => {
+  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
+  const { createLegendStrokeActions } = await import('../../gbdraw/web/js/app/legend/stroke-actions.js');
+  const mounted = buildSvgRoot();
+  const added = { caption: 'GC content', color: '#aaaaaa', xPos: null, yPos: null };
+  reconcileMountedResult(mounted, { ...createEmptySvgMutationPlan(1).operationsByResult[0], legendAdds: [added] });
+  const drawing = {
+    manualSpecificRules: [],
+    legendEntries: { value: [
+      { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
+      { caption: 'CDS', originalCaption: 'GC content', color: '#aaaaaa' }
+    ] },
+    deletedLegendEntries: { value: [] },
+    dormantLegendEntries: { value: [] },
+    addedLegendCaptions: { value: new Set() },
+    legendColorOverrides: {},
+    legendStrokeOverrides: {}
+  };
+  const strokeOptionsOpen = new Set();
+  const state = {
+    results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
+    originalLegendOrder: { value: ['CDS', 'GC content'] }, originalLegendColors: { value: {} },
+    legendStrokeOptionsOpen: strokeOptionsOpen,
+    activeDrawing: () => drawing
+  };
+  const owner = createLegendEntryActions({ state, readShownLegendColor: (entry) => String(entry?.color || '') });
+  const strokes = createLegendStrokeActions({ state });
+  assert.equal(owner.updateLegendEntryColor(1, '#ff0000'), true);
+  assert.equal(owner.updateLegendEntryColor(0, '#0000ff'), true);
+  assert.deepEqual(drawing.legendColorOverrides, { 'GC content': '#ff0000', CDS: '#0000ff' });
+  assert.equal(strokes.updateLegendEntryStrokeColor(1, '#123456'), true);
+  assert.deepEqual(Object.keys(drawing.legendStrokeOverrides), ['GC content']);
+  assert.deepEqual([strokes.getLegendEntryStrokeColor(0), strokes.getLegendEntryStrokeColor(1)], ['', '#123456']);
+  strokes.toggleLegendStrokeOptions(drawing.legendEntries.value[1]);
+  assert.deepEqual([...strokeOptionsOpen], ['GC content']);
+  assert.deepEqual(drawing.legendEntries.value.map((entry) => strokes.isLegendStrokeOptionsOpen(entry)), [false, true]);
+  owner.deleteLegendEntry(1);
+  drawing.deletedLegendEntries.value[0].color = '#aaaaaa';
+  owner.restoreDeletedLegendEntries();
+  assert.deepEqual(drawing.legendEntries.value.map(({ originalCaption, color }) => [originalCaption, color]),
+    [['CDS', '#0000ff'], ['GC content', '#ff0000']], 'a row returns in the color stored under its key');
+});
+
 // OV-345: a reconcile says whether it changed the Result, so a display,
 // History restore, or Reset that changes nothing keeps the Result's bytes.
 test('a reconcile reports whether it changed the Result and whether the Legend rows changed', () => {
@@ -1518,11 +1564,11 @@ test('a palette reconcile keeps the Legend color of a row renamed live', () => {
   const mounted = buildSvgRoot();
   reconcileMountedResult(mounted, previewPlan(admission, { legendColorOverrides: { CDS: '#ff0000' } }), { domains: ['legendFills'] });
   reconcileMountedResult(mounted, previewPlan(admission, {
-    ...RENAMED_ROW, legendColorOverrides: { Proteins: '#ff0000' }, domains: RENAME_DOMAINS
+    ...RENAMED_ROW, legendColorOverrides: { CDS: '#ff0000' }, domains: RENAME_DOMAINS
   }), { domains: RENAME_DOMAINS });
   assert.equal(mounted.querySelector('g[data-legend-key]').getAttribute('data-legend-key'), 'Proteins');
   reconcileMountedResult(mounted, previewPlan(admission, {
-    ...RENAMED_ROW, legendColorOverrides: { Proteins: '#ff0000' }, paletteColors: { CDS: '#00ff00' }
+    ...RENAMED_ROW, legendColorOverrides: { CDS: '#ff0000' }, paletteColors: { CDS: '#00ff00' }
   }), { domains: ['featureFills', 'legendFills'] });
   assert.equal(swatchFill(mounted), '#ff0000', 'the renamed row keeps its Legend color');
 });
@@ -1918,7 +1964,8 @@ test('an editor row is cloned from Python\'s first row and removed by a reconcil
 test('a reconcile without an order returns Python\'s order', () => {
   const svg = legendSvg();
   const drawn = serializeNode(svg);
-  const order = { captions: ['rRNA', 'Genes', 'tRNA'] };
+  // The order names rows by their keys (PR 3, D-25).
+  const order = { captions: ['rRNA', 'CDS', 'tRNA'] };
   const renames = [{ from: 'CDS', to: 'Genes' }];
   assert.equal(legendRowsChanged(svg, legendOperations({ legendRenames: renames, legendOrder: [order] }), { domains: LEGEND_STRUCTURE }), true);
   assert.deepEqual(legendRows(svg).map(([key]) => key), ['rRNA', 'Genes', 'tRNA']);
@@ -1942,7 +1989,7 @@ test('a second Legend structure reconcile changes nothing', () => {
     legendRenames: [{ from: 'CDS', to: 'Genes' }],
     legendDeletes: [{ caption: 'rRNA' }],
     legendAdds: [{ caption: 'New', color: '#556677', xPos: null, yPos: null }],
-    legendOrder: [{ captions: ['tRNA', 'Genes', 'New'] }],
+    legendOrder: [{ captions: ['tRNA', 'CDS', 'New'] }],
     legendFills: [{ caption: 'CDS', color: '#123456' }]
   });
   const domains = [...LEGEND_STRUCTURE, 'legendFills'];
@@ -1957,7 +2004,7 @@ test('an export strips the Legend structure records and the rows a delete hid', 
   reconcileMountedResult(svg, legendOperations({
     legendRenames: [{ from: 'CDS', to: 'Genes' }],
     legendDeletes: [{ caption: 'rRNA' }],
-    legendOrder: [{ captions: ['tRNA', 'Genes'] }]
+    legendOrder: [{ captions: ['tRNA', 'CDS'] }]
   }), { domains: LEGEND_STRUCTURE });
   assert.match(serializeNode(svg), /data-gbdraw-base-legend-order=/);
   stripResultBaseAttributes(svg);

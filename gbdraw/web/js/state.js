@@ -538,9 +538,12 @@ const resetColorDialog = reactive({
 const legendRenameDialog = reactive({
   show: false,
   mode: 'scope', // 'scope' | 'target'
-  oldCaption: '',
+  // The key of the renamed row and of the target row ('' for a color rule's
+  // name that no row shows); the dialog shows each row's drawn name.
+  sourceKey: /** @type {PythonLegendKey | ''} */ (''),
   newCaption: '',
-  targetCaption: '',
+  targetKey: /** @type {PythonLegendKey | ''} */ (''),
+  targetCaption: '', // the name a Merge adopts
   targetColor: '',
   currentColor: '',
   siblingCount: 0,

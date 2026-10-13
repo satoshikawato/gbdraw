@@ -9,7 +9,7 @@
 /** @typedef {EntryRecord & { caption: string, originalCaption: string }} ListedEntry A row a Result lists, under its caption and its key. */
 import { normalizeOptionalHexColor, resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
 import {
-  defaultLegendCaptionOrder,
+  defaultLegendKeyOrder,
   getAllFeatureLegendGroups,
   isLegendOrderEdited,
   legendEntryKey,
@@ -32,22 +32,22 @@ const legendCaption = (entry) => String(entry?.caption || '').trim();
 /** @param {EntryRecord | null | undefined} entry */
 const generatedCaption = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
 
-// The entries in a caption order: entries the order does not list follow in
-// their order; with `keepFollowed`, entries whose listed ones already follow
-// the order keep it (B18), as `orderLegendEntries` orders a Legend group.
+// The entries in an order of row keys: entries the order does not list follow
+// in their order; with `keepFollowed`, entries whose listed ones already
+// follow the order keep it (B18), as `orderLegendEntries` orders a Legend group.
 /**
  * @param {EntryRecord[]} entries
- * @param {string[]} captions
+ * @param {readonly string[]} keys
  * @param {{ keepFollowed?: boolean }} [options]
  */
-const entriesInOrder = (entries, captions, { keepFollowed = false } = {}) => {
+const entriesInOrder = (entries, keys, { keepFollowed = false } = {}) => {
   /** @type {Map<string, number>} */
   const rank = new Map();
-  captions.forEach((caption) => { if (caption && !rank.has(caption)) rank.set(caption, rank.size); });
-  const listed = entries.map((entry) => rank.get(legendCaption(entry))).filter((value) => value !== undefined);
+  keys.forEach((key) => { if (key && !rank.has(key)) rank.set(key, rank.size); });
+  const listed = entries.map((entry) => rank.get(legendEntryKey(entry))).filter((value) => value !== undefined);
   if (keepFollowed && listed.every((value, index) => index === 0 || listed[index - 1] < value)) return entries;
   /** @param {EntryRecord} entry */
-  const at = (entry) => rank.get(legendCaption(entry)) ?? Infinity;
+  const at = (entry) => rank.get(legendEntryKey(entry)) ?? Infinity;
   return entries.map((entry, index) => ({ entry, index }))
     .sort((left, right) => (at(left.entry) - at(right.entry)) || (left.index - right.index))
     .map(({ entry }) => entry);
@@ -197,41 +197,36 @@ export const createLegendEntryActions = ({
     if (!svg || results.value.length < 2 || !Array.isArray(from)) return false;
     const mounted = listLegendRows(svg, { entries: restored, dormant: drawing.dormantLegendEntries.value || [], asShown: true });
     if (!mounted) return false;
-    const fromCaptions = new Set(from.map(legendCaption));
-    if (mounted.entries.length === fromCaptions.size && mounted.entries.every((entry) => fromCaptions.has(entry.caption))) {
+    // A row is its key and the name it shows: two rows may show one name.
+    /** @param {EntryRecord} entry */
+    const shown = (entry) => `${legendEntryKey(entry)}\u0000${legendCaption(entry)}`;
+    const fromRows = new Set(from.map(shown));
+    if (mounted.entries.length === fromRows.size && mounted.entries.every((entry) => fromRows.has(shown(entry)))) {
       return false;
     }
-    /** @param {EntryRecord[]} list @param {(entry: EntryRecord) => string} key */
-    const captionMap = (list, key) => new Map(list.filter(legendCaption).map((entry) => [key(entry), entry]));
-    const before = captionMap(from, legendCaption);
-    const beforeByGenerated = captionMap(from, generatedCaption);
-    const after = captionMap(restored, legendCaption);
-    const afterByGenerated = captionMap(restored, generatedCaption);
-    /** @type {Map<string, EntryRecord>} */
-    const renames = new Map();
-    before.forEach((entry, caption) => {
-      const next = afterByGenerated.get(generatedCaption(entry));
-      if (next && !after.has(caption) && !before.has(legendCaption(next))) renames.set(caption, next);
-    });
-    const renamed = new Set([...renames.values()].map(legendCaption));
+    /** @param {EntryRecord[]} list */
+    const byKey = (list) => new Map(list.filter(legendCaption).map((entry) => [/** @type {string} */ (legendEntryKey(entry)), entry]));
+    const before = byKey(from);
+    const after = byKey(restored);
     // A row no Result's inventory lists is an editor row; a returning row is
     // this Result's own or an editor row.
     const inventories = [...inventoryByResult.values(), originalLegendOrder.value];
     /** @param {EntryRecord} entry */
     const editorRow = (entry) => !inventories.some((inventory) => inventory.includes(generatedCaption(entry)));
+    const mountedKeys = new Set(mounted.entries.map(legendEntryKey));
     const returning = [...after.values()].filter((entry) => (
-      !before.has(legendCaption(entry)) && !renamed.has(legendCaption(entry))
+      !before.has(legendEntryKey(entry)) && !mountedKeys.has(legendEntryKey(entry))
       && (originalLegendOrder.value.includes(generatedCaption(entry)) || editorRow(entry))
     ));
     /** @param {EntryRecord} entry @param {EntryRecord} next */
     const stepColor = (entry, next) => {
-      const previous = before.get(legendCaption(next)) || beforeByGenerated.get(generatedCaption(next));
+      const previous = before.get(legendEntryKey(next));
       return !previous || normalizedColor(previous.color) !== normalizedColor(next.color) ? next.color : entry.color;
     };
     /** @type {EntryRecord[]} */
     let entries = mounted.entries.flatMap((entry) => {
-      const next = renames.get(entry.caption) || after.get(entry.caption);
-      if (!next) return before.has(entry.caption) ? [] : [entry];
+      const next = after.get(legendEntryKey(entry));
+      if (!next) return before.has(legendEntryKey(entry)) ? [] : [entry];
       return [{ ...entry, caption: legendCaption(next), color: stepColor(entry, next) }];
     });
     entries = [...entries, ...returning];
@@ -247,7 +242,7 @@ export const createLegendEntryActions = ({
     ));
     if (orderChanged || returning.length > 0) {
       const order = originalLegendOrder.value.length > 0 && restoresDefault
-        ? defaultLegendCaptionOrder(entries, [...originalLegendOrder.value])
+        ? defaultLegendKeyOrder(entries, [...originalLegendOrder.value])
         : [...after.keys()];
       entries = entriesInOrder(entries, order, { keepFollowed: returning.length === 0 });
     }
@@ -261,19 +256,20 @@ export const createLegendEntryActions = ({
   // the wanted rows; a listed row the rules do not own with a wanted caption
   // in another color stops the commit. The rule owner runs its transition and
   // then `apply` in one History step, while `isCurrent` holds; `apply` writes
-  // the rows into the intent, the row a rename draws in the place of the row
-  // it renames (OV-158), and returns the rows the displayed Result shows at
-  // once until Python draws them (gaps 1 and 2; null when the rows only change
-  // color). A row of `rekeyed` (old key to new key) is one rule row whose key
-  // the rule table change re-allocates (OV-645): the row the commit adds under
-  // the new key takes the place of the row it removes under the old one, in
-  // the list and in the generated inventory, so the order stays the default
-  // order or the user's. Resolves to false when the Result or the caller
-  // became stale.
+  // the rows into the intent, a row the commit splits off right after the row
+  // `placement.after` (D-29), and returns the rows the displayed Result shows
+  // at once until Python draws them (gaps 1 and 2; null when the rows only
+  // change color). A row of `rekeyed` (old key to new key) is one row whose
+  // key the commit changes: a rule row the rule table change re-allocates
+  // (OV-645), or a whole row a rename gives a new key (OV-158). The row the
+  // commit adds under the new key takes the place of the row it removes under
+  // the old one, with every record stored under the old key, in the list and
+  // in the generated inventory, so the order stays the default order or the
+  // user's. Resolves to false when the Result or the caller became stale.
   /**
    * @param {(EntryRecord & { name?: string })[]} intents
    * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean,
-   *   placement?: { caption: string, at: string } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
+   *   placement?: { caption: PythonLegendKey, after: PythonLegendKey } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
    */
   const prepareFileLegendEntries = async (intents, {
     drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null, rekeyed = new Map()
@@ -289,9 +285,10 @@ export const createLegendEntryActions = ({
       if (!provenance.has(caption)) provenance.set(caption, new Set());
       provenance.get(caption)?.add(normalizedColor(entry?.color));
     }
+    // A listed row is its key: an intent's `caption` is its row's key.
     /** @type {{ caption: string, color: string }[]} */
     const listed = (drawing.legendEntries.value || [])
-      .map((/** @type {EntryRecord} */ entry) => ({ caption: legendCaption(entry), color: normalizedColor(entry.color) }));
+      .map((/** @type {EntryRecord} */ entry) => ({ caption: legendEntryKey(entry), color: normalizedColor(entry.color) }));
     const owned = listed.filter((entry) => provenance.get(entry.caption)?.has(entry.color));
     const desiredByCaption = new Map(intents.map((intent) => [intent.caption, normalizedColor(intent.color)]));
     for (const intent of intents) {
@@ -314,7 +311,7 @@ export const createLegendEntryActions = ({
         const added = new Map(diff.add.map(({ caption, color }) => [caption, { caption, originalCaption: caption, color, featureIds: [] }]));
         /** @type {EntryRecord[]} */
         let entries = (drawing.legendEntries.value || []).map((/** @type {EntryRecord} */ entry) => (
-          colors.has(legendCaption(entry)) ? { ...entry, color: colors.get(legendCaption(entry)) } : entry
+          colors.has(legendEntryKey(entry)) ? { ...entry, color: colors.get(legendEntryKey(entry)) } : entry
         ));
         // A re-keyed row (OV-645) is the row the commit removes, added under
         // its new key: the row and every record stored under its key move to
@@ -326,22 +323,25 @@ export const createLegendEntryActions = ({
         /** @type {Map<string, string>} A row the commit adds, and the row it is shown before. */
         const before = new Map([...moves].map(([from, to]) => [to, from]));
         if (moves.size > 0) {
-          entries = moveLegendRecords(drawing, entries, moves);
+          // The moved row is the added one: it shows the name of its rules.
+          const movedTo = new Set(moves.values());
+          entries = moveLegendRecords(drawing, entries, moves).map((entry) => (
+            movedTo.has(legendEntryKey(entry)) ? { ...entry, caption: legendEntryKey(entry) } : entry
+          ));
           moves.forEach((to) => added.delete(to));
         }
-        // OV-158 (Owner decision 2026-10-07): the row a rename draws takes the
-        // place of the row it renames, so the editor list records the edited
-        // order Generate replays (PD-OI-063).
-        const renamed = placement && intents.some((intent) => intent.caption === placement.caption) ? [placement] : [];
-        for (const { caption, at: key } of renamed) {
-          const row = added.get(caption) || entries.find((entry) => legendCaption(entry) === caption);
-          const others = entries.filter((entry) => legendCaption(entry) !== caption);
-          const at = others.findIndex((entry) => legendCaption(entry) === key);
-          if (!row || at < 0) continue;
-          entries = [...others.slice(0, at), row, ...others.slice(at)];
-          if (added.delete(caption)) before.set(caption, key);
+        // D-29: a row a commit splits off a row goes right after the row of
+        // its name, so the editor list records the edited order Generate
+        // replays (PD-OI-063), and the Result shows it there.
+        const split = placement && added.get(placement.caption);
+        const target = split ? entries.findIndex((entry) => legendEntryKey(entry) === placement.after) : -1;
+        if (split && target >= 0) {
+          entries = [...entries.slice(0, target + 1), split, ...entries.slice(target + 1)];
+          added.delete(placement.caption);
+          const next = entries.slice(target + 2).find((entry) => !removed.has(legendEntryKey(entry)));
+          if (next) before.set(placement.caption, legendEntryKey(next));
         }
-        drawing.legendEntries.value = [...entries.filter((entry) => !removed.has(legendCaption(entry))), ...added.values()];
+        drawing.legendEntries.value = [...entries.filter((entry) => !removed.has(legendEntryKey(entry))), ...added.values()];
         const rows = {
           add: diff.add.map(({ caption, color }) => ({
             caption, color, ...(names.get(caption) ? { name: names.get(caption) } : {}),
@@ -444,6 +444,10 @@ export const createLegendEntryActions = ({
     // row hidden under the caption a rename took (review M1).
     /** @param {typeof rows[number]} row */
     const namedBy = (row) => {
+      // An editor row shows its key; a row of Python's that shows the key of
+      // an intent entry is that entry's row.
+      const keyed = intentEntry((each) => generatedCaption(each) === row.shownKey);
+      if (row.editor || keyed) return row.editor ? keyed || null : null;
       const entry = intentEntry((each) => legendCaption(each) === row.shownKey);
       return entry && (row.editor || !rows.some((other) => (
         other !== row && (other.recordedKey ?? other.shownKey) === generatedCaption(entry)
@@ -467,8 +471,8 @@ export const createLegendEntryActions = ({
         return;
       }
       listed.push({
-        caption: row.shownKey,
-        originalCaption: named ? generatedCaption(named) : row.shownKey,
+        caption: asShown ? row.name : legendCaption(named) || row.name,
+        originalCaption: row.shownKey,
         color: row.color,
         xPos: row.xPos,
         yPos: row.yPos,
@@ -664,7 +668,7 @@ export const createLegendEntryActions = ({
     if (Object.keys(originalLegendColors.value).length === 0 && visuallySortedEntries.length > 0) {
       visuallySortedEntries.forEach((entry) => {
         const color = normalizeOptionalHexColor(entry.color);
-        if (color) originalLegendColors.value[entry.caption] = color;
+        if (color) originalLegendColors.value[entry.originalCaption] = color;
       });
     }
   };
@@ -682,7 +686,7 @@ export const createLegendEntryActions = ({
     if (!entry?.caption) return false;
     if (normalizedColor(readShownLegendColor(entry)) === normalizedColor(newColor)) return false;
     entry.color = newColor;
-    drawing.legendColorOverrides[entry.caption] = newColor;
+    drawing.legendColorOverrides[legendEntryKey(entry)] = newColor;
     return true;
   };
 
@@ -739,8 +743,8 @@ export const createLegendEntryActions = ({
     const context = displayedLegendRowContext(state, drawing);
     let entries = [...(drawing.legendEntries.value || [])];
     for (const entry of returning) {
-      const caption = legendCaption(entry);
-      const recorded = Object.hasOwn(drawing.legendColorOverrides, caption) ? drawing.legendColorOverrides[caption] : undefined;
+      const key = legendEntryKey(entry);
+      const recorded = Object.hasOwn(drawing.legendColorOverrides, key) ? drawing.legendColorOverrides[key] : undefined;
       const color = String(recorded || legendRowRules(legendEntryKey(entry), context)[0]?.color || entry.color);
       entries = withEntryAtDefaultPlace(entries, { ...entry, color }, inventory);
     }

@@ -16,6 +16,7 @@ import {
 import {
   getAllFeatureLegendGroups,
   getLegendEntrySwatch as legendSwatch,
+  legendEntryKey,
   legendRowFeatureIds,
   legendRowName,
   legendRowShown,
@@ -953,7 +954,7 @@ const applyLegendOperations = (index, operations, {
       moveLegendEntryToAnchor(row, xPos, yPos);
       const later = new Set(operations.legendAdds.slice(addIndex + 1).map((add) => add.caption));
       const next = rows.find((entry) => (before
-        ? text(entry.getAttribute('data-legend-key')) === before
+        ? pythonLegendKey(entry) === before
         : !ifAbsent && isEditorRow(entry) && later.has(text(entry.getAttribute('data-legend-key')))));
       if (next?.parentElement) next.parentElement.insertBefore(row, next);
       else group.appendChild(row);
@@ -1050,12 +1051,7 @@ const restoreLegendStructure = (index, operations, domains) => {
       /** @type {unknown} */
       let order = null;
       try { order = JSON.parse(recorded); } catch { order = null; }
-      const shownKeys = new Map(Array.from(group.querySelectorAll('g[data-legend-key]'))
-        .filter((entry) => !isEditorRow(entry))
-        .map((entry) => [pythonLegendKey(entry), text(entry.getAttribute('data-legend-key'))]));
-      if (Array.isArray(order)) {
-        changed = orderLegendGroup(group, order.map((key) => shownKeys.get(text(key)) || ''), false) || changed;
-      }
+      if (Array.isArray(order)) changed = orderLegendGroup(group, order.map(text), false) || changed;
       // The record's removal is a change, so the stored Result loses it too.
       group.removeAttribute(LEGEND_ORDER_RECORD);
       changed = true;
@@ -1242,24 +1238,24 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
   const rows = index.legends().entries;
   // A swatch shows its Legend color; its record keeps Python's, which is the
   // color the row's stroke reaches by (OV-288), so the records come first.
-  Object.entries(edits.legendColorOverrides).forEach(([caption, color]) => {
-    const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
-    const original = edits.originalLegendColors[text(entry?.originalCaption) || caption];
+  // Both stores are keyed by the row's key.
+  Object.entries(edits.legendColorOverrides).forEach(([key, color]) => {
+    const original = edits.originalLegendColors[key];
     if (original === undefined) return;
-    (rows.get(caption) || []).forEach((row) => {
+    (rows.get(key) || []).forEach((row) => {
       const swatch = legendSwatch(row);
       if (swatch) record(swatch, 'fill', color, original);
     });
   });
   /** @type {Array<[string, SavedStrokeEdit]>} */
   const strokedRows = Object.entries(edits.legendStrokeOverrides).filter(([, edit]) => setsFeatureStroke(edit));
-  strokedRows.forEach(([caption, edit]) => {
-    const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
-    const row = rows.get(caption)?.[0];
+  strokedRows.forEach(([key, edit]) => {
+    const entry = edits.legendEntries.find((row) => legendEntryKey(row) === key);
+    const row = rows.get(key)?.[0];
     /** @type {LegendRowReach} */
     const reach = {
       listedIds: /** @type {RenderedFeatureId[]} */ ((Array.isArray(entry?.featureIds) ? entry.featureIds : []).map(text).filter(Boolean)),
-      namedIds: namedIdsByCaption.get(caption) || [],
+      namedIds: namedIdsByCaption.get(key) || [],
       ownStrokeIds,
       draftColor: null
     };

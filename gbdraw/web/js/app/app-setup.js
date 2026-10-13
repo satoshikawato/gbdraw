@@ -7192,6 +7192,7 @@ export const createAppSetup = () => {
     // Redo show through the port and lay out as Python does, canvas included
     // (OV-125). The deleted row's stroke leaves its features (OV-293).
     shownLegendName: legendActions.shownLegendName,
+    shownLegendEntryName: legendActions.shownLegendEntryName,
     deleteLegendEntry: editEditorIntent('Delete legend item', deleteLegendEntry, { domains: [...LEGEND_STRUCTURE_DOMAINS, ...STROKE_DOMAINS] }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.

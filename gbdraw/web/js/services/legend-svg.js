@@ -92,11 +92,11 @@ export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
 /** @param {Element | null | undefined} row */
 export const legendRowShown = (row) => Boolean(row) && row?.getAttribute('display') !== 'none';
 
-// The keys of the feature Legend rows a Result shows.
+// The keys of the feature Legend rows a Result shows (a renamed row's key,
+// not the name it shows).
 /** @param {SVGSVGElement | null | undefined} svg @returns {Set<string>} */
 export const shownLegendKeys = (svg) => new Set(getAllFeatureLegendGroups(svg).flatMap((group) => (
-  Array.from(group.querySelectorAll('g[data-legend-key]')).filter(legendRowShown)
-    .map((row) => String(row.getAttribute('data-legend-key') || '').trim())
+  Array.from(group.querySelectorAll('g[data-legend-key]')).filter(legendRowShown).map(pythonLegendKey)
 )));
 
 // The order a feature Legend group recorded as Python's, else null.
@@ -115,7 +115,7 @@ const recordedGroupOrder = (group) => {
 // The rows of a key each feature Legend group of a Result holds, shown or hidden.
 /** @param {Element} group @param {string} key */
 const rowsOfKey = (group, key) => Array.from(group.querySelectorAll('g[data-legend-key]'))
-  .filter((row) => String(row.getAttribute('data-legend-key') || '').trim() === key);
+  .filter((row) => pythonLegendKey(row) === key);
 
 // Whether a Result shows Python's own row of a key: neither an editor row nor
 // a row a rule commit showed before Python drew it.
@@ -236,17 +236,17 @@ export const getLegendEntrySwatch = (entryGroup) => Array.from(
   return fill && fill !== 'none' && !fill.startsWith('url(');
 }) || null;
 
-// The stroke Python drew on the swatch of the Legend row `caption`, which a
+// The stroke Python drew on the swatch of the Legend row of `key`, which a
 // row stroke edit keeps as `originalStroke*`.
 /**
  * @param {SVGSVGElement | null | undefined} svg
- * @param {string} caption
+ * @param {string} key
  * @returns {{ originalStrokeColor: string | null, originalStrokeWidth: number | null }}
  */
-export const drawnLegendRowStroke = (svg, caption) => {
+export const drawnLegendRowStroke = (svg, key) => {
   const swatch = getAllFeatureLegendGroups(svg)
     .map((group) => getLegendEntrySwatch(Array.from(group.querySelectorAll('g[data-legend-key]'))
-      .find((entry) => entry.getAttribute('data-legend-key') === caption && legendRowShown(entry)) || null))
+      .find((entry) => pythonLegendKey(entry) === key && legendRowShown(entry)) || null))
     .find(Boolean) || null;
   const width = Number.parseFloat(String(pythonDrawnAttribute(swatch, 'stroke-width') ?? ''));
   return {
@@ -632,23 +632,20 @@ export const defaultLegendEntryOrder = (entries, generatedOrder) => {
 };
 
 /**
- * The captions of a Result's default order (D-08, OV-47): its generated
- * inventory with each renamed entry's current caption, followed by the other
- * entries in their current order. A Result applies it through
- * `orderLegendEntries`, which skips the captions it does not draw.
- * @param {{ caption?: string, originalCaption?: string }[]} entries
- * @param {string[]} inventory
- * @returns {string[]}
+ * The row keys of a Result's default order (D-08, OV-47): its generated
+ * inventory, followed by the keys of the other entries in their current
+ * order. A Result applies it through `orderLegendEntries`, which skips the
+ * keys it does not draw.
+ * @param {readonly { caption?: unknown, originalCaption?: unknown }[]} entries
+ * @param {readonly string[]} inventory
+ * @returns {PythonLegendKey[]}
  */
-export const defaultLegendCaptionOrder = (entries, inventory) => {
+export const defaultLegendKeyOrder = (entries, inventory) => {
   const generated = new Set(inventory);
-  /** @param {{ caption?: string, originalCaption?: string }} entry */
-  const generatedCaption = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
-  const currentCaption = new Map(entries.map((entry) => [generatedCaption(entry), String(entry?.caption || '').trim()]));
-  return [...new Set([
-    ...inventory.map((caption) => currentCaption.get(caption) || caption),
-    ...entries.filter((entry) => !generated.has(generatedCaption(entry))).map((entry) => String(entry?.caption || '').trim())
-  ])].filter(Boolean);
+  return /** @type {PythonLegendKey[]} */ ([...new Set([
+    ...inventory,
+    ...entries.map(legendEntryKey).filter((key) => !generated.has(key))
+  ])].filter(Boolean));
 };
 
 /**
@@ -677,8 +674,6 @@ const legendEntryGroups = (targetGroup) => {
     : Array.from(targetGroup?.querySelectorAll?.('g[data-legend-key]') || []);
 };
 
-/** @param {Element} entryGroup */
-const legendEntryCaption = (entryGroup) => String(entryGroup.getAttribute('data-legend-key') || '').trim();
 
 // One Legend group's entries in slot order (row-major anchor order).
 /** @param {Element | null | undefined} targetGroup */
@@ -697,15 +692,16 @@ const legendEntriesInSlotOrder = (targetGroup) => legendEntryGroups(targetGroup)
  */
 const followsOrder = (positioned, rank) => {
   const listed = positioned
-    .map(({ entryGroup }) => rank.get(legendEntryCaption(entryGroup)))
+    .map(({ entryGroup }) => rank.get(pythonLegendKey(entryGroup)))
     .filter((value) => value !== undefined);
   return listed.every((value, index) => index === 0 || listed[index - 1] < value);
 };
 
 /**
- * Put one Legend group's entries in the requested caption order. Entries keep
+ * Put one Legend group's entries in the requested order of row keys (a
+ * renamed row ranks by its key, as two rows may show one name). Entries keep
  * the group's current slots (row-major anchor order) and receive them in the
- * new order; captions missing from the order follow in their current order.
+ * new order; keys missing from the order follow in their current order.
  * Live Sort and Move and the Generate replay of the order (D-08) share this.
  * With `keepFollowed`, a group whose listed entries already follow the order
  * keeps its order, so the entries the order does not list keep their places:
@@ -725,7 +721,7 @@ export const orderLegendEntries = (targetGroup, captionOrder, { keepFollowed = f
     const key = String(caption ?? '').trim();
     if (key && !rank.has(key)) rank.set(key, rank.size);
   });
-  const caption = legendEntryCaption;
+  const caption = pythonLegendKey;
   const positioned = legendEntriesInSlotOrder(targetGroup);
   if (keepFollowed && followsOrder(positioned, rank)) return false;
   const ordered = positioned

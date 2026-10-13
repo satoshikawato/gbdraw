@@ -799,7 +799,8 @@ const mockLegendEntry = (caption, color, x) => {
 
 {
   // U3a A2a (gaps 1 and 2): the Legend rows of a rule commit are intent. The
-  // diff and the OV-158 placement are computed on the listed rows; `apply`
+  // diff, the OV-158 replacement of a renamed row (a re-key of its records),
+  // and the D-29 placement of a split row are computed on the listed rows; `apply`
   // writes them and names the rows the displayed Result shows at once: a
   // rule's new row where the Result lacks it, before the row it replaces, and
   // the retired row of a removed or renamed rule, which Python drew.
@@ -830,6 +831,7 @@ const mockLegendEntry = (caption, color, x) => {
     originalLegendColors: ref({}),
     legendStrokeOverrides: {},
     legendColorOverrides: {},
+    addedLegendCaptions: ref(new Set()),
     manualSpecificRules: [],
     skipCaptureBaseConfig: ref(false)
   };
@@ -841,7 +843,7 @@ const mockLegendEntry = (caption, color, x) => {
   const drawnRows = shownRows();
   const renamed = await actions.prepareFileLegendEntries([{ caption: 'New', color: '#aa0000' }], {
     previousFileIntents: [{ caption: 'Old', color: '#aa0000' }],
-    placement: { caption: 'New', at: 'Old' }
+    rekeyed: new Map([['Old', 'New']])
   });
   assert.deepEqual(renamed.diff, {
     add: [{ caption: 'New', color: '#aa0000' }], update: [], remove: [{ caption: 'Old', color: '#aa0000' }], unchanged: []
@@ -849,6 +851,15 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(renamed.isCurrent(), true);
   assert.deepEqual(renamed.apply(), { add: [{ caption: 'New', color: '#aa0000', before: 'Old' }], retire: ['Old'] });
   assert.deepEqual(listed(), [['CDS', '#112233'], ['New', '#aa0000'], ['tRNA', '#334455']]);
+  // D-29: a row split off goes right after the row of its name, before the
+  // row that followed it.
+  const split = await actions.prepareFileLegendEntries([{ caption: 'New', color: '#aa0000' }, { caption: 'CDS [#00aa00]', name: 'CDS', color: '#00aa00' }], {
+    previousFileIntents: [{ caption: 'New', color: '#aa0000' }],
+    placement: { caption: 'CDS [#00aa00]', after: 'CDS' }
+  });
+  assert.deepEqual(split.apply(), { add: [{ caption: 'CDS [#00aa00]', name: 'CDS', color: '#00aa00', before: 'New' }], retire: [] });
+  assert.deepEqual(listed(), [['CDS', '#112233'], ['CDS [#00aa00]', '#00aa00'], ['New', '#aa0000'], ['tRNA', '#334455']]);
+  state.legendEntries.value = state.legendEntries.value.filter(({ caption }) => caption !== 'CDS [#00aa00]');
   // A rule color change draws no row; a listed row the rules do not own keeps
   // its color or stops the commit.
   const recolored = await actions.prepareFileLegendEntries([{ caption: 'New', color: '#00aa00' }], {
@@ -922,17 +933,18 @@ const mockLegendEntry = (caption, color, x) => {
   stops.state.legendStrokeOverrides[TEAL] = { strokeColor: '#222222', strokeWidth: 1 };
   const unshared = await stops.actions.prepareFileLegendEntries(
     [{ caption: 'alpha', color: '#e63946' }, { caption: 'gamma', color: '#2a9d8f' }],
-    { previousFileIntents: sharedRows, placement: { caption: 'gamma', at: TEAL }, rekeyed: new Map([[RED, 'alpha']]) }
+    // The renamed row replaces the teal row (OV-158), as a re-key of its records.
+    { previousFileIntents: sharedRows, rekeyed: new Map([[RED, 'alpha'], [TEAL, 'gamma']]) }
   );
   assert.deepEqual(unshared.apply(), {
     add: [{ caption: 'alpha', color: '#e63946', before: RED }, { caption: 'gamma', color: '#2a9d8f', before: TEAL }],
     retire: [RED, TEAL]
   });
   assert.deepEqual(stops.listed(), ['alpha', 'gamma', 'CDS', 'tRNA']);
-  assert.deepEqual(stops.state.originalLegendOrder.value, ['alpha', TEAL, 'CDS', 'tRNA'], 'the re-keyed row keeps its rank');
+  assert.deepEqual(stops.state.originalLegendOrder.value, ['alpha', 'gamma', 'CDS', 'tRNA'], 'each re-keyed row keeps its rank');
   assert.deepEqual(stops.state.legendStrokeOverrides, {
-    alpha: { strokeColor: '#111111', strokeWidth: 3 }, [TEAL]: { strokeColor: '#222222', strokeWidth: 1 }
-  }, 'OV-660: the stroke follows the re-keyed row; a row the commit replaces keeps its record');
+    alpha: { strokeColor: '#111111', strokeWidth: 3 }, gamma: { strokeColor: '#222222', strokeWidth: 1 }
+  }, 'OV-660: the stroke follows the re-keyed row, and the renamed row\'s (D-25)');
   assert.deepEqual(stops.state.legendColorOverrides, { alpha: '#ff0000' });
 
   // The rule list renames "beta" onto "alpha" (no placement): the first row

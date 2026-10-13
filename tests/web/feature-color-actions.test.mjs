@@ -771,10 +771,11 @@ biologicalFeatures.value = [];
 
 await actions.renameLegendEntry(0, 'Oxidative phosphorylation');
 
-// U3a A2a (gap 3): the rename of an editor row writes the intent, its caption
-// and identity, and the port shows the row with its styles in one compile.
+// U3a A2a (gap 3): the rename of an editor row writes the intent, its name;
+// the row keeps its key (D-25), and the port shows the row with its styles in
+// one compile.
 assert.deepEqual(legendEntries.value[0], {
-  caption: 'Oxidative phosphorylation', originalCaption: 'Oxidative phosphorylation', color: '#123456', featureIds: []
+  caption: 'Oxidative phosphorylation', originalCaption: 'Short caption', color: '#123456', featureIds: []
 });
 assert.deepEqual(shownIntents.map(({ domains }) => [...domains]), [[
   ...LIVE_EDIT_DOMAINS.legendStructure, ...LIVE_EDIT_DOMAINS.legendFills, ...LIVE_EDIT_DOMAINS.strokes
@@ -988,24 +989,28 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   });
   assert.deepEqual(gcPlan.operationsByResult[0].legendRenames.map(({ from, to }) => [from, to]), [['GC content', 'GC percent']]);
 
-  // OV-60: a renamed row takes its caption: a style an earlier row left under
-  // the caption does not follow it, and Generate replays the rename also once
-  // a color rule without a drawn row carries the caption (Add rule).
+  // PR 3 (D-25): a Legend row's styles are stored under its key, so a rename
+  // moves none: the renamed row keeps its own, and a style stored under the
+  // key of another row (OV-60's earlier row) stays that row's. Generate
+  // replays the rename also once a color rule without a drawn row carries the
+  // name (Add rule).
   const unusedRule = { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: '#c83366', cap: 'Zeta' };
   const gcRows = { entries: [{ caption: 'CDS', color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }], order: ['CDS', 'GC content'] };
-  const staleStyle = build({ ...gcRows, legendColorOverrides: { Zeta: '#7b2cbf' } });
+  const staleStyle = build({ ...gcRows, legendColorOverrides: { Zeta: '#7b2cbf', 'GC content': '#123123' } });
   await staleStyle.renameActions.renameLegendEntry(1, 'Zeta');
   assert.notEqual(staleStyle.legendRenameDialog.show, true);
-  assert.deepEqual(staleStyle.legendColorOverrides, {}, 'the stale style of the caption is dropped');
+  assert.deepEqual(staleStyle.legendColorOverrides, { Zeta: '#7b2cbf', 'GC content': '#123123' }, 'a rename moves no style');
   const onRulePlan = compileDirectEditorMutationPlan({
     catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
     legendEntries: staleStyle.stateLegendEntries.value,
     originalLegendOrder: staleStyle.originalOrder.value,
+    legendColorOverrides: staleStyle.legendColorOverrides,
     manualSpecificRules: [unusedRule]
   });
   assert.deepEqual(onRulePlan.operationsByResult[0].legendRenames.map(({ from, to, allowMissing }) => [from, to, allowMissing]),
     [['GC content', 'Zeta', true]]);
-  assert.deepEqual(onRulePlan.operationsByResult[0].legendFills, []);
+  assert.deepEqual(onRulePlan.operationsByResult[0].legendFills.map(({ caption, color }) => [caption, color]),
+    [['Zeta', '#7b2cbf'], ['GC content', '#123123']], 'each style fills the row of its key');
   // PD-OI-061 revision 4: the name of a color rule is a rename target also
   // when the rule draws no row. A row without features cannot merge into it:
   // Keep both or Cancel, and no rule commit.

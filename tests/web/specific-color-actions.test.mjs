@@ -655,7 +655,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...rulesPanel);
   state.legendEntries.value = [{ caption: 'alpha', color: '#112233' }];
   assert.equal(await actions.commitSpecificRules(() => [tagRule('A|B', 'beta')], 'Rename legend item',
-    { legendPlacement: { caption: 'beta', at: 'alpha' } }), true);
+    { legendPlacement: { name: 'beta', color: '#112233', at: 'alpha', replaces: true } }), true);
   assert.equal(rerenders, first + 1, 'the renamed row is shown at once in its place');
   shownKeys = ['beta'];
   const beta = state.manualSpecificRules.map(rule => ({ ...rule }));

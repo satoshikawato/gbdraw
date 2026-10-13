@@ -6,7 +6,7 @@
 // displayed Result and the current settings. It holds no edit of its own: the
 // template calls the Legend panel's operations, and a record edit writes the
 // setting the sidebar field writes, as one History step.
-import { COMPARISON_LEGEND_SELECTOR, legendEntryKey } from '../services/legend-svg.js';
+import { COMPARISON_LEGEND_SELECTOR, legendEntryKey, pythonLegendKey } from '../services/legend-svg.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import {
   resolveLinearRecordEffectiveDefinition,
@@ -110,7 +110,7 @@ export const previewItemTarget = (target, svg) => {
   const element = target instanceof Element ? target.closest(PREVIEW_ITEM_SELECTOR) : null;
   if (!element || !svg.contains(element) || element.closest(COMPARISON_LEGEND_SELECTOR)) return null;
   if (element.hasAttribute('data-legend-key')) {
-    const key = text(element.getAttribute('data-legend-key'));
+    const key = text(pythonLegendKey(element));
     return key ? { element, item: { kind: 'legend-entry', key } } : null;
   }
   const index = text(element.getAttribute('data-gbdraw-record-index'));
@@ -279,7 +279,7 @@ export const createPreviewItemPopup = ({
   /** @param {string} key @param {boolean} matchesReady */
   const legendView = (key, matchesReady) => {
     const entries = legendEntries();
-    const index = entries.findIndex((entry) => text(legendEntryKey(entry)) === key || text(entry.caption) === key);
+    const index = entries.findIndex((entry) => text(legendEntryKey(entry)) === key);
     const entry = entries[index];
     if (!entry) return null;
     /** @type {readonly ColorRuleLike[]} */
@@ -288,13 +288,13 @@ export const createPreviewItemPopup = ({
     let featureCount = null;
     try {
       rules = readLegendRowRules(entry);
-      if (matchesReady) featureCount = countLegendCaptionFeatures(text(entry.caption));
+      if (matchesReady) featureCount = countLegendCaptionFeatures(text(legendEntryKey(entry)));
     } catch {
       // The rule matches are still preparing: the popup shows the color alone.
     }
     const featureTypes = new Set(state.extractedFeatures.value.map((feature) => text(feature?.type)));
     return buildLegendEntryView({
-      entry, name: readShownLegendName(text(entry.caption)), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes
+      entry, name: readShownLegendName(text(legendEntryKey(entry))), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes
     });
   };
 

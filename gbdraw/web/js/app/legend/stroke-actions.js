@@ -1,5 +1,7 @@
 // @ts-check
-import { drawnLegendRowStroke } from '../../services/legend-svg.js';
+import { drawnLegendRowStroke, legendEntryKey } from '../../services/legend-svg.js';
+/** @import { PythonLegendKey } from '../../services/legend-svg.js' */
+/** @typedef {{ caption?: unknown, originalCaption?: unknown }} StrokedLegendEntry A listed Legend row. */
 
 /**
  * @typedef {object} LegendStrokeActionsOptions
@@ -10,6 +12,8 @@ import { drawnLegendRowStroke } from '../../services/legend-svg.js';
 // root shows them on the Result through the executor as one History step
 // (`editEditorIntent` in app/app-setup.js), which records Python's strokes,
 // so a reset returns each feature part and swatch to the stroke Python drew.
+// A row's stroke and its open Stroke options are stored under the row's key
+// (`legendEntryKey`), so two rows of one name keep their own.
 /** @param {LegendStrokeActionsOptions} options */
 export const createLegendStrokeActions = ({ state }) => {
   const {
@@ -20,23 +24,24 @@ export const createLegendStrokeActions = ({ state }) => {
   // OV-157: a row's Stroke options button shows or hides its stroke controls.
   // That is view state, kept out of the Legend entries, so the click records
   // no History step and the Session does not save it.
-  /** @param {string} caption */
-  const isLegendStrokeOptionsOpen = (caption) => Boolean(legendStrokeOptionsOpen?.has(caption));
-  /** @param {string} caption */
-  const toggleLegendStrokeOptions = (caption) => {
-    if (!legendStrokeOptionsOpen?.delete(caption)) legendStrokeOptionsOpen?.add(caption);
+  /** @param {StrokedLegendEntry} entry */
+  const isLegendStrokeOptionsOpen = (entry) => Boolean(legendStrokeOptionsOpen?.has(legendEntryKey(entry)));
+  /** @param {StrokedLegendEntry} entry */
+  const toggleLegendStrokeOptions = (entry) => {
+    const key = legendEntryKey(entry);
+    if (!legendStrokeOptionsOpen?.delete(key)) legendStrokeOptionsOpen?.add(key);
   };
   const closeLegendStrokeOptions = () => legendStrokeOptionsOpen?.clear();
 
-  /** @param {string} caption */
-  const drawnSwatchStroke = (caption) => drawnLegendRowStroke(svgContainer.value?.querySelector?.('svg'), caption);
+  /** @param {PythonLegendKey} key */
+  const drawnSwatchStroke = (key) => drawnLegendRowStroke(svgContainer.value?.querySelector?.('svg'), key);
 
   /** @param {number} idx */
   const getLegendEntryStrokeColor = (idx) => {
     const drawing = state.activeDrawing();
     const entry = drawing.legendEntries.value[idx];
     if (!entry) return '';
-    const override = drawing.legendStrokeOverrides[entry.caption];
+    const override = drawing.legendStrokeOverrides[legendEntryKey(entry)];
     if (override && override.strokeColor !== undefined) return override.strokeColor;
     return '';
   };
@@ -46,7 +51,7 @@ export const createLegendStrokeActions = ({ state }) => {
     const drawing = state.activeDrawing();
     const entry = drawing.legendEntries.value[idx];
     if (!entry) return '';
-    const override = drawing.legendStrokeOverrides[entry.caption];
+    const override = drawing.legendStrokeOverrides[legendEntryKey(entry)];
     if (override && override.strokeWidth !== undefined) return override.strokeWidth;
     return '';
   };
@@ -59,16 +64,17 @@ export const createLegendStrokeActions = ({ state }) => {
     const entry = drawing.legendEntries.value[idx];
     if (!entry) return false;
     const normalized = String(color || '').trim();
-    if (String(drawing.legendStrokeOverrides[entry.caption]?.strokeColor || '').trim() === normalized) {
+    const key = legendEntryKey(entry);
+    if (String(drawing.legendStrokeOverrides[key]?.strokeColor || '').trim() === normalized) {
       return false;
     }
-    // A caption is free text: only an own entry is an override (OV-532).
-    const existing = Object.hasOwn(drawing.legendStrokeOverrides, entry.caption)
-      ? drawing.legendStrokeOverrides[entry.caption]
+    // A key is free text: only an own entry is an override (OV-532).
+    const existing = Object.hasOwn(drawing.legendStrokeOverrides, key)
+      ? drawing.legendStrokeOverrides[key]
       : undefined;
-    drawing.legendStrokeOverrides[entry.caption] = {
+    drawing.legendStrokeOverrides[key] = {
       ...(existing || {
-        ...drawnSwatchStroke(entry.caption),
+        ...drawnSwatchStroke(key),
         strokeWidth: getLegendEntryStrokeWidth(idx)
       }),
       strokeColor: normalized
@@ -85,14 +91,15 @@ export const createLegendStrokeActions = ({ state }) => {
     if (!entry) return false;
     const widthVal = parseFloat(String(width));
     if (isNaN(widthVal)) return false;
-    if (Number(drawing.legendStrokeOverrides[entry.caption]?.strokeWidth) === widthVal) return false;
-    // A caption is free text: only an own entry is an override (OV-532).
-    const existing = Object.hasOwn(drawing.legendStrokeOverrides, entry.caption)
-      ? drawing.legendStrokeOverrides[entry.caption]
+    const key = legendEntryKey(entry);
+    if (Number(drawing.legendStrokeOverrides[key]?.strokeWidth) === widthVal) return false;
+    // A key is free text: only an own entry is an override (OV-532).
+    const existing = Object.hasOwn(drawing.legendStrokeOverrides, key)
+      ? drawing.legendStrokeOverrides[key]
       : undefined;
-    drawing.legendStrokeOverrides[entry.caption] = {
+    drawing.legendStrokeOverrides[key] = {
       ...(existing || {
-        ...drawnSwatchStroke(entry.caption),
+        ...drawnSwatchStroke(key),
         strokeColor: getLegendEntryStrokeColor(idx)
       }),
       strokeWidth: widthVal
@@ -108,11 +115,12 @@ export const createLegendStrokeActions = ({ state }) => {
     const entry = drawing.legendEntries.value[idx];
     if (!entry) return false;
     if (value !== null) return updateLegendEntryStrokeColor(idx, String(value || '').trim());
-    const override = drawing.legendStrokeOverrides[entry.caption];
+    const key = legendEntryKey(entry);
+    const override = drawing.legendStrokeOverrides[key];
     if (!override || !Object.prototype.hasOwnProperty.call(override, 'strokeColor')) return false;
     delete override.strokeColor;
     if (override.strokeWidth === undefined || override.strokeWidth === '') {
-      delete drawing.legendStrokeOverrides[entry.caption];
+      delete drawing.legendStrokeOverrides[key];
     }
     return true;
   };
@@ -123,8 +131,8 @@ export const createLegendStrokeActions = ({ state }) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const entry = drawing.legendEntries.value[idx];
-    if (!entry || !Object.prototype.hasOwnProperty.call(drawing.legendStrokeOverrides, entry.caption)) return false;
-    delete drawing.legendStrokeOverrides[entry.caption];
+    if (!entry || !Object.prototype.hasOwnProperty.call(drawing.legendStrokeOverrides, legendEntryKey(entry))) return false;
+    delete drawing.legendStrokeOverrides[legendEntryKey(entry)];
     return true;
   };
 
