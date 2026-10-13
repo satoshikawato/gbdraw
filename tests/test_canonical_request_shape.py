@@ -41,6 +41,7 @@ from gbdraw.session_request_codec import (
     encode_canonical_request,
 )
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+from gbdraw.web_support.error_adapter import serialize_web_error
 from tests import test_session_request_codec as codec_tests
 from tests.utils.contract_shape_check import load_json, stored_json_files
 
@@ -748,6 +749,36 @@ def test_the_decoder_refuses_a_value_of_another_kind_at_every_schema(
 
     with pytest.raises(CanonicalRequestDecodingError, match=key):
         _decode_at(schema, request, tmp_path, change)
+
+
+def _set_at(path: tuple[str | int, ...], key: str, value: object) -> Any:
+    def change(payload: dict[str, Any]) -> None:
+        holder: Any = payload
+        for step in path:
+            holder = holder[step]
+        holder[key] = value
+
+    return change
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+@pytest.mark.parametrize(
+    ("path", "key", "value"),
+    [
+        ((*_COORDINATES, "target"), "wrapsOrigin", 0),
+        (_COORDINATES, "legendLabel", 7),
+        (("diagramOptions",), "comparisonTableFile", "table.tsv"),
+    ],
+)
+def test_the_web_reports_a_refused_request_value_as_an_invalid_input(
+    path: tuple[str | int, ...], key: str, value: object, schema: int, tmp_path: Path
+) -> None:
+    """The Web shows each refusal as INPUT_INVALID, not as an unclassified error (R6)."""
+
+    with pytest.raises(CanonicalRequestDecodingError, match=key) as refused:
+        _decode_at(schema, _annotated_request("linear"), tmp_path, _set_at(path, key, value))
+    shown = serialize_web_error(refused.value, operation="generate", stage="request-validation")
+    assert (shown["code"], shown["context"]) == ("INPUT_INVALID", {"field": "schema", "reason": "FIELDS"})
 
 
 # The Web's Lane, Start and End number inputs write fractions at every schema

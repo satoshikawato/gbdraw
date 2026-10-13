@@ -1865,7 +1865,8 @@ def _decode_diagram_options(
         raise CanonicalRequestDecodingError(
             "Unknown field(s) at renderRequest.diagramOptions: "
             + ", ".join(sorted(unknown))
-            + "."
+            + ".",
+            diagnostic=_REQUEST_FIELDS_INVALID,
         )
     decoded = {
         known[key]: _decode_option_value(
@@ -4871,7 +4872,7 @@ def _non_negative_index(value: object, path: str) -> int:
 
 def _boolean(value: object, path: str) -> bool:
     if not isinstance(value, bool):
-        raise CanonicalRequestDecodingError(f"{path} must be a boolean.")
+        raise CanonicalRequestDecodingError(f"{path} must be a boolean.", diagnostic=_REQUEST_FIELDS_INVALID)
     return value
 
 
@@ -4883,7 +4884,7 @@ def _string(value: object, path: str) -> str:
 
 def _optional_string(value: object, path: str) -> str | None:
     if value is not None and not isinstance(value, str):
-        raise CanonicalRequestDecodingError(f"{path} must be a string or null.")
+        raise CanonicalRequestDecodingError(f"{path} must be a string or null.", diagnostic=_REQUEST_FIELDS_INVALID)
     return value
 
 
