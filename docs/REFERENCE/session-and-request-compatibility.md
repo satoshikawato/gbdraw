@@ -36,11 +36,14 @@ Session 47 stores each slice's Legend color and stroke edits
 key: the caption gbdraw drew for the row (`originalCaption`), not the name the
 row shows. Two rows can then show one name and keep their own edits. Session 46
 stored these edits under the shown name. Reading a Session 46, or an older
-Session, moves an edit stored under a renamed row's shown name to that row's
-key. When several rows show that name, the first listed row takes the edit, and
-a deleted row only when no listed row shows it. An edit stored under the
-original caption of a renamed row that no row shows any more had no effect and
-is dropped. The Web app, a CLI re-save, and `upgrade_session_document()` read
+Session, gives each row the edit that Session 46 applied to it. An edit stored
+under a renamed row's shown name moves to that row's key. When several rows
+show that name, the first listed row takes the edit, and a deleted row only
+when no listed row shows it. An edit stored under the original caption of a
+renamed row that no row shows any more stays on that row, where Session 46
+applied it. When two edits reach one row, the one Session 46 applied last is
+kept; a stroke takes its color and its width each from the last edit that sets
+it. The Web app, a CLI re-save, and `upgrade_session_document()` read
 these edits the same way.
 
 Sessions 46 and 47 store the per-feature edits (Feature visibility, Label visibility,

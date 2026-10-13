@@ -24,14 +24,21 @@ unique by row key, not by caption. No other field changed.
 The bytes of a Session 46 cannot be read as Session 47: after a rename of
 GC skew to `Z` and of GC content to `GC skew`, a color stored under `GC skew`
 belongs to the GC content row in Session 46 and would name the GC skew row in
-Session 47. Every reader of a Session older than 47 therefore reads, per
-Legend and in store order, each edit by the caption it is stored under. The
-first entry that shows a caption names its row, listed and dormant entries
-before deleted ones, as Session 46 Load kept only that entry. An edit under a
-caption an entry shows moves to that entry's key (`moved`), unless an earlier
-edit of the store already took the key (`collision`, dropped). An edit under
-the key of a renamed row that no entry shows applied to no row in Session 46
-and is dropped (`unshown`). An edit under any other key stays (`unmatched`).
+Session 47. Every reader of a Session older than 47 therefore gives each row
+key the value Session 46 applied to that row (the Web compile of first-parent
+`main` 9839de8e: `draftLegendRows` and `compileDirectEditorMutationPlan` in
+`app/candidate-render.js`). It reads the stores as Session 46 Load read them
+(keys trimmed, a value without a usable color or width left out) and the rows
+as Session 46 Load kept them (an entry with a caption and a usable color, the
+first of each caption in its list). An edit reaches the row whose caption it
+is stored under, a listed row before a dormant one and a deleted row as its
+Restore shows it, and moves to that row's key (`moved`). An edit under a name
+that no row shows reached Python's row of that name and stays under its key:
+`unshown` when it is the key of a renamed row, else `unmatched`. Session 46
+applied the color edits in their order, then the strokes in the order of the
+color edits' keys and then their own, so of several edits that reach one row
+the later wins and each earlier one is a `collision` (dropped); a stroke field
+(`strokeColor`, `strokeWidth`) that no later edit sets keeps the earlier value.
 Each reader returns these outcomes as data (`{store, fromKey, toKey, outcome}`,
 `toKey` null when dropped); the Web Load computes them before it commits.
 The Web Load (`sessionLegendEditsByRowKey`

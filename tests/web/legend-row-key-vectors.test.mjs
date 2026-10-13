@@ -49,7 +49,7 @@ test('a Session 27-44 reads its flat draft by row key; a Session 47 is read as i
   const flat = { version: 44, editorState: { legend: chain.legend } };
   const older = sessionLegendEditsByRowKey(flat, 44);
   assert.deepEqual(older.session.editorState.legend, chain.expected);
-  assert.deepEqual(older.outcomes.map(({ slice }) => slice), ['draft', 'draft']);
+  assert.deepEqual(older.outcomes, chain.outcomes.map((outcome) => ({ ...outcome, slice: 'draft' })));
   const current = { version: SESSION_VERSION, modes: { circular: { editorState: { legend: chain.legend } } } };
   assert.deepEqual(sessionLegendEditsByRowKey(current, SESSION_VERSION), { session: current, outcomes: [] });
   assert.equal(sessionLegendEditsByRowKey(current, SESSION_VERSION).session, current);
