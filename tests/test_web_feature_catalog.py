@@ -1925,9 +1925,19 @@ def test_a_reused_catalog_normalization_starts_from_its_stored_features() -> Non
     expected = build_feature_catalog_item(plain_svg, context, result_index=0, result_name="r.svg")
     cache = PreparedBiologicalInputCache()
     items = []
+    stage_counts = []
     for source in (svg, plain_svg):
-        with cache.transaction(resource_paths={}, diagnostics=None):
+        diagnostics: dict[str, dict[str, int]] = {"metrics": {}}
+        with cache.transaction(resource_paths={}, diagnostics=diagnostics):
             register_prepared_value_identity(context, ("context", 1))
             items.append(build_feature_catalog_item(source, context, result_index=0, result_name="r.svg"))
+        stage_counts.append(
+            {name: count for name, count in diagnostics["metrics"].items() if name.endswith(":catalog_normalization")}
+        )
+    # The first request builds the normalization, the second reuses it.
+    assert stage_counts == [
+        {"renderStageBuild:catalog_normalization": 1},
+        {"renderStageHit:catalog_normalization": 1},
+    ]
     assert items[0]["biologicalFeatures"][0]["sequenceSourceIndex"] == 0
     assert items[1]["biologicalFeatures"] == expected["biologicalFeatures"]

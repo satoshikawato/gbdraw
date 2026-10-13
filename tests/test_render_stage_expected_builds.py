@@ -107,7 +107,8 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
         _FEATURE_PLACEMENT,
     ),
     **dict.fromkeys(("label_table", "label_whitelist", "label_blacklist", "qualifier_priority"), _LABEL_FILTER),
-    "feature_override_table": _FEATURE_EDIT,
+    # A placement row is a feature edit: the stages that read the edited features rebuild.
+    **dict.fromkeys(("feature_override_table", "feature_placement_table"), _FEATURE_EDIT),
     "feature_visibility_table": _FEATURE_EDIT | {"visibility_rules"},
     "annotation_table": _LEGEND | {"catalog_normalization", "interactive_context"},
     **dict.fromkeys(("depth_window", "depth_step", "depth_min", "depth_max", "depth_log_scale"), _DEPTH_FRAME),
@@ -149,7 +150,11 @@ def allowed_builds(option_id: str) -> frozenset[str]:
 
 
 def lost_hits(case_id: str, tables: Path, output: Path, *, include_slow: bool) -> list[str]:
-    """Render the base, then each P1/P2 variant and the base again; name each stage built beyond the allowed set."""
+    """Render the base, then each P1/P2 variant and the base again.
+
+    Name each stage built beyond the allowed set, each uncacheable stage call (it
+    can never be a hit), and each render that failed.
+    """
 
     case = CASES[case_id]
     placeholders = Placeholders(tables)
@@ -167,11 +172,19 @@ def lost_hits(case_id: str, tables: Path, output: Path, *, include_slow: bool) -
                 outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
             except SystemExit:
                 continue  # the CLI refuses this variant on this case
-            if outcome.error is None:
+            label = f"{case_id} {option.option_id} {variant.label}"
+            if outcome.error is not None:
+                failures.append(f"{label}: render failed with {outcome.error!r}")
+            else:
                 extra = set(outcome.stages.builds) - allowed_builds(option.option_id)
                 if extra:
-                    failures.append(f"{case_id} {option.option_id} {variant.label}: built {sorted(extra)}")
-            harness.warm(base)
+                    failures.append(f"{label}: built {sorted(extra)}")
+                uncacheable = sorted(name for name, count in outcome.stages.uncacheable.items() if count)
+                if uncacheable:
+                    failures.append(f"{label}: uncacheable {uncacheable}")
+            returned = harness.warm(base)
+            if returned.error is not None:
+                failures.append(f"{label}, back to the base: render failed with {returned.error!r}")
     return failures
 
 

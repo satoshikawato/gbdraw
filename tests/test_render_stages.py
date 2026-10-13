@@ -281,9 +281,14 @@ def test_an_inner_stage_that_declares_more_marks_the_outer_stage(declared) -> No
     metrics: dict[str, object] = {}
     with _transaction(cache, metrics):
         render_stage("legend_table", outer_font_size, _config())
-    assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
-    # The inner stage declared what it read and was stored.
-    assert "renderStageUndeclaredRead:legend_measurement" not in _metrics(metrics)
+    # The inner stage declared what it read and was stored: only the outer stage is marked.
+    assert {
+        name: count
+        for name, count in _metrics(metrics).items()
+        if name.startswith("renderStageUndeclaredRead:")
+    } == {"renderStageUndeclaredRead:legend_table": 1}
+    assert _metrics(metrics)["renderStageBuild:legend_measurement"] == 1
+    assert _metrics(metrics)["renderStageUncacheableCount"] == 0
     assert _metrics(metrics)["renderStageUndeclaredReadCount"] == 1
 
 

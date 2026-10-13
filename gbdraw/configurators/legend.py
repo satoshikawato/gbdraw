@@ -7,6 +7,8 @@ import math
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping, cast
 
+from gbdraw.canvas.circular import CircularCanvasConfigurator
+from gbdraw.canvas.linear import LinearCanvasConfigurator
 from gbdraw.config.models import (
     CircularRenderProfile,
     LinearRenderProfile,
@@ -185,7 +187,11 @@ class LegendDrawingConfigurator:
     render stage keys it by its attributes.
     """
 
-    def __init__(self, profile: RenderProfile, canvas_config: Any) -> None:
+    def __init__(
+        self,
+        profile: RenderProfile,
+        canvas_config: CircularCanvasConfigurator | LinearCanvasConfigurator,
+    ) -> None:
         cfg = profile.config
         if isinstance(profile, CircularRenderProfile):
             self.mode: Literal["circular", "linear"] = "circular"

@@ -610,7 +610,8 @@ def _hm_tables() -> dict[str, str]:
         "VIS": "{IN}/vis_hmmt.tsv", "LBL": "{IN}/label_hmmt.tsv", "WL": "{IN}/wl_hmmt.tsv",
         "PRIO": "{IN}/prio.tsv", "OVR": "{IN}/ovr_hmmt.tsv", "COL": "{IN}/col_hmmt.tsv",
         "ANN_HI": "{IN}/ann_hi_hmmt.tsv", "ANN_BR": "{IN}/ann_br_hmmt.tsv",
-        "PLACE": "{IN}/place_hmmt.tsv", "DEPTH": "{IN}/depth_hmmt.tsv", "BL": "NADH,tRNA",
+        "PLACE": "{IN}/place_hmmt.tsv", "PLACE_L": "{IN}/place_hmmt_l.tsv",
+        "DEPTH": "{IN}/depth_hmmt.tsv", "BL": "NADH,tRNA",
     }
 
 
@@ -619,7 +620,8 @@ def _mj_tables() -> dict[str, str]:
         "VIS": "{IN}/vis_mj.tsv", "LBL": "{IN}/label_mj.tsv", "WL": "{IN}/wl_mj.tsv",
         "PRIO": "{IN}/prio.tsv", "OVR": "{IN}/ovr_mj.tsv", "COL": "{E}/color_table.txt",
         "ANN_HI": "{IN}/ann_hi_mj.tsv", "ANN_BR": "{IN}/ann_br_mj.tsv",
-        "PLACE": "{IN}/place_mj.tsv", "DEPTH": "{T}/MjeNMV.DRR271272.depth.tsv",
+        "PLACE": "{IN}/place_mj.tsv", "PLACE_L": "{IN}/place_mj_l.tsv",
+        "DEPTH": "{T}/MjeNMV.DRR271272.depth.tsv",
         "BL": "hypothetical,ubiquitin",
     }
 
@@ -749,7 +751,8 @@ UNIVERSE: tuple[OptionSpec, ...] = (
     _opt("feature_placement_table", _C, ["--feature_placement_table", "{PLACE}"],
          pre=["--separate_strands", "--circular_track_slot",
               "features:features@side=overlay,lane_direction=split"]),
-    _opt("feature_placement_table", _L, ["--feature_placement_table", "{PLACE}"]),
+    # Linear mode places on the sides above and below.
+    _opt("feature_placement_table", _L, ["--feature_placement_table", "{PLACE_L}"]),
     _opt("annotation_table", _CL, ["--annotation_table", "{ANN_HI}"],
          ["--annotation_table", "{ANN_BR}"]),
     _opt("scale_interval", _CL, ["--scale_interval", "4000"], ["--scale_interval", "50000"]),
@@ -858,8 +861,9 @@ UNIVERSE: tuple[OptionSpec, ...] = (
     _opt("ruler_label_color", _L, ["--ruler_label_color", "red"]),
     _opt("normalize_length", _L, ["--normalize_length"], cases=["L2"]),
     _opt("region", _L, ["--region", "#1:2000-9000"], cases=["L1"]),
+    # Comparison rows use the coordinates of the cropped records, so this pair has no BLAST file.
     _opt("region (per record)", _L, ["--region", "#1:1000-100000", "--region", "#2:5000-120000"],
-         cases=["L2"]),
+         pre_remove=[("-b", "{E}/MjeNMV.MelaMJNV.tblastx.out")], cases=["L2"]),
     _opt("record_id", _L, ["--record_id", "#1"], cases=["L1"]),
     _opt("reverse_complement", _L, ["--reverse_complement", "true"], cases=["L1"]),
     _opt("reverse_complement (per file)", _L,
@@ -1090,7 +1094,11 @@ def random_walk(
 
 
 def equivalence_failures(results: Sequence[StepResult]) -> list[str]:
-    """Every step whose warm outcome differs from its cold outcome."""
+    """Every rendered step whose warm outcome differs from its cold outcome, or that failed.
+
+    Errors are compared by type and message. Each state is a valid command line
+    that the base branch renders, so an error equal on both sides is a failure too.
+    """
 
     failures = []
     for result in results:
@@ -1100,6 +1108,9 @@ def equivalence_failures(results: Sequence[StepResult]) -> list[str]:
             assert_same_outcome(result.warm, result.cold, result.label)
         except AssertionError as error:
             failures.append(str(error))
+            continue
+        if result.cold.error is not None:
+            failures.append(f"{result.label}: warm and cold renders failed with {result.cold.error!r}")
     return failures
 
 

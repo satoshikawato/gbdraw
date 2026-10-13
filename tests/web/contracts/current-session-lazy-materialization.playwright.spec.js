@@ -1493,6 +1493,9 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
     resolvedRecordCacheHitCount: 0,
     resolvedRecordCacheMissCount: 1,
     resolvedRecordBuildCount: 1,
+    // The retry starts a new worker: no render stage hits, and the
+    // interactive context stage builds once.
+    renderStageHitCount: 0,
     'renderStageBuild:interactive_context': 1
   });
   const afterRetryWorker = await getDiagramWorkerActivity(page);

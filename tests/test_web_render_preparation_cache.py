@@ -255,10 +255,11 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
         assert metrics["parsedSourceParseCount"] == 0
         assert metrics["resolvedRecordCacheHitCount"] == 1
         assert metrics["resolvedRecordBuildCount"] == 0
-        assert metrics["renderStageHit:interactive_context"] == 1
-        assert metrics.get("renderStageBuild:interactive_context", 0) == 0
-        assert metrics["renderStageHit:catalog_normalization"] == 1
-        assert metrics.get("renderStageBuild:catalog_normalization", 0) == 0
+        # Every counter of these stages, so a build would show as a second key.
+        for stage in ("interactive_context", "catalog_normalization"):
+            assert {
+                name: count for name, count in metrics.items() if name.endswith(f":{stage}")
+            } == {f"renderStageHit:{stage}": 1}
         assert metrics["interactiveFeatureTraversalCount"] == 0
         assert metrics["preparedInputCacheRetainedBytes"] > 0
         assert metrics["preparedInputCacheMutationViolationCount"] == 0

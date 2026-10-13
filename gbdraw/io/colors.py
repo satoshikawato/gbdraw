@@ -365,8 +365,14 @@ def merge_default_colors(
         user_df = overrides.set_index("feature_type")
         if load_comparison:  # if load_comparison is true, replace color names with hex codes
             source = overrides.attrs.get("source", "default colors")
+            # A repeated feature type takes its first row's color on every row; later
+            # rows of it are not read.
+            first_hex: dict[object, str] = {}
             try:
-                user_df = user_df.assign(color=[resolve_color_to_hex(color) for color in user_df["color"]])
+                for feature_type, color in zip(user_df.index, user_df["color"]):
+                    if feature_type not in first_hex:
+                        first_hex[feature_type] = resolve_color_to_hex(color)
+                user_df = user_df.assign(color=[first_hex[feature_type] for feature_type in user_df.index])
             except Exception as exc:
                 logger.error(f"ERROR: failed to read '{source}' – {exc}")
                 raise ParseError(f"Failed to read '{source}': {exc}") from exc

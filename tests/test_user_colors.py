@@ -109,6 +109,27 @@ def test_default_colors_header_row_is_not_an_override(header: str, tmp_path: Pat
         resolve_feature_inputs(color_table=None, default_colors=colors, feature_visibility_table=None)
 
 
+def test_first_row_of_a_repeated_default_color_wins_for_comparisons(tmp_path: Path) -> None:
+    # A repeated feature type in -d: every row of it takes the first row's color, and a later
+    # row's color is never read. A later invalid color is therefore no error.
+    path = _tsv(tmp_path, "colors.tsv", "CDS\tred\ngene\tblue\nCDS\tgreen\nCDS\tnotacolor\n")
+    colors = load_default_colors(path, load_comparison=True)
+    assert colors[colors["feature_type"] == "CDS"]["color"].tolist() == ["#FF0000"] * 3
+    assert colors[colors["feature_type"] == "gene"]["color"].tolist() == ["#0000FF"]
+
+
+def test_linear_comparison_draws_the_first_row_of_a_repeated_default_color(tmp_path: Path) -> None:
+    _run_cli(
+        "linear", "--gbk", str(EXAMPLES / "MjeNMV.gb"), str(EXAMPLES / "MelaMJNV.gb"),
+        "-b", str(EXAMPLES / "MjeNMV.MelaMJNV.tblastx.out"),
+        "-d", _tsv(tmp_path, "colors.tsv", "CDS\tred\nCDS\tgreen\n"),
+        "-o", str(tmp_path / "out"), "-f", "svg",
+    )
+    svg = (tmp_path / "out.svg").read_text(encoding="utf-8")
+    assert 'fill="#FF0000"' in svg
+    assert 'fill="#008000"' not in svg
+
+
 def test_invalid_specific_table_color_stays_a_gbdraw_error(tmp_path: Path) -> None:
     table = _tsv(tmp_path, "table.tsv", "CDS\tproduct\tkinase\tnotacolor\n")
     with pytest.raises(ValidationError, match="Invalid color 'notacolor'"):
