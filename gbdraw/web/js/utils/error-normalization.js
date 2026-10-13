@@ -2,7 +2,7 @@
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
-  'promoteLegacyLosatpCache', 'readComparisonSequence', 'readFeatureOverrideTable', 'resolveLegacyProteinReferences',
+  'promoteLegacyLosatpCache', 'readComparisonSequence', 'readFeatureOverrideTable', 'registerFonts', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
   'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'parse']);
@@ -97,7 +97,6 @@ const REASONS = Object.freeze({
   // Output Prefix (gbdraw/api/requests.py RenderOutputRequest).
   FILENAME: 'Use one file name without a folder: no / \\ : * ? " < > | or control characters, no trailing dot, and not a Windows device name such as CON or NUL.',
   FILENAME_LENGTH: 'Use at most 200 bytes in UTF-8, for example 200 ASCII characters.',
-  FONT_FILE: 'Use a TrueType or OpenType font file (.ttf or .otf) that names its font family.',
   FONT_NOT_LOADED: 'This font is no longer loaded in this page. Load it again in Font, or choose another font.',
   BOOLEAN: 'Use true or false.', INTEGER: 'Use an integer.', NONNEGATIVE: 'Use a finite value of zero or greater.',
   FINITE: 'Use a finite number.', POSITIVE_INTEGER: 'Use an integer greater than zero.',

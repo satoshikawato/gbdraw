@@ -210,5 +210,167 @@
         "Garamond Premier"
       ]
     }
+  ],
+  "faceMatch": [
+    {
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false
+        },
+        {
+          "weight": 700,
+          "italic": false
+        }
+      ],
+      "normal": 0
+    },
+    {
+      "faces": [
+        {
+          "weight": 700,
+          "italic": false
+        },
+        {
+          "weight": 400,
+          "italic": false
+        }
+      ],
+      "normal": 1
+    },
+    {
+      "faces": [
+        {
+          "weight": 300,
+          "italic": false
+        },
+        {
+          "weight": 500,
+          "italic": false
+        }
+      ],
+      "normal": 1
+    },
+    {
+      "faces": [
+        {
+          "weight": 450,
+          "italic": false
+        },
+        {
+          "weight": 500,
+          "italic": false
+        }
+      ],
+      "normal": 0
+    },
+    {
+      "faces": [
+        {
+          "weight": 300,
+          "italic": false
+        },
+        {
+          "weight": 600,
+          "italic": false
+        }
+      ],
+      "normal": 0
+    },
+    {
+      "faces": [
+        {
+          "weight": 200,
+          "italic": false
+        },
+        {
+          "weight": 300,
+          "italic": false
+        }
+      ],
+      "normal": 1
+    },
+    {
+      "faces": [
+        {
+          "weight": 600,
+          "italic": false
+        },
+        {
+          "weight": 800,
+          "italic": false
+        }
+      ],
+      "normal": 0
+    },
+    {
+      "faces": [
+        {
+          "weight": 900,
+          "italic": false
+        }
+      ],
+      "normal": 0
+    },
+    {
+      "faces": [
+        {
+          "weight": 400,
+          "italic": true
+        },
+        {
+          "weight": 700,
+          "italic": false
+        }
+      ],
+      "normal": 1
+    },
+    {
+      "faces": [
+        {
+          "weight": 400,
+          "italic": true
+        },
+        {
+          "weight": 300,
+          "italic": true
+        }
+      ],
+      "normal": 0
+    },
+    {
+      "faces": [
+        {
+          "weight": 700,
+          "italic": true
+        },
+        {
+          "weight": 400,
+          "italic": true
+        },
+        {
+          "weight": 500,
+          "italic": true
+        }
+      ],
+      "normal": 1
+    },
+    {
+      "faces": [
+        {
+          "weight": 350,
+          "italic": false
+        },
+        {
+          "weight": 400,
+          "italic": true
+        },
+        {
+          "weight": 550,
+          "italic": false
+        }
+      ],
+      "normal": 0
+    }
   ]
 }

@@ -150,6 +150,25 @@ RESOLUTION_CASES = (
 )
 
 
+# The (weight, italic) faces of one registered family, in registration order:
+# the face Python's CSS matching picks for the normal weight and style, which
+# the Web Legend layout ports (services/legend-layout.js `normalFace`).
+FACE_MATCH_CASES = (
+    ((400, False), (700, False)),
+    ((700, False), (400, False)),
+    ((300, False), (500, False)),
+    ((450, False), (500, False)),
+    ((300, False), (600, False)),
+    ((200, False), (300, False)),
+    ((600, False), (800, False)),
+    ((900, False),),
+    ((400, True), (700, False)),
+    ((400, True), (300, True)),
+    ((700, True), (400, True), (500, True)),
+    ((350, False), (400, True), (550, False)),
+)
+
+
 def render_font_family_rules_module() -> str:
     rules = json.dumps(gbdraw_fonts.font_family_rules(), indent=2)
     return (
@@ -184,7 +203,20 @@ def render_resolution_vectors() -> str:
             "effective": resolution.effective,
             "missing": list(resolution.missing),
         })
-    return json.dumps({"schema": 1, "vectors": vectors}, indent=2, ensure_ascii=False) + "\n"
+    face_match = []
+    for faces in FACE_MATCH_CASES:
+        candidates = [
+            (weight, italic, gbdraw_fonts.FontFace(path=str(index)))
+            for index, (weight, italic) in enumerate(faces)
+        ]
+        chosen = gbdraw_fonts._match_face(candidates, 400, False)
+        face_match.append({
+            "faces": [{"weight": weight, "italic": italic} for weight, italic in faces],
+            "normal": next(index for index, candidate in enumerate(candidates) if candidate[2] == chosen),
+        })
+    return json.dumps(
+        {"schema": 1, "vectors": vectors, "faceMatch": face_match}, indent=2, ensure_ascii=False
+    ) + "\n"
 
 
 def main() -> int:

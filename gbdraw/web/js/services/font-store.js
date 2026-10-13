@@ -72,6 +72,35 @@ const isFontFacts = (value) => {
     && typeof facts.measurementName === 'string' && Boolean(facts.metrics) && typeof facts.metrics === 'object';
 };
 
+// Local Font Access style names of the four faces a drawing uses (normal and
+// bold weight, upright and italic), in the order they are registered.
+const STANDARD_STYLES = Object.freeze([
+  ['regular', 'normal', 'book', 'roman', 'plain'],
+  ['bold'],
+  ['italic', 'oblique'],
+  ['bolditalic', 'boldoblique']
+]);
+
+/**
+ * The faces of an installed family to register: its Regular, Bold, Italic,
+ * and Bold Italic faces when it has them (Python's CSS matching picks among
+ * the registered faces), else its first face.
+ * @template {{ style: string }} T
+ * @param {readonly T[]} faces
+ * @returns {T[]}
+ */
+export const standardInstalledFaces = (faces) => {
+  /** @param {T} face */
+  const styleKey = (face) => face.style.toLowerCase().replace(/[\s_-]+/g, '');
+  /** @type {T[]} */
+  const chosen = [];
+  STANDARD_STYLES.forEach((names) => {
+    const face = faces.find((candidate) => names.includes(styleKey(candidate)));
+    if (face) chosen.push(face);
+  });
+  return chosen.length > 0 ? chosen : faces.slice(0, 1);
+};
+
 /**
  * Register font files with Python and return their entries, in source order.
  * Identical bytes are registered once.
@@ -92,11 +121,11 @@ export const registerWebFonts = async (sources, registerInWorker) => {
   /** @type {unknown[]} */
   const facts = Array.isArray(reply) ? reply : [];
   if (facts.length !== requested.length) {
-    throw diagnosticError('RESULT_INVALID', { field: 'font' }, { stage: 'result-admission', operation: 'registerFonts' });
+    throw diagnosticError('RESULT_INVALID', { field: 'font_family' }, { stage: 'result-admission', operation: 'registerFonts' });
   }
   return facts.map((fact, index) => {
     if (!isFontFacts(fact) || fact.identity !== requested[index].identity) {
-      throw diagnosticError('RESULT_INVALID', { field: 'font' }, { stage: 'result-admission', operation: 'registerFonts' });
+      throw diagnosticError('RESULT_INVALID', { field: 'font_family' }, { stage: 'result-admission', operation: 'registerFonts' });
     }
     const source = /** @type {WebFontSource} */ (byIdentity.get(fact.identity));
     return Object.freeze({

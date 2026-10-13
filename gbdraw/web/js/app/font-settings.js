@@ -5,6 +5,7 @@ import {
   addWebFontsToDocument,
   mergeWebFonts,
   registerWebFonts,
+  standardInstalledFaces,
   webFontFamilies
 } from '../services/font-store.js';
 import { bundledFacePrefix, comparableFamilyName, parseFontFamilyList } from '../services/font-families.js';
@@ -82,7 +83,9 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker }
   const choiceValueOf = (fontFamily) => {
     if (fontFamily === null) return DEFAULT_FONT_CHOICE;
     const first = parseFontFamilyList(fontFamily)[0] || '';
-    const bundled = BUNDLED_CHOICES.find((choice) => comparableFamilyName(choice.family) === comparableFamilyName(first));
+    // A bundled alias ("Arial") is the bundled family Python draws it with.
+    const prefix = bundledFacePrefix(first);
+    const bundled = prefix === null ? undefined : BUNDLED_CHOICES.find((choice) => bundledFacePrefix(choice.family) === prefix);
     if (bundled) return bundled.fontFamily === null ? DEFAULT_FONT_CHOICE : bundled.fontFamily;
     const loaded = webFontFamilies(loadedFonts()).find((entry) => comparableFamilyName(entry.family) === comparableFamilyName(first));
     return loaded ? loaded.fontFamily : fontFamily;
@@ -193,19 +196,17 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker }
   });
 
   /**
-   * Register every face of an installed family (Python picks the face of each
-   * weight and style) and select it.
+   * Register the Regular, Bold, Italic, and Bold Italic faces of an installed
+   * family (Python picks the face of each weight and style) and select it.
    * @param {string} family
    */
   const chooseInstalledFamily = async (family) => {
     const entry = installedPicker.families.find((candidate) => candidate.family === family);
     if (!entry) return;
     installedPicker.open = false;
-    // The regular face first, so the family's first registered face is upright.
-    const faces = [...entry.faces].sort((left, right) => Number(right.style === 'Regular') - Number(left.style === 'Regular'));
     /** @type {WebFontSource[]} */
     const sources = [];
-    for (const face of faces) {
+    for (const face of standardInstalledFaces(entry.faces)) {
       sources.push({ bytes: await (await face.blob()).arrayBuffer(), source: 'local', label: face.fullName });
     }
     await registerAndSelect(sources);

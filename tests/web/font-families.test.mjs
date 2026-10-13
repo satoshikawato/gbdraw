@@ -12,6 +12,7 @@ import {
   mergeWebFonts,
   registerWebFonts,
   registeredLegendFaces,
+  standardInstalledFaces,
   webFontFamilies,
   webFontIdentitiesFor
 } from '../../gbdraw/web/js/services/font-store.js';
@@ -102,4 +103,26 @@ test('the Legend measures a registered family with its face, and an unknown face
   // A face recorded on another machine (OV-683) falls back to the registered family's face, not a bundled one.
   assert.equal(legendMeasurementFace(metrics, 'GbdrawTestSerif-Regular', "'Gbdraw Test Serif', serif"), entries[1].measurementName);
   assert.equal(legendMeasurementFace(metrics, entries[0].measurementName, "'Gbdraw Test Serif', serif"), entries[0].measurementName);
+});
+
+test('the Legend picks the face of a registered family Python picks for the normal weight and style', () => {
+  assert.ok(vectors.faceMatch.length >= 10);
+  vectors.faceMatch.forEach((vector, index) => {
+    const faces = vector.faces.map((face, position) => ({
+      family: 'Vector Family', weight: face.weight, italic: face.italic, measurementName: `face${position}`, table: SERIF_TABLE
+    }));
+    const metrics = withRegisteredFontFaces(createLegendFontMetrics(LEGEND_FONT_METRICS), faces);
+    assert.equal(resolveLegendFontFace(metrics, "'Vector Family', serif"), `face${vector.normal}`, `faceMatch[${index}]`);
+  });
+});
+
+test('an installed family registers its Regular, Bold, Italic, and Bold Italic faces, upright first', () => {
+  const face = (style) => ({ style });
+  assert.deepEqual(
+    standardInstalledFaces(['Light', 'Bold Italic', 'Black', 'Italic', 'Bold', 'Regular', 'Medium'].map(face)).map((entry) => entry.style),
+    ['Regular', 'Bold', 'Italic', 'Bold Italic']
+  );
+  assert.deepEqual(standardInstalledFaces(['Book', 'Oblique', 'BoldOblique'].map(face)).map((entry) => entry.style), ['Book', 'Oblique', 'BoldOblique']);
+  assert.deepEqual(standardInstalledFaces(['Light', 'Thin'].map(face)).map((entry) => entry.style), ['Light'], 'a family without them registers its first face');
+  assert.deepEqual(standardInstalledFaces([]), []);
 });

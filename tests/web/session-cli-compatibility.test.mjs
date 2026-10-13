@@ -411,6 +411,24 @@ await test('a request whose Circular slot objects name a renderer by alias loads
     [['c', 'content'], ['g', 'content'], ['s', 'skew']]);
 });
 
+// Before the Font setting, a Web Session kept the diagram font as a preserved
+// override (PD-OI-009) in its draft and its request. Load moves it into the
+// setting, so no preserved override names a path the GUI manages.
+await test('a Session 44 that preserved objects.text.font_family loads it into the Font setting', async () => {
+  const session = JSON.parse(gunzipSync(await readFile(path.join(
+    root, 'tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'
+  ))));
+  const font = "'DejaVu Serif', serif";
+  session.config.unmanagedConfigOverrides = { 'objects.text.font_family': font };
+  session.renderRequest.diagramOptions.configOverrides = {
+    ...session.renderRequest.diagramOptions.configOverrides, 'objects.text.font_family': font
+  };
+  const result = await load(Buffer.from(JSON.stringify(session)));
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.equal(state.drawings.circular.adv.font_family, font);
+  assert.deepEqual({ ...state.drawings.circular.unmanagedConfigOverrides }, {});
+});
+
 // A Session 27 to 30 has no request, so Load records the track settings its
 // Result was drawn with; a Session with a request records none.
 await test('Load of a 0.13.0 Session records the track settings of its Result', async () => {
