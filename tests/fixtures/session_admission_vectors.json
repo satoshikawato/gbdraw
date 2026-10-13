@@ -824,6 +824,9 @@
   },
   "web-40": {
    "fixture": "tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json"
+  },
+  "web-44-bound-file": {
+   "fixture": "tests/fixtures/sessions/inactive-class-m.v44.gbdraw-session.json.gz"
   }
  },
  "vectors": [
@@ -853,6 +856,15 @@
    "python": "accept",
    "web": "accept",
    "note": "A tracked Web Session 44 with a Result."
+  },
+  {
+   "id": "control-web-44-bound-file",
+   "finding": "control",
+   "base": "web-44-bound-file",
+   "edits": [],
+   "python": "accept",
+   "web": "accept",
+   "note": "A tracked Web Session 44 whose Web file binding names a resource."
   },
   {
    "id": "control-web-40",
@@ -1513,6 +1525,38 @@
    "web": "refuse",
    "note": "A selector with a digit outside 0-9.",
    "difference": "Python's \\d matches every Unicode decimal digit; the Web's matches 0-9. Open (OV-611)."
+  },
+  {
+   "id": "ov636-resources-null",
+   "finding": "OV-636",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "web": "refuse",
+   "note": "resources is null while a Web file binding names a resource.",
+   "pythonMessage": "requires a canonical resources object"
+  },
+  {
+   "id": "ov636-resources-array",
+   "finding": "OV-636",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources",
+     "value": []
+    }
+   ],
+   "python": "refuse",
+   "web": "refuse",
+   "note": "The same for a resources that is no object.",
+   "pythonMessage": "requires a canonical resources object"
   },
   {
    "id": "ov566-linear-row-null",

@@ -648,8 +648,7 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   }
   const bindings = validateWebFileBindings(
     /** @type {UnvalidatedFields<'bindings'>} */ (sessionData.webFiles),
-    // T-request: `validateWebFileBindings` checks the descriptors it reads, but its parameter declares them checked.
-    /** @type {Record<string, RawSessionResourceDescriptor> | undefined} */ (sessionData.resources)
+    /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (sessionData.resources)
   );
   // A Linear record the Session turns OFF names a bound record card (record-selection D-05).
   const linearRecordsOff = /** @type {UnvalidatedFields<'linear', UnvalidatedFields<'config', UnvalidatedFields<'recordsOff'>>>} */ (
