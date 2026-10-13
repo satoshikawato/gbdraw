@@ -8,7 +8,8 @@ hit, so a later change that drops one fails here.
 
 The classes are those of the DEPMAP measurement (``P1_P2_OPTIONS``). Each
 variant starts from a cache that holds the base: the harness renders the base
-again after each variant.
+again after each variant. The slow cases are split into chunks of variants,
+each from the case base, so each test fits the 300 s pytest timeout.
 
 Two gaps are listed apart, so removing them shrinks the lists:
 
@@ -29,10 +30,13 @@ import pytest
 
 from tests.utils.render_stage_equivalence import (
     CASES,
-    SLOW_VARIANTS,
     EquivalenceHarness,
+    OptionSpec,
     Placeholders,
-    options_for,
+    Variant,
+    cost_chunks,
+    error_rule_failures,
+    matrix_variants,
     state_arguments,
     write_tables,
 )
@@ -149,43 +153,61 @@ def allowed_builds(option_id: str) -> frozenset[str]:
     return allowed | RECORD_PRESENTATION_GAP.get(option_id, frozenset())
 
 
-def lost_hits(case_id: str, tables: Path, output: Path, *, include_slow: bool) -> list[str]:
-    """Render the base, then each P1/P2 variant and the base again.
+def p1_p2_variants(case_id: str, *, include_slow: bool) -> list[tuple[OptionSpec, Variant]]:
+    """The variants of the P1 and P2 options of a case, in universe order."""
+
+    variants = matrix_variants(CASES[case_id], include_slow=include_slow)
+    return [(option, variant) for option, variant in variants if option.option_id in P1_P2_OPTIONS[case_id]]
+
+
+def lost_hits(
+    case_id: str,
+    tables: Path,
+    output: Path,
+    *,
+    include_slow: bool,
+    part: slice = slice(None),
+) -> list[str]:
+    """Render the base, then each P1/P2 variant in ``part`` and the base again.
 
     Name each stage built beyond the allowed set, each uncacheable stage call (it
-    can never be a hit), and each render that failed.
+    can never be a hit), and each failure of the error rule (``error_rule_failures``).
     """
 
     case = CASES[case_id]
     placeholders = Placeholders(tables)
     harness = EquivalenceHarness(case.mode, output)
     base = placeholders.expand(case, case.base)
-    assert harness.warm(base).error is None
+    base_label = f"{case_id} base"
     failures: list[str] = []
-    for option in options_for(case):
-        if option.option_id not in P1_P2_OPTIONS[case_id]:
-            continue
-        for variant in option.variants:
-            if not include_slow and (option.option_id, variant.label) in SLOW_VARIANTS:
-                continue
-            try:
-                outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
-            except SystemExit:
-                continue  # the CLI refuses this variant on this case
-            label = f"{case_id} {option.option_id} {variant.label}"
-            if outcome.error is not None:
-                failures.append(f"{label}: render failed with {outcome.error!r}")
-            else:
-                extra = set(outcome.stages.builds) - allowed_builds(option.option_id)
-                if extra:
-                    failures.append(f"{label}: built {sorted(extra)}")
-                uncacheable = sorted(name for name, count in outcome.stages.uncacheable.items() if count)
-                if uncacheable:
-                    failures.append(f"{label}: uncacheable {uncacheable}")
-            returned = harness.warm(base)
-            if returned.error is not None:
-                failures.append(f"{label}, back to the base: render failed with {returned.error!r}")
-    return failures
+    outcomes = []
+    first = harness.warm(base)
+    for option, variant in p1_p2_variants(case_id, include_slow=include_slow)[part]:
+        try:
+            outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
+        except SystemExit:
+            continue  # the CLI refuses this variant on this case
+        label = f"{case_id} {option.option_id} {variant.label}"
+        outcomes.append((label, outcome))
+        if outcome.error is None:
+            extra = set(outcome.stages.builds) - allowed_builds(option.option_id)
+            if extra:
+                failures.append(f"{label}: built {sorted(extra)}")
+            uncacheable = sorted(name for name, count in outcome.stages.uncacheable.items() if count)
+            if uncacheable:
+                failures.append(f"{label}: uncacheable {uncacheable}")
+        returned = harness.warm(base)
+        if returned.error is not None:
+            failures.append(f"{label}, back to the base: render failed with {returned.error!r}")
+    return failures + error_rule_failures((base_label, first), outcomes)
+
+
+# The slow cases in chunks within the time budget (``cost_chunks``).
+_SLOW_CHUNKS = [
+    chunk
+    for case_id in ("C2", "C3", "L2", "L3")
+    for chunk in cost_chunks(case_id, f"{case_id}-", p1_p2_variants(case_id, include_slow=True))
+]
 
 
 @pytest.fixture(scope="module")
@@ -194,19 +216,19 @@ def tables(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.mark.parametrize(
-    "case_id",
+    ("case_id", "part"),
     [
-        "C1",
-        "L1",
-        pytest.param("C2", marks=pytest.mark.slow),
-        pytest.param("C3", marks=pytest.mark.slow),
-        pytest.param("L2", marks=pytest.mark.slow),
-        pytest.param("L3", marks=pytest.mark.slow),
+        pytest.param("C1", slice(None), id="C1"),
+        pytest.param("L1", slice(None), id="L1"),
+        *(
+            pytest.param(chunk.case_id, slice(chunk.start, chunk.stop), marks=chunk.marks, id=chunk.chunk_id)
+            for chunk in _SLOW_CHUNKS
+        ),
     ],
 )
 def test_a_p1_or_p2_option_builds_only_the_stages_of_its_content(
-    case_id: str, tables: Path, tmp_path: Path, request: pytest.FixtureRequest
+    case_id: str, part: slice, tables: Path, tmp_path: Path, request: pytest.FixtureRequest
 ) -> None:
     slow = request.node.get_closest_marker("slow") is not None
-    failures = lost_hits(case_id, tables, tmp_path / case_id, include_slow=slow)
+    failures = lost_hits(case_id, tables, tmp_path / case_id, include_slow=slow, part=part)
     assert not failures, "\n".join(failures)

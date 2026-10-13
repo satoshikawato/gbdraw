@@ -5,12 +5,15 @@ the same SVG text and reply metadata as a render on a new cache. The harness
 runs the CLI entry and renders its typed request inside a cache transaction
 (``tests/utils/render_stage_equivalence.py``).
 
-- Matrix: a chain over the option variants of a case.
+- Matrix: a chain over the option variants of a case. The full universe of a
+  case is split into chunks, each a chain that starts from the case base, so
+  each slow test fits the 300 s pytest timeout.
 - Declarations: no undeclared settings read and no uncacheable stage.
 - Identity: the per-record identity elements Circular inputs reach (source
   bytes, GFF3 type filter, position within an input, batch and Multi-Record
   Canvas), and a shared depth axis.
-- Random walk: seeded single-option changes with returns to earlier states.
+- Random walk: seeded single-option changes with returns to earlier states;
+  the slow walks are short and use many seeds, for the same timeout.
 """
 
 from __future__ import annotations
@@ -28,9 +31,10 @@ from tests.utils.render_stage_equivalence import (
     assert_same_outcome,
     declaration_failures,
     equivalence_failures,
+    full_chain_chunks,
     matrix_steps,
+    matrix_variants,
     random_walk,
-    render_errors,
     run_chain,
     synthetic_record,
     write_depth_table,
@@ -43,14 +47,13 @@ pytestmark = pytest.mark.circular
 
 _BASE = ("--labels", "out", "--gc", "--skew", "-l", "right")
 
-# Chains: one variant per option on C1, named options on C2; the full universe is slow.
+# Chains: one variant per option on C1, named options on C2; the first variant of each.
 _CHAINS = {
-    "C1-fast": ("C1", None, True),
-    "C2-named": ("C2", ("label_table",), True),
-    "C1-full": ("C1", None, False),
-    "C2-full": ("C2", None, False),
-    "C3-full": ("C3", None, False),
+    "C1-fast": ("C1", None),
+    "C2-named": ("C2", ("label_table",)),
 }
+# The full universe of each case, in chunks within the time budget (``cost_chunks``).
+_FULL_CHUNKS = full_chain_chunks(("C1", "C2", "C3"))
 
 
 @pytest.fixture(scope="module")
@@ -60,34 +63,26 @@ def placeholders(tmp_path_factory: pytest.TempPathFactory) -> Placeholders:
 
 @pytest.fixture(
     scope="module",
-    params=[
-        "C1-fast",
-        "C2-named",
-        pytest.param("C1-full", marks=pytest.mark.slow),
-        pytest.param("C2-full", marks=pytest.mark.slow),
-        pytest.param("C3-full", marks=pytest.mark.slow),
-    ],
+    params=["C1-fast", "C2-named", *(pytest.param(chunk_id, marks=chunk.marks) for chunk_id, chunk in _FULL_CHUNKS.items())],
 )
 def chain(
     request: pytest.FixtureRequest,
     placeholders: Placeholders,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> list[StepResult]:
-    case_id, option_ids, fast = _CHAINS[request.param]
-    case = CASES[case_id]
-    steps = matrix_steps(
-        case,
-        placeholders,
-        option_ids=option_ids,
-        first_variant_only=fast,
-        include_slow=not fast,
-    )
+    if request.param in _FULL_CHUNKS:
+        chunk = _FULL_CHUNKS[request.param]
+        case = CASES[chunk.case_id]
+        variants = matrix_variants(case)[chunk.start:chunk.stop]
+    else:
+        case_id, option_ids = _CHAINS[request.param]
+        case = CASES[case_id]
+        variants = matrix_variants(case, option_ids=option_ids, first_variant_only=True, include_slow=False)
     harness = EquivalenceHarness("circular", tmp_path_factory.mktemp(f"chain-{request.param}"))
-    return run_chain(harness, steps)
+    return run_chain(harness, matrix_steps(case, placeholders, variants))
 
 
 def test_matrix_warm_equals_cold(chain: list[StepResult]) -> None:
-    assert not render_errors(chain[:1]), "the case base must render"
     failures = equivalence_failures(chain)
     assert not failures, "\n".join(failures)
 
@@ -99,14 +94,19 @@ def test_declarations_have_no_undeclared_read_or_uncacheable_stage(
     assert not failures, "\n".join(failures)
 
 
+# Slow walks: short walks over many seeds, each well within the 300 s timeout.
+_SLOW_WALKS = {"C1": (range(11, 17), 20), "C2": (range(21, 25), 4), "C3": (range(31, 34), 10)}
+
+
 @pytest.mark.parametrize(
     ("case_id", "seed", "steps"),
     [
         ("C1", 1, 8),
-        pytest.param("C1", 11, 60, marks=pytest.mark.slow),
-        pytest.param("C1", 12, 60, marks=pytest.mark.slow),
-        pytest.param("C2", 13, 12, marks=pytest.mark.slow),
-        pytest.param("C3", 14, 25, marks=pytest.mark.slow),
+        *(
+            pytest.param(case_id, seed, steps, marks=pytest.mark.slow)
+            for case_id, (seeds, steps) in _SLOW_WALKS.items()
+            for seed in seeds
+        ),
     ],
 )
 def test_random_walk_warm_equals_cold(
@@ -123,7 +123,6 @@ def test_random_walk_warm_equals_cold(
         placeholders,
         seed=seed,
         steps=steps,
-        include_slow=steps > 20,
     )
     assert len(results) > steps // 2, "too many refused steps"
     failures = equivalence_failures(results)

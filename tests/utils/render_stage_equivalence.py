@@ -12,7 +12,8 @@ reply carries (feature catalog, Legend rows, track-slot geometry), built by the
 same production functions, and the remaining fields of the typed result
 (interactive context, Linear metadata, LOSAT entries, warnings and notices) in
 a canonical JSON form. A render that fails is an outcome too: its error type and
-message are compared.
+message are compared, and only a user-input validation error
+(``USER_INPUT_ERRORS``) may be a step's accepted outcome.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from unittest import mock
 
 import numpy as np
 import pandas as pd
+import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
@@ -45,6 +47,7 @@ from gbdraw.api.request_render import (
     DiagramRequest,
     RequestRenderResult,
 )
+from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.legend.row_facts import collect_legend_row_facts
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
@@ -60,6 +63,14 @@ Mode = Literal["circular", "linear"]
 JsonValue = Union[None, bool, int, float, str, list["JsonValue"], dict[str, "JsonValue"]]
 
 STAGE_NAMES: frozenset[str] = frozenset(get_args(RenderStageName))
+
+# The errors that reject a user's input. Some variants of the universe and some
+# walk combinations are invalid input on the base branch too: a slot that does
+# not fit inside (``ValidationError`` and its ``_InsideFitError``), a
+# ``--multi_record_position`` list of the wrong length (``ValidationError``) and
+# labels that do not fit (``LabelsDoNotFitError``, #1049). Every other error is
+# a defect, even when warm and cold raise it alike.
+USER_INPUT_ERRORS: tuple[type[Exception], ...] = (ValidationError, LabelsDoNotFitError)
 _CLI_MODULES = {"circular": circular_cli, "linear": linear_cli}
 _CLI_MAINS: dict[Mode, Callable[[list[str]], None]] = {
     "circular": circular_cli.circular_main,
@@ -102,6 +113,7 @@ class RenderOutcome:
     reply: JsonValue
     error: tuple[str, str] | None
     metrics: Mapping[str, int] = field(compare=False)
+    user_input_error: bool = field(default=False, compare=False)
 
     @property
     def stages(self) -> StageCounts:
@@ -180,12 +192,19 @@ def render_captured(
     diagnostics: dict[str, object] = {"timingsMs": {}, "metrics": {}}
     reply: JsonValue = None
     error: tuple[str, str] | None = None
+    user_input_error = False
     try:
         with _transaction(cache, captured.input_paths, diagnostics):
             reply = _reply(captured, diagnostics if cache is not None else None)
     except Exception as exc:  # noqa: BLE001 - a failed render is an outcome
         error = (type(exc).__name__, str(exc))
-    return RenderOutcome(reply=reply, error=error, metrics=_metrics(diagnostics))
+        user_input_error = isinstance(exc, USER_INPUT_ERRORS)
+    return RenderOutcome(
+        reply=reply,
+        error=error,
+        metrics=_metrics(diagnostics),
+        user_input_error=user_input_error,
+    )
 
 
 @contextmanager
@@ -986,17 +1005,16 @@ def run_step(harness: EquivalenceHarness, label: str, arguments: Sequence[str]) 
     return StepResult(label, tuple(arguments), harness.warm(arguments), harness.cold(arguments))
 
 
-def matrix_steps(
+def matrix_variants(
     case: Case,
-    placeholders: Placeholders,
     *,
     option_ids: Sequence[str] | None = None,
     first_variant_only: bool = False,
     include_slow: bool = True,
-) -> list[tuple[str, list[str]]]:
-    """The chain of a case: its base, then each variant of each selected option."""
+) -> list[tuple[OptionSpec, Variant]]:
+    """The variants of the selected options of a case, in universe order."""
 
-    steps: list[tuple[str, list[str]]] = [(f"{case.case_id} base", placeholders.expand(case, case.base))]
+    selected: list[tuple[OptionSpec, Variant]] = []
     for option in options_for(case):
         if option_ids is not None and option.option_id not in option_ids:
             continue
@@ -1005,16 +1023,24 @@ def matrix_steps(
             for variant in option.variants
             if include_slow or (option.option_id, variant.label) not in SLOW_VARIANTS
         ]
-        if first_variant_only:
-            variants = variants[:1]
-        for variant in variants:
-            steps.append(
-                (
-                    f"{case.case_id} {option.key} {variant.label}",
-                    state_arguments(case, {option: variant}, placeholders),
-                )
-            )
-    return steps
+        selected.extend((option, variant) for variant in variants[:1 if first_variant_only else None])
+    return selected
+
+
+def matrix_steps(
+    case: Case,
+    placeholders: Placeholders,
+    variants: Sequence[tuple[OptionSpec, Variant]],
+) -> list[tuple[str, list[str]]]:
+    """The chain of a case: its base, then each variant (a single-option change of the base)."""
+
+    return [
+        (f"{case.case_id} base", placeholders.expand(case, case.base)),
+        *(
+            (f"{case.case_id} {option.key} {variant.label}", state_arguments(case, {option: variant}, placeholders))
+            for option, variant in variants
+        ),
+    ]
 
 
 def run_chain(
@@ -1031,23 +1057,22 @@ def random_walk(
     *,
     seed: int,
     steps: int,
-    include_slow: bool = False,
 ) -> list[StepResult]:
     """Seeded single-option changes from the case base, with returns to earlier states.
 
     Each step either sets one option to a variant, resets one option to the
-    base, or undoes the previous step (a return to the state before it).
+    base, or undoes the previous step (a return to the state before it). A
+    walk leaves out the slow and heavy variants (``SLOW_VARIANTS``,
+    ``HEAVY_RENDER_SECONDS``): a heavy setting stays in the state and makes
+    every later step heavy. The matrix chunks cover them.
     """
 
+    def walkable(option: OptionSpec, variant: Variant) -> bool:
+        key = (option.option_id, variant.label)
+        return key not in SLOW_VARIANTS and (case.case_id, *key) not in HEAVY_RENDER_SECONDS
+
     rng = np.random.default_rng(seed)
-    options = [
-        option
-        for option in options_for(case)
-        if any(
-            include_slow or (option.option_id, variant.label) not in SLOW_VARIANTS
-            for variant in option.variants
-        )
-    ]
+    options = [option for option in options_for(case) if any(walkable(option, v) for v in option.variants)]
     order = {option: index for index, option in enumerate(UNIVERSE)}
     state: dict[OptionSpec, Variant] = {}
     history: list[dict[OptionSpec, Variant]] = []
@@ -1069,8 +1094,7 @@ def random_walk(
                 choices = [
                     variant
                     for variant in option.variants
-                    if variant != state.get(option)
-                    and (include_slow or (option.option_id, variant.label) not in SLOW_VARIANTS)
+                    if variant != state.get(option) and walkable(option, variant)
                 ]
                 if not choices:
                     continue
@@ -1093,53 +1117,191 @@ def random_walk(
     return results
 
 
-def equivalence_failures(results: Sequence[StepResult]) -> list[str]:
-    """Every rendered step whose warm outcome differs from its cold outcome, or that failed.
+# --- Slow chunks -------------------------------------------------------------------------------
 
-    Errors are compared by type and message. Each state is a valid command line
-    that the base branch renders, so an error equal on both sides is a failure too.
+# One cold render per case, in seconds, measured 2026-10-14 on the 32-core
+# development machine (load average 2.5-6; a single render ran within 15% of
+# that at a load average of 8-10). A step renders twice: warm and cold in a
+# chain, or the variant and the base again in the expected-builds test.
+RENDER_SECONDS: Mapping[str, float] = {"C1": 0.5, "C2": 13.0, "C3": 1.3, "L1": 0.2, "L2": 1.3, "L3": 1.4}
+# Cold renders far above their case: C2 label layouts that end in
+# LabelsDoNotFitError (#1049) after a long search, and the slower label
+# settings. The warm render of such a step took up to twice its cold render
+# (C2 ``-k ...gene``: cold 81 s, warm 127-156 s), so a heavy step counts three
+# cold renders.
+HEAVY_RENDER_SECONDS: Mapping[tuple[str, str, str], float] = {
+    ("C1", "label_font_size", "--label_font_size 30"): 21.0,
+    ("C2", "label_font_size", "--label_font_size 30"): 421.0,
+    ("C2", "feature_overlap_tolerance_bp", "--feature_overlap_tolerance_bp 200"): 144.0,
+    ("C2", "resolve_overlaps", "--resolve_overlaps"): 140.0,
+    ("C2", "outer_label_y_radius_offset", "--outer_label_y_radius_offset 0.8"): 87.0,
+    ("C2", "features", "-k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region,gene"): 81.0,
+    ("C2", "circular_label_spacing", "--circular_label_spacing 40"): 25.0,
+    ("C2", "inner_label_x_radius_offset", "--inner_label_x_radius_offset 1.3"): 23.0,
+    ("C2", "inner_label_y_radius_offset", "--inner_label_y_radius_offset 1.3"): 23.0,
+}
+# The estimated time of one chunk: well under the 300 s pytest timeout (pyproject).
+CHUNK_BUDGET_SECONDS = 120.0
+_PYTEST_TIMEOUT_SECONDS = 300
+
+
+@dataclass(frozen=True)
+class Chunk:
+    """Variants ``start:stop`` of a case, rendered as one test that starts from the case base."""
+
+    chunk_id: str
+    case_id: str
+    start: int
+    stop: int
+    seconds: float
+
+    @property
+    def marks(self) -> list[pytest.MarkDecorator]:
+        """``slow``, and a longer timeout for a chunk that cannot fit the default.
+
+        Only a chunk with a heavy step can exceed two thirds of the default
+        timeout: one warm and one cold render of that step take that long, and
+        a step cannot be split. It gets twice its estimate, in whole 300 s units.
+        """
+
+        marks = [pytest.mark.slow]
+        if self.seconds > _PYTEST_TIMEOUT_SECONDS * 2 / 3:
+            units = math.ceil(2 * self.seconds / _PYTEST_TIMEOUT_SECONDS)
+            marks.append(pytest.mark.timeout(units * _PYTEST_TIMEOUT_SECONDS))
+        return marks
+
+
+def cost_chunks(
+    case_id: str,
+    prefix: str,
+    variants: Sequence[tuple[OptionSpec, Variant]],
+) -> list[Chunk]:
+    """Contiguous chunks of ``variants`` whose estimated time stays within the budget.
+
+    A chunk costs one base render plus two renders per variant (three for a
+    heavy one; ``RENDER_SECONDS``, ``HEAVY_RENDER_SECONDS``). A variant above
+    the budget closes its chunk; when that leaves a chunk of heavy variants
+    alone, it takes a light neighbour, so each chunk holds a step that can
+    render (heavy C2 variants end in a user-input error; ``error_rule_failures``).
+    """
+
+    base = RENDER_SECONDS[case_id]
+    heavy = [(case_id, option.option_id, variant.label) in HEAVY_RENDER_SECONDS for option, variant in variants]
+    costs = [
+        3 * HEAVY_RENDER_SECONDS[(case_id, option.option_id, variant.label)] if is_heavy else 2 * base
+        for (option, variant), is_heavy in zip(variants, heavy)
+    ]
+    starts = [0]
+    total = base
+    for index, cost in enumerate(costs):
+        if index > starts[-1] and total + cost > CHUNK_BUDGET_SECONDS:
+            starts.append(index)
+            total = base
+        total += cost
+    stops = [*starts[1:], len(variants)]
+    for number, (start, stop) in enumerate(zip(starts, stops)):
+        if not all(heavy[start:stop]):
+            continue
+        if number > 0 and start - starts[number - 1] >= 2 and not heavy[start - 1]:
+            starts[number] = stops[number - 1] = start - 1
+        elif number + 1 < len(starts) and stops[number + 1] - stop >= 2 and not heavy[stop]:
+            stops[number] = starts[number + 1] = stop + 1
+    return [
+        Chunk(f"{prefix}{number + 1}of{len(starts)}", case_id, start, stop, base + sum(costs[start:stop]))
+        for number, (start, stop) in enumerate(zip(starts, stops))
+    ]
+
+
+def full_chain_chunks(case_ids: Sequence[str]) -> dict[str, Chunk]:
+    """The chunks of the full chain of each case, by chunk id ("C2-full-3of20")."""
+
+    return {
+        chunk.chunk_id: chunk
+        for case_id in case_ids
+        for chunk in cost_chunks(case_id, f"{case_id}-full-", matrix_variants(CASES[case_id]))
+    }
+
+
+def error_rule_failures(
+    base: tuple[str, RenderOutcome | None],
+    steps: Sequence[tuple[str, RenderOutcome]],
+) -> list[str]:
+    """The error rule for the renders of one test.
+
+    The base state must render. A step may fail only with a user-input
+    validation error (``USER_INPUT_ERRORS``): some variants and walk
+    combinations are invalid input on the base branch too. Any other error
+    fails. The accepted errors must be fewer than the steps, so a test cannot
+    pass with every step failing.
+    """
+
+    label, outcome = base
+    failures = []
+    if outcome is None or outcome.error is not None:
+        failures.append(f"{label}: the base state must render, got {outcome and outcome.error!r}")
+    accepted = 0
+    for label, outcome in steps:
+        if outcome.error is None:
+            continue
+        if outcome.user_input_error:
+            accepted += 1
+        else:
+            failures.append(f"{label}: render failed with {outcome.error!r}")
+    if steps and accepted >= len(steps):
+        failures.append(f"all {len(steps)} steps failed with a user-input validation error")
+    return failures
+
+
+def _rendered_steps(results: Sequence[StepResult]) -> list[tuple[str, RenderOutcome, RenderOutcome]]:
+    """The steps after the base that were not refused: label, warm and cold outcomes."""
+
+    return [
+        (result.label, result.warm, result.cold)
+        for result in results[1:]
+        if result.warm is not None and result.cold is not None
+    ]
+
+
+def equivalence_failures(results: Sequence[StepResult]) -> list[str]:
+    """Every step whose warm outcome differs from its cold outcome, and the error rule.
+
+    ``results[0]`` is the base state of the chain or walk. Errors are compared
+    by type and message; an error equal on both sides passes only under
+    ``error_rule_failures``.
     """
 
     failures = []
-    for result in results:
-        if result.warm is None or result.cold is None:
-            continue
+    steps = _rendered_steps(results)
+    for label, warm, cold in steps:
         try:
-            assert_same_outcome(result.warm, result.cold, result.label)
+            assert_same_outcome(warm, cold, label)
         except AssertionError as error:
             failures.append(str(error))
-            continue
-        if result.cold.error is not None:
-            failures.append(f"{result.label}: warm and cold renders failed with {result.cold.error!r}")
-    return failures
+    base = (results[0].label, results[0].cold)
+    return failures + error_rule_failures(base, [(label, cold) for label, _, cold in steps])
 
 
 def declaration_failures(results: Sequence[StepResult]) -> list[str]:
-    """Every render with an undeclared read or an uncacheable stage."""
+    """Every render with an undeclared read or an uncacheable stage, and the error rule."""
 
-    failures = []
-    for result in results:
-        for name, outcome in (("warm", result.warm), ("cold", result.cold)):
-            if outcome is None or outcome.error is not None:
-                continue
-            counts = outcome.stages
-            if counts.undeclared_read_total or counts.uncacheable_total:
-                failures.append(
-                    f"{result.label} ({name}): undeclared reads "
-                    f"{counts.undeclared_read_total} {dict(counts.undeclared_reads)}, "
-                    f"uncacheable {counts.uncacheable_total} {dict(counts.uncacheable)}"
-                )
-    return failures
-
-
-def render_errors(results: Sequence[StepResult]) -> list[str]:
-    """Renders that failed on both sides (the comparison passes, but the case is lost)."""
-
-    return [
-        f"{result.label}: {result.cold.error}"
-        for result in results
-        if result.cold is not None and result.cold.error is not None
+    base = (results[0].label, results[0].cold)
+    outcomes = [
+        (f"{label} ({name})", outcome)
+        for label, warm, cold in _rendered_steps(results)
+        for name, outcome in (("warm", warm), ("cold", cold))
     ]
+    failures = []
+    for label, outcome in (base, *outcomes):
+        if outcome is None or outcome.error is not None:
+            continue
+        counts = outcome.stages
+        if counts.undeclared_read_total or counts.uncacheable_total:
+            failures.append(
+                f"{label}: undeclared reads "
+                f"{counts.undeclared_read_total} {dict(counts.undeclared_reads)}, "
+                f"uncacheable {counts.uncacheable_total} {dict(counts.uncacheable)}"
+            )
+    return failures + error_rule_failures(base, outcomes)
 
 
 # --- Synthetic inputs for the identity cases ------------------------------------------------------
