@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from functools import lru_cache
 from typing import Literal, TypeAlias
 
@@ -2386,22 +2386,22 @@ def _dense_inner_candidate_score(
     )
 
 
+def _bounds_overlap(bounds1: tuple[float, float], bounds2: tuple[float, float]) -> bool:
+    """Return whether two (min, max) label bounds overlap; touching counts."""
+    if bounds1[0] < bounds2[0]:
+        return bounds1[1] >= bounds2[0]
+    return bounds2[1] >= bounds1[0]
+
+
 def y_overlap(label1, label2, total_len, minimum_margin):
-    min_y1, max_y1 = _label_y_bounds(label1, total_len, minimum_margin)
-    min_y2, max_y2 = _label_y_bounds(label2, total_len, minimum_margin)
-    if min_y1 < min_y2:
-        return max_y1 >= min_y2
-    else:
-        return max_y2 >= min_y1
+    return _bounds_overlap(
+        _label_y_bounds(label1, total_len, minimum_margin),
+        _label_y_bounds(label2, total_len, minimum_margin),
+    )
 
 
 def x_overlap(label1, label2, minimum_margin=1.0):
-    min_x1, max_x1 = _label_x_bounds(label1, minimum_margin)
-    min_x2, max_x2 = _label_x_bounds(label2, minimum_margin)
-    if min_x1 < min_x2:
-        return max_x1 >= min_x2
-    else:
-        return max_x2 >= min_x1
+    return _bounds_overlap(_label_x_bounds(label1, minimum_margin), _label_x_bounds(label2, minimum_margin))
 
 
 def calculate_angle_degrees(
@@ -2677,11 +2677,6 @@ def _legacy_place_labels_on_arc_fc(
         new_y = center_y + y_radius * math.sin(math.radians(angle))
         return new_x, new_y
 
-    def check_overlap(label1: dict, label2: dict, total_length: int, margin: float) -> bool:
-        return y_overlap(label1, label2, total_length, margin) and x_overlap(
-            label1, label2, minimum_margin=2
-        )
-
     if not labels:
         return []
 
@@ -2712,7 +2707,12 @@ def _legacy_place_labels_on_arc_fc(
         label["start_x"], label["start_y"] = calculate_coordinates(
             center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
         )
-        while rearranged_labels and check_overlap(label, rearranged_labels[-1], total_length, spacing_px):
+        # The previous label stays put while this one steps away from it.
+        prev_y_bounds = _label_y_bounds(rearranged_labels[-1], total_length, spacing_px)
+        prev_x_bounds = _label_x_bounds(rearranged_labels[-1], 2)
+        while _bounds_overlap(_label_y_bounds(label, total_length, spacing_px), prev_y_bounds) and _bounds_overlap(
+            _label_x_bounds(label, 2), prev_x_bounds
+        ):
             new_angle += 0.01
             label["start_x"], label["start_y"] = calculate_coordinates(
                 center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
@@ -2750,19 +2750,23 @@ def _legacy_improved_label_placement_fc(
         new_y = center_y + y_radius * math.sin(math.radians(angle))
         return new_x, new_y
 
-    def calculate_angle_of_three_points(
-        x1: float, y1: float, x2: float, y2: float, x3: float, y3: float
-    ) -> float:
-        v1 = (x1 - x2, y1 - y2)
-        v2 = (x3 - x2, y3 - y2)
-        dot_product = v1[0] * v2[0] + v1[1] * v2[1]
-        mag1 = math.sqrt(v1[0] ** 2 + v1[1] ** 2)
-        mag2 = math.sqrt(v2[0] ** 2 + v2[1] ** 2)
-        if mag1 == 0 or mag2 == 0:
-            return 0.0
-        cos_angle = dot_product / (mag1 * mag2)
-        angle = math.acos(max(-1.0, min(1.0, cos_angle)))
-        return math.degrees(angle)
+    def feature_angle_scorer(label: dict) -> Callable[[float, float], float]:
+        """Return the angle in degrees at the origin between the label's feature middle and a point."""
+        v1_x = float(label["feature_middle_x"])
+        v1_y = float(label["feature_middle_y"])
+        mag1 = math.sqrt(v1_x**2 + v1_y**2)
+
+        def angle_to(x: float, y: float) -> float:
+            v2_x = float(x)
+            v2_y = float(y)
+            dot_product = v1_x * v2_x + v1_y * v2_y
+            mag2 = math.sqrt(v2_x**2 + v2_y**2)
+            if mag1 == 0 or mag2 == 0:
+                return 0.0
+            cos_angle = dot_product / (mag1 * mag2)
+            return math.degrees(math.acos(max(-1.0, min(1.0, cos_angle))))
+
+        return angle_to
 
     def check_overlap(label1: dict, label2: dict, total_length: int) -> bool:
         return y_overlap(label1, label2, total_length, y_margin) and x_overlap(
@@ -2791,9 +2795,8 @@ def _legacy_improved_label_placement_fc(
                 normalize=False,
             )
 
-            current_score = calculate_angle_of_three_points(
-                label["feature_middle_x"], label["feature_middle_y"], 0.0, 0.0, label["start_x"], label["start_y"]
-            )
+            feature_angle = feature_angle_scorer(label)
+            current_score = feature_angle(label["start_x"], label["start_y"])
 
             if idx == 0:
                 overlaps_prev = check_overlap(label, labels[reverse_idx - 1], total_length)
@@ -2815,63 +2818,52 @@ def _legacy_improved_label_placement_fc(
             else:
                 test_angle_plus = current_angle + 1.0
                 test_x_plus, test_y_plus = move_label(label, test_angle_plus)
-                score_plus = calculate_angle_of_three_points(
-                    label["feature_middle_x"], label["feature_middle_y"], 0.0, 0.0, test_x_plus, test_y_plus
-                )
+                score_plus = feature_angle(test_x_plus, test_y_plus)
 
                 test_angle_minus = current_angle - 1.0
                 test_x_minus, test_y_minus = move_label(label, test_angle_minus)
-                score_minus = calculate_angle_of_three_points(
-                    label["feature_middle_x"], label["feature_middle_y"], 0.0, 0.0, test_x_minus, test_y_minus
-                )
+                score_minus = feature_angle(test_x_minus, test_y_minus)
                 direction = 1 if abs(score_plus) < abs(score_minus) else -1
 
+            # The labels this move must not run into; they stay put while this label steps.
+            if idx == 0:
+                prev_label, next_label = labels[reverse_idx - 1], labels[0]
+            elif 0 < idx < len(labels) - 1:
+                prev_label, next_label = labels[reverse_idx - 1], labels[reverse_idx + 1]
+            else:
+                prev_label, next_label = labels[-1], labels[reverse_idx + 1]
+            if overlaps_prev:
+                fixed_labels = [next_label]
+            elif overlaps_next:
+                fixed_labels = [prev_label]
+            else:
+                fixed_labels = [prev_label, next_label]
+            fixed_bounds = [
+                (_label_y_bounds(other, total_length, y_margin), _label_x_bounds(other, 1)) for other in fixed_labels
+            ]
+            label_copy = label.copy()
             while True:
                 new_angle = current_angle + direction * 0.05
                 new_x, new_y = move_label(label, new_angle)
-                new_score = calculate_angle_of_three_points(
-                    label["feature_middle_x"], label["feature_middle_y"], 0.0, 0.0, new_x, new_y
-                )
-
-                label_copy = label.copy()
-                label_copy["start_x"], label_copy["start_y"] = new_x, new_y
-                if idx == 0:
-                    if overlaps_prev:
-                        creates_new_overlap = check_overlap(label_copy, labels[0], total_length)
-                    elif overlaps_next:
-                        creates_new_overlap = check_overlap(label_copy, labels[reverse_idx - 1], total_length)
-                    else:
-                        creates_new_overlap = check_overlap(label_copy, labels[reverse_idx - 1], total_length) or check_overlap(
-                            label_copy, labels[0], total_length
-                        )
-                elif 0 < idx < len(labels) - 1:
-                    prev_label = labels[reverse_idx - 1]
-                    next_label = labels[reverse_idx + 1]
-                    if overlaps_prev:
-                        creates_new_overlap = check_overlap(label_copy, next_label, total_length)
-                    elif overlaps_next:
-                        creates_new_overlap = check_overlap(label_copy, prev_label, total_length)
-                    else:
-                        creates_new_overlap = check_overlap(label_copy, prev_label, total_length) or check_overlap(
-                            label_copy, next_label, total_length
-                        )
-                else:
-                    if overlaps_prev:
-                        creates_new_overlap = check_overlap(label_copy, labels[reverse_idx + 1], total_length)
-                    elif overlaps_next:
-                        creates_new_overlap = check_overlap(label_copy, labels[-1], total_length)
-                    else:
-                        creates_new_overlap = check_overlap(label_copy, labels[-1], total_length) or check_overlap(
-                            label_copy, labels[reverse_idx + 1], total_length
-                        )
-
-                if (abs(new_score) <= abs(current_score)) and not creates_new_overlap:
-                    label["start_x"], label["start_y"] = new_x, new_y
-                    current_angle = new_angle
-                    current_score = new_score
-                    changes_made = True
-                else:
+                new_score = feature_angle(new_x, new_y)
+                if not abs(new_score) <= abs(current_score):
                     break
+
+                label_copy["start_x"], label_copy["start_y"] = new_x, new_y
+                new_y_bounds = _label_y_bounds(label_copy, total_length, y_margin)
+                creates_new_overlap = False
+                for other_y_bounds, other_x_bounds in fixed_bounds:
+                    if _bounds_overlap(new_y_bounds, other_y_bounds) and _bounds_overlap(
+                        _label_x_bounds(label_copy, 1), other_x_bounds
+                    ):
+                        creates_new_overlap = True
+                        break
+                if creates_new_overlap:
+                    break
+                label["start_x"], label["start_y"] = new_x, new_y
+                current_angle = new_angle
+                current_score = new_score
+                changes_made = True
         if not changes_made:
             break
 
