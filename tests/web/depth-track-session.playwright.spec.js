@@ -1950,6 +1950,29 @@ ORIGIN
   });
 });
 
+// OV-652 (BA-D07): the Web reads a legend position outside its mode's set
+// like an absent one, so the Session loads with the mode's default and the
+// request Generate sends is one Python accepts.
+test('a Session legend position outside its mode loads as the mode default and generates (OV-652)', async ({ page }) => {
+  test.setTimeout(420000);
+  const session = JSON.parse(readFileSync(
+    join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json'), 'utf8'
+  ));
+  expect(session.modes.linear.ui.layoutPreferences.legend).toBe('left');
+  session.modes.linear.ui.layoutPreferences.legend = 'Upper_Left';
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').first().setInputFiles({
+    name: 'legend-position.gbdraw-session.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(session))
+  });
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+  await expect.soft(await reveal(page.locator('#legend-position'))).toHaveValue('bottom');
+  await generateAndWaitForResult(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.legend)).toBe('bottom');
+});
+
 test('P3 Custom Track drafts survive fresh-page session re-save and Reset history', async ({ page }) => {
   test.setTimeout(180000);
   const recordText = readFileSync(hmmtDnaPath, 'utf8');

@@ -9,6 +9,7 @@ import {
 import { resultCatalogFeatures } from './services/feature-catalog.js';
 import {
   createDefaultLayoutPreferences,
+  legendPositionOrDefault,
   normalizeCircularPlotTitlePosition,
   resolveActiveLayoutPreference,
   updateActiveLayoutPreference
@@ -645,14 +646,14 @@ const generatedMode = ref('circular');
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
 /** @param {unknown} value */
-const normalizeCircularLegendPosition = (value) => String(value || '').trim().toLowerCase() || 'left';
+const circularLegendPosition = (value) => legendPositionOrDefault(value, 'circular');
 const shouldDeferCircularPreviewUpdates = computed(() => {
   const { form, adv } = drawings.circular;
   return generatedMode.value === 'circular' &&
     mode.value === 'circular' &&
     (
       Boolean(form.multi_record_canvas) !== Boolean(generatedMultiRecordCanvas.value) ||
-      normalizeCircularLegendPosition(form.legend) !== normalizeCircularLegendPosition(generatedLegendPosition.value) ||
+      circularLegendPosition(form.legend) !== circularLegendPosition(generatedLegendPosition.value) ||
       normalizeCircularPlotTitlePosition(adv.plot_title_position) !==
         normalizeCircularPlotTitlePosition(generatedCircularPlotTitlePosition.value)
     );

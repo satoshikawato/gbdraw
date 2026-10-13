@@ -48,6 +48,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
 )
+from gbdraw.layout.composition import LegendPlacement
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.mode_profiles import (
     ComparisonThresholds,
@@ -437,6 +438,26 @@ CircularTrackOptions = CircularRequestTrackOptions
 LinearTrackOptions = LinearRequestTrackOptions
 
 
+# The legend positions of each mode: the layout's placements, without the
+# corner (overlay) ones in Linear. The output options check them, and
+# tools/generate_web_contracts.py writes them into the Web's
+# contracts/schema.generated.js.
+LEGEND_POSITIONS: Mapping[DiagramMode, tuple[str, ...]] = MappingProxyType(
+    {
+        "circular": tuple(placement.value for placement in LegendPlacement),
+        "linear": tuple(placement.value for placement in LegendPlacement if not placement.is_overlay),
+    }
+)
+
+
+def _validate_legend_position(legend: object, mode: DiagramMode) -> None:
+    positions = LEGEND_POSITIONS[mode]
+    if not isinstance(legend, str) or legend not in positions:
+        raise ValidationError(
+            f"{mode.capitalize()} legend must be one of: {', '.join(positions)}."
+        )
+
+
 @dataclass(frozen=True)
 class CircularOutputOptions:
     """Circular legend and title placement options."""
@@ -445,21 +466,7 @@ class CircularOutputOptions:
     plot_title_position: Literal["none", "top", "bottom"] | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.legend, str) or self.legend not in {
-            "left",
-            "right",
-            "top",
-            "bottom",
-            "upper_left",
-            "upper_right",
-            "lower_left",
-            "lower_right",
-            "none",
-        }:
-            raise ValidationError(
-                "Circular legend must be one of: left, right, top, bottom, "
-                "upper_left, upper_right, lower_left, lower_right, none."
-            )
+        _validate_legend_position(self.legend, "circular")
         if self.plot_title_position not in {None, "none", "top", "bottom"}:
             raise ValidationError(
                 "Circular plot_title_position must be one of: none, top, bottom."
@@ -474,16 +481,7 @@ class LinearOutputOptions:
     plot_title_position: Literal["center", "top", "bottom"] | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.legend, str) or self.legend not in {
-            "left",
-            "right",
-            "top",
-            "bottom",
-            "none",
-        }:
-            raise ValidationError(
-                "Linear legend must be one of: left, right, top, bottom, none."
-            )
+        _validate_legend_position(self.legend, "linear")
         if self.plot_title_position not in {None, "center", "top", "bottom"}:
             raise ValidationError(
                 "Linear plot_title_position must be one of: center, top, bottom."
