@@ -5803,11 +5803,11 @@ const withDesignRuleGuardRepository = (runCase, {
   registry = DESIGN_RULE_REGISTRY,
   sources = { [DESIGN_RULE_GUARD_TEST_PATH]: designRuleGuardTestSource() }
 } = {}) => (
-  withChangeBudgetRepository(({ commit, execute, root, write }) => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     write(DESIGN_RULE_GUARD_REGISTRY_PATH, registry);
     Object.entries(sources).forEach(([path, content]) => write(path, content));
-    commit('register design-rule guards');
-    return runCase({ execute, root, write });
+    const base = commit('register design-rule guards');
+    return runCase({ base, commit, execute, git, root, write });
   })
 );
 const runtimeChange = (write) => {
@@ -6241,7 +6241,8 @@ test('a Python design-rule baseline cannot expand alongside Python package files
   });
   // Python has no `const`: a baseline is read only when one module-level
   // assignment is the single place that binds or changes the name. A removed
-  // baseline contracted.
+  // baseline contracts, but alongside production code its test has lost a
+  // registered literal (design-rule.count-scope).
   const pythonSource = designRuleGuardSources2()[DESIGN_RULE_PYTHON_GUARD_PATH];
   const declaration = 'TYPE_DEBT_BASELINE: dict[str, int] = ';
   const unreadable = `${blocked.source}\\(${designRuleSubjectPattern('TYPE_DEBT_BASELINE', 'unreadable')}\\)`;
@@ -6262,7 +6263,9 @@ test('a Python design-rule baseline cannot expand alongside Python package files
     [withStatement('from tests.other_baselines import TYPE_DEBT_BASELINE')],
     [withStatement('import tests.other_baselines as TYPE_DEBT_BASELINE')],
     [withStatement('def _grow():\n    global TYPE_DEBT_BASELINE\n    TYPE_DEBT_BASELINE = {"gbdraw/cli.py": 3}')],
-    [pythonSource.replace(/^TYPE_DEBT_BASELINE.*\n/m, '').replace('TYPE_DEBT_BASELINE is not None and ', ''), 0, '- contraction: TYPE-DEBT [^\\n]*#TYPE_DEBT_BASELINE\\n']
+    [pythonSource.replace(/^TYPE_DEBT_BASELINE.*\n/m, '').replace('TYPE_DEBT_BASELINE is not None and ', ''), 1,
+      '^(?=[\\s\\S]*- contraction: TYPE-DEBT [^\\n]*#TYPE_DEBT_BASELINE\\n)(?=[\\s\\S]*design-rule\\.count-scope: [^\\n]*'
+      + 'tests/test_design_rule_guard_fixture\\.py \\(registered literal missing or unreadable\\))']
   ].forEach(([source, status = 1, expected = unreadable]) => {
     withDesignRuleGuardRepository2(({ execute, write }) => {
       assert.notEqual(source, pythonSource);
@@ -6302,7 +6305,7 @@ test('the design-rule guard registry parser validates each schema 2 field and ke
   malformed((rules) => { rules[1].id = 'type-debt'; }, 'rules[1].id: expected R<n>, or an upper-case id with its own rulesPath');
   malformed((rules) => { rules[1].rulesPath = ''; }, 'rules[1].rulesPath: expected a path');
   malformed((rules) => { rules[1].id = 'R10'; }, 'rules[1].id: duplicate R10');
-  malformed((rules) => { rules[1].allowlists[0].kind = 'py-map'; }, 'rules[1].allowlists[0].kind: expected one of count, count-map, set, writer-map, set-map, json-entries, py-count, py-count-map, py-set');
+  malformed((rules) => { rules[1].allowlists[0].kind = 'py-map'; }, 'rules[1].allowlists[0].kind: expected one of count, count-map, set, writer-map, set-map, json-entries, json-ids, py-count, py-count-map, py-set');
   // Schema 1 reads as before: bare path guards, R<n> ids, and its four kinds.
   malformed((rules) => { rules.pop(); }, 'rules[0].guards: expected an array of paths', 1);
   malformed((rules) => {
@@ -6384,6 +6387,299 @@ test('the head-registry check resolves schema 2 guards, a rule\'s own rulesPath,
     assert.throws(() => gate(JSON.stringify(registry), root), unreadable('TYPE_DEBT_BASELINE', 'unreadable'));
     assert.throws(() => gate(JSON.stringify(registry), root), unreadable('FROZEN', 'unreadable'));
   });
+});
+
+// design-rule.count-scope (BA-OD40 (d), form B): a test that holds a count
+// baseline counts with its own code, so with production code it may change
+// only inside its registered literals.
+const countScope = (detail) => new RegExp(
+  'design-rule\\.count-scope: the test or counting code of a registered count baseline changed '
+  + `alongside production runtime files \\([^\\n]*${detail}`
+);
+const escaped = (path) => path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+test('a count-baseline test changes only inside its registered literals alongside runtime files', () => {
+  // The counting code narrows (here: one more line of test code).
+  const narrowed = `${designRuleGuardTestSource()}const COUNTED = (path) => path.startsWith('app/');\nvoid COUNTED;\n`;
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, narrowed);
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, countScope(escaped(DESIGN_RULE_GUARD_TEST_PATH)));
+  });
+  withDesignRuleGuardRepository(({ execute, root, write }) => {
+    runtimeChange(write);
+    rmSync(join(root, DESIGN_RULE_GUARD_TEST_PATH));
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, countScope(`${escaped(DESIGN_RULE_GUARD_TEST_PATH)} \\(deleted\\)`));
+  });
+  // Without production code the same change is a test change; inside the
+  // literals (a lowered count) it passes with production code.
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    write(DESIGN_RULE_GUARD_TEST_PATH, narrowed);
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.doesNotMatch(result.output, /design-rule\.count-scope/);
+  });
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({ baseline: 45, throwBaseline: "{ 'app/a.js': 2 }" }));
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.doesNotMatch(result.output, /design-rule\.count-scope/);
+  });
+  // A Python count baseline: a package change counts as production; a test
+  // with set literals only is not a count-baseline test.
+  withDesignRuleGuardRepository2(({ execute, write }) => {
+    pythonProductionChange(write);
+    const source = designRuleGuardSources2();
+    write(DESIGN_RULE_PYTHON_GUARD_PATH, source[DESIGN_RULE_PYTHON_GUARD_PATH].replace(
+      '    for path in UNPROVEN_BASELINE:',
+      '    for path in [p for p in UNPROVEN_BASELINE if p.startswith("gbdraw/api/")]:'
+    ));
+    write(DESIGN_RULE_GUARD_TEST_PATH, `${source[DESIGN_RULE_GUARD_TEST_PATH]}void 0;\n`);
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, countScope(escaped(DESIGN_RULE_PYTHON_GUARD_PATH)));
+    assert.doesNotMatch(result.output, /count-scope[^\n]*design-rule-guard-fixture\.test\.mjs/);
+  });
+});
+
+// F1: a registered literal that the head no longer holds as a readable
+// literal (a `let`, an indirection, a rename everywhere, a move into another
+// file) leaves the counting code free, so it is a count-scope change.
+test('a count-baseline test keeps its registered literals readable alongside runtime files', () => {
+  const missing = (path) => countScope(`${escaped(path)} \\(registered literal missing or unreadable\\)`);
+  const literal = '  const BASELINE = 46;';
+  const cases = {
+    let: (source) => source.replace(literal, '  let BASELINE = 99;'),
+    indirection: (source) => source.replace(literal, '  const BASELINE_NEXT = 99;\n  const BASELINE = BASELINE_NEXT;'),
+    renamed: (source) => source.replaceAll('BASELINE', 'CEILING').replace('const CEILING = 46;', 'const CEILING = 99;'),
+    moved: (source) => `import { BASELINE } from './count-literal.mjs';\n${source.replace(`${literal}\n`, '')}`
+  };
+  Object.entries(cases).forEach(([name, edit]) => withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, edit(designRuleGuardTestSource()));
+    if (name === 'moved') write('tests/web/count-literal.mjs', 'export const BASELINE = 99;\n');
+    const result = execute();
+    assert.equal(result.status, 1, `${name}: ${result.output}`);
+    assert.match(result.output, missing(DESIGN_RULE_GUARD_TEST_PATH), name);
+  }));
+  // Python: TYPE_DEBT_BASELINE renamed everywhere in the file.
+  withDesignRuleGuardRepository2(({ execute, write }) => {
+    pythonProductionChange(write);
+    const source = designRuleGuardSources2()[DESIGN_RULE_PYTHON_GUARD_PATH];
+    write(DESIGN_RULE_PYTHON_GUARD_PATH, source.replaceAll('TYPE_DEBT_BASELINE', 'TYPE_DEBT_CEILING'));
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, missing(DESIGN_RULE_PYTHON_GUARD_PATH));
+  });
+  // Without production code the same edits are test changes.
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    write(DESIGN_RULE_GUARD_TEST_PATH, cases.let(designRuleGuardTestSource()));
+    assert.doesNotMatch(execute().output, /design-rule\.count-scope/);
+  });
+});
+
+// F2: the code that counts for a registered count baseline outside its test
+// file (the shared comparison helper, the owner-graph report, the tsconfig the
+// type ratchets count with) does not change alongside production code either.
+const COUNTING_CODE_PATHS = Object.freeze([
+  'tests/web/helpers/count-baseline.mjs',
+  'tests/web/types/tsconfig.json',
+  'tests/web/types/web-globals.d.ts',
+  'tools/report-web-owner-graph.mjs'
+]);
+test('the counting code of the count baselines does not change alongside runtime files', () => {
+  const source = (path) => (path.endsWith('.json')
+    ? '{ "include": ["../../../gbdraw/web/js/**/*.js"] }\n'
+    : 'export const compareCountBaseline = (row) => row.observed > row.recorded;\n');
+  const weakened = (path) => source(path)
+    .replace('"../../../gbdraw/web/js/**/*.js"', '"../../../gbdraw/web/js/app/*.js"')
+    .replace('row.observed > row.recorded', 'false');
+  COUNTING_CODE_PATHS.forEach((path) => {
+    withDesignRuleGuardRepository(({ execute, root, write }) => {
+      runtimeChange(write);
+      write(path, weakened(path));
+      const result = execute();
+      assert.equal(result.status, 1, `${path}: ${result.output}`);
+      assert.match(result.output, countScope(escaped(path)), path);
+      write(path, source(path));
+      rmSync(join(root, path));
+      const deleted = execute();
+      assert.equal(deleted.status, 1, `${path}: ${deleted.output}`);
+      assert.match(deleted.output, countScope(`${escaped(path)} \\(deleted\\)`), path);
+    }, {
+      sources: { [DESIGN_RULE_GUARD_TEST_PATH]: designRuleGuardTestSource(), [path]: source(path) }
+    });
+    withDesignRuleGuardRepository(({ execute, write }) => {
+      write(path, weakened(path));
+      assert.doesNotMatch(execute().output, /design-rule\.count-scope/, path);
+    }, {
+      sources: { [DESIGN_RULE_GUARD_TEST_PATH]: designRuleGuardTestSource(), [path]: source(path) }
+    });
+  });
+});
+
+test('every count-baseline test counts only with counting code or guard paths', () => {
+  const checker = readFileSync(CHANGE_BUDGET_CHECKER, 'utf8');
+  const pathSet = (name) => (checker.match(new RegExp(`const ${name} = new Set\\(\\[([\\s\\S]*?)\\]\\);`))?.[1] || '')
+    .split(',').map((item) => item.trim()).filter(Boolean)
+    .map((item) => item.match(/^'([^']+)'$/)?.[1] || checker.match(new RegExp(`const ${item} = '([^']+)';`))?.[1]);
+  assert.deepEqual(pathSet('COUNTING_CODE_PATHS').sort(), [...COUNTING_CODE_PATHS]);
+  const guards = new Set(pathSet('guardPaths'));
+  const registry = JSON.parse(readFileSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH), 'utf8'));
+  const countFiles = new Set(registry.rules.flatMap((rule) => rule.allowlists)
+    .filter(({ kind }) => /^(py-)?count(-map)?$/.test(kind))
+    .map(({ path }) => path));
+  // Every module a count-baseline test imports outside the package, directly
+  // or through such a module, can change the count: it is counting code or a
+  // guard path.
+  const pending = [...countFiles].filter((path) => path.endsWith('.mjs'));
+  const seen = new Set(pending);
+  while (pending.length) {
+    const path = pending.pop();
+    const source = readFileSync(join(REPOSITORY_ROOT, path), 'utf8');
+    for (const [, specifier] of source.matchAll(/^import [^;]*? from '(\.{1,2}\/[^']+)';$/gm)) {
+      const target = posix.join(posix.dirname(path), specifier);
+      if (target.startsWith('gbdraw/') || seen.has(target)) continue;
+      seen.add(target);
+      assert.ok(
+        COUNTING_CODE_PATHS.includes(target) || guards.has(target),
+        `${target} (imported by ${path}) counts for a registered count baseline but is neither counting code nor a guard path`
+      );
+      if (COUNTING_CODE_PATHS.includes(target)) pending.push(target);
+    }
+  }
+  assert.ok(seen.has('tests/web/helpers/count-baseline.mjs') && seen.has('tools/report-web-owner-graph.mjs'));
+  // The type ratchets count with tsc (explicit-any-ratchet's TSCONFIG,
+  // no-implicit-any-ratchet's RATCHET_CONFIG and what it extends): every file
+  // their configs include outside the package (a declaration file can type a
+  // read as `any`) is counting code, and no glob there reaches outside it.
+  const typeConfigs = ['tests/web/types/tsconfig.json', 'tests/web/types/tsconfig.no-implicit-any.json'];
+  const included = [];
+  for (let config = typeConfigs.pop(); config; config = typeConfigs.pop()) {
+    const parsed = JSON.parse(readFileSync(join(REPOSITORY_ROOT, config), 'utf8'));
+    const resolveEntry = (entry) => posix.join(posix.dirname(config), entry);
+    if (parsed.extends) typeConfigs.push(resolveEntry(parsed.extends));
+    included.push(...[...(parsed.include || []), ...(parsed.files || [])].map(resolveEntry));
+  }
+  const outsidePackage = included.filter((path) => !path.startsWith('gbdraw/'));
+  assert.ok(outsidePackage.length, included.join(', '));
+  outsidePackage.forEach((path) => {
+    assert.doesNotMatch(path, /[*?]/, `${path}: a type-ratchet glob reaches outside the package`);
+    assert.ok(COUNTING_CODE_PATHS.includes(path), `${path} is included by a type-ratchet config but is not counting code`);
+  });
+});
+
+// F3 (remedy b): a runtime move that a count-baseline test follows by path
+// (#927 moved app/linear-comparisons.js to services/) cannot be split, so a
+// path string that names the old path of a rename in the same diff may name
+// the new path. Any other edit is still a count-scope change.
+test('a count-baseline test follows a runtime move by path alongside runtime files', () => {
+  const from = 'gbdraw/web/js/app/linear-comparisons.js';
+  const to = 'gbdraw/web/js/services/linear-comparisons.js';
+  const module = 'export const createDefaultLinearComparisonPlan = () => ({\n  comparisons: [],\n  thresholds: { identity: 0, length: 0 }\n});\n';
+  const withPaths = (specifier, source) => [
+    `import { createDefaultLinearComparisonPlan } from '${specifier}';`,
+    `const SOURCE = '${source}'; // read by path`,
+    'void createDefaultLinearComparisonPlan; void SOURCE;',
+    designRuleGuardTestSource()
+  ].join('\n');
+  const before = withPaths('../../gbdraw/web/js/app/linear-comparisons.js', 'app/linear-comparisons.js');
+  const after = withPaths('../../gbdraw/web/js/services/linear-comparisons.js', 'services/linear-comparisons.js');
+  const run = (edit, { rename = true } = {}) => withDesignRuleGuardRepository(({ base, commit, execute, root, write }) => {
+    runtimeChange(write);
+    if (rename) {
+      rmSync(join(root, from));
+      write(to, module);
+    } else {
+      write(from, 'export const createDefaultLinearComparisonPlan = () => null;\n');
+      write(to, 'export const other = 1;\n');
+    }
+    write(DESIGN_RULE_GUARD_TEST_PATH, edit);
+    return execute({ base, head: commit('move') });
+  }, { sources: { [DESIGN_RULE_GUARD_TEST_PATH]: before, [from]: module } });
+  const moved = run(after);
+  assert.doesNotMatch(moved.output, /design-rule\.count-scope/, moved.output);
+  // A lowered literal is still allowed with the move.
+  assert.doesNotMatch(run(after.replace('const BASELINE = 46;', 'const BASELINE = 45;')).output, /design-rule\.count-scope/);
+  const refused = {
+    'another path': after.replace("'services/linear-comparisons.js'", "'services/other.js'"),
+    'a path without a rename': after,
+    'another edit': after.replace('// read by path', '').replace('void SOURCE;', 'void SOURCE; void 0;'),
+    'a narrowed count': after.replace('test(\'baseline\'', 'test.skip(\'baseline\'')
+  };
+  Object.entries(refused).forEach(([name, edit]) => {
+    const result = run(edit, { rename: name !== 'a path without a rename' });
+    assert.equal(result.status, 1, `${name}: ${result.output}`);
+    assert.match(result.output, countScope(escaped(DESIGN_RULE_GUARD_TEST_PATH)), name);
+  });
+});
+
+// BA-D10: a rule's text is authority. The Gate checks the candidate registry
+// whenever it changes; an unchanged trusted registry is not re-checked.
+// json-ids (schema 2): the ids of a JSON list are a shrink-only set; a row's
+// other fields (owners, reason, retireWhen) change freely.
+test('a json-ids allowlist compares only the entry ids', () => {
+  const TWINS_PATH = 'tools/twins.json';
+  const row = (id, extra = {}) => ({ id, pythonOwner: ['gbdraw/a.py:f'], jsOwner: ['gbdraw/web/js/services/a.js:f'], reason: 'r', retireWhen: 'w', ...extra });
+  const twins = (rows) => `${JSON.stringify({ schemaVersion: 1, twins: rows }, null, 2)}\n`;
+  const rules = designRuleRules2();
+  rules[0].allowlists.push({ path: TWINS_PATH, symbol: 'twins', kind: 'json-ids' });
+  const subject = `R10 ${TWINS_PATH}#twins`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const base = [row('function:a'), row('function:b')];
+  const run = (rows) => withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(TWINS_PATH, twins(rows));
+    return execute();
+  }, {
+    registry: designRuleGuardRegistrySource(rules, 2),
+    sources: { ...designRuleGuardSources2(), [TWINS_PATH]: twins(base) }
+  });
+  const added = run([...base, row('function:c')]);
+  assert.equal(added.status, 1, added.output);
+  assert.match(added.output, new RegExp(`design-rule\\.co-change: [^\\n]*${subject} \\(expansion\\)`));
+  const removed = run([base[0]]);
+  assert.equal(removed.status, 0, removed.output);
+  assert.match(removed.output, new RegExp(`- contraction: ${subject}\\n`));
+  const edited = run([row('function:a', { jsOwner: ['gbdraw/web/js/services/b.js:f'], reason: 'moved', retireWhen: 'later' }), base[1]]);
+  assert.equal(edited.status, 0, edited.output);
+  assert.doesNotMatch(edited.output, new RegExp(subject));
+});
+
+test('a candidate guard registry names only authority paths as rule files', () => {
+  const rulesPathError = /candidate design-rule guard registry: rules\[1\] TYPE-DEBT: rulesPath CLAUDE\.md is not an authority path/;
+  withDesignRuleGuardRepository2(({ execute, write }) => {
+    const unchanged = execute();
+    assert.doesNotMatch(unchanged.output, /candidate design-rule guard registry/);
+    write(DESIGN_RULE_GUARD_REGISTRY_PATH, `${designRuleGuardRegistrySource(designRuleRules2(), 2)}\n`);
+    const reformatted = execute();
+    assert.equal(reformatted.status, 1, reformatted.output);
+    assert.match(reformatted.output, rulesPathError);
+    const rules = designRuleRules2();
+    rules[1].rulesPath = 'docs/internal/WEB_CHANGE_POLICY.md';
+    write(DESIGN_RULE_GUARD_REGISTRY_PATH, designRuleGuardRegistrySource(rules, 2));
+    const moved = execute();
+    assert.doesNotMatch(moved.output, /candidate design-rule guard registry/);
+  });
+});
+
+test('the twin detector is pre-registered checker implementation and a guard path', () => {
+  const checker = readFileSync(CHANGE_BUDGET_CHECKER, 'utf8');
+  assert.match(checker, /const twinDetectorsPath = 'tools\/web-twin-detectors\.mjs';/);
+  const guardBlock = checker.match(/const guardPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  const implementationBlock = checker.match(/const checkerImplementationPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  assert.match(guardBlock, /twinDetectorsPath/);
+  assert.match(implementationBlock, /twinDetectorsPath/);
+  const result = runChangeBudgetCase((write) => {
+    write('gbdraw/web/js/services/session-file.js', 'export const readSession = () => ({ version: 2 });\n');
+    write('tools/web-twin-detectors.mjs', 'export const TWIN_DETECTOR_ID = "twin.unregistered.v1";\n');
+  });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /production runtime files and Web guard\/CI files changed together/);
 });
 
 test('the Web design rules and the guard registry are pre-registered guard and authority paths', () => {
@@ -6528,7 +6824,9 @@ const guardRegistryProblems = (registry, {
     return undefined;
   };
   registry.rules.forEach((rule) => {
-    const named = new Set(namedTestPaths(ruleSection(read(rule.rulesPath || registry.rulesPath), rule.heading)));
+    // A rule may also register a JSON allowlist under tools/ that it names.
+    const section = ruleSection(read(rule.rulesPath || registry.rulesPath), rule.heading);
+    const named = new Set([...namedTestPaths(section), ...(section.match(/\btools\/[\w.-]+\.json\b/g) || [])]);
     [...new Set(registeredPaths(rule))].filter((path) => !named.has(path)).forEach((path) => {
       problems.unnamed.push(`${rule.id} registers ${path}, which "${rule.heading}" does not name`);
     });
@@ -6574,6 +6872,15 @@ test('the guard registry check reports an unregistered path, an unnamed guard, a
   moved.rules.find(({ id }) => id === 'R8').guards.push(rule('R12').guards.find(({ path }) => path.endsWith('run-info.test.mjs')));
   assert.deepEqual(guardRegistryProblems(moved).unnamed, [
     'R8 registers tests/web/run-info.test.mjs, which "R8: The Multi-Record Canvas owns placement only" does not name'
+  ]);
+  // A rule may register a tools/*.json allowlist that its section names; an
+  // unnamed one is still reported.
+  const withTwins = structuredClone(registry);
+  withTwins.rules.find(({ id }) => id === 'R13').allowlists.push({ path: 'tools/twins.json', symbol: 'twins', kind: 'json-ids' });
+  const namingTwins = (path) => read(path).replace('### R13: Owner layering and ports\n', '$&\nTwins: `tools/twins.json`.\n');
+  assert.deepEqual(guardRegistryProblems(withTwins, { read: namingTwins }).unnamed, []);
+  assert.deepEqual(guardRegistryProblems(withTwins).unnamed, [
+    'R13 registers tools/twins.json, which "R13: Owner layering and ports" does not name'
   ]);
 
   // A node test no job selects, and the fixture that only that test reads.

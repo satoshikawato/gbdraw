@@ -1,0 +1,952 @@
+{
+  "schemaVersion": 1,
+  "description": "Logic that Python and the Web each implement (boundary audit M2). tests/web/twin-registry.test.mjs requires a row for every twin that twin.unregistered.v1 (tools/web-twin-detectors.mjs) detects and no vector: or function: row it does not detect; constant: and concern: rows record twins it does not see. Rows leave when a side is deleted; a new row is an authority change.",
+  "twins": [
+    {
+      "id": "vector:tests/fixtures/auto_size_vectors.json",
+      "concern": "Auto size values by record length (size class)",
+      "pythonOwner": [
+        "gbdraw/auto_sizes.py:auto_setting_values"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/track-slot-display.js:sizeClassForRecordLengths",
+        "gbdraw/web/js/app/auto-value-display.js:createAutoValueDisplay"
+      ],
+      "vector": "tests/fixtures/auto_size_vectors.json",
+      "reason": "The Web shows the automatic value before Generate; the vector pins its size class to Python's (the Web reads the label font size only).",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/circular_tick_anchor_vectors.json",
+      "concern": "Circular ticks-row anchor radius (GX-18)",
+      "pythonOwner": [
+        "gbdraw/diagrams/circular/radial_layout.py:resolve_circular_radial_layout"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/track-slot-display.js:tickAnchorRadiusFactor"
+      ],
+      "vector": "tests/fixtures/circular_tick_anchor_vectors.json",
+      "reason": "The track-slot editor shows the tick note at the anchor Python draws; 32 vectors recomputed from Python pin the Web factor.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (circular radial layout; TK-13, GX-18)"
+    },
+    {
+      "id": "vector:tests/fixtures/cli-writer-config-vectors.json",
+      "concern": "A CLI-written Session 40-41 config holds no Web draft (OV-269)",
+      "pythonOwner": [
+        "gbdraw/session_io.py:_holds_cli_writer_config"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-active-config-contract.js:holdsCliWriterConfig"
+      ],
+      "vector": "tests/fixtures/cli-writer-config-vectors.json",
+      "reason": "Both Load paths decide whether a stored config is a CLI writer's; 13 cases pin them.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (feature catalog promotion, CLI-writer config; OV-269, OV-273)"
+    },
+    {
+      "id": "vector:tests/fixtures/comparison_ring_default_label_cases.json",
+      "concern": "Default comparison ring label from the file name (D-03)",
+      "pythonOwner": [
+        "gbdraw/io/comparison_sequences.py:comparison_file_stem"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/conservation-series.js:defaultConservationSeriesLabel"
+      ],
+      "vector": "tests/fixtures/comparison_ring_default_label_cases.json",
+      "reason": "The Web names a ring before Python reads the file; the shared cases pin the stem.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (ring default label; OV-202, OV-203)"
+    },
+    {
+      "id": "vector:tests/fixtures/default_color_domain.json",
+      "concern": "Accepted color domain of a Default colors table (-d)",
+      "pythonOwner": [
+        "gbdraw/io/colors.py:is_user_color"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/utils/color-utils.js:normalizeDefaultColor",
+        "gbdraw/web/js/services/file-imports.js:parseColorTable"
+      ],
+      "vector": "tests/fixtures/default_color_domain.json",
+      "reason": "The Web editor checks a table row as the user types; the vector pins it to the Python check. OV-272 (one documented domain) waits for the Owner.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (colour validity; OV-272, OV-302)"
+    },
+    {
+      "id": "vector:tests/fixtures/feature-edit-migration-vectors.json",
+      "concern": "Session 31-44 rendered-ID feature edits and legacy source reads",
+      "pythonOwner": [
+        "gbdraw/session_io.py:migrate_session_feature_edits",
+        "gbdraw/session_migration.py:legacy_source_reads"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-request.js:projectCanonicalSessionRequest"
+      ],
+      "vector": "tests/fixtures/feature-edit-migration-vectors.json",
+      "reason": "Partly shared: the Web test runs only the source-read cases of the vector; the edit cases run in Python only.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (placement drafts, rendered-ID edits, annotation targets; OV-102, OV-114, OV-133)"
+    },
+    {
+      "id": "vector:tests/fixtures/feature-placement-migration.json",
+      "concern": "Session 41-44 placement drafts scoped by mode",
+      "pythonOwner": [
+        "gbdraw/session_io.py:_migrate_session_feature_placements"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionFeaturePlacements"
+      ],
+      "vector": "tests/fixtures/feature-placement-migration.json",
+      "reason": "Web Load and CLI replay of a Session 41-44 must place features alike; 11 input rows pin them.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (placement drafts; OV-102, OV-132)"
+    },
+    {
+      "id": "vector:tests/fixtures/feature_drawn_cases.json",
+      "concern": "Is this feature drawn (visibility rules, overrides, selected records; R4)",
+      "pythonOwner": [
+        "gbdraw/features/visibility.py:should_render_feature"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-visibility.js:resolveFeatureDrawn"
+      ],
+      "vector": "tests/fixtures/feature_drawn_cases.json",
+      "reason": "The editor answers before Generate; rule matches come from Python and the vector pins the drawn decision.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (rule evaluation; OV-249)"
+    },
+    {
+      "id": "vector:tests/fixtures/hash-rule-migration-vectors.json",
+      "concern": "Hash color rules to source hash (Session 44 and older, R-7)",
+      "pythonOwner": [
+        "gbdraw/session_io.py:migrate_session_hash_rules"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionHashRules"
+      ],
+      "vector": "tests/fixtures/hash-rule-migration-vectors.json",
+      "reason": "Both Load paths migrate the rule values; the vector pins them.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/legacy-table-row-vectors.json",
+      "concern": "Session 31-39 legacy table row repair",
+      "pythonOwner": [
+        "gbdraw/io/table_text.py:repair_legacy_table_text"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/file-imports.js:parseColorTable",
+        "gbdraw/web/js/services/file-imports.js:parseWhitelistRules",
+        "gbdraw/web/js/services/file-imports.js:parsePriorityRules"
+      ],
+      "vector": "tests/fixtures/legacy-table-row-vectors.json",
+      "reason": "Web Load repairs the table text that the CLI reads; the vector pins both (D-15-5: the Web keeps its 31-39 Load path).",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (Sessions 31-39 content migrations; OV-133, OV-148)"
+    },
+    {
+      "id": "vector:tests/fixtures/legend_generated_rows.json",
+      "concern": "Default Legend rows and their palette keys",
+      "pythonOwner": [
+        "gbdraw/legend/table.py:_generated_legend_rows"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/track-legend-rows.js:trackLegendRows",
+        "gbdraw/web/js/services/specific-color-rules.js:generatedLegendRow"
+      ],
+      "vector": "tests/fixtures/legend_generated_rows.json",
+      "reason": "A live edit shows the Legend rows before Generate; the vector pins their keys to Python's.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (Legend row identity and facts; OV-63)"
+    },
+    {
+      "id": "vector:tests/fixtures/legend_layout_vectors.json",
+      "concern": "Legend measurement and layout (zero-shift port)",
+      "pythonOwner": [
+        "gbdraw/legend/circular_layout.py:build_circular_legend_layout",
+        "gbdraw/legend/linear_layout.py:build_linear_legend_layout",
+        "gbdraw/layout/composition.py:plan_composition",
+        "gbdraw/core/text.py:calculate_bbox_dimensions"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/legend-layout.js:buildCircularLegendLayout",
+        "gbdraw/web/js/services/legend-layout.js:buildLinearLegendLayout",
+        "gbdraw/web/js/app/legend/layout-actions.js:createLegendLayoutActions"
+      ],
+      "vector": "tests/fixtures/legend_layout_vectors.json",
+      "reason": "A Legend edit lays out in the browser with no Generate; 462 measurement and 132 Legend cases from Python pin the port (difference 0).",
+      "retireWhen": "incremental rendering lays out an edited Legend in Python (OV-165 part 2)",
+      "source": "inventory C section B (Legend measurement and layout; OV-127, OV-143, OV-165, #940)"
+    },
+    {
+      "id": "vector:tests/fixtures/legend_names.json",
+      "concern": "Drawn Legend row names (PD-OI-042 rev 2, PD-OI-095)",
+      "pythonOwner": [
+        "gbdraw/legend/table.py:drawn_legend_names"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/legend-row-names.js:drawnLegendNames"
+      ],
+      "vector": "tests/fixtures/legend_names.json",
+      "reason": "A live edit names the rows Python draws; the vector pins the naming rule.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/legend_rule_keys.json",
+      "concern": "Legend row keys of a Specific color rule (PD-OI-042 rev 2)",
+      "pythonOwner": [
+        "gbdraw/legend/table.py:rule_legend_keys"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/specific-color-rules.js:ruleLegendCaptions",
+        "gbdraw/web/js/services/legend-row-names.js:legendColorIdentity"
+      ],
+      "vector": "tests/fixtures/legend_rule_keys.json",
+      "reason": "A live rule edit adds the rows Python will draw; the vector pins the keys.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (Legend row identity; OV-288, OV-291..OV-294)"
+    },
+    {
+      "id": "vector:tests/fixtures/legend_track_slot_rows.json",
+      "concern": "Track-slot Legend rows, slot ids and fills (OV-484)",
+      "pythonOwner": [
+        "gbdraw/legend/table.py:_generated_legend_rows",
+        "gbdraw/diagrams/circular/assemble.py:_sync_legend_table_for_circular_slots",
+        "gbdraw/diagrams/linear/assemble.py:_sync_legend_table_for_linear_slots"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/track-legend-rows.js:trackLegendRows",
+        "gbdraw/web/js/services/track-legend-rows.js:trackRowColor"
+      ],
+      "vector": "tests/fixtures/legend_track_slot_rows.json",
+      "reason": "A track-slot edit shows its Legend rows before Generate; the vector pins them.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/losat-outfmt6-numeric-contract.json",
+      "concern": "Numeric columns of a cached raw LOSAT outfmt6 entry",
+      "pythonOwner": [
+        "gbdraw/analysis/protein_colinearity.py:validate_protein_raw_entry_references"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/losat-cache.js:validateProteinRawEntryReferences"
+      ],
+      "vector": "tests/fixtures/losat-outfmt6-numeric-contract.json",
+      "reason": "The Web decides whether a cached search is reusable before Python reads it; the vector pins the check.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/losat_edge_filename_cases.json",
+      "concern": "Default file name of a Linear raw LOSAT TSV",
+      "pythonOwner": [
+        "gbdraw/comparisons/linear_losat.py:losat_edge_filename"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/losat-cache.js:losatEdgeFilename"
+      ],
+      "vector": "tests/fixtures/losat_edge_filename_cases.json",
+      "reason": "Both surfaces write the file name; the cases pin it.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/losat_fasta_extraction_cases.json",
+      "concern": "LOSAT search-frame FASTA extraction (record, region, hash)",
+      "pythonOwner": [
+        "gbdraw/comparisons/losat_jobs.py:losat_search_frame_fasta"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/app/run-analysis.js:extractLosatFastaFast"
+      ],
+      "vector": "tests/fixtures/losat_fasta_extraction_cases.json",
+      "reason": "The Web extracts the search input without the Worker (fast path, R4); the cases pin it to Python's.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (region check; CI-01, GX-09)"
+    },
+    {
+      "id": "vector:tests/fixtures/losat_job_plan_cases.json",
+      "concern": "LOSAT and LOSATP job plan, batches and nucleotide cache keys (D15)",
+      "pythonOwner": [
+        "gbdraw/comparisons/losat_jobs.py:plan_losat_jobs",
+        "gbdraw/comparisons/losat_jobs.py:nucleotide_losat_cache_key"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/linear-sources.js:planLosatSourceJobs",
+        "gbdraw/web/js/services/linear-comparisons.js:buildLosatJobSpecs"
+      ],
+      "vector": "tests/fixtures/losat_job_plan_cases.json",
+      "reason": "The Web plans and caches searches before Python runs; the cases pin plans and keys.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/mode_semantic_parity.json",
+      "concern": "Per-mode default profiles (thresholds, tracks, feature types)",
+      "pythonOwner": [
+        "gbdraw/mode_profiles.py:CIRCULAR_MODE_PROFILE",
+        "gbdraw/mode_profiles.py:LINEAR_MODE_PROFILE"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/mode-profiles.js:modeProfile"
+      ],
+      "vector": "tests/fixtures/mode_semantic_parity.json",
+      "reason": "The Web profile data is generated from Python (tools/generate_mode_profiles.py); the vector checks both reads of it.",
+      "retireWhen": "the Web reads the generated profile only and the semantic vector is no longer needed",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/option_domain_vectors.json",
+      "concern": "Option domain: invalid and accepted values with the CLI field and reason (R7)",
+      "pythonOwner": [
+        "gbdraw/session_request_codec.py:decode_canonical_request",
+        "gbdraw/web_support/error_adapter.py:serialize_web_error"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-request.js:buildCanonicalRenderRequest",
+        "gbdraw/web/js/mode-profiles.js:resolveComparisonThresholds"
+      ],
+      "vector": "tests/fixtures/option_domain_vectors.json",
+      "reason": "Partly shared: Python judges the typed request; the Web judges its projection and may refuse earlier (thresholds).",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/optional-positive-number.json",
+      "concern": "Optional positive number grammar (comparison height)",
+      "pythonOwner": [
+        "gbdraw/config/models/canvas.py:_positive_finite_float"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/utils/optional-positive-number.js:classifyOptionalPositiveNumber"
+      ],
+      "vector": "tests/fixtures/optional-positive-number.json",
+      "reason": "The input checks the value as the user types; the vector pins it to the Python model.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/pixel-track-inputs.json",
+      "concern": "Pixel height, spacing and gap grammar of track slots",
+      "pythonOwner": [
+        "gbdraw/tracks/scalars.py:parse_optional_pixel",
+        "gbdraw/tracks/linear.py:normalize_linear_track_slots",
+        "gbdraw/tracks/circular.py:normalize_circular_track_slots"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/track-slot-validation.js:parseOptionalPixel",
+        "gbdraw/web/js/services/linear-track-slot-model.js:normalizeLinearTrackSlots",
+        "gbdraw/web/js/services/circular-track-slot-model.js:normalizeCircularTrackSlots"
+      ],
+      "vector": "tests/fixtures/pixel-track-inputs.json",
+      "reason": "The track-slot editor checks each value as the user types; the vector pins the grammar.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "inventory C section B (circular radial layout, slot validation; TK-12, GX-19)"
+    },
+    {
+      "id": "vector:tests/fixtures/record_metadata_inference_cases.json",
+      "concern": "Record metadata inference and record discovery (R4 fast path)",
+      "pythonOwner": [
+        "gbdraw/core/record_metadata.py:infer_record_source_metadata",
+        "gbdraw/io/genome.py:load_gbks"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/record-discovery.js:discoverSequenceRecords",
+        "gbdraw/web/js/app/python-helpers.js:list_sequence_records"
+      ],
+      "vector": "tests/fixtures/record_metadata_inference_cases.json",
+      "reason": "The Web lists records without the Worker; R4 requires the fast path to match the loader or decline. app/python-helpers.js holds a third copy as embedded Python.",
+      "retireWhen": "never: R4 keeps the fast path with this vector",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/saved_rule_captions.json",
+      "concern": "Saved rule caption read without its color ID suffix",
+      "pythonOwner": [
+        "gbdraw/legend/table.py:saved_rule_caption"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/specific-color-rules.js:savedRuleCaption"
+      ],
+      "vector": "tests/fixtures/saved_rule_captions.json",
+      "reason": "Web Load and CLI read the saved caption alike; the vector pins it.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/session_admission_vectors.json",
+      "concern": "Session admission verdict of the whole Load",
+      "pythonOwner": [
+        "gbdraw/session_io.py:load_session"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/config.js:importSession"
+      ],
+      "vector": "tests/fixtures/session_admission_vectors.json",
+      "reason": "Partly shared: each vector states the verdict of each side and records the known differences.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/source-feature-index-alias-vectors.json",
+      "concern": "Feature catalog source index alias promotion (schema 3, OV-274)",
+      "pythonOwner": [
+        "gbdraw/web_support/feature_catalog.py:promote_legacy_feature_catalog"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-catalog.js:migrateLegacyFeatureCatalog"
+      ],
+      "vector": "tests/fixtures/source-feature-index-alias-vectors.json",
+      "reason": "Both Load paths promote a legacy catalog; the vector pins the blank-alias case.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (feature catalog promotion; OV-274)"
+    },
+    {
+      "id": "vector:tests/fixtures/specific_color_domain.json",
+      "concern": "Accepted color domain of a Specific colors table",
+      "pythonOwner": [
+        "gbdraw/io/colors.py:read_color_table"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/file-imports.js:parseSpecificRules"
+      ],
+      "vector": "tests/fixtures/specific_color_domain.json",
+      "reason": "The Web editor checks a table row as the user types; the vector pins it to the Python reader. OV-272 waits for the Owner.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (colour validity, Specific-colors domain; OV-272)"
+    },
+    {
+      "id": "function:migrateImportedLinearTrackSlots",
+      "concern": "Imported Linear track slots to the current schema",
+      "pythonOwner": [
+        "gbdraw/session_io.py:migrate_imported_linear_track_slots"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/config.js:migrateImportedLinearTrackSlots"
+      ],
+      "vector": "tests/fixtures/linear-track-slot-migration-vectors.json",
+      "reason": "Both Load paths migrate; vectors generated from the Web function pin Python (tools/generate_draft_value_migration_vectors.mjs).",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:migrateLegacyCircularTrackSlotSpec",
+      "concern": "Retired Circular track slot keys and legacy spacing",
+      "pythonOwner": [
+        "gbdraw/session_request_codec.py:_migrate_legacy_circular_track_slot_spec"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/circular-track-slot-model.js:migrateLegacyCircularTrackSlotSpec"
+      ],
+      "vector": null,
+      "reason": "Partly the same: the Web rewrites spacing into inner and outer gaps at once; Python keeps an internal key it resolves later. No shared vector.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:migrateLegacyLinearComparisonDraft",
+      "concern": "Legacy Linear comparison draft rows to current comparisons",
+      "pythonOwner": [
+        "gbdraw/session_io.py:_migrate_legacy_linear_comparison_draft"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/gallery-session-migration.js:migrateLegacyLinearComparisonDraft"
+      ],
+      "vector": null,
+      "reason": "Both Load paths migrate; each side has its own test and no shared vector.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:migratePersistedWebOptionValues",
+      "concern": "Retired Session 27-39 option values",
+      "pythonOwner": [
+        "gbdraw/session_io.py:migrate_persisted_web_option_values"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/config.js:migratePersistedWebOptionValues"
+      ],
+      "vector": "tests/fixtures/draft-option-value-migration-vectors.json",
+      "reason": "Both Load paths migrate; vectors generated from the Web function pin Python's option-value steps.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:migratePersistedWebStateFieldNames",
+      "concern": "Renamed persisted Web state fields",
+      "pythonOwner": [
+        "gbdraw/session_io.py:migrate_persisted_web_state_field_names"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/current-option-values.js:migratePersistedWebStateFieldNames"
+      ],
+      "vector": null,
+      "reason": "Partly the same: Python also migrates Linear visibility and placement rows; no vector covers the renames on both sides.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:migrateSessionAnnotationTargets",
+      "concern": "Hash annotation targets to feature identity (Session 44 and older)",
+      "pythonOwner": [
+        "gbdraw/session_io.py:migrate_session_annotation_targets"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionAnnotationTargets"
+      ],
+      "vector": null,
+      "reason": "Both Load paths migrate. Only the Python test runs the 19 cases of tests/fixtures/annotation-target-migration-vectors.json; the Web test has its own inline cases (OV-714), so the row names no shared vector.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (annotation targets; OV-134)"
+    },
+    {
+      "id": "function:migrateSessionFeatureEdits",
+      "concern": "Session 31-44 rendered-ID feature edits to feature identity",
+      "pythonOwner": [
+        "gbdraw/session_io.py:migrate_session_feature_edits"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionFeatureEdits"
+      ],
+      "vector": null,
+      "reason": "Both Load paths migrate. The Python test runs the edit cases of tests/fixtures/feature-edit-migration-vectors.json through this function; the Web test runs only the vector's source-read cases (through projectCanonicalSessionRequest) and has its own inline edit cases (OV-714), so the row names no shared vector.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (rendered-ID edits; OV-114)"
+    },
+    {
+      "id": "function:migrateSessionFeaturePlacements",
+      "concern": "Session 41-44 placement drafts scoped by mode",
+      "pythonOwner": [
+        "gbdraw/session_io.py:_migrate_session_feature_placements"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionFeaturePlacements"
+      ],
+      "vector": "tests/fixtures/feature-placement-migration.json",
+      "reason": "Both Load paths migrate; the shared vector pins them.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (placement drafts; OV-102)"
+    },
+    {
+      "id": "function:migrateSessionHashRules",
+      "concern": "Hash color rules to source hash (Session 44 and older)",
+      "pythonOwner": [
+        "gbdraw/session_io.py:migrate_session_hash_rules"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionHashRules"
+      ],
+      "vector": "tests/fixtures/hash-rule-migration-vectors.json",
+      "reason": "Both Load paths migrate; the shared vector pins them.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeCircularTrackPreset",
+      "concern": "Circular track preset (tuckin, middle, spreadout)",
+      "pythonOwner": [
+        "gbdraw/diagrams/circular/presets.py:normalize_circular_track_preset",
+        "gbdraw/labels/circular.py:_normalize_circular_track_preset"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/circular-track-slot-model.js:normalizeCircularTrackPreset"
+      ],
+      "vector": null,
+      "reason": "Partly the same: the Web and labels/circular.py fall back to tuckin; presets.py refuses an unknown preset. No shared vector.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeCircularTrackSlots",
+      "concern": "Circular track slot list",
+      "pythonOwner": [
+        "gbdraw/tracks/circular.py:normalize_circular_track_slots"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/circular-track-slot-model.js:normalizeCircularTrackSlots"
+      ],
+      "vector": "tests/fixtures/pixel-track-inputs.json",
+      "reason": "Partly the same: the Web keeps an invalid draft, Python refuses it; the pixel fields share a vector.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeDefinitionLineFill",
+      "concern": "Definition line fill",
+      "pythonOwner": [
+        "gbdraw/definition_line_styles.py:normalize_definition_line_fill"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/definition-line-style-state.js:normalizeDefinitionLineFill"
+      ],
+      "vector": null,
+      "reason": "The same conversion; Python also has a refusing mode. No shared vector.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeDefinitionLineFontSize",
+      "concern": "Definition line font size",
+      "pythonOwner": [
+        "gbdraw/definition_line_styles.py:normalize_definition_line_font_size"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/definition-line-style-state.js:normalizeDefinitionLineFontSize"
+      ],
+      "vector": null,
+      "reason": "Partly the same: the Web returns null for an invalid value, Python refuses it. No shared vector.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeDefinitionLineFontWeight",
+      "concern": "Definition line font weight",
+      "pythonOwner": [
+        "gbdraw/definition_line_styles.py:normalize_definition_line_font_weight"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/definition-line-style-state.js:normalizeDefinitionLineFontWeight"
+      ],
+      "vector": null,
+      "reason": "Partly the same: the Web maps normal and invalid values to null; Python keeps normal and refuses invalid. No shared vector.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeDepthTracks",
+      "concern": "Depth track lists (two different conversions)",
+      "pythonOwner": [
+        "gbdraw/analysis/depth_tracks.py:normalize_depth_tracks"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/config.js:normalizeDepthTracks"
+      ],
+      "vector": null,
+      "reason": "Name clash: the Web normalizes stored depth-track settings; Python merges the public depth inputs per record.",
+      "retireWhen": "one side is renamed: the two functions do different work",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeHexColor",
+      "concern": "Hex color to lower-case #rrggbb",
+      "pythonOwner": [
+        "gbdraw/core/color.py:normalize_hex_color"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/config.js:normalizeHexColor"
+      ],
+      "vector": null,
+      "reason": "Partly the same: the Web also resolves color names and falls back to a default; Python refuses. No shared vector.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeLabelRendering",
+      "concern": "labels.rendering value",
+      "pythonOwner": [
+        "gbdraw/labels/policy.py:normalize_label_rendering"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/config.js:normalizeLabelRendering"
+      ],
+      "vector": null,
+      "reason": "Partly the same: the same values; the Web falls back to auto, Python refuses. No shared vector.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeLinearTrackSlots",
+      "concern": "Linear track slot list",
+      "pythonOwner": [
+        "gbdraw/tracks/linear.py:normalize_linear_track_slots"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/linear-track-slot-model.js:normalizeLinearTrackSlots"
+      ],
+      "vector": "tests/fixtures/pixel-track-inputs.json",
+      "reason": "Partly the same: the Web keeps an invalid draft, Python refuses it; the pixel fields share a vector.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeLocationParts",
+      "concern": "Feature location parts of the interactive SVG",
+      "pythonOwner": [
+        "gbdraw/render/interactive_svg.py:_normalize_location_parts"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/standalone-interactivity.js:normalizeLocationParts"
+      ],
+      "vector": null,
+      "reason": "The interactive SVG runs without the app; Python truncates start and end to integers and the Web keeps the number. No parity test.",
+      "retireWhen": "never: the standalone interactive SVG has no Python at view time",
+      "source": "inventory C section B (interactive SVG vs app; FL-08, GX-08)"
+    },
+    {
+      "id": "function:normalizeOrthogroupMembershipMode",
+      "concern": "Legacy orthogroup membership modes",
+      "pythonOwner": [
+        "gbdraw/analysis/protein_colinearity.py:normalize_orthogroup_membership_mode"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/losat-normalization.js:normalizeOrthogroupMembershipMode"
+      ],
+      "vector": null,
+      "reason": "Partly the same: one alias table; the Web falls back to the active model, Python refuses an unknown mode.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeQualifierMap",
+      "concern": "Qualifier map to lists of strings",
+      "pythonOwner": [
+        "gbdraw/render/interactive_svg.py:_normalize_qualifier_map"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/standalone-interactivity.js:normalizeQualifierMap",
+        "gbdraw/web/js/services/feature-selector.js:normalizeQualifierMap"
+      ],
+      "vector": null,
+      "reason": "Partly the same: standalone-interactivity.js matches Python; feature-selector.js lower-cases keys and keeps empty lists.",
+      "retireWhen": "never for the standalone interactive SVG; the feature-selector.js copy goes when Python owns rule matching (OV-286)",
+      "source": "inventory C section B (interactive SVG vs app; FL-08, OV-211)"
+    },
+    {
+      "id": "function:normalizeRenderer",
+      "concern": "Track slot renderer aliases",
+      "pythonOwner": [
+        "gbdraw/tracks/circular.py:_normalize_renderer",
+        "gbdraw/tracks/linear.py:_normalize_renderer"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/linear-track-slot-model.js:normalizeRenderer"
+      ],
+      "vector": null,
+      "reason": "Partly the same: both resolve aliases; the Web falls back to features, Python refuses later.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeStrandToken",
+      "concern": "Strand to +, - or none",
+      "pythonOwner": [
+        "gbdraw/features/selector_values.py:normalize_strand_token"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-selector.js:normalizeStrandToken"
+      ],
+      "vector": null,
+      "reason": "The same conversion; Python also accepts numeric strands. No shared vector.",
+      "retireWhen": "Python owns rule matching and the Web reads its result (OV-286)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeStringArray",
+      "concern": "A value as a list of strings",
+      "pythonOwner": [
+        "gbdraw/render/interactive_svg.py:_normalize_string_array"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-utils.js:normalizeStringArray",
+        "gbdraw/web/js/services/config.js:normalizeStringArray"
+      ],
+      "vector": null,
+      "reason": "Partly the same: feature-utils.js matches Python; config.js trims and drops blanks (a name clash).",
+      "retireWhen": "one side is renamed: the two functions do different work",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:normalizeTickLabelLayout",
+      "concern": "Tick label layout value",
+      "pythonOwner": [
+        "gbdraw/tracks/circular.py:normalize_tick_label_layout"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/circular-track-slot-model.js:normalizeTickLabelLayout"
+      ],
+      "vector": null,
+      "reason": "Partly the same: the same four layouts; the Web falls back to the default, Python refuses.",
+      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
+      "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "function:splitDraftIntoModes",
+      "concern": "Session 27-44 flat draft into Session 46 mode slices",
+      "pythonOwner": [
+        "gbdraw/session_io.py:split_draft_into_modes"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/mode-scoped-migration.js:splitDraftIntoModes"
+      ],
+      "vector": null,
+      "reason": "Both Load paths split; 41 cases in tests/fixtures/sessions/mode-split-vectors.json and the generated registry (--check) pin them.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (Session 27-44 to mode split; OV-157)"
+    },
+    {
+      "id": "function:splitSetting",
+      "concern": "One setting of a flat draft into mode slices",
+      "pythonOwner": [
+        "gbdraw/session_io.py:_split_setting"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/mode-scoped-migration.js:splitSetting"
+      ],
+      "vector": null,
+      "reason": "Run through splitDraftIntoModes and its 41 shared cases.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (Session 27-44 to mode split; OV-157)"
+    },
+    {
+      "id": "concern:css-color-names",
+      "concern": "CSS color names",
+      "pythonOwner": [
+        "gbdraw/io/colors.py:_COLOR_NAME_MAP"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/utils/named-colors.js",
+        "gbdraw/web/js/app/annotations/table-codec.js:SVG_COLOR_NAMES"
+      ],
+      "vector": null,
+      "reason": "Three copies of the 148 CSS names; tests/test_named_colors.py pins the Python map and the codec set, tests/web/named-colors.test.mjs pins utils/named-colors.js to Python.",
+      "retireWhen": "the Web imports a copy generated from the Python map",
+      "source": "inventory C section B (CSS colour names; OV-140, OV-141, OV-160)"
+    },
+    {
+      "id": "concern:color-precedence",
+      "concern": "Feature color precedence (override, rule, palette, Python fill)",
+      "pythonOwner": [
+        "gbdraw/features/colors.py"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/utils/color-utils.js:appliedFeatureColors"
+      ],
+      "vector": null,
+      "reason": "A live edit paints the feature before Generate; one reader per value, no shared vector. OV-282 is open.",
+      "retireWhen": "edit unification compiles one color projection (multi-drawing M4)",
+      "source": "inventory C section B (colour precedence; OV-199, OV-281, OV-282)"
+    },
+    {
+      "id": "concern:editor-table-readers",
+      "concern": "Editor table readers (key forms, comments, blank lines)",
+      "pythonOwner": [
+        "gbdraw/io/table_text.py:read_table_lines",
+        "gbdraw/io/table_text.py:read_literal_table"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/file-imports.js:EDITOR_TABLE_OPTIONS"
+      ],
+      "vector": null,
+      "reason": "The editor reads a table the user types; the D-01 matrix and one JavaScript key list pin the forms.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (editor table key forms, readers; OV-221, OV-265, OV-266)"
+    },
+    {
+      "id": "concern:gallery-publication",
+      "concern": "Gallery Session publication",
+      "pythonOwner": [
+        "tools/refresh_gallery_sessions.py"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/gallery-session-publication.js",
+        "gbdraw/web/js/services/session-request.js:normalizedPublicationBytes"
+      ],
+      "vector": null,
+      "reason": "The Web and the refresh tool each build a publishable Session; tests compare their bytes.",
+      "retireWhen": "one publication writer in Python, called by the Web through the Worker",
+      "source": "inventory C section B (Gallery publication; OV-215, OV-266..OV-268)"
+    },
+    {
+      "id": "concern:output-prefix",
+      "concern": "Output prefix and download names",
+      "pythonOwner": [
+        "gbdraw/api/requests.py:RenderOutputRequest"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-request.js",
+        "gbdraw/web/js/utils/download-names.js"
+      ],
+      "vector": null,
+      "reason": "The Web names downloads before Python renders; a node test and a Python diagnostic pin them. A record-derived name over 200 bytes still fails in Python.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (Output Prefix; FL-10)"
+    },
+    {
+      "id": "concern:region-check",
+      "concern": "Region start and end check",
+      "pythonOwner": [
+        "gbdraw/crop_genbank.py:check_start_end_coords"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/app/run-analysis.js:applyLosatSequenceTransforms"
+      ],
+      "vector": null,
+      "reason": "The Web checks a region before a LOSAT search; the browser twin throws REGION_INVALID. No shared vector.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "inventory C section B (region check; CI-01, GX-09)"
+    },
+    {
+      "id": "concern:request-record-cardinality",
+      "concern": "Record cardinality of a render request schema 5 and older (saved none)",
+      "pythonOwner": [
+        "gbdraw/session_request_codec.py:legacy_record_cardinality"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-request.js:promoteRenderRequestToSchema8"
+      ],
+      "vector": null,
+      "reason": "Both readers infer the cardinality a legacy request did not save (a Linear record without selector and region draws every record of its source, any other record one); no shared vector pins them.",
+      "retireWhen": "Python alone promotes a legacy render request at Load and the Web reads the promoted request",
+      "source": "inventory C section B (request record cardinality; OV-149)"
+    },
+    {
+      "id": "constant:LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION",
+      "concern": "Last Session version with legacy Linear track slots (32)",
+      "pythonOwner": [
+        "gbdraw/session_io.py:_LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION",
+        "gbdraw/api/session_compat.py:_LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/config.js:LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION"
+      ],
+      "vector": null,
+      "reason": "Three hand-written copies (two in Python) and no test that compares them.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "FINDINGS OV-323"
+    },
+    {
+      "id": "constant:SIMILARITY_ALIGNMENT_PLAN_SCHEMA",
+      "concern": "Similarity alignment plan schema (2) in Web type literals",
+      "pythonOwner": [
+        "gbdraw/layout/similarity_alignment.py:SIMILARITY_ALIGNMENT_PLAN_SCHEMA"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/app/similarity-alignment.js"
+      ],
+      "vector": null,
+      "reason": "The value is generated; the JSDoc typedefs of the Web module still write the literal 2.",
+      "retireWhen": "the typedefs import the generated type",
+      "source": "FINDINGS OV-323"
+    },
+    {
+      "id": "constant:typed-json-resource-schema",
+      "concern": "Typed JSON resource schema (3), a literal with no constant",
+      "pythonOwner": [
+        "gbdraw/session_request_codec.py"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-request.js",
+        "gbdraw/web/js/app/run-analysis.js"
+      ],
+      "vector": null,
+      "reason": "A hand-written 3 on both sides and no Python constant.",
+      "retireWhen": "a Python constant generated into contracts/schema.generated.js replaces the literals",
+      "source": "FINDINGS OV-323"
+    }
+  ]
+}

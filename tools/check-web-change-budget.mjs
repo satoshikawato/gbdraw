@@ -389,6 +389,8 @@ const designRuleGuardRegistryPath = 'tools/web-design-rule-guards.json';
 // only until a rule references them.
 const ownerGraphRegistryPath = 'tools/web-owner-graph.json';
 const ownerGraphDetectorsPath = 'tools/web-owner-graph-detectors.mjs';
+// The twin detector (tools/twins.json is its baseline) is checker implementation.
+const twinDetectorsPath = 'tools/web-twin-detectors.mjs';
 const guardPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   productImpactPolicyPath,
@@ -397,6 +399,7 @@ const guardPaths = new Set([
   designRuleGuardRegistryPath,
   ownerGraphRegistryPath,
   ownerGraphDetectorsPath,
+  twinDetectorsPath,
   '.github/pull_request_template.md',
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
@@ -427,6 +430,7 @@ const checkerImplementationPaths = new Set([
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
   ownerGraphDetectorsPath,
+  twinDetectorsPath,
   'tools/web-architecture-evaluation.mjs',
   productImpactEvaluationPath,
   productImpactDecisionSourcePath,
@@ -482,17 +486,21 @@ const narrowAuthorityBundlePaths = new Set([
 // the kinds read from a path -> names map, a JSON file, or a Python module.
 const DESIGN_RULE_ALLOWLIST_KINDS = {
   1: ['count', 'count-map', 'set', 'writer-map'],
-  2: ['count', 'count-map', 'set', 'writer-map', 'set-map', 'json-entries', 'py-count', 'py-count-map', 'py-set']
+  2: ['count', 'count-map', 'set', 'writer-map', 'set-map', 'json-entries', 'json-ids', 'py-count', 'py-count-map', 'py-set']
 };
 // The schema 1 comparison that each later kind gets once its literal is read.
 const DESIGN_RULE_ALLOWLIST_COMPARISONS = {
   'set-map': 'writer-map',
   'json-entries': 'writer-map',
+  'json-ids': 'writer-map',
   'py-count': 'count',
   'py-count-map': 'count-map',
   'py-set': 'set'
 };
 const isPythonAllowlistKind = (kind) => kind.startsWith('py-');
+// A JSON list of entries with ids: `json-entries` compares each entry's text,
+// `json-ids` only the ids (a shrink-only id set whose rows may change).
+const JSON_ALLOWLIST_KINDS = new Set(['json-entries', 'json-ids']);
 const parseDesignRuleGuardRegistry = (source) => {
   const errors = [];
   if (source === null) return { registry: null, errors };
@@ -658,7 +666,9 @@ const readJavaScriptLiteral = (source, symbol) => {
   const start = match.index + match[0].length;
   const rest = source.slice(start);
   const numberMatch = rest.match(/^(\d+)\s*;/);
-  if (numberMatch) return { status: 'ok', value: Number(numberMatch[1]) };
+  if (numberMatch) {
+    return { status: 'ok', value: Number(numberMatch[1]), span: [match.index, start + numberMatch[0].length] };
+  }
   const wrappers = rest.match(/^(Object\.freeze\s*\(\s*)?(new\s+Set\s*\(\s*)?/);
   const literalStart = start + wrappers[0].length;
   const opener = source[literalStart];
@@ -668,9 +678,14 @@ const readJavaScriptLiteral = (source, symbol) => {
   // Only the wrappers' closing parentheses and then `;` may follow the literal:
   // a line end does not close it (`.concat(MORE)` may start the next line).
   const closers = '\\s*\\)'.repeat(wrappers.slice(1).filter(Boolean).length);
-  if (!new RegExp(`^${closers}\\s*;`).test(masked.slice(end + 1))) return UNREADABLE_ALLOWLIST;
+  const closed = masked.slice(end + 1).match(new RegExp(`^${closers}\\s*;`));
+  if (!closed) return UNREADABLE_ALLOWLIST;
   try {
-    return { status: 'ok', value: JSON.parse(literalToJson(source.slice(literalStart, end + 1))) };
+    return {
+      status: 'ok',
+      value: JSON.parse(literalToJson(source.slice(literalStart, end + 1))),
+      span: [match.index, end + 1 + closed[0].length]
+    };
   } catch (_error) {
     return UNREADABLE_ALLOWLIST;
   }
@@ -776,7 +791,9 @@ const readPythonLiteral = (source, symbol) => {
   try {
     const result = value();
     skip();
-    return index < source.length && source[index] !== '\n' ? UNREADABLE_ALLOWLIST : { status: 'ok', value: result };
+    return index < source.length && source[index] !== '\n'
+      ? UNREADABLE_ALLOWLIST
+      : { status: 'ok', value: result, span: [declaration.index, index] };
   } catch (_error) {
     return UNREADABLE_ALLOWLIST;
   }
@@ -809,9 +826,10 @@ const mapObjectValues = (value, convert) => Object.fromEntries(
 const readAllowlistLiteral = (source, symbol, kind) => {
   if (source === null) return { status: 'absent', value: null };
   const read = isPythonAllowlistKind(kind) ? readPythonLiteral
-    : kind === 'json-entries' ? readJsonEntries : readJavaScriptLiteral;
+    : JSON_ALLOWLIST_KINDS.has(kind) ? readJsonEntries : readJavaScriptLiteral;
   const { status, value } = read(source, symbol);
   if (status !== 'ok') return { status, value: null };
+  if (kind === 'json-ids') return { status, value: mapObjectValues(value, (byId) => mapObjectValues(byId, () => '')) };
   if (kind === 'set-map') {
     if (!isPlainObject(value) || !Object.values(value).every(isStringList)) return UNREADABLE_ALLOWLIST;
     return { status, value: mapObjectValues(value, (names) => Object.fromEntries(names.map((name) => [name, '']))) };
@@ -868,6 +886,17 @@ const designRuleRegistryEvaluation = parseDesignRuleGuardRegistry(
 );
 const designRuleGuardRegistry = designRuleRegistryEvaluation.registry;
 const designRuleRegistryErrors = designRuleRegistryEvaluation.errors;
+// Every rule's text is authority (BA-D10): a rule whose text a runtime diff
+// could change does not bind it. Checked on the candidate registry whenever it
+// changes, so the change that registers or moves a rule names an authority path.
+const candidateDesignRuleRulesPathErrors = (() => {
+  if (!changed.has(designRuleGuardRegistryPath)) return [];
+  const { registry } = parseDesignRuleGuardRegistry(readHeadFile(designRuleGuardRegistryPath));
+  return (registry?.rules || []).flatMap((rule, index) => {
+    const rulesPath = rule.rulesPath || registry.rulesPath;
+    return authorityPaths.has(rulesPath) ? [] : [`rules[${index}] ${rule.id}: rulesPath ${rulesPath} is not an authority path`];
+  });
+})();
 const designRuleAllowlistChanges = [];
 if (designRuleGuardRegistry) {
   designRuleGuardRegistry.rules.forEach((rule) => {
@@ -903,6 +932,81 @@ const designRuleAllowlistContractions = designRuleAllowlistChanges
   .filter(({ direction }) => direction === 'contraction')
   .map(({ subject }) => subject)
   .sort();
+// design-rule.count-scope: a test that holds a registered count baseline
+// counts with its own code, so a change to that code can lower the count and
+// gain room under the ceiling. A diff with production code (as for co-change)
+// may change such a test only inside its registered literals (of any kind),
+// which stay readable literals; anything else in it, or its deletion, goes to
+// a pull request without production code. The same holds for the counting
+// code those tests share outside their files.
+const COUNT_ALLOWLIST_KINDS = new Set(['count', 'count-map', 'py-count', 'py-count-map']);
+const COUNTING_CODE_PATHS = new Set([
+  'tests/web/helpers/count-baseline.mjs',
+  'tests/web/types/tsconfig.json',
+  'tests/web/types/web-globals.d.ts',
+  'tools/report-web-owner-graph.mjs'
+]);
+const withoutAllowlistLiterals = (source, entries) => {
+  const spans = [];
+  for (const { symbol, kind } of entries) {
+    const { status, span } = (isPythonAllowlistKind(kind) ? readPythonLiteral : readJavaScriptLiteral)(source, symbol);
+    if (status !== 'ok') return null;
+    spans.push({ symbol, span });
+  }
+  return spans.sort((left, right) => right.span[0] - left.span[0])
+    .reduce((text, { symbol, span: [start, end] }) => `${text.slice(0, start)}<${symbol}>${text.slice(end)}`, source);
+};
+// A runtime move cannot be split from the test that names the moved file
+// (#927), so a quoted path that names the old path of a rename in this diff
+// may name the new path, in the same form: relative to the test, or the same
+// trailing path segments.
+let diffRenames = null;
+const renamesInDiff = () => {
+  diffRenames ||= parseDiffLines(runGit(repositoryRoot, [
+    'diff', '-M', '--diff-filter=R', '--name-status', ...diffRefs, '--'
+  ])).map(([, from, to]) => [from, to]);
+  return diffRenames;
+};
+const followsRename = (testPath, before, after) => renamesInDiff().some(([from, to]) => {
+  if (/^\.\.?\//.test(before)) {
+    const directory = posix.dirname(testPath);
+    return posix.join(directory, before) === from && posix.join(directory, after) === to;
+  }
+  if (from !== before && !from.endsWith(`/${before}`)) return false;
+  const prefix = from.slice(0, from.length - before.length);
+  return to.startsWith(prefix) && to.slice(prefix.length) === after;
+});
+const QUOTED_ON_ONE_LINE = /(['"`])([^'"`\n]*)\1/;
+const differsOnlyByRenamedPaths = (testPath, before, after) => {
+  const left = before.split(QUOTED_ON_ONE_LINE);
+  const right = after.split(QUOTED_ON_ONE_LINE);
+  return left.length === right.length && left.every((part, index) => (
+    part === right[index] || (index % 3 === 2 && followsRename(testPath, part, right[index]))
+  ));
+};
+const changedAllowlistEntriesByPath = new Map();
+(designRuleGuardRegistry?.rules || []).forEach((rule) => rule.allowlists.forEach((entry) => {
+  if (!changed.has(entry.path) || JSON_ALLOWLIST_KINDS.has(entry.kind)) return;
+  changedAllowlistEntriesByPath.set(entry.path, [...(changedAllowlistEntriesByPath.get(entry.path) || []), entry]);
+}));
+const countScopeEntriesByPath = [
+  ...[...changedAllowlistEntriesByPath].filter(([, entries]) => entries.some(({ kind }) => (
+    COUNT_ALLOWLIST_KINDS.has(kind) && (productionPaths.length || (isPythonAllowlistKind(kind) && pythonPackageChanged))
+  ))),
+  ...(productionPaths.length ? [...COUNTING_CODE_PATHS].filter((path) => changed.has(path)).map((path) => [path, []]) : [])
+];
+const designRuleCountScopeChanges = countScopeEntriesByPath.flatMap(([path, entries]) => {
+  const baseSource = readRevisionFile(base, path);
+  if (baseSource === null) return [];
+  const before = withoutAllowlistLiterals(baseSource, entries);
+  // A literal unreadable in the trusted base is already a co-change expansion.
+  if (before === null) return [];
+  const headSource = readHeadFile(path);
+  if (headSource === null) return [`${path} (deleted)`];
+  const after = withoutAllowlistLiterals(headSource, entries);
+  if (after === null) return [`${path} (registered literal missing or unreadable)`];
+  return differsOnlyByRenamedPaths(path, before, after) ? [] : [path];
+}).sort();
 const baseAcceptedViolationsSource = readRevisionFile(base, acceptedViolationsPath);
 const candidateAcceptedViolationsSource = readHeadFile(acceptedViolationsPath);
 const acceptedViolationAuthorityErrors = [];
@@ -2044,10 +2148,19 @@ if (changedCheckerImplementations.length && changedAuthorities.length) {
 blockingViolations.push(...designRuleRegistryErrors.map((error) => (
   `trusted design-rule guard registry: ${error}`
 )));
+blockingViolations.push(...candidateDesignRuleRulesPathErrors.map((error) => (
+  `candidate design-rule guard registry: ${error}`
+)));
 if (designRuleCoChangeExpansions.length) {
   blockingViolations.push(
     'design-rule.co-change: a registered design-rule allowlist expanded alongside production runtime files '
     + `(${designRuleCoChangeExpansions.join(', ')})`
+  );
+}
+if (designRuleCountScopeChanges.length) {
+  blockingViolations.push(
+    'design-rule.count-scope: the test or counting code of a registered count baseline changed '
+    + `alongside production runtime files (${designRuleCountScopeChanges.join(', ')})`
   );
 }
 if (unapprovedCapabilities.length) {
