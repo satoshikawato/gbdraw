@@ -279,11 +279,12 @@ export const LEGACY_LAYOUT_PREFERENCE_FIELDS = Object.freeze([
  */
 const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-// The legacy legend fields and the mode whose positions each one holds; `legend`
-// holds the restored mode's.
-/** @type {Readonly<Record<string, string | null>>} */
+// The legacy legend fields and the mode whose positions each one holds. The
+// migration reads `legend` as a Circular position in every mode (and as the
+// Linear one in Linear, whose positions are Circular's).
+/** @type {Readonly<Record<string, 'circular' | 'linear'>>} */
 const LEGACY_LEGEND_FIELD_MODES = Object.freeze({
-  legend: null,
+  legend: 'circular',
   circularLegendPosition: 'circular',
   circularSingleRecordLegendPosition: 'circular',
   circularMultiRecordLegendPosition: 'circular',
@@ -293,12 +294,12 @@ const LEGACY_LEGEND_FIELD_MODES = Object.freeze({
 // Partial objects remain authoritative for session compatibility; normalization
 // supplies the current defaults for omitted branches. A legend field outside
 // its mode's positions is not a stored layout (OV-652).
-/** @param {Record<string, unknown> | null | undefined} ui @param {string} mode */
-const hasStoredLayoutPreferences = (ui, mode) => (
+/** @param {Record<string, unknown> | null | undefined} ui */
+const hasStoredLayoutPreferences = (ui) => (
   isRecord(ui?.layoutPreferences) ||
   LEGACY_LAYOUT_PREFERENCE_FIELDS.some((field) => (
     Object.hasOwn(LEGACY_LEGEND_FIELD_MODES, field)
-      ? legendPositionOfMode(ui?.[field], LEGACY_LEGEND_FIELD_MODES[field] ?? mode) !== null
+      ? legendPositionOfMode(ui?.[field], LEGACY_LEGEND_FIELD_MODES[field]) !== null
       : storedText(ui?.[field])
   ))
 );
@@ -315,7 +316,7 @@ const hasStoredLayoutPreferences = (ui, mode) => (
  * @returns {LayoutPreferences}
  */
 export const restoredLayoutPreferences = (ui, { mode, multiRecord, projected = null, active }) => {
-  if (projected && !hasStoredLayoutPreferences(ui, mode)) return normalizeLayoutPreferences(projected);
+  if (projected && !hasStoredLayoutPreferences(ui)) return normalizeLayoutPreferences(projected);
   const fallback = projected ? resolveActiveLayoutPreference(projected, mode, multiRecord) : active;
   const migrationUi = (
     !isRecord(ui?.layoutPreferences) &&

@@ -122,13 +122,16 @@ test('a legacy legend field outside its mode does not count as a stored layout o
   });
   const unset = restore({});
   for (const ui of [
-    { legend: 'banana' }, { legend: 'Upper_Left' }, { legend: '' }, { linearLegendPosition: 'upper_left' },
+    { legend: 'banana' }, { legend: '' }, { linearLegendPosition: 'upper_left' },
     { circularLegendPosition: 'banana' }, { circularMultiRecordLegendPosition: 'centre' }
   ]) {
     assert.deepEqual(restore(ui), unset, JSON.stringify(ui));
   }
   // A position of the field's mode is still a stored layout: it migrates.
   assert.equal(restore({ legend: ' Left ' }).linear.legend, 'left');
+  // `legend` is also a Circular source: a corner keeps the Circular slot, and the Linear slot reads it as absent.
+  const corner = restore({ legend: 'Upper_Left' });
+  assert.deepEqual([corner.circular.multi.legend, corner.linear.legend], ['upper_left', 'top']);
   assert.equal(restore({ circularSingleRecordLegendPosition: 'upper_right' }).circular.single.legend, 'upper_right');
   // The plot title fields keep their presence check.
   assert.notDeepEqual(restore({ linearPlotTitlePosition: 'top' }), unset);
