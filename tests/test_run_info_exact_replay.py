@@ -98,7 +98,8 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
             ).set_input_files(fixture)
             page.wait_for_function("""() => {
                 const app = window.__GBDRAW_APP__;
-                return app.sessionTitle === 'lazy-normal' && app.results.length > 0;
+                return app.sessionTitle === 'lazy-normal' && app.results.length > 0
+                    && app.sessionImportPending === false;
             }""")
 
             def snapshot(name):
