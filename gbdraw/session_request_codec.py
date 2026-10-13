@@ -75,8 +75,10 @@ from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.tracks.circular import (
     _InternalCircularTrackSlot,
     _internal_circular_track_slot,
+    _normalize_renderer as _circular_renderer_name,
     parse_circular_track_slot,
 )
+from gbdraw.tracks.linear import _normalize_renderer as _linear_renderer_name
 from gbdraw.annotations import (
     AnnotationOptions,
     AnnotationSet,
@@ -3386,8 +3388,16 @@ def _encode_track_slot(
         if isinstance(slot, CircularTrackSlot)
         else fields(LinearTrackSlot)
     )
+    # The names the track planner reads a renderer and a side as (OV-653).
+    renderer_name = (
+        _circular_renderer_name if isinstance(slot, CircularTrackSlot) else _linear_renderer_name
+    )
+    names = {
+        "renderer": renderer_name(str(slot.renderer)),
+        "side": None if slot.side is None else str(slot.side).strip().lower(),
+    }
     for item in slot_fields:
-        raw = getattr(slot, item.name)
+        raw = names[item.name] if item.name in names else getattr(slot, item.name)
         if isinstance(raw, ScalarSpec):
             raw = {"value": raw.value, "unit": raw.unit}
         elif item.name == "params" and isinstance(raw, MappingABC):

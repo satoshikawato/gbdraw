@@ -271,9 +271,9 @@ _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]
 # - A legend position: the Web writer writes the text its state holds, which a
 #   stored Session can set to any text (OV-652); it narrows once the Web writes
 #   only a position of the mode's set.
-# - A slot's renderer and side: the encoder writes them as its caller gave
-#   them, and the track planner reads other spellings of a name
-#   (_SLOT_SPELLINGS, OV-653).
+# - A slot's renderer and side: the track planner reads other spellings of a
+#   name, and the Session writer of request schemas 5 to 9 stored a caller's
+#   spelling until the encoder wrote the name (_SLOT_SPELLINGS, OV-653).
 # - The five comparison mode settings: the decoder reads other spellings of a
 #   name (OV-651) and the Web's Session Load does not check them; they narrow
 #   with the Load check of stage 1d PR-C.
@@ -454,37 +454,43 @@ def test_the_decoder_agrees_with_the_description_at_every_position(
     assert {label for label, _shape in OBJECTS} - reached == set()
 
 
-# A slot is written as its caller built it (_encode_track_slot), and the track
-# planner reads these spellings of a renderer and of a side. So a request the
-# encoder wrote can hold one, and the description cannot name the values of
-# either field while that is so (_NAMES_TYPED_STRING, OV-653).
-_SLOT_SPELLINGS: dict[str, tuple[Any, Any, tuple[tuple[str, str, str], ...]]] = {
+# A slot built with another spelling of a renderer or a side, and the names
+# the track planner reads it as (a renderer alias is the name it stands for).
+_SLOT_SPELLINGS: dict[str, tuple[Any, Any, tuple[tuple[str, tuple[str, str], tuple[str, str]], ...]]] = {
     "circular": (CircularTrackSlot, CircularRequestTrackOptions, (
-        ("features", "Features", " OUTSIDE "), ("gc_content", "gc_content", "INSIDE"),
+        ("features", ("Features", "features"), (" OUTSIDE ", "outside")),
+        ("gc_content", ("gc_content", "dinucleotide_content"), ("INSIDE", "inside")),
     )),
     "linear": (LinearTrackSlot, LinearRequestTrackOptions, (
-        ("features", " FEATURES ", "Above"), ("gc_content", "GC_CONTENT", "BELOW"),
+        ("features", (" FEATURES ", "features"), ("Above", "above")),
+        ("gc_content", ("GC_CONTENT", "dinucleotide_content"), ("BELOW", "below")),
     )),
 }
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
-def test_the_encoder_writes_a_slot_renderer_and_side_in_the_spelling_it_was_given(
-    mode: str, tmp_path: Path
-) -> None:
+def test_the_encoder_writes_the_name_of_a_slot_renderer_and_side(mode: str, tmp_path: Path) -> None:
+    """A Python caller's spelling is written as the name (OV-653, BA-D23)."""
+
     slot_type, tracks_type, spellings = _SLOT_SPELLINGS[mode]
-    tracks = tracks_type(**{
-        f"{mode}_track_slots": tuple(
-            slot_type(id=slot_id, renderer=renderer, side=side) for slot_id, renderer, side in spellings
-        ),
-        f"{mode}_track_axis_index": 1,
-    })
-    payload, resources = _encoded(_request(mode, tracks=tracks), tmp_path)
+
+    def tracks(index: int) -> Any:
+        return tracks_type(**{
+            f"{mode}_track_slots": tuple(
+                slot_type(id=slot_id, renderer=renderer[index], side=side[index])
+                for slot_id, renderer, side in spellings
+            ),
+            f"{mode}_track_axis_index": 1,
+        })
+
+    payload, resources = _encoded(_request(mode, tracks=tracks(0)), tmp_path)
     written = payload["diagramOptions"]["tracks"][f"{mode}TrackSlots"]
-    assert [(slot["id"], slot["renderer"], slot["side"]) for slot in written] == list(spellings)
+    assert [(slot["id"], slot["renderer"], slot["side"]) for slot in written] == [
+        (slot_id, renderer[1], side[1]) for slot_id, renderer, side in spellings
+    ]
     assert _problems(payload, ROOT) == []
     decoded = decode_canonical_request(payload, resource_paths=resources, output_directory=tmp_path / "output")
-    assert decoded.options.tracks == tracks
+    assert decoded.options.tracks == tracks(1)
 
 
 # The decoder reads these keys and no writer writes them: the depth inputs of
