@@ -16,6 +16,7 @@ from ..io.table_text import (
     read_table_lines,
     table_text_stream,
 )
+from ..render_stages import render_stage
 from ..features.selector_values import (
     _matches_constraint,
     get_feature_hash as _get_feature_hash,
@@ -443,9 +444,6 @@ def label_filter_maps(label_filtering: Mapping[str, Any]) -> Mapping[str, Any]:
     The config's own mapping is never written; every reader takes the mapping
     returned here.
     """
-
-    # Deferred: gbdraw.render_stages imports gbdraw.api, which imports this module.
-    from gbdraw.render_stages import render_stage
 
     return render_stage("label_filter_maps", preprocess_label_filtering, label_filtering)
 

@@ -47,6 +47,8 @@ from ...configurators import (
     LegendMeasurement,
 )
 from ...configurators.gc import _slot_skew_config
+from ...configurators.legend import measure_legend
+from ...render_stages import render_stage
 from ...core.sequence import check_feature_presence
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
 from ...config.modify import with_config_overrides
@@ -2489,7 +2491,8 @@ def add_record_on_circular_canvas(
         overlay_obstacles=overlay_obstacles,
     )
     if legend_config is not None:
-        legend_measurement = legend_config.measure_legend(
+        legend_measurement = measure_legend(
+            legend_config,
             legend_table,
             placement=canvas_config.legend_position,
             wrap_width=source_content_bounds.width,
@@ -2984,13 +2987,16 @@ def _assemble_circular_diagram_result(
     )
 
     legend_table = LegendTable()
-    legend_measurement = legend_config.measure_legend(
+    legend_measurement = measure_legend(
+        legend_config,
         legend_table,
         placement=canvas_config.legend_position,
         wrap_width=canvas_config.total_width,
     )
     if canvas_config.legend_position != "none":
-        legend_table = build_circular_legend_table(
+        legend_table = render_stage(
+            "legend_table",
+            build_circular_legend_table,
             [gb_record],
             feature_config=feature_config,
             gc_config=gc_config,

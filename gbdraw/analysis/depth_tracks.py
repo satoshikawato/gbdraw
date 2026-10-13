@@ -16,6 +16,7 @@ from gbdraw.analysis.depth import depth_df, read_depth_tsv
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
+from gbdraw.render_stages import render_stage
 from gbdraw.tracks.parsing import parse_nonnegative_integer
 
 if TYPE_CHECKING:
@@ -669,9 +670,6 @@ def build_depth_track_dataframes(
     dataframe) and ``depth_track_data`` (the frame with its drawing config,
     taking the shared axis maximum as an argument).
     """
-
-    # Deferred: gbdraw.render_stages imports gbdraw.api, which imports this module.
-    from gbdraw.render_stages import render_stage
 
     if base_config is None or not record_depth_tracks:
         return [[] for _ in records]

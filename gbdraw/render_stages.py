@@ -7,8 +7,9 @@ transaction it keys the call by its arguments and reuses a result stored by an
 earlier successful transaction (the fifth layer of
 ``gbdraw.api.prepared.PreparedBiologicalInputCache``).
 
-Keys follow a closed table (``_key``): plain values by value; a frozen
-dataclass by its fields; a ``GbdrawConfig`` by the leaves of the sections the
+Keys follow a closed table (``_key``): plain values (with tuples, lists,
+sets, dicts and read-only dict views of them) by value; a frozen dataclass by
+its fields; a ``GbdrawConfig`` by the leaves of the sections the
 stage declares in ``RENDER_STAGE_SETTINGS``; a configurator by its attributes;
 a record, a decoded table or another stage's result by the identity registered
 for it in the transaction. Anything else makes the call uncacheable for that
@@ -28,20 +29,12 @@ import logging
 import re
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from enum import Enum
 from typing import Any, Callable, Hashable, Iterable, Literal, Mapping, ParamSpec, TypeVar, cast
 
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.api.prepared import (
-    NO_IDENTITY,
-    active_render_stage_transaction,
-    lookup_render_stage,
-    prepared_value_identity,
-    record_prepared_input_metric,
-    register_prepared_value_identity,
-    store_render_stage,
-)
 from gbdraw.config.models.root import GbdrawConfig
 
 logger = logging.getLogger(__name__)
@@ -98,6 +91,10 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
 
 _TOP_SECTIONS = ("canvas", "labels", "objects")
 _PLAIN_TYPES = (bool, int, float, str, bytes)
+# ``gbdraw.api.prepared`` is imported inside the functions that use it (about
+# 0.2 us once loaded): feature, label, depth and legend modules call
+# ``render_stage`` and are imported while ``gbdraw.api`` initializes, so this
+# module cannot import the ``gbdraw.api`` package when it is loaded.
 
 
 class _Unkeyable(Exception):
@@ -346,8 +343,10 @@ def _key(
         return ("enum", _type_name(value), value.value)
     if isinstance(value, _PLAIN_TYPES):
         return (type(value).__name__, value)
-    identity = prepared_value_identity(value)
-    if identity is NO_IDENTITY:
+    from gbdraw.api import prepared
+
+    identity = prepared.prepared_value_identity(value)
+    if identity is prepared.NO_IDENTITY:
         raise _Unkeyable(f"unstored stage result {_type_name(value)}")
     if identity is not None:
         return ("identity", identity)
@@ -368,7 +367,7 @@ def _key(
             type(value).__name__,
             tuple(sorted((_key(item, config_path=None) for item in value), key=repr)),
         )
-    if isinstance(value, dict):
+    if isinstance(value, (dict, MappingProxyType)):
         return (
             "dict",
             tuple(
@@ -476,19 +475,23 @@ def _register_result(value: object, identity: Hashable, passed: set[int]) -> Non
 
     if value is None or isinstance(value, (*_PLAIN_TYPES, Enum)) or id(value) in passed:
         return
-    register_prepared_value_identity(value, identity)
+    from gbdraw.api import prepared
+
+    prepared.register_prepared_value_identity(value, identity)
     for name, child in _direct_children(value):
         if child is None or isinstance(child, (*_PLAIN_TYPES, Enum)) or id(child) in passed:
             continue
-        register_prepared_value_identity(
+        prepared.register_prepared_value_identity(
             child,
-            NO_IDENTITY if identity is NO_IDENTITY else ("field", identity, name),
+            prepared.NO_IDENTITY if identity is prepared.NO_IDENTITY else ("field", identity, name),
         )
 
 
 def _metric(kind: str, name: str) -> None:
-    record_prepared_input_metric(f"renderStage{kind}Count")
-    record_prepared_input_metric(f"renderStage{kind}:{name}")
+    from gbdraw.api import prepared
+
+    prepared.record_prepared_input_metric(f"renderStage{kind}Count")
+    prepared.record_prepared_input_metric(f"renderStage{kind}:{name}")
 
 
 def render_stage(
@@ -502,7 +505,9 @@ def render_stage(
 
     if name not in RENDER_STAGE_SETTINGS:
         raise ValueError(f"Unknown render stage {name!r}.")
-    transaction = active_render_stage_transaction()
+    from gbdraw.api import prepared
+
+    transaction = prepared.active_render_stage_transaction()
     if transaction is None:
         return function(*args, **kwargs)
     declared = RENDER_STAGE_SETTINGS[name]
@@ -532,11 +537,11 @@ def render_stage(
         logger.debug("render stage %s is not cached: %s", name, reason)
         _metric("Uncacheable", name)
         result = function(*args, **kwargs)
-        _register_result(result, NO_IDENTITY, _argument_ids(args, kwargs))
+        _register_result(result, prepared.NO_IDENTITY, _argument_ids(args, kwargs))
         return result
 
     enclosing = _FRAMES.get()
-    entry = lookup_render_stage(transaction, key)
+    entry = prepared.lookup_render_stage(transaction, key)
     if entry is not None:
         _metric("Hit", name)
         for frame in enclosing:
@@ -566,12 +571,12 @@ def render_stage(
             sorted(frame.undeclared_sections),
         )
         _metric("UndeclaredRead", name)
-        _register_result(result, NO_IDENTITY, _argument_ids(args, kwargs))
+        _register_result(result, prepared.NO_IDENTITY, _argument_ids(args, kwargs))
         return result
     for outer in enclosing:
         outer.inner_keys.add(key)
         outer.inner_keys.update(frame.inner_keys)
-    store_render_stage(transaction, key, result, frozenset(frame.inner_keys))
+    prepared.store_render_stage(transaction, key, result, frozenset(frame.inner_keys))
     _register_result(result, key, _argument_ids(args, kwargs))
     return result
 

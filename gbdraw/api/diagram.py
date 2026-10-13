@@ -114,6 +114,7 @@ from gbdraw.configurators import (
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
+from gbdraw.configurators.legend import measure_legend
 from gbdraw.core.color import normalize_hex_color
 from gbdraw.core.fonts import resolve_font_family
 from gbdraw.core.numeric import compensated_sum
@@ -167,7 +168,7 @@ from gbdraw.layout.spatial import Aabb
 from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from gbdraw.legend.table import (
     LegendTable,
-    configure_pairwise_identity_legend_from_comparisons,
+    pairwise_identity_legend_from_comparisons,
 )
 from gbdraw.linear_comparison import ComparisonRecordIdWarning, LinearComparison
 from gbdraw.mode_profiles import (
@@ -2070,7 +2071,7 @@ def assemble_linear_diagram_from_records(
         if collinearity_blocks is not None or normalized_protein_blastp_mode == "collinear"
         else None
     )
-    configure_pairwise_identity_legend_from_comparisons(
+    protein_identity_legend = pairwise_identity_legend_from_comparisons(
         blast_config,
         resolved_protein_comparisons,
         additional_color_modes=additional_color_modes,
@@ -2119,14 +2120,7 @@ def assemble_linear_diagram_from_records(
         profile=profile,
     ) if show_depth else None
     legend_config = LegendDrawingConfigurator(
-        color_table=color_table,
-        default_colors=default_colors,
-        selected_features_set=list(selected_features_set),
         profile=profile,
-        gc_config=gc_config,
-        skew_config=skew_config,
-        feature_config=feature_config,
-        blast_config=blast_config,
         canvas_config=canvas_config,
     )
 
@@ -2149,6 +2143,7 @@ def assemble_linear_diagram_from_records(
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
         comparison_dataframes=resolved_protein_comparisons,
+        pairwise_identity_legend=protein_identity_legend,
         linear_comparisons=resolved_linear_comparisons or None,
         linear_layout=layout,
         orthogroups=resolved_orthogroups,
@@ -2558,13 +2553,7 @@ def assemble_circular_diagram_from_record(
         record_features=_resolved_record_features,
     )
     legend_config = LegendDrawingConfigurator(
-        color_table=color_table,
-        default_colors=default_colors,
-        selected_features_set=list(selected_features_set),
         profile=profile,
-        gc_config=gc_config,
-        skew_config=skew_config,
-        feature_config=feature_config,
         canvas_config=canvas_config,
     )
 
@@ -3144,7 +3133,9 @@ def assemble_circular_diagram_from_records(
         )
         legend_depth_tracks = representative_depth_tracks(record_depth_track_data)
         legend_depth_track_zero = index_depth_track_row(legend_depth_tracks).get(0)
-        legend_table = build_circular_legend_table(
+        legend_table = render_stage(
+            "legend_table",
+            build_circular_legend_table,
             records,
             feature_config=feature_config,
             gc_config=gc_config,
@@ -3165,16 +3156,11 @@ def assemble_circular_diagram_from_records(
         )
         if legend_table:
             legend_config = LegendDrawingConfigurator(
-                color_table=color_table,
-                default_colors=default_colors,
-                selected_features_set=list(selected_features_set),
                 profile=profile,
-                gc_config=gc_config,
-                skew_config=skew_config,
-                feature_config=feature_config,
                 canvas_config=legend_canvas_config,
             )
-            legend_measurement = legend_config.measure_legend(
+            legend_measurement = measure_legend(
+                legend_config,
                 legend_table,
                 placement=legend_canvas_config.legend_position,
                 wrap_width=grid_layout.bounds.width,

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping, cast
 
 from gbdraw.config.models import (
     CircularRenderProfile,
@@ -22,6 +22,7 @@ from gbdraw.legend.linear_layout import (
     LinearLegendLayout,
     build_linear_legend_layout,
 )
+from gbdraw.legend.table import LegendTable
 from gbdraw.legend.metrics import (
     legend_line_height,
     legend_text_x_offset,
@@ -29,6 +30,7 @@ from gbdraw.legend.metrics import (
 from gbdraw.core.text import measurement_font_file
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.spatial import Aabb, union_aabbs
+from gbdraw.render_stages import render_stage
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,30 +179,23 @@ def _linear_legend_local_bounds(
 
 
 class LegendDrawingConfigurator:
-    def __init__(
-        self,
-        color_table,
-        default_colors,
-        selected_features_set,
-        profile: RenderProfile,
-        gc_config,
-        skew_config,
-        feature_config,
-        legend_table=None,
-        blast_config=None,
-        canvas_config=None,
-    ) -> None:
+    """Legend text and swatch settings for one canvas.
+
+    It holds values only (no config, profile or canvas configurator), so a
+    render stage keys it by its attributes.
+    """
+
+    def __init__(self, profile: RenderProfile, canvas_config: Any) -> None:
         cfg = profile.config
-        self.color_table = color_table
-        self.default_colors = default_colors
-        self.selected_features_set = selected_features_set
-        self.canvas_config = canvas_config
-        self._profile = profile
-        self.gc_config = gc_config
-        self.skew_config = skew_config
-        self.feature_config = feature_config
-        self.blast_config = blast_config
-        self.length_param = self.canvas_config.length_param
+        if isinstance(profile, CircularRenderProfile):
+            self.mode: Literal["circular", "linear"] = "circular"
+        elif isinstance(profile, LinearRenderProfile):
+            self.mode = "linear"
+        else:
+            raise TypeError(
+                "Legend measurement requires a CircularRenderProfile or LinearRenderProfile."
+            )
+        self.length_param = canvas_config.length_param
         self.font_size: float = cfg.objects.legends.font_size.for_length_param(self.length_param)
         self.font_weight: str = cfg.objects.legends.font_weight
         self.font_family: str = cfg.objects.text.font_family
@@ -265,90 +260,108 @@ class LegendDrawingConfigurator:
             wrap_width=0.0,
         )
 
-    def measure_legend(
-        self,
-        legend_table,
-        *,
-        placement: str,
-        wrap_width: float,
-    ) -> LegendMeasurement:
-        if not legend_table:
-            return self._empty_measurement()
-        wrap_width = float(wrap_width)
-        if not math.isfinite(wrap_width) or wrap_width < 0.0:
-            raise ValueError("legend wrap width must be a finite non-negative number")
-        _legend_half_stroke_width(legend_table)
-        if isinstance(self._profile, CircularRenderProfile):
-            circular_layout = build_circular_legend_layout(
-                legend_table,
-                legend_position=str(placement),
-                canvas_width=wrap_width,
-                font_family=self.font_family,
-                font_size=float(self.font_size),
-                dpi=int(self.dpi),
-                color_rect_size=float(self.color_rect_size),
-            )
-            return self._measurement(
-                legend_width=circular_layout.width,
-                legend_height=circular_layout.height,
-                total_feature_legend_width=circular_layout.feature_width,
-                pairwise_legend_width=circular_layout.pairwise_legend_width,
-                num_of_lines=circular_layout.num_lines,
-                num_of_columns=circular_layout.num_columns,
-                num_of_items_per_line=circular_layout.num_items_per_line,
-                has_gradient=circular_layout.has_gradient,
-                wrap_width=wrap_width,
-                circular_layout=circular_layout,
-                local_bounds=_circular_legend_local_bounds(
-                    circular_layout,
-                    color_rect_size=float(self.color_rect_size),
-                ),
-            )
-        if not isinstance(self._profile, LinearRenderProfile):
-            raise TypeError(
-                "Legend measurement requires a CircularRenderProfile or LinearRenderProfile."
-            )
-        layout = build_linear_legend_layout(
+
+def measure_legend(
+    legend_config: LegendDrawingConfigurator,
+    legend_table: LegendTable,
+    *,
+    placement: str,
+    wrap_width: float,
+) -> LegendMeasurement:
+    """Measure one legend table for a canvas, wrapped at ``wrap_width``.
+
+    A table with rows is measured by render stage ``legend_measurement``.
+    """
+
+    if not legend_table:
+        return legend_config._empty_measurement()
+    return render_stage(
+        "legend_measurement",
+        _measured_legend,
+        legend_config,
+        cast("Mapping[object, Mapping[str, object]]", legend_table),
+        str(placement),
+        float(wrap_width),
+    )
+
+
+def _measured_legend(
+    legend_config: LegendDrawingConfigurator,
+    legend_table: Mapping[object, Mapping[str, object]],
+    placement: str,
+    wrap_width: float,
+) -> LegendMeasurement:
+    wrap_width = float(wrap_width)
+    if not math.isfinite(wrap_width) or wrap_width < 0.0:
+        raise ValueError("legend wrap width must be a finite non-negative number")
+    _legend_half_stroke_width(legend_table)
+    if legend_config.mode == "circular":
+        circular_layout = build_circular_legend_layout(
             legend_table,
             legend_position=str(placement),
             canvas_width=wrap_width,
-            font_family=self.font_family,
-            font_size=float(self.font_size),
-            dpi=int(self.dpi),
-            color_rect_size=float(self.color_rect_size),
+            font_family=legend_config.font_family,
+            font_size=float(legend_config.font_size),
+            dpi=int(legend_config.dpi),
+            color_rect_size=float(legend_config.color_rect_size),
         )
-        active = layout.active
-        solid_count = len(active.feature.entries)
-        num_lines = active.feature.num_lines
-        num_items_per_line = (
-            max(1, (solid_count + max(1, num_lines) - 1) // max(1, num_lines))
-            if solid_count
-            else 0
-        )
-        return self._measurement(
-            legend_width=active.width,
-            legend_height=active.height,
-            total_feature_legend_width=active.feature.width,
-            pairwise_legend_width=(
-                active.gradient.width
-                if active.gradient is not None
-                else 0.0
-            ),
-            num_of_lines=num_lines,
-            num_of_columns=(
-                len(legend_table)
-                if layout.active_orientation == "horizontal"
-                else 1
-            ),
-            num_of_items_per_line=num_items_per_line,
-            has_gradient=layout.has_gradient,
+        return legend_config._measurement(
+            legend_width=circular_layout.width,
+            legend_height=circular_layout.height,
+            total_feature_legend_width=circular_layout.feature_width,
+            pairwise_legend_width=circular_layout.pairwise_legend_width,
+            num_of_lines=circular_layout.num_lines,
+            num_of_columns=circular_layout.num_columns,
+            num_of_items_per_line=circular_layout.num_items_per_line,
+            has_gradient=circular_layout.has_gradient,
             wrap_width=wrap_width,
-            linear_layout=layout,
-            local_bounds=_linear_legend_local_bounds(
-                layout,
-                color_rect_size=float(self.color_rect_size),
+            circular_layout=circular_layout,
+            local_bounds=_circular_legend_local_bounds(
+                circular_layout,
+                color_rect_size=float(legend_config.color_rect_size),
             ),
         )
+    layout = build_linear_legend_layout(
+        legend_table,
+        legend_position=str(placement),
+        canvas_width=wrap_width,
+        font_family=legend_config.font_family,
+        font_size=float(legend_config.font_size),
+        dpi=int(legend_config.dpi),
+        color_rect_size=float(legend_config.color_rect_size),
+    )
+    active = layout.active
+    solid_count = len(active.feature.entries)
+    num_lines = active.feature.num_lines
+    num_items_per_line = (
+        max(1, (solid_count + max(1, num_lines) - 1) // max(1, num_lines))
+        if solid_count
+        else 0
+    )
+    return legend_config._measurement(
+        legend_width=active.width,
+        legend_height=active.height,
+        total_feature_legend_width=active.feature.width,
+        pairwise_legend_width=(
+            active.gradient.width
+            if active.gradient is not None
+            else 0.0
+        ),
+        num_of_lines=num_lines,
+        num_of_columns=(
+            len(legend_table)
+            if layout.active_orientation == "horizontal"
+            else 1
+        ),
+        num_of_items_per_line=num_items_per_line,
+        has_gradient=layout.has_gradient,
+        wrap_width=wrap_width,
+        linear_layout=layout,
+        local_bounds=_linear_legend_local_bounds(
+            layout,
+            color_rect_size=float(legend_config.color_rect_size),
+        ),
+    )
 
 
-__all__ = ["LegendDrawingConfigurator", "LegendMeasurement"]
+__all__ = ["LegendDrawingConfigurator", "LegendMeasurement", "measure_legend"]
