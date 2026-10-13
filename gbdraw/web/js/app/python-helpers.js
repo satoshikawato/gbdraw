@@ -19,12 +19,16 @@ from gbdraw.web_support.config_overrides import validate_web_config_overrides_js
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
+from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_error_payload
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
 _WEB_LOSATP_CACHE_ORDER = []
 _WEB_LOSATP_CACHE_LIMIT = 64
 _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
+# The last figure of each mode drawn with crossing label leaders, for the rows
+# the label fit dialog computes later (OD-F14).
+_WEB_LABEL_FIT_SEARCHES = LabelFitRowSearches()
 
 def read_pdf_font(filename):
     import base64
@@ -138,6 +142,7 @@ def run_canonical_request_wrapper(
                 else None
             ),
             _resource_identities=resource_identities,
+            _label_fit_searches=_WEB_LABEL_FIT_SEARCHES,
         )
         if diagnostics is not None:
             for name in (
@@ -188,7 +193,12 @@ def run_canonical_request_wrapper(
             ).encode("utf-8")
         return result
     except Exception as e:
-        return {"error": serialize_web_error(e, operation="generate", stage="render")}
+        failure = {"error": serialize_web_error(e, operation="generate", stage="render")}
+        # Overlapping labels: the report travels next to the error for the dialog.
+        label_fit = label_fit_error_payload(e)
+        if label_fit is not None:
+            failure["labelFit"] = json.dumps(label_fit, ensure_ascii=False, separators=(",", ":"))
+        return failure
 
 def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
     """Extract the first record as FASTA for LOSAT input."""
@@ -1703,7 +1713,12 @@ def extract_features_from_gff_fasta(gff_path, fasta_path, region_spec=None, reco
     )
 
 
+def compute_label_fit_row_json(row_token, kind):
+    return json.dumps({"row": _WEB_LABEL_FIT_SEARCHES.row(str(row_token), str(kind))}, ensure_ascii=False)
+
+
 _WEB_JSON_HELPERS = {
+    "compute_label_fit_row_json": (compute_label_fit_row_json, "computeLabelFitRow"),
     "resolve_similarity_alignment_json": (resolve_similarity_alignment_json, "resolveSimilarityAlignment"),
     "evaluate_rules_json": (evaluate_rules_json, "evaluateRules"),
     "read_pdf_font": (read_pdf_font, "readPdfFont"),

@@ -14,6 +14,8 @@ import {
 } from './runtime-test-hooks.js';
 import { createDiagramResourceTransport } from './diagram-resource-staging.js';
 import { markCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
+import { normalizeLabelFitReport } from './label-fit.js';
+/** @import { LabelFitReport } from './label-fit.js' */
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
 /** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
@@ -36,6 +38,7 @@ import { markCurrentWorkerGenerationResponse } from './current-worker-result-sou
  * @property {unknown} results The decoded Result entries, or the engine's error payload.
  * @property {Record<string, unknown>} metadata
  * @property {GeneratedArtifactIdentity | null} artifactIdentity
+ * @property {LabelFitReport | null} [labelFit] With an engine error of overlapping labels: Python's report.
  */
 
 /** @typedef {NormalizedGeneration & { requestId: number }} GenerationResponse What a Generate request resolves with. */
@@ -46,6 +49,7 @@ import { markCurrentWorkerGenerationResponse } from './current-worker-result-sou
  * @property {unknown} [error]
  * @property {unknown} [results]
  * @property {unknown} [metadata]
+ * @property {unknown} [labelFit] The JSON text of a label fit report, next to an error.
  * @property {Partial<GeneratedArtifactIdentity> | null} [artifactIdentity]
  */
 
@@ -219,7 +223,8 @@ export const normalizeGenerationResponse = (payload) => {
     return markCurrentWorkerGenerationResponse({
       results: payload,
       metadata: {},
-      artifactIdentity: null
+      artifactIdentity: null,
+      labelFit: normalizeLabelFitReport(payload.labelFit)
     });
   }
   const results = Array.isArray(payload.results)

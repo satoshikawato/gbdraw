@@ -1,0 +1,165 @@
+// @ts-check
+// The "Labels do not fit" dialog (LP-D43, LP-D45 SHOW-ALL, LP-D48
+// WARN-NOTICE): the six rows of Python's label fit report in its order, each
+// with the settings it changes and the canvas size, or disabled with its
+// reason. Overlapping labels open it after a Generate that drew nothing;
+// crossing leaders open it from the notice bar over the drawn figure, and the
+// rows Generate did not search are computed here, one after another, by the
+// Worker (OD-F14). Apply writes the row's settings as one History step
+// (PD-OI-088) and runs Generate; Cancel writes nothing.
+import { normalizeLabelFitRow } from '../services/label-fit.js';
+import { diagnosticError } from '../utils/error-normalization.js';
+
+/** @import { LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitRowToken, ConfigPath, LabelFitSetting } from '../services/label-fit.js' */
+
+/**
+ * @typedef {object} LabelFitDialogRow What a row of the dialog shows.
+ * @property {LabelFitRowKind} kind
+ * @property {string} title
+ * @property {'found' | 'not_found' | 'not_computed' | 'computing' | 'failed'} status
+ * @property {readonly LabelFitSetting[]} settings
+ * @property {{ width: number, height: number } | null} canvasSize
+ * @property {string | null} reason
+ */
+/**
+ * @typedef {object} LabelFitDialogState
+ * @property {boolean} show
+ * @property {boolean} drawn True over a drawn figure (crossing leaders only).
+ * @property {number} overlapPairs
+ * @property {number} crossingPairs
+ * @property {{ recordId: string, labelKindTitle: string, labelCount: number, fontSize: number,
+ *   overlapPairs: number, crossingPairs: number }[]} records
+ * @property {LabelFitDialogRow[]} rows
+ * @property {LabelFitRowKind | ''} selectedKind
+ */
+/** @typedef {'circular' | 'linear'} LabelFitMode */
+/**
+ * @typedef {object} LabelFitDialogPorts
+ * @property {(value: LabelFitDialogState) => LabelFitDialogState} reactive Vue `reactive`.
+ * @property {(rowToken: LabelFitRowToken, kind: LabelFitRowKind) => Promise<unknown>} computeRow
+ *   The Worker's `computeLabelFitRow` reply for one row.
+ * @property {(values: Readonly<Record<ConfigPath, number>>, mode: LabelFitMode) => void} writeRowSettings
+ *   Writes a row's settings into the drawing of `mode` (the request mapping's draft fields).
+ * @property {(label: () => string, handler: (choice: string) => unknown, cancel: () => unknown) =>
+ *   (choice: string) => unknown} withHistory The modal choice's one History step (`createDialogChoice`).
+ * @property {(close: () => unknown) => void} closeAfterChoice
+ * @property {() => boolean} choicePending
+ * @property {() => Promise<unknown>} runAnalysis Generate.
+ * @property {(error: unknown) => string} errorSummary The user-facing summary of a failure.
+ */
+
+/**
+ * @param {LabelFitRow} row
+ * @returns {LabelFitDialogRow}
+ */
+const displayRow = (row) => ({
+  kind: row.kind,
+  title: row.title,
+  status: row.status,
+  settings: row.settings,
+  canvasSize: row.canvasSize,
+  reason: row.reason
+});
+
+/** @param {LabelFitDialogPorts} ports */
+export const createLabelFitDialog = ({
+  reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary
+}) => {
+  const dialog = reactive({
+    show: false, drawn: false, overlapPairs: 0, crossingPairs: 0, records: [], rows: [], selectedKind: ''
+  });
+  // The rows' values stay with the report, out of the reactive display state.
+  /** @type {Map<LabelFitRowKind, LabelFitRow>} */
+  let rowsByKind = new Map();
+  /** @type {LabelFitMode} */
+  let dialogMode = 'circular';
+  let openCount = 0;
+
+  const close = () => { dialog.show = false; openCount += 1; };
+  /** @param {LabelFitRowKind} kind @param {Partial<LabelFitDialogRow>} update */
+  const updateRow = (kind, update) => {
+    const index = dialog.rows.findIndex((row) => row.kind === kind);
+    if (index >= 0) dialog.rows[index] = { ...dialog.rows[index], ...update };
+  };
+  const selectFirstFound = () => {
+    if (rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind))?.status === 'found') return;
+    dialog.selectedKind = dialog.rows.find((row) => row.status === 'found')?.kind || '';
+  };
+
+  /**
+   * @param {number} opened
+   * @param {LabelFitRowToken | null} rowToken
+   */
+  const computeMissingRows = async (opened, rowToken) => {
+    for (const row of [...rowsByKind.values()]) {
+      if (row.status !== 'not_computed') continue;
+      if (opened !== openCount) return;
+      if (!rowToken) continue;
+      updateRow(row.kind, { status: 'computing' });
+      try {
+        const reply = /** @type {{ row?: unknown } | null} */ (await computeRow(rowToken, row.kind));
+        const computed = normalizeLabelFitRow(reply?.row);
+        if (opened !== openCount) return;
+        if (computed.kind !== row.kind) throw diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
+        rowsByKind.set(row.kind, computed);
+        updateRow(row.kind, displayRow(computed));
+        selectFirstFound();
+      } catch (error) {
+        if (opened !== openCount) return;
+        updateRow(row.kind, { status: 'failed', reason: errorSummary(error) });
+      }
+    }
+  };
+
+  /**
+   * Opens the dialog on a report; with a row token, computes the rows the
+   * report did not search, one after another.
+   * @param {LabelFitReport} report
+   * @param {{ rowToken?: LabelFitRowToken | null, mode: LabelFitMode }} options
+   */
+  const openLabelFitDialog = (report, { rowToken = null, mode }) => {
+    openCount += 1;
+    const opened = openCount;
+    dialogMode = mode;
+    rowsByKind = new Map(report.rows.map((row) => [row.kind, row]));
+    dialog.drawn = report.drawn;
+    dialog.overlapPairs = report.overlapPairs;
+    dialog.crossingPairs = report.crossingPairs;
+    dialog.records = report.records.map((record) => ({
+      recordId: record.recordId,
+      labelKindTitle: record.labelKindTitle,
+      labelCount: record.labelCount,
+      fontSize: record.fontSize,
+      overlapPairs: record.overlapPairs,
+      crossingPairs: record.crossingPairs
+    }));
+    dialog.rows = report.rows.map(displayRow);
+    dialog.selectedKind = '';
+    selectFirstFound();
+    dialog.show = true;
+    return computeMissingRows(opened, rowToken);
+  };
+
+  const applyRow = withHistory(
+    () => `Fit labels: ${rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind))?.title || ''}`,
+    () => {
+      const row = rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind));
+      if (!row || row.status !== 'found' || !row.values) return false;
+      writeRowSettings(row.values, dialogMode);
+      closeAfterChoice(close);
+      return true;
+    },
+    close
+  );
+
+  /** @param {'apply' | 'cancel'} choice */
+  const resolveLabelFitChoice = async (choice) => {
+    if (choice === 'cancel') {
+      if (choicePending()) return undefined;
+      return applyRow('cancel');
+    }
+    return await applyRow('apply') === true ? runAnalysis() : undefined;
+  };
+
+  return { labelFitDialog: dialog, openLabelFitDialog, resolveLabelFitChoice };
+};

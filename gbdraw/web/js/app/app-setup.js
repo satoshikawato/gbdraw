@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LegendEntry, LinearSeq, PopupPosition } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -75,6 +76,7 @@ import {
   serializeResults,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
+  applyConfigValues,
   setHeldPreviewViewportReader
 } from '../services/config.js';
 import {
@@ -130,7 +132,8 @@ import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
-import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { createLabelFitDialog } from './label-fit-dialog.js';
+import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { placePopupNearPoint, popupViewportBounds } from '../utils/popup-bounds.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
@@ -437,6 +440,7 @@ export const createAppSetup = () => {
     featureIdentityNotices,
     featureEditRemovalCount,
     comparisonWarnings,
+    labelFitReports,
     matchSequenceRegistry,
     svgContent,
     svgResultIdentity,
@@ -4571,6 +4575,10 @@ export const createAppSetup = () => {
         if (result?.status === 'error' && mode.value === 'linear') {
           await focusLinearComparisonIssue();
         }
+        // Overlapping labels drew nothing: Python searched every row already.
+        if (result?.status === 'error' && result.labelFit) {
+          void openLabelFitDialog(result.labelFit, { mode: mode.value === 'linear' ? 'linear' : 'circular' });
+        }
         if (result?.status === 'ok') {
           featureActions.clearSpecificRulePatternDrafts();
           await rulePreparation.prepare();
@@ -4703,6 +4711,31 @@ export const createAppSetup = () => {
         fileName: found?.draft?.fileActive ? String(found.draft.file?.name || '') : '', missing: missing.has(pair.edgeKey) };
     });
   });
+  // Labels that do not fit (LP-D43, LP-D48): the dialog over a Generate that
+  // drew nothing, or over crossing leaders from the notice bar.
+  const { labelFitDialog, openLabelFitDialog, resolveLabelFitChoice } = createLabelFitDialog({
+    reactive,
+    computeRow: async (rowToken, kind) => (await runDiagramHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW, { rowToken, kind }
+    )).result,
+    writeRowSettings: (values, rowMode) => applyConfigValues(state.drawings[rowMode], values, rowMode),
+    withHistory: dialogChoice.withHistory,
+    closeAfterChoice: dialogChoice.closeAfterChoice,
+    choicePending: () => dialogChoice.pending.value,
+    runAnalysis: () => runAnalysis(),
+    errorSummary: (error) => normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summary
+  });
+  // The notice bar over the shown Result drawn with crossing leaders (WARN-NOTICE).
+  const labelFitNotice = computed(() => {
+    const entry = /** @type {readonly ResultLabelFit[]} */ (labelFitReports.value).find((item) => item.resultIndex === selectedResultIndex.value
+      && item.resultName === results.value[selectedResultIndex.value]?.name);
+    return entry && entry.report.drawn && entry.report.crossingPairs > 0 ? entry : null;
+  });
+  const openLabelFitNotice = () => {
+    const entry = labelFitNotice.value;
+    if (!entry) return undefined;
+    return openLabelFitDialog(entry.report, { rowToken: entry.rowToken, mode: mode.value === 'linear' ? 'linear' : 'circular' });
+  };
   /** @param {'generate' | 'none' | 'cancel'} choice */
   const resolveMissingBlastTsv = async (choice) => {
     if (choice === 'generate') {
@@ -6498,6 +6531,10 @@ export const createAppSetup = () => {
     showLinearComparisonCause,
     runLinearComparisonIssueAction,
     resolveMissingBlastTsv,
+    labelFitDialog,
+    labelFitNotice,
+    openLabelFitNotice,
+    resolveLabelFitChoice,
     sessionSaveAvailable,
     sessionLoadAvailable,
     sessionBusyReason,

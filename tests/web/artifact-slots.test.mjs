@@ -27,7 +27,7 @@ snapshots.setGeneratedArtifactRuntimeOwner({
 const SWAPPED = [
   'results', 'selectedResultIndex', 'featureCatalog', 'extractedFeatures', 'biologicalFeatures',
   'featureRecordIds', 'orthogroups', 'featureOrthogroupIndex', 'collinearGroups', 'trackSlotResolvedGeometry',
-  'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings', 'lastRunInfo', 'pairwiseMatchFactors',
+  'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings', 'labelFitReports', 'lastRunInfo', 'pairwiseMatchFactors',
   'editableLabels', 'generatedLegendPosition', 'generatedMode', 'generatedMultiRecordCanvas',
   'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors',
   'similarityAlignmentResetReceipt', 'originalLegendColors', 'originalSvgStroke'
@@ -54,6 +54,7 @@ const fillCircularArtifact = async () => {
     featureOrthogroupIndex: new Map([['f1', 'og1']]), collinearGroups: [{ id: 'c1' }],
     trackSlotResolvedGeometry: { slots: [] }, annotationWarnings: [{ code: 'w' }],
     featureIdentityNotices: [{ status: 'dormant' }], comparisonWarnings: [{ code: 'c' }],
+    labelFitReports: [{ resultIndex: 0, resultName: 'a.svg', report: { drawn: true }, rowToken: null }],
     lastRunInfo: { invocation: { mode: 'circular' } }, pairwiseMatchFactors: { p1: 1.5 },
     editableLabels: [{ key: 'l1' }], generatedLegendPosition: 'right', generatedMode: 'circular',
     generatedMultiRecordCanvas: true, generatedCircularPlotTitlePosition: 'top',

@@ -46,6 +46,8 @@ _SETTING_NAMES: Mapping[str, tuple[str, str]] = {
 _LABEL_KIND_TITLES: Mapping[LabelKind, str] = {"circular_outer": "outer labels"}
 _ROW_KINDS: frozenset[str] = frozenset(get_args(LabelFitRowKind))
 _STALE_REASON = "Generate again to compute this choice."
+_UNKNOWN_CONFIG_PATH = {"code": "INPUT_INVALID", "field": "configOverrides", "reason": "UNKNOWN_CONFIG_PATH"}
+_UNKNOWN_ROW_KIND = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 
 
 class LabelFitSettingPayload(TypedDict):
@@ -92,7 +94,9 @@ def _settings(values: Mapping[str, float]) -> list[LabelFitSettingPayload]:
     settings: dict[str, LabelFitSettingPayload] = {}
     for path, value in values.items():
         if path not in _SETTING_NAMES:
-            raise ValidationError(f"The label fit row sets an unknown config path: {path}.")
+            raise ValidationError(
+                f"The label fit row sets an unknown config path: {path}.", diagnostic=_UNKNOWN_CONFIG_PATH
+            )
         name, unit = _SETTING_NAMES[path]
         settings.setdefault(name, {"name": name, "unit": unit, "value": float(value)})
     return list(settings.values())
@@ -185,7 +189,7 @@ class LabelFitRowSearches:
         """Compute one row of a kept figure (no time limit)."""
 
         if kind not in _ROW_KINDS:
-            raise ValidationError(f"Unknown label fit row kind: {kind}.")
+            raise ValidationError(f"Unknown label fit row kind: {kind}.", diagnostic=_UNKNOWN_ROW_KIND)
         row_kind = cast(LabelFitRowKind, kind)
         mode, _, rest = token.partition(":")
         generation_text, _, index_text = rest.partition(":")

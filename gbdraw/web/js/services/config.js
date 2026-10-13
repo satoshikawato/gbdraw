@@ -96,6 +96,7 @@ import {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest,
   canonicalLinearRecordLayout,
+  draftFieldsForConfigValues,
   featureEditsOverProjection,
   legacyTableRowsNotice,
   legendColorDropNotice,
@@ -2561,6 +2562,18 @@ const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) =
   }));
 };
 
+// Settings given by config path (a label fit row, LP-D43) go into the drawing's
+// draft through the request mapping, so the next Generate sends exactly them.
+// A path the mode does not manage is an UNKNOWN_CONFIG_PATH error.
+/**
+ * @param {DrawingState} drawing
+ * @param {Readonly<Record<string, number>>} values
+ * @param {'circular' | 'linear'} mode
+ */
+export const applyConfigValues = (drawing, values, mode) => {
+  Object.assign(drawing.adv, draftFieldsForConfigValues(values, mode, drawing.adv));
+};
+
 // Captured or stored settings (History Undo and Redo, the failed Session Load
 // rollback, a settings-only Session) pass `resolveTrackPlacements: false`: the
 // track stacks are installed as given, so unset slot sides, lane directions,
@@ -4590,6 +4603,7 @@ const resetSessionBaseline = () => {
   state.featureIdentityNotices.value = [];
   state.featureEditRemovalCount.value = 0;
   state.comparisonWarnings.value = [];
+  state.labelFitReports.value = [];
   applyFiles(null, { targetDrawing: state.drawings.linear });
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -6105,6 +6119,8 @@ const importSessionDocument = async (e, options = {}) => {
     state.comparisonWarnings.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.comparisonWarnings || []
     );
+    // A Session does not save the label fit report: a loaded Result has no notice.
+    state.labelFitReports.value = [];
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );

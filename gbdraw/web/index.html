@@ -5784,6 +5784,15 @@
                     <p class="font-semibold">Comparison table rows were placed by position.</p>
                     <p v-for="(warning, index) in comparisonWarnings" :key="index">{{ warning.message }}</p>
                 </div>
+                <!-- Crossing label leaders over the drawn figure (WARN-NOTICE): the fix is a choice, not a modal. -->
+                <div v-if="labelFitNotice && !processing"
+                     role="status" aria-live="polite" aria-atomic="true" data-testid="label-fit-notice"
+                     class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
+                    <p class="flex flex-wrap items-center gap-2">
+                        <span class="font-semibold">Leader lines cross ({{ labelFitNotice.report.crossingPairs }} {{ labelFitNotice.report.crossingPairs === 1 ? 'pair' : 'pairs' }}).</span>
+                        <button type="button" data-history-ignore class="btn btn-secondary text-xs h-7 px-2" @click="openLabelFitNotice">Choose a fix</button>
+                    </p>
+                </div>
                 <!-- While the Generate error card shows, its recovery line is this notice. -->
                 <div v-if="failedGeneratePreservedResult && (failedGeneratePreservedResult === 'current' || !(errorDisplay && (errorDisplay.operation === 'generate' || errorDisplay.operation === 'align')))"
                      role="status"
@@ -8359,6 +8368,48 @@
                 <button type="button" data-history-ignore @click="resolveMissingBlastTsv('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
                 <button v-if="missingBlastTsvRows.some((row) => row.missing)" type="button" data-history-managed :disabled="!semanticMutationAvailable" @click="resolveMissingBlastTsv('none')" class="btn btn-secondary btn-sm">Skip these comparisons and Generate</button>
                 <button v-else type="button" data-history-ignore :disabled="processing" @click="resolveMissingBlastTsv('generate')" class="btn btn-primary btn-sm">Generate</button>
+            </div>
+        </choice-dialog>
+        <!-- Labels that do not fit (LP-D43, LP-D45): every row of Python's report, in its order -->
+        <choice-dialog v-if="labelFitDialog.show" :busy="dialogChoicePending" labelledby="label-fit-title" describedby="label-fit-description"
+             data-label-fit-dialog
+             @cancel="resolveLabelFitChoice('cancel')" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="label-fit-title" class="text-base font-bold text-slate-800">{{ labelFitDialog.drawn ? 'Leader lines cross' : 'Labels do not fit' }}</h2>
+            <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">
+                <template v-if="labelFitDialog.drawn">{{ labelFitDialog.crossingPairs }} {{ labelFitDialog.crossingPairs === 1 ? 'pair' : 'pairs' }} of leader lines cross. The figure is drawn; choose a fix to Generate again, or Cancel to keep it.</template>
+                <template v-else>{{ labelFitDialog.overlapPairs }} {{ labelFitDialog.overlapPairs === 1 ? 'pair' : 'pairs' }} of labels overlap, so nothing was drawn. Choose a fix to Generate again.</template>
+            </p>
+            <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
+                <li v-for="record in labelFitDialog.records" :key="`${record.recordId}:${record.labelKindTitle}`">
+                    <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt<template v-if="record.overlapPairs">, {{ record.overlapPairs }} overlapping</template><template v-if="record.crossingPairs">, {{ record.crossingPairs }} crossing</template>
+                </li>
+            </ul>
+            <fieldset class="mt-3">
+                <legend class="sr-only">Fix</legend>
+                <ul class="divide-y divide-slate-200 rounded border border-slate-200" data-label-fit-rows>
+                    <li v-for="row in labelFitDialog.rows" :key="row.kind" :data-label-fit-row="row.kind" :data-label-fit-status="row.status"
+                        class="px-2 py-1.5 text-sm" :class="row.status === 'found' ? '' : 'text-slate-400'">
+                        <label class="flex min-w-0 items-start gap-2" :class="row.status === 'found' ? 'cursor-pointer' : 'cursor-not-allowed'">
+                            <input type="radio" name="label-fit-row" data-history-ignore class="mt-1 shrink-0" :value="row.kind"
+                                   :checked="labelFitDialog.selectedKind === row.kind" :disabled="row.status !== 'found'"
+                                   @change="labelFitDialog.selectedKind = row.kind">
+                            <span class="min-w-0 flex-1">
+                                <span class="block font-semibold first-letter:uppercase" :class="row.status === 'found' ? 'text-slate-800' : ''">{{ row.title }}</span>
+                                <span v-if="row.status === 'found'" class="block text-xs text-slate-600">
+                                    <template v-for="(setting, index) in row.settings" :key="setting.name">{{ index ? ', ' : '' }}{{ setting.name }} {{ setting.value }}{{ setting.unit ? ` ${setting.unit}` : '' }}</template>
+                                    <template v-if="row.canvasSize"> · {{ Math.round(row.canvasSize.width) }} × {{ Math.round(row.canvasSize.height) }} px</template>
+                                </span>
+                                <span v-else-if="row.status === 'computing'" class="block text-xs" role="status">Computing…</span>
+                                <span v-else class="block text-xs">{{ row.reason || 'Not computed.' }}</span>
+                            </span>
+                        </label>
+                    </li>
+                </ul>
+            </fieldset>
+            <div class="mt-4 flex flex-wrap justify-end gap-2">
+                <button type="button" data-history-ignore @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
+                <button type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">Apply and Generate</button>
             </div>
         </choice-dialog>
         <!-- Record selection (D-02, D-10): the records of one file, drawn or left out -->

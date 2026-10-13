@@ -8,6 +8,7 @@
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { normalizeResultLabelFits } from '../services/label-fit.js';
 import { keepResultNames } from '../services/result-normalization.js';
 import {
   nameFeaturePlacementFailure,
@@ -1396,6 +1397,8 @@ export const executeCanonicalRenderCandidate = async ({
       status: /** @type {const} */ ('engine-error'),
       generationResponse,
       engineError: results.error,
+      // Overlapping labels: Python's report, for the dialog (LP-D43).
+      labelFit: generationResponse.labelFit ?? null,
       elapsedMs: getNow() - startedAt
     };
   }
@@ -1410,6 +1413,8 @@ export const executeCanonicalRenderCandidate = async ({
     : {};
   const annotationWarnings = validateAnnotationWarnings(metadata.annotationWarnings, results);
   const comparisonWarnings = validateComparisonWarnings(metadata.comparisonWarnings, results);
+  // Crossing label leaders drawn anyway: each Result's report (LP-D46).
+  const labelFitReports = normalizeResultLabelFits(metadata.labelFitReports, results);
   // Edits by source identity that a Result does not draw (design Q4 3.4).
   const featureIdentityNotices = Array.isArray(metadata.featureIdentityNotices)
     ? metadata.featureIdentityNotices : [];
@@ -1443,6 +1448,7 @@ export const executeCanonicalRenderCandidate = async ({
     annotationWarnings,
     featureIdentityNotices,
     comparisonWarnings,
+    labelFitReports,
     results,
     catalogAdmission: catalogState,
     catalog: catalogState.catalog,
@@ -1598,6 +1604,7 @@ export const createRunAnalysis = ({
     extractedFeatures,
     biologicalFeatures,
     featureCatalog,
+    labelFitReports,
     featureEditRemovalCount,
     featureEditorStatus,
     featureExtractionPending,
@@ -5164,9 +5171,12 @@ export const createRunAnalysis = ({
       if (canonicalExecution.status === 'engine-error') {
         logPostGbdrawTimings(postGbdrawTimingEntries);
         // R6: Python names the failed placement row; the Result still shows its feature.
-        return await failOperation(nameFeaturePlacementFailure(canonicalExecution.engineError,
+        const failure = await failOperation(nameFeaturePlacementFailure(canonicalExecution.engineError,
           canonical.renderRequest, extractedFeatures.value), { handle: committedArtifactHandle,
           restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
+        // The composition root asks how to make the labels fit (LP-D43).
+        return failure.status === 'error' && canonicalExecution.labelFit
+          ? { ...failure, labelFit: canonicalExecution.labelFit } : failure;
       }
       const {
         generationResponse,
@@ -5252,6 +5262,7 @@ export const createRunAnalysis = ({
         annotationWarnings: canonicalExecution.annotationWarnings,
         featureIdentityNotices: canonicalExecution.featureIdentityNotices,
         comparisonWarnings: canonicalExecution.comparisonWarnings,
+        labelFitReports: canonicalExecution.labelFitReports,
         specificRules: candidateRules,
         fileLegendCaptions: new Set(candidateRules.filter((/** @type {SpecificColorRule} */ rule) => rule.fromFile && rule.cap).map((/** @type {SpecificColorRule} */ rule) => rule.cap)),
         proteinIdentityManifest: workingProteinIdentityManifest,
@@ -5750,8 +5761,10 @@ export const createRunAnalysis = ({
         return { status: 'stale' };
       }
       if (execution.status === 'engine-error') {
-        return await failOperation(execution.engineError, { handle: committedArtifactHandle, operation,
+        const failure = await failOperation(execution.engineError, { handle: committedArtifactHandle, operation,
           restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
+        return failure.status === 'error' && execution.labelFit
+          ? { ...failure, labelFit: execution.labelFit } : failure;
       }
       processingStatus.value = 'Preparing preview...';
       const candidateCommit = execution.commit;
@@ -5787,6 +5800,7 @@ export const createRunAnalysis = ({
         annotationWarnings: execution.annotationWarnings,
         featureIdentityNotices: execution.featureIdentityNotices,
         comparisonWarnings: execution.comparisonWarnings,
+        labelFitReports: execution.labelFitReports,
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
         ) || currentOwnerSet.matchSequenceOwner,
@@ -6143,6 +6157,8 @@ export const createRunAnalysis = ({
       extractedFeatures.value = execution.commit.featureState.extractedFeatures;
       biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
       results.value = execution.commit.results;
+      // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
+      labelFitReports.value = execution.labelFitReports;
       // The preview owner selects the Result (R13). It registers readiness only
       // when fewer Results leave the selection out of range; the reflow's own
       // expectation, registered next, replaces it, so the binder reports a

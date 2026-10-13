@@ -30,6 +30,7 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   annotationWarnings: () => [],
   featureIdentityNotices: () => [],
   comparisonWarnings: () => [],
+  labelFitReports: () => [],
   lastRunInfo: () => null,
   pairwiseMatchFactors: () => ({}),
   editableLabels: () => [],
