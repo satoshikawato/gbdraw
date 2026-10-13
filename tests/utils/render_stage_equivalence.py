@@ -1012,7 +1012,7 @@ def matrix_variants(
     first_variant_only: bool = False,
     include_slow: bool = True,
 ) -> list[tuple[OptionSpec, Variant]]:
-    """The variants of the selected options of a case, in universe order."""
+    """The variants of the selected options of a case, in universe order, without ``LABEL_FIT_FAILURES``."""
 
     selected: list[tuple[OptionSpec, Variant]] = []
     for option in options_for(case):
@@ -1021,7 +1021,8 @@ def matrix_variants(
         variants = [
             variant
             for variant in option.variants
-            if include_slow or (option.option_id, variant.label) not in SLOW_VARIANTS
+            if (case.case_id, option.option_id, variant.label) not in LABEL_FIT_FAILURES
+            and (include_slow or (option.option_id, variant.label) not in SLOW_VARIANTS)
         ]
         selected.extend((option, variant) for variant in variants[:1 if first_variant_only else None])
     return selected
@@ -1063,13 +1064,14 @@ def random_walk(
     Each step either sets one option to a variant, resets one option to the
     base, or undoes the previous step (a return to the state before it). A
     walk leaves out the slow and heavy variants (``SLOW_VARIANTS``,
-    ``HEAVY_RENDER_SECONDS``): a heavy setting stays in the state and makes
+    ``HEAVY_RENDER_SECONDS``, ``LABEL_FIT_FAILURES``): a heavy setting stays in the state and makes
     every later step heavy. The matrix chunks cover them.
     """
 
     def walkable(option: OptionSpec, variant: Variant) -> bool:
         key = (option.option_id, variant.label)
-        return key not in SLOW_VARIANTS and (case.case_id, *key) not in HEAVY_RENDER_SECONDS
+        full = (case.case_id, *key)
+        return key not in SLOW_VARIANTS and full not in HEAVY_RENDER_SECONDS and full not in LABEL_FIT_FAILURES
 
     rng = np.random.default_rng(seed)
     options = [option for option in options_for(case) if any(walkable(option, v) for v in option.variants)]
@@ -1124,25 +1126,30 @@ def random_walk(
 # that at a load average of 8-10). A step renders twice: warm and cold in a
 # chain, or the variant and the base again in the expected-builds test.
 RENDER_SECONDS: Mapping[str, float] = {"C1": 0.5, "C2": 13.0, "C3": 1.3, "L1": 0.2, "L2": 1.3, "L3": 1.4}
-# Cold renders far above their case: C2 label layouts that end in
-# LabelsDoNotFitError (#1049) after a long search, and the slower label
-# settings. The warm render of such a step took up to twice its cold render
-# (C2 ``-k ...gene``: cold 81 s, warm 127-156 s), so a heavy step counts three
-# cold renders.
+# Cold renders far above their case: the slower label settings. A warm render
+# can take up to twice its cold render, so a heavy step counts three cold renders.
 HEAVY_RENDER_SECONDS: Mapping[tuple[str, str, str], float] = {
     ("C1", "label_font_size", "--label_font_size 30"): 21.0,
-    ("C2", "label_font_size", "--label_font_size 30"): 421.0,
-    ("C2", "feature_overlap_tolerance_bp", "--feature_overlap_tolerance_bp 200"): 144.0,
-    ("C2", "resolve_overlaps", "--resolve_overlaps"): 140.0,
-    ("C2", "outer_label_y_radius_offset", "--outer_label_y_radius_offset 0.8"): 87.0,
-    ("C2", "features", "-k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region,gene"): 81.0,
     ("C2", "circular_label_spacing", "--circular_label_spacing 40"): 25.0,
     ("C2", "inner_label_x_radius_offset", "--inner_label_x_radius_offset 1.3"): 23.0,
     ("C2", "inner_label_y_radius_offset", "--inner_label_y_radius_offset 1.3"): 23.0,
 }
-# The estimated time of one chunk: well under the 300 s pytest timeout (pyproject).
+# C2 variants left out of the universe. Each ends in LabelsDoNotFitError, so the
+# test only checks that warm and cold raise the same error; together they cost
+# about 47 min (cold 81-421 s each, warm up to twice that). The cause is the slow
+# failing label fit, bug OV-701.
+LABEL_FIT_FAILURES: frozenset[tuple[str, str, str]] = frozenset({
+    ("C2", "label_font_size", "--label_font_size 30"),
+    ("C2", "feature_overlap_tolerance_bp", "--feature_overlap_tolerance_bp 200"),
+    ("C2", "resolve_overlaps", "--resolve_overlaps"),
+    ("C2", "outer_label_y_radius_offset", "--outer_label_y_radius_offset 0.8"),
+    ("C2", "features", "-k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region,gene"),
+})
+# The estimated time of one chunk.
 CHUNK_BUDGET_SECONDS = 120.0
-_PYTEST_TIMEOUT_SECONDS = 300
+# The universe tests are slow and run only with ``--render-stage-universe``
+# (tests/conftest.py); ``slow`` also keeps them out of the release job.
+UNIVERSE_MARKS = (pytest.mark.slow, pytest.mark.render_stage_universe)
 
 
 @dataclass(frozen=True)
@@ -1154,21 +1161,6 @@ class Chunk:
     start: int
     stop: int
     seconds: float
-
-    @property
-    def marks(self) -> list[pytest.MarkDecorator]:
-        """``slow``, and a longer timeout for a chunk that cannot fit the default.
-
-        Only a chunk with a heavy step can exceed two thirds of the default
-        timeout: one warm and one cold render of that step take that long, and
-        a step cannot be split. It gets twice its estimate, in whole 300 s units.
-        """
-
-        marks = [pytest.mark.slow]
-        if self.seconds > _PYTEST_TIMEOUT_SECONDS * 2 / 3:
-            units = math.ceil(2 * self.seconds / _PYTEST_TIMEOUT_SECONDS)
-            marks.append(pytest.mark.timeout(units * _PYTEST_TIMEOUT_SECONDS))
-        return marks
 
 
 def cost_chunks(

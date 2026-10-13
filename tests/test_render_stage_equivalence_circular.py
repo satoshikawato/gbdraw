@@ -7,7 +7,7 @@ runs the CLI entry and renders its typed request inside a cache transaction
 
 - Matrix: a chain over the option variants of a case. The full universe of a
   case is split into chunks, each a chain that starts from the case base, so
-  each slow test fits the 300 s pytest timeout.
+  each test fits the 300 s pytest timeout; they run with ``--render-stage-universe``.
 - Declarations: no undeclared settings read and no uncacheable stage.
 - Identity: the per-record identity elements Circular inputs reach (source
   bytes, GFF3 type filter, position within an input, batch and Multi-Record
@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from tests.utils.render_stage_equivalence import (
+    UNIVERSE_MARKS,
     CASES,
     EquivalenceHarness,
     Placeholders,
@@ -48,6 +49,7 @@ pytestmark = pytest.mark.circular
 _BASE = ("--labels", "out", "--gc", "--skew", "-l", "right")
 
 # Chains: one variant per option on C1, named options on C2; the first variant of each.
+# C2-named takes 37 s (a C2 render is 13 s), so it runs with the universe.
 _CHAINS = {
     "C1-fast": ("C1", None),
     "C2-named": ("C2", ("label_table",)),
@@ -63,7 +65,7 @@ def placeholders(tmp_path_factory: pytest.TempPathFactory) -> Placeholders:
 
 @pytest.fixture(
     scope="module",
-    params=["C1-fast", "C2-named", *(pytest.param(chunk_id, marks=chunk.marks) for chunk_id, chunk in _FULL_CHUNKS.items())],
+    params=["C1-fast", pytest.param("C2-named", marks=UNIVERSE_MARKS), *(pytest.param(chunk_id, marks=UNIVERSE_MARKS) for chunk_id, chunk in _FULL_CHUNKS.items())],
 )
 def chain(
     request: pytest.FixtureRequest,
@@ -103,7 +105,7 @@ _SLOW_WALKS = {"C1": (range(11, 17), 20), "C2": (range(21, 25), 4), "C3": (range
     [
         ("C1", 1, 8),
         *(
-            pytest.param(case_id, seed, steps, marks=pytest.mark.slow)
+            pytest.param(case_id, seed, steps, marks=UNIVERSE_MARKS)
             for case_id, (seeds, steps) in _SLOW_WALKS.items()
             for seed in seeds
         ),

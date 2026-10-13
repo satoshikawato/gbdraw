@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from tests.utils.render_stage_equivalence import (
+    UNIVERSE_MARKS,
     CASES,
     EquivalenceHarness,
     OptionSpec,
@@ -221,7 +222,7 @@ def tables(tmp_path_factory: pytest.TempPathFactory) -> Path:
         pytest.param("C1", slice(None), id="C1"),
         pytest.param("L1", slice(None), id="L1"),
         *(
-            pytest.param(chunk.case_id, slice(chunk.start, chunk.stop), marks=chunk.marks, id=chunk.chunk_id)
+            pytest.param(chunk.case_id, slice(chunk.start, chunk.stop), marks=UNIVERSE_MARKS, id=chunk.chunk_id)
             for chunk in _SLOW_CHUNKS
         ),
     ],

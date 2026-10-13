@@ -7,7 +7,7 @@ runs the CLI entry and renders its typed request inside a cache transaction
 
 - Matrix: a chain over the option variants of a case. The full universe of a
   case is split into chunks, each a chain that starts from the case base, so
-  each slow test fits the 300 s pytest timeout.
+  each test fits the 300 s pytest timeout; they run with ``--render-stage-universe``.
 - Declarations: no undeclared settings read and no uncacheable stage.
 - Identity: each element of the per-record identity, a shared depth axis, and
   a similarity alignment reference (two builds in one transaction).
@@ -33,6 +33,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from tests.utils.render_stage_equivalence import (
+    UNIVERSE_MARKS,
     CASES,
     EquivalenceHarness,
     Placeholders,
@@ -71,7 +72,7 @@ def placeholders(tmp_path_factory: pytest.TempPathFactory) -> Placeholders:
 
 @pytest.fixture(
     scope="module",
-    params=["L1-fast", "L2-named", *(pytest.param(chunk_id, marks=chunk.marks) for chunk_id, chunk in _FULL_CHUNKS.items())],
+    params=["L1-fast", "L2-named", *(pytest.param(chunk_id, marks=UNIVERSE_MARKS) for chunk_id, chunk in _FULL_CHUNKS.items())],
 )
 def chain(
     request: pytest.FixtureRequest,
@@ -112,7 +113,7 @@ _SLOW_WALKS = {"L1": (range(11, 17), 20), "L2": (range(21, 24), 10), "L3": (rang
         ("L1", 1, 10),
         ("L1", 2, 10),
         *(
-            pytest.param(case_id, seed, steps, marks=pytest.mark.slow)
+            pytest.param(case_id, seed, steps, marks=UNIVERSE_MARKS)
             for case_id, (seeds, steps) in _SLOW_WALKS.items()
             for seed in seeds
         ),
