@@ -247,7 +247,7 @@ class FakeDetails {
 
   parentElement = null;
 }
-// The module reads Vue once: its watchers and the window's listeners are those of the pane made last.
+// The module reads Vue once: its watchers are those of the pane made last.
 let watchers = [];
 const Vue = {
   computed: (read) => ({ get value() { return read(); } }), nextTick: async (run) => run?.(),
@@ -255,7 +255,6 @@ const Vue = {
 };
 const createPane = async (mode, display = 'stacked') => {
   const calls = [];
-  const listeners = new Map();
   watchers = [];
   const sections = new Map();
   const sectionElement = (key) => {
@@ -299,7 +298,7 @@ const createPane = async (mode, display = 'stacked') => {
   };
   globalThis.window = {
     localStorage: null, innerWidth: 1600, innerHeight: 1000, Vue,
-    addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener() {}
+    addEventListener() {}, removeEventListener() {}
   };
   const state = {
     mode: { value: mode }, settingsPaneDisplay: { value: display }, settingsPaneDocked: { value: display === 'rail' ? 'layout' : null },
@@ -307,12 +306,7 @@ const createPane = async (mode, display = 'stacked') => {
   };
   const { createSettingsPaneController } = await import('../../gbdraw/web/js/app/settings-pane.js');
   const pane = createSettingsPaneController({ state });
-  // The window at a new size, as the browser tells the page.
-  const resize = (width, height) => {
-    Object.assign(globalThis.window, { innerWidth: width, innerHeight: height });
-    listeners.get('resize')();
-  };
-  return { pane, state, calls, sections, resize, watchers };
+  return { pane, state, calls, sections, watchers };
 };
 // The Result's viewport, and a click on an item 20 px wide at (700, 500).
 const RESULT = { top: 100, bottom: 900, left: 400, right: 1500 };
@@ -383,20 +377,12 @@ test('the popup closes when the Result panel shows another tab, and when no Resu
   }
 });
 
-// S-2: the popup is 320 x 300 here; a drag keeps it 12 px inside the window.
-test('a window that changed size moves the popup the least distance back inside it, and does not close it', async () => {
-  const { pane, state, resize } = await createPane('circular');
-  resize(900, 500);
+// S-2, OV-626: the popup is moved by a drag and by a window that changed size, both through the owner's one move.
+test('a move of the popup keeps its section and does nothing without a popup', async () => {
+  const { pane, state } = await createPane('circular');
+  pane.moveSettingsPopup({ x: 40, y: 60, maxHeight: 0 });
   assert.equal(state.settingsPopup.value, null, 'no popup, nothing to move');
   pane.showSettingsBesideResult('dinucleotide', CLICK, RESULT);
-  const placed = { section: 'dinucleotide', x: 722, y: 225, maxHeight: 663 };
-  resize(1600, 1000);
-  assert.deepEqual(state.settingsPopup.value, placed, 'inside the window: where it was, as high as it was');
-  resize(900, 500);
-  assert.deepEqual(state.settingsPopup.value, { section: 'dinucleotide', x: 568, y: 188, maxHeight: 0 });
-  resize(1600, 1000);
-  assert.deepEqual(state.settingsPopup.value, { section: 'dinucleotide', x: 568, y: 188, maxHeight: 0 }, 'a larger window moves nothing back');
-  // A drag moves it through the same transition.
   pane.moveSettingsPopup({ x: 40, y: 60, maxHeight: 0 });
   assert.deepEqual(state.settingsPopup.value, { section: 'dinucleotide', x: 40, y: 60, maxHeight: 0 });
 });
@@ -410,6 +396,10 @@ test('no module but the pane-state service writes the popup', () => {
   // A popup of the Result is dragged through a port that moves it; the drag holds no placement to write.
   const setup = readFileSync(join(root, 'app', 'app-setup.js'), 'utf8');
   assert.match(setup, /moveTo: settingsPaneActions\.moveSettingsPopup/);
+  // OV-626: one resize rule for every popup of the Result, in the helper that drags them.
+  assert.match(setup, /\[featurePopupDragging, pairwiseMatchPopupDragging, settingsPopupDrag\]\.forEach\(\(popup\) => popup\.keepInWindow\(\)\)/);
+  assert.equal(modules.filter((file) => /addEventListener\('resize', keepPopupsInWindow\)/.test(readFileSync(join(root, file), 'utf8'))).length, 1);
+  assert.doesNotMatch(readFileSync(join(root, 'app', 'settings-pane.js'), 'utf8'), /placePopupWithin/);
   // Only the four sections a drawn element opens can be shown beside the Result: the port takes no other key.
   assert.match(readFileSync(join(root, 'app', 'settings-pane.js'), 'utf8'), /@typedef \{\(key: DrawnElementSectionKey, anchor: PopupAnchor, bounds: PopupBounds\) => boolean\} ShowSettingsBesideResult/);
 });
