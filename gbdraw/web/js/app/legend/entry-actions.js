@@ -12,7 +12,8 @@ import {
   isLegendOrderEdited,
   legendEntryKey,
   recordedLegendOrder,
-  resultLegendRows
+  resultLegendRows,
+  shownLegendRowNames
 } from '../../services/legend-svg.js';
 import { diffLegendIntents, legendRowRules } from '../../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
@@ -57,6 +58,9 @@ const entriesInOrder = (entries, captions, { keepFollowed = false } = {}) => {
  * @property {import('../candidate-render.js').LegendRowColorOf} readShownLegendColor
  *   The color a listed row shows (`displayedLegendRowColors`, OV-282), read
  *   from the composition root's derivation the Legend panel shows.
+ * @property {{ value: ReadonlyMap<string, import('../../services/legend-svg.js').ShownLegendRowNames> }} [legendRowNames]
+ *   The root's reactive holder of the names the displayed Result shows for its rows;
+ *   this owner is its one writer.
  */
 
 // The Legend entry owner (U3a, R1): its writers edit the drawing's Legend
@@ -67,7 +71,8 @@ const entriesInOrder = (entries, captions, { keepFollowed = false } = {}) => {
 export const createLegendEntryActions = ({
   state,
   readActiveResultIdentity = null,
-  readShownLegendColor
+  readShownLegendColor,
+  legendRowNames = { value: new Map() }
 }) => {
   const {
     results,
@@ -89,6 +94,25 @@ export const createLegendEntryActions = ({
   const inventoryByResult = new Map();
   /** @type {Set<string>} */
   const replayedInventoryResults = new Set();
+
+  // The names the displayed Result shows for its Legend rows, by the key each
+  // row shows: read when the rows are listed and after the executor named
+  // them. A row's key (`caption`) is never shown; every surface shows
+  // `shownLegendName` of it.
+  const readLegendRowNames = () => {
+    legendRowNames.value = shownLegendRowNames(svgContainer.value?.querySelector?.('svg') || null);
+  };
+  /** @param {unknown} caption The key a row shows. @returns {string} The name the Legend draws for it. */
+  const shownLegendName = (caption) => legendRowNames.value.get(String(caption ?? ''))?.drawnName ?? String(caption ?? '');
+  // Whether `typed` names the row that shows `caption`: its key, its name, or
+  // its drawn name. Typing one of them into the row's name field is no rename.
+  /** @param {unknown} caption @param {unknown} typed */
+  const legendRowIsNamed = (caption, typed) => {
+    const key = String(caption ?? '').trim();
+    const text = String(typed ?? '').trim();
+    const names = legendRowNames.value.get(key);
+    return text === key || (Boolean(names) && (text === names?.name || text === names?.drawnName));
+  };
 
   /** @param {(options?: { commit?: boolean }) => unknown} handler The root's refresh of the Legend geometry. */
   const setLegendGeometryChangedHandler = (handler) => {
@@ -463,6 +487,7 @@ export const createLegendEntryActions = ({
   /** @param {{ replaceGeneratedInventory?: boolean, liveResultIdentities?: string[] }} [options] */
   const extractLegendEntries = ({ replaceGeneratedInventory = false, liveResultIdentities = [] } = {}) => {
     const drawing = state.activeDrawing();
+    readLegendRowNames();
     if (!svgContainer.value) {
       drawing.legendEntries.value = [];
       return;
@@ -615,11 +640,14 @@ export const createLegendEntryActions = ({
     captureResultInventory,
     deleteLegendEntry,
     extractLegendEntries,
+    legendRowIsNamed,
     onLegendGeometryChanged,
     prepareFileLegendEntries,
+    readLegendRowNames,
     rememberResultInventory,
     restoreDeletedLegendEntries,
     setLegendGeometryChangedHandler,
+    shownLegendName,
     updateLegendEntryColor
   };
 };

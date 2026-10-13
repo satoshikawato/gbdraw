@@ -6279,7 +6279,8 @@
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Legend name</label>
                             <input type="text"
-                                   v-model="clickedFeature.legendName"
+                                   :value="clickedFeature.legendName === clickedFeature.appliedLegendName ? shownLegendName(clickedFeature.legendName) : clickedFeature.legendName"
+                                   @input="clickedFeature.legendName = $event.target.value"
                                    list="specific-rule-legend-name-options"
                                    @change="handleLegendNameCommit"
                                    @keydown.enter.prevent="handleLegendNameCommit"
@@ -6670,7 +6671,7 @@
                                         <div class="flex items-center gap-2">
                                             <input type="color" :value="previewItemView.color"
                                                    @change="updateLegendEntryColor(previewItemView.index, $event.target.value)"
-                                                   :aria-label="`Color of ${previewItemView.caption}`"
+                                                   :aria-label="`Color of ${previewItemView.name}`"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="h-7 w-10 cursor-pointer rounded border border-slate-300 p-0">
                                             <span class="match-mono">{{ previewItemView.color }}</span>
@@ -6682,7 +6683,7 @@
                                     </section>
                                     <section>
                                         <label for="preview-legend-caption" class="feature-popup-heading block">Legend name</label>
-                                        <input id="preview-legend-caption" type="text" :value="previewItemView.caption"
+                                        <input id="preview-legend-caption" type="text" :value="previewItemView.name"
                                                @change="renameLegendEntryInPopup(previewItemView.index, $event.target.value)"
                                                @keydown.enter.prevent="commitPreviewItemField"
                                                :disabled="!semanticMutationAvailable"
@@ -7177,7 +7178,7 @@
                                         :aria-describedby="featureStyleScopeDialog.defaultColorType ? 'feature-style-scope-default-color' : null"
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-list-bullets" aria-hidden="true"></i>
-                                    <span>Legend item "{{ featureStyleScopeDialog.legendName }}" ({{ featureStyleScopeDialog.siblingCount + 1 }})</span>
+                                    <span>Legend item "{{ shownLegendName(featureStyleScopeDialog.legendName) }}" ({{ featureStyleScopeDialog.siblingCount + 1 }})</span>
                                 </button>
                                 <p v-if="featureStyleScopeDialog.siblingCount > 0 && featureStyleScopeDialog.defaultColorType" id="feature-style-scope-default-color" data-default-color-scope-line class="choice-option-note">
                                     <template v-if="featureStyleScopeDialog.replacedDefaultColor">
@@ -7214,7 +7215,7 @@
                                             class="choice-option" :disabled="!semanticMutationAvailable">
                                         <span class="w-5 h-5 rounded border border-slate-300 shrink-0"
                                               :style="{ backgroundColor: featureStyleScopeDialog.existingCaptionColor }"></span>
-                                        <span>Use the "{{ featureStyleScopeDialog.legendName }}" Legend color</span>
+                                        <span>Use the "{{ shownLegendName(featureStyleScopeDialog.legendName) }}" Legend color</span>
                                     </button>
                                 </template>
                             </div>
@@ -7234,7 +7235,7 @@
                                 {{ legendRenameDialog.mode === 'scope' ? 'Legend Name Scope' : 'Legend Name Conflict' }}
                             </h3>
                             <p v-if="legendRenameDialog.mode === 'scope'" id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                Rename "<span class="font-semibold text-slate-800">{{ legendRenameDialog.oldCaption }}</span>" to "<span class="font-semibold text-slate-800">{{ legendRenameDialog.newCaption }}</span>"?
+                                Rename "<span class="font-semibold text-slate-800">{{ shownLegendName(legendRenameDialog.oldCaption) }}</span>" to "<span class="font-semibold text-slate-800">{{ legendRenameDialog.newCaption }}</span>"?
                             </p>
                             <div v-else id="legend-rename-description" class="text-sm text-slate-600 mb-4">
                                 <p v-if="legendRenameDialog.targetRuleOnly">
@@ -7249,11 +7250,11 @@
                                 <ul class="mt-2 space-y-1">
                                     <li class="flex items-center gap-2">
                                         <span class="w-4 h-4 rounded border border-slate-300 inline-block shrink-0" :style="{ backgroundColor: legendRenameDialog.targetColor }"></span>
-                                        <span class="font-semibold text-slate-800">{{ legendRenameDialog.targetCaption || legendRenameDialog.newCaption }}</span>
+                                        <span class="font-semibold text-slate-800">{{ shownLegendName(legendRenameDialog.targetCaption) || legendRenameDialog.newCaption }}</span>
                                     </li>
                                     <li class="flex items-center gap-2">
                                         <span class="w-4 h-4 rounded border border-slate-300 inline-block shrink-0" :style="{ backgroundColor: legendRenameDialog.currentColor }"></span>
-                                        <span class="font-semibold text-slate-800">{{ legendRenameDialog.oldCaption }}</span>
+                                        <span class="font-semibold text-slate-800">{{ shownLegendName(legendRenameDialog.oldCaption) }}</span>
                                         <span class="text-xs text-slate-500">(the item you renamed)</span>
                                     </li>
                                 </ul>
@@ -7270,7 +7271,7 @@
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-users-three" aria-hidden="true"></i>
-                                    <span>All {{ legendRenameDialog.siblingCount + 1 }} "{{ legendRenameDialog.oldCaption }}" features</span>
+                                    <span>All {{ legendRenameDialog.siblingCount + 1 }} "{{ shownLegendName(legendRenameDialog.oldCaption) }}" features</span>
                                 </button>
                             </div>
 
@@ -7280,8 +7281,8 @@
                                         data-history-managed
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <span class="w-5 h-5 rounded border border-white/70 shrink-0" :style="{ backgroundColor: legendRenameDialog.targetColor }"></span>
-                                    <span v-if="legendRenameDialog.deletedTargetKey">Restore "{{ legendRenameDialog.targetCaption }}" and merge into it</span>
-                                    <span v-else>Merge into "{{ legendRenameDialog.targetCaption }}"</span>
+                                    <span v-if="legendRenameDialog.deletedTargetKey">Restore "{{ shownLegendName(legendRenameDialog.targetCaption) }}" and merge into it</span>
+                                    <span v-else>Merge into "{{ shownLegendName(legendRenameDialog.targetCaption) }}"</span>
                                 </button>
                                 <button @click="handleLegendRenameChoice('suffix')"
                                         data-history-managed
@@ -7351,7 +7352,7 @@
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="reset-color-title" class="text-lg font-bold text-slate-800 mb-2">Reset Fill Color</h3>
                             <p id="reset-color-description" class="text-sm text-slate-600 mb-4">
-                                There are <span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ resetColorDialog.caption }}</span>".
+                                There are <span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span>".
                                 <br>How do you want to reset the color?
                             </p>
 
@@ -7360,7 +7361,7 @@
                                         data-history-managed
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-users" aria-hidden="true"></i>
-                                    <span>Reset all "{{ resetColorDialog.caption }}" ({{ resetColorDialog.siblingCount + 1 }})</span>
+                                    <span>Reset all "{{ shownLegendName(resetColorDialog.caption) }}" ({{ resetColorDialog.siblingCount + 1 }})</span>
                                 </button>
                                 <button @click="handleResetColorChoice('this_with_legend')"
                                         data-history-managed
@@ -7768,7 +7769,7 @@
                                  @dragover="overLegendReorder($event, idx)" @drop="dropLegendReorder($event, idx)">
                                 <div class="flex items-center gap-1.5">
                                     <button type="button" :data-legend-reorder-handle="idx" data-history-managed
-                                            :aria-label="`Reorder ${entry.caption}`"
+                                            :aria-label="`Reorder ${shownLegendName(entry.caption)}`"
                                             aria-describedby="legend-tab-help"
                                             :draggable="semanticMutationAvailable ? 'true' : 'false'"
                                             :disabled="!semanticMutationAvailable || legendEntries.length < 2"
@@ -7779,11 +7780,11 @@
                                         <i class="ph ph-dots-six-vertical text-sm" aria-hidden="true"></i>
                                     </button>
                                     <div class="w-5 h-5 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: legendEntryColor(entry) }" :title="legendEntryColor(entry)"></div>
-                                    <input type="text" :value="entry.caption" :aria-label="`Legend entry ${entry.caption} name`" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0 bg-white" :disabled="!semanticMutationAvailable">
-                                    <button :aria-label="`Stroke options for ${entry.caption}`" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry.caption) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry.caption)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry.caption) ? 'Hide stroke options' : 'Show stroke options'">
+                                    <input type="text" :value="shownLegendName(entry.caption)" :aria-label="`Legend entry ${shownLegendName(entry.caption)} name`" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0 bg-white" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Stroke options for ${shownLegendName(entry.caption)}`" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry.caption) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry.caption)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry.caption) ? 'Hide stroke options' : 'Show stroke options'">
                                         <i class="ph text-xs" :class="isLegendStrokeOptionsOpen(entry.caption) ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
                                     </button>
-                                    <button :aria-label="`Remove ${entry.caption}`" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove from legend" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Remove ${shownLegendName(entry.caption)}`" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove from legend" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-trash text-sm" aria-hidden="true"></i>
                                     </button>
                                 </div>
@@ -7793,11 +7794,11 @@
                                         :model-value="getLegendEntryStrokeColor(idx)"
                                         fallback="#000000"
                                         @update:model-value="setLegendEntryStrokeColorValue(idx, $event)"
-                                        :aria-label="`Legend stroke color for ${entry.caption}`"
+                                        :aria-label="`Legend stroke color for ${shownLegendName(entry.caption)}`"
                                         class="w-28 shrink-0">
                                     </color-value-control>
-                                    <input type="number" :aria-label="`Legend stroke width for ${entry.caption}`" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width" :disabled="!semanticMutationAvailable">
-                                    <button :aria-label="`Reset stroke of ${entry.caption} to default`" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
+                                    <input type="number" :aria-label="`Legend stroke width for ${shownLegendName(entry.caption)}`" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Reset stroke of ${shownLegendName(entry.caption)} to default`" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-arrow-counter-clockwise text-xs" aria-hidden="true"></i>
                                     </button>
                                 </div>
@@ -7813,8 +7814,8 @@
                                 <ul aria-labelledby="deleted-legend-items-label" class="space-y-1">
                                     <li v-for="(entry, idx) in deletedLegendEntries" :key="`deleted-${idx}-${entry.caption}`" class="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
                                         <div class="w-4 h-4 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: deletedLegendEntryColor(entry) }" :title="deletedLegendEntryColor(entry)"></div>
-                                        <span class="flex-1 text-xs text-slate-500 truncate min-w-0">{{ entry.caption }}</span>
-                                        <button :aria-label="`Restore ${entry.caption}`" @click="restoreDeletedLegendEntry(idx)" class="text-[10px] text-blue-600 hover:text-blue-800 shrink-0 px-1" title="Restore this item" :disabled="!semanticMutationAvailable">Restore</button>
+                                        <span class="flex-1 text-xs text-slate-500 truncate min-w-0">{{ shownLegendName(entry.caption) }}</span>
+                                        <button :aria-label="`Restore ${shownLegendName(entry.caption)}`" @click="restoreDeletedLegendEntry(idx)" class="text-[10px] text-blue-600 hover:text-blue-800 shrink-0 px-1" title="Restore this item" :disabled="!semanticMutationAvailable">Restore</button>
                                     </li>
                                 </ul>
                             </div>

@@ -119,6 +119,14 @@ import {
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
  * @property {ReadDrawnTracksPort} readDrawnTracks
+ * @property {LegendRowIsNamedPort} [legendRowIsNamed]
+ */
+
+/**
+ * Whether `typed` names the Legend row that shows the key `caption`: its key, its name, or the name
+ * the Legend draws for it (the Legend owner's reading of the displayed Result). Typing one of them
+ * into the row's name field is no rename.
+ * @typedef {(caption: string, typed: string) => boolean} LegendRowIsNamedPort
  */
 
 /**
@@ -139,7 +147,8 @@ export const createFeatureColorActions = ({
   // R13, D-15: the palette owner's user default colors.
   readUserDefaultColor,
   setDefaultColor,
-  readDrawnTracks
+  readDrawnTracks,
+  legendRowIsNamed = (caption, typed) => caption === typed
 }) => {
   const {
     extractedFeatures,
@@ -1276,8 +1285,17 @@ export const createFeatureColorActions = ({
     if (!clickedFeature.value) return;
     const feat = clickedFeature.value.feat;
     if (!feat) return;
-    const customName = normalizeCaption(clickedFeature.value.legendName);
+    const customName = popupLegendCaption();
     await requestFeatureColorChange(drawing, feat, color, customName, { closePopupOnDialog: true });
+  };
+
+  // The caption the popup's Legend name field holds: the key of the feature's
+  // row while the field names that row (its key, its name, or its drawn name,
+  // which the field shows), else the typed text.
+  const popupLegendCaption = () => {
+    const typed = normalizeCaption(clickedFeature.value?.legendName);
+    const applied = normalizeCaption(clickedFeature.value?.appliedLegendName);
+    return applied && legendRowIsNamed(applied, typed) ? applied : typed;
   };
 
   // The popup's Legend name, typed or picked from the list of color-rule groups.
@@ -1290,7 +1308,7 @@ export const createFeatureColorActions = ({
     const feat = clickedFeature.value.feat;
     if (!feat) return;
 
-    const requestedCaption = normalizeCaption(clickedFeature.value.legendName);
+    const requestedCaption = popupLegendCaption();
     const currentCaption =
       normalizeCaption(clickedFeature.value.appliedLegendName) || normalizeCaption(getEffectiveLegendCaption(feat));
 
@@ -1382,7 +1400,7 @@ export const createFeatureColorActions = ({
     if (!entry) return;
 
     const requestedCaption = normalizeCaption(newCaption);
-    if (!requestedCaption || requestedCaption === normalizeCaption(entry.caption)) {
+    if (!requestedCaption || legendRowIsNamed(normalizeCaption(entry.caption), requestedCaption)) {
       drawing.legendEntries.value = [...drawing.legendEntries.value];
       return;
     }
@@ -1512,7 +1530,7 @@ export const createFeatureColorActions = ({
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (!normalizedStrokeColor && normalizedStrokeWidth === null) return false;
 
-    const scope = getFeatureStyleScope(feat, clickedFeature.value.legendName);
+    const scope = getFeatureStyleScope(feat, popupLegendCaption());
     if (!scope) return false;
     if (scope.needsDialog) {
       openFeatureStyleScopeDialog({

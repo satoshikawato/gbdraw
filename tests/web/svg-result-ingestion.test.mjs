@@ -610,6 +610,37 @@ test('the executor draws Legend names by the naming rule and never a row key', (
   assert.deepEqual(texts(mounted), ['CDS', 'Shared']);
 });
 
+// The Legend tab, the popups, and the dialogs show a row by the name the
+// Legend draws for it, never by its key (PD-OI-042 scenario revision 2), and
+// typing a row's own name or drawn name into its name field is no rename.
+test('the Legend owner shows a row by its drawn name and reads which typed names are the row itself', async () => {
+  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
+  const mounted = buildSvgRoot();
+  const rule = (color) => ({ caption: `Shared [${color}]`, name: 'Shared', color, xPos: null, yPos: null, ifAbsent: true });
+  const two = { ...createEmptySvgMutationPlan(1).operationsByResult[0], legendAdds: [rule('#112233'), rule('#445566')] };
+  const legendRowNames = { value: new Map() };
+  const owner = createLegendEntryActions({
+    state: {
+      results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
+      originalLegendOrder: { value: [] }, originalLegendColors: { value: {} }
+    },
+    readShownLegendColor: (entry) => String(entry?.color || ''),
+    legendRowNames
+  });
+  reconcileMountedResult(mounted, two);
+  assert.equal(owner.shownLegendName('Shared [#112233]'), 'Shared [#112233]', 'not read yet: the key is all it has');
+  owner.readLegendRowNames();
+  assert.deepEqual(['CDS', 'Shared [#112233]', 'Shared [#445566]', 'No such row'].map(owner.shownLegendName),
+    ['CDS', 'Shared (1)', 'Shared (2)', 'No such row']);
+  assert.deepEqual(['Shared [#112233]', 'Shared', 'Shared (1)', 'Shared (2)', 'Other'].map((typed) => owner.legendRowIsNamed('Shared [#112233]', typed)),
+    [true, true, true, false, false]);
+  assert.equal(owner.legendRowIsNamed('No such row', 'No such row'), true);
+  // A row the Legend no longer draws is shown by its name, without a number.
+  reconcileMountedResult(mounted, { ...two, legendDeletes: [{ caption: 'Shared [#445566]', allowMissing: true, retire: true }] });
+  owner.readLegendRowNames();
+  assert.deepEqual(['Shared [#112233]', 'Shared [#445566]'].map(owner.shownLegendName), ['Shared', 'Shared']);
+});
+
 // OV-345: a reconcile says whether it changed the Result, so a display,
 // History restore, or Reset that changes nothing keeps the Result's bytes.
 test('a reconcile reports whether it changed the Result and whether the Legend rows changed', () => {

@@ -474,6 +474,21 @@ export const resultLegendRows = (svg) => {
 };
 
 /**
+ * What the editor shows for a Legend row instead of its key: the row's name,
+ * and the name the Legend draws for it (its name while the row is hidden).
+ * @typedef {{ name: LegendRowName, drawnName: DrawnLegendName }} ShownLegendRowNames
+ */
+
+// The names of the rows of a Result's shown feature Legend group, by the key
+// each row shows. The Legend tab, the popups, and the dialogs show a row by
+// its drawn name, never by its key (PD-OI-042 scenario revision 2).
+/** @param {SVGSVGElement | null | undefined} svg @returns {Map<string, ShownLegendRowNames>} */
+export const shownLegendRowNames = (svg) => new Map((resultLegendRows(svg) || []).map((row) => [
+  row.shownKey,
+  { name: row.name, drawnName: row.shown && row.drawnName ? row.drawnName : /** @type {DrawnLegendName} */ (/** @type {string} */ (row.name)) }
+]));
+
+/**
  * @param {Element} entryGroup
  * @param {number} xPos
  * @param {number} yPos

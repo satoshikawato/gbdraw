@@ -74,7 +74,7 @@ test('a click on a Legend row or a record definition names its popup item', () =
 const createPopup = ({
   mode = 'linear', busy = null, circularBlock = 'not-inspected', recordLabel = '',
   entries = [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#ff0000' }],
-  renameLegendRow = null, legendRenameSettled = async () => {},
+  renameLegendRow = null, legendRenameSettled = async () => {}, readShownLegendName = undefined,
   requestRecords = [{ recordKey: 'uid-1', presentation: { label: 'Old name' } }],
   recordRows = [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' }],
   rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null
@@ -96,6 +96,7 @@ const createPopup = ({
     state,
     computed: (getter) => ({ get value() { return getter(); } }),
     readLegendEntryColor: (entry) => entry.color,
+    readShownLegendName,
     readLegendRowRules: () => rules,
     countLegendCaptionFeatures: () => featureCount,
     getCommittedRequest: () => ({ records: requestRecords }),
@@ -279,6 +280,16 @@ test('the legend-entry view names the rule behind the color and the feature coun
   assert.equal(ruled.colorSource, 'From this color rule:');
   assert.deepEqual(ruled.ruleLines, ['CDS where gene_kind matches “biosynthetic$”']);
   assert.equal(ruled.dialogLabel, 'Legend item: Core biosynthetic genes');
+
+  assert.equal(ruled.name, 'Core biosynthetic genes');
+
+  // The popup shows a row by the name the Legend draws, never by its key.
+  const numbered = openView(createPopup({
+    entries: [{ caption: 'Shared [#112233]', originalCaption: 'Shared [#112233]', color: '#112233' }],
+    readShownLegendName: (caption) => (caption === 'Shared [#112233]' ? 'Shared (1)' : caption)
+  }), { kind: 'legend-entry', key: 'Shared [#112233]' });
+  assert.deepEqual([numbered.name, numbered.title, numbered.dialogLabel], ['Shared (1)', 'Shared (1)', 'Legend item: Shared (1)']);
+  assert.equal(JSON.stringify(numbered).includes('[#112233]') && !numbered.identity.includes('[#112233]'), false, 'the key is its identity only');
 
   const byType = openView(createPopup(), { kind: 'legend-entry', key: 'tRNA' }, false);
   assert.equal(byType.subtitle, 'Counting features…');

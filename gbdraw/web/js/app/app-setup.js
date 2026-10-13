@@ -1756,6 +1756,7 @@ export const createAppSetup = () => {
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
     readShownLegendColor: (entry) => legendEntryColor(entry),
+    legendRowNames: shallowRef(new Map()),
     showLegendStructure: () => showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendStructure })
   });
   // R13: the palette watcher reacts through the root's palette and rules
@@ -1863,6 +1864,7 @@ export const createAppSetup = () => {
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true }),
     readUserDefaultColor: resultsManager.readUserDefaultColor,
     setDefaultColor: resultsManager.setDefaultColor,
+    legendRowIsNamed: legendActions.legendRowIsNamed,
     askChoice,
     showNotice,
     revealSetting: settingsPaneActions.revealSetting
@@ -3890,7 +3892,11 @@ export const createAppSetup = () => {
       domains,
       // The Legend is laid out without its own commit: the display commits
       // the Result once (S4).
-      afterApply: (_svg, reconciled) => { if (reconciled) legendActions.onLegendGeometryChanged({ commit: false }); }
+      afterApply: (_svg, reconciled) => {
+        if (!reconciled) return;
+        legendActions.readLegendRowNames();
+        legendActions.onLegendGeometryChanged({ commit: false });
+      }
     });
   };
   // The paint domains each edit kind shows, live and on Undo and Redo.
@@ -5706,6 +5712,7 @@ export const createAppSetup = () => {
     computed,
     revealSetting: settingsPaneActions.revealSetting,
     readLegendEntryColor: legendEntryColor,
+    readShownLegendName: legendActions.shownLegendName,
     readLegendRowRules: (entry) => legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, state.activeDrawing())),
     countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
@@ -7175,6 +7182,7 @@ export const createAppSetup = () => {
     // A Legend row delete is one History step of the intent, which Undo and
     // Redo show through the port and lay out as Python does, canvas included
     // (OV-125). The deleted row's stroke leaves its features (OV-293).
+    shownLegendName: legendActions.shownLegendName,
     deleteLegendEntry: editEditorIntent('Delete legend item', deleteLegendEntry, { domains: [...LEGEND_STRUCTURE_DOMAINS, ...STROKE_DOMAINS] }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.

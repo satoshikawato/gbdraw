@@ -3,7 +3,7 @@
 /** @import { PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort } from './feature-editor/svg-actions.js' */
-/** @import { ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
+/** @import { LegendRowIsNamedPort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
@@ -61,6 +61,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
+ * @property {LegendRowIsNamedPort} [legendRowIsNamed]
  * @property {AskChoice} askChoice The root's choice dialog.
  * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there.
  * @property {RevealSetting} revealSetting The root's way to bring a setting of the settings pane into view.
@@ -95,6 +96,7 @@ export const createFeatureEditor = ({
   evaluateLabelRules,
   readUserDefaultColor,
   setDefaultColor,
+  legendRowIsNamed,
   askChoice,
   showNotice,
   revealSetting
@@ -129,7 +131,8 @@ export const createFeatureEditor = ({
     closeAfterDialogChoice,
     readUserDefaultColor,
     setDefaultColor,
-    readDrawnTracks
+    readDrawnTracks,
+    legendRowIsNamed
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature

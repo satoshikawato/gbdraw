@@ -884,7 +884,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       querySelectorAll: () => []
     };
   };
-  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null }) => {
+  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null, legendRowIsNamed }) => {
     // Each derivation of the Legend row colors reads the displayed Result once.
     const derivations = { count: 0 };
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
@@ -899,7 +899,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const originalOrder = ref([...order]);
     const featureList = ref(features);
     const renameState = { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
-    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [],
+    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], legendRowIsNamed,
       state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
@@ -933,6 +933,24 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     });
     return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides, deleted, derivations };
   };
+
+  // A row's name field shows the name the Legend draws (`Shared (1)`), not the
+  // row's key: typing that, or the row's own name, is no rename (PD-OI-042
+  // scenario revision 2); another name renames the row.
+  const sharedRows = {
+    entries: [{ caption: 'Shared [#112233]', color: '#112233' }, { caption: 'Shared [#445566]', color: '#445566' }],
+    order: ['Shared [#112233]', 'Shared [#445566]'],
+    legendRowIsNamed: (caption, typed) => typed === caption || (caption === 'Shared [#112233]' && ['Shared', 'Shared (1)'].includes(typed))
+  };
+  for (const typed of ['Shared (1)', 'Shared', 'Shared [#112233]']) {
+    const own = build(sharedRows);
+    await own.renameActions.renameLegendEntry(0, typed);
+    assert.equal(own.stateLegendEntries.value[0].caption, 'Shared [#112233]', `"${typed}" is the row itself`);
+    assert.notEqual(own.legendRenameDialog.show, true, `"${typed}" asks nothing`);
+  }
+  const otherName = build(sharedRows);
+  await otherName.renameActions.renameLegendEntry(0, 'Packaging');
+  assert.equal(otherName.stateLegendEntries.value[0].caption, 'Packaging');
 
   // PV-02: a renamed renderer-generated row keeps its generated identity, so
   // Generate replays the rename.
