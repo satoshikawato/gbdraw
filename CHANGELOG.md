@@ -298,13 +298,9 @@ write-up of a release.
   similarity groups the Result does not have) are dropped without a row. A
   Depth series without a Depth file loads as saved, and so does a Depth row
   the app keeps when a Depth file is removed (a row with its own size or
-  position) (OV-755). Some other old or invalid values are still changed
-  without a row or kept as stored (for example a track stack row's values or
-  a Legend color edit the app does not accept), and a configuration file
-  drops a key it does not know without a row. Other invalid content, such as
-  an unknown `adv` key in a Session, an unknown shape of a default feature
-  type, or an unknown option value, is still refused, now before anything is
-  asked or changed. No file that
+  position) (OV-755). An unknown text value of `track_type`, `scale_style`,
+  `labels_mode`, `show_labels_linear` or `legend` in a Session is still kept as
+  stored, because the request format lists no values for them. No file that
   loaded before is refused: a feature shape or Linear Accession or Length /
   Coordinates visibility that is not text keeps the drawing's value, and an
   unknown shape for a feature type the defaults lack is dropped, each with a
@@ -340,9 +336,9 @@ write-up of a release.
   web app; a Session of version 42, 44 or 47 written by the CLI or the Python
   API, and a Session of version 31 to 41, is refused. Eight search-scope
   spellings only the web app accepted are no longer read: a generated
-  comparison that holds one is dropped with a row, and a Session whose
-  comparison settings hold one is still refused. A file that holds `top1` or
-  `legacy` now loads. See [Saved diagram settings that cannot be read](docs/REFERENCE/session-and-request-compatibility.md#saved-diagram-settings-that-cannot-be-read).
+  comparison that holds one is dropped with a row, and a Session's comparison
+  settings that hold one read as the default, with a row. A file that holds
+  `top1` or `legacy` now loads. See [Saved diagram settings that cannot be read](docs/REFERENCE/session-and-request-compatibility.md#saved-diagram-settings-that-cannot-be-read).
 - Fixed (web app): since late August 2026, gbdraw.app had refused every Session
   31–32 whose request has schema 1, and some Sessions 32–33 whose request has
   schema 2, among them most older Gallery Sessions with schema 2 (OV-790). They
@@ -352,6 +348,17 @@ write-up of a release.
   and a live edit works before the first **Generate Diagram**. **Save Session**
   writes request schema 9; right after Load of a Session with a saved Result
   it first asks for one Generate, as for other Sessions saved before Session 40.
+- Changed (web app): older or hand-edited Sessions and configuration files
+  that Load used to refuse for their content now load, and the **Load this
+  file?** dialog lists what Load drops or replaces: an unknown or invalid
+  setting, track slot, Legend or stroke edit, an unreadable Result, feature
+  list, stored input file or saved diagram of the other mode, and a key that
+  Session version never held. Run notices, recomputable caches, empty
+  values and values with no effect on the figure give no row. Load still
+  refuses a file that is not a gbdraw Session or configuration file, an
+  unsupported or too old version, a file too large or with an unsafe name, and
+  a file from which it restores nothing. **Save Session** refuses what it
+  refused before.
 - Fixed (web app): the shape set for a feature type added to the feature list
   was dropped when its Session was loaded again; Load now keeps it.
 - Fixed (web app): a cleared **Feature overlap tolerance (bp)** made Save
