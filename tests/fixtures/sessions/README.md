@@ -9,6 +9,30 @@ Its decompressed SHA-256 is
 The schema-v2 fixture is the older supported compatibility case. Its expected
 projection is recorded in the adjacent `.expected.json` file.
 
+`lambda_basic_linear.v31-schema1.gbdraw-session.json.gz` and
+`HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz` are the positive
+fixtures of request schema 1, copied unchanged and compressed with
+`gzip -n -9`. The first is the version 31 Linear Gallery Session from
+first-parent `main` commit `10d3a3d28b3c9faa42db01c8bd0bd36b9be8433c`
+(`gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json`); its
+decompressed SHA-256 is
+`15c8f32338453ede2c11e9976a7d972483483b1e2e85820d13398d3304326596`. The second
+is the version 32 Circular Gallery Session from first-parent `main` commit
+`be13a5c030bbfba9e874cbaf22a74d08015532a9`
+(`gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json`); its
+decompressed SHA-256 is
+`e565f29c358a0c372d967a29a2c58654c87417fa120800a90a05f6e1528b3429`.
+
+`legacy-render-requests.vectors.json.gz` holds every distinct request schema 1
+and 2 `renderRequest` stored in a Gallery Session of first-parent `main`
+history (23 requests in 47 Session blobs, from `10d3a3d2` to the last schema-2
+writer before `17e2c9de`), as stored, each with the commit, path, blob and
+Session version of every place that holds it; the four committed (33, 2)
+fixtures are listed by reference. Its decompressed SHA-256 is
+`b0907b352e11a0d95a4f34965299dcb094b317a48ab365625dd27d5819c8eed2`.
+`legacy-request-load.expected.json` records what the Web Load and Save Session
+do with the six full legacy fixtures (`tests/web/legacy-request-sessions.test.mjs`).
+
 `HmmtDNA_basic_circular.issue-469.json.gz` preserves the unmodified JSON from
 `0f00436da728402d06d4a8fdce80cff63b552488:gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json`.
 Its decompressed SHA-256 is

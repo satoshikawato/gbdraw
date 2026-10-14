@@ -1393,6 +1393,12 @@ const NEEDS_DIAGRAM_WORKER = new Set([
   'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', 'q-frame-main-web-losatn.v42.gbdraw-session.json.gz',
   'q-frame-main-web-upload.v42.gbdraw-session.json.gz'
 ]);
+// OV-790: the Load's configuration check refuses the full `config` of a
+// request schema 1 (Sessions 31-32), which holds `canvas.show_labels`; the
+// Python decoder reads it (`_migrate_legacy_full_config`). PR-D makes these load.
+const REFUSED_BY_CONFIG_CHECK = new Set([
+  'lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz'
+]);
 test('every Gallery Session and Session fixture loads without a repair (G3)', async () => {
   const sessions = (dir, keep) => readdirSync(new URL(dir, import.meta.url)).filter(keep).map((name) => [name, new URL(`${dir}${name}`, import.meta.url)]);
   const corpus = [
@@ -1413,6 +1419,11 @@ test('every Gallery Session and Session fixture loads without a repair (G3)', as
     const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     if (NEEDS_DIAGRAM_WORKER.has(name)) {
       assert.equal(loaded.status, 'error', `${name} loads in node now: check it here`);
+      continue;
+    }
+    if (REFUSED_BY_CONFIG_CHECK.has(name)) {
+      assert.deepEqual([loaded.status, loaded.error?.code, loaded.error?.operation],
+        ['error', 'VALIDATION_UNCLASSIFIED', 'validateConfigOverrides'], `${name} loads now: check it here`);
       continue;
     }
     assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
