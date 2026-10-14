@@ -309,9 +309,7 @@ write-up of a release.
   `losat` or `circularConservation`) that is not an object, a value of
   another kind inside one, and `rules` or `whitelist` that is not a list
   (such as `"form": 5`) are not used, and the drawing keeps its value, which
-  the row names or says the drawing keeps; the arrow ratios, like the other
-  settings, keep the drawing's value when the file does not hold them (they
-  took their default before). **Load** loads the file;
+  the row names or says the drawing keeps. **Load** loads the file;
   **Cancel** leaves the settings, Results, input files, History and screen as
   they were. Dropped feature edits, narrowed Feature visibility edits, `hash=`
   values that could not be renamed, joined or dropped table rows and Legend

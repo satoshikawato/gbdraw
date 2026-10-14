@@ -1282,8 +1282,6 @@ const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
   if (!adv) return configData;
   const features = Array.isArray(adv.features) ? adv.features : null;
   if (features && !features.includes('repeat_region')) return configData;
-  // Shapes that are no object are not read (Load lists them).
-  if (!isPlainObject(adv.feature_shapes) && !isUnsetValue(adv.feature_shapes)) return configData;
   const featureShapes = isPlainObject(adv.feature_shapes) ? adv.feature_shapes : {};
   if (Object.prototype.hasOwnProperty.call(featureShapes, 'repeat_region')) return configData;
   return {
@@ -1529,12 +1527,15 @@ const readLegacyConfigPayload = (data, drawing, mode) => {
   const migratedOptions = circularSlotSchema === CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
     ? data
     : migratePersistedWebOptionValues(data);
+  // A shape map that is no object is not used (the reader lists it, and the
+  // drawing keeps its shapes), so the repeat-region shape is not added to it.
+  const storedShapes = isPlainObject(data.adv) ? /** @type {Record<string, unknown>} */ (data.adv).feature_shapes : undefined;
   /** @type {Record<string, unknown>} */
   const migrated = migrateLegacyFeatureRenderingConfig(
     migrateImportedLinearTrackSlots(
       migrateImportedCircularTrackSlots(migratedOptions)
     ),
-    true
+    isPlainObject(storedShapes) || isUnsetValue(storedShapes)
   );
   validateImportedCircularTrackSlots(migrated);
   validateImportedLinearTrackSlots(migrated);

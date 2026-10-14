@@ -609,6 +609,30 @@ test('a value both drawings of a Session 27-44 read is one row; a Session 46 lis
   assert.equal(items.length, 4);
 });
 
+// A Session 27-33 drew its repeat regions as rectangles whatever its shape
+// map held, so a shape map that is no object reads as the repeat-region
+// shape with no row, as the Python twin reads it. A configuration file loads
+// over the drawing: there the map is not used, and its row says the drawing
+// keeps its shapes.
+test('a Session 27-33 shape map that is no object reads as the repeat-region shape; a configuration file lists it', async () => {
+  const session = fixture('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz');
+  const features = Array.isArray(session.config.adv?.features) ? session.config.adv.features : [];
+  session.config.adv = { ...session.config.adv, features: [...new Set([...features, 'repeat_region'])], feature_shapes: ['arrow'] };
+  const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(loaded.repairs.filter(({ path }) => path.includes('feature_shapes')), []);
+  assert.equal(state.drawings[state.mode.value].adv.feature_shapes.repeat_region, 'rectangle');
+  const drawing = state.drawings[state.mode.value];
+  const shapes = JSON.stringify(drawing.adv.feature_shapes);
+  const asked = [];
+  const fromFile = await importSession(input({ adv: { feature_shapes: ['arrow'] } }), {
+    confirmLoadRepairs: async ({ items }) => { asked.push(...items); return true; }
+  });
+  assert.equal(fromFile.status, 'legacy', JSON.stringify(fromFile.error));
+  assert.deepEqual(asked, ['Settings: the value "[\"arrow\"]" (adv.feature_shapes) cannot be used; the drawing keeps its current value.']);
+  assert.equal(JSON.stringify(state.drawings[state.mode.value].adv.feature_shapes), shapes);
+});
+
 // BA-OD89: a row of a list names the leaf with that leaf's values; free text
 // (a label, an ID) is named by its place only; a row names the value used,
 // and a valid value from another source is no row. BA-OD91 (rule 2): a
@@ -850,12 +874,16 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
     rules: [{ feat: 'CDS', qual: 'product', val: 'x', color: '#ff0000', cap: 'Mine' }], whitelist: [{ feat: 'CDS', qual: 'gene', key: 'abc' }] };
   /** The values of the first file a kept group or list holds. */
   const held = (drawing) => JSON.stringify([
-    drawing.form.plot_title, drawing.adv.label_font_size, drawing.adv.arrow_shaft_width_ratio, drawing.adv.arrow_head_length_ratio,
+    drawing.form.plot_title, drawing.adv.label_font_size,
     drawing.losat.blastp.collinearInferOrthogroups, drawing.losat.blastp.collinearMinAnchors, drawing.losat.blastp.hitLimitsByMode.pairwise,
     drawing.circularConservation.subject_gencode, drawing.circularConservation.ring_width,
     drawing.manualSpecificRules.length, drawing.manualWhitelist.length
   ]);
-  const firstHeld = JSON.stringify(['Mine', 21, 0.5, 0.3, true, 4, { candidateLimit: 7, orthogroupMemberMaxHits: 3 }, 11, 12, 1, 1]);
+  const firstHeld = JSON.stringify(['Mine', 21, true, 4, { candidateLimit: 7, orthogroupMemberMaxHits: 3 }, 11, 12, 1, 1]);
+  // The arrow ratios: an `adv` that is not used keeps the drawing's; a file
+  // whose `adv` does not hold them gives their defaults, the arrow an older file was drawn with.
+  const ratios = (drawing) => [drawing.adv.arrow_shaft_width_ratio, drawing.adv.arrow_head_length_ratio];
+  const ratiosAfter = (file) => (file.adv === undefined || (typeof file.adv === 'object' && !Array.isArray(file.adv)) ? [1, null] : [0.5, 0.3]);
   const kept = 'the drawing keeps its current value.';
   const cases = [
     [{ form: 5 }, `Settings: the value "5" (form) cannot be used; ${kept}`],
@@ -873,21 +901,21 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
     [{ form: { plot_title: {} } }, `Settings: the value of form.plot_title cannot be used; ${kept}`]
   ];
   const outcomes = [];
-  // `losat.blastp` is a Linear setting: a Circular drawing never draws it, so its row is Linear's.
+  // `losat.blastp` is a Linear setting and `circularConservation` a Circular one: each row is its mode's.
   const shownMode = state.mode.value;
-  for (const [file, , mode = shownMode] of cases) {
+  for (const [file, , mode = 'circular'] of cases) {
     state.mode.value = mode;
     assert.equal((await importSession(input(first), { confirmLoadRepairs: async () => true })).status, 'legacy');
     const drawing = state.drawings[state.mode.value];
-    assert.equal(held(drawing), firstHeld);
+    assert.deepEqual([held(drawing), ratios(drawing)], [firstHeld, [0.5, 0.3]]);
     const shapes = JSON.stringify(drawing.adv.feature_shapes);
     const asked = [];
     const loaded = await importSession(input(file), { confirmLoadRepairs: async ({ items }) => { asked.push(...items); return true; } });
     outcomes.push([JSON.stringify(file), loaded.status, asked, loaded.repairs.map(({ effect }) => effect),
-      held(drawing), JSON.stringify(drawing.adv.feature_shapes) === shapes]);
+      held(drawing), ratios(drawing), JSON.stringify(drawing.adv.feature_shapes) === shapes]);
   }
   state.mode.value = shownMode;
-  assert.deepEqual(outcomes, cases.map(([file, line]) => [JSON.stringify(file), 'legacy', [line], ['kept'], firstHeld, true]));
+  assert.deepEqual(outcomes, cases.map(([file, line]) => [JSON.stringify(file), 'legacy', [line], ['kept'], firstHeld, ratiosAfter(file), true]));
   // A Session's drawing is reset first: the same values are its default.
   for (const [field, value] of [['feature_shapes', 5], ['plot_title', {}]]) {
     const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');

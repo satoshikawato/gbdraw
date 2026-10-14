@@ -777,18 +777,19 @@ export const defaultSettingsContainers = (mode) => ({
   form: createDefaultForm(), adv: createDefaultAdv(mode), losat: createDefaultLosat(),
   circularConservation: createDefaultCircularConservation()
 });
+/** The `adv` fields copied as stored, whatever their kind, when the stored `adv` holds them: the two Linear font sizes. */
+const RAW_ADV_FIELDS = Object.freeze(['scale_font_size', 'ruler_label_font_size']);
 /**
- * The `adv` fields copied as stored, whatever their kind, when the stored
- * `adv` holds them: the two Linear font sizes, and the arrow ratios, which are
- * then read as numbers (a ratio stored as its text reads as its number; one
- * that is no number is refused before, `requireCurrentConfigFields`).
+ * Fields read as stored, whatever their kind (their merge losses are none):
+ * the `RAW_ADV_FIELDS`; the arrow ratios, read as numbers below (a ratio
+ * stored as its text reads as its number; one that is no number is refused
+ * before, `requireCurrentConfigFields`); and the inference flag, copied with
+ * the hit limits below.
  */
-const RAW_ADV_FIELDS = Object.freeze(['scale_font_size', 'ruler_label_font_size', 'arrow_head_length_ratio', 'arrow_shaft_width_ratio']);
-/**
- * Fields copied as stored, whatever their kind (their merge losses are none):
- * the `RAW_ADV_FIELDS`, and the inference flag, copied with the hit limits below.
- */
-const RAW_FIELDS = Object.freeze([...RAW_ADV_FIELDS.map((field) => `adv.${field}`), 'losat.blastp.collinearInferOrthogroups']);
+const RAW_FIELDS = Object.freeze([
+  ...RAW_ADV_FIELDS.map((field) => `adv.${field}`), 'adv.arrow_head_length_ratio', 'adv.arrow_shaft_width_ratio',
+  'losat.blastp.collinearInferOrthogroups'
+]);
 /** @param {unknown} value */
 const copied = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
@@ -823,7 +824,9 @@ export const installStoredSettings = (targets, config) => {
   const storedAdv = used('adv') ? containerAt(config, 'adv') : null;
   Object.assign(targets.adv, Object.fromEntries(RAW_ADV_FIELDS
     .filter((field) => storedAdv && Object.hasOwn(storedAdv, field)).map((field) => [field, copied(storedAdv?.[field])])));
-  Object.assign(targets.adv, normalizedPersistedArrowGeometryState(targets.adv));
+  // The arrow ratios the stored `adv` holds, else their defaults (an older
+  // file draws the arrow it was drawn with); an `adv` not used keeps the target's.
+  Object.assign(targets.adv, normalizedPersistedArrowGeometryState(used('adv') ? storedAdv : targets.adv));
   if (config.losat && used('losat') && used('losat.blastp')) {
     // The hit limits of each mode over their defaults, as stored; the
     // inference flag as stored, else on for a collinear search.
