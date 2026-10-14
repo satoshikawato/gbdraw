@@ -723,8 +723,10 @@ this page documents current support.
 
 New commands and Python calls reject the names and values below. A Session or
 a canonical request schema 1–2 saved by an earlier release may still use them:
-gbdraw rewrites them before it draws. A retired CLI flag exits with status 2
-and names its replacement. A retired Python field raises `TypeError`; there is
+the CLI and the Python API rewrite them before they draw. The Web app reads
+those a Session 31–33 request stores the same way, except a Circular slot
+`spacing` (see below the table). A retired CLI flag exits with status 2 and
+names its replacement. A retired Python field raises `TypeError`; there is
 no alias. Field names stored inside a Session file do not change.
 
 | Retired input | Current input |
@@ -765,9 +767,12 @@ Long options of more than one word use underscores, with two aliases that still
 work: `--annotation-table` for `--annotation_table`, and
 `--gc_content_tick_interval` for `--gc_content_large_tick_interval`.
 
-A Circular slot whose spacing an earlier release stored as a factor still draws.
-Set explicit pixel gaps (`inner_gap_px`, `outer_gap_px`) before you save it in
-the current format; a factor cannot be saved without loss.
+In the CLI and the Python API, a Circular slot whose spacing an earlier release
+stored as a factor still draws. Set explicit pixel gaps (`inner_gap_px`,
+`outer_gap_px`) before you save it in the current format; a factor cannot be
+saved without loss. The Web app drops a factor spacing of a Session 31–33 at
+Load and reads a spacing without a unit as pixels; it lists both in
+**Load this file?**.
 
 ## Record rotation and feature placement
 
