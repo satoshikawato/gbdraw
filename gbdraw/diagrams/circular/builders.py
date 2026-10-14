@@ -263,7 +263,7 @@ def add_record_definition_group_on_canvas(
     cfg = canvas_config.profile.config
     definition_builder = DefinitionGroup(
         gb_record,
-        canvas_config,
+        canvas_config.geometry(),
         cfg=cfg,
         species=species,
         strain=strain,
@@ -317,7 +317,7 @@ def add_record_group_on_canvas(
     # Unpack parameters
     record_group: Group = SeqRecordGroup(
         gb_record=record,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
         feature_config=feature_config,
         feature_layers=feature_layers,
         render_context=render_context,
@@ -354,7 +354,7 @@ def add_axis_group_on_canvas(
     """
     axis_group: Group = AxisGroup(
         float(radius_override) if radius_override is not None else canvas_config.radius,
-        canvas_config,
+        canvas_config.geometry(),
         cfg=canvas_config.profile.config,
     ).get_group()
     axis_group = center_group_on_canvas(axis_group, canvas_config)
@@ -388,7 +388,7 @@ def add_tick_group_on_canvas(
     """
     tick_group: Group = TickGroup(
         gb_record,
-        canvas_config,
+        canvas_config.geometry(),
         profile=canvas_config.profile,
         radius=radius_override,
         label_side=label_side,
@@ -409,7 +409,6 @@ def add_labels_group_on_canvas(
     gb_record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
     *,
-    feature_layers: FeatureBuildResult,
     render_context: CircularRecordRenderContext,
     outer_arena: tuple[float, float] | None = None,
     precalculated_labels: list[CircularLabel] | None = None,
@@ -431,8 +430,7 @@ def add_labels_group_on_canvas(
     """
     labels_group: Group = LabelsGroup(
         gb_record=gb_record,
-        canvas_config=canvas_config,
-        feature_layers=feature_layers,
+        geometry=canvas_config.geometry(),
         render_context=render_context,
         outer_arena=outer_arena,
         precalculated_labels=precalculated_labels,

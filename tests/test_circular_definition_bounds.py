@@ -29,7 +29,7 @@ def _definition(
     canvas = CircularCanvasConfigurator("test", render_profile, "none", record)
     return DefinitionGroup(
         record,
-        canvas,
+        canvas.geometry(),
         cfg=cfg,
         species="<i>Testus boundsii</i>",
         strain="strain A",

@@ -1212,7 +1212,7 @@ def _definition_reserved_radius_px(
     cfg = canvas_config.profile.config
     definition_group = DefinitionGroup(
         gb_record,
-        canvas_config,
+        canvas_config.geometry(),
         cfg=cfg,
         species=species,
         strain=strain,
@@ -2302,7 +2302,7 @@ def add_record_on_circular_canvas(
         _centre_definition_text(
             DefinitionGroup(
                 gb_record,
-                canvas_config,
+                canvas_config.geometry(),
                 cfg=canvas_config.profile.config,
                 species=species,
                 strain=strain,
@@ -2594,7 +2594,6 @@ def add_record_on_circular_canvas(
     if show_external_labels:
         labels_group_kwargs: dict[str, Any] = {
             "outer_arena": outer_arena,
-            "feature_layers": feature_layers,
             "render_context": render_context,
             "precalculated_labels": precalculated_labels,
             "feature_track_ratio_factor_override": feature_track_ratio_factor_override,

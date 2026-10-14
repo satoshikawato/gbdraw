@@ -1257,7 +1257,7 @@ def _build_circular_plot_title_group(
     )
     definition = DefinitionGroup(
         gb_record=gb_record,
-        canvas_config=plot_title_canvas_config,
+        geometry=plot_title_canvas_config.geometry(),
         species=species,
         strain=strain,
         plot_title=plot_title,

@@ -12,7 +12,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
 
 from ....analysis.gc import calculate_gc_percent
-from ....canvas import CircularCanvasConfigurator
+from ....canvas import CircularCanvasGeometry
 from ....config.models import GbdrawConfig
 from ....core.record_metadata import infer_record_source_metadata
 from ....core.numeric import compensated_sum
@@ -188,7 +188,7 @@ class DefinitionGroup:
     def __init__(
         self,
         gb_record: SeqRecord,
-        canvas_config: CircularCanvasConfigurator,
+        geometry: CircularCanvasGeometry,
         *,
         cfg: GbdrawConfig,
         species: Optional[str] = None,
@@ -206,7 +206,7 @@ class DefinitionGroup:
         self.record_presentation = record_presentation
         self.species_line_count = max(1, int(species_line_count))
         self.gb_record: SeqRecord = gb_record
-        self.canvas_config: CircularCanvasConfigurator = canvas_config
+        self.geometry = geometry
         self.species: str | None = species
         self.strain: str | None = strain
         self.plot_title: str | None = plot_title
@@ -242,7 +242,7 @@ class DefinitionGroup:
             self.definition_group.attribs["data-gbdraw-definition-part"] = "main"
             self.definition_group.attribs["data-gbdraw-record-id"] = str(self.gb_record.id)
             self.definition_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
-        self.radius: float = self.canvas_config.radius
+        self.radius: float = geometry.radius
         self.calculate_coordinates()
         self.find_organism_name()
         self.add_circular_definitions()
@@ -334,7 +334,7 @@ class DefinitionGroup:
                     text,
                     self.font,
                     active_font_size,
-                    int(self.canvas_config.dpi),
+                    int(self.geometry.dpi),
                 )[0],
             )
             if len(wrapped) > 1:

@@ -7,7 +7,7 @@ from typing import Optional, Dict
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
 
-from ....canvas import CircularCanvasConfigurator
+from ....canvas import CircularCanvasGeometry
 from ....auto_sizes import determine_length_parameter
 from ....features.factory import FeatureBuildResult
 from ....features.objects import FeatureObject
@@ -27,7 +27,7 @@ class SeqRecordGroup:
     def __init__(
         self,
         gb_record: SeqRecord,
-        canvas_config: CircularCanvasConfigurator,
+        geometry: CircularCanvasGeometry,
         feature_config: FeatureDrawingConfigurator,
         feature_layers: FeatureBuildResult,
         render_context: CircularRecordRenderContext,
@@ -40,7 +40,7 @@ class SeqRecordGroup:
         feature_dom_namespace: str | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
-        self.canvas_config: CircularCanvasConfigurator = canvas_config
+        self.geometry = geometry
         self.feature_config: FeatureDrawingConfigurator = feature_config
         self.feature_layers = feature_layers
         self.render_context = render_context
@@ -58,7 +58,7 @@ class SeqRecordGroup:
         self.dpi = cfg.canvas.dpi
         self.strandedness = render_context.profile.strandedness
         self.track_ratio_factors = cfg.canvas.circular.track_ratio_factors[self.length_param]
-        self.track_ratio = self.canvas_config.track_ratio
+        self.track_ratio = geometry.track_ratio
         self.precalculated_labels: Optional[list[CircularLabel]] = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
         self.feature_anchor_radius_px = feature_anchor_radius_px
@@ -82,7 +82,7 @@ class SeqRecordGroup:
         feature_anchor_radius = (
             float(self.feature_anchor_radius_px)
             if self.feature_anchor_radius_px is not None
-            else float(self.canvas_config.radius)
+            else float(self.geometry.radius)
         )
         # The record assembly places every drawn label (and checks their fit) once.
         label_list = (self.precalculated_labels or []) if self.show_labels is True else []
@@ -106,7 +106,7 @@ class SeqRecordGroup:
                 group,
                 record_length,
                 feature_anchor_radius,
-                self.canvas_config.track_ratio,
+                self.geometry.track_ratio,
                 feature_track_ratio_factor,
                 self.render_context.track_preset,
                 self.strandedness,
@@ -128,7 +128,7 @@ class SeqRecordGroup:
                         group,
                         record_length,
                         feature_anchor_radius,
-                        self.canvas_config.track_ratio,
+                        self.geometry.track_ratio,
                         feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
                         track_preset=self.render_context.track_preset,
                     )

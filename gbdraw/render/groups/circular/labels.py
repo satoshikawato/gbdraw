@@ -10,8 +10,7 @@ from typing import Literal, Optional
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group, Line
 
-from ....canvas import CircularCanvasConfigurator
-from ....features.factory import FeatureBuildResult
+from ....canvas import CircularCanvasGeometry
 from ....labels.circular_types import CircularLabel
 from ....layout.circular import CircularRecordRenderContext
 from ...drawers.circular.labels import LabelDrawer
@@ -24,8 +23,7 @@ class LabelsGroup:
     def __init__(
         self,
         gb_record: SeqRecord,
-        canvas_config: CircularCanvasConfigurator,
-        feature_layers: FeatureBuildResult,
+        geometry: CircularCanvasGeometry,
         render_context: CircularRecordRenderContext,
         *,
         outer_arena: tuple[float, float] | None = None,
@@ -35,8 +33,7 @@ class LabelsGroup:
         phase: Literal["all", "leaders", "text"] = "all",
     ) -> None:
         self.gb_record: SeqRecord = gb_record
-        self.canvas_config: CircularCanvasConfigurator = canvas_config
-        self.feature_layers = feature_layers
+        self.geometry = geometry
         self.render_context = render_context
         self.outer_arena = outer_arena
         self.precalculated_labels: Optional[list[CircularLabel]] = precalculated_labels
@@ -47,7 +44,7 @@ class LabelsGroup:
 
         self.show_labels = render_context.profile.labels_enabled
 
-        self.label_stroke_width = cfg.labels.stroke_width.for_length_param(self.canvas_config.length_param)
+        self.label_stroke_width = cfg.labels.stroke_width.for_length_param(geometry.length_param)
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
 
         self.labels_group: Group = self.setup_labels_group()
@@ -66,7 +63,7 @@ class LabelsGroup:
         feature_anchor_radius = (
             float(self.feature_anchor_radius_px)
             if self.feature_anchor_radius_px is not None
-            else float(self.canvas_config.radius)
+            else float(self.geometry.radius)
         )
         # The record assembly places every drawn label (and checks their fit) once.
         label_list = self.precalculated_labels or []
@@ -100,7 +97,7 @@ class LabelsGroup:
                 bind_label_part(line_path2, label["feature_id"])
                 group.add(line_path2)
             if self.phase in {"all", "text"}:
-                group = drawer.draw(label, group, record_length, feature_anchor_radius, self.canvas_config.track_ratio)
+                group = drawer.draw(label, group, record_length, feature_anchor_radius, self.geometry.track_ratio)
 
         return group
 

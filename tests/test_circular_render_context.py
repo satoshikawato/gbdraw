@@ -14,8 +14,15 @@ from gbdraw.layout.circular import (
     CircularResolvedSlot,
     RadialBand,
 )
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+
+from gbdraw.canvas import CircularCanvasConfigurator, CircularCanvasGeometry
+from gbdraw.render.groups.circular.axis import AxisGroup
+from gbdraw.render.groups.circular.definition import DefinitionGroup
 from gbdraw.render.groups.circular.labels import LabelsGroup
 from gbdraw.render.groups.circular.seq_record import SeqRecordGroup
+from gbdraw.render.groups.circular.ticks import TickGroup
 
 
 def _profile() -> CircularRenderProfile:
@@ -102,3 +109,29 @@ def test_circular_record_render_groups_require_explicit_context(group_type: type
     render_context = signature(group_type).parameters["render_context"]
 
     assert render_context.default is Parameter.empty
+
+
+@pytest.mark.parametrize("group_type", [AxisGroup, TickGroup, DefinitionGroup, LabelsGroup, SeqRecordGroup])
+def test_circular_group_classes_read_the_canvas_geometry_not_the_configurator(group_type: type) -> None:
+    parameters = signature(group_type).parameters
+
+    assert "canvas_config" not in parameters
+    assert parameters["geometry"].annotation in {CircularCanvasGeometry, "CircularCanvasGeometry"}
+
+
+def test_circular_canvas_geometry_is_a_frozen_value_of_the_configurator() -> None:
+    record = SeqRecord(Seq("ATGC" * 250), id="NC_TEST.1")
+    canvas = CircularCanvasConfigurator("test", _profile(), "none", record)
+    geometry = canvas.geometry()
+
+    assert (geometry.radius, geometry.track_ratio, geometry.dpi, geometry.length_param) == (
+        canvas.radius, canvas.track_ratio, canvas.dpi, canvas.length_param,
+    )
+    assert geometry.track_ratio_factors == tuple(canvas.track_ratio_factors)
+    assert geometry.track_id("gc_track") == canvas.track_ids.get("gc_track")
+    assert geometry.track_id("depth_track") is None
+    assert hash(geometry) == hash(canvas.geometry())
+    with pytest.raises(FrozenInstanceError):
+        geometry.radius = 1.0  # type: ignore[misc]
+    canvas.radius += 10.0
+    assert canvas.geometry().radius == geometry.radius + 10.0
