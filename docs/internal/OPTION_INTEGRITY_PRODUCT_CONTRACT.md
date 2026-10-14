@@ -1006,11 +1006,22 @@ Status: active Product authority
   - Reply 8 (scenario revision 7, `2026-10-14`), to the automatic repair of
     slight defects and to a fix row that leaves crossings: 「入れる、上限 100 (推奨)」
     (`REPAIR-100`) and 「交差が残る行も出す (推奨)」 (`CROSS-LEFT-ROW`).
-  - Reply 9 (`2026-10-14`), to the rewritten Accepted residual risk, quoted in
-    the receipt below: 「これでよい (推奨)」.
+  - Reply 9 (`2026-10-14`), to the rewritten Accepted residual risk
+    「微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒、描けない図なら 30 秒まで探し、間に合わない候補は『未計算』と示す。」:
+    「これでよい (推奨)」.
+  - Reply 10 (`2026-10-14`), to two questions after the review of this
+    change. To the question whether to record Reply 9's sentence on search
+    times as written or to correct it to the option text of Reply 4's
+    「時間を区切る (推奨)」, which says 「重なりで止まる場合は値を必ず出す」:
+    「Q9 に合わせて直す (推奨)」, whose option text replaces that sentence with
+    「CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。」.
+    To the question what Apply and Cancel do while a fix row is being
+    computed in the Web: 「1 候補 30 秒まで (推奨)」, whose option text adds
+    「Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。」.
   - The receipt below combines these replies: Choice lists the options of
     scenario revisions 1 to 7, Rationale, Must preserve, and May retire are the
-    texts of Reply 7, and Accepted residual risk is the text of Reply 9.
+    texts of Reply 7, and Accepted residual risk is the text of Reply 9 as
+    corrected by Reply 10.
   - `PD-OI-088` (a dialog choice is one History step, Cancel records none, the
     dialog is busy while applying) applies to the new dialog unchanged. No
     other record is amended or retired.
@@ -5472,7 +5483,7 @@ Decision date: 2026-10-13
   Contract co-change route; this record supplies no runtime acceptance
   evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `13793d0514d193f592a20ec4a25162965ba00754a1a46c756fbd079bd31e9d2f`.
+  `e77d81603000fc47273f5bc86fc1331bf27b666be988cef11cc388301a7324e8`.
 
 ```text
 PRODUCT_DECISION
@@ -5482,7 +5493,7 @@ Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN 
 Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。
 Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
 May retire: ラベルが重なったまま図を出す動作。
-Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒、描けない図なら 30 秒まで探し、間に合わない候補は『未計算』と示す。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。
 Owner: satoshikawato
 Decision date: 2026-10-14
 ```
@@ -5495,7 +5506,7 @@ Decision date: 2026-10-14
   "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。",
   "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
   "mayRetire": "ラベルが重なったまま図を出す動作。",
-  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒、描けない図なら 30 秒まで探し、間に合わない候補は『未計算』と示す。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-14"
 }
