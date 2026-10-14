@@ -750,4 +750,127 @@ for (const invalidRecordIndex of [
   }
 }
 
+// OV-751: a Session below 40 whose features are read again aligns them with
+// the saved SVG. A Circular SVG names a feature without its record (the record
+// index and ID sit on the record group), and a Linear feature read again names
+// its input (`fileIdx`) and its record within that input (`record_idx`) and
+// carries the extraction's predicted rendered ID, which is the source hash
+// without the `_record_<n>` suffix the SVG draws.
+{
+  const circularPlan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'circular',
+      cInputType: 'gb',
+      files: { c_gb: { name: 'c.gb' } },
+      selectedResultIndex: 0,
+      results: committedResults('<svg><g data-gbdraw-record-id="R1" data-gbdraw-record-index="0"><path id="hc" data-gbdraw-feature-id="hc" /></g></svg>'),
+      featureState: {},
+      editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async () => {
+      const feature = { id: 'f0', svg_id: 'hc', stable_svg_id: 'hc', rendered_feature_svg_id: 'hc', record_idx: 0, record_id: 'R1', type: 'CDS' };
+      return { features: [feature], biological_features: [feature], record_ids: ['R1'] };
+    }
+  });
+  assert.equal(circularPlan.status, 'recovered', circularPlan.reason);
+  assert.deepEqual(circularPlan.recoveredFeatureState.extractedFeatures.map((feature) => feature.rendered_svg_id), ['hc']);
+}
+
+{
+  // Input 0 holds two records and input 1 one: the SVG numbers them 0, 1, 2.
+  const svg = `<svg>
+    <path id="a_record_1" data-gbdraw-feature-id="a_record_1" data-gbdraw-stable-feature-id="a" data-gbdraw-record-index="0" data-gbdraw-record-id="RA" />
+    <path id="a2_record_2" data-gbdraw-feature-id="a2_record_2" data-gbdraw-stable-feature-id="a2" data-gbdraw-record-index="1" data-gbdraw-record-id="RA2" />
+    <path id="b_record_3" data-gbdraw-feature-id="b_record_3" data-gbdraw-stable-feature-id="b" data-gbdraw-record-index="2" data-gbdraw-record-id="RB" />
+  </svg>`;
+  const extracted = {
+    '/seq_0.gb': {
+      features: [
+        { id: 'f0', svg_id: 'a', stable_svg_id: 'a', rendered_feature_svg_id: 'a', record_idx: 0, record_id: 'RA', type: 'CDS' },
+        { id: 'f1', svg_id: 'a2', stable_svg_id: 'a2', rendered_feature_svg_id: 'a2', record_idx: 1, record_id: 'RA2', type: 'CDS' }
+      ],
+      record_ids: ['RA', 'RA2']
+    },
+    '/seq_1.gb': {
+      features: [{ id: 'f0', svg_id: 'b', stable_svg_id: 'b', rendered_feature_svg_id: 'b', record_idx: 0, record_id: 'RB', type: 'CDS' }],
+      record_ids: ['RB']
+    }
+  };
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear',
+      lInputType: 'gb',
+      linearSeqs: [{ gb: { name: 'a.gb' } }, { gb: { name: 'b.gb' } }],
+      selectedResultIndex: 0,
+      results: committedResults(svg),
+      featureState: {},
+      editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async ({ path }) => extracted[path]
+  });
+  assert.equal(plan.status, 'recovered', plan.reason);
+  const features = plan.recoveredFeatureState.extractedFeatures;
+  assert.deepEqual(features.map((feature) => feature.rendered_svg_id), ['a_record_1', 'a2_record_2', 'b_record_3']);
+  assert.deepEqual(features.map((feature) => feature.rendered_feature_svg_id), ['a_record_1', 'a2_record_2', 'b_record_3']);
+  // The features keep the extraction's reading of their records, which the
+  // rendered-ID edit migration reads (services/feature-edit-migration.js).
+  assert.deepEqual(features.map((feature) => [feature.fileIdx, feature.record_idx]), [[0, 0], [0, 1], [1, 0]]);
+}
+
+{
+  // A cropped, reverse-complemented or rotated record draws its features under
+  // their hash in the drawn record (`drawn_selector.hash`), not their source
+  // hash; a biological feature takes that hash from the drawn feature.
+  const source = { svg_id: 'src', stable_svg_id: 'src', record_idx: 0, record_id: 'R1', type: 'CDS' };
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'circular',
+      cInputType: 'gb',
+      files: { c_gb: { name: 'c.gb' } },
+      selectedResultIndex: 0,
+      results: committedResults('<svg><path id="drw" data-gbdraw-feature-id="drw" /></svg>'),
+      featureState: {},
+      editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async () => ({
+      features: [{ ...source, id: 'f0', rendered_feature_svg_id: 'src', drawn_selector: { hash: 'drw' } }],
+      biological_features: [{ ...source, id: 'f0' }],
+      record_ids: ['R1']
+    })
+  });
+  assert.equal(plan.status, 'recovered', plan.reason);
+  const [drawn] = plan.recoveredFeatureState.extractedFeatures;
+  assert.equal(drawn.rendered_svg_id, 'drw');
+  assert.equal(drawn.stable_svg_id, 'src');
+  assert.deepEqual(plan.recoveredFeatureState.biologicalFeatures.map((feature) => feature.rendered_svg_id), ['drw']);
+}
+
+{
+  // Saved metadata whose IDs all match the SVG does not lose features to an
+  // alignment that cannot place them: Load keeps it as saved.
+  const saved = [
+    { id: 'f0', svg_id: 'a_record_1', stable_svg_id: 'a', fileIdx: 0, record_idx: 0, record_id: 'RA' },
+    { id: 'f1', svg_id: 'b_record_2', stable_svg_id: 'b', fileIdx: 1, record_idx: 0, record_id: 'RB' }
+  ];
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear',
+      lInputType: 'gb',
+      selectedResultIndex: 0,
+      results: committedResults(`<svg>
+        <path id="a_record_1" data-gbdraw-feature-id="a_record_1" data-gbdraw-stable-feature-id="a" data-gbdraw-record-index="0" data-gbdraw-record-id="RA" />
+        <path id="b_record_2" data-gbdraw-feature-id="b_record_2" data-gbdraw-stable-feature-id="b" data-gbdraw-record-index="1" data-gbdraw-record-id="RB" />
+      </svg>`),
+      featureState: { extractedFeatures: saved },
+      editorState: {}
+    },
+    featureVisibilityTsv: ''
+  });
+  assert.notEqual(plan.status, 'aligned');
+  assert.equal(plan.recoveredFeatureState, undefined);
+}
+
 console.log('session feature metadata tests passed');

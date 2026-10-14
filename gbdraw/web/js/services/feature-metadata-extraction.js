@@ -30,6 +30,8 @@ import { cloneFileBytesForTransfer } from './file-content-cache.js';
 
 /** @typedef {{ cli: string, file: string, displayFile: string }} LinearRegionSpec */
 
+/** A drawn Linear record: its input and its record within that input. @typedef {{ fileIdx: number, recordIdx: number }} FeatureRecordInput */
+
 const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
 /** @type {WeakMap<FileLike, Map<string, FeatureExtractionPayload>>} */
 const featureExtractionCache = new WeakMap();
@@ -509,6 +511,8 @@ export const extractFeatureMetadataForPreview = async ({
       extractedFeatures: allFeatures,
       biologicalFeatures: allBiologicalFeatures,
       featureRecordIds: allRecordLabels.map((record) => record.label),
+      /** @type {FeatureRecordInput[]} The drawn records in order. */
+      featureRecordInputs: allRecordLabels.map(({ fileIdx, recordIdx }) => ({ fileIdx, recordIdx })),
       selectedFeatureRecordIdx: 0,
       errors
     };
