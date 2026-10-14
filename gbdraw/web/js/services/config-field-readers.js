@@ -821,9 +821,8 @@ export const installStoredSettings = (targets, config) => {
   /** @param {string} at */
   const used = (at) => !losses.some((loss) => loss.kept && loss.at === at);
   const storedAdv = used('adv') ? containerAt(config, 'adv') : null;
-  RAW_ADV_FIELDS.forEach((field) => {
-    if (storedAdv && Object.hasOwn(storedAdv, field)) targets.adv[field] = copied(storedAdv[field]);
-  });
+  Object.assign(targets.adv, Object.fromEntries(RAW_ADV_FIELDS
+    .filter((field) => storedAdv && Object.hasOwn(storedAdv, field)).map((field) => [field, copied(storedAdv?.[field])])));
   Object.assign(targets.adv, normalizedPersistedArrowGeometryState(targets.adv));
   if (config.losat && used('losat') && used('losat.blastp')) {
     // The hit limits of each mode over their defaults, as stored; the

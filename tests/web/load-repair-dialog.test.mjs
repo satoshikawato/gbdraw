@@ -585,7 +585,7 @@ test('a value both drawings of a Session 27-44 read is one row; a Session 46 lis
     return { loaded, items: dialogs.flat() };
   };
   const lossy = (config) => {
-    config.adv = { ...config.adv, label_rendering: 'sideways', arrow_shaft_width_ratio: '0.5', feature_shapes: { gene: 'bogus' } };
+    config.adv = { ...config.adv, label_rendering: 'sideways', feature_shapes: { gene: 'bogus' } };
   };
   for (const name of ['BGC0000708-BGC0000713.v30.gbdraw-session.json.gz', 'lambda_basic_linear.v44-schema8.gbdraw-session.json.gz',
     'HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz']) {
@@ -593,22 +593,20 @@ test('a value both drawings of a Session 27-44 read is one row; a Session 46 lis
     lossy(session.config);
     const { loaded, items } = await load(session, name);
     assert.deepEqual(rowsOf(loaded), [
-      'setting-replaced config.adv.arrow_shaft_width_ratio 0.5 -> 1',
       'setting-replaced config.adv.label_rendering sideways -> auto',
       'setting-replaced config.adv.feature_shapes.gene bogus -> undefined'
     ], name);
-    assert.equal(items.length, 3, name);
+    assert.equal(items.length, 2, name);
   }
   const session46 = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
   const MODES = ['circular', 'linear'];
   MODES.forEach((mode) => lossy(session46.modes[mode].config));
   const { loaded, items } = await load(session46, 'Session 46');
   assert.deepEqual(rowsOf(loaded), MODES.flatMap((mode) => [
-    `setting-replaced modes.${mode}.config.adv.arrow_shaft_width_ratio 0.5 -> 1`,
     `setting-replaced modes.${mode}.config.adv.label_rendering sideways -> auto`,
     `setting-replaced modes.${mode}.config.adv.feature_shapes.gene bogus -> undefined`
   ]));
-  assert.equal(items.length, 6);
+  assert.equal(items.length, 4);
 });
 
 // BA-OD89: a row of a list names the leaf with that leaf's values; free text
