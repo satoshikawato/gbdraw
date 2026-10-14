@@ -148,9 +148,11 @@ import {
   requireCurrentWebStateFieldNames
 } from './current-option-values.js';
 import {
-  normalizeCollinearAnchorMode,
-  normalizeCollinearSearchScope,
-  normalizeOrthogroupMembershipMode
+  readCollinearAnchorMode,
+  readCollinearColorMode,
+  readCollinearSearchScope,
+  readCollinearUnitMode,
+  readOrthogroupMembershipMode
 } from './losat-normalization.js';
 import {
   canonicalComparisonResourceKind,
@@ -2307,27 +2309,12 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
   const positiveInteger = (value, fallback) => integerSettingOr(value, fallback, 1);
   /** @param {unknown} value @param {number} fallback */
   const nonNegativeInteger = (value, fallback) => integerSettingOr(value, fallback, 0);
-  const rawCollinearityUnitMode = String(blastp.collinearUnitMode || '').trim().toLowerCase();
   const collinearityUnitMode = blastpMode === 'collinear'
-    ? requireCurrentCollinearUnitMode(rawCollinearityUnitMode)
-    : (['auto', 'cds', 'locus'].includes(rawCollinearityUnitMode)
-        ? rawCollinearityUnitMode
-        : 'auto');
-  const rawCollinearityColorMode = String(
-    blastp.collinearColorMode || ''
-  ).trim().toLowerCase().replace(/-/g, '_');
-  const resolvedCollinearityColorMode = rawCollinearityColorMode === 'identity'
-    ? 'average_identity'
-    : rawCollinearityColorMode;
+    ? requireCurrentCollinearUnitMode(blastp.collinearUnitMode)
+    : readCollinearUnitMode(blastp.collinearUnitMode).value;
   const collinearityColorMode = blastpMode === 'collinear'
-    ? requireCurrentCollinearColorMode(resolvedCollinearityColorMode)
-    : ([
-        'average_identity',
-        'orientation',
-        'orientation_identity'
-      ].includes(resolvedCollinearityColorMode)
-        ? resolvedCollinearityColorMode
-        : 'orientation');
+    ? requireCurrentCollinearColorMode(blastp.collinearColorMode)
+    : readCollinearColorMode(blastp.collinearColorMode).value;
   const baselineCollinearity = baseline.collinearityParams &&
     typeof baseline.collinearityParams === 'object' &&
     !Array.isArray(baseline.collinearityParams)
@@ -2366,10 +2353,10 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
     collinearInferOrthogroups: requireCurrentCollinearInferOrthogroups(blastp.collinearInferOrthogroups),
     collinearityAnchorMode: blastpMode === 'collinear'
       ? requireCurrentCollinearAnchorMode(blastp.collinearAnchorMode)
-      : normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
+      : readCollinearAnchorMode(blastp.collinearAnchorMode).value,
     collinearitySearchScope: blastpMode === 'collinear'
       ? requireCurrentCollinearSearchScope(blastp.collinearSearchScope)
-      : normalizeCollinearSearchScope(blastp.collinearSearchScope),
+      : readCollinearSearchScope(blastp.collinearSearchScope).value,
     collinearityColorMode,
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
@@ -2382,7 +2369,7 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
     ),
     orthogroupMembershipMode: ['orthogroup', 'collinear'].includes(blastpMode)
       ? requireCurrentOrthogroupMembershipMode(blastp.orthogroupMembershipMode)
-      : normalizeOrthogroupMembershipMode(blastp.orthogroupMembershipMode),
+      : readOrthogroupMembershipMode(blastp.orthogroupMembershipMode).value,
     orthogroupMemberMaxHits: ['orthogroup', 'collinear'].includes(blastpMode)
       ? requireCurrentOrthogroupMemberMaxHits(blastp.orthogroupMemberMaxHits)
       : integerSettingOr(blastp.orthogroupMemberMaxHits, null, 1),

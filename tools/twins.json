@@ -727,20 +727,6 @@
       "source": "inventory C section B (interactive SVG vs app; FL-08, GX-08)"
     },
     {
-      "id": "function:normalizeOrthogroupMembershipMode",
-      "concern": "Legacy orthogroup membership modes",
-      "pythonOwner": [
-        "gbdraw/analysis/protein_colinearity.py:normalize_orthogroup_membership_mode"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/losat-normalization.js:normalizeOrthogroupMembershipMode"
-      ],
-      "vector": null,
-      "reason": "Partly the same: one alias table; the Web falls back to the active model, Python refuses an unknown mode.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "twin.unregistered.v1 on origin/dev 927b658b"
-    },
-    {
       "id": "function:normalizeQualifierMap",
       "concern": "Qualifier map to lists of strings",
       "pythonOwner": [

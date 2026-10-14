@@ -21,8 +21,8 @@ await cp(
   join(tempRoot, 'services', 'conservation-series.js')
 );
 // linear-track-slots.js reads the current option values, which read the
-// Linear label visibilities.
-for (const leaf of ['current-option-values.js', 'linear-label-visibility.js']) {
+// Linear label visibilities and the comparison settings.
+for (const leaf of ['current-option-values.js', 'linear-label-visibility.js', 'losat-normalization.js']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf), join(tempRoot, 'services', leaf));
 }
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');

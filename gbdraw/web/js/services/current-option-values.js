@@ -1,7 +1,7 @@
 // @ts-check
-import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { DEFAULT_FEATURE_RENDERINGS, normalizeFeatureRendering, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
 import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
+import { requireComparisonSetting } from './losat-normalization.js';
 
 /**
  * @param {unknown} value
@@ -124,12 +124,7 @@ export const requireCurrentProteinBlastpMode = (value) => (
 
 /** @param {unknown} value */
 export const requireCurrentCollinearSearchScope = (value) => (
-  requireCurrentValue(
-    value,
-    'adjacent',
-    ['adjacent', 'all'],
-    'Collinear search scope'
-  )
+  requireComparisonSetting('collinearitySearchScope', value, 'Collinear search scope')
 );
 
 // Older saved pipelines omit this field; fresh Web state explicitly supplies false.
@@ -206,22 +201,12 @@ export const requireCurrentCollinearMaxParalogLinks = (value) => (
 
 /** @param {unknown} value */
 export const requireCurrentCollinearUnitMode = (value) => (
-  requireCurrentValue(
-    value,
-    'auto',
-    ['auto', 'cds', 'locus'],
-    'Collinear unit mode'
-  )
+  requireComparisonSetting('collinearityUnitMode', value, 'Collinear unit mode')
 );
 
 /** @param {unknown} value */
 export const requireCurrentCollinearAnchorMode = (value) => (
-  requireCurrentValue(
-    value,
-    'rbh',
-    ['all', 'one_to_one', 'rbh'],
-    'Collinear anchor mode'
-  )
+  requireComparisonSetting('collinearityAnchorMode', value, 'Collinear anchor mode')
 );
 
 /** @param {unknown} value */
@@ -235,26 +220,13 @@ export const requireCurrentCollinearMergeOrientation = (value) => (
 );
 
 /** @param {unknown} value */
-export const requireCurrentCollinearColorMode = (value) => {
-  const normalized = String(value ?? '').trim().toLowerCase().replace(/-/g, '_');
-  const resolved = normalized === 'identity' ? 'average_identity' : normalized;
-  if (!resolved) return 'orientation';
-  if (!['average_identity', 'orientation', 'orientation_identity'].includes(resolved)) {
-    throw new Error(
-      'Collinear color mode must be one of: average_identity, orientation, orientation_identity.'
-    );
-  }
-  return resolved;
-};
+export const requireCurrentCollinearColorMode = (value) => (
+  requireComparisonSetting('collinearityColorMode', value, 'Collinear color mode')
+);
 
 /** @param {unknown} value */
 export const requireCurrentOrthogroupMembershipMode = (value) => (
-  requireCurrentValue(
-    value,
-    ORTHOGROUP_INFERENCE_VERSION,
-    [ORTHOGROUP_INFERENCE_VERSION],
-    'Protein BLASTP orthogroup membership mode'
-  )
+  requireComparisonSetting('orthogroupMembershipMode', value, 'Protein BLASTP orthogroup membership mode')
 );
 
 /** @param {unknown} value */

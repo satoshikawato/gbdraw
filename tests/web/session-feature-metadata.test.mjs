@@ -22,6 +22,9 @@ const copyModule = async (sourceRelative, targetRelative) => {
 await copyModule('gbdraw/web/js/services/session-feature-recovery.js', 'services/session-feature-recovery.js');
 await copyModule('gbdraw/web/js/services/feature-metadata-extraction.js', 'services/feature-metadata-extraction.js');
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
+// losat-normalization.js reads the comparison settings from the generated request description.
+await copyModule('gbdraw/web/js/contracts/request-shape.generated.js', 'contracts/request-shape.generated.js');
+await copyModule('gbdraw/web/js/utils/contract-shape.js', 'utils/contract-shape.js');
 await copyModule('gbdraw/web/js/utils/field-reading.js', 'utils/field-reading.js');
 await copyModule('gbdraw/web/js/services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('gbdraw/web/js/services/legend-svg.js', 'services/legend-svg.js');

@@ -25,6 +25,15 @@ import {
   requireCurrentProteinBlastpMode,
   requireCurrentWebStateFieldNames
 } from '../../gbdraw/web/js/services/current-option-values.js';
+import {
+  readCollinearAnchorMode,
+  readCollinearColorMode,
+  readCollinearSearchScope,
+  readCollinearUnitMode,
+  readOrthogroupMembershipMode
+} from '../../gbdraw/web/js/services/losat-normalization.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../../gbdraw/web/js/contracts/request-shape.generated.js';
+import { readSpelling } from '../../gbdraw/web/js/utils/contract-shape.js';
 
 assert.equal(requireCurrentCircularMultiRecordSizeMode(), 'auto');
 assert.equal(requireCurrentCircularMultiRecordSizeMode('linear'), 'linear');
@@ -64,11 +73,11 @@ assert.throws(() => requireCurrentCollinearSearchScope('all-records'), /search s
 
 for (const [validator, validValues, invalidValue] of [
   [requireCurrentCollinearUnitMode, ['auto', 'cds', 'locus'], 'gene'],
-  [requireCurrentCollinearAnchorMode, ['all', 'one_to_one', 'rbh'], 'top1'],
+  [requireCurrentCollinearAnchorMode, ['all', 'one_to_one', 'rbh'], 'top3'],
   [requireCurrentCollinearMergeOrientation, ['strand', 'order', 'either'], 'both'],
   [requireCurrentCollinearColorMode,
     ['average_identity', 'orientation', 'orientation_identity'], 'score'],
-  [requireCurrentOrthogroupMembershipMode, ['anchor_core_v1'], 'legacy']
+  [requireCurrentOrthogroupMembershipMode, ['anchor_core_v1'], 'banana']
 ]) {
   for (const value of validValues) assert.equal(validator(value), value);
   assert.throws(() => validator(invalidValue));
@@ -153,3 +162,34 @@ assert.throws(
   }),
   /collinearMaxGeneGap is obsolete/
 );
+
+// The five comparison settings: the Web reads each spelling exactly as Python's
+// read_spelling does, from the generated description (OV-776). Load gives the
+// name, or the setting's default as a lost value; Generate gives the name or
+// refuses. A spelling only the Web once read (`all_pairs`, `global`) is lost.
+const comparisonSettings = CANONICAL_REQUEST_DESCRIPTION.types.CanonicalProteinComparisonSettings.fields;
+for (const [name, read, require] of /** @type {const} */ ([
+  ['collinearityUnitMode', readCollinearUnitMode, requireCurrentCollinearUnitMode],
+  ['collinearityAnchorMode', readCollinearAnchorMode, requireCurrentCollinearAnchorMode],
+  ['collinearitySearchScope', readCollinearSearchScope, requireCurrentCollinearSearchScope],
+  ['collinearityColorMode', readCollinearColorMode, requireCurrentCollinearColorMode],
+  ['orthogroupMembershipMode', readOrthogroupMembershipMode, requireCurrentOrthogroupMembershipMode]
+])) {
+  const shape = comparisonSettings[name];
+  const aliases = Object.keys(shape.spellings.aliases ?? {});
+  const spellings = [
+    ...shape.values, ...aliases, ...[...shape.values, ...aliases].flatMap((value) => [
+      ` ${value.toUpperCase()} `, value.replaceAll('_', '-')
+    ]),
+    '', null, undefined, 'banana', 5, 'all_pairs', 'adjacent_pairs', 'global', 'all-records'
+  ];
+  for (const spelling of spellings) {
+    const expected = readSpelling(spelling, shape);
+    assert.deepEqual(read(spelling), expected === null
+      ? { value: shape.spellings.blank, lost: true } : { value: expected, lost: false }, `${name} reads ${String(spelling)}`);
+    if (expected === null) assert.throws(() => require(spelling), Error, `${name} refuses ${String(spelling)}`);
+    else assert.equal(require(spelling), expected, `${name} requires ${String(spelling)}`);
+  }
+}
+assert.deepEqual(readCollinearSearchScope('all_pairs'), { value: 'adjacent', lost: true });
+assert.deepEqual(readCollinearSearchScope('global'), { value: 'adjacent', lost: true });
