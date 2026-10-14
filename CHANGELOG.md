@@ -277,9 +277,15 @@ write-up of a release.
   (OV-324, OV-528, OV-596, OV-611, OV-631, OV-632, OV-651, OV-653).
 - Changed (web app): a Session or configuration file that Load cannot fully
   restore now opens one **Load this file?** dialog before anything changes. It
-  lists each value Load would drop, replace with a default, or read
-  differently, with its place in the file (up to 12 lines), and says that Save
-  Session afterwards writes the current format. **Load** loads the file;
+  lists the settings, Legend positions and edits, table rows, Depth rows,
+  feature edits and feature information Load drops, replaces with a default,
+  or reads differently (up to 12 lines): a setting with its place in the file
+  and the value used, a feature edit or feature information as a count or a
+  statement. It says that Save Session afterwards writes the current format.
+  Values that had no effect on the figure (a pending palette Instant Preview
+  drops, edits of similarity groups the Result does not have, a Depth series
+  without a Depth file) are dropped without a row, and other invalid content,
+  such as an unknown `adv` key or feature shape, is still refused. **Load** loads the file;
   **Cancel** leaves the settings, Results, input files, History and screen as
   they were. Dropped feature edits, narrowed Feature visibility edits, `hash=`
   values that could not be renamed, joined or dropped table rows and Legend

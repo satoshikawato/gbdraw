@@ -174,26 +174,43 @@ one Result, so a settings-only Session cannot hold it.
 ## Loading a file that cannot be fully restored
 
 The Web app reads a Session or an older configuration file as far as it can.
-When it would drop a value, replace it with a default, or read it with another
-meaning, it first shows one **Load this file?** dialog, before any setting,
-Result, input file, History entry or screen changes. The dialog lists each such
-value with its place in the file, for example
-`modes.circular.config.adv.depth_tracks[1]`: settings their reader cannot use,
-Legend positions outside the diagram mode, dropped Legend entries and edits,
-per-feature edits and `hash=` values as listed above, joined or dropped table
-rows, Depth series and Depth rows without a Depth file, a pending palette that
-Instant Preview drops, edits of similarity groups the saved Result does not
-have, and feature information or comparison match sequences that cannot be
-restored. It shows at most 12 lines, the last one with the number of the rest,
-and says that Save Session afterwards writes the current format.
+Before any setting, Result, input file, History entry or screen changes, it
+shows one **Load this file?** dialog that lists the values it will drop, replace
+with a default, or read with another meaning:
+
+- settings their reader cannot use, named by their place in the file and the
+  value used, for example `modes.circular.config.adv.depth_tracks[0].height`.
+  A label, file name, ID or other free text is named by its place only;
+- Legend positions outside the diagram mode, with the position used;
+- dropped Legend entries and edits;
+- per-feature edits and `hash=` values as listed above;
+- joined or dropped table rows;
+- Depth rows of the drawing's track stack that show a Depth series without a
+  Depth file;
+- feature information or comparison match sequences that cannot be restored.
+
+Rows of per-feature edits, Feature visibility edits, `hash=` values, feature
+information and comparison match sequences give a count or a statement, not a
+place in the file. Legend entry rows name the entry, and table rows name the
+table and its lines.
+
+The dialog shows at most 12 lines, the last one with the number of the rest,
+and says that Save Session afterwards writes the current format. It lists the
+readings named here. Other old or invalid values are still changed or refused
+as before; for example, a track stack row's values are normalized without a
+row.
 
 - **Load** loads the file. **Cancel** changes nothing. The file itself is
   never changed.
 - No dialog opens for a reading that keeps the meaning (an older format,
-  capitals, outer spaces, an alias), for a dropped cache entry that the next
-  comparison computes again, or for a Session 46 Legend edit that a later edit
-  of the same row overwrote. A file that loads without a loss, such as every
-  Gallery Session, opens none.
+  capitals, outer spaces, an alias, a number stored as its text), or for a
+  value that had no effect on the figure: a dropped cache entry that the next
+  comparison computes again, a Session 46 Legend edit that a later edit of the
+  same row overwrote, a pending palette that Instant Preview drops, a name or
+  description edit of a similarity group the saved Result does not have, a
+  Depth series without a Depth file, a setting of the other diagram mode, view
+  state such as zoom, or a value another stored value replaces. A file that
+  loads without a loss, such as every Gallery Session, opens none.
 - The **Replace the current work?** question, asked when there is unsaved
   work, still comes first, before you choose the file. The notice of `hash=` annotation targets moved to
   the feature they name, the notice of a loaded configuration file, and the
@@ -211,7 +228,11 @@ The Web app refuses these files and shows an error instead:
 - A file larger than 200 MB, or larger than 512 MB after decompression.
 - A file opened in a browser without gzip decompression or module Workers.
 - A file with an unsafe name (`__proto__`, `constructor`, `prototype`).
-- A file of which nothing can be restored.
+- A file whose content does not read as its version: for example an unknown
+  key in a drawing's `adv`, a feature shape the app does not know, a missing
+  or unknown resource, a track stack that does not read, or a saved Result
+  that does not pass its checks. The dialog does not list these; Load refuses
+  them as it did before.
 
 Do not change a version number, resource hash, or runtime binding by hand;
 changing metadata does not migrate its content.
