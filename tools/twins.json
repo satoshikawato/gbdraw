@@ -60,6 +60,23 @@
       "source": "inventory C section B (ring default label; OV-202, OV-203)"
     },
     {
+      "id": "vector:tests/fixtures/contract_shape_vectors.json",
+      "concern": "Structural check of a parsed JSON value against a gbdraw.contract_shapes description (path and reason of each violation), and the name a literal's described spellings read as",
+      "pythonOwner": [
+        "gbdraw/contract_shapes.py:shape_violations",
+        "gbdraw/contract_shapes.py:read_spelling"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/utils/contract-shape.js:shapeViolations",
+        "gbdraw/web/js/utils/contract-shape.js:readSpelling"
+      ],
+      "vector": "tests/fixtures/contract_shape_vectors.json",
+      "reason": "Python's request decoder and the Web Load check a stored request against the same generated description (contracts/request-shape.generated.js); the vectors pin the reason codes, and jsonDifferences lists what JSON.parse and Python's json read differently. A stored request of schemas 5 to 8 can hold another spelling of a comparison setting, which both readers read as its name.",
+      "retireWhen": "the Web checks a stored document through the Python Worker; Loading a saved preview leaves the Worker unconstructed (gbdraw/web/CLAUDE.md), so until then the Web keeps its checker",
+      "source": "boundary-audit stage 1d PLAN 3.2 and K3 (PR-C step C1)",
+      "pending": true
+    },
+    {
       "id": "vector:tests/fixtures/default_color_domain.json",
       "concern": "Accepted color domain of a Default colors table (-d)",
       "pythonOwner": [
@@ -130,6 +147,21 @@
       "reason": "Both Load paths migrate the rule values; the vector pins them.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/legacy-render-request-vectors.json",
+      "concern": "Stored render requests of schemas 1 and 2 (Sessions 31-33) read as schema 5",
+      "pythonOwner": [
+        "gbdraw/session_request_codec.py:decode_canonical_request"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/legacy-render-request.js:liftLegacyRenderRequest"
+      ],
+      "vector": "tests/fixtures/legacy-render-request-vectors.json",
+      "reason": "Python decodes request schemas 1 and 2 directly; the Web rewrites their JSON into the schema-5 form before its one stored-request reader, so a Load needs no Worker. The vector holds every distinct schema 1/2 request of first-parent main history; both runtimes must read each one to the same request.",
+      "retireWhen": "the Web stops reading request schemas 1 and 2, or reads them through the Python decoder",
+      "source": "boundary-audit-20261010 lane D (PR-D), D-OD07",
+      "pending": true
     },
     {
       "id": "vector:tests/fixtures/legacy-table-row-vectors.json",
