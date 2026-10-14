@@ -203,6 +203,17 @@ test('a request that cannot be read at its root loads the Session as settings on
   }
 });
 
+test('a Session 42 to 47 with no stored request loads as settings only, listed; no writer omits the key (OV-785, C-OD07)', async () => {
+  const session = gallery('HmmtDNA_basic_circular');
+  delete session.renderRequest;
+  const { result, dialogs } = await load(session);
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.equal(state.results.value.length, 0);
+  assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'renderRequest']]);
+  assert.equal(dialogs.length, 1);
+  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(renderRequest\) could not be read\. The file loads as settings only/);
+});
+
 test('a Linear layout whose record translations do not cover the drawn records drops the request at its root (vector 027, C-OD20)', async () => {
   const session = gallery('BGC0000708-BGC0000713');
   const change = (request) => { request.layout.recordTranslations[0].recordKey = 'no-such-record'; };

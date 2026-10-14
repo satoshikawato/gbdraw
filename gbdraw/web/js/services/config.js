@@ -1778,7 +1778,11 @@ const readSessionRequests = (rawData, repairs) => {
     renderRequest: /** @type {UnvalidatedFields<'schema'>} */ (top.renderRequest)?.schema,
     otherModeResult: /** @type {UnvalidatedFields<'schema'>} */ (other?.renderRequest)?.schema
   };
-  if (!Object.hasOwn(top, 'renderRequest') || top.renderRequest === null) {
+  // A missing request of a version with a settings-only form is one its
+  // reader cannot read (K22, C-OD07; OV-785): no writer omits the key. An
+  // older version keeps its refusal (C-OD17).
+  const settingsOnlyForm = isSettingsOnlySessionDocument({ .../** @type {SessionEnvelope} */ (rawData), renderRequest: null });
+  if (top.renderRequest === null || (!Object.hasOwn(top, 'renderRequest') && !settingsOnlyForm)) {
     return { data: rawData, storedSchemas, settingsOnly: false, comparisonClassification: null };
   }
   const resourceIds = new Set(isPlainObject(top.resources) ? Object.keys(/** @type {object} */ (top.resources)) : []);
@@ -1800,10 +1804,10 @@ const readSessionRequests = (rawData, repairs) => {
   const comparisonClassification = classify(top);
   const topRead = read(top, 'renderRequest', comparisonClassification);
   if ('kind' in topRead) {
-    const envelope = /** @type {SessionEnvelope} */ (rawData);
-    if (!isSettingsOnlySessionDocument({ ...envelope, renderRequest: null })) {
+    if (!settingsOnlyForm) {
       return { data: rawData, storedSchemas, settingsOnly: false, comparisonClassification };
     }
+    const envelope = /** @type {SessionEnvelope} */ (rawData);
     repairs.push(loadRepair({ code: 'request-dropped', path: topRead.path, effect: 'dropped' }));
     return {
       data: /** @type {T} */ (settingsOnlySessionCandidate(envelope)), storedSchemas, settingsOnly: true,

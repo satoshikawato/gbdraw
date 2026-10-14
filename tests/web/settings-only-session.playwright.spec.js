@@ -257,8 +257,9 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   const before = await snapshot(page);
   const visual = await capture(page, testInfo, 'before-rejected-loads');
   await assertCoherent(visual, 'prior valid Session');
+  // A Session 47 with no `renderRequest` key loads as settings only with a
+  // row (K22, OV-785; tests/web/stored-request-read.test.mjs), so it is not here.
   const cases = [
-    ['request', d => { delete d.renderRequest; }, { field: 'schema' }],
     ['null-request-with-result', d => { d.renderRequest = null; }, { field: 'schema' }],
     ['resource', d => { d.resources = {}; }, { field: 'schema' }],
     ['config', d => { d.modes.circular.config.form = []; }, { field: 'schema' }],
