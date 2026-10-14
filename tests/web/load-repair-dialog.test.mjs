@@ -947,6 +947,71 @@ test('an arrow ratio stored as its text loads as its number with no row', async 
   assert.deepEqual([refused.status, loadedState() === snapshot], ['error', true]);
 });
 
+// OV-824: a value the app's own writer stores loads with no row (BA-D25). A
+// number input bound with `.number` stores '' when it is cleared, which reads
+// as the value the drawing would have (a blank is the default, R7); the
+// comparison filters hold a number or its text (the e-value input is text, and
+// `resolveComparisonThresholds` reads both) and load as stored. The cleared
+// fields are read from the template's bindings.
+const TEMPLATE = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+// Save refuses a cleared Feature overlap tolerance, so no file holds it (OV-826).
+const CLEARED_NUMBER_FIELDS = [...new Set([...TEMPLATE.matchAll(/<input\b[^>]*>/g)].map(([tag]) => (
+  /\btype="number"/.test(tag) ? tag.match(/\bv-model\.number="((?:form|adv|losat\.blastp|circularConservation)\.\w+)"/)?.[1] : undefined
+)).filter((at) => at && at !== 'adv.feature_overlap_tolerance_bp'))];
+const WRITTEN_VALUES = [...new Map([
+  ...CLEARED_NUMBER_FIELDS.map((at) => [at, '']),
+  ['adv.evalue', 1], ['adv.min_bitscore', '50'], ['adv.identity', '70.5'], ['adv.alignment_length', '']
+])];
+test('a value the app writes into a setting of another kind loads with no row, in a Session and a configuration file (OV-824)', async () => {
+  assert.ok(CLEARED_NUMBER_FIELDS.length >= 30, String(CLEARED_NUMBER_FIELDS.length));
+  for (const at of ['adv.gc_content_tick_interval', 'losat.blastp.maxHits', 'circularConservation.subject_gencode']) {
+    assert.ok(CLEARED_NUMBER_FIELDS.includes(at), at);
+  }
+  /** @param {Record<string, any>} config @param {string} at */
+  const place = (config, at) => {
+    const parts = at.split('.');
+    return [parts.slice(0, -1).reduce((container, key) => container[key], config), parts.at(-1)];
+  };
+  /** Loads `file`; returns its status and the rows the dialog listed. */
+  const load = async (file) => {
+    const items = [];
+    const loaded = await importSession(input(file), { confirmLoadRepairs: async (prompt) => { items.push(...prompt.items); return true; } });
+    return [loaded.status, items];
+  };
+  // A blank reads as '' or as unset (null).
+  const valuesOf = (mode) => WRITTEN_VALUES.map(([at]) => {
+    const [container, key] = place(state.drawings[mode], at);
+    return container[key] === null ? '' : container[key];
+  });
+  // A cleared field whose value is a number keeps it, unless a comparison
+  // filter (a blank filter is its default, R7); any other value loads as stored.
+  const filters = ['adv.evalue', 'adv.min_bitscore', 'adv.identity', 'adv.alignment_length'];
+  const expected = (before) => WRITTEN_VALUES.map(([at, value], index) => (
+    value === '' && typeof before[index] === 'number' && !filters.includes(at) ? before[index] : value));
+  const base = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  assert.deepEqual(await load(base), ['ok', []]);
+  const before = Object.fromEntries(['circular', 'linear'].map((mode) => [mode, valuesOf(mode)]));
+  const session = structuredClone(base);
+  for (const mode of ['circular', 'linear']) {
+    for (const [at, value] of WRITTEN_VALUES) {
+      const [container, key] = place(session.modes[mode].config, at);
+      container[key] = value;
+    }
+  }
+  assert.deepEqual(await load(session), ['ok', []]);
+  for (const mode of ['circular', 'linear']) assert.deepEqual(valuesOf(mode), expected(before[mode]), mode);
+  // A configuration file is applied over the shown drawing.
+  assert.deepEqual(await load(base), ['ok', []]);
+  const shown = state.mode.value;
+  const configFile = { form: {}, adv: {}, losat: { blastp: {} }, circularConservation: {} };
+  for (const [at, value] of WRITTEN_VALUES) {
+    const [container, key] = place(configFile, at);
+    container[key] = value;
+  }
+  assert.deepEqual(await load(configFile), ['legacy', []]);
+  assert.deepEqual(valuesOf(shown), expected(before[shown]));
+});
+
 // The shape of a feature type the user added is a key the default
 // shapes lack; Load kept only the default keys and dropped it without a row.
 test('a feature shape of a feature type the user added survives Save and Load', async () => {

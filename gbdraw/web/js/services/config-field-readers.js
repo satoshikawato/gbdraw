@@ -719,8 +719,20 @@ const readRows = (container, rows, at, stored = container) => rows.flatMap(({ fi
   return [{ at: fieldAt, stored: before, used: reading.value }];
 });
 
-/** @param {unknown} value A list, an object, or the `typeof` of anything else. */
-const kindOf = (value) => (Array.isArray(value) ? 'list' : typeof value);
+/**
+ * The fields whose writer stores a number or its text: the comparison filters
+ * (the e-value input is text; `resolveComparisonThresholds` reads both).
+ * @type {readonly string[]}
+ */
+const NUMBER_OR_TEXT_FIELDS = Object.freeze(['adv.evalue', 'adv.min_bitscore', 'adv.identity', 'adv.alignment_length']);
+/**
+ * A list, an object, or the `typeof` of anything else; a number and a text
+ * are one kind in a field of `NUMBER_OR_TEXT_FIELDS`.
+ * @param {unknown} value
+ * @param {string} at
+ */
+const kindOf = (value, at) => (Array.isArray(value) ? 'list'
+  : NUMBER_OR_TEXT_FIELDS.includes(at) && typeof value === 'string' ? 'number' : typeof value);
 /** Stored maps whose keys the user names, merged with their own keys. @type {readonly string[]} */
 const FREE_KEY_MAPS = Object.freeze(['adv.feature_shapes']);
 /** @type {readonly string[]} */
@@ -728,9 +740,11 @@ const UNSAFE_KEYS = Object.freeze(['__proto__', 'constructor', 'prototype']);
 /**
  * Merges a stored settings object into `target`: a key `target` lacks is
  * ignored, except in a map of `FREE_KEY_MAPS`, where it is copied; an object merges into an object; a list replaces a list; a value
- * of `target`'s kind, or `null` on either side, is copied. A value of another
- * kind (a list for an object included) is not used; it is returned as a loss
- * at `at`, and `target` keeps its value.
+ * of `target`'s kind, or `null` on either side, is copied. An empty text of
+ * another kind (a cleared number input) keeps `target`'s value without a loss,
+ * as a blank reads (R7). Any other value of another kind (a list for an object
+ * included) is not used; it is returned as a loss at `at`, and `target` keeps
+ * its value.
  * @param {Record<string, unknown>} target
  * @param {unknown} source
  * @param {string} [at]
@@ -754,11 +768,11 @@ export const mergeStoredSettings = (target, source, at = '') => {
       targetValue.splice(0, targetValue.length, ...sourceValue);
       return [];
     }
-    if (kindOf(targetValue) === kindOf(sourceValue) || targetValue === null || sourceValue === null) {
+    if (kindOf(targetValue, keyAt) === kindOf(sourceValue, keyAt) || targetValue === null || sourceValue === null) {
       target[key] = sourceValue;
       return [];
     }
-    return [{ at: keyAt, stored: sourceValue, used: targetValue, kept: true }];
+    return sourceValue === '' ? [] : [{ at: keyAt, stored: sourceValue, used: targetValue, kept: true }];
   });
 };
 
