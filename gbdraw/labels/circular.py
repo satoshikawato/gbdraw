@@ -2479,14 +2479,14 @@ def _bounds_overlap(bounds1: tuple[float, float], bounds2: tuple[float, float]) 
     return bounds2[1] >= bounds1[0]
 
 
-def y_overlap(label1, label2, total_len, minimum_margin):
+def y_overlap(label1: CircularLabel, label2: CircularLabel, total_len: int, minimum_margin: float) -> bool:
     return _bounds_overlap(
         _label_y_bounds(label1, total_len, minimum_margin),
         _label_y_bounds(label2, total_len, minimum_margin),
     )
 
 
-def x_overlap(label1, label2, minimum_margin=1.0):
+def x_overlap(label1: CircularLabel, label2: CircularLabel, minimum_margin: float = 1.0) -> bool:
     return _bounds_overlap(_label_x_bounds(label1, minimum_margin), _label_x_bounds(label2, minimum_margin))
 
 
@@ -2643,7 +2643,7 @@ def place_labels_on_arc_fc(
         legacy_spacing_px=2.0,
     )
 
-    def check_overlap(label1, label2, total_length, margin):
+    def check_overlap(label1: CircularLabel, label2: CircularLabel, total_length: int, margin: float) -> bool:
         effective_margin = minimum_bbox_gap_px(label1, label2, base_margin_px=max(margin, resolved_spacing_px))
         return y_overlap(label1, label2, total_length, effective_margin) and x_overlap(
             label1, label2, minimum_margin=effective_margin
@@ -2733,7 +2733,7 @@ def euclidean_distance(x1, y1, x2, y2):
     return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
 
 
-def sort_labels(labels):
+def sort_labels(labels: Iterable[CircularLabel]) -> list[CircularLabel]:
     return sorted(labels, key=lambda x: x["middle"])
 
 
@@ -2956,7 +2956,7 @@ def _legacy_improved_label_placement_fc(
 
 
 def improved_label_placement_fc(
-    labels,
+    labels: list[CircularLabel],
     center_x,
     center_y,
     x_radius,
@@ -3013,12 +3013,14 @@ def improved_label_placement_fc(
     pair_margins: list[list[float]] = []
     max_pair_margin = 0.0
 
-    def move_label(label, angle):
+    def move_label(label: CircularLabel, angle: float) -> tuple[float, float]:
         new_x = center_x + x_radius * math.cos(math.radians(angle))
         new_y = center_y + y_radius * math.sin(math.radians(angle))
         return new_x, new_y
 
-    def check_overlap(label1, label2, total_length, effective_margin: float):
+    def check_overlap(
+        label1: CircularLabel, label2: CircularLabel, total_length: int, effective_margin: float
+    ) -> bool:
         return y_overlap(label1, label2, total_length, effective_margin) and x_overlap(
             label1, label2, minimum_margin=effective_margin
         )
@@ -4659,7 +4661,7 @@ def _polish_total_leader_distance(
 
 
 def rearrange_labels_fc(
-    labels,
+    labels: list[CircularLabel],
     feature_radius,
     total_length,
     genome_len,
