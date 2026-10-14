@@ -4647,21 +4647,7 @@ export const projectCanonicalSessionRequest = ({
       )) throw new Error(
         'Linear row placement must use record presentation or layout positions, not both.'
       );
-      const recordKeys = sourceRecords.map((record, index) => requireCanonicalText(
-        record.recordKey,
-        `renderRequest.records[${index}].recordKey`
-      ));
-      similarityAlignment = canonicalSimilarityAlignment(
-        layout.similarityAlignment,
-        recordKeys,
-        'renderRequest.layout.similarityAlignment'
-      );
-      recordTranslations = canonicalRecordTranslations(
-        layout.recordTranslations,
-        recordKeys,
-        'renderRequest.layout.recordTranslations',
-        { requireCoverage: similarityAlignment !== null }
-      );
+      ({ similarityAlignment, recordTranslations } = canonicalLinearRecordLayout(renderRequest));
     }
   }
   const grouping = canonicalGrouping(renderRequest, records);
@@ -6156,6 +6142,14 @@ export const readStoredRenderRequest = (value, context) => {
   );
   const root = repaired.rows.find((row) => row.pattern === '');
   if (repaired.value === undefined || root) return { kind: 'request-dropped', path, reason: String(root?.reason ?? 'wrong-kind') };
+  // The Linear layout's cross-record rules (translations cover the drawn
+  // records, the alignment plan names them) are its owner's, which Load and
+  // Generate run; a layout it refuses leaves no request to draw (C-OD20).
+  try {
+    canonicalLinearRecordLayout(/** @type {Record<string, unknown>} */ (repaired.value));
+  } catch {
+    return { kind: 'request-dropped', path: `${path}.layout`, reason: 'unknown-record' };
+  }
   // The leaf returns the stored object itself when nothing changed (RK-3).
   return {
     value: /** @type {CanonicalRenderRequest} */ (repaired.value),

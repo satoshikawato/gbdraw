@@ -203,6 +203,19 @@ test('a request that cannot be read at its root loads the Session as settings on
   }
 });
 
+test('a Linear layout whose record translations do not cover the drawn records drops the request at its root (vector 027, C-OD20)', async () => {
+  const session = gallery('BGC0000708-BGC0000713');
+  const change = (request) => { request.layout.recordTranslations[0].recordKey = 'no-such-record'; };
+  assert.deepEqual(readRequest(session, change), { kind: 'request-dropped', path: 'renderRequest.layout', reason: 'unknown-record' });
+  change(session.renderRequest);
+  const { result, dialogs } = await load(session);
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.equal(state.results.value.length, 0);
+  assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'renderRequest.layout']]);
+  assert.equal(dialogs.length, 1);
+  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(renderRequest\.layout\) could not be read\. The file loads as settings only/);
+});
+
 test('the other diagram\'s request is read at Load: its repairs are listed, and an unreadable one leaves only that set out (OV-670)', async () => {
   const twoMode = () => JSON.parse(execFileSync('python', ['-c',
     'import json; from tests.utils.two_mode_session import two_mode_session; print(json.dumps(two_mode_session()))'
