@@ -293,8 +293,9 @@ write-up of a release.
   without a row or kept as stored (for example a track stack row's values or
   a Legend color edit the app does not accept), and a configuration file
   drops a key it does not know without a row. Other invalid content, such as
-  an unknown `adv` key in a Session, an unknown feature shape or option value,
-  is still refused, now before anything is asked or changed. No file that
+  an unknown `adv` key in a Session, an unknown shape of a default feature
+  type, or an unknown option value, is still refused, now before anything is
+  asked or changed. No file that
   loaded before is refused: a feature shape or Linear Accession or Length /
   Coordinates visibility that is not text keeps the drawing's value, and an
   unknown shape for a feature type the defaults lack is dropped, each with a
@@ -303,7 +304,10 @@ write-up of a release.
   file, a color rule or label whitelist entry that is not an object, which
   made the Load fail, is now dropped and listed, and a label filter mode or
   feature overlap tolerance the app does not accept, which made Save Session
-  fail after the Load, is now listed and set to its default. **Load** loads
+  fail after the Load, is now listed and set to its default. A configuration
+  file loads over the current drawing: a settings group or list it cannot
+  use (such as `"form": 5`, or `rules` that is not a list) is not used, and
+  its row says that the drawing keeps its current value. **Load** loads
   the file;
   **Cancel** leaves the settings, Results, input files, History and screen as
   they were. Dropped feature edits, narrowed Feature visibility edits, `hash=`
