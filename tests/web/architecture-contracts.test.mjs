@@ -1706,7 +1706,7 @@ test('Gallery readiness routes jobs from direct-parent evidence and aggregates t
     planner,
     /Checkout exact workflow SHA[\s\S]*ref: \$\{\{ github\.sha \}\}[\s\S]*fetch-depth: 0[\s\S]*persist-credentials: false/
   );
-  assert.match(planner, /node-version: "20"/);
+  assert.match(planner, /node-version-file: \.node-version/);
   assert.match(planner, /CI_IMPACT_PROFILE: gallery/);
   assert.match(planner, /CI_IMPACT_EVENT_NAME: \$\{\{ github\.event_name \}\}/);
   assert.match(
@@ -1854,6 +1854,19 @@ test('steady-state topology removes legacy main producers without changing final
     WORKFLOW_SOURCES.join('\n'),
     /branches\/[^"]+\/protection|required_status_checks|\/rulesets(?:\b|\/)/
   );
+});
+
+test('every workflow reads its Node version from the root .node-version', () => {
+  assert.match(readFileSync(join(REPOSITORY_ROOT, '.node-version'), 'utf8'), /^\d+\n$/);
+  WORKFLOW_NAMES.forEach((name, index) => {
+    const source = WORKFLOW_SOURCES[index];
+    assert.doesNotMatch(source, /^\s*node-version:/m, name);
+    assert.equal(
+      (source.match(/uses: actions\/setup-node@v\d+\n\s+with:\n\s+node-version-file: \.node-version\n/g) || []).length,
+      (source.match(/uses: actions\/setup-node@/g) || []).length,
+      name
+    );
+  });
 });
 
 test('the PR template retains architecture evidence anchors', () => {
