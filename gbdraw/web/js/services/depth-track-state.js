@@ -4,7 +4,7 @@ import { isUnsetValue, positiveNumberOrNull } from '../utils/field-reading.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
-/** @import { FieldReading } from '../utils/field-reading.js' */
+/** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
 
 /**
  * The Depth file slots of one record: one file, or a list indexed by series.
@@ -333,11 +333,13 @@ export const readDepthTrackConfig = (entry, index, defaults = {}) => {
   const isEntry = Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry);
   /** @type {RawDepthTrackConfig} */
   const source = isEntry ? /** @type {RawDepthTrackConfig} */ (entry) : {};
-  let lost = !isEntry && !isUnsetValue(entry);
-  /** @param {unknown} value */
-  const positive = (value) => {
+  const lost = !isEntry && !isUnsetValue(entry);
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  /** @param {string} field @param {unknown} value */
+  const positive = (field, value) => {
     const reading = positiveNumberOrNull(value);
-    lost ||= reading.lost;
+    if (reading.lost) leaves.push({ at: `.${field}`, stored: value, used: reading.value });
     return reading.value;
   };
   const labelForIndex = typeof defaults.labelForIndex === 'function'
@@ -346,12 +348,12 @@ export const readDepthTrackConfig = (entry, index, defaults = {}) => {
   const value = {
     label: String(source.label ?? labelForIndex(index)),
     color: resolveColorToHex(String(source.color || fallbackColor(index, defaults))),
-    height: positive(Object.hasOwn(source, 'height') ? source.height : defaults.depthHeight),
-    large_tick_interval: positive(source.large_tick_interval ?? defaults.largeTickInterval),
-    small_tick_interval: positive(source.small_tick_interval ?? defaults.smallTickInterval),
-    tick_font_size: positive(source.tick_font_size ?? defaults.tickFontSize)
+    height: positive('height', Object.hasOwn(source, 'height') ? source.height : defaults.depthHeight),
+    large_tick_interval: positive('large_tick_interval', source.large_tick_interval ?? defaults.largeTickInterval),
+    small_tick_interval: positive('small_tick_interval', source.small_tick_interval ?? defaults.smallTickInterval),
+    tick_font_size: positive('tick_font_size', source.tick_font_size ?? defaults.tickFontSize)
   };
-  return { value, lost };
+  return { value, lost: lost || leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
 };
 
 /**
@@ -391,10 +393,13 @@ export const readDepthTracks = (tracks, adv = {}) => {
   const readings = (Array.isArray(tracks) ? tracks : [])
     .map((entry, index) => readDepthTrackConfig(entry, index, storedSeriesDefaults(adv, index)));
   if (!readings.length) readings.push(readDepthTrackConfig(null, 0, storedSeriesDefaults(adv, 0)));
-  return {
-    value: readings.map(({ value }) => value),
-    lost: readings.some(({ lost }) => lost) || (!Array.isArray(tracks) && !isUnsetValue(tracks))
-  };
+  const notList = !Array.isArray(tracks) && !isUnsetValue(tracks);
+  const value = readings.map((reading) => reading.value);
+  // An entry that is no series is replaced by a default series.
+  const leaves = notList ? [] : readings.flatMap((reading, index) => (!reading.lost ? []
+    : reading.leaves ? reading.leaves.map((leaf) => ({ ...leaf, at: `[${index}]${leaf.at}` }))
+      : [{ at: `[${index}]`, stored: /** @type {unknown[]} */ (tracks)[index], used: reading.value }]));
+  return { value, lost: notList || leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
 };
 
 /**

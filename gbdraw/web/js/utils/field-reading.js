@@ -7,9 +7,16 @@
 // case, outer spaces and a listed alias.
 
 /**
+ * A value inside a read list or object that its reader replaced; `at` is its
+ * place under the field (`[0].height`, `.name.font_size`).
+ * @typedef {{ at: string, stored: unknown, used: unknown }} FieldLeaf
+ */
+/**
  * @template T
- * @typedef {{ value: T, lost: boolean, dropped?: number }} FieldReading
- *   `dropped`: how many entries of a list the reading dropped.
+ * @typedef {{ value: T, lost: boolean, dropped?: number, leaves?: readonly FieldLeaf[] }} FieldReading
+ *   `dropped`: how many entries of a list the reading dropped; `leaves`: the
+ *   values inside it the reading replaced (a reading that lost something and
+ *   names neither lost the field as a whole).
  */
 /**
  * @template T
@@ -70,7 +77,9 @@ export const numberOr = (accepts, fallback, { coerceUnset = false } = {}) => (va
   const unset = isUnsetValue(value);
   if (unset && !coerceUnset) return { value: fallback, lost: false };
   const numeric = Number(value);
-  return Number.isFinite(numeric) && accepts(numeric) ? { value: numeric, lost: false } : { value: fallback, lost: !unset };
+  // A boolean reads as 1 or 0, as it always did, but is no number (rule 2).
+  return Number.isFinite(numeric) && accepts(numeric)
+    ? { value: numeric, lost: typeof value === 'boolean' } : { value: fallback, lost: !unset };
 };
 
 /** @param {unknown} value */
@@ -93,4 +102,38 @@ export const truthy = (value) => ({ value: Boolean(value), lost: notBoolean(valu
 export const exactChoice = (values, fallback) => (value) => {
   const known = values.find((candidate) => candidate === value);
   return known === undefined ? { value: fallback, lost: Boolean(value) } : { value: known, lost: false };
+};
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+const isObjectValue = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+/** @param {unknown} value Its text without case and outer spaces. */
+const foldedText = (value) => String(value).trim().toLowerCase();
+
+/**
+ * The values of `stored` that its reading `read` does not keep: a value read
+ * as other text, a list or object read as another kind, and a key or entry
+ * the reading dropped. An unset stored value takes its default without a
+ * loss, and a value read as its own text (`"5"` as 5, case and outer spaces
+ * aside) keeps its meaning.
+ * @param {unknown} stored
+ * @param {unknown} read
+ * @param {string} [at] Its place under the field (`[0].mark`).
+ * @returns {FieldLeaf[]}
+ */
+export const changedLeaves = (stored, read, at = '') => {
+  if (isUnsetValue(stored)) return [];
+  const list = Array.isArray(stored);
+  if (list || isObjectValue(stored)) {
+    if (list ? !Array.isArray(read) : !isObjectValue(read)) return [{ at, stored, used: read }];
+    const source = /** @type {Record<string, unknown>} */ (stored);
+    const target = /** @type {Record<string, unknown>} */ (read);
+    return Object.keys(source).flatMap((key) => {
+      const keyAt = list ? `${at}[${key}]` : `${at}.${key}`;
+      return Object.hasOwn(target, key) ? changedLeaves(source[key], target[key], keyAt)
+        : changedLeaves(source[key], undefined, keyAt);
+    });
+  }
+  return stored === read || (read !== undefined && typeof read !== 'object' && foldedText(stored) === foldedText(read))
+    ? [] : [{ at, stored, used: read }];
 };

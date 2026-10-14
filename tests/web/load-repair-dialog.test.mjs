@@ -20,13 +20,15 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-globalThis.document = {};
+// Save Session downloads through a link (G2 saves the loaded Session).
+globalThis.document = { createElement: () => ({ click: () => {} }) };
 installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-settings.generated.js');
 // The Worker's typed override check, run by Python (as session-cli-compatibility does).
 setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
 import json, sys
@@ -109,8 +111,8 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
 });
 
 // OV-652 (BA-D11, BA-D25): a stored legend position outside its mode reads
-// as the mode's default or as unset and is listed; case and outer spaces are
-// no row.
+// as the mode's default or as unset and is listed with the value used
+// (BA-OD89); case and outer spaces are no row.
 test('a legend position outside its mode is listed at Load (OV-652)', async () => {
   const session = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
   session.ui.generatedLegendPosition = 'upper_left';
@@ -122,17 +124,117 @@ test('a legend position outside its mode is listed at Load (OV-652)', async () =
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [[
     'Legend: the position "upper_left" (ui.generatedLegendPosition) is not one of its mode\'s positions; bottom is used.',
-    'Legend: the position "banana" (ui.layoutPreferences.linear.legend) is not one of its mode\'s positions; it is not used.'
+    'Legend: the position "banana" (ui.layoutPreferences.linear.legend) is not one of its mode\'s positions; bottom is used.'
   ]]);
   assert.equal(state.generatedLegendPosition.value, 'bottom');
   assert.equal(state.drawings.linear.form.legend, 'bottom');
   assert.equal(state.drawings.circular.layoutPreferences.circular.single.legend, 'upper_left');
 });
 
-test('the repair list is frozen at the dialog: no step after the commit adds a repair (G2)', async () => {
-  const loaded = await importSession(input(unmatchedEditSession()), { confirmLoadRepairs: async () => true });
-  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.ok(Array.isArray(loaded.repairs) && Object.isFrozen(loaded.repairs));
+// G2: what Load applies after the dialog is what the dialog listed. Each
+// stored leaf of a Session 46 is set to a value of another kind (and, for
+// text and numbers, to an unknown value of its kind); the file is loaded and
+// saved again. A leaf saved differently must be named by a row, unless the
+// apply ignores it for a reason listed below.
+const savedSession = async (title) => {
+  const result = await exportSession(title, { askChoice: async () => 'download' });
+  assert.equal(result?.status, 'saved', JSON.stringify(result));
+  return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+};
+const leafPaths = (value, parts = []) => [
+  ...(parts.length ? [parts] : []),
+  ...(value && typeof value === 'object' ? Object.entries(value).flatMap(([key, child]) => (
+    leafPaths(child, [...parts, Array.isArray(value) ? Number(key) : key]))) : [])
+];
+const dotted = (parts) => parts.map((part) => (typeof part === 'number' ? `[${part}]` : `.${part}`)).join('').slice(1);
+const valueAt = (value, parts) => parts.reduce((current, part) => (current == null ? undefined : current[part]), value);
+/** A value of another kind, and an unknown value of the same kind. */
+const MUTATIONS = {
+  otherKind: (value) => (value === null ? 'x-mut' : Array.isArray(value) || typeof value === 'object' ? 5
+    : typeof value === 'string' ? 5 : 'x-mut'),
+  sameKind: (value) => (typeof value === 'string' ? 'x-mut' : typeof value === 'number' ? -7.5 : undefined)
+};
+/** The stored values a Load sets aside without a row, with the reason. */
+const UNLISTED_LEAVES = [
+  // View state (BA-OD84 (3)).
+  [/^ui\.(zoom|canvasPan|selectedResultIndex)$|^modes\.\w+\.ui\.selectedFeatureRecordIdx$/, 'view state'],
+  // The committed request's mode is the shown mode.
+  [/^ui\.mode$/, 'the request\'s mode wins'],
+  // The pending palette's colors apply only with a pending palette.
+  [/^modes\.\w+\.ui\.pendingPaletteColors$/, 'no pending palette'],
+  // The committed mode's request sets a layout slot that is no object.
+  [/^modes\.circular\.ui\.layoutPreferences$/, 'the request\'s layout wins'],
+  // Read before the dialog with the editor state's own readers (PR-E).
+  [/^modes\.\w+\.editorState\./, 'editor state'],
+  // The track slot model's normalizers do not report what they replace yet
+  // (residual: the slot readers return what they lose, PR-E).
+  [/^modes\.\w+\.config\.adv\.(circular|linear)_track_slots\[\d+\]\./, 'track slot leaves']
+];
+const MODE_ROWS = MODE_SCOPED_SETTINGS.rows;
+/** A value the drawing of its slice never draws (the registry gives it to the other mode). */
+const otherModeValue = (path) => {
+  const match = path.match(/^modes\.(circular|linear)\.(config|ui)\.(\w+)(?:\.(\w+))?/);
+  if (!match) return false;
+  const [, mode, part, head, next] = match;
+  const row = MODE_ROWS.find((entry) => entry.domain === `${part}.${head}` && entry.path === next)
+    ?? MODE_ROWS.find((entry) => entry.domain === part && entry.path === head);
+  return Boolean(row) && row.modes !== 'both' && row.modes !== mode;
+};
+const named = (path, repairs) => repairs.some((repair) => repair.path === path || path.startsWith(`${repair.path}.`)
+  || path.startsWith(`${repair.path}[`) || repair.path.startsWith(`${path}.`) || repair.path.startsWith(`${path}[`));
+test('no apply step after the dialog drops or changes a stored value the dialog did not list (G2)', async () => {
+  const FIXTURE = 'legend-renamed-rows.v46.gbdraw-session.json.gz';
+  const base = fixture(FIXTURE);
+  const loadedBase = await importSession(input(fixture(FIXTURE)), { confirmLoadRepairs: async () => assert.fail('the fixture loads as is') });
+  assert.equal(loadedBase.status, 'ok', JSON.stringify(loadedBase.error));
+  assert.ok(Object.isFrozen(loadedBase.repairs));
+  const baseSaved = await savedSession('g2-base');
+  const roots = [['ui'], ...['circular', 'linear'].flatMap((mode) => ['config', 'ui', 'features', 'editorState'].map((part) => ['modes', mode, part]))];
+  const leaves = roots.flatMap((root) => leafPaths(valueAt(base, root)).map((rest) => [...root, ...rest]))
+    // A leaf the Save writes differently without a change is not this check's.
+    .filter((parts) => JSON.stringify(valueAt(baseSaved, parts)) === JSON.stringify(valueAt(base, parts)));
+  const silent = [];
+  let checked = 0;
+  for (const [kind, mutate] of Object.entries(MUTATIONS)) {
+    for (const parts of leaves) {
+      const path = dotted(parts);
+      const mutated = mutate(valueAt(base, parts));
+      if (mutated === undefined || UNLISTED_LEAVES.some(([pattern]) => pattern.test(path)) || otherModeValue(path)) continue;
+      const session = fixture(FIXTURE);
+      valueAt(session, parts.slice(0, -1))[parts.at(-1)] = mutated;
+      const loaded = await importSession(input(session), { confirmLoadRepairs: async () => true });
+      if (loaded.status !== 'ok') continue; // refused before anything changes
+      checked += 1;
+      const saved = valueAt(await savedSession(`g2-${checked}`), parts);
+      const kept = JSON.stringify(saved) === JSON.stringify(mutated) || (typeof mutated === 'number' && saved === String(mutated));
+      if (!kept && !named(path, loaded.repairs)) silent.push(`${kind} ${path}: ${JSON.stringify(mutated)} -> ${JSON.stringify(saved)}`);
+    }
+  }
+  assert.ok(checked > 100, String(checked));
+  assert.deepEqual(silent, []);
+});
+
+// r1's silent cases: a qualifier priority rule, a form text of another kind,
+// and an annotation mark and lane are read after the dialog with the readers
+// that list them before it (BA-OD87).
+test('a priority rule, a form value of another kind and an annotation mark or lane are listed before the Load (G2, BA-OD87)', async () => {
+  const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  session.modes.circular.config.qualifierPriorityRules = [
+    { feat: 'CDS', order: '' }, { feat: 'CDS', order: 'product' }, { feat: 'CDS', order: 'gene' }
+  ];
+  session.modes.circular.config.form.plot_title = 5;
+  session.modes.linear.config.annotationSets = [{
+    id: 'a', annotations: [{ id: 'r', target: { kind: 'coordinateSpan', start: 1, end: 10 }, label: 'x', mark: 'circle', lane: 'top' }]
+  }];
+  const { items } = await loadAnswering(session);
+  assert.deepEqual(items, [
+    'Settings: the value of modes.circular.config.form.plot_title cannot be used; its default is used.',
+    'Settings: the value "circle" (modes.linear.config.annotationSets[0].annotations[0].mark) cannot be used; bracket is used.',
+    'Settings: the value "top" (modes.linear.config.annotationSets[0].annotations[0].lane) cannot be used; 0 is used.',
+    'Settings: 2 entries of modes.circular.config.qualifierPriorityRules could not be read and were dropped.'
+  ]);
+  assert.deepEqual([...state.drawings.circular.manualPriorityRules], [{ feat: 'CDS', order: 'gene' }]);
+  assert.deepEqual(state.drawings.linear.annotationSets[0].annotations.map(({ mark, lane }) => [mark, lane]), [['bracket', 0]]);
 });
 
 // BA-D15 (OV-569, OV-710): a legacy configuration file is read before it is
@@ -377,9 +479,43 @@ test('a stored setting its reader cannot restore is listed before the Load (B37,
   assert.equal(state.losatExecution.totalThreadBudget, 'safe');
 });
 
-// B36, B43, B44: the app settings of `ui`, and a pending palette that
-// Instant Preview drops.
-test('a Session 46 app setting or pending palette Load cannot restore is listed (B36, B43, B44)', async () => {
+// BA-OD89: a row of a list names the leaf with that leaf's values; free text
+// (a label, an ID) is named by its place only; a row names the value used,
+// and a valid value from another source is no row. BA-OD91 (rule 2): a
+// value read as another kind is listed unless it reads as its own text.
+test('a row names the leaf and the value used, never free text, and a value another source replaces is no row (BA-OD89, BA-OD91)', async () => {
+  const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  session.modes.circular.config.adv.depth_tracks = [{ label: 'patient_0042_tumor.depth.tsv', height: -1 }];
+  session.modes.circular.config.adv.multi_record_row_gap_ratio = true;
+  session.modes.linear.config.annotationSets = [{ id: 'a', annotations: [
+    { id: 'r', target: { kind: 'coordinateSpan', start: 1, end: 10 } }, { id: 'r', target: { kind: 'coordinateSpan', start: 2, end: 9 } }
+  ] }];
+  session.modes.linear.config.linearRecordLayout = { enabled: 'true', recordGap: 24, rows: [
+    { uid: 'a', row: 1 }, { uid: 'b', row: 3, canonicalRow: 4, canonicalColumn: 1 }, { uid: 'c', row: 2, canonicalRow: '2', canonicalColumn: 1 }
+  ] };
+  session.ui = { ...session.ui, generatedCircularPlotTitlePosition: 5, circularPlotTitlePosition: 'top' };
+  const { items } = await loadAnswering(session);
+  assert.deepEqual(items, [
+    'Settings: the value "true" (modes.circular.config.adv.multi_record_row_gap_ratio) cannot be used; 0.05 is used.',
+    'Settings: the value "-1" (modes.circular.config.adv.depth_tracks[0].height) cannot be used; its default is used.',
+    'Settings: the value "4" (modes.linear.config.linearRecordLayout.rows[1].canonicalRow) cannot be used; it is left unset.',
+    'Settings: the value "1" (modes.linear.config.linearRecordLayout.rows[1].canonicalColumn) cannot be used; it is left unset.',
+    'Settings: the value of modes.linear.config.annotationSets[0].annotations[1].id cannot be used; it is changed.'
+  ]);
+  assert.equal(state.generatedCircularPlotTitlePosition.value, 'top');
+  assert.equal(state.drawings.linear.linearRecordLayoutEnabled.value, true);
+  // A list given as another kind is one row of its own.
+  const other = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  other.modes.linear.config.linearRecordLayout = { enabled: true, recordGap: 24, rows: { 0: { uid: 'a', row: 1 } } };
+  const listed = await loadAnswering(other);
+  assert.deepEqual(listed.items, [
+    'Settings: the value "{"0":{"uid":"a","row":1}}" (modes.linear.config.linearRecordLayout.rows) cannot be used; its default is used.'
+  ]);
+});
+
+// B36, B43: the app settings of `ui` are listed. B44: a pending palette that
+// Instant Preview drops had no effect on the figure: no row (BA-OD88).
+test('a Session 46 app setting Load cannot restore is listed; a pending palette Instant Preview drops is not (B36, B43, B44)', async () => {
   const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
   session.ui = {
     ...session.ui, featurePanelTab: 'banana', paletteInstantPreviewEnabled: true,
@@ -391,10 +527,10 @@ test('a Session 46 app setting or pending palette Load cannot restore is listed 
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [[
     'Settings: the value "banana" (ui.featurePanelTab) cannot be used; colors is used.',
-    'Settings: the value "-2" (ui.losatExecution.threadsPerJob) cannot be used; auto is used.',
-    'Palette: the palette "Pastel" (modes.linear.ui.pendingPaletteName) waits to be applied, but Instant Preview is on,'
-      + ' which applies a palette at once; it was dropped.'
+    'Settings: the value "-2" (ui.losatExecution.threadsPerJob) cannot be used; auto is used.'
   ]]);
+  assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'pending-palette-dropped').map(({ path }) => path),
+    ['modes.linear.ui.pendingPaletteName']);
   assert.equal(state.featurePanelTab.value, 'colors');
   assert.equal(state.losatExecution.threadsPerJob, 'auto');
   assert.equal(state.drawings.linear.pendingPaletteName.value, '');
@@ -410,10 +546,10 @@ test('a legacy configuration lists a setting its reader cannot restore (B48)', a
   ]);
 });
 
-// B47: a group name edit of a group the Session does not hold is dropped
-// and listed. B46: a cache entry Load does not keep is dropped without a row
-// (Q1): the next comparison computes it again.
-test('a similarity-group edit of an unknown group is listed; a dropped cache entry is not (B46, B47)', async () => {
+// B47: a group name edit of a group the Session does not hold names nothing
+// the figure draws; B46: a cache entry Load does not keep is computed again
+// by the next comparison. Both are dropped without a row (Q1, BA-OD88).
+test('a similarity-group edit of an unknown group and a dropped cache entry are dropped without a row (B46, B47)', async () => {
   const session = fixture('BGC0000708-BGC0000713.v39.gbdraw-session.json.gz');
   session.orthogroupState.orthogroupNameOverrides = { [session.orthogroupState.groups[0].id]: 'Kept', ghost: 'Gone' };
   // One derived entry more than the cache keeps (16): the oldest is dropped.
@@ -428,20 +564,18 @@ test('a similarity-group edit of an unknown group is listed; a dropped cache ent
     }
   });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.deepEqual(dialogs, [[
-    'Similarity groups: 1 name edit(s) (orthogroupState.orthogroupNameOverrides) name a group the saved Result does not have'
-      + ' and were dropped.'
-  ]]);
-  assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'cache-entry-dropped').map(({ path, count }) => [path, count]),
-    [['losatDerivedCache.entries', 1]]);
+  assert.deepEqual(dialogs.flat(), []);
+  assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'cache-entry-dropped' || code === 'orthogroup-edit-dropped')
+    .map(({ path, count }) => [path, count]),
+  [['orthogroupState.orthogroupNameOverrides', 1], ['losatDerivedCache.entries', 1]]);
   assert.deepEqual({ ...state.drawings.linear.orthogroupNameOverrides }, { [session.orthogroupState.groups[0].id]: 'Kept' });
 });
 
 // B45: a drawing's Depth series and rows fit the Depth files Load restores.
-// A Circular series without a file whose settings differ from a new series'
-// is listed, and so is a manual Depth row of the drawing's own stack that the
-// fit turns off or unbinds; a default series, a row that was off and named no
-// series, and the other mode's stack are not.
+// A manual Depth row of the drawing's own stack that the fit turns off or
+// unbinds is listed; a series without a Depth file draws nothing and is
+// dropped without a row (BA-OD88), and so are a row that was off and named
+// no series and the other mode's stack.
 const DEFAULT_SERIES = { height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null };
 const depthEdits = (session, mode) => {
   const { adv } = session.modes[mode].config;
@@ -454,10 +588,11 @@ const depthEdits = (session, mode) => {
     row('off_named', false, { track_index: 2 }), row('off_unnamed', false, {})];
   return session;
 };
-test('a Circular Depth series and a Depth row without a Depth file are listed before the Load (B45)', async () => {
-  const { items } = await loadAnswering(depthEdits(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'), 'circular'));
+test('a Depth row without a Depth file is listed before the Load; a series without one is not (B45)', async () => {
+  const { loaded, items } = await loadAnswering(depthEdits(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'), 'circular'));
+  assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'depth-series-dropped').map(({ path }) => path),
+    ['modes.circular.config.adv.depth_tracks[1]']);
   assert.deepEqual(items, [
-    'Depth: the series "Coverage B" (modes.circular.config.adv.depth_tracks[1]) has no Depth file; its settings were dropped.',
     ...['my_depth', 'off_named'].map((id) => `Track stack: the Depth row "${id}" (modes.circular.config.adv.circular_track_slots)`
       + ' shows a Depth series that has no Depth file; the row is turned off and no longer names that series.')
   ]);
@@ -471,6 +606,22 @@ test('a Circular Depth series and a Depth row without a Depth file are listed be
   assert.deepEqual(state.drawings.linear.adv.depth_tracks.map(({ label }) => label), ['Depth', 'Coverage B', 'Depth 3']);
 });
 
+// r1 S1, r2 S1 (BA-OD88): Add Depth track in Circular adds a series without
+// a Depth file; the Session Save writes it, and its Load asks nothing.
+test('a Circular Session with a series Add Depth track added loads again without a dialog (BA-OD88)', async () => {
+  const { normalizeDepthTrackConfig } = await import('../../gbdraw/web/js/services/depth-track-state.js');
+  await loadAnswering(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'));
+  state.mode.value = 'circular';
+  const { adv } = state.drawings.circular;
+  assert.equal(adv.depth_tracks.length, 1);
+  adv.depth_tracks.push({ ...normalizeDepthTrackConfig(null, 1), label: 'Coverage B', small_tick_interval: 5 });
+  const saved = await savedSession('depth-round-trip');
+  assert.equal(saved.modes.circular.config.adv.depth_tracks.length, 2);
+  const loaded = await importSession(input(saved), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(loaded.repairs.map(({ code }) => code), ['depth-series-dropped']);
+});
+
 // A History restore applies captured settings with the same readers and
 // lists nothing (only Load asks): what it installs is unchanged (R11).
 test('a History restore reads stored settings as before and asks nothing', async () => {
@@ -480,33 +631,59 @@ test('a History restore reads stored settings as before and asks nothing', async
     adv: {
       label_rendering: 'sideways', multi_record_column_gap_ratio: null, multi_record_row_gap_ratio: 'x',
       depth_min: 5, depth_max: 2, gc_content_min_percent: 60, gc_content_max_percent: 40, track_axis_gap: 'auto',
-      depth_tracks: [{ label: 'D', height: -1 }]
+      depth_tracks: [{ label: 'D', height: -1 }], depth_normalize: 'x', gc_content_show_axis: 'x', pairwise_match_style: 'Curve',
+      multi_record_positions: [{ selector: '#2', row: 2 }, { selector: '#1', row: 1 }, { selector: '#2', row: 3 }]
     },
-    losat: { blastp: { mode: 'x', collinearMaxConflictsInMergeGap: null, orthogroupMaxHits: 3, orthogroupHitPolicy: 'old' } },
-    circularConservation: { source: 'UPLOAD', series: [null, { color: 'nonsense', losat_gencode: 0 }] },
-    linearRecordLayout: { recordGap: null, rows: [{ uid: '', row: 1 }, { uid: 'a', row: 2 }] },
+    losat: {
+      executionMode: 'turbo', totalThreadBudget: 'auto',
+      blastp: {
+        mode: 'x', collinearMaxConflictsInMergeGap: null, orthogroupMaxHits: 3, orthogroupHitPolicy: 'old',
+        collinearColorMode: 'identity', collinearAnchorMode: 'Top-N', collinearSearchScope: 'adjacent-pairs'
+      }
+    },
+    circularConservation: { source: 'UPLOAD', series: [null, [1], { color: 'nonsense', losat_gencode: 0 }] },
+    linearRecordLayout: {
+      enabled: 'yes', recordGap: null,
+      rows: [{ uid: '', row: 1 }, { uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: '3', canonicalColumn: 1 }]
+    },
+    importedComparisonResolution: { action: 'bogus' },
     losatProgram: 'BLASTP'
   }, { resolveTrackPlacements: false });
   const { adv, losat, circularConservation } = drawing;
   assert.deepEqual([adv.label_rendering, adv.multi_record_column_gap_ratio, adv.multi_record_row_gap_ratio, adv.depth_max,
-    adv.gc_content_max_percent, adv.track_axis_gap], ['auto', 0, 0.05, null, 60, null]);
+    adv.gc_content_max_percent, adv.track_axis_gap, adv.depth_normalize, adv.gc_content_show_axis, adv.pairwise_match_style],
+  ['auto', 0, 0.05, null, 60, null, false, true, 'curve']);
+  assert.deepEqual(adv.multi_record_positions, [{ selector: '#1', row: 1 }, { selector: '#2', row: 2 }]);
   assert.deepEqual(adv.depth_tracks.map(({ label, height }) => [label, height]), [['D', null]]);
   assert.deepEqual([losat.blastp.mode, losat.blastp.collinearMaxConflictsInMergeGap, losat.blastp.orthogroupMemberMaxHits,
     Object.hasOwn(losat.blastp, 'orthogroupMaxHits'), Object.hasOwn(losat.blastp, 'orthogroupHitPolicy')], ['orthogroup', 0, null, false, false]);
-  assert.deepEqual([circularConservation.source, circularConservation.series.map(({ color, losat_gencode }) => [color, losat_gencode])],
-    ['upload', [['#4e79a7', 1]]]);
-  assert.deepEqual([drawing.linearRecordGap.value, [...drawing.linearRecordRows]], [0, [{ uid: 'a', row: 2 }]]);
+  assert.deepEqual([losat.blastp.collinearColorMode, losat.blastp.collinearAnchorMode, losat.blastp.collinearSearchScope],
+    ['average_identity', 'all', 'adjacent']);
+  assert.deepEqual([state.losatExecution.executionMode, state.losatExecution.totalThreadBudget], ['auto', 'safe']);
+  assert.deepEqual([circularConservation.source, circularConservation.series.map(({ color, losat_gencode, sourceIndex }) => [color, losat_gencode, sourceIndex])],
+    ['upload', [['#4e79a7', 1, 0]]]);
+  assert.deepEqual([drawing.linearRecordLayoutEnabled.value, drawing.linearRecordGap.value, [...drawing.linearRecordRows]],
+    [true, 0, [{ uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: 3, canonicalColumn: 1 }]]);
+  assert.equal(drawing.importedComparisonIntent.action, null);
   assert.equal(drawing.losatProgram.value, 'blastn');
 });
 
 // G3: every Gallery Session and every Session fixture loads without a repair;
-// a repair there is a producer bug. Two fixtures are lossy on purpose. In
-// node, a Session older than 40 lists its feature recovery, which needs the
-// diagram Worker, and five fixtures need that Worker to load at all.
+// a repair there is a producer bug. Two fixtures are lossy on purpose. Node
+// supplies no diagram Worker: a Session older than 40 reads its features again
+// through it, so eight fixtures list that recovery here (and only because the
+// Worker is missing: each asks for it); the browser specs load them without a
+// row (OV-751). Five fixtures need a Worker service to load at all.
 const LOSSY_FIXTURES = {
   'feature-edits-circular-copies.v44.gbdraw-session.json.gz': ['feature-visibility-narrowed'],
   'whitelist-tab-keyword.v39.gbdraw-session.json.gz': ['table-row-joined']
 };
+const FEATURES_NEED_DIAGRAM_WORKER = new Set([
+  'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz',
+  'cli-linear-protein.v30.gbdraw-session.json.gz', 'conservation-fasta.v39.gbdraw-session.json.gz',
+  'precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz', 'scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz',
+  'scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
+]);
 const NEEDS_DIAGRAM_WORKER = new Set([
   'feature-edits-circular.v33.gbdraw-session.json.gz', 'feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz',
   'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', 'q-frame-main-web-losatn.v42.gbdraw-session.json.gz',
@@ -519,17 +696,25 @@ test('every Gallery Session and Session fixture loads without a repair (G3)', as
     ...sessions('../../gbdraw/web/gallery/sessions/', (name) => /\.json(\.gz)?$/.test(name))
   ];
   assert.ok(corpus.length > 50, String(corpus.length));
+  const ImportWorker = globalThis.Worker;
+  let askedDiagramWorker = false;
+  globalThis.Worker = class extends ImportWorker {
+    /** @param {string | URL} url */
+    constructor(url) { askedDiagramWorker ||= !String(url).endsWith('/session-import-worker.js'); super(url); }
+  };
   for (const [name, url] of corpus) {
     const bytes = readFileSync(url);
     const session = JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+    askedDiagramWorker = false;
     const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     if (NEEDS_DIAGRAM_WORKER.has(name)) {
       assert.equal(loaded.status, 'error', `${name} loads in node now: check it here`);
       continue;
     }
     assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
-    const codes = loaded.repairs.map(({ code }) => code)
-      .filter((code) => !(session.version < 40 && code === 'feature-recovery-failed'));
-    assert.deepEqual(codes, LOSSY_FIXTURES[name] ?? [], name);
+    const nodeOnly = FEATURES_NEED_DIAGRAM_WORKER.has(name) ? ['feature-recovery-failed'] : [];
+    assert.deepEqual(loaded.repairs.map(({ code }) => code), [...(LOSSY_FIXTURES[name] ?? []), ...nodeOnly], name);
+    assert.equal(askedDiagramWorker, nodeOnly.length > 0, `${name}: the Features row comes from the missing diagram Worker`);
   }
+  globalThis.Worker = ImportWorker;
 });

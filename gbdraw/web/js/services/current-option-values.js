@@ -93,12 +93,15 @@ export const requireCurrentLinearLabelPlacement = (value) => (
   )
 );
 
+/** The Pairwise match styles (the Load reader and Generate read this list). */
+export const PAIRWISE_MATCH_STYLES = /** @type {const} */ (['ribbon', 'curve']);
+
 /**
  * @param {unknown} value
  * @param {unknown} fallback
  */
 export const normalizeCurrentPairwiseMatchStyle = (value, fallback) => {
-  const supported = ['ribbon', 'curve'];
+  const supported = /** @type {readonly string[]} */ (PAIRWISE_MATCH_STYLES);
   const normalizedFallback = String(fallback ?? '').trim().toLowerCase();
   if (!supported.includes(normalizedFallback)) {
     throw new Error('Pairwise match style fallback must be one of: ribbon, curve.');

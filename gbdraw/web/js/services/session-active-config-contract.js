@@ -343,6 +343,14 @@ const linearTypographyValuesMatch = (adv = {}) => (
 );
 
 /**
+ * A stored Linear typography link: linked when omitted, as stored when a
+ * boolean, and unlinked for anything else.
+ * @param {unknown} value
+ * @returns {{ value: boolean, lost: boolean }}
+ */
+export const readLinearTypographyLinked = (value) => (value === undefined || value === null ? { value: true, lost: false }
+  : typeof value === 'boolean' ? { value, lost: false } : { value: false, lost: true });
+/**
  * @param {{
  *   adv: Record<string, any>,
  *   linked: any,
@@ -352,10 +360,7 @@ const linearTypographyValuesMatch = (adv = {}) => (
 export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) => {
   if (!linked || typeof linked !== 'object' || !('value' in linked)) return false;
   // Omission takes the fresh linked default; unequal values still open unlinked.
-  linked.value = (
-    (ui.linearTypographyLinked ?? true) === true
-    && linearTypographyValuesMatch(adv)
-  );
+  linked.value = readLinearTypographyLinked(ui.linearTypographyLinked).value && linearTypographyValuesMatch(adv);
   return linked.value;
 };
 

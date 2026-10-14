@@ -64,11 +64,14 @@ const depthIndexes = (slots) => slots
 
 {
   // One reader for a stored series and a new one: a color name reads as its
-  // hex, and a value it cannot use is a loss (B45).
+  // hex, and a value it cannot use is a loss named by its place (B45, BA-OD89).
   assert.deepEqual(readDepthTrackConfig({ label: 'A', color: 'red', height: -1 }, 1), {
     value: { label: 'A', color: '#FF0000', height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null },
-    lost: true
+    lost: true,
+    leaves: [{ at: '.height', stored: -1, used: null }]
   });
+  assert.deepEqual(readDepthTracks([{ label: 'A' }, 5, { height: 'x' }]).leaves.map(({ at, stored }) => [at, stored]),
+    [['[1]', 5], ['[2].height', 'x']]);
   // A drawing's single-series settings belong to its first series; every series takes the height.
   const legacy = { depth_color: '#111111', depth_height: 30, depth_large_tick_interval: 100 };
   assert.deepEqual(readDepthTracks([{}, {}], legacy).value.map(({ color, height, large_tick_interval }) => [color, height, large_tick_interval]),

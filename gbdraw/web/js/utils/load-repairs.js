@@ -72,12 +72,18 @@ const LINE_LIMIT = 12;
 
 /**
  * Codes whose values had no effect on the figure: Load drops them without a
- * dialog row (Owner answer Q1 of the Load repair receipt). A Session 46 drew
- * the later of two Legend edits of one row; the next comparison computes a
- * LOSAT cache entry again.
+ * dialog row (Owner answer Q1 of the Load repair receipt, BA-OD88). A Session
+ * 46 drew the later of two Legend edits of one row; the next comparison
+ * computes a LOSAT cache entry again; a pending palette waits while Instant
+ * Preview, which the file turns on, applies a palette at once; a similarity
+ * group name names no group the Result has; a Depth series without a Depth
+ * file draws nothing (a Depth row the fit turns off stays listed).
  * @type {ReadonlySet<LoadRepairCode>}
  */
-const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ (['legend-edit-overwritten-session46', 'cache-entry-dropped']));
+const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ ([
+  'legend-edit-overwritten-session46', 'cache-entry-dropped', 'pending-palette-dropped', 'orthogroup-edit-dropped',
+  'depth-series-dropped'
+]));
 
 /** @param {string} value @param {number} limit */
 const bounded = (value, limit) => (value.length > limit ? `${value.slice(0, limit - 1)}…` : value);
@@ -146,8 +152,12 @@ const tableLines = (repairs, describe) => [...new Set(repairs.map(({ path }) => 
  * @type {Readonly<Record<LoadRepairCode, (repairs: readonly LoadRepair[]) => string[]>>}
  */
 const WORDING = {
-  'setting-replaced': (repairs) => valueLines(repairs, ({ path, stored, used }) => (
-    `Settings: the value "${stored}" (${path}) cannot be used; ${used === undefined ? 'it is left unset' : `${used} is used`}.`)),
+  // Free text is named by its place only (a changed one, such as an ID made
+  // unique, names neither value); a value replaced by a list or an object
+  // names no value used.
+  'setting-replaced': (repairs) => valueLines(repairs, ({ path, stored, used, effect }) => (
+    `Settings: ${stored === undefined ? `the value of ${path}` : `the value "${stored}" (${path})`} cannot be used; `
+    + `${used !== undefined ? `${used} is used` : { defaulted: 'its default is used', changed: 'it is changed', dropped: 'it is left unset' }[effect]}.`)),
   'setting-entries-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
     `Settings: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
   'pending-palette-dropped': (repairs) => valueLines(repairs, ({ path, label }) => (

@@ -1,24 +1,35 @@
 // @ts-check
+import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import {
-  exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, nonNegativeNumberOrNull, numberOr, onlyTrue,
+  changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, nonNegativeNumberOrNull, numberOr, onlyTrue,
   positiveNumberOrNull, textChoice, trueUnlessFalse, truthy
 } from '../utils/field-reading.js';
 import { loadRepair } from '../utils/load-repairs.js';
+import { normalizeAnnotationSets } from './annotation-state.js';
+import { PAIRWISE_MATCH_STYLES } from './current-option-values.js';
+import { readDefinitionLineStyles } from './definition-line-style-state.js';
 import { readDepthTracks } from './depth-track-state.js';
 import { IMPORTED_COMPARISON_ACTIONS } from './imported-comparison-intent.js';
 import { readCircularPlotTitlePosition } from './layout-preferences.js';
+import { isPlainObject } from './losat-cache.js';
 import { readCollinearAnchorMode, readCollinearSearchScope, readOrthogroupMembershipMode } from './losat-normalization.js';
+import { normalizeOrthogroupDormantOverrides } from './orthogroup-feature-metadata.js';
+import {
+  createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, createDefaultLosatpHitLimits,
+  readLinearTypographyLinked
+} from './session-active-config-contract.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 
-/** @import { FieldReader, FieldReading } from '../utils/field-reading.js' */
+/** @import { FieldLeaf, FieldReader, FieldReading } from '../utils/field-reading.js' */
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
 
 // The readers of the stored settings of a configuration (a drawing's draft, a
-// legacy configuration file) and of a Session's app `ui`. `applyConfigData`
-// and Load's apply read with these rows, History restores included; before
-// Load applies a file it lists what they cannot restore (BA-D25, B36, B37,
-// B43), so the apply makes no repair of its own.
+// legacy configuration file) and of a Session's app `ui`, a drawing's `ui`
+// and its feature edits. `applyConfigData` and Load's apply read with these
+// readers, History restores included; before Load applies a file it reads the
+// file with the same readers and lists what they cannot restore (BA-D25,
+// B36, B37, B43), so the apply makes no repair of its own (G2).
 
 /**
  * One stored field and its reader. A reader may read fields its table read
@@ -31,9 +42,12 @@ import { WEB_UX_PROFILE } from '../web-ux-profile.js';
  * @property {boolean} [retired]
  */
 /** @typedef {{ at: string, rows: readonly FieldRow[] }} FieldTable */
-
-/** @param {unknown} value @returns {value is Record<string, unknown>} */
-const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+/**
+ * A stored value a reading did not restore: `at` is its place in the read
+ * value (`adv.depth_tracks[0].height`); `dropped` counts the entries of a list
+ * it dropped.
+ * @typedef {{ at: string, stored: unknown, used: unknown, dropped?: number }} SettingLoss
+ */
 
 /**
  * @param {string} field
@@ -45,6 +59,11 @@ const row = (field, read) => ({ field, read: (value) => read(value) });
 /** @type {FieldRow['read']} */
 const retiredField = (value) => ({ value: undefined, lost: !isUnsetValue(value) });
 
+/** An object, else empty. @type {FieldReader<Record<string, unknown>>} */
+export const readPlainObject = (value) => (isPlainObject(value) ? { value, lost: false } : { value: {}, lost: !isUnsetValue(value) });
+/** A list, else empty. @type {FieldReader<unknown[]>} */
+export const readList = (value) => (Array.isArray(value) ? { value, lost: false } : { value: [], lost: !isUnsetValue(value) });
+
 /** @typedef {{ selector: string, row: number }} MultiRecordPosition */
 const readGridRow = numberOr(isPositiveInteger, 1);
 /**
@@ -53,26 +72,47 @@ const readGridRow = numberOr(isPositiveInteger, 1);
  */
 const readMultiRecordPositions = (value) => {
   let dropped = 0;
-  let lost = !Array.isArray(value) && !isUnsetValue(value);
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
   /** @type {Set<string>} */
   const seen = new Set();
   /** @type {MultiRecordPosition[]} */
   const positions = [];
-  (Array.isArray(value) ? value : []).forEach((entry) => {
-    const selector = isRecord(entry) ? String(entry.selector ?? '').trim() : '';
-    if (!isRecord(entry) || !selector || seen.has(selector)) {
+  (Array.isArray(value) ? value : []).forEach((entry, index) => {
+    const selector = isPlainObject(entry) ? String(entry.selector ?? '').trim() : '';
+    if (!isPlainObject(entry) || !selector || seen.has(selector)) {
       dropped += 1;
       return;
     }
     const gridRow = readGridRow(entry.row);
-    lost ||= gridRow.lost;
+    if (gridRow.lost) leaves.push({ at: `[${index}].row`, stored: entry.row, used: gridRow.value });
     seen.add(selector);
     positions.push({ selector, row: gridRow.value });
   });
   const ordered = positions.map((entry, index) => ({ entry, index }))
     .sort((left, right) => (left.entry.row - right.entry.row) || (left.index - right.index))
     .map(({ entry }) => entry);
-  return { value: ordered, lost: lost || dropped > 0, ...(dropped && !lost ? { dropped } : {}) };
+  return listReading(ordered, value, dropped, leaves);
+};
+
+/**
+ * The reading of a list: lost when the stored value is no list, when entries
+ * were dropped, or when values inside it were replaced.
+ * @template T
+ * @param {T} read
+ * @param {unknown} stored
+ * @param {number} dropped
+ * @param {readonly FieldLeaf[]} leaves
+ * @returns {FieldReading<T>}
+ */
+const listReading = (read, stored, dropped, leaves) => {
+  const notList = !Array.isArray(stored) && !isUnsetValue(stored);
+  return {
+    value: read,
+    lost: notList || dropped > 0 || leaves.length > 0,
+    ...(dropped && !notList ? { dropped } : {}),
+    ...(leaves.length && !notList ? { leaves } : {})
+  };
 };
 
 /**
@@ -96,45 +136,141 @@ const readGencode = numberOr(isPositiveInteger, 1);
 /** @type {FieldReader<ConservationSeries[]>} */
 export const readConservationSeries = (value) => {
   const entries = Array.isArray(value) ? value : [];
-  let lost = !Array.isArray(value) && !isUnsetValue(value);
-  const kept = entries.filter(isRecord);
-  const series = kept.map((entry, index) => {
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  /** @type {ConservationSeries[]} */
+  const series = [];
+  entries.forEach((entry, index) => {
+    if (!isPlainObject(entry)) return;
     const color = normalizeHexColor(entry.color);
     const gencode = readGencode(entry.losat_gencode);
-    lost ||= color.lost || gencode.lost;
-    return {
+    if (color.lost) leaves.push({ at: `[${index}].color`, stored: entry.color, used: color.value });
+    if (gencode.lost) leaves.push({ at: `[${index}].losat_gencode`, stored: entry.losat_gencode, used: gencode.value });
+    series.push({
       sourceKey: String(entry.sourceKey || ''),
       fileName: String(entry.fileName || ''),
-      sourceIndex: Number.isInteger(Number(entry.sourceIndex)) ? Number(entry.sourceIndex) : index,
+      sourceIndex: Number.isInteger(Number(entry.sourceIndex)) ? Number(entry.sourceIndex) : series.length,
       label: String(entry.label ?? entry.name ?? ''),
       color: color.value,
       losat_gencode: gencode.value
-    };
+    });
   });
-  const dropped = entries.length - kept.length;
-  return { value: series, lost: lost || dropped > 0, ...(dropped && !lost ? { dropped } : {}) };
+  return listReading(series, value, entries.length - series.length, leaves);
 };
 
 /**
  * @typedef {{ uid: string, row: number, canonicalCardinality?: 'exactly_one', canonicalRow?: number,
  *   canonicalColumn?: number }} LinearRecordRowEntry
  */
-/** The rows that name a record and a row. @type {FieldReader<LinearRecordRowEntry[]>} */
+/**
+ * The rows that name a record and a row. The canonical place of a row is kept
+ * when it names the row's own row and a column; other canonical fields are
+ * dropped.
+ * @type {FieldReader<LinearRecordRowEntry[]>}
+ */
 export const readLinearRecordRows = (value) => {
-  const entries = (Array.isArray(value) ? value : []).map((entry) => {
-    const source = isRecord(entry) ? entry : {};
-    return {
-      uid: String(source.uid || ''), row: Number(source.row),
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  let dropped = 0;
+  /** @type {LinearRecordRowEntry[]} */
+  const kept = [];
+  (Array.isArray(value) ? value : []).forEach((entry, index) => {
+    const source = isPlainObject(entry) ? entry : {};
+    const uid = String(source.uid || '');
+    const rowNumber = Number(source.row);
+    if (!uid || !Number.isInteger(rowNumber) || rowNumber <= 0) {
+      dropped += 1;
+      return;
+    }
+    const canonical = Number(source.canonicalRow) === rowNumber
+      && typeof source.canonicalColumn === 'number' && Number.isInteger(source.canonicalColumn) && source.canonicalColumn > 0;
+    ['canonicalRow', 'canonicalColumn'].forEach((field) => {
+      if (!canonical && !isUnsetValue(source[field])) leaves.push({ at: `[${index}].${field}`, stored: source[field], used: undefined });
+    });
+    if (!isUnsetValue(source.canonicalCardinality) && source.canonicalCardinality !== 'exactly_one') {
+      leaves.push({ at: `[${index}].canonicalCardinality`, stored: source.canonicalCardinality, used: undefined });
+    }
+    kept.push({
+      uid, row: rowNumber,
       ...(source.canonicalCardinality === 'exactly_one' ? { canonicalCardinality: /** @type {const} */ ('exactly_one') } : {}),
-      ...(Number(source.canonicalRow) === Number(source.row)
-        && typeof source.canonicalColumn === 'number' && Number.isInteger(source.canonicalColumn) && source.canonicalColumn > 0
-        ? { canonicalRow: Number(source.canonicalRow), canonicalColumn: source.canonicalColumn }
-        : {})
-    };
+      ...(canonical ? { canonicalRow: rowNumber, canonicalColumn: /** @type {number} */ (source.canonicalColumn) } : {})
+    });
   });
-  const kept = entries.filter((entry) => entry.uid && Number.isInteger(entry.row) && entry.row > 0);
-  const dropped = entries.length - kept.length;
-  return { value: kept, lost: dropped > 0, ...(dropped ? { dropped } : {}) };
+  return listReading(kept, value, dropped, leaves);
+};
+
+/** @typedef {{ feat: string, order: string }} QualifierPriorityRule */
+/**
+ * One rule per feature type, the later rule of a type winning; a rule without
+ * a type or an order is dropped.
+ * @type {FieldReader<QualifierPriorityRule[]>}
+ */
+export const readQualifierPriorityRules = (value) => {
+  /** @type {QualifierPriorityRule[]} */
+  const rules = [];
+  let dropped = 0;
+  (Array.isArray(value) ? value : []).forEach((rule) => {
+    const feat = isPlainObject(rule) ? String(rule.feat ?? '').trim() : '';
+    const order = isPlainObject(rule) ? String(rule.order ?? '').trim() : '';
+    if (!feat || !order) {
+      dropped += 1;
+      return;
+    }
+    const existing = rules.find((entry) => entry.feat === feat);
+    if (existing) {
+      existing.order = order;
+      dropped += 1;
+    } else {
+      rules.push({ feat, order });
+    }
+  });
+  return listReading(rules, value, dropped, []);
+};
+
+/**
+ * The annotation sets of a drawing (`normalizeAnnotationSets`), with each
+ * stored value it replaces.
+ * @type {FieldReader<ReturnType<typeof normalizeAnnotationSets>>}
+ */
+export const readAnnotationSets = (value) => {
+  const sets = normalizeAnnotationSets(/** @type {Parameters<typeof normalizeAnnotationSets>[0]} */ (Array.isArray(value) ? value : []));
+  return listReading(sets, value, 0, Array.isArray(value) ? changedLeaves(value, sets) : []);
+};
+
+/**
+ * A map of text by key (similarity group names and descriptions, bulk label
+ * text): a key without text is dropped; a value is read as its text.
+ * @type {FieldReader<Record<string, string>>}
+ */
+export const readStringMap = (value) => {
+  /** @type {Record<string, string>} */
+  const map = {};
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  let dropped = 0;
+  Object.entries(isPlainObject(value) ? value : {}).forEach(([key, text]) => {
+    const name = String(key || '').trim();
+    if (!name) {
+      dropped += 1;
+      return;
+    }
+    if (text !== null && typeof text === 'object') leaves.push({ at: `.${key}`, stored: text, used: undefined });
+    map[name] = String(text ?? '');
+  });
+  const notObject = !isPlainObject(value) && !isUnsetValue(value);
+  return {
+    value: map,
+    lost: notObject || dropped > 0 || leaves.length > 0,
+    ...(dropped && !notObject ? { dropped } : {}),
+    ...(leaves.length && !notObject ? { leaves } : {})
+  };
+};
+/** The dormant group names (D-21): an entry with neither text is dropped. @type {FieldReader<Record<string, unknown>>} */
+const readDormantOverrides = (value) => {
+  const read = normalizeOrthogroupDormantOverrides(value);
+  const dropped = isPlainObject(value) ? Object.keys(value).length - Object.keys(read).length : 0;
+  const notObject = !isPlainObject(value) && !isUnsetValue(value);
+  return { value: read, lost: notObject || dropped > 0, ...(dropped && !notObject ? { dropped } : {}) };
 };
 
 // The Web's lenient reading of a stored label rendering; Python refuses an
@@ -203,10 +339,16 @@ const ADV_ROWS = Object.freeze([
     }
   },
   row('linear_show_replicon', onlyTrue),
-  row('pairwise_match_style', textChoice(['ribbon', 'curve'], 'ribbon'))
+  row('pairwise_match_style', textChoice(PAIRWISE_MATCH_STYLES, 'ribbon')),
+  row('linear_definition_line_styles', readDefinitionLineStyles)
 ]);
 
-/** `losat.blastp`: the protein search settings. @type {readonly FieldRow[]} */
+/**
+ * `losat.blastp`: the protein search settings. `orthogroupMaxHits` had no
+ * writer on `main` or in a release (OV-756): it is dropped like the other
+ * retired keys.
+ * @type {readonly FieldRow[]}
+ */
 const LOSAT_SEARCH_ROWS = Object.freeze([
   row('mode', textChoice(['pairwise', 'orthogroup', 'collinear'], 'orthogroup')),
   row('maxHits', numberOr(isPositiveInteger, 5)),
@@ -228,12 +370,7 @@ const LOSAT_SEARCH_ROWS = Object.freeze([
   { field: 'collinearBlockMergeGap', read: retiredField, retired: true },
   { field: 'collinearSingletonMergeGap', read: retiredField, retired: true },
   { field: 'orthogroupHitPolicy', read: retiredField, retired: true },
-  // Read as `orthogroupMemberMaxHits` when that is unset.
-  {
-    field: 'orthogroupMaxHits',
-    read: (value, blastp) => ({ value: undefined, lost: !isUnsetValue(value) && blastp.orthogroupMemberMaxHits !== undefined }),
-    retired: true
-  }
+  { field: 'orthogroupMaxHits', read: retiredField, retired: true }
 ]);
 
 /**
@@ -285,12 +422,16 @@ const readLosatProgramText = exactChoice(['blastn', 'tblastx', 'blastp'], 'blast
 /** Read as text. @type {FieldReader<string>} */
 export const readLosatProgram = (value) => readLosatProgramText(value ? String(value) : value);
 
-/** @type {readonly FieldTable[]} */
-const CONFIG_FIELD_TABLE = Object.freeze([
+/** The containers the merge reads first, then their rows (`installStoredSettings`). @type {readonly FieldTable[]} */
+const CONTAINER_TABLES = Object.freeze([
+  { at: 'form', rows: [] },
   { at: 'adv', rows: ADV_ROWS },
   { at: 'losat.blastp', rows: LOSAT_SEARCH_ROWS },
+  { at: 'circularConservation', rows: CONSERVATION_ROWS }
+]);
+/** The fields read from the configuration as stored. @type {readonly FieldTable[]} */
+const VALUE_TABLES = Object.freeze([
   { at: 'losat', rows: LOSAT_EXECUTION_ROWS },
-  { at: 'circularConservation', rows: CONSERVATION_ROWS },
   {
     at: 'linearRecordLayout',
     rows: [
@@ -300,9 +441,52 @@ const CONFIG_FIELD_TABLE = Object.freeze([
     ]
   },
   { at: 'importedComparisonResolution', rows: [row('action', readImportedComparisonAction)] },
-  { at: '', rows: [row('losatProgram', readLosatProgram)] }
+  {
+    at: 'webEdits',
+    rows: [
+      row('orthogroupNameOverrides', readStringMap), row('orthogroupDescriptionOverrides', readStringMap),
+      row('orthogroupDormantOverrides', readDormantOverrides)
+    ]
+  },
+  {
+    at: '',
+    rows: [
+      row('losatProgram', readLosatProgram),
+      row('qualifierPriorityRules', readQualifierPriorityRules),
+      row('priorityRules', readQualifierPriorityRules),
+      row('annotationSets', readAnnotationSets)
+    ]
+  }
 ]);
 
+/** @param {unknown} value */
+const storedText = (value) => typeof value === 'string' && value.trim() !== '';
+/**
+ * The plot title position the shown Result was drawn with: the stored one, or
+ * else the older `circularPlotTitlePosition` of the same `ui`, which wins
+ * without a loss over a stored value that is no text.
+ * @param {unknown} value
+ * @param {Record<string, unknown>} ui
+ * @returns {FieldReading<string>}
+ */
+export const readGeneratedCircularPlotTitlePosition = (value, ui) => {
+  if (storedText(value)) return readCircularPlotTitlePosition(value);
+  const fallback = readCircularPlotTitlePosition(ui.circularPlotTitlePosition);
+  return { value: fallback.value, lost: !isUnsetValue(value) && !storedText(ui.circularPlotTitlePosition) };
+};
+/**
+ * A saved palette's colors by feature type, each read as a color; a value
+ * that is no object is not read (`null`: the drawing's colors are used).
+ * @type {FieldReader<Record<string, string> | null>}
+ */
+export const readPaletteColors = (value) => (isPlainObject(value)
+  ? {
+      value: Object.fromEntries(Object.entries(value).map(([key, color]) => [key, resolveColorToHex(String(color || '').trim())])),
+      lost: false
+    }
+  : { value: null, lost: !isUnsetValue(value) });
+/** Shown unless `false`. @type {FieldReader<boolean>} */
+export const readRichFeaturePopup = trueUnlessFalse;
 export const readSessionUiMode = exactChoice(['circular', 'linear'], 'circular');
 export const readFeaturePanelTab = exactChoice(['colors', 'labels'], 'colors');
 /** A Session's app `ui`. @type {readonly FieldTable[]} */
@@ -315,33 +499,49 @@ const SESSION_UI_TABLE = Object.freeze([
       row('autoLabelReflow', truthy),
       row('paletteInstantPreviewEnabled', truthy),
       row('generatedMultiRecordCanvas', truthy),
-      row('generatedCircularPlotTitlePosition', readCircularPlotTitlePosition)
+      { field: 'circularPlotTitlePosition', read: (value, ui) => (storedText(ui.generatedCircularPlotTitlePosition)
+        ? { value, lost: false } : readCircularPlotTitlePosition(value)) },
+      { field: 'generatedCircularPlotTitlePosition', read: readGeneratedCircularPlotTitlePosition },
+      row('appliedPaletteColors', readPaletteColors)
     ]
   }
 ]);
 
-/**
- * Reads the rows into `container` (an `adv`, `losat.blastp`, or
- * `circularConservation` the apply merged a stored configuration into).
- * @param {Record<string, unknown>} container
- * @param {'adv' | 'losat.blastp' | 'circularConservation'} at
- */
-export const applyConfigFieldRows = (container, at) => {
-  const table = CONFIG_FIELD_TABLE.find((entry) => entry.at === at);
-  (table ? table.rows : []).forEach(({ field, read, inPlace, retired }) => {
-    if (retired) {
-      delete container[field];
-      return;
-    }
-    const { value } = read(container[field], container);
-    const current = container[field];
-    if (inPlace && Array.isArray(current) && Array.isArray(value)) current.splice(0, current.length, ...value);
-    else container[field] = value;
+/** @type {FieldReader<number>} */
+const readPaddingSide = numberOr(Number.isFinite, 0);
+/** A drawing's Canvas padding: a side that is no number is 0. @type {FieldReader<Record<'top' | 'right' | 'bottom' | 'left', number>>} */
+export const readCanvasPadding = (value) => {
+  const stored = isPlainObject(value) ? value : {};
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  const padding = { top: 0, right: 0, bottom: 0, left: 0 };
+  /** @type {('top' | 'right' | 'bottom' | 'left')[]} */ (['top', 'right', 'bottom', 'left']).forEach((side) => {
+    const reading = readPaddingSide(stored[side]);
+    if (reading.lost) leaves.push({ at: `.${side}`, stored: stored[side], used: reading.value });
+    padding[side] = reading.value;
   });
+  const notObject = !isPlainObject(value) && !isUnsetValue(value);
+  return { value: padding, lost: notObject || leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
 };
-
-/** @param {unknown} value */
-const excerpt = (value) => (typeof value === 'string' ? value : JSON.stringify(value) ?? '');
+/** A drawing's `ui` and its feature edits (a Session 46 slice). @type {readonly FieldTable[]} */
+const SLICE_TABLES = Object.freeze([
+  {
+    at: 'ui',
+    rows: [
+      row('canvasPadding', readCanvasPadding),
+      row('linearTypographyLinked', readLinearTypographyLinked)
+    ]
+  },
+  {
+    at: 'features',
+    rows: [
+      row('featureColorOverrides', readPlainObject),
+      row('featureVisibilityManualRules', readList),
+      row('labelOverrideRows', readList),
+      row('labelTextBulkOverrides', readStringMap)
+    ]
+  }
+]);
 
 /**
  * @param {unknown} value
@@ -350,57 +550,259 @@ const excerpt = (value) => (typeof value === 'string' ? value : JSON.stringify(v
  */
 const containerAt = (value, at) => {
   let container = value;
-  for (const key of at.split('.').filter(Boolean)) container = isRecord(container) ? container[key] : undefined;
-  return isRecord(container) ? container : null;
+  for (const key of at.split('.').filter(Boolean)) container = isPlainObject(container) ? container[key] : undefined;
+  return isPlainObject(container) ? container : null;
 };
 
 /**
- * What the rows of `tables` cannot restore of the values `stored` holds.
- * @param {readonly FieldTable[]} tables
- * @param {unknown} value
- * @param {string} path
- * @param {unknown} stored
- * @returns {LoadRepair[]}
+ * Reads the rows into `container`; returns what they could not restore.
+ * `stored` holds the retired fields (the merge does not copy them).
+ * @param {Record<string, unknown>} container
+ * @param {readonly FieldRow[]} rows
+ * @param {string} at
+ * @param {Record<string, unknown> | null} [stored]
+ * @returns {SettingLoss[]}
  */
-const fieldRepairs = (tables, value, path, stored) => tables.flatMap(({ at, rows }) => {
-  const source = containerAt(value, at);
-  const storedContainer = containerAt(stored, at);
-  if (!isRecord(source) || !isRecord(storedContainer)) return [];
-  /** @type {Record<string, unknown>} */
-  const read = { ...source };
-  return rows.flatMap(({ field, read: reader }) => {
-    if (!Object.hasOwn(source, field)) return [];
-    const reading = reader(source[field], read);
-    read[field] = reading.value;
-    if (!reading.lost || !Object.hasOwn(storedContainer, field)) return [];
-    const fieldPath = [path, at, field].filter(Boolean).join('.');
-    if (reading.dropped) {
-      return [loadRepair({ code: 'setting-entries-dropped', path: fieldPath, effect: 'dropped', count: reading.dropped })];
-    }
-    return [loadRepair({
-      code: 'setting-replaced', path: fieldPath, effect: 'defaulted', stored: excerpt(source[field]),
-      ...(isUnsetValue(reading.value) ? {} : { used: excerpt(reading.value) })
-    })];
-  });
+const readRows = (container, rows, at, stored = container) => rows.flatMap(({ field, read, inPlace, retired }) => {
+  const fieldAt = [at, field].filter(Boolean).join('.');
+  if (retired) {
+    const storedValue = stored?.[field];
+    delete container[field];
+    return retiredField(storedValue, container).lost ? [{ at: fieldAt, stored: storedValue, used: undefined }] : [];
+  }
+  const before = container[field];
+  const reading = read(before, container);
+  if (inPlace && Array.isArray(before) && Array.isArray(reading.value)) before.splice(0, before.length, ...reading.value);
+  else container[field] = reading.value;
+  if (!reading.lost) return [];
+  if (reading.dropped || reading.leaves) {
+    return [
+      ...(reading.dropped ? [{ at: fieldAt, stored: before, used: undefined, dropped: reading.dropped }] : []),
+      ...(reading.leaves ?? []).map((leaf) => ({ at: `${fieldAt}${leaf.at}`, stored: leaf.stored, used: leaf.used }))
+    ];
+  }
+  return [{ at: fieldAt, stored: before, used: reading.value }];
 });
 
+/** @param {unknown} value A list, an object, or the `typeof` of anything else. */
+const kindOf = (value) => (Array.isArray(value) ? 'list' : typeof value);
+/** @type {readonly string[]} */
+const UNSAFE_KEYS = Object.freeze(['__proto__', 'constructor', 'prototype']);
 /**
- * The stored settings of a configuration that its readers cannot restore, as
- * Load lists them before `applyConfigData` reads the configuration with the
- * same rows. Only the values `stored` holds are listed (the file's draft; a
- * value the stored request supplies is read with the request).
- * @param {unknown} config
- * @param {string} path Where the configuration is in the file.
- * @param {unknown} [stored]
+ * Merges a stored settings object into `target`: a key `target` lacks is
+ * ignored; an object merges into an object; a list replaces a list; a value
+ * of `target`'s kind, or `null` on either side, is copied. A value of another
+ * kind (a list for an object included) is not used; it is returned as a loss
+ * at `at`.
+ * @param {Record<string, unknown>} target
+ * @param {unknown} source
+ * @param {string} [at]
+ * @returns {SettingLoss[]}
  */
-export const configFieldRepairs = (config, path, stored = config) => fieldRepairs(CONFIG_FIELD_TABLE, config, path, stored);
+export const mergeStoredSettings = (target, source, at = '') => {
+  if (!source || typeof source !== 'object') return [];
+  const stored = /** @type {Record<string, unknown>} */ (source);
+  return Object.keys(stored).flatMap((key) => {
+    if (UNSAFE_KEYS.includes(key) || !Object.hasOwn(target, key)) return [];
+    const targetValue = target[key];
+    const sourceValue = stored[key];
+    const keyAt = at ? `${at}.${key}` : key;
+    if (isPlainObject(targetValue) && isPlainObject(sourceValue)) return mergeStoredSettings(targetValue, sourceValue, keyAt);
+    if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
+      targetValue.splice(0, targetValue.length, ...sourceValue);
+      return [];
+    }
+    if (kindOf(targetValue) === kindOf(sourceValue) || targetValue === null || sourceValue === null) {
+      target[key] = sourceValue;
+      return [];
+    }
+    return [{ at: keyAt, stored: sourceValue, used: targetValue }];
+  });
+};
+
+/**
+ * The settings containers of a drawing a configuration is installed into: the
+ * drawing's own, or fresh defaults when Load reads a file before it applies it.
+ * @typedef {{ form: Record<string, unknown>, adv: Record<string, unknown>,
+ *   losat: { blastp: Record<string, unknown> }, circularConservation: Record<string, unknown> }} SettingsContainers
+ */
+/**
+ * A drawing's settings as Load resets it (`resetSessionBaseline`).
+ * @param {'circular' | 'linear'} mode
+ * @returns {SettingsContainers}
+ */
+export const defaultSettingsContainers = (mode) => ({
+  form: createDefaultForm(), adv: createDefaultAdv(mode), losat: createDefaultLosat(),
+  circularConservation: createDefaultCircularConservation()
+});
+/**
+ * Fields copied as stored, whatever their kind (their merge losses are none):
+ * `applyConfigData` copies the two Linear font sizes; the hit limits and the
+ * inference flag are copied below.
+ */
+const RAW_FIELDS = Object.freeze(['adv.scale_font_size', 'adv.ruler_label_font_size', 'losat.blastp.collinearInferOrthogroups']);
+/** @param {unknown} value */
+const copied = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+
+/**
+ * Installs a configuration's settings into `targets`: each container is
+ * merged, then read by its rows. `applyConfigData` installs a drawing's
+ * settings with it, and Load reads a file with it before it applies it, so
+ * both lose the same values.
+ * @param {SettingsContainers} targets
+ * @param {Record<string, unknown>} config
+ * @returns {SettingLoss[]}
+ */
+export const installStoredSettings = (targets, config) => {
+  const losses = [
+    ...mergeStoredSettings(targets.form, config.form, 'form'),
+    ...mergeStoredSettings(targets.adv, config.adv, 'adv'),
+    ...mergeStoredSettings(targets.losat, config.losat, 'losat'),
+    ...mergeStoredSettings(targets.circularConservation, config.circularConservation, 'circularConservation')
+  ].filter(({ at }) => !RAW_FIELDS.includes(at) && !at.startsWith('losat.blastp.hitLimitsByMode.'));
+  CONTAINER_TABLES.forEach(({ at, rows }) => {
+    const container = at === 'losat.blastp' ? targets.losat.blastp
+      : /** @type {Record<string, unknown>} */ (targets[/** @type {'form' | 'adv' | 'circularConservation'} */ (at)]);
+    losses.push(...readRows(container, rows, at, containerAt(config, at)));
+  });
+  if (config.losat) {
+    // The hit limits of each mode over their defaults, as stored; the
+    // inference flag as stored, else on for a collinear search.
+    const blastp = containerAt(config, 'losat.blastp');
+    const limits = blastp?.hitLimitsByMode;
+    targets.losat.blastp.collinearInferOrthogroups = blastp?.collinearInferOrthogroups ?? (targets.losat.blastp.mode === 'collinear');
+    targets.losat.blastp.hitLimitsByMode = { ...createDefaultLosatpHitLimits(), ...(isPlainObject(limits) ? copied(limits) : {}) };
+  }
+  return losses;
+};
+
+/**
+ * Reads `tables` of `value` as stored; returns what they could not restore.
+ * @param {readonly FieldTable[]} tables
+ * @param {unknown} value
+ * @returns {SettingLoss[]}
+ */
+const readValueTables = (tables, value) => tables.flatMap(({ at, rows }) => {
+  const source = containerAt(value, at);
+  if (!source) return [];
+  /** @type {Record<string, unknown>} */
+  const read = { ...source };
+  return readRows(read, rows.filter(({ field }) => Object.hasOwn(source, field)), at, source);
+});
+
+/** Free text: Load names the place of such a value, not the value (12.3). */
+const FREE_TEXT_KEYS = new Set([
+  'label', 'name', 'fileName', 'sourceKey', 'uid', 'caption', 'prefix', 'species', 'strain', 'plot_title',
+  'circular_record_label', 'circular_record_subtitle', 'labels', 'blacklistText', 'legendLabel', 'description', 'id'
+]);
+/** @param {string} at */
+const isFreeText = (at) => FREE_TEXT_KEYS.has(at.replace(/\[\d+\]/g, '').split('.').pop() || '');
+/** @param {unknown} value */
+const excerpt = (value) => (typeof value === 'string' ? value : JSON.stringify(value) ?? '');
+
+/**
+ * Whether the drawing of `mode` draws the value at `at`: the mode-scoped
+ * registry gives some settings to one mode only, and a value the drawing
+ * never draws changes nothing when Load drops it.
+ * @param {'circular' | 'linear' | null} mode
+ * @param {string} root The registry domain of the read value (`config`, or '' for a slice).
+ * @param {string} at
+ */
+const drawnByMode = (mode, root, at) => {
+  if (!mode) return true;
+  const [head, next] = at.replace(/\[\d+\]/g, '').split('.');
+  const setting = MODE_SCOPED_SETTINGS.rows.find((entry) => entry.domain === [root, head].filter(Boolean).join('.') && entry.path === next)
+    ?? MODE_SCOPED_SETTINGS.rows.find((entry) => entry.domain === root && entry.path === head);
+  return !setting || setting.modes === 'both' || setting.modes === mode;
+};
+
+/**
+ * @param {unknown} value
+ * @param {string} at
+ */
+const holds = (value, at) => {
+  let container = value;
+  for (const key of at.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean)) {
+    if (!container || typeof container !== 'object' || !Object.hasOwn(container, key)) return false;
+    container = /** @type {Record<string, unknown>} */ (container)[key];
+  }
+  return true;
+};
+
+/**
+ * The dialog rows of what a reading lost. A value the file does not hold
+ * (`stored`), one the drawing never draws, and one read as its own text
+ * (`"true"` as true) are no row. A row names the value used when it is one
+ * value; free text is named by its place only.
+ * @param {readonly SettingLoss[]} losses
+ * @param {string} path Where the read value is in the file.
+ * @param {unknown} stored
+ * @param {{ mode?: 'circular' | 'linear' | null, root?: string }} [scope] The drawing's mode, and the
+ *   registry domain of the read value.
+ * @returns {LoadRepair[]}
+ */
+const lossRepairs = (losses, path, stored, { mode = null, root = '' } = {}) => losses
+  .filter(({ at, stored: storedValue, used }) => holds(stored, at) && drawnByMode(mode, root, at)
+    && !(used !== undefined && used !== null && typeof used !== 'object' && excerpt(storedValue) === excerpt(used)))
+  .map(({ at, stored: storedValue, used, dropped }) => {
+    const fieldPath = [path, at].filter(Boolean).join('.');
+    if (dropped) return loadRepair({ code: 'setting-entries-dropped', path: fieldPath, effect: 'dropped', count: dropped });
+    // Nothing used: the value is dropped; an unset value, a list or an
+    // object used: the default is used. Free text is named by its place.
+    const named = !isUnsetValue(used) && typeof used !== 'object';
+    if (isFreeText(at)) {
+      return loadRepair({ code: 'setting-replaced', path: fieldPath, effect: used === undefined ? 'dropped' : named ? 'changed' : 'defaulted' });
+    }
+    return loadRepair({
+      code: 'setting-replaced', path: fieldPath, effect: used === undefined ? 'dropped' : 'defaulted', stored: excerpt(storedValue),
+      ...(named ? { used: excerpt(used) } : {})
+    });
+  });
+
+/**
+ * Reads the containers of `config` as `installStoredSettings` installs them
+ * into `targets` (fresh defaults for a Session's drawing, a copy of the
+ * drawing for a legacy configuration) and the other fields as
+ * `applyConfigData` reads them; lists what they cannot restore. Only the
+ * values `stored` holds are listed (the file's draft; a value the stored
+ * request supplies is read with the request), and only those the drawing of
+ * `mode` draws.
+ * @param {SettingsContainers} targets Written.
+ * @param {Record<string, unknown>} config
+ * @param {string} path Where the configuration is in the file.
+ * @param {{ stored?: unknown, mode?: 'circular' | 'linear' | null }} [options]
+ * @returns {LoadRepair[]}
+ */
+export const configFieldRepairs = (targets, config, path, { stored = config, mode = null } = {}) => lossRepairs([
+  ...installStoredSettings(targets, config),
+  ...readValueTables(VALUE_TABLES, config)
+], path, stored, { mode, root: 'config' });
 
 /**
  * The same for a Session's app `ui`.
  * @param {unknown} ui
  * @param {string} path
  */
-export const sessionUiFieldRepairs = (ui, path) => fieldRepairs(SESSION_UI_TABLE, ui, path, ui);
+export const sessionUiFieldRepairs = (ui, path) => lossRepairs(readValueTables(SESSION_UI_TABLE, ui), path, ui);
+
+/**
+ * The same for a drawing's `ui` and feature edits (a Session 46 slice).
+ * @param {unknown} slice
+ * @param {string} path
+ * @param {'circular' | 'linear'} mode
+ */
+export const sliceFieldRepairs = (slice, path, mode) => lossRepairs(readValueTables(SLICE_TABLES, slice), path, slice, { mode });
+
+/**
+ * The same for one value and its reader.
+ * @param {FieldReader<unknown>} read
+ * @param {unknown} value
+ * @param {string} path
+ */
+export const valueRepairs = (read, value, path) => {
+  const reading = read(value);
+  return reading.lost ? lossRepairs([{ at: '', stored: value, used: reading.value }], path, value) : [];
+};
 
 /**
  * The same for the LOSAT execution settings (`ui.losatExecution` of a Session
@@ -408,4 +810,6 @@ export const sessionUiFieldRepairs = (ui, path) => fieldRepairs(SESSION_UI_TABLE
  * @param {unknown} execution
  * @param {string} path
  */
-export const losatExecutionRepairs = (execution, path) => fieldRepairs([{ at: '', rows: LOSAT_EXECUTION_ROWS }], execution, path, execution);
+export const losatExecutionRepairs = (execution, path) => lossRepairs(
+  readValueTables([{ at: '', rows: LOSAT_EXECUTION_ROWS }], execution), path, execution
+);
