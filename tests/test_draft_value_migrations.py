@@ -1,7 +1,9 @@
 """The Python twins of the Web Load value migrations of a Session 27-44 draft.
 
-``tools/generate_draft_value_migration_vectors.mjs`` runs the Web functions of
-``services/config.js`` and writes the vectors; this file reads them.
+``tools/generate_draft_value_migration_vectors.mjs`` runs the Web's owners and
+writes the vectors; this file reads them. A case's ``expected`` or ``error`` is
+Python's outcome; ``load`` is what Web Load reads where it repairs a value
+Python refuses or keeps (E-OD02), and Python does not read it.
 """
 
 from __future__ import annotations

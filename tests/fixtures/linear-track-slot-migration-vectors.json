@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "migrateImportedLinearTrackSlots (services/config.js) with migrateLinearTrackSlotsToCurrentSchema; Python twin migrate_imported_linear_track_slots.",
+  "description": "expected is migrateImportedLinearTrackSlots (services/config.js) with migrateLinearTrackSlotsToCurrentSchema, and error what its Python twin migrate_imported_linear_track_slots refuses where the Web reads the stack; load is what Web Load reads where it differs (readImportedTrackSlots through the reader table, with its rows).",
   "cases": [
     {
       "name": "Session 30 schema-1 Linear slots (real file)",
@@ -1195,6 +1195,28 @@
             ]
           }
         }
+      },
+      "load": {
+        "config": {
+          "adv": {
+            "linear_track_slots_schema_version": 2,
+            "linear_track_slots": [
+              {
+                "id": "features",
+                "renderer": "features",
+                "enabled": true,
+                "side": "overlay",
+                "height": "",
+                "spacing": "",
+                "z": 0,
+                "params": {}
+              }
+            ]
+          }
+        },
+        "rows": [
+          "setting-replaced@config.adv.linear_track_slots"
+        ]
       }
     },
     {
@@ -1207,7 +1229,15 @@
           }
         }
       },
-      "error": "Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2."
+      "error": "Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2.",
+      "load": {
+        "config": {
+          "adv": {
+            "linear_track_slots": []
+          }
+        },
+        "rows": []
+      }
     },
     {
       "name": "an unknown stored schema is refused",
@@ -1220,7 +1250,16 @@
           }
         }
       },
-      "error": "Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2."
+      "error": "Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2.",
+      "load": {
+        "config": {
+          "adv": {
+            "linear_track_slots_schema_version": 2,
+            "linear_track_slots": []
+          }
+        },
+        "rows": []
+      }
     },
     {
       "name": "a non-integer stored schema is refused",
@@ -1233,7 +1272,60 @@
           }
         }
       },
-      "error": "Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2."
+      "error": "Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2.",
+      "load": {
+        "config": {
+          "adv": {
+            "linear_track_slots_schema_version": 2,
+            "linear_track_slots": []
+          }
+        },
+        "rows": []
+      }
+    },
+    {
+      "name": "a Session 40 stack of an unknown schema is refused",
+      "sessionVersion": 40,
+      "input": {
+        "config": {
+          "adv": {
+            "linear_track_slots_schema_version": 3,
+            "linear_track_slots": [
+              {
+                "id": "features",
+                "renderer": "features",
+                "height": 30,
+                "spacing": 4,
+                "params": {
+                  "a": 1
+                }
+              }
+            ]
+          }
+        }
+      },
+      "error": "Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2.",
+      "load": {
+        "config": {
+          "adv": {
+            "linear_track_slots_schema_version": 2,
+            "linear_track_slots": [
+              {
+                "id": "features",
+                "renderer": "features",
+                "height": 30,
+                "spacing": 4,
+                "params": {
+                  "a": 1
+                }
+              }
+            ]
+          }
+        },
+        "rows": [
+          "setting-replaced@config.adv.linear_track_slots_schema_version"
+        ]
+      }
     },
     {
       "name": "slots that are not a list are refused",
@@ -1247,7 +1339,28 @@
           }
         }
       },
-      "error": "Custom Track Slots must be an array."
+      "error": "Custom Track Slots must be an array.",
+      "load": {
+        "config": {
+          "adv": {
+            "linear_track_slots": [
+              {
+                "id": "features",
+                "renderer": "features",
+                "enabled": true,
+                "side": "overlay",
+                "height": "",
+                "spacing": "",
+                "z": 0,
+                "params": {}
+              }
+            ]
+          }
+        },
+        "rows": [
+          "setting-replaced@config.adv.linear_track_slots"
+        ]
+      }
     },
     {
       "name": "a draft without Linear slots is unchanged",

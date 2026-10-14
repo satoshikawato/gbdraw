@@ -3,8 +3,9 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 // The Python twins of the Web Load value migrations of a Session 27-44 draft
-// (gbdraw/session_io.py) read vectors that the Web functions of
-// services/config.js wrote. A change to those functions must regenerate them.
+// (gbdraw/session_io.py) read vectors that the Web's owners wrote: the reader
+// table and the functions of services/config.js the generator names. A change
+// to them must regenerate the vectors.
 test('the draft value migration vectors are the Web functions output', () => {
   const result = spawnSync(
     process.execPath,

@@ -3671,7 +3671,9 @@ def migrate_persisted_web_option_values(config: object) -> object:
     Linear track layout ``spreadout``/``tuckin`` becomes ``above``/``below``,
     label placement ``on_feature`` becomes ``above_feature``, and multi-record
     size ``sqrt`` becomes ``auto``; any other value must be a current one. The
-    twin of the option-value steps of ``migratePersistedWebOptionValues``.
+    twin of the Web's strict readers (``migratePersisted*`` in
+    ``current-option-values.js``); Web Load reads these values with its reader
+    table, which reads an unknown one as the default with a row (E-OD02).
     """
 
     if not isinstance(config, Mapping):
@@ -3766,7 +3768,8 @@ def migrate_imported_linear_track_slots(config: object, source_version: object) 
     A Session up to 32 saved them with schema-1 meaning whatever it stored;
     later ones state their schema. A schema-1 features slot loses its height and
     spacing, and every slot gets its own ``params`` object. The twin of
-    ``migrateImportedLinearTrackSlots`` and ``migrateLinearTrackSlotsToCurrentSchema``.
+    ``migrateImportedLinearTrackSlots`` and ``migrateLinearTrackSlotsToCurrentSchema``;
+    a stack it refuses, Web Load reads with ``readImportedTrackSlots`` (E-OD02).
     """
 
     adv = config.get("adv") if isinstance(config, Mapping) else None
