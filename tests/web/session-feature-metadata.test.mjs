@@ -873,4 +873,42 @@ for (const invalidRecordIndex of [
   assert.equal(plan.recoveredFeatureState, undefined);
 }
 
+// OV-751 (r3 S4): two features that differ only by their record share one
+// hash. When the drawn element carries no record (an older Linear SVG with
+// bare IDs, or a Circular figure), both agree with it; neither is aligned and
+// the Load lists its feature edits, as it did before OV-751.
+{
+  const feature = (product, recordIdx, extra = {}) => ({ id: 'f0', svg_id: 'h', stable_svg_id: 'h', rendered_feature_svg_id: 'h',
+    record_idx: recordIdx, record_id: 'contig_1', type: 'CDS', product, ...extra });
+  const linearPlan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb: { name: '0.gb' } }, { gb: { name: '1.gb' } }], selectedResultIndex: 0,
+      results: committedResults('<svg><path id="h" data-gbdraw-feature-id="h" /><path id="h" data-gbdraw-feature-id="h" /></svg>'),
+      featureState: {}, editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async ({ path }) => ({
+      '/seq_0.gb': { features: [feature('A', 0)], record_ids: ['contig_1'] },
+      '/seq_1.gb': { features: [feature('B', 0)], record_ids: ['contig_1'] }
+    })[path]
+  });
+  assert.equal(linearPlan.status, 'failed', linearPlan.reason);
+  assert.equal(linearPlan.recoveredFeatureState, undefined);
+  const circularPlan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'circular', cInputType: 'gb', files: { c_gb: { name: 'c.gb' } }, selectedResultIndex: 0,
+      results: committedResults('<svg><g data-gbdraw-record-index="0"><path id="h" data-gbdraw-feature-id="h" /></g>'
+        + '<g data-gbdraw-record-index="1"><path id="h" data-gbdraw-feature-id="h" /></g></svg>'),
+      featureState: {}, editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async () => {
+      const features = [feature('A', 0), feature('B', 1, { id: 'f1' })];
+      return { features, biological_features: features, record_ids: ['contig_1', 'contig_1'] };
+    }
+  });
+  assert.equal(circularPlan.status, 'failed', circularPlan.reason);
+  assert.equal(circularPlan.recoveredFeatureState, undefined);
+}
+
 console.log('session feature metadata tests passed');

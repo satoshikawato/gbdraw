@@ -668,6 +668,28 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
     });
   });
 
+  // One drawn element is one feature. Features that differ only by a record
+  // the element does not carry all agree with it (OV-751): none is aligned.
+  /** @type {Map<string, number>} */
+  const claims = new Map();
+  resolutions.forEach(({ renderedId }) => {
+    if (renderedId) claims.set(renderedId, (claims.get(renderedId) || 0) + 1);
+  });
+  resolutions.forEach((resolution, index) => {
+    const { renderedId, status } = resolution;
+    if (!renderedId || (claims.get(renderedId) || 0) < 2) return;
+    const feature = sourceFeatures[index];
+    if (status === 'exact') exactCount -= 1;
+    else alignedCount -= 1;
+    ambiguousCount += 1;
+    if (nextFeatures[index] !== feature) changedCount -= 1;
+    nextFeatures[index] = withoutRenderedFeatureIdentity(feature);
+    if (nextFeatures[index] !== feature) changedCount += 1;
+    Object.keys(svgIdMap).forEach((from) => { if (svgIdMap[from] === renderedId) delete svgIdMap[from]; });
+    delete featureIdMap[featureId(feature)];
+    resolutions[index] = { ...resolution, status: 'ambiguous', renderedId: '', method: '' };
+  });
+
   return {
     features: nextFeatures,
     changedCount,
