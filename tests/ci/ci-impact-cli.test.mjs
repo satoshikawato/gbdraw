@@ -13,7 +13,9 @@ import {
 } from '../../tools/ci-impact-policy.mjs';
 import { PromotionReadinessError } from '../../tools/check-promotion-readiness.mjs';
 import {
+  PR_PLAN_RECORD_PREFIX,
   buildImpactPlan,
+  formatPlanSummary,
   functionalShardFiles,
   parseNameStatusZ,
   readPlanConfiguration,
@@ -1408,4 +1410,132 @@ test('functional shards skip setup when no changed spec is assigned to them', ()
   assert.match(run, /FUNCTIONAL_SPECS: \$\{\{ steps\.shard\.outputs\.files \}\}/);
   assert.match(run, /files="\$FUNCTIONAL_SPECS"/);
   assert.doesNotMatch(run, /require\('\.\/tests\/ci\/functional-shards\.json'\)/);
+});
+
+// SELECTIVE_CI.md "Merged pull request inheritance".
+const PR_HEAD = 'f'.repeat(40);
+const RUNTIME_PR_JOBS = 'web-change-budget.gallery.web-contracts-pr.web-pr-smoke.playwright-functional';
+const mergeGit = ({
+  diff = ['M', 'gbdraw/web/js/app.js'],
+  parents = [SHA.head, SHA.base, PR_HEAD],
+  tree = TREE.same,
+  calls = []
+} = {}) => (_root, args) => {
+  calls.push(args);
+  if (args[0] === 'diff') return gitResult(...diff);
+  if (args[0] === 'rev-list') return { status: 0, stdout: Buffer.from(`${parents.join(' ')}\n`), stderr: Buffer.alloc(0) };
+  if (args[0] === 'rev-parse') return { status: 0, stdout: Buffer.from(`${tree}\n`), stderr: Buffer.alloc(0) };
+  throw new Error(`unexpected git ${args.join(' ')}`);
+};
+const pullRequestRunEvidence = (records = [`${PR_PLAN_RECORD_PREFIX}${TREE.same}.${RUNTIME_PR_JOBS}`]) => ({
+  workflow: { path: '.github/workflows/test.yml' },
+  run: { id: 303, headSha: PR_HEAD, url: 'https://github.com/satoshikawato/gbdraw/actions/runs/303' },
+  aggregateJob: { id: 404, name: 'PR / gate', url: 'https://github.com/satoshikawato/gbdraw/actions/runs/303/job/404' },
+  records
+});
+const mergeOutcome = ({ git = {}, evidence = async () => pullRequestRunEvidence() } = {}) => buildImpactPlan({
+  configuration: pushConfiguration('dev'),
+  token: 'test-token',
+  runGitImpl: mergeGit(git),
+  verifyWorkflowEvidenceImpl: evidence
+});
+
+test('a dev merge whose tree its pull request run tested inherits the jobs that run planned', async () => {
+  const calls = [];
+  let evidenceArguments;
+  const outcome = await mergeOutcome({
+    git: { calls },
+    evidence: async (args) => {
+      evidenceArguments = args;
+      return pullRequestRunEvidence();
+    }
+  });
+  assert.deepEqual(calls.slice(1), [
+    ['rev-list', '--parents', '-n', '1', SHA.head],
+    ['rev-parse', `${SHA.head}^{tree}`]
+  ]);
+  assert.deepEqual(evidenceArguments, {
+    repository: 'satoshikawato/gbdraw',
+    workflowPath: '.github/workflows/test.yml',
+    expectedEvent: 'pull_request',
+    expectedBranch: null,
+    expectedHeadSha: PR_HEAD,
+    expectedAggregateName: 'PR / gate',
+    recordPrefix: `${PR_PLAN_RECORD_PREFIX}${TREE.same}.`,
+    token: 'test-token'
+  });
+  assert.equal(outcome.plan.decision, 'selective');
+  assert.equal(outcome.plan.basis, 'IDENTICAL_TREE_WITH_PR_EVIDENCE');
+  assert.deepEqual(outcome.plan.requiredJobs, knownJobsFor('dev')
+    .filter((job) => !['gallery', 'playwright-functional'].includes(job)));
+  assert.equal(outcome.plan.inheritedEvidence.headSha, PR_HEAD);
+  assert.equal(outcome.plan.inheritedEvidence.runId, 303);
+  assert.equal(outcome.plan.inheritedEvidence.aggregateName, 'PR / gate');
+  assert.match(formatPlanSummary(outcome), /Basis: `IDENTICAL_TREE_WITH_PR_EVIDENCE`[\s\S]*Inherited aggregate: \[PR \/ gate\]/);
+  assert.throws(() => functionalShardFiles({ plan: outcome.plan, shards: TEST_SHARDS, shard: 1 }),
+    { code: 'FUNCTIONAL_NOT_REQUIRED' });
+});
+
+test('dev merges without exact-tree pull request evidence run the complete dev tier', async () => {
+  const evidenceError = (code) => async () => { throw new PromotionReadinessError(code, `PR evidence: ${code}`); };
+  for (const [name, options, code] of [
+    ['single-parent push', { git: { parents: [SHA.head, SHA.base] } }, 'NOT_A_PULL_REQUEST_MERGE'],
+    ['dev moved before the merge', { git: { parents: [SHA.head, TREE.other, PR_HEAD] } }, 'NOT_A_PULL_REQUEST_MERGE'],
+    ['octopus merge', { git: { parents: [SHA.head, SHA.base, PR_HEAD, TREE.other] } }, 'NOT_A_PULL_REQUEST_MERGE'],
+    ['unreadable tree', { git: { tree: '' } }, 'NOT_A_PULL_REQUEST_MERGE'],
+    ['fork, untested head, or no run', { evidence: evidenceError('NO_MATCHING_RUN') }, 'NO_MATCHING_RUN'],
+    ['newest run not green', { evidence: evidenceError('RUN_NOT_SUCCESSFUL') }, 'RUN_NOT_SUCCESSFUL'],
+    ['PR / gate not green', { evidence: evidenceError('AGGREGATE_JOB_NOT_SUCCESSFUL') }, 'AGGREGATE_JOB_NOT_SUCCESSFUL'],
+    ['rerun started during the check', { evidence: evidenceError('RUN_ATTEMPT_CHANGED') }, 'RUN_ATTEMPT_CHANGED'],
+    ['unreadable evidence', { evidence: evidenceError('API_REQUEST_FAILED') }, 'API_REQUEST_FAILED'],
+    ['different tested tree', { evidence: async () => pullRequestRunEvidence([]) }, 'TESTED_TREE_NOT_RECORDED'],
+    ['records from reruns disagree', { evidence: async () => pullRequestRunEvidence([
+      `${PR_PLAN_RECORD_PREFIX}${TREE.same}.gallery`,
+      `${PR_PLAN_RECORD_PREFIX}${TREE.same}.${RUNTIME_PR_JOBS}`
+    ]) }, 'TESTED_TREE_NOT_RECORDED'],
+    ['functional not planned', { evidence: async () => pullRequestRunEvidence([
+      `${PR_PLAN_RECORD_PREFIX}${TREE.same}.web-change-budget.gallery.playwright-functional-extra`
+    ]) }, 'PULL_REQUEST_JOBS_NOT_PLANNED']
+  ]) {
+    const outcome = await mergeOutcome(options);
+    assert.equal(outcome.plan.decision, 'full', name);
+    assert.equal(outcome.plan.basis, 'FULL_CHANGE', name);
+    assert.equal(outcome.plan.inheritedEvidence, null, name);
+    assert.deepEqual(outcome.plan.requiredJobs, knownJobsFor('dev'), name);
+    assert.equal(outcome.evidenceFailure.code, code, name);
+    assert.match(formatPlanSummary(outcome), new RegExp(`Full fallback: \`${code}\``), name);
+  }
+  await assert.rejects(mergeOutcome({ evidence: async () => { throw new TypeError('bug'); } }), TypeError);
+});
+
+test('control-plane merges, Gallery pushes, and pull requests never read pull request evidence', async () => {
+  for (const [profile, diff] of [
+    ['dev', ['M', 'gbdraw/web/js/app.js', 'M', '.github/workflows/test.yml']],
+    ['dev', ['M', 'tools/ci-impact.mjs']],
+    ['gallery', ['M', 'gbdraw/web/js/app.js']],
+    ['pr', ['M', 'gbdraw/web/js/app.js']]
+  ]) {
+    const calls = [];
+    let evidenceCalls = 0;
+    const outcome = await buildImpactPlan({
+      configuration: profile === 'pr' ? configuration() : pushConfiguration(profile),
+      token: 'test-token',
+      runGitImpl: mergeGit({ diff, calls }),
+      verifyWorkflowEvidenceImpl: async () => { evidenceCalls += 1; return successfulEvidence(); }
+    });
+    assert.equal(calls.some((args) => args[0] === 'rev-list'), false, `${profile} ${diff}`);
+    assert.equal(outcome.plan.basis === 'IDENTICAL_TREE_WITH_PR_EVIDENCE', false, `${profile} ${diff}`);
+    if (profile !== 'pr') assert.equal(evidenceCalls, 0, `${profile} ${diff}`);
+  }
+});
+
+test('pull request runs record the tested tree and planned jobs under the planner prefix', () => {
+  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const planner = workflow.slice(workflow.indexOf('  ci-impact:\n'), workflow.indexOf('  web-change-budget:\n'));
+  assert.match(planner, /tree="\$\(git rev-parse "\$\{GITHUB_SHA\}\^\{tree\}"\)"/);
+  assert.ok(planner.includes(`echo "name=${PR_PLAN_RECORD_PREFIX}\${tree}\${jobs}" >> "$GITHUB_OUTPUT"`));
+  assert.ok(planner.includes('process.stdout.write(`.${job}`)'));
+  assert.ok(planner.includes('name: ${{ steps.pr_record.outputs.name }}\n'));
+  assert.match(planner, /overwrite: true/);
+  assert.equal((planner.match(/if: github\.event_name == 'pull_request'\n/g) || []).length, 4);
 });

@@ -497,3 +497,23 @@ test('dev gate accepts identical-tree and leaf-test plans only when their select
   assert.equal(validate(roundTrip, needsFor(leaf)).ok, true);
   assert.throws(() => validate({ ...roundTrip, leafTests: null }, needsFor(leaf)), { code: 'INVALID_LEAF_TESTS' });
 });
+
+test('dev gate accepts a merged pull request tree plan only when the jobs it did not inherit succeed', () => {
+  const merged = devPlan({
+    impact: 'web-runtime',
+    capabilities: ['web-runtime'],
+    basis: 'IDENTICAL_TREE_WITH_PR_EVIDENCE',
+    inheritedEvidence: { ...devPlan().inheritedEvidence, aggregateName: 'PR / gate', headSha: 'f'.repeat(40) }
+  });
+  assert.deepEqual(merged.requiredJobs, [
+    'web-change-budget', 'core', 'recipes-standard', 'browser', 'playwright-performance', 'lint',
+    'losat-cache-browser-acceptance'
+  ]);
+  const needs = needsFor(merged);
+  assert.equal(needs['playwright-functional'].result, 'skipped');
+  assert.equal(validate(merged, needs).ok, true);
+  assert.throws(() => validate(merged, { ...needs, core: { result: 'skipped' } }),
+    { code: 'REQUIRED_JOB_NOT_SUCCESSFUL' });
+  assert.throws(() => validate(merged, { ...needs, gallery: { result: 'failure' } }),
+    { code: 'UNREQUIRED_JOB_FAILED' });
+});

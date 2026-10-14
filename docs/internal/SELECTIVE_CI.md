@@ -82,8 +82,8 @@ selective and the full decision, so an evidence fallback or the
 `architecture-change` label keeps it whenever one of those capabilities is
 present. Other full-tier routes do not run it before merge: `ci-only`,
 `packaging`, and fallbacks of `metadata`, `python-core`, or `renderer` plans.
-Integrated `dev` staging runs it on every push that does not inherit parent
-evidence. On pull requests it is the same job, shard matrix, and command
+Integrated `dev` staging runs it on every push that inherits neither parent
+evidence nor the evidence of the pull request it merges. On pull requests it is the same job, shard matrix, and command
 as in `dev` staging.
 
 `web-contracts-pr` groups the existing fast JS contracts and non-slow Python
@@ -129,7 +129,10 @@ Every runtime/subsystem change runs complete integrated dev and Gallery coverage
 A `dev` push that leaves the tree unchanged, or changes only metadata,
 documentation, policy documentation, and leaf tests, inherits its direct parent's
 evidence and runs only the jobs it needs
-([Light-change inheritance](#light-change-inheritance)).
+([Light-change inheritance](#light-change-inheritance)). A `dev` push that merges
+a pull request whose green run tested the same tree inherits the jobs that run
+ran with the dev-tier command
+([Merged pull request inheritance](#merged-pull-request-inheritance)).
 
 A later `dev` push does not cancel a running `Tests` or `Gallery publication`
 run. For each workflow, one run executes, the newest later push waits, and
@@ -245,6 +248,56 @@ leaf-test change always inherits it.
 Tests marked `slow` run only in the release tier, except the packaging checks
 that `browser` runs from `tests/test_web_packaging.py`, so a leaf-test push does
 not run them on `dev`.
+
+### Merged pull request inheritance
+
+With merge commits and no up-to-date requirement on `dev`, a pull request run
+often tests the exact tree that its merge commit later pushes to `dev`: in 26
+of 59 merges between 2026-10-11 and 2026-10-14, the last green run started
+after `dev` reached the merge commit's first parent. The `dev` run then inherits
+that run's evidence for the jobs both tiers run with the same command:
+
+| `Tests` job on `dev` | Why the pull request job is the same |
+| --- | --- |
+| `recipes-standard`, `lint` | Same steps on both events |
+| `gallery` | Same pytest step; the pull request job may add the Gallery parity steps |
+| `playwright-functional` | Same eight shard lists; a pull request plan has no leaf tests, so each shard runs its whole list |
+
+The other dev jobs always run: `core` (three Python versions; pull requests
+run `core-pr` on 3.11), `browser`, `playwright-performance`,
+`losat-cache-browser-acceptance`, and `web-change-budget` (it checks the
+`dev` push range in its integrated mode, not the pull request range). A job
+is inherited only when the pull request capabilities of the change select it,
+so the plan's required jobs follow from its capabilities
+(`pullRequestEvidenceJobsFor` in `tools/ci-impact-policy.mjs`). The basis is
+`IDENTICAL_TREE_WITH_PR_EVIDENCE`; its inherited evidence names the pull
+request run, its `PR / gate` job, and the pull request head.
+
+The `CI impact plan` job of every pull request run uploads an artifact named
+`ci-impact-pr-plan.<tree>` followed by `.<job ID>` for each planned job, where
+`<tree>` is the tree of the merge commit the run tested. The `dev` planner reads it through
+the Actions REST API with `actions: read`, and inherits only when all of these
+hold:
+
+1. The `dev` profile classifies the push as a full change with no control-plane
+   (`ci-only`) path, and the change selects at least one inheritable job.
+   Lighter pushes keep the direct-parent routes above.
+2. The push is one merge commit whose first parent is `github.event.before`.
+   Its second parent is the pull request head.
+3. The newest `Tests` `pull_request` run for that head comes from the same
+   repository, completed successfully, and its current attempt has a
+   successful `PR / gate`
+   (`verifyWorkflowEvidence` in `tools/check-promotion-readiness.mjs`).
+4. The run has exactly one record for the merge commit's tree, and that record
+   lists every inherited job.
+
+Otherwise the plan stays `FULL_CHANGE` and its summary names the missing
+evidence (`NOT_A_PULL_REQUEST_MERGE`, `TESTED_TREE_NOT_RECORDED`,
+`PULL_REQUEST_JOBS_NOT_PLANNED`, or the verifier's code). This covers a fork,
+a later head push that was not tested, a run that failed or is still running,
+a re-run that is in progress or planned differently, a tree that changed because
+`dev` moved, and unreadable evidence. `Gallery publication` keeps its own
+routes: a pull request run does not execute its jobs.
 
 ### Carrying evidence to a later commit
 
@@ -377,7 +430,8 @@ A release dispatch cannot emit ordinary `Dev staging / gate` success.
 Plans use schema 3 and include the capability union. A leaf-test plan also lists
 each changed leaf test with its kind and jobs (`leafTests`; `null` in every other
 plan), and an identical-tree plan has the single capability `none` and no changed
-path. The active helper validates
+path. A merged pull request plan names a pull request run as its evidence. The
+active helper validates
 its own exact schema, profile, workflow SHA, required job list, and inherited
 evidence. It rejects missing/skipped/failed/cancelled required jobs and unexpected
 failures in optional/additional jobs. Matrix aggregates must succeed. Workflows
