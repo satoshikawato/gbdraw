@@ -1050,12 +1050,18 @@ def matrix_variants(
     first_variant_only: bool = False,
     include_slow: bool = True,
 ) -> list[tuple[OptionSpec, Variant]]:
-    """The variants of the selected options of a case, in universe order, without ``LABEL_FIT_FAILURES``."""
+    """The variants of the selected options of a case, without ``LABEL_FIT_FAILURES``.
 
+    They come in universe order, or in the order of ``option_ids``: the cache
+    keeps only what the previous request used, so a chain names the step a
+    later step reuses right before it.
+    """
+
+    options = options_for(case)
+    if option_ids is not None:
+        options = tuple(option for option_id in option_ids for option in options if option.option_id == option_id)
     selected: list[tuple[OptionSpec, Variant]] = []
-    for option in options_for(case):
-        if option_ids is not None and option.option_id not in option_ids:
-            continue
+    for option in options:
         variants = [
             variant
             for variant in option.variants

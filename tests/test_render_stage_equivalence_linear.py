@@ -58,9 +58,14 @@ pytestmark = pytest.mark.linear
 _BASE = ("--show_labels", "all", "--gc", "--skew", "-l", "right")
 
 # Chains: one variant per option on L1, named options on L2; the first variant of each.
+# ``pairwise_match_style`` reuses the comparison rows the step before it stored
+# and draws the ribbons again from them, so a write into a stored frame shows.
 _CHAINS = {
     "L1-fast": ("L1", None),
-    "L2-named": ("L2", ("share_depth_axis", "evalue", "region (per record)", "reverse_complement (per file)")),
+    "L2-named": (
+        "L2",
+        ("share_depth_axis", "pairwise_match_style", "evalue", "region (per record)", "reverse_complement (per file)"),
+    ),
 }
 # The full universe of each case, in chunks within the time budget (``cost_chunks``).
 _FULL_CHUNKS = full_chain_chunks(("L1", "L2", "L3"))
