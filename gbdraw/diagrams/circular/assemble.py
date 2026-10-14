@@ -69,7 +69,7 @@ from ...labels.circular import (
 )
 from ...labels.circular_fit import CircularLabelLayout
 from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
-from ...labels.circular_types import CircularLabel
+from ...labels.circular_types import CircularLabel, CircularLabelCandidate, CircularLabelCandidateCache
 from ...labels.fit import FITS, LabelFit, LabelFitValue, LabelKind
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
@@ -1959,7 +1959,7 @@ def _place_circular_labels(
     label_profile: CircularRenderProfile,
     *,
     probe: bool = False,
-    candidate_caches: dict[float, dict[str, object]],
+    candidate_caches: dict[float, CircularLabelCandidateCache],
 ) -> list[CircularLabel]:
     """Place one record's labels with ``label_profile`` and the geometry of ``state``."""
 
@@ -2012,7 +2012,7 @@ class CircularLabelPlacement:
     feature_slot: CircularTrackSlot | None
     radial_refused: bool
     # Text measurements per label font size, for the fit probes.
-    label_candidates: tuple[tuple[float, object], ...]
+    label_candidates: tuple[tuple[float, tuple[CircularLabelCandidate, ...]], ...]
 
 
 def circular_labels(
@@ -2047,7 +2047,7 @@ def circular_labels(
     """
 
     cfg = profile.config
-    candidate_caches: dict[float, dict[str, object]] = {}
+    candidate_caches: dict[float, CircularLabelCandidateCache] = {}
 
     def state() -> _CircularLabelState:
         return _CircularLabelState(
@@ -2503,7 +2503,7 @@ def add_record_on_circular_canvas(
     radial_refused = False
     label_state: _CircularLabelState | None = None
     # Text measurements per label font size, shared by the drawn placement and fit probes.
-    label_candidate_caches: dict[float, dict[str, object]] = {}
+    label_candidate_caches: dict[float, CircularLabelCandidateCache] = {}
     if show_external_labels:
         placement = render_stage(
             "circular_radial_labels" if profile.label_placement == "radial" else "circular_labels",

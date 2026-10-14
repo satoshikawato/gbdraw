@@ -1099,6 +1099,23 @@ def test_a_request_without_a_record_stage_skips_the_walk_and_the_next_record_sta
     assert _metrics(diagnostics)["preparedInputCacheMutationViolationCount"] == 1
 
 
+def test_a_request_that_builds_a_record_entry_checks_it_in_full_without_a_record_stage(
+    tmp_path: Path,
+) -> None:
+    """O-2 (D-07): a new entry that holds records is walked at its commit, with no stage run."""
+
+    cache, path, identity = _parsed_source_cache(tmp_path, {})
+    diagnostics: dict[str, object] = {"metrics": {}}
+    with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+        get_or_build_parsed_source(
+            ("source", identity),
+            frozenset({identity}),
+            lambda: (_record("built"),),
+        )
+    assert _metrics(diagnostics)["preparedInputCacheFullCheckCount"] == 1
+    assert _metrics(diagnostics).get("renderStageBuildCount", 0) == 0
+
+
 def test_an_uncacheable_stage_checks_owners_in_full(tmp_path: Path) -> None:
     """A stage without a key may take a record without an identity: the commit walks."""
 

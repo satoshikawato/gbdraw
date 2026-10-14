@@ -333,6 +333,20 @@ def test_short_tuckin_separate_strands_default_tracks_do_not_overlap() -> None:
     assert not _annulus_overlaps_band(gc_annulus, skew_annulus)
 
 
+def _capture_label_arenas(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, Any]]:
+    """Record the outer arena and feature ratio of every label placement."""
+
+    calls: list[tuple[Any, Any]] = []
+    original = circular_assemble_module.prepare_label_list
+
+    def capture(*args: Any, **kwargs: Any) -> Any:
+        calls.append((kwargs.get("outer_arena"), kwargs.get("feature_track_ratio_factor_override")))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(circular_assemble_module, "prepare_label_list", capture)
+    return calls
+
+
 def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     record = _load_record()
     config_dict = _make_config_dict(show_labels=True)
@@ -340,7 +354,6 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
     captured: dict[str, Any] = {}
 
     def fake_add_axis_group_on_canvas(canvas, canvas_config, **_kwargs):
-        captured["axis_radius"] = _kwargs.get("radius_override")
         return _add_mock_primary_group(canvas)
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
@@ -380,6 +393,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", fake_add_labels_group_on_canvas)
+    label_calls = _capture_label_arenas(monkeypatch)
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
     monkeypatch.setattr(
         circular_assemble_module,
@@ -401,11 +415,16 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
     )
 
     assert captured["record_feature_ratio"] is not None
-    assert captured["axis_radius"] is None
     assert captured["ticks_radius"] is not None
     assert captured["gc_norm"] is not None
     assert captured["skew_norm"] is not None
     assert captured["labels_drawn"]
+    # A feature-width slot places the labels with its ratio in an outer arena.
+    assert label_calls
+    for outer_arena, feature_ratio in label_calls:
+        assert outer_arena is not None
+        assert float(outer_arena[1]) > float(outer_arena[0])
+        assert feature_ratio is not None
 
 
 def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -416,7 +435,6 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
     captured: dict[str, Any] = {}
 
     def fake_add_axis_group_on_canvas(canvas, canvas_config, **_kwargs):
-        captured["axis_radius"] = _kwargs.get("radius_override")
         return _add_mock_primary_group(canvas)
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
@@ -441,6 +459,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", fake_add_labels_group_on_canvas)
+    label_calls = _capture_label_arenas(monkeypatch)
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda *args, **kwargs: args[0])
     monkeypatch.setattr(
         circular_assemble_module,
@@ -466,7 +485,6 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         ],
     )
 
-    assert captured["axis_radius"] is None
     assert math.isclose(float(captured["ticks_radius"]), 1.25 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
     assert math.isclose(float(captured["gc_norm"]), 0.56, rel_tol=1e-6, abs_tol=1e-6)
     assert math.isclose(float(captured["skew_norm"]), 0.48, rel_tol=1e-6, abs_tol=1e-6)
@@ -474,6 +492,9 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
     assert math.isclose(float(captured["skew_width"]), 18.0, rel_tol=1e-6, abs_tol=1e-6)
 
     assert captured["labels_drawn"]
+    # The explicit feature width still gives the labels an outer arena.
+    assert label_calls
+    assert all(outer_arena is not None for outer_arena, _ratio in label_calls)
 
 
 def test_feature_slot_width_ratio_ignores_radius() -> None:
@@ -1012,7 +1033,6 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
     captured: dict[str, Any] = {}
 
     def fake_add_axis_group_on_canvas(canvas, canvas_config, **_kwargs):
-        captured["axis"] = _kwargs.get("radius_override")
         return _add_mock_primary_group(canvas)
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
@@ -1515,7 +1535,6 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
         captured: dict[str, Any] = {}
 
         def fake_add_axis_group_on_canvas(canvas, canvas_config, **_kwargs):
-            captured["axis"] = _kwargs.get("radius_override")
             return _add_mock_primary_group(canvas)
 
         def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
@@ -1579,8 +1598,6 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
     on = captured_by_show[True]
     assert "labels_drawn" not in off
     assert on["labels_drawn"]
-    assert off["axis"] is None
-    assert on["axis"] is None
     for key in ("ticks", "gc_norm", "skew_norm"):
         if key in off and key in on:
             assert math.isclose(float(off[key]), float(on[key]), rel_tol=1e-9, abs_tol=1e-9)
