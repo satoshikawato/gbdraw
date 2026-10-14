@@ -29,6 +29,10 @@ const savedDocument = async title => {
   return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
 };
 
+// These files are refused before the Load dialog; a dialog would cancel the
+// Load and fail the check.
+const refuseLoadDialog = async () => false;
+
 test('OV-591: a settings-only Session 46 needs form and adv in the settings of its mode, as Python requires', async () => {
   // gbdraw/session_io.py `_validate_settings_only_session`: "requires an active Web configuration and mode".
   const fresh = await savedDocument('settings of its mode');
@@ -42,7 +46,7 @@ test('OV-591: a settings-only Session 46 needs form and adv in the settings of i
     assert.throws(() => adoptCurrentSessionDocument(structuredClone(document), SESSION_VERSION), /settings of its mode/, name);
     const loaded = await importSession({
       target: { files: [new Blob([JSON.stringify(document)], { type: 'application/json' })], value: 'selected' }
-    });
+    }, { confirmLoadRepairs: refuseLoadDialog });
     assert.equal(loaded.status, 'error', name);
   }
   // The other mode's slice may hold less: Load fills it with that mode's defaults.
@@ -162,7 +166,7 @@ test('writer and current admission reject invalid scalar drafts without altering
     const invalidBefore = structuredClone(invalid);
     const loaded = await importSession({
       target: { files: [new Blob([JSON.stringify(invalid)], { type: 'application/json' })], value: 'selected' }
-    });
+    }, { confirmLoadRepairs: refuseLoadDialog });
     assert.equal(loaded.status, 'error', text);
     assert.deepEqual(invalid, invalidBefore);
     // A rejected Load leaves the drawing as it was.

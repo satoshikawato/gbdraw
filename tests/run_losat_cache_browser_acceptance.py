@@ -344,9 +344,14 @@ def _run_node_adapter(node: str, cli: str) -> int:
 
 def _import_session(page: Any, path: Path, checks: AcceptanceChecks) -> None:
     page.locator('input[accept^=".json,"]').first.set_input_files(str(path))
-    page.locator("[data-app-notice]").filter(has_text="Session loaded").wait_for(
-        state="visible", timeout=120_000
-    )
+    # The fixture loads without a repair: a Load repair dialog (BA-D25) is a
+    # failure, reported with its lines, not a wait that times out.
+    loaded = page.locator("[data-app-notice]").filter(has_text="Session loaded")
+    repairs = page.locator("[data-choice-prompt]").filter(has_text="Load this file?")
+    loaded.or_(repairs).first.wait_for(state="visible", timeout=120_000)
+    if repairs.count():
+        checks.require(False, f"Load asked about repairs: {repairs.locator('li').all_inner_texts()!r}")
+        return
     checks.require(
         page.locator("[data-app-notice] li").count() == 0,
         f"Import notice carried warnings: {page.locator('[data-app-notice]').inner_text()!r}",
