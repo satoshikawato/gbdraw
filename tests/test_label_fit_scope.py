@@ -11,11 +11,24 @@ import warnings
 from pathlib import Path
 
 import pytest
+from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, SimpleLocation
+from Bio.SeqRecord import SeqRecord
 
+import gbdraw.diagrams.circular.assemble as circular_assemble_module
+import gbdraw.diagrams.circular.builders as circular_builders_module
 import gbdraw.labels.circular_fit as circular_fit_module
 import gbdraw.labels.circular_repair as circular_repair_module
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.options import CircularDiagramOptions
+from gbdraw.api.request_render import plan_request
+from gbdraw.api.requests import CircularDiagramRequest, InMemoryRecordSource, RecordInput, RecordPresentation
+from gbdraw.canvas import CircularCanvasConfigurator
 from gbdraw.circular import circular_main
 from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
+from gbdraw.layout.spatial import Aabb
+from gbdraw.render.groups.circular import DefinitionGroup
+from gbdraw.svg.elements import Group
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
 FONT_SIZE_PATHS = ("labels.font_size.short", "labels.font_size.long")
@@ -132,3 +145,50 @@ def test_crossing_inner_leaders_alone_draw_and_warn(tmp_path: Path) -> None:
     (warning,) = [item.message for item in caught if isinstance(item.message, LabelLeadersCrossWarning)]
     inner = [record for record in warning.report.records if record.label_kind == "circular_inner"]
     assert inner and inner[0].fit.overlap_pairs == 0 and inner[0].fit.crossing_pairs > 0
+
+
+@pytest.mark.circular
+def test_the_fit_check_measures_the_drawn_definition_of_a_record_with_a_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OV-707: the definition text the check and the repair measure carries the record label, as drawn."""
+
+    measured: list[Aabb] = []
+    drawn: list[Aabb] = []
+    centre_definition_text = circular_assemble_module._centre_definition_text
+    place_definition_group = circular_builders_module.place_definition_group_on_canvas
+
+    def measure(definition: DefinitionGroup) -> tuple[Aabb, ...]:
+        measured.append(definition.local_bounds)
+        return centre_definition_text(definition)
+
+    def place(group: Group, canvas_config: CircularCanvasConfigurator, *, position: str) -> Group:
+        drawn.append(getattr(group, "_gbdraw_local_bounds"))
+        return place_definition_group(group, canvas_config, position=position)
+
+    monkeypatch.setattr(circular_assemble_module, "_centre_definition_text", measure)
+    monkeypatch.setattr(circular_builders_module, "place_definition_group_on_canvas", place)
+    record = SeqRecord(
+        Seq("AAAACCGTGG" * 1000),
+        id="labelled",
+        annotations={"topology": "circular", "molecule_type": "DNA"},
+    )
+    record.features = [
+        SeqFeature(SimpleLocation(2000, 3000, strand=1), type="CDS", qualifiers={"product": ["anchor enzyme"]})
+    ]
+    config = apply_config_overrides(
+        None, {"labels.circular.scope": "outer", "canvas.show_gc": False, "canvas.show_skew": False}
+    )
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                InMemoryRecordSource(record),
+                presentation=RecordPresentation(label="A record label wider than the accession line"),
+            ),
+        ),
+        options=CircularDiagramOptions(config=config),
+    )
+
+    plan_request(request).build()
+
+    assert measured and measured == drawn

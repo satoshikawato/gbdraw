@@ -2308,6 +2308,7 @@ def add_record_on_circular_canvas(
                 record_count=int(definition_record_count),
                 record_transform=record_transform,
                 species_line_count=species_line_count,
+                record_presentation=record_presentation,
             )
         )
         if show_external_labels
