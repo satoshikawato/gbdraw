@@ -2075,9 +2075,11 @@ def assemble_linear_diagram_from_records(
         resolved_collinearity_result = collinearity_result
         if collinearity_result.orthogroups is not None:
             resolved_orthogroups = collinearity_result.orthogroups
-        resolved_protein_frames = project_collinearity_frames(
+        resolved_protein_frames = render_stage(
+            "collinearity_projection",
+            project_collinearity_frames,
             collinearity_result,
-            records,
+            tuple(records),
             color_mode=normalized_collinearity_color_mode,
             search_scope=normalized_collinearity_search_scope,
             comparison_pairs=collinearity_comparison_pairs,

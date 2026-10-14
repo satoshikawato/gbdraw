@@ -8,6 +8,7 @@ LOSAT entries are the same on a build, on a hit and without a transaction.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -25,7 +26,11 @@ from gbdraw.analysis.protein_colinearity import (
     parse_losatp_outfmt6,
 )
 from gbdraw.api.options import LinearDiagramOptions, LosatSearchOptions
-from gbdraw.api.prepared import PreparedBiologicalInputCache, PreparedResourceIdentity
+from gbdraw.api.prepared import (
+    PreparedBiologicalInputCache,
+    PreparedResourceIdentity,
+    register_prepared_resource_value,
+)
 from gbdraw.api.request_render import CurrentRequestArtifacts, build_request_diagram
 from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordInput
 
@@ -155,6 +160,49 @@ def test_a_repeat_render_reuses_the_protein_analysis_and_its_display_marks(
     assert any(entry["display"] for entry in expected.losat_cache_entries)
     assert _reply(cold) == _reply(expected)
     assert _reply(warm) == _reply(expected)
+
+
+def test_a_stored_collinearity_result_reuses_its_projection_and_the_comparison_stages(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A Session's stored blocks are projected by one stage keyed by their resource."""
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
+    request, identities = _request("collinear", tmp_path)
+    searched, _ = _render(request, None)
+    assert searched.linear_metadata is not None
+    stored = searched.linear_metadata.collinearity_result
+    assert stored is not None
+    given = replace(request, options=replace(request.options, losat_search=None, collinearity_blocks=stored))
+    blocks_path = tmp_path / "blocks.json"
+    blocks_path.write_text("stored blocks", encoding="utf-8")
+    identities = {**identities, blocks_path: PreparedResourceIdentity("blocks", "token-blocks", 13)}
+    cache = PreparedBiologicalInputCache()
+
+    def render() -> tuple[object, dict]:
+        diagnostics: dict[str, object] = {"metrics": {}}
+        with cache.transaction(resource_paths=identities, diagnostics=diagnostics):
+            # As the Session decoder registers a decoded collinearity result.
+            register_prepared_resource_value(stored, blocks_path)
+            prepared = build_request_diagram(given)
+        metrics = diagnostics["metrics"]
+        assert isinstance(metrics, dict)
+        return prepared, metrics
+
+    cold, cold_metrics = render()
+    warm, warm_metrics = render()
+
+    assert cold_metrics["renderStageBuild:collinearity_projection"] == 1
+    assert warm_metrics["renderStageHit:collinearity_projection"] == 1
+    assert warm_metrics["renderStageHit:comparison_rows"] == 1
+    assert warm_metrics["renderStageHit:comparison_content"] >= 1
+    assert not {name for name in warm_metrics if name.startswith("renderStageBuild:")}
+    for metrics in (cold_metrics, warm_metrics):
+        assert metrics.get("renderStageUncacheableCount", 0) == 0
+    expected = build_request_diagram(given).drawing.tostring()
+    assert cold.drawing.tostring() == expected
+    assert warm.drawing.tostring() == expected
 
 
 def _records_and_extraction():
