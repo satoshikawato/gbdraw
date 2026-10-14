@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,6 +12,8 @@ await mkdir(join(tempDir, 'services'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n');
 await writeFile(tempModulePath, await readFile(sourceUrl, 'utf8'));
 await writeFile(join(tempDir, 'services', 'track-slot-display.js'), await readFile(displaySourceUrl, 'utf8'));
+// The series reader reads colors and numbers with the shared leaves.
+await cp(new URL('../../gbdraw/web/js/utils', import.meta.url), join(tempDir, 'utils'), { recursive: true });
 // track-slot-display.js reads the generated size-class boundaries.
 await writeFile(
   join(tempDir, 'mode-profiles.generated.js'),
@@ -31,6 +33,8 @@ const {
   dropInvalidManagedDepthSlots,
   isRecordMajorDepthFileMatrix,
   normalizeDepthTrackConfig,
+  readDepthTrackConfig,
+  readDepthTracks,
   normalizeRecordMajorDepthFileRows,
   padDepthFileSlots,
   representativeDepthFiles,
@@ -56,6 +60,19 @@ const depthIndexes = (slots) => slots
     25,
     'fresh depth-track normalization must not read the obsolete tick_interval field'
   );
+}
+
+{
+  // One reader for a stored series and a new one: a color name reads as its
+  // hex, and a value it cannot use is a loss (B45).
+  assert.deepEqual(readDepthTrackConfig({ label: 'A', color: 'red', height: -1 }, 1), {
+    value: { label: 'A', color: '#FF0000', height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null },
+    lost: true
+  });
+  // A drawing's single-series settings belong to its first series; every series takes the height.
+  const legacy = { depth_color: '#111111', depth_height: 30, depth_large_tick_interval: 100 };
+  assert.deepEqual(readDepthTracks([{}, {}], legacy).value.map(({ color, height, large_tick_interval }) => [color, height, large_tick_interval]),
+    [['#111111', 30, 100], ['#E45756', 30, null]]);
 }
 
 {
@@ -147,7 +164,7 @@ const depthIndexes = (slots) => slots
     targetCount: 2
   });
 
-  assert.deepEqual(labels(reconciled), ['24 hpi SRR14027705)', '6 hpi (SRR14027721)']);
+  assert.deepEqual(labels(reconciled.tracks), ['24 hpi SRR14027705)', '6 hpi (SRR14027721)']);
 }
 
 console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);

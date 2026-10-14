@@ -1,7 +1,9 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, loadRepair } from '../utils/load-repairs.js';
-import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
+import {
+  state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList, createDefaultAdv, createDefaultForm
+} from '../state.js';
 import { normalizeDefaultColor, normalizeOptionalHexColor, normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
 import {
   captureRightDrawerState,
@@ -30,22 +32,13 @@ import {
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
 } from './linear-track-slot-model.js';
-import {
-  depthFileSlotsFromValue,
-  depthTrackMatrixWidth,
-  depthTrackSessionWidth,
-  dropInvalidManagedDepthSlots,
-  padDepthFileSlots,
-  reconcileDepthTracksToFiles,
-  representativeDepthFiles,
-  syncDepthSlotLabels
-} from './depth-track-state.js';
+import { depthFileSlotsFromValue, fitDepthStateToSources, padDepthFileSlots } from './depth-track-state.js';
 import {
   decodeDepthText,
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 import {
-  applyConfigFieldRows, configFieldRepairs, losatExecutionRepairs, readDepthTrack, readDepthTracks, readImportedComparisonAction, readLinearRecordGap,
+  applyConfigFieldRows, configFieldRepairs, losatExecutionRepairs, readImportedComparisonAction, readLinearRecordGap,
   readLinearRecordLayoutEnabled, readLinearRecordRows, readFeaturePanelTab, readLosatProgram, readSessionUiMode,
   sessionUiFieldRepairs, LOSAT_EXECUTION_ROWS
 } from './config-field-readers.js';
@@ -302,6 +295,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { GbdrawSession, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { DepthFileSlots } from './depth-track-state.js' */
 
 /** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
 
@@ -2454,6 +2448,33 @@ export const applyLabelFitValues = (drawing, values, mode) => {
   adv.forEach(([field, value]) => LABEL_FIT_ADV_WRITERS[field](drawing.adv, value));
 };
 
+// The track stacks a drawing's settings resolve to: each stack with its
+// axis index read and its placements applied (`applyConfigData`'s
+// `resolveTrackPlacements`). Pure: Load reads the stacks it installs with it
+// before the commit.
+/**
+ * @param {DrawingState['adv']} adv The drawing's settings, read.
+ * @param {DrawingState['form']} form
+ */
+const resolvedTrackStacks = (adv, form) => {
+  const normalizedSlots = normalizeCircularTrackSlots(adv.circular_track_slots, adv.nt, form.track_type);
+  const importedAxis = clampCircularTrackAxisIndex(adv.circular_track_slots_axis_index, normalizedSlots.length);
+  const circularAxis = importedAxis === null
+    ? inferLegacyAxisIndexFromFeature(normalizedSlots, form.track_type)
+    : importedAxis;
+  const normalizedLinearSlots = normalizeLinearTrackSlots(adv.linear_track_slots, adv.nt, form.linear_track_layout);
+  const linearAxis = resolveLinearTrackAxisIndex(
+    normalizedLinearSlots,
+    clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length)
+  );
+  return {
+    circularAxis,
+    circularSlots: applyCircularTrackOrderPlacements(adv.circular_track_slots, adv.nt, form.track_type, circularAxis),
+    linearAxis,
+    linearSlots: applyLinearTrackOrderPlacements(normalizedLinearSlots, linearAxis, adv.nt, form.linear_track_layout)
+  };
+};
+
 // Captured or stored settings (History Undo and Redo, the failed Session Load
 // rollback, a settings-only Session) pass `resolveTrackPlacements: false`: the
 // track stacks are installed as given, so unset slot sides, lane directions,
@@ -2543,57 +2564,13 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   drawing.adv.circular_track_slots_schema_version = CIRCULAR_TRACK_SLOT_SCHEMA_VERSION;
   drawing.adv.circular_track_slots_enabled = drawing.adv.circular_track_slots_enabled === true;
   if (resolveTrackPlacements) {
-    {
-      const normalizedSlots = normalizeCircularTrackSlots(
-        drawing.adv.circular_track_slots,
-        drawing.adv.nt,
-        drawing.form.track_type
-      );
-      const importedAxis = clampCircularTrackAxisIndex(
-        drawing.adv.circular_track_slots_axis_index,
-        normalizedSlots.length
-      );
-      drawing.adv.circular_track_slots_axis_index = importedAxis === null
-        ? inferLegacyAxisIndexFromFeature(normalizedSlots, drawing.form.track_type)
-        : importedAxis;
-    }
-    drawing.adv.circular_track_slots.splice(
-      0,
-      drawing.adv.circular_track_slots.length,
-      ...applyCircularTrackOrderPlacements(
-        drawing.adv.circular_track_slots,
-        drawing.adv.nt,
-        drawing.form.track_type,
-        drawing.adv.circular_track_slots_axis_index
-      )
-    );
+    const stacks = resolvedTrackStacks(drawing.adv, drawing.form);
+    drawing.adv.circular_track_slots_axis_index = stacks.circularAxis;
+    drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...stacks.circularSlots);
     drawing.adv.linear_track_slots_schema_version = LINEAR_TRACK_SLOT_SCHEMA_VERSION;
     drawing.adv.linear_track_slots_enabled = drawing.adv.linear_track_slots_enabled === true;
-    {
-      const normalizedLinearSlots = normalizeLinearTrackSlots(
-        drawing.adv.linear_track_slots,
-        drawing.adv.nt,
-        drawing.form.linear_track_layout
-      );
-      drawing.adv.linear_track_slots_axis_index = clampLinearTrackAxisIndex(
-        drawing.adv.linear_track_slots_axis_index,
-        normalizedLinearSlots.length
-      );
-      drawing.adv.linear_track_slots_axis_index = resolveLinearTrackAxisIndex(
-        normalizedLinearSlots,
-        drawing.adv.linear_track_slots_axis_index
-      );
-      drawing.adv.linear_track_slots.splice(
-        0,
-        drawing.adv.linear_track_slots.length,
-        ...applyLinearTrackOrderPlacements(
-          normalizedLinearSlots,
-          drawing.adv.linear_track_slots_axis_index,
-          drawing.adv.nt,
-          drawing.form.linear_track_layout
-        )
-      );
-    }
+    drawing.adv.linear_track_slots_axis_index = stacks.linearAxis;
+    drawing.adv.linear_track_slots.splice(0, drawing.adv.linear_track_slots.length, ...stacks.linearSlots);
   } else {
     // The merge installs the caller's slot objects; copy them so a later edit
     // never writes into a History entry or another caller-owned snapshot.
@@ -3884,96 +3861,82 @@ const applyFiles = (filesData, {
   return { collapsedLinearSeqs: false };
 };
 
+// What the Depth fit of a loaded drawing drops (B45), read before the commit
+// from the settings `applyModeSliceData` installs and the candidate's Depth
+// files: the series and rows of the values the file holds. Only the drawing's
+// own mode's stack is listed; the drawing never draws the other.
+/**
+ * @param {'circular' | 'linear'} mode
+ * @param {Record<string, unknown>} config The drawing's draft, as Load installs it.
+ * @param {unknown} storedAdv The `adv` the file holds of it.
+ * @param {{ at: string, resolveTrackPlacements: boolean, circularFiles: DepthFileSlots | DepthFileSlots[],
+ *   linearRows: (FileLike | null)[][] }} options `at`: where `adv` is in the file.
+ * @returns {LoadRepair[]}
+ */
+const depthFitRepairs = (mode, config, storedAdv, { at, resolveTrackPlacements, circularFiles, linearRows }) => {
+  if (!isPlainObject(storedAdv)) return [];
+  const stored = /** @type {Record<string, unknown>} */ (storedAdv);
+  const installed = overlayModeSliceConfig(null, config);
+  // The merge and the readers `applyConfigData` installs the draft with, on
+  // private copies (no drawing's input is written).
+  const installedAdv = createDefaultAdv(mode);
+  safeDeepMerge(installedAdv, installed.adv);
+  applyConfigFieldRows(installedAdv, 'adv');
+  const installedForm = createDefaultForm();
+  safeDeepMerge(installedForm, installed.form);
+  const stacks = resolveTrackPlacements ? resolvedTrackStacks(installedAdv, installedForm) : null;
+  const fit = fitDepthStateToSources({
+    mode,
+    adv: stacks ? { ...installedAdv, circular_track_slots: stacks.circularSlots, linear_track_slots: stacks.linearSlots } : installedAdv,
+    circularFiles,
+    linearRows
+  });
+  const ownStack = mode === 'linear' ? 'linear_track_slots' : 'circular_track_slots';
+  return [
+    ...(Object.hasOwn(stored, 'depth_tracks') ? fit.droppedSeries.map(({ index, label }) => loadRepair({
+      code: 'depth-series-dropped', path: `${at}.depth_tracks[${index}]`, effect: 'dropped', label
+    })) : []),
+    ...(Object.hasOwn(stored, ownStack) ? fit.disabledRows.filter(({ list }) => list === mode).map(({ id }) => loadRepair({
+      code: 'depth-row-disabled', path: `${at}.${ownStack}`, effect: 'changed', label: id
+    })) : [])
+  ];
+};
+
 // A loaded drawing's Depth series fit its own mode's Depth sources (plan 4.2
-// `depth`): each drawing runs this once with its mode.
+// `depth`): each drawing runs this once with its mode. Load listed what the
+// fit drops before the commit (`depthFitRepairs`).
 /**
  * @param {DrawingState} drawing
  * @param {'circular' | 'linear'} mode
  */
 const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode) => {
-  const circularDepthFiles = representativeDepthFiles(state.files.c_depth);
-  const circularDepthCount = circularDepthFiles.some(Boolean) ? circularDepthFiles.length : 0;
-  const linearRows = state.linearSeqs.map((/** @type {LinearSeq} */ seq) => depthFileSlotsFromValue(seq.depth));
-  const linearDepthCount = mode === 'linear'
-    ? depthTrackSessionWidth({
-        rows: linearRows,
-        depthTracks: drawing.adv.depth_tracks,
-        slots: drawing.adv.linear_track_slots
-      })
-    : depthTrackMatrixWidth(linearRows);
-  // Rows are padded to the series count only when one holds a Depth file, as
-  // Circular counts its series, so rows without a file load as saved (OV-337).
-  if (mode === 'linear' && linearDepthCount > 0 && linearRows.some((row) => row.some(Boolean))) {
+  const fit = fitDepthStateToSources({
+    mode,
+    adv: drawing.adv,
+    circularFiles: state.files.c_depth,
+    linearRows: state.linearSeqs.map((/** @type {LinearSeq} */ seq) => depthFileSlotsFromValue(seq.depth))
+  });
+  if (fit.linearRowWidth) {
     state.linearSeqs.forEach((/** @type {LinearSeq} */ seq) => {
-      seq.depth = padDepthFileSlots(seq.depth, linearDepthCount);
+      seq.depth = padDepthFileSlots(seq.depth, fit.linearRowWidth);
     });
   }
-
-  const defaults = {
-    depthColor: drawing.adv.depth_color,
-    depthHeight: drawing.adv.depth_height,
-    largeTickInterval: drawing.adv.depth_large_tick_interval,
-    smallTickInterval: drawing.adv.depth_small_tick_interval,
-    tickFontSize: drawing.adv.depth_tick_font_size
-  };
-  let normalizedTracks;
-  if (mode === 'linear') {
-    normalizedTracks = readDepthTracks(drawing.adv.depth_tracks, drawing.adv).value;
-    while (normalizedTracks.length < Math.max(1, linearDepthCount)) {
-      normalizedTracks.push(readDepthTrack(null, normalizedTracks.length, drawing.adv).value);
-    }
-  } else {
-    normalizedTracks = reconcileDepthTracksToFiles(/** @type {Record<string, any>} */ ({
-      files: circularDepthFiles,
-      depthTracks: drawing.adv.depth_tracks,
-      targetCount: Math.max(1, circularDepthCount),
-      defaults
-    }));
-  }
-  drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...normalizedTracks);
-
-  drawing.adv.circular_track_slots.splice(
-    0,
-    drawing.adv.circular_track_slots.length,
-    ...dropInvalidManagedDepthSlots(/** @type {Record<string, any>} */ ({
-      slots: drawing.adv.circular_track_slots,
-      activeCount: circularDepthCount
-    }))
-  );
-  syncDepthSlotLabels(/** @type {Record<string, any>} */ ({
-    slots: drawing.adv.circular_track_slots,
-    depthTracks: drawing.adv.depth_tracks,
-    activeCount: circularDepthCount
-  }));
+  drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...fit.depthTracks);
   drawing.adv.circular_track_slots.splice(
     0,
     drawing.adv.circular_track_slots.length,
     ...applyCircularTrackOrderPlacements(
-      drawing.adv.circular_track_slots,
+      fit.circularSlots,
       drawing.adv.nt,
       drawing.form.track_type,
       drawing.adv.circular_track_slots_axis_index
     )
   );
-
-  drawing.adv.linear_track_slots.splice(
-    0,
-    drawing.adv.linear_track_slots.length,
-    ...dropInvalidManagedDepthSlots(/** @type {Record<string, any>} */ ({
-      slots: drawing.adv.linear_track_slots,
-      activeCount: linearDepthCount
-    }))
-  );
-  syncDepthSlotLabels(/** @type {Record<string, any>} */ ({
-    slots: drawing.adv.linear_track_slots,
-    depthTracks: drawing.adv.depth_tracks,
-    activeCount: linearDepthCount
-  }));
   drawing.adv.linear_track_slots.splice(
     0,
     drawing.adv.linear_track_slots.length,
     ...applyLinearTrackOrderPlacements(
-      drawing.adv.linear_track_slots,
+      fit.linearSlots,
       drawing.adv.linear_track_slots_axis_index,
       drawing.adv.nt,
       drawing.form.linear_track_layout
@@ -5191,6 +5154,9 @@ const importSessionDocument = async (e, options = {}) => {
     // A Session 46 committed mode with a Result: its slice over its request's
     // projection (`restoredConfig`); any other slice over its mode's defaults.
     const committedSliceProjected = modeScopedSession && canonicalSession && !settingsOnly && Boolean(restoredConfig);
+    // Any other Session 46 slice is stored settings: its track stacks install as saved (R11).
+    /** @param {'circular' | 'linear'} mode */
+    const isStoredSlice = (mode) => modeScopedSession && !(mode === committedDraftMode && committedSliceProjected);
     /** @param {'circular' | 'linear'} mode @returns {Record<string, any> | null} */
     const draftConfigOf = (mode) => (modeScopedSession
       ? (mode === committedDraftMode && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, data.modes?.[mode]?.config))
@@ -5651,6 +5617,18 @@ const importSessionDocument = async (e, options = {}) => {
         });
       }
     }
+    // What each drawing's Depth fit drops (B45): it runs on the restored files.
+    if (!settingsOnly) {
+      const linearRows = candidateFiles.linearSeqs.map((/** @type {LinearSeq} */ seq) => depthFileSlotsFromValue(seq.depth));
+      // `applyFiles` restored the bound Circular Depth slots (by record, or one row).
+      const circularFiles = /** @type {DepthFileSlots | DepthFileSlots[]} */ (/** @type {{ c_depth?: unknown }} */ (candidateFiles.files).c_depth);
+      SLICE_MODES.forEach((mode) => repairs.push(...depthFitRepairs(mode, modeConfigs[mode], modeSlices[mode].config?.adv, {
+        at: `${modeScopedSession ? `modes.${mode}.config` : 'config'}.adv`,
+        resolveTrackPlacements: !isStoredSlice(mode),
+        circularFiles,
+        linearRows
+      })));
+    }
     // The app settings Load reads from `ui` (B36, B43), and a drawing's
     // pending palette, which Instant Preview drops (B44): the drafts apply in
     // SLICE_MODES order, each over the Instant Preview the one before left.
@@ -5817,7 +5795,6 @@ const importSessionDocument = async (e, options = {}) => {
     // slice without its mode's request projection is stored settings: its track
     // stacks install as saved, unset axis indexes included (R11).
     for (const mode of SLICE_MODES) {
-      const storedSlice = modeScopedSession && !(mode === committedDraftMode && committedSliceProjected);
       // The committed mode's slice takes its request's per-feature edits where
       // it has none (OV-220).
       const features = mode === committedDraftMode && canonicalSession && !settingsOnly
@@ -5825,7 +5802,7 @@ const importSessionDocument = async (e, options = {}) => {
       applyModeSliceData(state.drawings[mode], mode, {
         ...modeSlices[mode], ...features, config: modeConfigs[mode], editorState: modeEditorStates[mode]
       }, {
-        resolveTrackPlacements: !settingsOnly && !storedSlice,
+        resolveTrackPlacements: !settingsOnly && !isStoredSlice(mode),
         applyCanvasPadding: mode !== displayMode
       });
     }

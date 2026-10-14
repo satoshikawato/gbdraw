@@ -11,6 +11,8 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  * @typedef {'setting-replaced'
  *   | 'setting-entries-dropped'
  *   | 'pending-palette-dropped'
+ *   | 'depth-series-dropped'
+ *   | 'depth-row-disabled'
  *   | 'orthogroup-edit-dropped'
  *   | 'cache-entry-dropped'
  *   | 'feature-edit-unmatched'
@@ -151,6 +153,10 @@ const WORDING = {
   'pending-palette-dropped': (repairs) => valueLines(repairs, ({ path, label }) => (
     `Palette: the palette "${label ?? ''}" (${path}) waits to be applied, but Instant Preview is on, which applies a palette at once;`
     + ' it was dropped.')),
+  'depth-series-dropped': (repairs) => repairs.map(({ path, label }) => (
+    `Depth: the series "${label ?? ''}" (${path}) has no Depth file; its settings were dropped.`)),
+  'depth-row-disabled': (repairs) => repairs.map(({ path, label }) => (
+    `Track stack: the Depth row "${label ?? ''}" (${path}) shows a Depth series that has no Depth file; it was turned off.`)),
   'legend-position-defaulted': (repairs) => valueLines(repairs, ({ path, stored, used }) => (
     `Legend: the position "${stored}" (${path}) is not one of its mode's positions; `
     + `${used === undefined ? 'it is not used' : `${used} is used`}.`)),

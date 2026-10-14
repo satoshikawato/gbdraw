@@ -5,6 +5,7 @@ import {
   positiveNumberOrNull, textChoice, trueUnlessFalse, truthy
 } from '../utils/field-reading.js';
 import { loadRepair } from '../utils/load-repairs.js';
+import { readDepthTracks } from './depth-track-state.js';
 import { IMPORTED_COMPARISON_ACTIONS } from './imported-comparison-intent.js';
 import { readCircularPlotTitlePosition } from './layout-preferences.js';
 import { readCollinearAnchorMode, readCollinearSearchScope, readOrthogroupMembershipMode } from './losat-normalization.js';
@@ -43,58 +44,6 @@ const row = (field, read) => ({ field, read: (value) => read(value) });
 
 /** @type {FieldRow['read']} */
 const retiredField = (value) => ({ value: undefined, lost: !isUnsetValue(value) });
-
-// A Session's Depth series as Load reads them; unset fields take the legacy
-// single-series settings of `adv`.
-const DEPTH_TRACK_FALLBACK_COLORS = [
-  '#4A90E2', '#E45756', '#2CA02C', '#F28E2B', '#9467BD', '#8C564B', '#17BECF', '#7F7F7F'
-];
-/**
- * @typedef {{ label: string, color: string, height: number | null, large_tick_interval: number | null,
- *   small_tick_interval: number | null, tick_font_size: number | null }} SessionDepthTrack
- */
-/**
- * @param {unknown} entry A saved Depth series, unvalidated.
- * @param {number} index
- * @param {Record<string, unknown>} [legacyAdv]
- * @returns {FieldReading<SessionDepthTrack>}
- */
-export const readDepthTrack = (entry, index, legacyAdv = {}) => {
-  const source = isRecord(entry) ? entry : {};
-  let lost = !isRecord(entry) && !isUnsetValue(entry);
-  /** @param {unknown} value */
-  const positive = (value) => {
-    const reading = positiveNumberOrNull(value);
-    lost ||= reading.lost;
-    return reading.value;
-  };
-  const fallbackColor = index === 0
-    ? String(legacyAdv.depth_color || DEPTH_TRACK_FALLBACK_COLORS[0])
-    : DEPTH_TRACK_FALLBACK_COLORS[index % DEPTH_TRACK_FALLBACK_COLORS.length];
-  const value = {
-    label: String(source.label ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
-    color: resolveColorToHex(String(source.color || fallbackColor)),
-    height: positive(Object.hasOwn(source, 'height') ? source.height : legacyAdv.depth_height),
-    large_tick_interval: positive(source.large_tick_interval ?? (index === 0 ? legacyAdv.depth_large_tick_interval : null)),
-    small_tick_interval: positive(source.small_tick_interval ?? (index === 0 ? legacyAdv.depth_small_tick_interval : null)),
-    tick_font_size: positive(source.tick_font_size ?? (index === 0 ? legacyAdv.depth_tick_font_size : null))
-  };
-  return { value, lost };
-};
-/**
- * At least one series.
- * @param {unknown} tracks
- * @param {Record<string, unknown>} [legacyAdv]
- * @returns {FieldReading<SessionDepthTrack[]>}
- */
-export const readDepthTracks = (tracks, legacyAdv = {}) => {
-  const readings = (Array.isArray(tracks) ? tracks : []).map((entry, index) => readDepthTrack(entry, index, legacyAdv));
-  if (!readings.length) readings.push(readDepthTrack(null, 0, legacyAdv));
-  return {
-    value: readings.map(({ value }) => value),
-    lost: readings.some(({ lost }) => lost) || (!Array.isArray(tracks) && !isUnsetValue(tracks))
-  };
-};
 
 /** @typedef {{ selector: string, row: number }} MultiRecordPosition */
 const readGridRow = numberOr(isPositiveInteger, 1);

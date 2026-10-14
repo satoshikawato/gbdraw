@@ -437,6 +437,38 @@ test('a similarity-group edit of an unknown group is listed; a dropped cache ent
   assert.deepEqual({ ...state.drawings.linear.orthogroupNameOverrides }, { [session.orthogroupState.groups[0].id]: 'Kept' });
 });
 
+// B45: a drawing's Depth series and rows fit the Depth files Load restores.
+// A Circular series without a file whose settings differ from a new series'
+// is listed, and so is a manual Depth row of the drawing's own stack that the
+// fit turns off; a default series and the other mode's stack are not.
+const DEFAULT_SERIES = { height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null };
+const depthEdits = (session, mode) => {
+  const { adv } = session.modes[mode].config;
+  adv.depth_tracks = [adv.depth_tracks[0], { ...DEFAULT_SERIES, label: 'Coverage B', color: '#123456' },
+    { ...DEFAULT_SERIES, label: 'Depth 3', color: '#2CA02C' }];
+  adv.circular_track_slots = [...adv.circular_track_slots, {
+    id: 'my_depth', renderer: 'depth', enabled: true, width: '12', radius: null, inner_gap_px: null, outer_gap_px: null,
+    side: null, z: 0, params: { track_index: 1 }
+  }];
+  return session;
+};
+test('a Circular Depth series and a Depth row without a Depth file are listed before the Load (B45)', async () => {
+  const { items } = await loadAnswering(depthEdits(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'), 'circular'));
+  assert.deepEqual(items, [
+    'Depth: the series "Coverage B" (modes.circular.config.adv.depth_tracks[1]) has no Depth file; its settings were dropped.',
+    'Track stack: the Depth row "my_depth" (modes.circular.config.adv.circular_track_slots) shows a Depth series that has no'
+      + ' Depth file; it was turned off.'
+  ]);
+  const { adv } = state.drawings.circular;
+  assert.deepEqual(adv.depth_tracks.map(({ label }) => label), ['Depth']);
+  assert.deepEqual(adv.circular_track_slots.filter(({ renderer }) => renderer === 'depth').map(({ id, enabled }) => [id, enabled]),
+    [['my_depth', false]]);
+  // The Linear drawing keeps its series; its Circular stack is not drawn.
+  const linear = await loadAnswering(depthEdits(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'), 'linear'));
+  assert.deepEqual(linear.items, []);
+  assert.deepEqual(state.drawings.linear.adv.depth_tracks.map(({ label }) => label), ['Depth', 'Coverage B', 'Depth 3']);
+});
+
 // A History restore applies captured settings with the same readers and
 // lists nothing (only Load asks): what it installs is unchanged (R11).
 test('a History restore reads stored settings as before and asks nothing', async () => {
