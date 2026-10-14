@@ -634,11 +634,14 @@ def _move_label_text_anchor(
     label["start_x"] = float(start_x)
     label["start_y"] = float(start_y)
 
-    for x_key, y_key in (("text_x", "text_y"), ("leader_start_x", "leader_start_y")):
-        if x_key in label:
-            label[x_key] = float(label[x_key]) + dx
-        if y_key in label:
-            label[y_key] = float(label[y_key]) + dy
+    if "text_x" in label:
+        label["text_x"] = float(label["text_x"]) + dx
+    if "text_y" in label:
+        label["text_y"] = float(label["text_y"]) + dy
+    if "leader_start_x" in label:
+        label["leader_start_x"] = float(label["leader_start_x"]) + dx
+    if "leader_start_y" in label:
+        label["leader_start_y"] = float(label["leader_start_y"]) + dy
 
     authoritative_aabb = label.get("aabb_local")
     if authoritative_aabb is not None and len(authoritative_aabb) == 4:
