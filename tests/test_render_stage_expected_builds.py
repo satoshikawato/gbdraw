@@ -143,15 +143,37 @@ _RECORD_CONTENT_OPTIONS = (
 )
 
 # The options Circular label placement reads: the arrow geometry the labels
-# anchor on, the outer content radius of the radial layout (axis and scale
-# bands) they clear, and the definition text in the centre they avoid.
+# anchor on, the outer content radius of the radial layout (axis band) they
+# clear, the definition text in the centre they avoid, and the ring labels
+# their slots carry.
 _CIRCULAR_LABEL_OPTIONS = (
-    "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_width", "scale_interval", "hide_scale",
-    "keep_full_definition_with_plot_title",
+    "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_width", "species (no plot title)",
+    "strain (no plot title)", "conservation_labels",
 )
 
 # The placed labels and the two contents that draw them.
 _CIRCULAR_LABELS = frozenset({"circular_labels", "label_leaders_content", "label_text_content"})
+
+# The options that move the Circular radial layout: the centre definition
+# reserve (its text and font), the tick band, the depth axis footprint, and the
+# feature lanes. Every stage that takes the layout's slots may rebuild.
+_RADIAL_LAYOUT_OPTIONS = (
+    "keep_full_definition_with_plot_title", "definition_font_size", "scale_interval", "hide_scale",
+    "show_depth_axis", "show_depth_ticks", "depth_tick_font_size", "feature_overlap_tolerance_bp",
+)
+_RADIAL_LAYOUT_STAGES = _CIRCULAR_LABELS | {
+    "record_content", "ticks_content", "gc_content_content", "gc_skew_content", "depth_content",
+    "conservation_content", "annotation_content",
+}
+
+# The per-record Circular contents a Multi-Record merge takes: it rebuilds with any of them.
+_RECORD_MERGE_INPUTS = frozenset(
+    {
+        "axis_content", "record_content", "ticks_content", "gc_content_content", "gc_skew_content", "depth_content",
+        "conservation_content", "annotation_content", "label_leaders_content", "label_text_content",
+        "definition_content",
+    }
+)
 
 # The group contents an option changes, besides the stages above.
 CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
@@ -192,7 +214,7 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     ),
     **dict.fromkeys(
         (
-            "definition_font_size", "keep_definition_left_aligned", "definition_line_style", "record_label",
+            "keep_definition_left_aligned", "definition_line_style", "record_label",
             "record_subtitle", "show_replicon", "hide_accession", "hide_length",
         ),
         frozenset({"definition_content"}),
@@ -200,6 +222,15 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     # The Circular definition reads the definition section, which holds the
     # plot title font size (the shared-common profile draws the title in it).
     "plot_title_font_size": frozenset({"definition_content"}),
+    # The Circular plot title is a shared-common definition: it reads the
+    # definition section (section granularity; it draws in its own font size).
+    "definition_font_size": frozenset({"definition_content", "plot_title_content"}),
+    # The Circular definition and title read the canvas section, which holds
+    # the overlap tolerance (section granularity).
+    "feature_overlap_tolerance_bp": frozenset({"definition_content", "plot_title_content"}),
+    # Circular label placement reads the features section, which holds the
+    # line strokes (section granularity); the placed labels do not change.
+    **dict.fromkeys(("line_stroke_color", "line_stroke_width"), frozenset({"circular_labels"})),
     # The Circular definition draws the species and strain lines, in full or
     # short beside a plot title.
     **dict.fromkeys(
@@ -212,8 +243,14 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
 # The ribbons take the feature DOM index and both whole record placements,
 # whose comparison extents these track contents set; they rebuild with them.
 _RIBBON_INPUTS = frozenset({"feature_dom_index", "gc_content_content", "depth_content", "annotation_content"})
-# The stages whose results the catalog item reads: it rebuilds when one of them does.
-_CATALOG_INPUTS = frozenset({"record_content", "annotation_content", "comparison_content", "interactive_context"})
+# The stages whose results the catalog item reads: it rebuilds when one of them does
+# (Circular: the axis, the rings and the merged Multi-Record records too).
+_CATALOG_INPUTS = frozenset(
+    {
+        "record_content", "annotation_content", "comparison_content", "interactive_context", "axis_content",
+        "conservation_content", "record_merge",
+    }
+)
 
 
 # The composition plan is keyed by the bounds of the primary content, the
@@ -226,19 +263,23 @@ _BOUNDS_STAGES = (
     | {
         "record_content", "gc_content_content", "gc_skew_content", "annotation_content", "definition_content",
         "length_bar_content", "comparison_content",
+        # Circular: the placed labels are obstacles of the composition.
+        "circular_labels",
     }
 )
-# The options the composition request reads without a stage: the placements, and
-# the Circular definition text, which the primary bounds hold (no Circular content
-# stage holds it before PR 4).
-_COMPOSITION_INPUTS = frozenset({"legend", "plot_title_position", "species (no plot title)", "strain (no plot title)"})
+# The options the composition request reads without a stage: the placements. (The
+# Circular definition text it reads is the `definition_content` bounds.)
+_COMPOSITION_INPUTS = frozenset({"legend", "plot_title_position"})
 # Options that reshape a mark inside the box its content measures. With a paint
 # option (its ID ends in ``_color``) they move no bound, so the plan must be a hit.
 _MARK_SHAPE_OPTIONS = frozenset({"arrow_head_length_ratio", "arrow_shaft_width_ratio", "pairwise_match_style"})
 
 
 def _moves_bounds(option_id: str, allowed: frozenset[str]) -> bool:
-    if option_id.endswith("_color") or option_id in _MARK_SHAPE_OPTIONS:
+    if option_id.endswith("_color"):
+        return False
+    # A mark shape moves the Circular labels anchored on the marks.
+    if option_id in _MARK_SHAPE_OPTIONS and "circular_labels" not in allowed:
         return False
     return option_id in _COMPOSITION_INPUTS or bool(allowed & _BOUNDS_STAGES)
 
@@ -249,9 +290,12 @@ def allowed_builds(option_id: str) -> frozenset[str]:
         | CONTENT_BUILDS.get(option_id, frozenset())
         | (frozenset({"record_content"}) if option_id in _RECORD_CONTENT_OPTIONS else frozenset())
         | (_CIRCULAR_LABELS if option_id in _CIRCULAR_LABEL_OPTIONS else frozenset())
+        | (_RADIAL_LAYOUT_STAGES if option_id in _RADIAL_LAYOUT_OPTIONS else frozenset())
     )
     if allowed & _RIBBON_INPUTS:
         allowed |= {"comparison_content"}
+    if allowed & _RECORD_MERGE_INPUTS:
+        allowed |= {"record_merge"}
     if _moves_bounds(option_id, allowed):
         allowed |= {"composition_plan"}
     return allowed | ({"catalog_item"} if allowed & _CATALOG_INPUTS else frozenset())

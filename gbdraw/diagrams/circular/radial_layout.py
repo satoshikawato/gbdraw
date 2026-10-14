@@ -9,7 +9,6 @@ from typing import Any, Collection, Literal, Mapping, Sequence, TypedDict
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasGeometry
 from ...config.models import GbdrawConfig
-from ...configurators import DepthConfigurator
 from ...exceptions import ValidationError
 from ...layout.circular import (
     CircularAxisLayout,
@@ -26,6 +25,7 @@ from ...layout.circular import (
 )
 from ...layout.circular_depth_axis import (
     DepthAxisFootprint,
+    DepthAxisSource,
     resolve_depth_axis_footprint,
 )
 from ...tracks.circular import (
@@ -606,7 +606,7 @@ def _measure_radial_slot(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
     compressed: bool = False,
 ) -> CircularResolvedSlot:
     anchor_radius_px = float(axis_radius_px) + float(anchor_offset_px)
@@ -790,7 +790,7 @@ def _place_outside_auto(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
 ) -> CircularResolvedSlot:
     for width_px, compressed in _candidate_widths(intent):
         anchor_offset = max(0.0, float(intent.anchor_offset_px or 0.0))
@@ -868,7 +868,7 @@ def _try_measure_inside_interval(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
     compressed: bool,
     packing_inner_px: float = 0.0,
 ) -> CircularResolvedSlot | None:
@@ -944,7 +944,7 @@ def _place_inside_auto(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
 ) -> CircularResolvedSlot:
     for width_px, compressed in _candidate_widths(intent):
         resolved = _place_inside_auto_fixed_width(
@@ -981,7 +981,7 @@ def _place_inside_auto_fixed_width(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
 ) -> CircularResolvedSlot | None:
     outer_limit = max(0.0, float(placement_window.outer_px))
     reserved_inner = placement_window.reserved_inner_px
@@ -1024,7 +1024,7 @@ def _measure_anchored_inside(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
 ) -> CircularResolvedSlot | None:
     """A pinned row at ``width_px`` on its radius, or ``None`` when it leaves the window or overlaps."""
 
@@ -1316,7 +1316,7 @@ def _place_inside_auto_stack_group(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     failure: _RadialSlotIntent | None = None
     for scale in _inside_auto_stack_width_scales(intents):
@@ -1383,7 +1383,7 @@ def _place_outside_auto_stack_group(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     """Place ``intents``, given from the axis outward, from the window's inner edge."""
 
@@ -1527,7 +1527,7 @@ def _try_place_preferred_numeric_group_at_anchors(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
 ) -> tuple[CircularResolvedSlot, ...] | None:
     resolved_group = tuple(
         _measure_radial_slot(
@@ -1565,7 +1565,7 @@ def _place_inside_auto_group_with_width_scale(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
 ) -> tuple[CircularResolvedSlot, ...] | None:
     working_occupied = list(occupied)
     working_outer = float(placement_window.outer_px)
@@ -1616,7 +1616,7 @@ def _place_preferred_numeric_group(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     anchored = _try_place_preferred_numeric_group_at_anchors(
         intents,
@@ -1729,7 +1729,7 @@ def _minimum_future_inside_width_px(
     cfg: GbdrawConfig,
     total_length: int,
     feature_dict: Mapping[str, Any] | None,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
 ) -> float:
     width = max(0.0, float(intent.width_px))
     if intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
@@ -1771,7 +1771,7 @@ def _future_unresolved_inside_span_px(
     cfg: GbdrawConfig,
     total_length: int,
     feature_dict: Mapping[str, Any] | None,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
 ) -> float:
     span = 0.0
@@ -1829,7 +1829,7 @@ def _inside_placement_window(
     cfg: GbdrawConfig,
     total_length: int,
     feature_dict: Mapping[str, Any] | None,
-    depth_config: DepthConfigurator | None,
+    depth_config: DepthAxisSource | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
     group: Sequence[_RadialSlotIntent] = (),
 ) -> PlacementWindow:
@@ -1923,7 +1923,7 @@ class _RadialLayoutInputs(TypedDict):
     slots: Sequence[CircularTrackSlot]
     feature_dict: Mapping[str, Any] | None
     preferred_anchor_slot_ids: Collection[str]
-    depth_config: DepthConfigurator | None
+    depth_config: DepthAxisSource | None
     center_reserved_radius_explicit: bool
     keep_preset_lanes: bool
 
@@ -1937,7 +1937,7 @@ def resolve_circular_radial_layout(
     feature_dict: Mapping[str, Any] | None = None,
     definition_reserved_radius_px: float | None = None,
     preferred_anchor_slot_ids: Collection[str] = (),
-    depth_config: DepthConfigurator | None = None,
+    depth_config: DepthAxisSource | None = None,
     center_reserved_radius_explicit: bool = False,
 ) -> CircularRadialLayout:
     """Resolve every slot band; a failed inside placement names its cause.
@@ -1996,7 +1996,7 @@ def _resolve_circular_radial_layout(
     feature_dict: Mapping[str, Any] | None = None,
     definition_reserved_radius_px: float | None = None,
     preferred_anchor_slot_ids: Collection[str] = (),
-    depth_config: DepthConfigurator | None = None,
+    depth_config: DepthAxisSource | None = None,
     center_reserved_radius_explicit: bool = False,
     keep_preset_lanes: bool = True,
 ) -> CircularRadialLayout:

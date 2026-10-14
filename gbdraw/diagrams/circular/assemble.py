@@ -80,7 +80,7 @@ from ...layout.circular import (
     CircularResolvedSlot,
     CircularTickLayout,
 )
-from ...layout.circular_depth_axis import depth_axis_tick_font_size_px
+from ...layout.circular_depth_axis import DepthAxisStyle, depth_axis_tick_font_size_px
 from ...layout.composition import (
     CompositionItem,
     CompositionPlan,
@@ -2033,7 +2033,7 @@ def circular_labels(
     record_features: ResolvedRecordFeatureInputs | None,
     definition_reserved_radius_px: float | None,
     preferred_anchor_slot_ids: Collection[str],
-    depth_config: DepthConfigurator | None,
+    depth_axis: DepthAxisStyle | None,
     center_reserved_radius_explicit: bool,
     record_transform: RecordDisplayTransform | None,
     definition_text: tuple[Aabb, ...],
@@ -2189,7 +2189,7 @@ def circular_labels(
                 feature_dict=_radial_layout_feature_dict(feature_layers),
                 definition_reserved_radius_px=definition_reserved_radius_px,
                 preferred_anchor_slot_ids=preferred_anchor_slot_ids,
-                depth_config=depth_config,
+                depth_config=depth_axis,
                 center_reserved_radius_explicit=center_reserved_radius_explicit,
             )
             if radial_layout.features is not None:
@@ -2522,7 +2522,10 @@ def add_record_on_circular_canvas(
             record_features=feature_config.record_features[0] if feature_config.record_features else None,
             definition_reserved_radius_px=definition_reserved_radius_px,
             preferred_anchor_slot_ids=preferred_anchor_slot_ids,
-            depth_config=depth_config if show_depth_track else None,
+            # The radial replan reads the depth axis and ticks only.
+            depth_axis=(
+                DepthAxisStyle.of(depth_config) if show_depth_track and depth_config is not None else None
+            ),
             center_reserved_radius_explicit=center_reserved_radius is not None,
             record_transform=record_transform,
             definition_text=definition_text,
