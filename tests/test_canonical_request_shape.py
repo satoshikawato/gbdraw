@@ -614,9 +614,12 @@ def test_every_described_field_is_held_by_a_request_or_named_by_the_decoder(
 
 
 # Defaults that a rule across records or the grouping can refuse: one record's
-# grid cell (every Circular record has one, or none) and a batch's output (one
-# per record).
+# grid cell (every Circular record has one, or none), so also its whole
+# presentation, a Linear layout's translations (an alignment plan needs one
+# per record), and a batch's output (one per record).
 _DEFAULTS_DECIDED_BY_OTHER_PARTS = frozenset({
+    "CanonicalRecord.presentation",
+    "CanonicalLinearLayout.recordTranslations",
     "CanonicalRecordPresentation.gridColumn",
     "CanonicalRecordPresentation.gridRow",
     "CanonicalCircularRenderRequest.output",

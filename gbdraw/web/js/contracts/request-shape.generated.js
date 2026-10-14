@@ -161,6 +161,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       defaults: Object.freeze({
         cardinality: "exactly_one",
         display: Object.freeze({isCircular: null, startCoordinate: null}),
+        presentation: Object.freeze({label: null, subtitle: null, reverseComplement: false, gridRow: null, gridColumn: null}),
         region: null,
         selector: null
       })
@@ -294,7 +295,12 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       }),
       optional: Object.freeze([]),
       open: false,
-      defaults: Object.freeze({multiRecordPositions: null, recordGapPx: 24.0, similarityAlignment: null})
+      defaults: Object.freeze({
+        multiRecordPositions: null,
+        recordGapPx: 24.0,
+        recordTranslations: Object.freeze([]),
+        similarityAlignment: null
+      })
     }),
     CanonicalColorOptions: Object.freeze({
       kind: "object",
@@ -974,7 +980,13 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         "window"
       ]),
       open: false,
-      defaults: Object.freeze({conservationReference: "auto", dinucleotide: "GC", keepFullDefinitionWithPlotTitle: false})
+      defaults: Object.freeze({
+        conservationReference: "auto",
+        dinucleotide: "GC",
+        featureOverrides: Object.freeze([]),
+        featurePlacements: Object.freeze([]),
+        keepFullDefinitionWithPlotTitle: false
+      })
     }),
     CanonicalLinearDepthTrack: Object.freeze({
       kind: "object",
@@ -1258,7 +1270,12 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         "window"
       ]),
       open: false,
-      defaults: Object.freeze({dinucleotide: "GC", pairwiseMatchStyle: "ribbon"})
+      defaults: Object.freeze({
+        dinucleotide: "GC",
+        featureOverrides: Object.freeze([]),
+        featurePlacements: Object.freeze([]),
+        pairwiseMatchStyle: "ribbon"
+      })
     }),
     CanonicalLosslessCollinearityParameters: Object.freeze({
       kind: "object",

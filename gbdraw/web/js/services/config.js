@@ -191,6 +191,7 @@ import {
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
   readSessionInput,
+  holdsSettingsOnlyContent,
   settingsOnlySessionCandidate,
   validateSessionAuthorityInventory
 } from './session-authority.js';
@@ -1745,8 +1746,8 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
  * new data object when a request changed (the parsed file is never changed),
  * the request schemas the file stored (RK-1), and whether the Session loads as
  * settings only because its request cannot be read (K22, C-OD07): only a
- * Session version that has a settings-only form (42, 44, 46, 47) does; an
- * older one keeps its stored request, which the projection refuses as before.
+ * Session version that has a settings-only form (42, 44, 46, 47) and holds the
+ * settings it keeps does; any other is refused (R4, C-OD25).
  * The Comparisons notice after Load is classified on the stored top-level
  * request, as before the reader (receipt 〔今までの知らせ〕, C-OD14); it is null
  * when Load reads no stored request.
@@ -1789,10 +1790,10 @@ const readSessionRequests = (rawData, repairs) => {
   const comparisonClassification = classify(top);
   const topRead = read(top, 'renderRequest', comparisonClassification);
   if ('kind' in topRead) {
-    if (!settingsOnlyForm) {
-      return { data: rawData, storedSchemas, settingsOnly: false, comparisonClassification };
-    }
     const envelope = /** @type {SessionEnvelope} */ (rawData);
+    // Without a settings-only form, or without the settings it keeps, nothing
+    // can be restored (R4, C-OD25); an unread request is never committed.
+    if (!settingsOnlyForm || !holdsSettingsOnlyContent(envelope)) throw SESSION_FIELDS_ERROR();
     repairs.push(loadRepair({ code: 'request-dropped', path: topRead.path, effect: 'dropped' }));
     return {
       data: /** @type {T} */ (settingsOnlySessionCandidate(envelope)), storedSchemas, settingsOnly: true,

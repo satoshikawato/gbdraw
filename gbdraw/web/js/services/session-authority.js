@@ -416,6 +416,19 @@ const EMPTY_WEB_BINDINGS = Object.freeze({
 });
 
 /**
+ * Whether a Session holds the settings its settings-only form keeps: the flat
+ * Web draft `config` of a Session 42 or 44, the mode slices `modes` of a
+ * Session 46 or 47. A Session 42 or 44 the CLI or the Python API wrote holds
+ * none (its settings are its request), so when its request cannot be read,
+ * nothing can be restored (R4).
+ * @param {SessionEnvelope} session
+ * @returns {boolean}
+ */
+export const holdsSettingsOnlyContent = (session) => isPlainObject(
+  /** @type {Record<string, unknown>} */ (session)[Number(session.version) >= MODE_SCOPED_SESSION_VERSION ? 'modes' : 'config']
+);
+
+/**
  * The settings-only Session of a Session whose request cannot be read (K22):
  * the request, the Results, the GenBank, GFF and FASTA inputs (and the
  * conservation sequences), the feature list and the caches are dropped; the

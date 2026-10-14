@@ -1230,7 +1230,6 @@ def _encode_record(
     else:  # pragma: no cover - RecordInput validates its source union.
         raise CanonicalRequestEncodingError(f"Unsupported record source at index {index}.")
 
-    presentation = record.presentation
     return {
         "recordKey": record.record_key or f"record-{index}",
         "cardinality": record.cardinality.value,
@@ -1238,18 +1237,22 @@ def _encode_record(
         "source": source_payload,
         "selector": _encode_selector(selector),
         "region": _encode_region(record.region),
-        "presentation": {
-            "label": presentation.label,
-            "subtitle": presentation.subtitle,
-            "reverseComplement": presentation.reverse_complement,
-            "gridRow": presentation.grid_row,
-            "gridColumn": presentation.grid_column,
-        },
+        "presentation": _encode_record_presentation(record.presentation),
     }
 
 
 def _encode_record_display(display: RecordDisplayOptions) -> dict[str, Any]:
     return {"isCircular": display.is_circular, "startCoordinate": display.start_coordinate}
+
+
+def _encode_record_presentation(presentation: RecordPresentation) -> dict[str, Any]:
+    return {
+        "label": presentation.label,
+        "subtitle": presentation.subtitle,
+        "reverseComplement": presentation.reverse_complement,
+        "gridRow": presentation.grid_row,
+        "gridColumn": presentation.grid_column,
+    }
 
 
 def legacy_record_cardinality(mode: object, record: Mapping[str, Any]) -> RecordCardinality:
@@ -5057,6 +5060,7 @@ def describe_canonical_request() -> dict[str, Any]:
         "record_key": bounded(STRING, pattern=r"\S"),  # written as given or as record-<n>
     }, defaults={
         "display": _encode_record_display(RecordDisplayOptions()),
+        "presentation": _encode_record_presentation(RecordPresentation()),
         "cardinality": RecordInput.__dataclass_fields__["cardinality"].default.value,
     })), minItems=1)
 
@@ -5095,6 +5099,7 @@ def describe_canonical_request() -> dict[str, Any]:
             "similarityAlignment": nullable(wire[SimilarityAlignmentPlan]),
         }, defaults={
             "recordGapPx": LinearMultiRecordOptions().record_gap_px,
+            "recordTranslations": list(LinearMultiRecordOptions().record_translations),
             "similarityAlignment": None,
         })),
     }
@@ -5224,11 +5229,15 @@ def describe_canonical_request() -> dict[str, Any]:
         defaults = _DEFAULT_CIRCULAR_OPTIONS if mode == "circular" else _DEFAULT_LINEAR_OPTIONS
         diagram_options[mode] = named(f"{title}DiagramOptions", obj(
             members, optional=sorted(set(members) - set(required)), defaults={
-                _option_wire_key(item.name): _encode_option_value(
-                    item.name, getattr(defaults, item.name), resources=SessionResourceTable().request()
-                )
-                for item in fields(options_class)
-                if item.name not in unwritten and getattr(defaults, item.name) is not None
+                # _encode_diagram_options writes no row as the empty list.
+                **{name: [] for name in required},
+                **{
+                    _option_wire_key(item.name): _encode_option_value(
+                        item.name, getattr(defaults, item.name), resources=SessionResourceTable().request()
+                    )
+                    for item in fields(options_class)
+                    if item.name not in unwritten and getattr(defaults, item.name) is not None
+                },
             },
         ))
 

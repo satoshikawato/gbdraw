@@ -5901,16 +5901,18 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
     promoted.diagramOptions = { ...promoted.diagramOptions, featurePlacements: [] };
   }
   if (promoted.mode === 'linear') {
+    // A record that is not an object is the repair's, as above.
+    const records = (promoted.records || []).filter((/** @type {unknown} */ record) => isPlainObject(record));
     const generated = (promoted.comparisons || []).find(
       (comparison) => comparison?.kind === 'generatedProteinComparison'
     );
     const rawLegacy = generated?.settings?.alignOrthogroupFeature;
     const readAlignment = () => canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
       target: rawLegacy,
-      records: promoted.records || [],
+      records,
       featureCatalog,
       legacyOrthogroupState
-    }), (promoted.records || []).map((record) => record.recordKey),
+    }), records.map((record) => record.recordKey),
     'renderRequest.layout.similarityAlignment');
     /** @type {ReturnType<typeof canonicalSimilarityAlignment> | null} */
     let similarityAlignment = null;
@@ -5929,7 +5931,7 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
       promoted.layout = {
         recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : 24,
         multiRecordPositions: null,
-        recordTranslations: (promoted.records || []).map((record) => ({
+        recordTranslations: records.map((record) => ({
           recordKey: String(record.recordKey || ''),
           x: 0,
           y: 0
@@ -6039,10 +6041,11 @@ const STORED_REQUEST_PLACES = {
   circular: storedRequestPlaces(STORED_REQUEST_ROOTS.circular, 'CanonicalLinearDiagramOptions'),
   linear: storedRequestPlaces(STORED_REQUEST_ROOTS.linear, 'CanonicalCircularDiagramOptions')
 };
-/** The places without a default that a repair drops as one part (rule 6); a place with one is a part too. */
-const STORED_REQUEST_PARTS = new Set([
-  'diagramOptions.tracks', 'diagramOptions.annotations', 'layout.recordTranslations', 'records[*].presentation'
-]);
+/**
+ * The optional places without a default that a repair drops as one part
+ * (rule 6); a place with a default is a part too. Each can go alone.
+ */
+const STORED_REQUEST_PARTS = new Set(['diagramOptions.tracks', 'diagramOptions.annotations']);
 /** The conservation ring columns, read by index together (B16). */
 const CONSERVATION_RING_COLUMNS = ['conservationBlastFiles', 'conservationLabels', 'conservationColors', 'conservationFastaFiles']
   .map((key) => `diagramOptions.${key}`);

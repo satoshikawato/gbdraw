@@ -337,6 +337,64 @@ test('a saved comparison entry that is neither resource-backed nor a generated c
 // request and commits it at the current schema (schema 1 as stored until its
 // reader, PR-D). A row here is a defect of the input's producer.
 /** Inputs this Node harness cannot load, by name, with the reason. */
+const fixture = (name) => read(`tests/fixtures/sessions/${name}`);
+
+test('every part the reader lists can be dropped alone: a null presentation, translation list or feature row list takes the writer\'s empty form (S1, S4, C-OD25)', () => {
+  const lambda = gallery('lambda_basic_linear');
+  const presentation = readRequest(lambda, (request) => { request.records[0].presentation = null; });
+  assert.deepEqual(presentation.value.records[0].presentation,
+    { label: null, subtitle: null, reverseComplement: false, gridRow: null, gridColumn: null });
+  assert.deepEqual(rows(presentation), [{ code: 'setting-replaced', path: 'renderRequest.records[0].presentation' }]);
+  const translations = readRequest(lambda, (request) => {
+    request.layout = { recordGapPx: 12, multiRecordPositions: null, recordTranslations: null, similarityAlignment: null };
+  });
+  assert.deepEqual(translations.value.layout,
+    { recordGapPx: 12, multiRecordPositions: null, recordTranslations: [], similarityAlignment: null });
+  assert.deepEqual(rows(translations), [{ code: 'setting-replaced', path: 'renderRequest.layout.recordTranslations' }]);
+  for (const key of ['featureOverrides', 'featurePlacements']) {
+    const result = readRequest(lambda, (request) => { request.diagramOptions[key] = null; });
+    assert.deepEqual(result.value.diagramOptions, { ...lambda.renderRequest.diagramOptions, [key]: [] }, key);
+    assert.deepEqual(rows(result), [{ code: 'setting-replaced', path: `renderRequest.diagramOptions.${key}` }], key);
+  }
+});
+
+test('the schema 5 to 7 promotion leaves a record that is not an object to the repair, never a TypeError (S5)', () => {
+  const session = fixture('lambda_basic_linear.v40-schema5.json');
+  for (const layout of [undefined, { recordGapPx: 10 }]) {
+    const result = readRequest(session, (request) => {
+      request.records.push(null);
+      if (layout) request.layout = layout;
+    });
+    assert.equal(result.kind, 'request-dropped', JSON.stringify(layout));
+  }
+});
+
+test('a CLI or older Session whose request only loses a part loads with its Results, as before the reader (F2, F3)', async () => {
+  for (const name of ['cli-linear-tables.v41', 'cli-linear-tables.v42', 'se08-main-linear-cli.v42',
+    'cli-linear-tables.v44', 'scale-interval-zero-circular-cli.v44', 'precomputed-ring-unlabelled-cli.v44']) {
+    const session = fixture(`${name}.gbdraw-session.json.gz`);
+    session.renderRequest.records[0].presentation = null;
+    const { result } = await load(session);
+    assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.error)}`);
+    assert.ok(state.results.value.length > 0, name);
+    assert.equal(getCommittedCanonicalSession().renderRequest.schema, 9, name);
+    const saved = await exportSession('probe', { askChoice: async () => 'download' });
+    assert.equal(saved.status, 'saved', `${name}: ${JSON.stringify(saved.error)}`);
+  }
+});
+
+test('a request that cannot be read at its root in a Session that keeps no settings without it is refused with a typed error, never committed unread (F2, F3, C-OD25)', async () => {
+  for (const name of ['cli-linear-tables.v41', 'cli-linear-tables.v42', 'scale-interval-zero-circular-cli.v44']) {
+    const session = fixture(`${name}.gbdraw-session.json.gz`);
+    session.renderRequest.records = [];
+    const { result, dialogs } = await load(session);
+    assert.equal(result.status, 'error', name);
+    assert.deepEqual([result.error?.code, result.error?.context?.field, result.error?.context?.reason],
+      ['INPUT_INVALID', 'schema', 'FIELDS'], `${name}: ${JSON.stringify(result.error)}`);
+    assert.deepEqual(dialogs, [], name);
+  }
+});
+
 const HARNESS_CANNOT_LOAD = new Map([
   // Their Load extracts the features again, which needs the Pyodide Worker (WORKER_INIT here).
   ['feature-edits-circular.v33.gbdraw-session.json.gz', 'feature extraction Worker'],
