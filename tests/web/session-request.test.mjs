@@ -422,7 +422,6 @@ const state = {
   selectedOrthogroupAlignmentFeature: ref(''),
   similarityAlignmentPlan: ref(null),
   linearRecordTranslations: ref([]),
-  legacySimilarityAlignment: ref(null),
   linearRecordLayoutEnabled: ref(false),
   linearRecordGap: ref(24),
   linearRecordRows: [],
@@ -2440,16 +2439,12 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
     }
   });
 
-  // A Session loaded from an older request schema keeps its request until the
-  // next Generate; the reflow promotes it instead of rejecting it.
+  // Load reads every stored request to schema 9 (except schema 1, kept as
+  // stored); the reflow reads only a committed request of the current schema.
   const older = structuredClone(committed);
-  older.renderRequest.schema = 7;
-  delete older.renderRequest.diagramOptions.featureOverrides;
-  const promoted = projectCommittedEditorIntent({ committed: older, state: draft });
-  assert.equal(older.renderRequest.schema, 7, 'the committed Session is not modified');
-  assert.equal(promoted.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
-  assert.deepEqual(promoted.renderRequest.records, reflow.renderRequest.records);
-  assert.deepEqual(promoted.renderRequest.diagramOptions, reflow.renderRequest.diagramOptions);
+  older.renderRequest.schema = 1;
+  assert.throws(() => projectCommittedEditorIntent({ committed: older, state: draft }),
+    /A current committed canonical Session is required/);
 }
 
 state.form.prefix = '';
@@ -3055,8 +3050,7 @@ const legacyProjection = projectCanonicalSessionRequest({
   resources: losatPairCanonical.resources
 });
 assert.deepEqual(legacyProjection.pipelineState.legacySimilarityAlignment, {
-  target: 'og-legacy',
-  sourceSchema: 7
+  target: 'og-legacy'
 });
 const legacyFeatureCatalog = {
   schema: 3,

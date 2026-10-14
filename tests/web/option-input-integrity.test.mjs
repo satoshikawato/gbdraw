@@ -67,7 +67,6 @@ const baseState = (mode, adv = {}) => ({
   selectedOrthogroupAlignmentFeature: ref(''),
   similarityAlignmentPlan: ref(null),
   linearRecordTranslations: ref([]),
-  legacySimilarityAlignment: ref(null),
   linearRecordLayoutEnabled: ref(false),
   linearRecordGap: ref(24),
   linearRecordRows: [],

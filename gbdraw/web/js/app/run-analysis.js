@@ -40,7 +40,6 @@ import {
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
-  promoteCanonicalRenderRequestToCurrent,
   readCanonicalResourceRecordCount,
   requestLabelProjection,
   requestLabelTableTsv,
@@ -5078,20 +5077,11 @@ export const createRunAnalysis = ({
         if (typeof getCommittedCanonicalSession !== 'function') {
           throw new Error('The preserved comparison owner is unavailable.');
         }
-        // The candidate is a current-schema request; an older committed
-        // request (for example a v42 CLI sidecar) is promoted before reuse.
-        const committedSession = getCommittedCanonicalSession();
+        // Load read the committed request (schema 9; a schema-1 request is
+        // refused as the inherited comparison's owner).
         inheritCommittedComparisonIntent({
           candidate: canonical,
-          committed: committedSession?.renderRequest
-            ? {
-                ...committedSession,
-                renderRequest: promoteCanonicalRenderRequestToCurrent(
-                  committedSession.renderRequest,
-                  { featureCatalog: featureCatalog?.value || null }
-                )
-              }
-            : committedSession
+          committed: getCommittedCanonicalSession()
         });
       }
       recordSessionLifecycleEvent('canonical-request-construction-end');
@@ -6144,10 +6134,6 @@ export const createRunAnalysis = ({
       const candidateRules = colorCandidate.rules;
       const canonical = projectCommittedEditorIntent({
         committed,
-        promotion: {
-          featureCatalog: featureCatalog?.value ?? null,
-          legacyOrthogroupState: { groups: cloneJsonData(orthogroups.value || []) }
-        },
         state,
         drawing: {
           ...drawing,

@@ -211,3 +211,54 @@ test('the other diagram\'s request is read at Load: its repairs are listed, and 
   ]);
   assert.ok(state.results.value.length > 0);
 });
+
+const { getCommittedCanonicalSession, exportSession } = await import('../../gbdraw/web/js/services/config.js');
+const frame = () => {
+  const intent = state.drawings.linear.importedComparisonIntent;
+  return [intent.disposition, intent.message];
+};
+
+test('a request whose comparisons Load holds is promoted like any other, and the Comparisons notice is as before (C-OD14)', async () => {
+  // The frame each input showed before the reader (base b62b9ceb), against
+  // what Load now commits: schema 9, no lazy promotion left after Load.
+  const missing = 'The saved comparison is missing a required resource.';
+  const cases = [
+    ['q-frame fixture', () => read('tests/fixtures/sessions/q-frame-main-linear-reverse.v42.gbdraw-session.json.gz'),
+      'PRESERVED_READ_ONLY', []],
+    ['se06 fixture', () => read('tests/fixtures/sessions/se06-main-linear-blast-cli.v42.gbdraw-session.json.gz'),
+      'PRESERVED_READ_ONLY', []],
+    ['dangling comparison', () => {
+      const session = gallery('BGC0000708-BGC0000713');
+      session.renderRequest.comparisons[0].resourceId = 'missing';
+      return session;
+    }, 'DECISION_REQUIRED', [], missing],
+    ['unknown comparison kind', () => {
+      const session = gallery('BGC0000708-BGC0000713');
+      session.renderRequest.comparisons[0].kind = 'other';
+      return session;
+    }, 'DECISION_REQUIRED', ['setting-entries-dropped'], 'The saved comparison kind \'other\' is unsupported.'],
+    ['Linear comparison in a Circular request', () => {
+      const session = gallery('HmmtDNA_basic_circular');
+      session.renderRequest.comparisons = clone(gallery('BGC0000708-BGC0000713').renderRequest.comparisons.slice(0, 1));
+      return session;
+    }, 'DECISION_REQUIRED', [], 'A Circular session contains unsupported Linear comparison data.']
+  ];
+  for (const [name, make, disposition, codes, message] of cases) {
+    const { result } = await load(make());
+    assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.error)}`);
+    assert.deepEqual(result.repairs.map(({ code }) => code), codes, name);
+    assert.equal(frame()[0], disposition, name);
+    if (message) assert.equal(frame()[1], message, name);
+    assert.equal(getCommittedCanonicalSession().renderRequest.schema, 9, name);
+  }
+});
+
+test('Save writes the request Load read: the legacy alignment keeps the feature the Load context names (OV-770, BC-1)', async () => {
+  const { result } = await load(read('tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json'));
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  const saved = await exportSession('probe', { askChoice: async () => 'download' });
+  assert.equal(saved.status, 'saved', JSON.stringify(saved.error));
+  const session = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+  assert.equal(session.renderRequest.schema, 9);
+  assert.equal(session.renderRequest.layout.similarityAlignment.reference.sourceFeatureIndex, 14);
+});

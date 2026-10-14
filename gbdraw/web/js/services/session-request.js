@@ -93,10 +93,9 @@ import { isPlainObject } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
+import { isCurrentRequestSchema } from '../utils/request-schema.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
-  DISPLAY_PLACEMENT_SCHEMA,
-  FEATURE_OVERRIDE_SCHEMA,
   SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 } from '../contracts/schema.generated.js';
@@ -573,7 +572,7 @@ export const linearDefinitionVisibilityOf = (renderRequest) => {
 /** @param {Record<string, any>} renderRequest */
 export const canonicalLinearRecordLayout = (renderRequest) => {
   const layout = renderRequest?.layout || {};
-  if (renderRequest?.mode !== 'linear' || renderRequest.schema < 8 || Object.keys(layout).length === 0) {
+  if (renderRequest?.mode !== 'linear' || !isCurrentRequestSchema(renderRequest) || Object.keys(layout).length === 0) {
     return { similarityAlignment: null, recordTranslations: [] };
   }
   const recordKeys = (Array.isArray(renderRequest.records) ? renderRequest.records : [])
@@ -3774,7 +3773,7 @@ const resolvePipelineCollinearInference = (settings, mode) =>
 
 const projectGeneratedProteinPipeline = (
   comparison,
-  { adoptCanonicalPayloads = false, requestSchema = CANONICAL_REQUEST_SCHEMA } = {}
+  { adoptCanonicalPayloads = false, currentRequest = true } = {}
 ) => {
   if (
     !comparison ||
@@ -3784,19 +3783,20 @@ const projectGeneratedProteinPipeline = (
     Array.isArray(comparison.settings)
   ) return null;
   const settings = comparison.settings;
-  if (requestSchema >= 8 && Object.hasOwn(settings, 'alignOrthogroupFeature')) {
+  if (currentRequest && Object.hasOwn(settings, 'alignOrthogroupFeature')) {
     throw new Error('Current canonical protein settings cannot contain legacy alignment state.');
   }
-  /** @type {{ target: string, sourceSchema: number } | null} */
+  // A request of schema 1 or 2 (or a stored schema 5 that Gallery publication
+  // projects) names its alignment by a legacy target; Load promotes the others.
+  /** @type {{ target: string } | null} */
   let legacySimilarityAlignment = null;
-  if (requestSchema <= 7 && settings.alignOrthogroupFeature !== null &&
+  if (!currentRequest && settings.alignOrthogroupFeature !== null &&
       settings.alignOrthogroupFeature !== undefined) {
     legacySimilarityAlignment = {
       target: requireCanonicalText(
         settings.alignOrthogroupFeature,
         'renderRequest.comparisons[].settings.alignOrthogroupFeature'
-      ),
-      sourceSchema: requestSchema
+      )
     };
   }
   const parameters = settings.collinearityParams?.parameters || {};
@@ -4616,21 +4616,18 @@ export const projectCanonicalSessionRequest = ({
     throw new Error('Unsupported canonical renderRequest mode.');
   }
   const sourceRecords = Array.isArray(renderRequest.records) ? renderRequest.records : [];
-  if (renderRequest.schema >= DISPLAY_PLACEMENT_SCHEMA) {
+  const currentRequest = isCurrentRequestSchema(renderRequest);
+  if (currentRequest) {
     sourceRecords.forEach((record) => canonicalRecordDisplay(record.display));
     if (!Array.isArray(renderRequest.diagramOptions?.featurePlacements)) {
       throw new Error('Canonical featurePlacements must be an array.');
     }
     canonicalFeaturePlacements(renderRequest.diagramOptions.featurePlacements, renderRequest.mode);
-  } else if (sourceRecords.some((record) => Object.hasOwn(record, 'display'))
-    || Object.hasOwn(renderRequest.diagramOptions || {}, 'featurePlacements')) {
-    throw new Error(`Record display and feature placements require canonical schema ${DISPLAY_PLACEMENT_SCHEMA}.`);
   }
-  if ((renderRequest.schema >= FEATURE_OVERRIDE_SCHEMA)
-    !== Array.isArray(renderRequest.diagramOptions?.featureOverrides)) {
+  if (currentRequest !== Array.isArray(renderRequest.diagramOptions?.featureOverrides)) {
     throw diagnosticError('INPUT_INVALID', { field: 'featureOverrides', reason: 'SESSION_FORMAT' });
   }
-  const projectedFeatureOverrides = renderRequest.schema >= FEATURE_OVERRIDE_SCHEMA
+  const projectedFeatureOverrides = currentRequest
     ? canonicalFeatureOverrides(renderRequest.diagramOptions.featureOverrides)
     : [];
   const normalizedRecordOrdering = normalizeWebGridColumnOrdering(sourceRecords);
@@ -4643,7 +4640,7 @@ export const projectCanonicalSessionRequest = ({
   /** @type {ReturnType<typeof canonicalSimilarityAlignment> | null} */
   let similarityAlignment = null;
   let recordTranslations = [];
-  if (renderRequest.mode === 'linear' && renderRequest.schema >= 8) {
+  if (renderRequest.mode === 'linear' && currentRequest) {
     const layout = renderRequest.layout || {};
     if (Object.keys(layout).length > 0) {
       requireExactCanonicalKeys(layout, [
@@ -4679,11 +4676,6 @@ export const projectCanonicalSessionRequest = ({
         { requireCoverage: similarityAlignment !== null }
       );
     }
-  } else if (renderRequest.mode === 'linear' && (
-    Object.hasOwn(renderRequest.layout || {}, 'recordTranslations') ||
-    Object.hasOwn(renderRequest.layout || {}, 'similarityAlignment')
-  )) {
-    throw new Error('Typed similarity alignment requires canonical schema 8.');
   }
   const grouping = canonicalGrouping(renderRequest, records);
   const sourceOutputPrefixes = canonicalOutputPrefixes(
@@ -4813,7 +4805,7 @@ export const projectCanonicalSessionRequest = ({
     (renderRequest.comparisons || []).find(
       (comparison) => comparison?.kind === 'generatedProteinComparison'
     ),
-    { adoptCanonicalPayloads, requestSchema: renderRequest.schema }
+    { adoptCanonicalPayloads, currentRequest: isCurrentRequestSchema(renderRequest) }
   );
   const comparisonsContainGeneratedProteinPipeline = (
     renderRequest.comparisons || []
@@ -5579,7 +5571,7 @@ export const projectCanonicalSessionRequest = ({
       return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };
     })
   };
-  const presentationOwnsLinearRows = renderRequest.schema >= 6 && records.some(
+  const presentationOwnsLinearRows = currentRequest && records.some(
     (record) => record.presentation?.gridRow != null
   );
   const linearLayoutRows = presentationOwnsLinearRows
@@ -5608,7 +5600,7 @@ export const projectCanonicalSessionRequest = ({
       });
   const linearLayout = renderRequest.mode === 'linear' && renderRequest.schema >= 2
     ? {
-        enabled: renderRequest.schema >= 6
+        enabled: currentRequest
           ? presentationOwnsLinearRows ||
             (renderRequest.layout?.multiRecordPositions || []).length > 0
           : Object.keys(renderRequest.layout || {}).length > 0,
@@ -5965,9 +5957,10 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
  * @property {unknown} legacyOrthogroupState
  * @property {ReadonlySet<string>} resourceIds
  * @property {string} path
- * @property {boolean} [holdComparisons] The request is kept as stored: the
- *   Comparisons notice after Load (a saved comparison kept read-only, or one
- *   that needs a decision) owns it.
+ * @property {boolean} [holdComparisons] Load holds the request's comparisons
+ *   (a saved comparison kept read-only, or one that needs a decision): their
+ *   unresolved references are what the Comparisons notice after Load shows
+ *   (receipt 〔今までの知らせ〕), so they are not dropped.
  */
 /**
  * A schema-1 request, returned as stored until its reader (PR-D) lifts it.
@@ -5984,8 +5977,8 @@ const STORED_REQUEST_ROOTS = /** @type {const} */ ({ circular: 'CanonicalCircula
 
 /**
  * Per mode, from the description: the places a value of the other diagram
- * type is read as this one's (a placeholder that holds only null, and an
- * option of the other type that this one holds at its default), and the
+ * type is read as this one's (a placeholder that holds only null or no item,
+ * and an option of the other type that this one holds at its default), and the
  * unions picked by their `kind`.
  * @param {string} rootType
  * @param {string} otherOptionsType
@@ -6007,6 +6000,8 @@ const storedRequestPlaces = (rootType, otherOptionsType) => {
     const resolved = resolve(shape);
     if (depth > 40) return;
     if (resolved.kind === 'null' && pattern && !option) otherType.set(pattern, null);
+    // A list only the other type fills (a Circular request's `comparisons`).
+    if (resolved.kind === 'tuple' && resolved.items.length === 0 && pattern && !option) otherType.set(pattern, []);
     if (resolved.kind === 'literal' && resolved.values.length === 1 && /^diagramOptions\.[^.]+$/.test(pattern)) {
       const other = otherOptions.fields[pattern.slice('diagramOptions.'.length)];
       if (other && JSON.stringify(resolve(other)) !== JSON.stringify(resolved)) otherType.set(pattern, resolved.values[0]);
@@ -6037,6 +6032,8 @@ const STORED_REQUEST_PARTS = new Set([
 /** The conservation ring columns, read by index together (B16). */
 const CONSERVATION_RING_COLUMNS = ['conservationBlastFiles', 'conservationLabels', 'conservationColors', 'conservationFastaFiles']
   .map((key) => `diagramOptions.${key}`);
+/** The comparisons Load can hold: Linear comparisons and the conservation rings. */
+const HELD_COMPARISON_PLACE = /^(comparisons\[\*\]|diagramOptions\.conservation[A-Za-z]+\[\*\])/;
 const RECORD_INDEX_PLACE = /^comparisons\[\*\](\.pairs\[\*\])?\.(query|subject)RecordIndex$/;
 const RECORD_KEY_PLACE = /^layout\.(recordTranslations\[\*\]|similarityAlignment\.(reference|records\[\*\](\.anchor)?))\.recordKey$/;
 
@@ -6046,9 +6043,10 @@ const RECORD_KEY_PLACE = /^layout\.(recordTranslations\[\*\]|similarityAlignment
  * @param {Readonly<Record<string, unknown>>} request The promoted request (schema 9 shape, unchecked).
  * @param {'circular' | 'linear'} mode
  * @param {ReadonlySet<string>} resourceIds
+ * @param {boolean} holdComparisons The references of the comparisons are kept.
  * @returns {RepairPolicy<StoredReferenceReason>}
  */
-const storedRequestPolicy = (request, mode, resourceIds) => {
+const storedRequestPolicy = (request, mode, resourceIds, holdComparisons) => {
   const places = STORED_REQUEST_PLACES[mode];
   const records = Array.isArray(request.records) ? request.records : [];
   const recordKeys = new Set(records.map((/** @type {unknown} */ record) => (isPlainObject(record) ? record.recordKey : undefined)));
@@ -6068,6 +6066,7 @@ const storedRequestPolicy = (request, mode, resourceIds) => {
     lossless: (pattern) => (places.otherType.has(pattern) ? { value: places.otherType.get(pattern) } : null),
     discriminator: (pattern) => (pattern === '' ? 'mode' : places.tagged.has(pattern) ? 'kind' : null),
     reference: (pattern, value) => {
+      if (holdComparisons && HELD_COMPARISON_PLACE.test(pattern)) return null;
       if (/(^|\.)(resourceId|gffResourceId|fastaResourceId)$/.test(pattern)) {
         return typeof value === 'string' && !resourceIds.has(value) ? 'unknown-resource' : null;
       }
@@ -6145,9 +6144,6 @@ export const readStoredRenderRequest = (value, context) => {
   if (!Array.isArray(value.records) || (Object.hasOwn(value, 'comparisons') && !Array.isArray(value.comparisons))) {
     return { kind: 'request-dropped', path, reason: 'wrong-kind' };
   }
-  // The Comparisons notice after Load owns this request as before (receipt
-  // 〔今までの知らせ〕); it stays as stored until C2c-2 decides its reading.
-  if (context.holdComparisons) return { value, repairs: [] };
   /** @type {LoadRepair[]} */
   const repairs = [];
   const promoted = value.schema === CANONICAL_REQUEST_SCHEMA ? value : promoteCanonicalRenderRequestToCurrent(value, {
@@ -6162,7 +6158,7 @@ export const readStoredRenderRequest = (value, context) => {
   if (mode === null) return { kind: 'request-dropped', path: `${path}.mode`, reason: 'not-in-set' };
   const repaired = repairByDescription(
     promoted, { type: STORED_REQUEST_ROOTS[mode], path }, CANONICAL_REQUEST_DESCRIPTION,
-    storedRequestPolicy(promoted, mode, context.resourceIds)
+    storedRequestPolicy(promoted, mode, context.resourceIds, context.holdComparisons === true)
   );
   const root = repaired.rows.find((row) => row.pattern === '');
   if (repaired.value === undefined || root) return { kind: 'request-dropped', path, reason: String(root?.reason ?? 'wrong-kind') };
@@ -6279,16 +6275,8 @@ const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) =>
   })
 );
 
-// A schema-8 request has no feature overrides, so a Session saved before schema 9
-// stays usable without Generate (design Q4).
-const withCurrentCommittedRequest = (committed) => (
-  committed?.renderRequest?.schema === 8
-    ? { ...committed, renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest) }
-    : committed
-);
-
 const requireCurrentCommittedRequest = (committed, request) => {
-  if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
+  if (!isCurrentRequestSchema(request)
     || !['circular', 'linear'].includes(request.mode)
     || !committed?.resources || typeof committed.resources !== 'object') {
     throw new Error('A current committed canonical Session is required.');
@@ -6299,8 +6287,7 @@ const requireCurrentCommittedRequest = (committed, request) => {
  * Clone the last committed canonical Session and overlay one record transform.
  * No live form state participates in this projection.
  */
-export const projectCommittedRecordTransform = ({ committed: source, target, transform }) => {
-  const committed = withCurrentCommittedRequest(source);
+export const projectCommittedRecordTransform = ({ committed, target, transform }) => {
   const request = committed?.renderRequest;
   requireCurrentCommittedRequest(committed, request);
   validateRecordTransformTarget(target, transform, request.mode);
@@ -6416,20 +6403,14 @@ const referencedResourceIds = (value, ids = new Set()) => {
  * live editor intent: feature colors (rules and the applied palette), feature
  * visibility, and label overrides. A label reflow renders this request, so no
  * other draft setting reaches the Result before Generate (R1(c), N-16).
- * @param {{ committed: any, state: Record<string, any>, drawing: RequestDrawing,
- *   promotion?: Record<string, any> }} input
+ * @param {{ committed: any, state: Record<string, any>, drawing: RequestDrawing }} input
  */
 export const projectCommittedEditorIntent = ({
   committed,
   state,
-  drawing,
-  promotion = {}
+  drawing
 }) => {
-  // A Session loaded from an older supported request schema keeps that request
-  // until the next Generate; promote it the way Save does before overlaying.
-  const request = [5, 6, 7, 8].includes(committed?.renderRequest?.schema)
-    ? promoteCanonicalRenderRequestToCurrent(committed.renderRequest, promotion)
-    : committed?.renderRequest;
+  const request = committed?.renderRequest;
   requireCurrentCommittedRequest(committed, request);
   const candidate = {
     ...committed,
@@ -6477,9 +6458,8 @@ export const projectCommittedEditorIntent = ({
 };
 
 /** Project only alignment-owned fields of the last committed canonical artifact. */
-export const projectCommittedSimilarityAlignment = ({ committed: source, plan, translations, orientations }) => {
-  const committed = withCurrentCommittedRequest(source);
-  if (committed?.renderRequest?.schema !== CANONICAL_REQUEST_SCHEMA
+export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations }) => {
+  if (!isCurrentRequestSchema(committed?.renderRequest)
     || committed.renderRequest.mode !== 'linear' || !committed.resources) {
     throw new Error('Alignment requires a committed canonical Linear artifact.');
   }
