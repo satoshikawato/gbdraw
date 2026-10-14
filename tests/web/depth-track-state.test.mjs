@@ -168,6 +168,14 @@ const depthIndexes = (slots) => slots
   });
 
   assert.deepEqual(labels(reconciled.tracks), ['24 hpi SRR14027705)', '6 hpi (SRR14027721)']);
+  // A series whose config another series took takes the first config no
+  // series took, so no config is lost (BA-OD94).
+  const swapped = reconcileDepthTracksToFiles({
+    files: [file('b.depth.tsv'), file('a.depth.tsv')],
+    depthTracks: [{ label: 'a' }, { label: 'b' }],
+    targetCount: 2
+  });
+  assert.deepEqual([labels(swapped.tracks), swapped.sources], [['b', 'a'], [1, 0]]);
 }
 
 console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);
@@ -186,6 +194,16 @@ console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);
   const loaded = dropInvalidManagedDepthSlots({ slots: stack, activeCount: 1 });
   assert.deepEqual(loaded.map((slot) => slot.id), ['features', 'ticks', 'gc_content', 'depth']);
   assert.equal(loaded[3].enabled, false);
+  // BA-OD94: a row of a series without a source keeps it as the source
+  // change does (reconcileManagedDepthSlots): a managed row goes, a manual
+  // row stays; a row that names no series is dropped (managed) or turned off.
+  const managed = { id: 'depth', renderer: 'depth', params: { track_index: 0 } };
+  const manual = { id: 'mine', renderer: 'depth', width: '10px', params: { track_index: 1 } };
+  const named = { id: 'gone', renderer: 'depth', width: '10px', params: { track_index: 3 } };
+  const fitted = dropInvalidManagedDepthSlots({ slots: [managed, manual, named], activeCount: 2, sourced: [] });
+  assert.deepEqual(fitted.map(({ id, enabled, params }) => [id, enabled ?? true, params.track_index ?? null]),
+    [['mine', true, 1], ['gone', false, null]]);
+  assert.deepEqual(reconcileManagedDepthSlots({ slots: [managed, manual], previousSourced: [0, 1], sourced: [] }).slots, [manual]);
 }
 
 {

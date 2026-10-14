@@ -3485,6 +3485,8 @@ export const createAppSetup = () => {
     // Load the user canceled changed nothing, the notice included.
     if (name && !['canceled', 'skipped', 'stale'].includes(String(result?.status))) noticeBanner.dismiss();
     if (result?.status === 'ok') {
+      // The Depth panel shows each loaded Circular series, with or without a Depth file (BA-OD94).
+      depthTrackUiCounts.circular = Math.max(1, state.drawings.circular.adv.depth_tracks.length);
       showNotice({ text: name ? `Session loaded: ${name}` : 'Session loaded.', items: result.notices || [] });
     } else if (result?.status === 'legacy') {
       showNotice({ text: 'Configuration loaded from an older gbdraw. Save Session to keep it in the current format.' });

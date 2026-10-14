@@ -11,7 +11,6 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  * @typedef {'setting-replaced'
  *   | 'setting-entries-dropped'
  *   | 'pending-palette-dropped'
- *   | 'depth-series-dropped'
  *   | 'depth-row-disabled'
  *   | 'orthogroup-edit-dropped'
  *   | 'cache-entry-dropped'
@@ -76,13 +75,12 @@ const LINE_LIMIT = 12;
  * 46 drew the later of two Legend edits of one row; the next comparison
  * computes a LOSAT cache entry again; a pending palette waits while Instant
  * Preview, which the file turns on, applies a palette at once; a similarity
- * group name names no group the Result has; a Depth series without a Depth
- * file draws nothing (a Depth row the fit turns off stays listed).
+ * group name names no group the Result has. (Load keeps a Depth series
+ * without a Depth file, as the app does, BA-OD94.)
  * @type {ReadonlySet<LoadRepairCode>}
  */
 const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ ([
-  'legend-edit-overwritten-session46', 'cache-entry-dropped', 'pending-palette-dropped', 'orthogroup-edit-dropped',
-  'depth-series-dropped'
+  'legend-edit-overwritten-session46', 'cache-entry-dropped', 'pending-palette-dropped', 'orthogroup-edit-dropped'
 ]));
 
 /** @param {string} value @param {number} limit */
@@ -163,11 +161,8 @@ const WORDING = {
   'pending-palette-dropped': (repairs) => valueLines(repairs, ({ path, label }) => (
     `Palette: the palette "${label ?? ''}" (${path}) waits to be applied, but Instant Preview is on, which applies a palette at once;`
     + ' it was dropped.')),
-  'depth-series-dropped': (repairs) => repairs.map(({ path, label }) => (
-    `Depth: the series "${label ?? ''}" (${path}) has no Depth file; its settings were dropped.`)),
   'depth-row-disabled': (repairs) => repairs.map(({ path, label }) => (
-    `Track stack: the Depth row "${label ?? ''}" (${path}) shows a Depth series that has no Depth file; the row is turned off`
-    + ' and no longer names that series.')),
+    `Track stack: the Depth row "${label ?? ''}" (${path}) names a Depth series its drawing does not have; the row is turned off.`)),
   'legend-position-defaulted': (repairs) => valueLines(repairs, ({ path, stored, used }) => (
     `Legend: the position "${stored}" (${path}) is not one of its mode's positions; `
     + `${used === undefined ? 'it is not used' : `${used} is used`}.`)),

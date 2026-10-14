@@ -2,7 +2,7 @@
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import {
-  changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, nonNegativeNumberOrNull, numberOr, onlyTrue,
+  changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, nonNegativeNumberOrNull, numberOr, onlyTrue,
   positiveNumberOrNull, textChoice, trueUnlessFalse, truthy
 } from '../utils/field-reading.js';
 import { loadRepair } from '../utils/load-repairs.js';
@@ -146,10 +146,13 @@ export const readConservationSeries = (value) => {
     const gencode = readGencode(entry.losat_gencode);
     if (color.lost) leaves.push({ at: `[${index}].color`, stored: entry.color, used: color.value });
     if (gencode.lost) leaves.push({ at: `[${index}].losat_gencode`, stored: entry.losat_gencode, used: gencode.value });
+    // A series without its file index takes its place in the list.
+    const sourceIndex = numberOr(Number.isInteger, series.length, { coerceUnset: true })(entry.sourceIndex);
+    if (sourceIndex.lost) leaves.push({ at: `[${index}].sourceIndex`, stored: entry.sourceIndex, used: sourceIndex.value });
     series.push({
       sourceKey: String(entry.sourceKey || ''),
       fileName: String(entry.fileName || ''),
-      sourceIndex: Number.isInteger(Number(entry.sourceIndex)) ? Number(entry.sourceIndex) : series.length,
+      sourceIndex: sourceIndex.value,
       label: String(entry.label ?? entry.name ?? ''),
       color: color.value,
       losat_gencode: gencode.value
@@ -586,11 +589,13 @@ const readRows = (container, rows, at, stored = container) => rows.flatMap(({ fi
 
 /** @param {unknown} value A list, an object, or the `typeof` of anything else. */
 const kindOf = (value) => (Array.isArray(value) ? 'list' : typeof value);
+/** Stored maps whose keys the user names, merged with their own keys. @type {readonly string[]} */
+const FREE_KEY_MAPS = Object.freeze(['adv.feature_shapes']);
 /** @type {readonly string[]} */
 const UNSAFE_KEYS = Object.freeze(['__proto__', 'constructor', 'prototype']);
 /**
  * Merges a stored settings object into `target`: a key `target` lacks is
- * ignored; an object merges into an object; a list replaces a list; a value
+ * ignored, except in a map of `FREE_KEY_MAPS`, where it is copied; an object merges into an object; a list replaces a list; a value
  * of `target`'s kind, or `null` on either side, is copied. A value of another
  * kind (a list for an object included) is not used; it is returned as a loss
  * at `at`.
@@ -603,7 +608,12 @@ export const mergeStoredSettings = (target, source, at = '') => {
   if (!source || typeof source !== 'object') return [];
   const stored = /** @type {Record<string, unknown>} */ (source);
   return Object.keys(stored).flatMap((key) => {
-    if (UNSAFE_KEYS.includes(key) || !Object.hasOwn(target, key)) return [];
+    if (UNSAFE_KEYS.includes(key)) return [];
+    if (!Object.hasOwn(target, key)) {
+      // A shape of a feature type the defaults do not name is the user's own.
+      if (FREE_KEY_MAPS.includes(at)) target[key] = copied(stored[key]);
+      return [];
+    }
     const targetValue = target[key];
     const sourceValue = stored[key];
     const keyAt = at ? `${at}.${key}` : key;
@@ -743,7 +753,7 @@ const holds = (value, at) => {
  */
 const lossRepairs = (losses, path, stored, { mode = null, root = '' } = {}) => losses
   .filter(({ at, stored: storedValue, used }) => holds(stored, at) && drawnByMode(mode, root, at)
-    && !(used !== undefined && used !== null && typeof used !== 'object' && excerpt(storedValue) === excerpt(used)))
+    && !keepsMeaning(storedValue, used))
   .map(({ at, stored: storedValue, used, dropped }) => {
     const fieldPath = [path, at].filter(Boolean).join('.');
     if (dropped) return loadRepair({ code: 'setting-entries-dropped', path: fieldPath, effect: 'dropped', count: dropped });

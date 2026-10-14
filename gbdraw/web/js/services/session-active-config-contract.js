@@ -7,7 +7,7 @@ import { sha256Hex, textToBytes } from './byte-utils.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
 import { createDefaultLinearDefinitionLineStyles } from './definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from './circular-track-slot-model.js';
 import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from './linear-track-slot-model.js'; import { validateTrackSlotBindingInvariants } from './track-slot-validation.js';
-import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from './current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
+import { requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentConfigFields } from './current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -251,7 +251,7 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     || new Set(config.recordsOff).size !== config.recordsOff.length
     || !config.recordsOff.every((/** @type {unknown} */ key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
-  validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
+  validateDomainShapes(config); validateCollections(config); requireCurrentConfigFields(config);
   // Python checks the record display drafts of a Session from that version
   // (`validate_session`) and refuses a row whose selector is not text
   // (gbdraw/session_io.py:853-857). A Session 40 draft is not checked there, so
@@ -268,9 +268,6 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
   assertFields(config.form, new Set(CURRENT_WRITER_FORM_FIELDS), 'config.form'); assertFields(config.adv, new Set(CURRENT_WRITER_ADV_FIELDS), 'config.adv');
   if (has(config.form, 'keep_definition_left_aligned') && typeof config.form.keep_definition_left_aligned !== 'boolean')
     throw new Error('Current session active configuration config.form.keep_definition_left_aligned must be a boolean.');
-  if (has(config.form, 'linear_track_layout')) requireCurrentLinearTrackLayout(config.form.linear_track_layout);
-  if (has(config.adv, 'label_placement')) requireCurrentLinearLabelPlacement(config.adv.label_placement);
-  if (has(config.adv, 'multi_record_size_mode')) requireCurrentCircularMultiRecordSizeMode(config.adv.multi_record_size_mode);
   // A Session 46 slice may omit a field: it reads that mode's default (plan 4.1).
   if (has(config.adv, 'linear_accession_visibility')) requireLinearLabelVisibilityMode(
     config.adv.linear_accession_visibility,

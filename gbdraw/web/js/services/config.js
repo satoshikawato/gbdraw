@@ -178,10 +178,10 @@ import {
   validateProteinIdentityManifest
 } from './losat-cache.js';
 import {
-  arrowHeadLengthRatioForState,
   defaultFeatureRendering,
-  normalizeArrowShaftWidthRatio,
-  normalizeFeatureRenderingMap
+  normalizeFeatureRenderingMap,
+  normalizedArrowGeometryState,
+  normalizedPersistedArrowGeometryState
 } from '../utils/feature-rendering.js';
 import {
   adoptCurrentSessionDocument,
@@ -209,7 +209,7 @@ import {
   requireCurrentCircularMultiRecordSizeMode,
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
-  requireCurrentWebStateFieldNames
+  requireCurrentConfigFields
 } from './current-option-values.js';
 import {
   validateSimilarityAlignmentResetReceipt,
@@ -845,34 +845,6 @@ const cloneCanonicalSession = (canonical) => {
   };
 };
 
-/** @param {{ arrow_head_length_ratio?: unknown, arrow_shaft_width_ratio?: unknown } | null} [adv] */
-const normalizedArrowGeometryState = (adv = {}) => ({
-  arrow_head_length_ratio: arrowHeadLengthRatioForState(
-    adv?.arrow_head_length_ratio
-  ),
-  arrow_shaft_width_ratio: normalizeArrowShaftWidthRatio(
-    adv?.arrow_shaft_width_ratio
-  )
-});
-
-/** @param {unknown} value */
-const persistedArrowGeometryValue = (value) => {
-  if (typeof value !== 'string' || value.trim() === '') return value;
-  const numeric = Number(value.trim());
-  return Number.isFinite(numeric) ? numeric : value;
-};
-
-/** @param {{ arrow_head_length_ratio?: unknown, arrow_shaft_width_ratio?: unknown } | null} [adv] */
-const normalizedPersistedArrowGeometryState = (adv = {}) =>
-  normalizedArrowGeometryState({
-    arrow_head_length_ratio: persistedArrowGeometryValue(
-      adv?.arrow_head_length_ratio
-    ),
-    arrow_shaft_width_ratio: persistedArrowGeometryValue(
-      adv?.arrow_shaft_width_ratio
-    )
-  });
-
 /**
  * @param {LinearComparisonPlan} target
  * @param {unknown} source
@@ -1011,7 +983,7 @@ export const buildEditorStateData = (drawing) => ({
  *   `repairs` collects what Load cannot restore of the editor state stored at `path`; `sessionVersion`: the
  *   version of the Session it was read from.
  */
-const normalizeEditorStateData = (editorState = {}, {
+export const normalizeEditorStateData = (editorState = {}, {
   featureCatalog = undefined, repairs = null, path = 'editorState', sessionVersion = SESSION_VERSION
 } = {}) => {
   const defaults = defaultEditorStateData();
@@ -1568,6 +1540,8 @@ const readLegacyConfigPayload = (data, drawing, mode) => {
   );
   validateImportedCircularTrackSlots(migrated);
   validateImportedLinearTrackSlots(migrated);
+  // `applyLegacyConfigPayload` would refuse these fields after the dialog.
+  requireCurrentConfigFields(migrated);
   if (Object.hasOwn(migrated, 'recordDisplayDrafts')) {
     try {
       validateRecordDisplayDrafts(migrated.recordDisplayDrafts);
@@ -2400,16 +2374,8 @@ const resolvedTrackStacks = (adv, form) => {
 // and axis indexes stay unset (R11).
 /** @param {DrawingState} drawing */
 export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true } = {}) => {
-  requireCurrentWebStateFieldNames(data);
-  if (isPlainObject(data.form) && Object.prototype.hasOwnProperty.call(data.form, 'linear_track_layout')) {
-    requireCurrentLinearTrackLayout(data.form.linear_track_layout);
-  }
-  if (isPlainObject(data.adv) && Object.prototype.hasOwnProperty.call(data.adv, 'label_placement')) {
-    requireCurrentLinearLabelPlacement(data.adv.label_placement);
-  }
-  if (isPlainObject(data.adv) && Object.prototype.hasOwnProperty.call(data.adv, 'multi_record_size_mode')) {
-    requireCurrentCircularMultiRecordSizeMode(data.adv.multi_record_size_mode);
-  }
+  // Load ran this check before its dialog; a History restore holds captured settings.
+  requireCurrentConfigFields(data);
   if (data.losat) {
     // The execution settings of a Session 44 or older draft or of a request
     // projection are app-level (`state.losatExecution`); the drawing keeps the
@@ -3734,11 +3700,13 @@ const applyFiles = (filesData, {
   return { collapsedLinearSeqs: false };
 };
 
-// What the Depth fit of a loaded drawing drops (B45), read before the commit
-// from the settings `applyModeSliceData` installs and the candidate's Depth
-// files: the series and rows of the values the file holds. A row the fit
-// turns off is listed when it was on or the file names its series; only the
-// drawing's own mode's stack is listed, as the drawing never draws the other.
+// What the Depth fit of a loaded drawing turns off (B45), read before the
+// commit from the settings `applyModeSliceData` installs and the candidate's
+// Depth files: the fit keeps every series and every row the app keeps without
+// a Depth file (BA-OD94), so only a manual row that names no series of the
+// drawing is turned off. It is listed when it was on or the file names its
+// series; only the drawing's own mode's stack is listed, as the drawing never
+// draws the other.
 /**
  * @param {'circular' | 'linear'} mode
  * @param {SettingsContainers} installed The drawing's settings as Load installs them (`configFieldRepairs`).
@@ -3767,13 +3735,8 @@ const depthFitRepairs = (mode, installed, storedAdv, { at, resolveTrackPlacement
     const saved = /** @type {{ id?: unknown, params?: { track_index?: unknown } }} */ (isPlainObject(row) ? row : {});
     return String(saved.id || '') === id && isPlainObject(saved.params) && !isUnsetValue(saved.params?.track_index);
   });
-  return [
-    ...(Object.hasOwn(stored, 'depth_tracks') ? fit.droppedSeries.map(({ index, label }) => loadRepair({
-      code: 'depth-series-dropped', path: `${at}.depth_tracks[${index}]`, effect: 'dropped', label
-    })) : []),
-    ...(Object.hasOwn(stored, ownStack) ? fit.disabledRows.filter(({ list, id, enabled }) => list === mode && (enabled || namesSeries(id)))
-      .map(({ id }) => loadRepair({ code: 'depth-row-disabled', path: `${at}.${ownStack}`, effect: 'changed', label: id })) : [])
-  ];
+  return Object.hasOwn(stored, ownStack) ? fit.disabledRows.filter(({ list, id, enabled }) => list === mode && (enabled || namesSeries(id)))
+    .map(({ id }) => loadRepair({ code: 'depth-row-disabled', path: `${at}.${ownStack}`, effect: 'changed', label: id })) : [];
 };
 
 // A loaded drawing's Depth series fit its own mode's Depth sources (plan 4.2
@@ -5487,7 +5450,10 @@ const importSessionDocument = async (e, options = {}) => {
       // B43), installed as `applyModeSliceData` installs it over the drawing
       // Load resets; and of the drawing's `ui` and feature edits.
       installedSettings[mode] = defaultSettingsContainers(mode);
-      repairs.push(...configFieldRepairs(installedSettings[mode], overlayModeSliceConfig(null, modeConfigs[mode]),
+      // What `applyModeSliceData` installs; `applyConfigData` would refuse its fields after the dialog.
+      const installedConfig = overlayModeSliceConfig(null, modeConfigs[mode]);
+      requireCurrentConfigFields(installedConfig);
+      repairs.push(...configFieldRepairs(installedSettings[mode], installedConfig,
         modeScopedSession ? `modes.${mode}.config` : 'config', { stored: modeSlices[mode].config, mode }));
       // (A Session 27-44 keeps them in its `ui` and `features`.)
       repairs.push(...sliceFieldRepairs(modeSlices[mode], modeScopedSession ? `modes.${mode}` : '', mode));

@@ -53,7 +53,8 @@ export const textChoice = (values, fallback, { aliases = {}, foldHyphens = false
 const optionalNumber = (accepts) => (value) => {
   if (isUnsetValue(value) || String(value).trim().toLowerCase() === 'auto') return { value: null, lost: false };
   const numeric = Number(value);
-  return Number.isFinite(numeric) && accepts(numeric) ? { value: numeric, lost: false } : { value: null, lost: true };
+  // A boolean reads as 1 or 0, as `numberOr` reads it, but is no number (rule 2).
+  return Number.isFinite(numeric) && accepts(numeric) ? { value: numeric, lost: typeof value === 'boolean' } : { value: null, lost: true };
 };
 export const positiveNumberOrNull = optionalNumber((numeric) => numeric > 0);
 export const nonNegativeNumberOrNull = optionalNumber((numeric) => numeric >= 0);
@@ -111,6 +112,19 @@ const isObjectValue = (value) => Boolean(value) && typeof value === 'object' && 
 const foldedText = (value) => String(value).trim().toLowerCase();
 
 /**
+ * Whether the value `used` for a stored value keeps its meaning: the same
+ * value, or its own text (`"5"` as 5, case and outer spaces aside). A boolean
+ * read as text (`true` as "true") or a list or object read as a value is
+ * another kind (rule 2).
+ * @param {unknown} stored
+ * @param {unknown} used
+ */
+export const keepsMeaning = (stored, used) => stored === used || (
+  used !== undefined && used !== null && typeof used !== 'object'
+  && stored !== null && typeof stored !== 'object' && typeof stored !== 'boolean'
+  && foldedText(stored) === foldedText(used));
+
+/**
  * The values of `stored` that its reading `read` does not keep: a value read
  * as other text, a list or object read as another kind, and a key or entry
  * the reading dropped. An unset stored value takes its default without a
@@ -134,6 +148,5 @@ export const changedLeaves = (stored, read, at = '') => {
         : changedLeaves(source[key], undefined, keyAt);
     });
   }
-  return stored === read || (read !== undefined && typeof read !== 'object' && foldedText(stored) === foldedText(read))
-    ? [] : [{ at, stored, used: read }];
+  return keepsMeaning(stored, read) ? [] : [{ at, stored, used: read }];
 };

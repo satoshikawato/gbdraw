@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
+import { keepsMeaning } from '../utils/field-reading.js';
 export const DEFINITION_LINE_STYLE_KINDS = Object.freeze([
   'name',
   'subtitle',
@@ -34,7 +35,10 @@ const normalizeDefinitionLineFontWeight = (value) => {
 /** @param {unknown} value @returns {FieldReading<string | null>} */
 const normalizeDefinitionLineFill = (value) => {
   if (value === null || value === undefined) return { value: null, lost: false };
-  return { value: String(value).trim() || null, lost: false };
+  if (typeof value === 'object') return { value: null, lost: true };
+  const text = String(value).trim() || null;
+  // A color is text: a number keeps its meaning as its text, a boolean does not (rule 2).
+  return { value: text, lost: text !== null && !keepsMeaning(value, text) };
 };
 
 const STYLE_READERS = Object.freeze({
