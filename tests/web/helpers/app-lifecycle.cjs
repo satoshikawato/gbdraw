@@ -818,9 +818,39 @@ const assertSingleWorkerRun = async (page) => {
   return activity;
 };
 
+// What a Load that ended or asked shows: no dialog lines, no error.
+const expectNoRepairsOrError = async (page) => {
+  const prompt = page.locator('[data-choice-prompt]');
+  expect(await prompt.locator('li').allTextContents(), 'the Load listed repairs').toEqual([]);
+  await expect(prompt).toHaveCount(0);
+  expect(await page.evaluate(() => {
+    const error = window.__GBDRAW_APP__.errorLog;
+    return error ? { code: error.code, summary: error.summary } : null;
+  }), 'the Load failed').toBeNull();
+};
+
+// A Load of a file that loses nothing ends without the Load repair dialog
+// (BA-D25). Called right after the file is chosen, it waits until the new
+// Load has started, so a notice of an earlier Load does not end the wait,
+// then until the Load ends or the dialog opens. It fails with the
+// dialog's lines when the dialog opened, and with the error when the Load
+// failed.
+const expectNoLoadRepairDialog = async (page, { timeout = 180_000 } = {}) => {
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending, null, { timeout });
+  await page.waitForFunction(() => document.querySelector('[data-choice-prompt]') || !window.__GBDRAW_APP__.sessionImportPending,
+    null, { timeout });
+  await expectNoRepairsOrError(page);
+};
+
 // A Session Load succeeded with no warning: the notice says "Session loaded"
 // and lists nothing (each warning of a Load is one list item of the notice).
+// Its callers may have waited for the Load's end or answered its dialog, so it
+// does not wait for the start; a notice or an error counts once no Load runs.
 const expectSessionLoadedWithoutWarnings = async (page, { timeout = 120_000 } = {}) => {
+  await page.waitForFunction(() => document.querySelector('[data-choice-prompt]') || (!window.__GBDRAW_APP__?.sessionImportPending
+    && (window.__GBDRAW_APP__?.errorLog || /Session loaded/.test(document.querySelector('[data-app-notice]')?.textContent || ''))),
+  null, { timeout });
+  await expectNoRepairsOrError(page);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout });
   await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
 };
@@ -833,6 +863,18 @@ const answerChoicePrompt = async (page, title, action, { timeout = 120_000 } = {
   const prompt = page.locator('[data-choice-prompt]');
   await expect(prompt.getByRole('heading', { name: title, exact: true })).toBeVisible({ timeout });
   await prompt.locator(`[data-choice-prompt-action="${action}"]`).click();
+};
+
+// BA-D25: a Load that cannot restore everything lists what it cannot in one
+// dialog before it changes anything. The spec names the lines it expects and
+// answers `load` or `cancel`.
+const answerLoadRepairs = async (page, items, answer = 'load', { timeout = 120_000 } = {}) => {
+  const prompt = page.locator('[data-choice-prompt]');
+  await expect(prompt.getByRole('heading', { name: 'Load this file?', exact: true })).toBeVisible({ timeout });
+  await expect(prompt.locator('li')).toHaveText(items);
+  if (answer === 'load') await prompt.locator('[data-choice-prompt-action="load"]').click();
+  else await prompt.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(prompt).toHaveCount(0);
 };
 
 // The local static server can reset a connection under CI load (OV-713).
@@ -866,7 +908,9 @@ const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', 
 
 module.exports = {
   answerChoicePrompt,
+  expectNoLoadRepairDialog,
   expectSessionLoadedWithoutWarnings,
+  answerLoadRepairs,
   CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,
   CURRENT_SESSION_VERSION,

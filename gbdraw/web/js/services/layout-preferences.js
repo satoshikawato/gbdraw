@@ -1,6 +1,10 @@
 // @ts-check
 import { LEGEND_POSITIONS } from '../contracts/schema.generated.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
+import { loadRepair } from '../utils/load-repairs.js';
+import { changedLeaves, textChoice } from '../utils/field-reading.js';
+
+/** @import { LoadRepair, Repaired } from '../utils/load-repairs.js' */
 
 /**
  * A legend side and a title side, as a diagram of one mode shows them.
@@ -26,11 +30,9 @@ import { WEB_UX_PROFILE } from '../web-ux-profile.js';
  */
 /** @typedef {{ legend?: unknown, plotTitlePosition?: unknown }} StoredLayoutSides */
 
+export const readCircularPlotTitlePosition = textChoice(['none', 'top', 'bottom'], 'none');
 /** @param {unknown} value */
-export const normalizeCircularPlotTitlePosition = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
-};
+export const normalizeCircularPlotTitlePosition = (value) => readCircularPlotTitlePosition(value).value;
 
 /** @param {unknown} value */
 export const normalizeLinearPlotTitlePosition = (value) => {
@@ -70,6 +72,35 @@ export const legendPositionOrDefault = (value, mode) => (
 );
 
 /**
+ * A stored value Load reads as a legend position: a falsy value (absent,
+ * `null`, `false`, 0, empty text) and blank text are unset (no repair); case
+ * and outer spaces read as the position.
+ * @param {unknown} value
+ */
+const storedLegendValue = (value) => Boolean(value) && !(typeof value === 'string' && value.trim() === '');
+
+/**
+ * The legend position of a mode that Load reads from a file: the mode's
+ * default for a value outside the mode's positions, listed in the Load dialog
+ * at `path` (OV-652, BA-D11, BA-D25).
+ * @param {unknown} value
+ * @param {string} mode 'linear'; any other mode reads the Circular positions.
+ * @param {string} path Where the value is in the file.
+ * @param {'legend-position-defaulted' | 'legend-side-defaulted'} [code] The side a saved Result is drawn with
+ *   is `legend-side-defaulted`.
+ * @returns {Repaired<string>}
+ */
+export const readLegendPositionOfMode = (value, mode, path, code = 'legend-position-defaulted') => {
+  const position = legendPositionOrDefault(value, mode);
+  return {
+    value: position,
+    repairs: storedLegendValue(value) && legendPositionOfMode(value, mode) === null
+      ? [loadRepair({ code, path, effect: 'defaulted', stored: String(value), used: position })]
+      : []
+  };
+};
+
+/**
  * The side a Result saved without composition metadata (Session 27 to 30) is
  * laid out with: `none` when its Session stored no side (no value, a falsy
  * value the old `||` chain read as `none`, or blank text, which failed Load
@@ -82,6 +113,24 @@ export const legendPositionOrDefault = (value, mode) => (
 export const drawnLegendSideOfMode = (value, mode) => (
   !value || (typeof value === 'string' && value.trim() === '') ? 'none' : legendPositionOrDefault(value, mode)
 );
+
+/**
+ * `drawnLegendSideOfMode` as Load reads it from a file: a stored side outside
+ * the Result's mode is listed in the Load dialog at `path` (BA-D26).
+ * @param {unknown} value
+ * @param {string} mode
+ * @param {string} path
+ * @returns {Repaired<string>}
+ */
+export const readDrawnLegendSideOfMode = (value, mode, path) => {
+  const side = drawnLegendSideOfMode(value, mode);
+  return {
+    value: side,
+    repairs: storedLegendValue(value) && legendPositionOfMode(value, mode) === null
+      ? [loadRepair({ code: 'legend-side-defaulted', path, effect: 'defaulted', stored: String(value), used: side })]
+      : []
+  };
+};
 
 /** @returns {LayoutPreferences} */
 export const createDefaultLayoutPreferences = () => ({
@@ -327,6 +376,49 @@ const hasStoredLayoutPreferences = (ui) => (
       : storedText(ui?.[field])
   ))
 );
+
+/**
+ * The layout values stored in a Session's `ui` that Load does not use as
+ * stored. `ui.layoutPreferences`, when stored, is the layout: each value it
+ * reads otherwise (a legend outside its mode's positions, OV-652; an unknown
+ * plot title position) is listed with the value used. Otherwise the legacy
+ * legend fields are, and a legend outside its mode's positions is not used.
+ * A Session 46 mode slice stores its mode's slot only (`slotOf`); a slot that
+ * is no object is not read, and the committed request's layout, when it has
+ * one (`projected`), is used instead without a loss.
+ * @param {unknown} ui
+ * @param {string} path Where `ui` is in the file.
+ * @param {{ slotOf?: 'circular' | 'linear' | null, projected?: boolean }} [options]
+ * @returns {LoadRepair[]}
+ */
+export const storedLegendPositionRepairs = (ui, path, { slotOf = null, projected = false } = {}) => {
+  if (!isRecord(ui)) return [];
+  const layout = ui.layoutPreferences;
+  if (isRecord(layout)) {
+    const stored = slotOf ? { [slotOf]: layout } : layout;
+    const read = normalizeLayoutPreferences(stored);
+    return changedLeaves(slotOf ? layout : stored, slotOf ? read[slotOf] : read).map(({ at, stored: value, used }) => {
+      const leafPath = `${path}.layoutPreferences${at}`;
+      return at.endsWith('.legend') && (used === null || typeof used === 'string')
+        ? loadRepair({
+            code: 'legend-position-defaulted', path: leafPath, effect: used === null ? 'dropped' : 'defaulted',
+            stored: String(value), ...(used === null ? {} : { used })
+          })
+        : loadRepair({
+            code: 'setting-replaced', path: leafPath, effect: used === undefined ? 'dropped' : 'defaulted',
+            stored: typeof value === 'string' ? value : JSON.stringify(value) ?? '',
+            ...(typeof used === 'string' ? { used } : {})
+          });
+    });
+  }
+  if (slotOf) {
+    return layout === undefined || layout === null || projected ? []
+      : [loadRepair({ code: 'setting-replaced', path: `${path}.layoutPreferences`, effect: 'defaulted', stored: JSON.stringify(layout) ?? '' })];
+  }
+  return Object.entries(LEGACY_LEGEND_FIELD_MODES)
+    .filter(([field, mode]) => storedLegendValue(ui[field]) && legendPositionOfMode(ui[field], mode) === null)
+    .map(([field]) => loadRepair({ code: 'legend-position-defaulted', path: `${path}.${field}`, effect: 'dropped', stored: String(ui[field]) }));
+};
 
 /**
  * The layout preferences a Session 27-44 restores (Session Load and Gallery

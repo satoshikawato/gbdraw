@@ -84,6 +84,34 @@ export const arrowHeadLengthRatioForState = (value) => {
   return normalized === DEFAULT_ARROW_HEAD_LENGTH_RATIO ? null : normalized;
 };
 
+/** @param {{ arrow_head_length_ratio?: unknown, arrow_shaft_width_ratio?: unknown } | null} [adv] */
+export const normalizedArrowGeometryState = (adv = {}) => ({
+  arrow_head_length_ratio: arrowHeadLengthRatioForState(
+    adv?.arrow_head_length_ratio
+  ),
+  arrow_shaft_width_ratio: normalizeArrowShaftWidthRatio(
+    adv?.arrow_shaft_width_ratio
+  )
+});
+
+/** A stored ratio saved as its text reads as its number. @param {unknown} value */
+const persistedArrowGeometryValue = (value) => {
+  if (typeof value !== 'string' || value.trim() === '') return value;
+  const numeric = Number(value.trim());
+  return Number.isFinite(numeric) ? numeric : value;
+};
+
+/** @param {{ arrow_head_length_ratio?: unknown, arrow_shaft_width_ratio?: unknown } | null} [adv] */
+export const normalizedPersistedArrowGeometryState = (adv = {}) =>
+  normalizedArrowGeometryState({
+    arrow_head_length_ratio: persistedArrowGeometryValue(
+      adv?.arrow_head_length_ratio
+    ),
+    arrow_shaft_width_ratio: persistedArrowGeometryValue(
+      adv?.arrow_shaft_width_ratio
+    )
+  });
+
 /** @param {unknown} source */
 export const normalizeFeatureRenderingMap = (source) => {
   if (source === null || source === undefined) return {};

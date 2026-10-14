@@ -3,7 +3,7 @@
 // a current defect; the PR that fixes the audit ID removes the mark.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { generateAndWaitForResult, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, evaluateWithRetainedPromise, expectNoLoadRepairDialog, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 const {
   BATCH_FIXTURE,
   HMMT,
@@ -364,6 +364,7 @@ for (const [version, fixture] of [
   await openFresh(page);
   await page.locator('input[accept^=".json,"]')
     .setInputFiles(fixture);
+  await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await page.waitForFunction(() => window.__GBDRAW_APP__.sessionSaveAvailable, null, { timeout: 180_000 });
   await settle(page);
@@ -385,6 +386,18 @@ for (const [version, fixture] of [
   const saved = await attemptSave(page);
   expect(saved.error).toBeNull();
   expect(saved.downloads).toHaveLength(1);
+});
+
+// The Sessions below 40 whose features the diagram Worker reads again and
+// that no other spec loads: each loads without the Load dialog.
+for (const fixture of [
+  'cli-linear-protein.v30', 'conservation-fasta.v39', 'precomputed-ring-unlabelled-cli.v30', 'scale-interval-negative-linear-cli.v30'
+]) test(`a ${fixture} Session loads without the Load dialog`, async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(`tests/fixtures/sessions/${fixture}.gbdraw-session.json.gz`);
+  await expectNoLoadRepairDialog(page);
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
 });
 
 test('loading a JSON file that is not a Session reports a recognized diagnostic', async ({ page }) => {

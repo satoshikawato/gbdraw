@@ -22,6 +22,7 @@ const copyModule = async (sourceRelative, targetRelative) => {
 await copyModule('gbdraw/web/js/services/session-feature-recovery.js', 'services/session-feature-recovery.js');
 await copyModule('gbdraw/web/js/services/feature-metadata-extraction.js', 'services/feature-metadata-extraction.js');
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
+await copyModule('gbdraw/web/js/utils/field-reading.js', 'utils/field-reading.js');
 await copyModule('gbdraw/web/js/services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('gbdraw/web/js/services/legend-svg.js', 'services/legend-svg.js');
 await copyModule('gbdraw/web/js/services/result-paint-bases.js', 'services/result-paint-bases.js');
@@ -747,6 +748,190 @@ for (const invalidRecordIndex of [
   for (const value of [undefined, null, 0, '']) {
     await assert.rejects(failing(value), (thrown) => thrown === value, `falsy rejection ${String(value)}`);
   }
+}
+
+// OV-751: a Session below 40 whose features are read again aligns them with
+// the saved SVG. A Circular SVG names a feature without its record (the record
+// index and ID sit on the record group), and a Linear feature read again names
+// its input (`fileIdx`) and its record within that input (`record_idx`) and
+// carries the extraction's predicted rendered ID, which is the source hash
+// without the `_record_<n>` suffix the SVG draws.
+{
+  const circularPlan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'circular',
+      cInputType: 'gb',
+      files: { c_gb: { name: 'c.gb' } },
+      selectedResultIndex: 0,
+      results: committedResults('<svg><g data-gbdraw-record-id="R1" data-gbdraw-record-index="0"><path id="hc" data-gbdraw-feature-id="hc" /></g></svg>'),
+      featureState: {},
+      editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async () => {
+      const feature = { id: 'f0', svg_id: 'hc', stable_svg_id: 'hc', rendered_feature_svg_id: 'hc', record_idx: 0, record_id: 'R1', type: 'CDS' };
+      return { features: [feature], biological_features: [feature], record_ids: ['R1'] };
+    }
+  });
+  assert.equal(circularPlan.status, 'recovered', circularPlan.reason);
+  assert.deepEqual(circularPlan.recoveredFeatureState.extractedFeatures.map((feature) => feature.rendered_svg_id), ['hc']);
+}
+
+{
+  // Input 0 holds two records and input 1 one: the SVG numbers them 0, 1, 2.
+  const svg = `<svg>
+    <path id="a_record_1" data-gbdraw-feature-id="a_record_1" data-gbdraw-stable-feature-id="a" data-gbdraw-record-index="0" data-gbdraw-record-id="RA" />
+    <path id="a2_record_2" data-gbdraw-feature-id="a2_record_2" data-gbdraw-stable-feature-id="a2" data-gbdraw-record-index="1" data-gbdraw-record-id="RA2" />
+    <path id="b_record_3" data-gbdraw-feature-id="b_record_3" data-gbdraw-stable-feature-id="b" data-gbdraw-record-index="2" data-gbdraw-record-id="RB" />
+  </svg>`;
+  const extracted = {
+    '/seq_0.gb': {
+      features: [
+        { id: 'f0', svg_id: 'a', stable_svg_id: 'a', rendered_feature_svg_id: 'a', record_idx: 0, record_id: 'RA', type: 'CDS' },
+        { id: 'f1', svg_id: 'a2', stable_svg_id: 'a2', rendered_feature_svg_id: 'a2', record_idx: 1, record_id: 'RA2', type: 'CDS' }
+      ],
+      record_ids: ['RA', 'RA2']
+    },
+    '/seq_1.gb': {
+      features: [{ id: 'f0', svg_id: 'b', stable_svg_id: 'b', rendered_feature_svg_id: 'b', record_idx: 0, record_id: 'RB', type: 'CDS' }],
+      record_ids: ['RB']
+    }
+  };
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear',
+      lInputType: 'gb',
+      linearSeqs: [{ gb: { name: 'a.gb' } }, { gb: { name: 'b.gb' } }],
+      selectedResultIndex: 0,
+      results: committedResults(svg),
+      featureState: {},
+      editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async ({ path }) => extracted[path]
+  });
+  assert.equal(plan.status, 'recovered', plan.reason);
+  const features = plan.recoveredFeatureState.extractedFeatures;
+  assert.deepEqual(features.map((feature) => feature.rendered_svg_id), ['a_record_1', 'a2_record_2', 'b_record_3']);
+  assert.deepEqual(features.map((feature) => feature.rendered_feature_svg_id), ['a_record_1', 'a2_record_2', 'b_record_3']);
+  // The features keep the extraction's reading of their records, which the
+  // rendered-ID edit migration reads (services/feature-edit-migration.js).
+  assert.deepEqual(features.map((feature) => [feature.fileIdx, feature.record_idx]), [[0, 0], [0, 1], [1, 0]]);
+}
+
+{
+  // A cropped, reverse-complemented or rotated record draws its features under
+  // their hash in the drawn record (`drawn_selector.hash`), not their source
+  // hash; a biological feature takes that hash from the drawn feature.
+  const source = { svg_id: 'src', stable_svg_id: 'src', record_idx: 0, record_id: 'R1', type: 'CDS' };
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'circular',
+      cInputType: 'gb',
+      files: { c_gb: { name: 'c.gb' } },
+      selectedResultIndex: 0,
+      results: committedResults('<svg><path id="drw" data-gbdraw-feature-id="drw" /></svg>'),
+      featureState: {},
+      editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async () => ({
+      features: [{ ...source, id: 'f0', rendered_feature_svg_id: 'src', drawn_selector: { hash: 'drw' } }],
+      biological_features: [{ ...source, id: 'f0' }],
+      record_ids: ['R1']
+    })
+  });
+  assert.equal(plan.status, 'recovered', plan.reason);
+  const [drawn] = plan.recoveredFeatureState.extractedFeatures;
+  assert.equal(drawn.rendered_svg_id, 'drw');
+  assert.equal(drawn.stable_svg_id, 'src');
+  assert.deepEqual(plan.recoveredFeatureState.biologicalFeatures.map((feature) => feature.rendered_svg_id), ['drw']);
+}
+
+{
+  // Saved metadata whose IDs all match the SVG does not lose features to an
+  // alignment that cannot place them: Load keeps it as saved.
+  const saved = [
+    { id: 'f0', svg_id: 'a_record_1', stable_svg_id: 'a', fileIdx: 0, record_idx: 0, record_id: 'RA' },
+    { id: 'f1', svg_id: 'b_record_2', stable_svg_id: 'b', fileIdx: 1, record_idx: 0, record_id: 'RB' }
+  ];
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear',
+      lInputType: 'gb',
+      selectedResultIndex: 0,
+      results: committedResults(`<svg>
+        <path id="a_record_1" data-gbdraw-feature-id="a_record_1" data-gbdraw-stable-feature-id="a" data-gbdraw-record-index="0" data-gbdraw-record-id="RA" />
+        <path id="b_record_2" data-gbdraw-feature-id="b_record_2" data-gbdraw-stable-feature-id="b" data-gbdraw-record-index="1" data-gbdraw-record-id="RB" />
+      </svg>`),
+      featureState: { extractedFeatures: saved },
+      editorState: {}
+    },
+    featureVisibilityTsv: ''
+  });
+  assert.notEqual(plan.status, 'aligned');
+  assert.equal(plan.recoveredFeatureState, undefined);
+}
+
+// OV-751: two features that differ only by their record share one
+// hash. When the drawn element carries no record (an older Linear SVG with
+// bare IDs, or a Circular figure), both agree with it; neither is aligned and
+// the Load lists its feature edits, as it did before OV-751.
+{
+  const feature = (product, recordIdx, extra = {}) => ({ id: 'f0', svg_id: 'h', stable_svg_id: 'h', rendered_feature_svg_id: 'h',
+    record_idx: recordIdx, record_id: 'contig_1', type: 'CDS', product, ...extra });
+  const linearPlan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb: { name: '0.gb' } }, { gb: { name: '1.gb' } }], selectedResultIndex: 0,
+      results: committedResults('<svg><path id="h" data-gbdraw-feature-id="h" /><path id="h" data-gbdraw-feature-id="h" /></svg>'),
+      featureState: {}, editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async ({ path }) => ({
+      '/seq_0.gb': { features: [feature('A', 0)], record_ids: ['contig_1'] },
+      '/seq_1.gb': { features: [feature('B', 0)], record_ids: ['contig_1'] }
+    })[path]
+  });
+  assert.equal(linearPlan.status, 'failed', linearPlan.reason);
+  assert.equal(linearPlan.recoveredFeatureState, undefined);
+  const circularPlan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'circular', cInputType: 'gb', files: { c_gb: { name: 'c.gb' } }, selectedResultIndex: 0,
+      results: committedResults('<svg><g data-gbdraw-record-index="0"><path id="h" data-gbdraw-feature-id="h" /></g>'
+        + '<g data-gbdraw-record-index="1"><path id="h" data-gbdraw-feature-id="h" /></g></svg>'),
+      featureState: {}, editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async () => {
+      const features = [feature('A', 0), feature('B', 1, { id: 'f1' })];
+      return { features, biological_features: features, record_ids: ['contig_1', 'contig_1'] };
+    }
+  });
+  assert.equal(circularPlan.status, 'failed', circularPlan.reason);
+  assert.equal(circularPlan.recoveredFeatureState, undefined);
+}
+
+// OV-751: two features of one record that share a hash (a 0.13.0
+// Linear Session such as hash-color-rule-linear-rc.v30, whose SVG draws both
+// under one ID) both agree with that element. They differ by no record, so
+// both stay aligned, as before OV-751.
+{
+  const twin = (id, product) => ({ id, svg_id: 'h', stable_svg_id: 'h', rendered_feature_svg_id: 'h',
+    fileIdx: 0, record_idx: 0, record_id: 'TESTA', type: 'CDS', product });
+  const twins = [twin('f1', 'TWIN_A'), twin('f2', 'dupA')];
+  const drawn = '<path id="h_record_1" data-gbdraw-feature-id="h_record_1" data-gbdraw-stable-feature-id="h" '
+    + 'data-gbdraw-record-index="0" data-gbdraw-record-id="TESTA" />';
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb: { name: 'a.gb' } }], selectedResultIndex: 0,
+      results: committedResults(`<svg>${drawn}${drawn}</svg>`),
+      featureState: {}, editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async () => ({ features: twins, record_ids: ['TESTA'] })
+  });
+  assert.equal(plan.status, 'recovered', plan.reason);
+  assert.deepEqual(plan.recoveredFeatureState.extractedFeatures.map((feature) => feature.rendered_svg_id), ['h_record_1', 'h_record_1']);
 }
 
 console.log('session feature metadata tests passed');

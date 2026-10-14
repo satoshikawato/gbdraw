@@ -1,11 +1,11 @@
 // @ts-check
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { textChoice } from '../utils/field-reading.js';
 
-/** @param {unknown} value */
-export const normalizeCollinearAnchorMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  /** @type {Record<string, string>} */
-  const aliases = {
+// Each reader also says whether the stored value was lost (BA-D25).
+export const readCollinearAnchorMode = textChoice(['all', 'one_to_one', 'rbh'], 'rbh', {
+  foldHyphens: true,
+  aliases: {
     all_hits: 'all',
     raw: 'all',
     top_n: 'all',
@@ -17,16 +17,14 @@ export const normalizeCollinearAnchorMode = (value) => {
     top_1: 'one_to_one',
     reciprocal_best: 'rbh',
     strict_rbh: 'rbh'
-  };
-  const resolved = aliases[normalized] || normalized;
-  return ['all', 'one_to_one', 'rbh'].includes(resolved) ? resolved : 'rbh';
-};
-
+  }
+});
 /** @param {unknown} value */
-export const normalizeOrthogroupMembershipMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  /** @type {Record<string, string>} */
-  const aliases = {
+export const normalizeCollinearAnchorMode = (value) => readCollinearAnchorMode(value).value;
+
+export const readOrthogroupMembershipMode = textChoice([ORTHOGROUP_INFERENCE_VERSION], ORTHOGROUP_INFERENCE_VERSION, {
+  foldHyphens: true,
+  aliases: {
     legacy: ORTHOGROUP_INFERENCE_VERSION,
     rbh: ORTHOGROUP_INFERENCE_VERSION,
     rbh_only: ORTHOGROUP_INFERENCE_VERSION,
@@ -39,16 +37,14 @@ export const normalizeOrthogroupMembershipMode = (value) => {
     distribution_split: ORTHOGROUP_INFERENCE_VERSION,
     orthogroups: ORTHOGROUP_INFERENCE_VERSION,
     anchor_core: ORTHOGROUP_INFERENCE_VERSION
-  };
-  const resolved = aliases[normalized] || normalized;
-  return resolved === ORTHOGROUP_INFERENCE_VERSION ? resolved : ORTHOGROUP_INFERENCE_VERSION;
-};
-
+  }
+});
 /** @param {unknown} value */
-export const normalizeCollinearSearchScope = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  /** @type {Record<string, string>} */
-  const aliases = {
+export const normalizeOrthogroupMembershipMode = (value) => readOrthogroupMembershipMode(value).value;
+
+export const readCollinearSearchScope = textChoice(['adjacent', 'all'], 'adjacent', {
+  foldHyphens: true,
+  aliases: {
     adjacent_pairs: 'adjacent',
     adjacent_pair: 'adjacent',
     neighbor_pairs: 'adjacent',
@@ -57,10 +53,10 @@ export const normalizeCollinearSearchScope = (value) => {
     all_pairs: 'all',
     all_record_pairs: 'all',
     global: 'all'
-  };
-  const resolved = aliases[normalized] || normalized;
-  return ['adjacent', 'all'].includes(resolved) ? resolved : 'adjacent';
-};
+  }
+});
+/** @param {unknown} value */
+export const normalizeCollinearSearchScope = (value) => readCollinearSearchScope(value).value;
 
 /** @param {unknown} value */
 export const collinearGroupScopeForEvidenceScope = (value) =>

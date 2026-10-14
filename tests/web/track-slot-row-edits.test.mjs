@@ -22,8 +22,8 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // track-slot-display.js reads the generated size-class boundaries.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), join(tempRoot, 'mode-profiles.generated.js'));
 // The services the slot editors import.
-for (const leaf of ['conservation-series.js', 'current-option-values.js', 'depth-track-state.js', 'track-slot-display.js',
-  'track-slot-validation.js', 'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
+for (const leaf of ['conservation-series.js', 'current-option-values.js', 'depth-track-state.js', 'linear-label-visibility.js',
+  'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf), join(tempRoot, 'services', leaf));
 }
 

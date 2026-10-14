@@ -9,7 +9,9 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const { generateAndWaitForResult, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const {
+  generateAndWaitForResult, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs
+} = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
 
@@ -303,8 +305,10 @@ test('OV-12: after reordering records the popup shows the edit of the same featu
 
 // A Session before feature catalogs may restore no feature metadata until
 // Generate, so the load waits for the committed Result only.
-const loadSession = async (page, file) => {
+// `repairs`: the lines the Load dialog lists, answered with [Load] (BA-D25).
+const loadSession = async (page, file, repairs = null) => {
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  if (repairs) await answerLoadRepairs(page, repairs);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
   await settle(page);
@@ -607,6 +611,8 @@ test('a Linear Session 33 with crop and reverse complement keeps its feature edi
   expect(shown[unlabeled.svgId]).toEqual({ drawn: true, labels: [] });
 });
 
+const UNMATCHED_EDIT_LINE = '1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.';
+
 // The Linear Session 33 with one more edit that names no feature.
 const writeUnmatchedEditSession = (testInfo) => {
   const session = JSON.parse(gunzipSync(readFileSync(LINEAR_V33)));
@@ -616,16 +622,13 @@ const writeUnmatchedEditSession = (testInfo) => {
   return file;
 };
 
-// Design 4.3 rule 3: the Load notice counts exactly the edits it drops.
+// Design 4.3 rule 3: the Load dialog counts exactly the edits it drops.
 test('loading an older Session counts only the feature edits it drops', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   const file = writeUnmatchedEditSession(testInfo);
   await openFresh(page);
-  await loadSession(page, file);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
-  await expect(page.locator('[data-app-notice] li')).toHaveText([
-    '1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
-  ]);
+  await loadSession(page, file, [UNMATCHED_EDIT_LINE]);
+  await expectSessionLoadedWithoutWarnings(page);
   expect((await featureOverrideRows(page)).length).toBe(4);
 });
 
@@ -665,11 +668,8 @@ test('an older Session whose sources cannot be read again fails to load and keep
     window.__GBDRAW_APP__.sessionLoadAvailable])).toEqual([true, true]);
   // Retry once the runtime can start: the Load drops only the unmatched edit.
   await page.context().unroute(runtimeAssets);
-  await loadSession(page, file);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
-  await expect(page.locator('[data-app-notice] li')).toHaveText([
-    '1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
-  ]);
+  await loadSession(page, file, [UNMATCHED_EDIT_LINE]);
+  await expectSessionLoadedWithoutWarnings(page);
   expect((await featureOverrideRows(page)).length).toBe(4);
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
@@ -726,11 +726,10 @@ test('a Label TSV location row waits for Generate on a catalog 4 Result of cropp
 test('loading a Session 44 says which Feature visibility edits now apply to one copy', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
-  await loadSession(page, 'tests/fixtures/sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz');
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
-  await expect(page.locator('[data-app-notice] li')).toHaveText([
+  await loadSession(page, 'tests/fixtures/sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz', [
     '1 Feature visibility edit(s) from an older Session hid every feature with '
       + 'the same hash, such as each copy of a duplicated record. Each now applies only to the feature that '
       + 'was edited, so the next Generate draws the others.'
   ]);
+  await expectSessionLoadedWithoutWarnings(page);
 });

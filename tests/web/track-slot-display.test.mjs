@@ -24,11 +24,11 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
   join(tempRoot, 'services', 'conservation-series.js')
 );
-// linear-track-slots.js reads the current option values.
-await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'current-option-values.js'),
-  join(tempRoot, 'services', 'current-option-values.js')
-);
+// linear-track-slots.js reads the current option values, which read the
+// Linear label visibilities.
+for (const leaf of ['current-option-values.js', 'linear-label-visibility.js']) {
+  await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf), join(tempRoot, 'services', leaf));
+}
 await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'contracts'),
   join(tempRoot, 'contracts'),

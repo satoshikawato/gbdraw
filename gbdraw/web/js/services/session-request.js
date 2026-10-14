@@ -86,7 +86,8 @@ import {
 } from './track-slot-validation.js';
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annotation-state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
-import { SESSION_TABLE_LABELS, diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
+import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
+import { loadRepair } from '../utils/load-repairs.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
@@ -181,6 +182,7 @@ import { isCanonicalResourceReferenceField } from './canonical-resource-referenc
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
 
+/** @import { LoadRepair } from '../utils/load-repairs.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
@@ -4099,49 +4101,6 @@ const readSessionTable = (table, read) => {
   }
 };
 
-/**
- * @param {string} singular
- * @param {string} plural
- * @param {unknown[]} items
- */
-const cappedList = (singular, plural, items) => (items.length === 1 ? `${singular} ${items[0]}`
-  : `${plural} ${items.slice(0, 5).join(', ')}${items.length > 5 ? `, and ${items.length - 5} more` : ''}`);
-/** @param {unknown[]} rows */
-const lineList = (rows) => cappedList('line', 'lines', rows);
-// The Load notice for the rows `legacyTableRepairs` lists, by table.
-/** @param {{ table: string, repair: string, row: unknown }[] | null | undefined} repairs */
-export const legacyTableRowsNotice = (repairs) => {
-  if (!repairs?.length) return '';
-  const tables = [...new Set(repairs.map(({ table }) => table))];
-  return ['Some table rows of this older Session were read as the current version writes them.',
-    ...tables.flatMap((table) => {
-      /** @param {string} repair */
-      const rows = (repair) => repairs.filter((item) => item.table === table && item.repair === repair)
-        .map(({ row }) => row);
-      const joined = rows('joined');
-      const dropped = rows('dropped');
-      const invalid = rows('invalid');
-      return [
-        joined.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(joined)} had extra cells, joined into the last column with one space.` : '',
-        dropped.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(dropped)} lacked a required column and ${dropped.length === 1 ? 'was' : 'were'} dropped.` : '',
-        invalid.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(invalid)} had a color the table does not accept and ${invalid.length === 1 ? 'was' : 'were'} dropped.` : ''
-      ].filter(Boolean);
-    })].join(' ');
-};
-
-// The Load notice for the Legend entries a Session stored with a color outside
-// the Default colors domain (D-43): `drops` lists `{ list, caption }` per
-// dropped entry, possibly more than once. Captions are free text, quoted with " as
-// other user text is.
-/** @type {Readonly<Record<string, string>>} */
-const LEGEND_LIST_MARKS = { entries: '', dormantEntries: ' (not drawn)', deletedEntries: ' (deleted)' };
-/** @param {{ list: string, caption: string }[] | null | undefined} drops */
-export const legendColorDropNotice = (drops) => {
-  const named = [...new Set((drops || []).map(({ list, caption }) => `"${caption}"${LEGEND_LIST_MARKS[list] ?? ''}`))];
-  if (!named.length) return '';
-  return `Legend: ${cappedList('entry', 'entries', named)} had a color the app does not accept and ${named.length === 1 ? 'was' : 'were'} dropped.`;
-};
-
 // Whether the committed Session drew with the given Feature visibility rules
 // (TSV), compared after normalization. Reusing resolved protein comparisons is
 // valid only when it holds (CO-02); an unreadable committed table declines.
@@ -5126,13 +5085,16 @@ export const projectCanonicalSessionRequest = ({
     });
   }
   // Sessions 31–39 (repairLegacyTableRows) read these three tables as the
-  // current writer writes them; the Load notice lists the rows read so.
+  // current writer writes them; the Load dialog lists the rows read so.
+  /** @type {LoadRepair[]} */
   const legacyTableRepairs = [];
   const readLegacyTable = (table, ref, parse) => {
     const parsed = readSessionTable(table, () => parse(
       resourceTextFromRef(resources, ref), { legacyRows: repairLegacyTableRows }
     ));
-    legacyTableRepairs.push(...parsed.repairs.map((repair) => ({ table, ...repair })));
+    legacyTableRepairs.push(...(parsed.repairs || []).map((/** @type {{ row: number, repair: 'joined' | 'dropped' | 'invalid' }} */ { row, repair }) => loadRepair({
+      code: `table-row-${repair}`, path: table, effect: repair === 'joined' ? 'changed' : 'dropped', line: row
+    })));
     return parsed;
   };
   const defaultColorsRef = options.colors?.defaultColorsFile || options.colors?.defaultColors;

@@ -1,5 +1,7 @@
 // @ts-check
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { DEFAULT_FEATURE_RENDERINGS, normalizeFeatureRendering, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
+import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 
 /**
  * @param {unknown} value
@@ -93,12 +95,15 @@ export const requireCurrentLinearLabelPlacement = (value) => (
   )
 );
 
+/** The Pairwise match styles (the Load reader and Generate read this list). */
+export const PAIRWISE_MATCH_STYLES = /** @type {const} */ (['ribbon', 'curve']);
+
 /**
  * @param {unknown} value
  * @param {unknown} fallback
  */
 export const normalizeCurrentPairwiseMatchStyle = (value, fallback) => {
-  const supported = ['ribbon', 'curve'];
+  const supported = /** @type {readonly string[]} */ (PAIRWISE_MATCH_STYLES);
   const normalizedFallback = String(fallback ?? '').trim().toLowerCase();
   if (!supported.includes(normalizedFallback)) {
     throw new Error('Pairwise match style fallback must be one of: ribbon, curve.');
@@ -359,4 +364,45 @@ export const requireCurrentWebStateFieldNames = (config) => {
     );
   }
   return config;
+};
+
+// The merge of stored settings installs text or null over a text setting; a
+// value of another kind is not used, and Load lists it (`mergeStoredSettings`).
+/** @param {unknown} value */
+const installedOverText = (value) => typeof value === 'string' || value === null;
+
+// The refusals of a stored configuration's fields (BA-OD96): a retired field
+// name, a value no current option names (the Linear label visibilities
+// included), a shape of a default feature type that names no shape, and an
+// arrow ratio out of range. Only a value the merge installs is refused
+// (BA-OD100): a visibility or a default type's shape of another kind is read
+// with a dialog row, and the shape of another feature type is the shapes
+// reader's (`config-field-readers.js`), as the Web read them before.
+// The one check of the active configuration, of `applyConfigData`, and of
+// Load before its dialog (the Session prediction and the legacy configuration
+// read), so Load refuses such a file before it asks anything.
+/**
+ * @param {unknown} config
+ */
+export const requireCurrentConfigFields = (config) => {
+  if (!isPlainObject(config)) return;
+  requireCurrentWebStateFieldNames(config);
+  const { form, adv } = config;
+  if (isPlainObject(form) && hasOwn(form, 'linear_track_layout')) requireCurrentLinearTrackLayout(form.linear_track_layout);
+  if (!isPlainObject(adv)) return;
+  if (hasOwn(adv, 'label_placement')) requireCurrentLinearLabelPlacement(adv.label_placement);
+  if (hasOwn(adv, 'multi_record_size_mode')) requireCurrentCircularMultiRecordSizeMode(adv.multi_record_size_mode);
+  if (installedOverText(adv.linear_accession_visibility)) {
+    requireLinearLabelVisibilityMode(adv.linear_accession_visibility, 'Linear Accession visibility');
+  }
+  if (installedOverText(adv.linear_length_visibility)) {
+    requireLinearLabelVisibilityMode(adv.linear_length_visibility, 'Linear Length / Coordinates visibility');
+  }
+  // The arrow ratios and the default types' shapes `applyConfigData` installs.
+  normalizedPersistedArrowGeometryState(adv);
+  if (isPlainObject(adv.feature_shapes)) {
+    for (const [featureType, shape] of Object.entries(adv.feature_shapes)) {
+      if (Object.hasOwn(DEFAULT_FEATURE_RENDERINGS, featureType) && installedOverText(shape)) normalizeFeatureRendering(shape);
+    }
+  }
 };

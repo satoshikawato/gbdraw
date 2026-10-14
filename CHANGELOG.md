@@ -275,6 +275,54 @@ write-up of a release.
   and its Generate shows "An input value is invalid". A record display
   selector with non-ASCII digits is refused, as the web app already did
   (OV-324, OV-528, OV-596, OV-611, OV-631, OV-632, OV-651, OV-653).
+- Changed (web app): a Session or configuration file that Load cannot fully
+  restore now opens one **Load this file?** dialog before anything changes. It
+  lists the settings, Legend positions of the layout preferences or a saved
+  Result, Legend entries and edits it re-keys, table rows, Depth rows that
+  name a Depth series their drawing does not have, feature edits and feature
+  information Load drops, replaces with a default, or reads differently (up
+  to 12 lines): a setting with its place in the file and the value used, a
+  feature edit or feature information as a count or a statement. A setting
+  that a Session of version 44 or older stores once for both diagram modes is
+  one row. It says that Save Session afterwards writes the current format. Values that had no
+  effect on the figure (a pending palette Instant Preview drops, edits of
+  similarity groups the Result does not have) are dropped without a row. A
+  Depth series without a Depth file loads as saved, and so does a Depth row
+  the app keeps when a Depth file is removed (a row with its own size or
+  position) (OV-755). Some other old or invalid values are still changed
+  without a row or kept as stored (for example a track stack row's values or
+  a Legend color edit the app does not accept), and a configuration file
+  drops a key it does not know without a row. Other invalid content, such as
+  an unknown `adv` key in a Session, an unknown shape of a default feature
+  type, or an unknown option value, is still refused, now before anything is
+  asked or changed. No file that
+  loaded before is refused: a feature shape or Linear Accession or Length /
+  Coordinates visibility that is not text keeps the drawing's value, and an
+  unknown shape for a feature type the defaults lack is dropped, each with a
+  row (a Session of version 44 or later with such a visibility, refused
+  before, now loads the same way). In a configuration
+  file, a color rule or label whitelist entry that is not an object, which
+  made the Load fail, is now dropped and listed, and a label filter mode or
+  feature overlap tolerance the app does not accept, which made Save Session
+  fail after the Load, is now listed and set to its default. A configuration
+  file loads over the current drawing: a settings group (`form`, `adv`,
+  `losat` or `circularConservation`) that is not an object, a value of
+  another kind inside one (except the values kept as stored, above), and
+  `rules` or `whitelist` that is not a list (such as `"form": 5`) are not
+  used, and the drawing keeps its value, which
+  the row names or says the drawing keeps. **Load** loads the file;
+  **Cancel** leaves the settings, Results, input files, History and screen as
+  they were. Dropped feature edits, narrowed Feature visibility edits, `hash=`
+  values that could not be renamed, joined or dropped table rows and Legend
+  entries with a color the app does not accept, which notices reported after
+  the load, are listed in this dialog instead. The notice of `hash=`
+  annotation targets moved to the feature they name, and the notice of a
+  loaded configuration file, still follow the load. A file that loads without
+  a loss, such as every Gallery Session, opens no dialog. A Session older than
+  version 27 (gbdraw 0.11.0 or older, or gbdraw.app before 0.12.0) is still
+  refused, and the error now says so (OV-710, OV-712, OV-719).
+- Fixed (web app): the shape set for a feature type added to the feature list
+  was dropped when its Session was loaded again; Load now keeps it.
 - Fixed: the records of one multi-record File were named differently in
   **Record Layout**, **Selected pairs** and the **BLAST TSV missing** dialog
   (one by its definition, the next by its accession); each now shows the File's

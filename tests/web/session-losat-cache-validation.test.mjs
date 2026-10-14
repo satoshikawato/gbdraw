@@ -1,4 +1,4 @@
-import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -1039,7 +1039,7 @@ test('visible protein cache entries from the frozen v39 session recover stable e
   const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
   const result = await importSession(
     { target: { files: [file], value: 'selected' } },
-    { transformLegacyResultSvg }
+    { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow }
   );
 
   assert.equal(result.status, 'ok');
@@ -1082,7 +1082,7 @@ test('a conflicting restored edge key is not exposed under the wrong endpoints',
   const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
   const result = await importSession(
     { target: { files: [file], value: 'selected' } },
-    { transformLegacyResultSvg }
+    { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow }
   );
 
   assert.equal(result.status, 'ok');

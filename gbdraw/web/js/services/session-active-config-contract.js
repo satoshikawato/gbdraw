@@ -7,13 +7,12 @@ import { sha256Hex, textToBytes } from './byte-utils.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
 import { createDefaultLinearDefinitionLineStyles } from './definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from './circular-track-slot-model.js';
 import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from './linear-track-slot-model.js'; import { validateTrackSlotBindingInvariants } from './track-slot-validation.js';
-import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from './current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
+import { requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentConfigFields } from './current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
-import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
 import { DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION, ORTHOGROUP_INFERENCE_VERSION, SESSION_VERSION } from '../contracts/schema.generated.js';
@@ -251,7 +250,7 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     || new Set(config.recordsOff).size !== config.recordsOff.length
     || !config.recordsOff.every((/** @type {unknown} */ key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
-  validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
+  validateDomainShapes(config); validateCollections(config); requireCurrentConfigFields(config);
   // Python checks the record display drafts of a Session from that version
   // (`validate_session`) and refuses a row whose selector is not text
   // (gbdraw/session_io.py:853-857). A Session 40 draft is not checked there, so
@@ -268,18 +267,6 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
   assertFields(config.form, new Set(CURRENT_WRITER_FORM_FIELDS), 'config.form'); assertFields(config.adv, new Set(CURRENT_WRITER_ADV_FIELDS), 'config.adv');
   if (has(config.form, 'keep_definition_left_aligned') && typeof config.form.keep_definition_left_aligned !== 'boolean')
     throw new Error('Current session active configuration config.form.keep_definition_left_aligned must be a boolean.');
-  if (has(config.form, 'linear_track_layout')) requireCurrentLinearTrackLayout(config.form.linear_track_layout);
-  if (has(config.adv, 'label_placement')) requireCurrentLinearLabelPlacement(config.adv.label_placement);
-  if (has(config.adv, 'multi_record_size_mode')) requireCurrentCircularMultiRecordSizeMode(config.adv.multi_record_size_mode);
-  // A Session 46 slice may omit a field: it reads that mode's default (plan 4.1).
-  if (has(config.adv, 'linear_accession_visibility')) requireLinearLabelVisibilityMode(
-    config.adv.linear_accession_visibility,
-    'Linear Accession visibility'
-  );
-  if (has(config.adv, 'linear_length_visibility')) requireLinearLabelVisibilityMode(
-    config.adv.linear_length_visibility,
-    'Linear Length / Coordinates visibility'
-  );
   for (const [path, value] of [['config.adv.losatProgram', config.adv.losatProgram], ['config.losatProgram', config.losatProgram]]) {
     if (value !== undefined && !(/** @type {readonly unknown[]} */ (['blastn', 'tblastx', 'blastp'])).includes(value))
       throw new Error(`Current session active configuration ${path} is invalid.`);
@@ -343,6 +330,14 @@ const linearTypographyValuesMatch = (adv = {}) => (
 );
 
 /**
+ * A stored Linear typography link: linked when omitted, as stored when a
+ * boolean, and unlinked for anything else.
+ * @param {unknown} value
+ * @returns {{ value: boolean, lost: boolean }}
+ */
+export const readLinearTypographyLinked = (value) => (value === undefined || value === null ? { value: true, lost: false }
+  : typeof value === 'boolean' ? { value, lost: false } : { value: false, lost: true });
+/**
  * @param {{
  *   adv: Record<string, any>,
  *   linked: any,
@@ -352,10 +347,7 @@ const linearTypographyValuesMatch = (adv = {}) => (
 export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) => {
   if (!linked || typeof linked !== 'object' || !('value' in linked)) return false;
   // Omission takes the fresh linked default; unequal values still open unlinked.
-  linked.value = (
-    (ui.linearTypographyLinked ?? true) === true
-    && linearTypographyValuesMatch(adv)
-  );
+  linked.value = readLinearTypographyLinked(ui.linearTypographyLinked).value && linearTypographyValuesMatch(adv);
   return linked.value;
 };
 

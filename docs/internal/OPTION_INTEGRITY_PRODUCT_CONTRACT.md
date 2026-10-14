@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `51`
+- Contract revision: `52`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -39,7 +39,7 @@ Status: active Product authority
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
-  `PD-OI-097`, and `PD-OI-098`
+  `PD-OI-097`, `PD-OI-098`, and `PD-OI-099`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -1061,6 +1061,51 @@ Status: active Product authority
     47 (see `docs/internal/SESSION_FORMAT_HISTORY.md`), and no Session stores
     a font file.
   - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 52 changes: `PD-OI-099` is added
+  (`A / CONFIRM-REPAIRS-BEFORE-LOAD`, concern
+  `web.session.load-repair-confirmation`), with acceptance contract `OIC-031`.
+  It comes from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-13` and `2026-10-14` on how the Web app loads a gbdraw file that is
+  old or holds values it cannot use. Each quotation below is the part of a
+  reply that carries the answer.
+  - Reply 1 (`2026-10-13`), a message on loading older files. It is Reply 3 of
+    the Revision 48 entry.
+    「てか古いファイルを拒否するよりもさ、「これこれこういう不具合というか、バグがあるから一部完全には復元できないけどいい？次回保存するときは細心のフォーマットになるから」っていうひとことnoticeを出して読み込めるようにするのがいいんじゃないかな。」
+  - Reply 2 (`2026-10-13`), to four questions that confirmed Reply 1, each with
+    the recommended option first. Reply 4 of the Revision 48 entry quotes the
+    questions of (a), (b), and (d).
+    - (a) how the notice is shown: the Owner selected
+      「読み込む前に確認(推奨)」.
+    - (b) the scope of loading as far as possible instead of refusing: the
+      Owner selected 「gbdraw のファイルなら全部(推奨)」.
+    - (c) files the Web refused and Python reads: the Owner selected
+      「Web も notice 付きで読む(推奨)」.
+    - (d) a notice for conversions that do not change a meaning: the Owner
+      selected 「出さない(推奨)」.
+  - Reply 3 (`2026-10-14`), to the status line
+    「PR-N（Load の修復ダイアログ）の receipt は Owner の承認待ちです」 of another
+    Claude Code session, which relayed the reply; the reply is in that
+    session's transcript.
+    「承認します」
+    The status line names this pull request by its working name. The receipt
+    approved is draft v3.6 of the receipt text, recorded below byte for byte.
+    That session did not show the receipt text. Earlier, the session that
+    drafted the receipt had shown the full text of draft v3.1 on `2026-10-13`.
+    For drafts v3.2 to v3.6 it gave a summary of each draft's changes, not the
+    full text, and with drafts v3.2, v3.3, and v3.5 the path of the draft file.
+    It had not yet asked for approval of v3.6. After the reply, the relaying
+    session told the Owner that a later change to the text needs a new
+    approval.
+  - `OIPC-C01` and `OIPC-C03` keep their text. The values this record decides
+    are stored in a file that is being loaded, not supplied in a control or a
+    request; the receipt lists them before the load, except the values its
+    〔出さないもの〕 names, and its Accepted residual risk states the interim.
+  - `PD-OI-096` keeps its text; the confirmation dialog its Accepted residual
+    risk names is the dialog of this record. No other record is amended or
+    retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -5595,6 +5640,53 @@ Decision date: 2026-10-13
 }
 ```
 
+### PD-OI-099: Confirm what Load cannot restore before it loads
+
+- Concern key: `web.session.load-repair-confirmation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / CONFIRM-REPAIRS-BEFORE-LOAD`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 52 entry
+  above. The Owner approved the receipt text below in Reply 3 of that entry.
+  The receipt reproduces its fields without translation or additional terms.
+  Dependent runtime requires this authority merged into its base, or merged
+  together with it through the reviewed static Product Contract co-change
+  route.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `d646d6704e71e3066315abdba14cf762e847653a7041982359bdb98711452245`.
+- Acceptance contracts: `OIC-031`. These obligations and the complete selected
+  outcome are jointly required; their citation does not claim completed
+  dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.session.load-repair-confirmation
+Scenario revision: 1
+Choice: A / CONFIRM-REPAIRS-BEFORE-LOAD
+Rationale: 古いファイルや、バグなどで不正な値を含むファイルを拒否すると、ユーザーは何も取り戻せない。拒否するよりも、読み込めるところまで読み込み、一部を完全には復元できないことを読み込む前に一言知らせ、次に保存すると最新の形式になると伝える。
+Must preserve: 〔拒否〕次のファイルだけは今までどおり読み込まずにエラーを示す。JSON として読めないファイル（壊れた圧縮ファイル、UTF-8 でない文字を含むファイルを含む）。gbdraw の Session でも設定ファイルでもないファイル（開発版だけの Session 34〜38、43、45 と、開発版だけの request の形式 3、4 を含む）。版 26 以下の Session（gbdraw 0.11.0 以前と、0.12.0 より前の gbdraw.app が保存したもの）。このときはエラーで古い版だと示す。新しい版の Session や request の形式。大きすぎるファイル（200 MB、展開して 512 MB を超えるもの）。読み込みに要る機能（gzip の展開、module Worker）がない browser で開いたファイル。安全でない名前（__proto__、constructor、prototype）を含むファイル。何も復元できないファイル（ファイルにある設定、request、Result、入力ファイル、編集、cache のすべてを捨てることになるもの）。読み込みの途中で browser の機能や Worker が失敗したときも、読み込まずにエラーを示す。〔確認〕それ以外の Session と古い設定ファイルは、読み込めるところまで読む。値を捨てる、既定値にする、意味を変えて読むところが 1 つでもあれば、読み込む前に 1 つの dialog でその一覧（何をどう読んだか。設定の値の行はファイルの中の場所も示す）を示し、次に Save Session すると最新の形式で保存されることを伝える。[Load] で読み込み、[Cancel] では設定、Result、入力ファイル、History、画面を何も変えない。ファイル自体は変えない。〔出さないもの〕古い版の形式からの変換や、大文字、前後の空白、別名の違いのように、意味を変えずに読めるものでは dialog を出さない。計算し直せる cache の項目、同じ Legend の行に後の編集が上書きしていた Session 46 の色や線の編集、Result にない group の名前や説明の編集、Instant Preview が on のときの当てていない palette の選択、画面の表示の状態、もう一方の図の型（Circular か Linear）だけで使う設定、ファイルの中の別の有効な値で置き換わる値のように、図に効いていなかった値を捨てるだけのときも dialog を出さない。何も捨てずに読めるファイル（Gallery の Session、現在の Web が保存した Session を含む）では今までどおり dialog を出さない。〔今までの知らせ〕今は読み込んだ後の知らせに出ている、合わせられずに捨てた feature の編集、範囲を狭めた Feature visibility の編集、hash= を付け替えられなかった値、読み替えたり捨てたりした表の行、色を受け付けずに捨てた Legend の項目は、この dialog に移す。意味を変えない変換の知らせ（annotation の hash= を source で指す形に変えた数）と、古い設定ファイルを読んだという知らせは、今までどおり読み込んだ後に出す。Linear の Comparisons 欄の、保存された比較を読み取り専用で残した、または決定が要るという枠（選ぶ操作つき）は、今までどおり読み込んだ後に出す。feature の情報を復元できないときは、dialog の一覧に示し、Features 欄の表示（SVG の preview は残る）も今までどおり出す。〔ほかの確認〕読み込む前の「Replace the current work?」の確認は今までどおり先に出す。〔読み込んだ後〕Session を読み込んだ状態が Undo の起点になり、変更のない状態として始まる。保存すると直した値が最新の形式で書かれる。〔Python と CLI〕CLI と Python API は、request の形式が定めない値（文字や真偽値や名前の欄の null や別の種類の値、形式 9 では定義にない key や名前の別の綴り）、比較の表のファイルの path（以前の Python API が一部の request に書いたもの。今は表を resource として保存する）、ASCII でない数字を使った record の selector を拒否する。それ以外に Session を読む範囲は変えない（古い形式の request の大文字や別名などは今までどおり読む）。
+May retire: Web が、上の〔拒否〕に当たらない Session（古い Session、不正な値を含む Session、Python は読める Session）と古い設定ファイルを、読み込みのときに拒否する動作。完全には復元できなかったことを、読み込んだ後の知らせで伝える動作。知らせずに捨てたり既定値にしたりする動作（凡例の位置を既定値にする今の暫定の動作を含む）。
+Accepted residual risk: 直した部分は保存された Result（図）と合わないことがあり、次の Generate で直した設定の図になる。dialog の一覧には、ファイルの中の場所（modes.circular.config.adv.depth_tracks[0].height など）をそのまま示す行がある。一覧が長いときは 12 行までを示し、残りの数を示す。Web では dialog を出して読めるが、CLI では拒否される Session がある（手で書き換えた Session の不正な値、request の形式が定めない値）。request を直せない Session は、設定だけの Session として読み、保存された Result、GenBank、GFF、FASTA の入力ファイル、feature の一覧、cache を捨てて一覧に示すことがある。この動作はいくつかの変更に分けて入る。最初の変更（この dialog）より後の変更が入るまでは、次のことが残る。古い版の Session や古い設定ファイルの一部の値や不正な値（track の並びの設定の値、受け付けない Legend の色の編集、設定ファイルの図の型に合わない Legend の位置や知らない key など）は、今までどおり dialog に示さずに直されるか、そのまま読み込まれる（知らない track の型など）。不正な値を含む Session や設定ファイルの一部（定義にない key や欄、知らない値、図の型にない値、範囲外の値、種類の違う値、足りない resource や欄、読めない track の並びや cache、確認を通らない保存された Result を含むもの）は、今までどおり拒否される。何も復元できないファイルを拒否する確認はまだなく、後の変更で入る。保存された request に形式が定めない値を含む Session のうち、今までの Web が読めたものは、その値を dialog に示さずに読み込まれ、Generate や、保存された request で描き直す操作（label の配置し直し、alignment、record の変換）で「An input value is invalid」と出る。それ以外（feature の編集の表や grouping が null のもの、layout に定義にない key があるものなど）は今までどおり拒否される。
+Owner: satoshikawato
+Decision date: 2026-10-14
+```
+
+```json
+{
+  "concern": "web.session.load-repair-confirmation",
+  "scenarioRevision": 1,
+  "choice": "A / CONFIRM-REPAIRS-BEFORE-LOAD",
+  "rationale": "古いファイルや、バグなどで不正な値を含むファイルを拒否すると、ユーザーは何も取り戻せない。拒否するよりも、読み込めるところまで読み込み、一部を完全には復元できないことを読み込む前に一言知らせ、次に保存すると最新の形式になると伝える。",
+  "mustPreserve": "〔拒否〕次のファイルだけは今までどおり読み込まずにエラーを示す。JSON として読めないファイル（壊れた圧縮ファイル、UTF-8 でない文字を含むファイルを含む）。gbdraw の Session でも設定ファイルでもないファイル（開発版だけの Session 34〜38、43、45 と、開発版だけの request の形式 3、4 を含む）。版 26 以下の Session（gbdraw 0.11.0 以前と、0.12.0 より前の gbdraw.app が保存したもの）。このときはエラーで古い版だと示す。新しい版の Session や request の形式。大きすぎるファイル（200 MB、展開して 512 MB を超えるもの）。読み込みに要る機能（gzip の展開、module Worker）がない browser で開いたファイル。安全でない名前（__proto__、constructor、prototype）を含むファイル。何も復元できないファイル（ファイルにある設定、request、Result、入力ファイル、編集、cache のすべてを捨てることになるもの）。読み込みの途中で browser の機能や Worker が失敗したときも、読み込まずにエラーを示す。〔確認〕それ以外の Session と古い設定ファイルは、読み込めるところまで読む。値を捨てる、既定値にする、意味を変えて読むところが 1 つでもあれば、読み込む前に 1 つの dialog でその一覧（何をどう読んだか。設定の値の行はファイルの中の場所も示す）を示し、次に Save Session すると最新の形式で保存されることを伝える。[Load] で読み込み、[Cancel] では設定、Result、入力ファイル、History、画面を何も変えない。ファイル自体は変えない。〔出さないもの〕古い版の形式からの変換や、大文字、前後の空白、別名の違いのように、意味を変えずに読めるものでは dialog を出さない。計算し直せる cache の項目、同じ Legend の行に後の編集が上書きしていた Session 46 の色や線の編集、Result にない group の名前や説明の編集、Instant Preview が on のときの当てていない palette の選択、画面の表示の状態、もう一方の図の型（Circular か Linear）だけで使う設定、ファイルの中の別の有効な値で置き換わる値のように、図に効いていなかった値を捨てるだけのときも dialog を出さない。何も捨てずに読めるファイル（Gallery の Session、現在の Web が保存した Session を含む）では今までどおり dialog を出さない。〔今までの知らせ〕今は読み込んだ後の知らせに出ている、合わせられずに捨てた feature の編集、範囲を狭めた Feature visibility の編集、hash= を付け替えられなかった値、読み替えたり捨てたりした表の行、色を受け付けずに捨てた Legend の項目は、この dialog に移す。意味を変えない変換の知らせ（annotation の hash= を source で指す形に変えた数）と、古い設定ファイルを読んだという知らせは、今までどおり読み込んだ後に出す。Linear の Comparisons 欄の、保存された比較を読み取り専用で残した、または決定が要るという枠（選ぶ操作つき）は、今までどおり読み込んだ後に出す。feature の情報を復元できないときは、dialog の一覧に示し、Features 欄の表示（SVG の preview は残る）も今までどおり出す。〔ほかの確認〕読み込む前の「Replace the current work?」の確認は今までどおり先に出す。〔読み込んだ後〕Session を読み込んだ状態が Undo の起点になり、変更のない状態として始まる。保存すると直した値が最新の形式で書かれる。〔Python と CLI〕CLI と Python API は、request の形式が定めない値（文字や真偽値や名前の欄の null や別の種類の値、形式 9 では定義にない key や名前の別の綴り）、比較の表のファイルの path（以前の Python API が一部の request に書いたもの。今は表を resource として保存する）、ASCII でない数字を使った record の selector を拒否する。それ以外に Session を読む範囲は変えない（古い形式の request の大文字や別名などは今までどおり読む）。",
+  "mayRetire": "Web が、上の〔拒否〕に当たらない Session（古い Session、不正な値を含む Session、Python は読める Session）と古い設定ファイルを、読み込みのときに拒否する動作。完全には復元できなかったことを、読み込んだ後の知らせで伝える動作。知らせずに捨てたり既定値にしたりする動作（凡例の位置を既定値にする今の暫定の動作を含む）。",
+  "acceptedResidualRisk": "直した部分は保存された Result（図）と合わないことがあり、次の Generate で直した設定の図になる。dialog の一覧には、ファイルの中の場所（modes.circular.config.adv.depth_tracks[0].height など）をそのまま示す行がある。一覧が長いときは 12 行までを示し、残りの数を示す。Web では dialog を出して読めるが、CLI では拒否される Session がある（手で書き換えた Session の不正な値、request の形式が定めない値）。request を直せない Session は、設定だけの Session として読み、保存された Result、GenBank、GFF、FASTA の入力ファイル、feature の一覧、cache を捨てて一覧に示すことがある。この動作はいくつかの変更に分けて入る。最初の変更（この dialog）より後の変更が入るまでは、次のことが残る。古い版の Session や古い設定ファイルの一部の値や不正な値（track の並びの設定の値、受け付けない Legend の色の編集、設定ファイルの図の型に合わない Legend の位置や知らない key など）は、今までどおり dialog に示さずに直されるか、そのまま読み込まれる（知らない track の型など）。不正な値を含む Session や設定ファイルの一部（定義にない key や欄、知らない値、図の型にない値、範囲外の値、種類の違う値、足りない resource や欄、読めない track の並びや cache、確認を通らない保存された Result を含むもの）は、今までどおり拒否される。何も復元できないファイルを拒否する確認はまだなく、後の変更で入る。保存された request に形式が定めない値を含む Session のうち、今までの Web が読めたものは、その値を dialog に示さずに読み込まれ、Generate や、保存された request で描き直す操作（label の配置し直し、alignment、record の変換）で「An input value is invalid」と出る。それ以外（feature の編集の表や grouping が null のもの、layout に定義にない key があるものなど）は今までどおり拒否される。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-14"
+}
+```
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -5629,6 +5721,7 @@ Decision date: 2026-10-13
 | `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (`Merge into "<name>"` or `Keep both: name it "<name 2>"`), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
 | `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
 | `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; a drawing switch writes no setting and is not an Undo step; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown; each Session 27-44 fixture and each Session 46 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a Session 46 or 47 preview-only Load starts no Python Worker; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
+| `OIC-031` | `PD-OI-099`: a Load of a file with something it cannot fully restore lists it in one dialog before any setting, Result, input file, History, or screen changes, and Cancel changes none of them. Every Gallery Session, and every Session fixture that loses nothing, loads with no row; a fixture that is lossy on purpose lists exactly its loss. A refusal of the Web Load comes before the dialog, never after [Load]. No file the Web loaded before the dialog existed is refused. The receipt's 〔拒否〕 classes are refused; once the interim of its Accepted residual risk ends, they are the only refusals of the Web Load. |
 
 These new acceptance entries are obligations for dependent runtime work, not
 claims of completed runtime or browser verification by this authority amendment.
@@ -5727,6 +5820,18 @@ checking an `All` label or counting uploaded files is insufficient. Restoring
 first-record truncation, zipped Adjacent pairing, or positional endpoint
 coercion must fail the corresponding regression test. Source changes to these
 boundaries require this coverage in the normal PR gate.
+
+### OIC-031 required regression coverage
+
+These tests protect the outcome; they do not supply Product authority.
+
+| Observation | Executable regression owners |
+| --- | --- |
+| The dialog lists what Load cannot restore before anything changes; Cancel changes nothing. | [`load-repair-dialog.test.mjs`](../../tests/web/load-repair-dialog.test.mjs), `a lossy Load asks once before it changes anything, and Cancel leaves everything as it was (PLAN 12.7 (1), (2))`; [`session-loading-feedback.playwright.spec.js`](../../tests/web/session-loading-feedback.playwright.spec.js), `a lossy Session asks before it loads: Cancel changes nothing, Load loads it`. |
+| Every Gallery Session, and every Session fixture that loses nothing, loads with no row; a fixture that is lossy on purpose lists exactly its loss. | [`load-repair-dialog.test.mjs`](../../tests/web/load-repair-dialog.test.mjs), `every Gallery Session and Session fixture loads without a repair (G3)`. |
+| A refusal comes before the dialog, never after [Load]. | [`load-repair-dialog.test.mjs`](../../tests/web/load-repair-dialog.test.mjs), `a configuration field Load refuses is refused before the dialog (BA-OD96)`. |
+| No file the Web loaded before the dialog existed is refused. | [`load-repair-dialog.test.mjs`](../../tests/web/load-repair-dialog.test.mjs), `no file the Web loaded before the dialog existed is refused (BA-OD100)`. |
+| The 〔拒否〕 classes are refused. | [`session-import-codec.test.mjs`](../../tests/web/session-import-codec.test.mjs), `malformed JSON/gzip and fatal UTF-8 stay structured failures`, `unsafe own keys remain untrusted after the production whole-object reply`, and `codec rejects exact file and expanded caps before reading/decoding oversize data`; [`session-import-client.test.mjs`](../../tests/web/session-import-client.test.mjs), `Worker unavailable, constructor and postMessage failures have no main parser fallback`; [`session-authority.test.mjs`](../../tests/web/session-authority.test.mjs), the `readSessionInput` refusals; [`mode-scoped-session.test.mjs`](../../tests/web/mode-scoped-session.test.mjs), `a file that is not a gbdraw Session is refused as such before its contents are read`; [`session-losat-cache-validation.test.mjs`](../../tests/web/session-losat-cache-validation.test.mjs), `session import rejects branch-internal version 34` to `38`; [`load-repair-dialog.test.mjs`](../../tests/web/load-repair-dialog.test.mjs), `a Session older than 27 is refused as an old version (B51)`; [`session-import-worker.playwright.spec.js`](../../tests/web/session-import-worker.playwright.spec.js), `unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve the old document and History`. Request formats 3, 4 and newer: no test yet. |
 
 ## Residual-risk boundary
 

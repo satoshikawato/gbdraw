@@ -344,37 +344,56 @@ export const legendEntryKey = (entry) => /** @type {PythonLegendKey} */ (String(
 // changes (Load). Every collection is moved at once, so a swap of two keys
 // moves both; a record the new key already has stays, and the old one is
 // dropped. Returns new collections: none is written in place (History and the
-// artifact slot hold them).
+// artifact slot hold them). `dropped` collects each dropped entry and edit
+// (Load lists them).
+/**
+ * A Legend entry or edit the re-key dropped: the collection, its old key and the key it moved to.
+ * @typedef {{ collection: 'entries' | 'deletedEntries' | 'dormantEntries' | 'colorOverrides' | 'strokeOverrides',
+ *   from: string, to: string }} DroppedLegendRecord
+ */
 /**
  * @template {LegendKeyedRecords} Records
  * @param {Records} records
  * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} rekeyed
+ * @param {DroppedLegendRecord[] | null} [dropped]
  * @returns {Records}
  */
-export const rekeyLegendRecords = (records, rekeyed) => {
+export const rekeyLegendRecords = (records, rekeyed, dropped = null) => {
   if (rekeyed.size === 0) return records;
   const lookup = /** @type {ReadonlyMap<string, string>} */ (rekeyed);
   /** @param {unknown} key */
   const moved = (key) => lookup.get(String(key ?? '').trim());
-  /** @template {{ caption?: unknown, originalCaption?: unknown }} Entry @param {readonly Entry[]} list @returns {Entry[]} */
-  const entries = (list) => {
+  /**
+   * @template {{ caption?: unknown, originalCaption?: unknown }} Entry
+   * @param {readonly Entry[]} list @param {DroppedLegendRecord['collection']} collection @returns {Entry[]}
+   */
+  const entries = (list, collection) => {
     /** @type {Set<string>} */
     const held = new Set(list.map((entry) => legendEntryKey(entry)).filter((key) => !lookup.has(key)));
     return list.flatMap((entry) => {
       const key = moved(legendEntryKey(entry));
-      if (key && held.has(key)) return [];
+      if (key && held.has(key)) {
+        dropped?.push({ collection, from: legendEntryKey(entry), to: key });
+        return [];
+      }
       const caption = moved(entry.caption);
       const originalCaption = moved(entry.originalCaption);
       return [caption || originalCaption ? { ...entry, ...(caption ? { caption } : {}), ...(originalCaption ? { originalCaption } : {}) } : entry];
     });
   };
-  /** @param {Readonly<Record<string, unknown>>} record @returns {Record<string, unknown>} */
-  const keyed = (record) => {
+  /**
+   * @param {Readonly<Record<string, unknown>>} record
+   * @param {DroppedLegendRecord['collection'] | null} [collection] Set for an edit: a dropped one is collected.
+   * @returns {Record<string, unknown>}
+   */
+  const keyed = (record, collection = null) => {
     const kept = Object.entries(record).filter(([key]) => !lookup.has(key));
     const result = Object.fromEntries(kept);
     Object.entries(record).forEach(([key, value]) => {
       const to = lookup.get(key);
-      if (to !== undefined && !Object.hasOwn(result, to)) result[to] = value;
+      if (to === undefined) return;
+      if (!Object.hasOwn(result, to)) result[to] = value;
+      else if (collection) dropped?.push({ collection, from: key, to });
     });
     return result;
   };
@@ -382,13 +401,13 @@ export const rekeyLegendRecords = (records, rekeyed) => {
   const keys = (list) => [...new Set(list.map((key) => lookup.get(key) ?? key))];
   /** @type {LegendKeyedRecords} */
   const next = { ...records };
-  if (records.entries) next.entries = entries(records.entries);
-  if (records.deletedEntries) next.deletedEntries = entries(records.deletedEntries);
-  if (records.dormantEntries) next.dormantEntries = entries(records.dormantEntries);
+  if (records.entries) next.entries = entries(records.entries, 'entries');
+  if (records.deletedEntries) next.deletedEntries = entries(records.deletedEntries, 'deletedEntries');
+  if (records.dormantEntries) next.dormantEntries = entries(records.dormantEntries, 'dormantEntries');
   if (records.originalOrder) next.originalOrder = keys(records.originalOrder);
   if (records.originalColors) next.originalColors = keyed(records.originalColors);
-  if (records.colorOverrides) next.colorOverrides = keyed(records.colorOverrides);
-  if (records.strokeOverrides) next.strokeOverrides = keyed(records.strokeOverrides);
+  if (records.colorOverrides) next.colorOverrides = keyed(records.colorOverrides, 'colorOverrides');
+  if (records.strokeOverrides) next.strokeOverrides = keyed(records.strokeOverrides, 'strokeOverrides');
   if (records.addedCaptions) next.addedCaptions = keys(records.addedCaptions);
   if (records.strokeOptionsOpen) next.strokeOptionsOpen = keys(records.strokeOptionsOpen);
   return /** @type {Records} */ (next);

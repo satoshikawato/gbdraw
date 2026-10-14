@@ -27,8 +27,8 @@ import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.
 
 const NO_IMPLICIT_ANY_BASELINE = {
   'app/run-analysis.js': 2,
-  'services/config.js': 77,
-  'services/session-request.js': 124
+  'services/config.js': 72,
+  'services/session-request.js': 121
 };
 
 const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');

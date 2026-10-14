@@ -289,6 +289,8 @@ test('failed import after draft application restores the prior mode, profiles, s
     const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
     const { importSession } = await import('./js/services/config.js');
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
+      // A Gallery Session loads without a dialog; one would cancel the Load.
+      confirmLoadRepairs: async () => false,
       beforePreviewMount: () => { throw new Error('S02 forced rollback'); }
     });
     return { status: result.status, error: result.error };

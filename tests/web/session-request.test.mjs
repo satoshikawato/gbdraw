@@ -5711,8 +5711,8 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
 // Sessions 31–39 read that row as the current writer writes it and report it;
 // any other Session table failure names the table and the Session.
 {
-  const { legacyTableRowsNotice, legendColorDropNotice } = await import(
-    pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
+  const { describeLoadRepairs } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'utils', 'load-repairs.js'))
   );
   const { normalizeUserFacingError } = await import(
     pathToFileURL(join(tempRoot, 'js', 'utils', 'error-normalization.js'))
@@ -5728,34 +5728,11 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   const repaired = project(session, true);
   assert.deepEqual(repaired.config.whitelist, [{ feat: 'CDS', qual: 'product', key: 'cytochrome c oxidase' }]);
   assert.equal(repaired.config.filterMode, 'Whitelist');
-  assert.deepEqual(repaired.legacyTableRepairs, [{ table: 'label-whitelist', row: 1, repair: 'joined' }]);
-  assert.equal(legacyTableRowsNotice(repaired.legacyTableRepairs),
-    'Some table rows of this older Session were read as the current version writes them. '
-    + 'Label whitelist: line 1 had extra cells, joined into the last column with one space.');
-  assert.equal(legacyTableRowsNotice([
-    ...[3, 4, 5, 6, 7, 9, 12].map((row) => ({ table: 'qualifier-priority', row, repair: 'dropped' })),
-    { table: 'label-whitelist', row: 2, repair: 'dropped' },
-    { table: 'default-colors', row: 4, repair: 'invalid' }
-  ]), 'Some table rows of this older Session were read as the current version writes them. '
-    + 'Qualifier priority: lines 3, 4, 5, 6, 7, and 2 more lacked a required column and were dropped. '
-    + 'Label whitelist: line 2 lacked a required column and was dropped. '
-    + 'Default colors: line 4 had a color the table does not accept and was dropped.');
-  assert.equal(legacyTableRowsNotice([]), '');
-  // D-43 (OV-300): the Load notice names each Legend entry dropped for its
-  // color once, marks rows outside the shown list, and caps the list.
-  assert.equal(legendColorDropNotice([{ list: 'entries', caption: 'X' }, { list: 'entries', caption: 'X' }]),
-    'Legend: entry "X" had a color the app does not accept and was dropped.');
-  assert.equal(legendColorDropNotice([
-    ...['A', 'B', 'C', 'D'].map((caption) => ({ list: 'entries', caption })),
-    { list: 'deletedEntries', caption: 'A' }, { list: 'dormantEntries', caption: 'E' },
-    { list: 'entries', caption: 'F' }, { list: 'entries', caption: 'G' }
-  ]), 'Legend: entries "A", "B", "C", "D", "A" (deleted), and 3 more had a color the app does not accept and were dropped.');
-  assert.equal(legendColorDropNotice([{ list: 'dormantEntries', caption: 'E' }]),
-    'Legend: entry "E" (not drawn) had a color the app does not accept and was dropped.');
-  // A caption is free text quoted as other user text is ("5' UTR" contains a ').
-  assert.equal(legendColorDropNotice([{ list: 'entries', caption: "5' UTR" }]),
-    'Legend: entry "5\' UTR" had a color the app does not accept and was dropped.');
-  assert.equal(legendColorDropNotice([]), '');
+  // The rows read so are Load repairs, listed in the Load dialog (BA-D25).
+  assert.deepEqual(repaired.legacyTableRepairs,
+    [{ code: 'table-row-joined', path: 'label-whitelist', effect: 'changed', line: 1 }]);
+  assert.deepEqual(describeLoadRepairs(repaired.legacyTableRepairs).items,
+    ['Label whitelist: line 1 had extra cells, joined into the last column with one space.']);
   const sessionTableFailure = (document, repairLegacyTableRows) => {
     try {
       project(document, repairLegacyTableRows);

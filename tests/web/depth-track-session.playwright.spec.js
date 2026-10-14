@@ -15,6 +15,7 @@ const {
   reveal,
   waitForAppShell,
   expectSessionLoadedWithoutWarnings,
+  answerLoadRepairs,
 } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -1966,6 +1967,11 @@ test('a Session legend position outside its mode loads as the mode default and g
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(session))
   });
+  // The file is lossy on purpose: Load lists the position and the one it uses (BA-D25).
+  await answerLoadRepairs(page, [
+    'Legend: the position "Upper_Left" (modes.linear.ui.layoutPreferences.legend) is not one of its mode\'s positions;'
+      + ' bottom is used.'
+  ], 'load', { timeout: 180000 });
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
   await expect.soft(await reveal(page.locator('#legend-position'))).toHaveValue('bottom');
@@ -3259,6 +3265,59 @@ test('BGC session selected feature Hide undo redo keeps visibility and legend st
 // series, ArrowUp then ArrowDown on `depth_2` leaves two series, and Generate
 // and Save Session succeed (before: the render added "Depth 3", and both failed
 // with DEPTH_INVALID "Depth series 3").
+// BA-OD94: Load keeps the Depth state the app keeps without a Depth file. A
+// series Add Depth track added and a Depth row with geometry whose file was
+// cleared load as saved, with no dialog, and the Depth panel shows both series.
+test('a Circular Session keeps a Depth series without a file and a row whose file was cleared (BA-OD94)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
+    .toBeGreaterThan(0);
+  const depthTsv = Array.from({ length: 6 }, (_, index) => `NC_012920.1\t${index * 3000 + 1}\t${10 + index}`).join('\n');
+  const depthState = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      series: app.adv.depth_tracks.map(({ label }) => label),
+      panel: app.circularDepthTrackRows.length,
+      rows: app.adv.circular_track_slots.filter((slot) => slot?.renderer === 'depth')
+        .map(({ id, enabled, width, params }) => ({ id, enabled: enabled !== false, width, trackIndex: params?.track_index }))
+    };
+  });
+  await page.evaluate(async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularDepthFile(0, new File([text], 'depth_a.tsv', { type: 'text/tab-separated-values' }));
+    await window.Vue.nextTick();
+    app.resetCircularTrackSlotsFromSimpleControls();
+    app.setCircularTrackSlotsEnabled(true);
+    // A width makes the managed row the user's; clearing the file keeps it in
+    // the saved stack (with Use custom stack on, Save asks for its file).
+    app.adv.circular_track_slots.find((slot) => slot?.renderer === 'depth').width = '12';
+    app.setCircularTrackSlotsEnabled(false);
+    app.setCircularDepthFile(0, null);
+    app.addCircularDepthTrack();
+    app.setDepthTrackLabel(1, 'Coverage B');
+    await window.Vue.nextTick();
+  }, depthTsv);
+  const before = await depthState();
+  expect(before.series).toHaveLength(2);
+  expect(before.series[1]).toBe('Coverage B');
+  expect(before.panel).toBe(2);
+  expect(before.rows).toEqual([{ id: 'depth', enabled: true, width: '12', trackIndex: 0 }]);
+  const pending = page.waitForEvent('download');
+  const saved = await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'ba-od94-depth';
+    return await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  expect(saved.status, JSON.stringify(saved)).toBe('saved');
+  const savedPath = await (await pending).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await expectSessionLoadedWithoutWarnings(page);
+  expect(await depthState()).toEqual(before);
+});
+
 test('TK-03: stepping a Depth row track index past the series adds no series', async ({ page }) => {
   test.setTimeout(300_000);
   await openApp(page);

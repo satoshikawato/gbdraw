@@ -8,7 +8,7 @@ const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { answerChoicePrompt, evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { answerChoicePrompt, evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { popup, closeEditor, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
@@ -164,6 +164,7 @@ const load = async (page, path) => {
   }
   await openApp(page);
   await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   await settleLive(page);

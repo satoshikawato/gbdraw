@@ -141,6 +141,7 @@ const isPlainObject = (value) => (
 );
 
 const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
+const OLDEST_SESSION_VERSION = Math.min(...SUPPORTED_SESSION_VERSIONS);
 
 /**
  * The one reader of a parsed Session file. What it returns is a
@@ -154,6 +155,11 @@ export const readSessionInput = (value) => {
   if (!isPlainObject(value)) throw formatInvalid();
   const { version } = value;
   if (typeof version !== 'number' || !Number.isInteger(version)) throw formatInvalid();
+  // Q2 of the Load repair receipt: a Session older than the oldest version
+  // this app reads is refused, as an old version.
+  if (value.format === 'gbdraw-session' && version > 0 && version < OLDEST_SESSION_VERSION) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_TOO_OLD' });
+  }
   if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSION_SET.has(version)) {
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   }

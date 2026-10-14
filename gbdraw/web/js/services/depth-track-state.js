@@ -1,7 +1,10 @@
 // @ts-check
+import { resolveColorToHex } from '../utils/color-utils.js';
+import { isUnsetValue, positiveNumberOrNull } from '../utils/field-reading.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
+/** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
 
 /**
  * The Depth file slots of one record: one file, or a list indexed by series.
@@ -17,7 +20,7 @@ import { normalizeOptionalText } from './track-slot-display.js';
  */
 
 /**
- * A Depth series config after `normalizeDepthTrackConfig`.
+ * A Depth series config after `readDepthTrackConfig`.
  * @typedef {{
  *   label: string, color: string, height: number | null, large_tick_interval: number | null,
  *   small_tick_interval: number | null, tick_font_size: number | null
@@ -31,15 +34,22 @@ import { normalizeOptionalText } from './track-slot-display.js';
  */
 
 /**
- * The Depth track defaults of the calling stack.
+ * The Depth track defaults of the calling stack. The values are a drawing's
+ * stored single-series settings, unvalidated.
  * @typedef {object} DepthTrackDefaults
  * @property {(index: number) => string} [labelForIndex]
  * @property {(index: number) => string} [colorForIndex]
- * @property {string} [depthColor]
- * @property {number | string | null} [depthHeight]
- * @property {number | string | null} [largeTickInterval]
- * @property {number | string | null} [smallTickInterval]
- * @property {number | string | null} [tickFontSize]
+ * @property {unknown} [depthColor] The first series' color.
+ * @property {unknown} [depthHeight]
+ * @property {unknown} [largeTickInterval]
+ * @property {unknown} [smallTickInterval]
+ * @property {unknown} [tickFontSize]
+ */
+
+/**
+ * A drawing's single-series Depth settings (`adv`), unvalidated.
+ * @typedef {{ depth_color?: unknown, depth_height?: unknown, depth_large_tick_interval?: unknown,
+ *   depth_small_tick_interval?: unknown, depth_tick_font_size?: unknown }} StoredDepthSettings
  */
 
 /**
@@ -68,7 +78,8 @@ import { normalizeOptionalText } from './track-slot-display.js';
 /**
  * @typedef {object} DropInvalidManagedDepthSlotsOptions
  * @property {DepthSlotRow[]} [slots]
- * @property {number} [activeCount]
+ * @property {number} [activeCount] The drawing's series count.
+ * @property {Iterable<number>} [sourced] Series indexes with a source; without it every series has one.
  * @property {(slot: DepthSlotRow) => boolean} [managedPredicate]
  */
 
@@ -97,13 +108,6 @@ const DEPTH_TRACK_FALLBACK_COLORS = [
   '#17BECF',
   '#7F7F7F'
 ];
-
-/** @param {unknown} value */
-const normalizePositiveNumber = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-};
 
 /**
  * @param {unknown} [params]
@@ -317,33 +321,86 @@ export const removeDepthTrackColumnAt = (rows, trackIndex) => {
   });
 };
 
+// The one reader of a Depth series config: a stored series, a Session's, and
+// the defaults of a series the app adds. Unset fields take `defaults`; a
+// color name reads as its hex. `lost`: a stored value it could not use.
 /**
- * @param {RawDepthTrackConfig | null | undefined} entry
+ * @param {unknown} entry
+ * @param {number} index
+ * @param {DepthTrackDefaults} [defaults]
+ * @returns {FieldReading<DepthTrackConfig>}
+ */
+export const readDepthTrackConfig = (entry, index, defaults = {}) => {
+  const isEntry = Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry);
+  /** @type {RawDepthTrackConfig} */
+  const source = isEntry ? /** @type {RawDepthTrackConfig} */ (entry) : {};
+  const lost = !isEntry && !isUnsetValue(entry);
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  /** @param {string} field @param {unknown} value */
+  const positive = (field, value) => {
+    const reading = positiveNumberOrNull(value);
+    if (reading.lost) leaves.push({ at: `.${field}`, stored: value, used: reading.value });
+    return reading.value;
+  };
+  const labelForIndex = typeof defaults.labelForIndex === 'function'
+    ? defaults.labelForIndex
+    : fallbackLabel;
+  const value = {
+    label: String(source.label ?? labelForIndex(index)),
+    color: resolveColorToHex(String(source.color || fallbackColor(index, defaults))),
+    height: positive('height', Object.hasOwn(source, 'height') ? source.height : defaults.depthHeight),
+    large_tick_interval: positive('large_tick_interval', source.large_tick_interval ?? defaults.largeTickInterval),
+    small_tick_interval: positive('small_tick_interval', source.small_tick_interval ?? defaults.smallTickInterval),
+    tick_font_size: positive('tick_font_size', source.tick_font_size ?? defaults.tickFontSize)
+  };
+  return { value, lost: lost || leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
+};
+
+/**
+ * @param {unknown} entry
  * @param {number} index
  * @param {DepthTrackDefaults} [defaults]
  * @returns {DepthTrackConfig}
  */
-export const normalizeDepthTrackConfig = (entry, index, defaults = {}) => {
-  /** @type {RawDepthTrackConfig} */
-  const source = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
-  const hasHeight = Object.prototype.hasOwnProperty.call(source, 'height');
-  const labelForIndex = typeof defaults.labelForIndex === 'function'
-    ? defaults.labelForIndex
-    : fallbackLabel;
-  return {
-    label: String(source.label ?? labelForIndex(index)),
-    color: String(source.color || fallbackColor(index, defaults)),
-    height: normalizePositiveNumber(hasHeight ? source.height : defaults.depthHeight),
-    large_tick_interval: normalizePositiveNumber(
-      source.large_tick_interval ?? defaults.largeTickInterval
-    ),
-    small_tick_interval: normalizePositiveNumber(
-      source.small_tick_interval ?? defaults.smallTickInterval
-    ),
-    tick_font_size: normalizePositiveNumber(
-      source.tick_font_size ?? defaults.tickFontSize
-    )
-  };
+export const normalizeDepthTrackConfig = (entry, index, defaults = {}) => (
+  readDepthTrackConfig(entry, index, defaults).value
+);
+
+// A drawing's stored single-series Depth settings belong to its first series;
+// every series takes the height.
+/**
+ * @param {StoredDepthSettings} adv
+ * @param {number} index
+ * @returns {DepthTrackDefaults}
+ */
+const storedSeriesDefaults = (adv, index) => ({
+  depthColor: adv.depth_color,
+  depthHeight: adv.depth_height,
+  ...(index === 0 ? {
+    largeTickInterval: adv.depth_large_tick_interval,
+    smallTickInterval: adv.depth_small_tick_interval,
+    tickFontSize: adv.depth_tick_font_size
+  } : {})
+});
+
+/**
+ * A drawing's stored Depth series (`adv.depth_tracks`), at least one.
+ * @param {unknown} tracks
+ * @param {StoredDepthSettings} [adv]
+ * @returns {FieldReading<DepthTrackConfig[]>}
+ */
+export const readDepthTracks = (tracks, adv = {}) => {
+  const readings = (Array.isArray(tracks) ? tracks : [])
+    .map((entry, index) => readDepthTrackConfig(entry, index, storedSeriesDefaults(adv, index)));
+  if (!readings.length) readings.push(readDepthTrackConfig(null, 0, storedSeriesDefaults(adv, 0)));
+  const notList = !Array.isArray(tracks) && !isUnsetValue(tracks);
+  const value = readings.map((reading) => reading.value);
+  // An entry that is no series is replaced by a default series.
+  const leaves = notList ? [] : readings.flatMap((reading, index) => (!reading.lost ? []
+    : reading.leaves ? reading.leaves.map((leaf) => ({ ...leaf, at: `[${index}]${leaf.at}` }))
+      : [{ at: `[${index}]`, stored: /** @type {unknown[]} */ (tracks)[index], used: reading.value }]));
+  return { value, lost: notList || leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
 };
 
 /**
@@ -407,7 +464,14 @@ export const depthTrackConfigForEdit = (tracks, index, seriesCount, defaults = {
   return tracks[idx];
 };
 
-/** @param {ReconcileDepthTracksToFilesOptions} [options] */
+// Each series keeps the config of its index, or a later config whose label
+// names its file; a series whose config another series took takes the first
+// config no series took, so no config is lost while there are as many series
+// as configs. `sources`: the config index each series took.
+/**
+ * @param {ReconcileDepthTracksToFilesOptions} [options]
+ * @returns {{ tracks: DepthTrackConfig[], sources: number[] }}
+ */
 export const reconcileDepthTracksToFiles = ({
   files,
   depthTracks,
@@ -418,7 +482,7 @@ export const reconcileDepthTracksToFiles = ({
   const rawTracks = Array.isArray(depthTracks) ? depthTracks : [];
   /** @type {Set<number>} */
   const usedTrackIndexes = new Set();
-  return Array.from({ length: Math.max(1, Number(targetCount) || 1) }, (_, index) => {
+  const sources = Array.from({ length: Math.max(1, Number(targetCount) || 1) }, (_, index) => {
     const file = fileSlots[index] || null;
     let sourceIndex = index;
     if (
@@ -433,9 +497,17 @@ export const reconcileDepthTracksToFiles = ({
       ));
       if (matchingIndex >= 0) sourceIndex = matchingIndex;
     }
+    if (usedTrackIndexes.has(sourceIndex)) {
+      const unused = rawTracks.findIndex((_, candidateIndex) => !usedTrackIndexes.has(candidateIndex));
+      if (unused >= 0) sourceIndex = unused;
+    }
     usedTrackIndexes.add(sourceIndex);
-    return normalizeDepthTrackConfig(rawTracks[sourceIndex], index, defaults);
+    return sourceIndex;
   });
+  return {
+    tracks: sources.map((sourceIndex, index) => normalizeDepthTrackConfig(rawTracks[sourceIndex], index, defaults)),
+    sources
+  };
 };
 
 // The logical series a Depth row references: its track_index, else its
@@ -575,30 +647,58 @@ export const reindexDepthSlots = ({
   return nextSlots;
 };
 
-/** @param {DropInvalidManagedDepthSlotsOptions} [options] */
-export const dropInvalidManagedDepthSlots = ({
-  slots,
-  activeCount,
-  managedPredicate = isDefaultManagedDepthSlot
-} = {}) => {
-  const count = Math.max(0, Number(activeCount) || 0);
-  if (!Array.isArray(slots)) return [];
-  return /** @type {ClonedDepthSlot[]} */ (slots
-    .map((slot) => {
-      if (!slot || String(slot.renderer || '') !== 'depth') return cloneSlot(slot);
-      const trackIndex = depthSlotTrackIndex(slot);
-      if (trackIndex !== null && trackIndex >= 0 && trackIndex < count) {
-        const next = cloneSlot(slot);
-        next.params.track_index = trackIndex;
-        return next;
-      }
-      return managedPredicate(slot) ? null : disableInvalidManualDepthSlot(slot, trackIndex);
-    })
-    .filter(Boolean)); // drops the null of a managed row
+/**
+ * A Depth row that names none of the drawing's `count` series.
+ * @param {DepthSlotRow} slot
+ * @param {number} count
+ */
+const namesNoDepthSeries = (slot, count) => {
+  if (!slot || String(slot.renderer || '') !== 'depth') return false;
+  const trackIndex = depthSlotTrackIndex(slot);
+  return trackIndex === null || trackIndex < 0 || trackIndex >= count;
 };
 
 /** @param {DepthSlotRow} slot */
 const isDepthSlot = (slot) => Boolean(slot) && String(slot.renderer || '') === 'depth';
+
+// What a Depth row keeps when its series has no Depth source (PD-OI-058,
+// PD-OI-083, BA-OD94), the one rule of a Depth source change and of Load: a
+// managed row goes with the source; a manual row stays as the user set it, and
+// its row issue says that the series has no source.
+/**
+ * @param {DepthSlotRow} slot
+ * @param {(slot: DepthSlotRow) => boolean} managedPredicate
+ */
+const keepsDepthRowWithoutSource = (slot, managedPredicate) => !managedPredicate(slot);
+
+// A stack's Depth rows fit to the drawing's `activeCount` series: a row of a
+// series without a source keeps or loses it by `keepsDepthRowWithoutSource`;
+// a managed row that names no series is dropped and a manual one turned off.
+/** @param {DropInvalidManagedDepthSlotsOptions} [options] */
+export const dropInvalidManagedDepthSlots = ({
+  slots,
+  activeCount,
+  sourced,
+  managedPredicate = isDefaultManagedDepthSlot
+} = {}) => {
+  const count = Math.max(0, Number(activeCount) || 0);
+  /** @type {Set<number | null> | null} */
+  const withSource = sourced ? new Set(sourced) : null;
+  if (!Array.isArray(slots)) return [];
+  return /** @type {ClonedDepthSlot[]} */ (slots
+    .map((slot) => {
+      if (!isDepthSlot(slot)) return cloneSlot(slot);
+      const trackIndex = depthSlotTrackIndex(slot);
+      if (namesNoDepthSeries(slot, count)) {
+        return managedPredicate(slot) ? null : disableInvalidManualDepthSlot(slot, trackIndex);
+      }
+      if (withSource && !withSource.has(trackIndex) && !keepsDepthRowWithoutSource(slot, managedPredicate)) return null;
+      const next = cloneSlot(slot);
+      next.params.track_index = trackIndex;
+      return next;
+    })
+    .filter(Boolean)); // drops the null of a managed row
+};
 
 /**
  * Managed Depth row lifecycle (PD-OI-058), shared by both modes. Only the
@@ -623,7 +723,7 @@ export const reconcileManagedDepthSlots = ({
   /** @type {Set<number | null>} */
   const after = new Set(sourced);
   const kept = (Array.isArray(slots) ? slots : []).filter((slot) => {
-    if (!isDepthSlot(slot) || !managedPredicate(slot)) return true;
+    if (!isDepthSlot(slot) || keepsDepthRowWithoutSource(slot, managedPredicate)) return true;
     const trackIndex = depthSlotTrackIndex(slot);
     return !before.has(trackIndex) || after.has(trackIndex);
   });
@@ -673,4 +773,84 @@ export const depthSeriesLegendCaptions = ({ depthTracks, slots } = {}) => {
       .map((slot) => slot?.params?.legend_label)
   ].map((caption) => String(caption ?? '').trim());
   return [...new Set(captions.filter(Boolean))];
+};
+
+/**
+ * A drawing's Depth settings and track stacks.
+ * @typedef {StoredDepthSettings & { depth_tracks?: unknown, circular_track_slots?: DepthSlotRow[],
+ *   linear_track_slots?: DepthSlotRow[] }} DrawingDepthState
+ */
+/**
+ * @typedef {object} DepthSourceFit
+ * @property {DepthTrackConfig[]} depthTracks
+ * @property {ClonedDepthSlot[]} circularSlots Before the stack's placements.
+ * @property {ClonedDepthSlot[]} linearSlots Before the stack's placements.
+ * @property {number} linearRowWidth The width each Linear record's Depth slots
+ *   are padded to; 0 leaves them as saved.
+ * @property {{ list: 'circular' | 'linear', id: string, enabled: boolean }[]} disabledRows
+ *   The manual Depth rows that name no series of the drawing, which the fit
+ *   turns off, and whether each was on (a row the fit marked before is not).
+ */
+
+/**
+ * A loaded drawing's Depth series and Depth rows fit to the Depth sources
+ * (plan 4.2 `depth`) by the rule the app keeps when a source goes (BA-OD94):
+ * every stored series stays, with or without a Depth file (Circular adds a
+ * series for each Circular Depth file past them, and a series takes the
+ * stored config whose label names its file; Linear grows to the widest record
+ * and pads the records that hold a file, OV-337); a Depth row keeps or loses
+ * a series without a source by `keepsDepthRowWithoutSource`. Pure: Load lists
+ * what it turns off before the commit (B45) and installs it after.
+ * @param {{ mode: 'circular' | 'linear', adv: DrawingDepthState, circularFiles: DepthFileSlots | DepthFileSlots[],
+ *   linearRows: (FileLike | null)[][] }} input
+ * @returns {DepthSourceFit}
+ */
+export const fitDepthStateToSources = ({ mode, adv, circularFiles, linearRows }) => {
+  const circularDepthFiles = representativeDepthFiles(circularFiles);
+  const circularSlots = Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots : [];
+  const linearSlots = Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : [];
+  const stored = readDepthTracks(adv.depth_tracks, adv).value;
+  const linearDepthCount = depthTrackSessionWidth({ rows: linearRows, depthTracks: stored, slots: linearSlots });
+  /** @type {DepthTrackConfig[]} */
+  let depthTracks;
+  if (mode === 'linear') {
+    depthTracks = stored;
+    while (depthTracks.length < linearDepthCount) {
+      depthTracks.push(readDepthTrackConfig(null, depthTracks.length, storedSeriesDefaults(adv, depthTracks.length)).value);
+    }
+  } else {
+    // Every Circular series takes the first series' stored settings as its
+    // defaults, as this fit always read them.
+    depthTracks = reconcileDepthTracksToFiles({
+      files: circularDepthFiles,
+      depthTracks: stored,
+      targetCount: Math.max(stored.length, circularDepthFiles.some(Boolean) ? circularDepthFiles.length : 0),
+      defaults: storedSeriesDefaults(adv, 0)
+    }).tracks;
+  }
+  /**
+   * @param {'circular' | 'linear'} list
+   * @param {DepthSlotRow[]} slots
+   * @param {number} seriesCount
+   * @param {number[]} sourced
+   */
+  const fitStack = (list, slots, seriesCount, sourced) => {
+    const fitted = dropInvalidManagedDepthSlots({ slots, activeCount: seriesCount, sourced });
+    syncDepthSlotLabels({ slots: fitted, depthTracks, activeCount: seriesCount });
+    const disabled = slots
+      .filter((slot) => namesNoDepthSeries(slot, seriesCount) && !isDefaultManagedDepthSlot(slot) && !slot.depth_binding_error)
+      .map((slot) => ({ list, id: String(slot.id || ''), enabled: slot.enabled !== false }));
+    return { fitted, disabled };
+  };
+  // Each stack fits the series of its own mode's sources.
+  const circular = fitStack('circular', circularSlots, mode === 'circular' ? depthTracks.length : Math.max(stored.length, circularDepthFiles.length),
+    circularDepthFiles.flatMap((file, index) => (file ? [index] : [])));
+  const linear = fitStack('linear', linearSlots, mode === 'linear' ? depthTracks.length : linearDepthCount, activeDepthTrackIndices(linearRows));
+  return {
+    depthTracks,
+    circularSlots: circular.fitted,
+    linearSlots: linear.fitted,
+    linearRowWidth: mode === 'linear' && linearDepthCount > 0 && linearRows.some((row) => row.some(Boolean)) ? linearDepthCount : 0,
+    disabledRows: [...circular.disabled, ...linear.disabled]
+  };
 };

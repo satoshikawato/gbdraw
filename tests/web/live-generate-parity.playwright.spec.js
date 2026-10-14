@@ -10,7 +10,7 @@
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
 const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { evaluateWithRetainedPromise, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows, switchMode } = require('./helpers/mode-transition.cjs');
@@ -851,6 +851,7 @@ test('Palette change repaints the skew track and its Legend rows of a loaded Ses
   await openFresh(page);
   // A CLI Session of 0.13.0 lists no extracted features, so the Load is awaited by its Result.
   await page.locator('input[accept^=".json,"]').setInputFiles('tests/fixtures/sessions/scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz');
+  await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.svgContainer?.querySelector('g#skew'), null, { timeout: 60_000 });
   await settleLive(page);
