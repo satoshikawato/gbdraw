@@ -228,20 +228,20 @@ class LegendTable(Mapping[LegendRowKey, LegendEntry]):
         return len(self._rows)
 
 
-def as_legend_table(legend_table: Mapping[object, LegendEntry]) -> LegendTable:
+def as_legend_table(legend_table: LegendTable | Mapping[object, LegendEntry]) -> LegendTable:
     """The table itself; a plain mapping (a test's table) is read as rows named by their keys."""
 
     return legend_table if isinstance(legend_table, LegendTable) else LegendTable(legend_table)
 
 
-def legend_row_names(legend_table: Mapping[object, LegendEntry]) -> dict[LegendRowKey, LegendRowNames]:
+def legend_row_names(legend_table: LegendTable | Mapping[object, LegendEntry]) -> dict[LegendRowKey, LegendRowNames]:
     """The names the legend layouts measure and the legend drawers write, by row key."""
 
     return as_legend_table(legend_table).names()
 
 
 def write_legend_row_names(
-    legend_table: Mapping[object, LegendEntry] | None,
+    legend_table: LegendTable | None,
 ) -> Callable[[MutableMapping[str, object], LegendRowKey], DrawnLegendName]:
     """The legend drawers' one writer of a row's key, name, and drawn name.
 
@@ -251,7 +251,7 @@ def write_legend_row_names(
     names are its keys keeps its bytes), and returns the name the legend draws.
     """
 
-    names = legend_row_names(legend_table or {})
+    names = legend_row_names(legend_table if legend_table is not None else LegendTable())
 
     def write(attribs: MutableMapping[str, object], key: LegendRowKey) -> DrawnLegendName:
         attribs["data-legend-key"] = key

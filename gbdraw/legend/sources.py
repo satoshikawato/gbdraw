@@ -18,7 +18,7 @@ from pandas import DataFrame
 
 from gbdraw.core.sequence import check_feature_presence
 from gbdraw.features.colors import precompute_used_color_rules
-from gbdraw.tracks.parsing import slot_skew_colors
+from gbdraw.tracks.parsing import SlotView, slot_skew_colors
 
 if TYPE_CHECKING:
     from gbdraw.analysis.depth_tracks import DepthTrackData
@@ -187,22 +187,18 @@ class LegendSlotSource:
 
     id: str
     renderer: str
-    params: Mapping[str, Any]
+    params: Mapping[str, object]
 
 
-def legend_slot_sources(slots: Iterable[object] | None) -> tuple[LegendSlotSource, ...] | None:
+def legend_slot_sources(slots: Iterable[SlotView] | None) -> tuple[LegendSlotSource, ...] | None:
     """The enabled slots in order; ``None`` (no slot list) stays ``None``."""
 
     if slots is None:
         return None
     return tuple(
-        LegendSlotSource(
-            str(getattr(slot, "id", "")),
-            str(getattr(slot, "renderer", "")),
-            dict(getattr(slot, "params", {}) or {}),
-        )
+        LegendSlotSource(slot.id, slot.renderer, dict(slot.params))
         for slot in slots
-        if getattr(slot, "enabled", True)
+        if slot.enabled
     )
 
 

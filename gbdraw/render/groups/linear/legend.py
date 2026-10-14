@@ -11,7 +11,7 @@ from ....legend.linear_layout import (
     LinearGradientLegendLayout,
     LinearOrientationLegendLayout,
 )
-from ....legend.table import LegendRowKey, write_legend_row_names
+from ....legend.table import LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
@@ -23,8 +23,8 @@ class LegendGroup:
     def __init__(
         self,
         legend_measurement: LegendMeasurement,
-        legend_table,
-    ):
+        legend_table: LegendTable,
+    ) -> None:
         self.legend_group = Group(id="legend")
         self.legend_measurement = legend_measurement
         self.legend_table = legend_table
@@ -300,7 +300,7 @@ class LegendGroup:
         return self.vertical_legend_width, self.vertical_legend_height
 
 
-def linear_legend_content(legend_measurement: LegendMeasurement, legend_table) -> GroupContent:
+def linear_legend_content(legend_measurement: LegendMeasurement, legend_table: LegendTable) -> GroupContent:
     """The ``legend_content`` stage of a Linear canvas."""
 
     return GroupContent.of(LegendGroup(legend_measurement, legend_table).get_group())

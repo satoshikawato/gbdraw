@@ -7,7 +7,7 @@ from gbdraw.svg.elements import Group, LinearGradient, Path
 
 from ....configurators.legend import LegendMeasurement
 from ....legend.circular_layout import CircularGradientLegendLayout
-from ....legend.table import LegendRowKey, write_legend_row_names
+from ....legend.table import LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.text_path import generate_text_path
 from ....svg.ids import stable_svg_id
@@ -17,8 +17,8 @@ class LegendGroup:
     def __init__(
         self,
         legend_measurement: LegendMeasurement,
-        legend_table,
-    ):
+        legend_table: LegendTable,
+    ) -> None:
         self.legend_group = Group(id="legend")
         self.legend_measurement = legend_measurement
         self.legend_table = legend_table
@@ -249,7 +249,7 @@ class LegendGroup:
         return self.legend_group
 
 
-def circular_legend_content(legend_measurement: LegendMeasurement, legend_table) -> GroupContent:
+def circular_legend_content(legend_measurement: LegendMeasurement, legend_table: LegendTable) -> GroupContent:
     """The ``legend_content`` stage of a Circular canvas outside the record build."""
 
     return GroupContent.of(LegendGroup(legend_measurement, legend_table).get_group())

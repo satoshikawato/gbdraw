@@ -18,6 +18,7 @@ from gbdraw.annotations.legend import sync_annotation_legend_entries
 from gbdraw.annotations.models import HatchStyle, RegionAnnotationStyle
 from gbdraw.legend.circular_layout import build_circular_legend_layout
 from gbdraw.legend.sources import depth_legend_sources, legend_slot_sources
+from gbdraw.tracks.linear import LinearTrackSlot
 from gbdraw.legend.table import (
     LegendTable,
     drawn_legend_names,
@@ -147,7 +148,7 @@ def test_annotation_rows_follow_the_rule_and_keep_their_keys():
         RegionAnnotationStyle(fill="#94a3b8", stroke="#334155", stroke_width=1, hatch=hatch),
     ]
     bundle = SimpleNamespace(annotations=tuple(annotation(style) for style in styles))
-    slot = SimpleNamespace(enabled=True, renderer="annotations", params={"set_id": "islands"})
+    slot = LinearTrackSlot(id="islands", renderer="annotations", params={"set_id": "islands"})
     table = LegendTable()
     table.add("Island", solid("#ff0000", "gray", 1))
     table = sync_annotation_legend_entries(table, bundle, legend_slot_sources([slot]))
