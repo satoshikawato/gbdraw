@@ -47,8 +47,9 @@ import { LINEAR_LABEL_VISIBILITY_MODES } from './linear-label-visibility.js';
 /**
  * A stored value a reading did not restore: `at` is its place in the read
  * value (`adv.depth_tracks[0].height`); `dropped` counts the entries of a list
- * it dropped.
- * @typedef {{ at: string, stored: unknown, used: unknown, dropped?: number }} SettingLoss
+ * it dropped; `kept`: the stored value is not used, and the target keeps the
+ * value it holds.
+ * @typedef {{ at: string, stored: unknown, used: unknown, dropped?: number, kept?: boolean }} SettingLoss
  */
 
 /**
@@ -65,6 +66,16 @@ const retiredField = (value) => ({ value: undefined, lost: !isUnsetValue(value) 
 export const readPlainObject = (value) => (isPlainObject(value) ? { value, lost: false } : { value: {}, lost: !isUnsetValue(value) });
 /** A list, else empty. @type {FieldReader<unknown[]>} */
 export const readList = (value) => (Array.isArray(value) ? { value, lost: false } : { value: [], lost: !isUnsetValue(value) });
+/**
+ * A list `read` reads; any other value is not used, and the drawing keeps the
+ * list it holds (`applyConfigData` installs a configuration's `rules` and
+ * `whitelist` so).
+ * @template T
+ * @param {FieldReader<T[]>} read
+ * @returns {FieldReader<T[]>}
+ */
+const listOrKept = (read) => (value) => (Array.isArray(value) ? read(value)
+  : { value: [], lost: !isUnsetValue(value), kept: true });
 
 /** @typedef {{ selector: string, row: number }} MultiRecordPosition */
 const readGridRow = numberOr(isPositiveInteger, 1);
@@ -271,9 +282,10 @@ const textFieldLeaves = (entry, row, fields) => fields.flatMap((field) => change
 /**
  * The specific color rules of a configuration (`rules`). A color name reads as
  * its hex value; an unset color is black; `fromFile` is kept only when set.
+ * A value that is no list is not used (`listOrKept`).
  * @type {FieldReader<StoredColorRule[]>}
  */
-export const readColorRules = rowList((entry) => {
+export const readColorRules = listOrKept(rowList((entry) => {
   const color = resolveColorToHex(String(entry.color || '#000000'));
   /** @type {StoredColorRule} */
   const row = {
@@ -292,14 +304,18 @@ export const readColorRules = rowList((entry) => {
         ? [{ at: '.fromFile', stored: entry.fromFile, used: Boolean(entry.fromFile) }] : [])
     ]
   };
-});
+}));
 
 /** @typedef {{ feat: string, qual: string, key: string }} StoredWhitelistRule */
-/** The label whitelist of a configuration (`whitelist`). @type {FieldReader<StoredWhitelistRule[]>} */
-export const readWhitelistRules = rowList((entry) => {
+/**
+ * The label whitelist of a configuration (`whitelist`); a value that is no
+ * list is not used (`listOrKept`).
+ * @type {FieldReader<StoredWhitelistRule[]>}
+ */
+export const readWhitelistRules = listOrKept(rowList((entry) => {
   const row = { feat: ruleText(entry.feat), qual: ruleText(entry.qual), key: ruleText(entry.key) };
   return { row, leaves: textFieldLeaves(entry, row, ['feat', 'qual', 'key']) };
-});
+}));
 
 /**
  * The annotation sets of a drawing (`normalizeAnnotationSets`), with each
@@ -693,6 +709,7 @@ const readRows = (container, rows, at, stored = container) => rows.flatMap(({ fi
   if (inPlace && Array.isArray(before) && Array.isArray(reading.value)) before.splice(0, before.length, ...reading.value);
   else container[field] = reading.value;
   if (!reading.lost) return [];
+  if (reading.kept) return [{ at: fieldAt, stored: before, used: undefined, kept: true }];
   if (reading.dropped || reading.leaves) {
     return [
       ...(reading.dropped ? [{ at: fieldAt, stored: before, used: undefined, dropped: reading.dropped }] : []),
@@ -713,7 +730,7 @@ const UNSAFE_KEYS = Object.freeze(['__proto__', 'constructor', 'prototype']);
  * ignored, except in a map of `FREE_KEY_MAPS`, where it is copied; an object merges into an object; a list replaces a list; a value
  * of `target`'s kind, or `null` on either side, is copied. A value of another
  * kind (a list for an object included) is not used; it is returned as a loss
- * at `at`.
+ * at `at`, and `target` keeps its value.
  * @param {Record<string, unknown>} target
  * @param {unknown} source
  * @param {string} [at]
@@ -741,7 +758,7 @@ export const mergeStoredSettings = (target, source, at = '') => {
       target[key] = sourceValue;
       return [];
     }
-    return [{ at: keyAt, stored: sourceValue, used: targetValue }];
+    return [{ at: keyAt, stored: sourceValue, used: targetValue, kept: true }];
   });
 };
 
@@ -781,7 +798,7 @@ const copied = (value) => (value === undefined ? undefined : JSON.parse(JSON.str
 export const installStoredSettings = (targets, config) => {
   /** A stored container that is no object is not used (the drawing's stays). @param {Record<string, unknown>} target @param {string} at */
   const merged = (target, at) => (isPlainObject(config[at]) || isUnsetValue(config[at])
-    ? mergeStoredSettings(target, config[at], at) : [{ at, stored: config[at], used: target }]);
+    ? mergeStoredSettings(target, config[at], at) : [{ at, stored: config[at], used: target, kept: true }]);
   const losses = [
     ...merged(targets.form, 'form'),
     ...merged(targets.adv, 'adv'),
@@ -865,25 +882,32 @@ const holds = (value, at) => {
  * @param {readonly SettingLoss[]} losses
  * @param {string} path Where the read value is in the file.
  * @param {unknown} stored
- * @param {{ mode?: 'circular' | 'linear' | null, root?: string }} [scope] The drawing's mode, and the
- *   registry domain of the read value.
+ * @param {{ mode?: 'circular' | 'linear' | null, root?: string, targets?: 'current' | 'default' }} [scope]
+ *   The drawing's mode, the registry domain of the read value, and what a
+ *   kept value is: the drawing's current one (a configuration file is
+ *   installed over the drawing) or its default (Load resets a Session's drawing).
  * @returns {LoadRepair[]}
  */
-const lossRepairs = (losses, path, stored, { mode = null, root = '' } = {}) => losses
+const lossRepairs = (losses, path, stored, { mode = null, root = '', targets = 'default' } = {}) => losses
   .filter(({ at, stored: storedValue, used }) => holds(stored, at) && drawnByMode(mode, root, at)
     && !keepsMeaning(storedValue, used))
-  .map(({ at, stored: storedValue, used, dropped }) => {
+  .map(({ at, stored: storedValue, used, dropped, kept }) => {
     const fieldPath = [path, at].filter(Boolean).join('.');
     if (dropped) return loadRepair({ code: 'setting-entries-dropped', path: fieldPath, effect: 'dropped', count: dropped });
-    // Nothing used: the value is dropped; an unset value, a list or an
-    // object used: the default is used. Free text is named by its place.
+    // A kept value: the drawing's current one or its default; else nothing
+    // used: the value is dropped; an unset value, a list or an object used:
+    // the default is used. Free text is named by its place.
     const named = !isUnsetValue(used) && typeof used !== 'object';
+    const keptEffect = kept ? (targets === 'current' ? 'kept' : 'defaulted') : null;
     if (isFreeText(at)) {
-      return loadRepair({ code: 'setting-replaced', path: fieldPath, effect: used === undefined ? 'dropped' : named ? 'changed' : 'defaulted' });
+      return loadRepair({
+        code: 'setting-replaced', path: fieldPath,
+        effect: keptEffect ?? (used === undefined ? 'dropped' : named ? 'changed' : 'defaulted')
+      });
     }
     return loadRepair({
-      code: 'setting-replaced', path: fieldPath, effect: used === undefined ? 'dropped' : 'defaulted', stored: excerpt(storedValue),
-      ...(named ? { used: excerpt(used) } : {})
+      code: 'setting-replaced', path: fieldPath, effect: keptEffect ?? (used === undefined ? 'dropped' : 'defaulted'),
+      stored: excerpt(storedValue), ...(named ? { used: excerpt(used) } : {})
     });
   });
 
@@ -898,13 +922,15 @@ const lossRepairs = (losses, path, stored, { mode = null, root = '' } = {}) => l
  * @param {SettingsContainers} targets Written.
  * @param {Record<string, unknown>} config
  * @param {string} path Where the configuration is in the file.
- * @param {{ stored?: unknown, mode?: 'circular' | 'linear' | null }} [options]
+ * @param {{ stored?: unknown, mode?: 'circular' | 'linear' | null, current?: boolean }} [options]
+ *   `current`: `targets` are the drawing's current settings (a configuration
+ *   file), so a value not used keeps the drawing's.
  * @returns {LoadRepair[]}
  */
-export const configFieldRepairs = (targets, config, path, { stored = config, mode = null } = {}) => lossRepairs([
+export const configFieldRepairs = (targets, config, path, { stored = config, mode = null, current = false } = {}) => lossRepairs([
   ...installStoredSettings(targets, config),
   ...readValueTables(VALUE_TABLES, config)
-], path, stored, { mode, root: 'config' });
+], path, stored, { mode, root: 'config', targets: current ? 'current' : 'default' });
 
 /**
  * The same for a Session's app `ui`.

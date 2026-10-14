@@ -747,7 +747,7 @@ test('a configuration field Load refuses is refused before the dialog (BA-OD96)'
     ? [name, 'legacy', 1, true] : [name, 'error', 0, false])));
 });
 
-// BA-OD100: Load refuses no file the Web loaded before PR-N. These files
+// BA-OD100: Load refuses no file the Web loaded before the dialog existed. These files
 // loaded on origin/dev 28c8277f (fix4 probe: one process per file, the value
 // in a minimal and a current configuration file and in a Session 46); the
 // merge did not use the value or the feature type's shape was not read.
@@ -763,7 +763,7 @@ const LOADED_BEFORE = [
     { linear_length_visibility: 0 }, { linear_length_visibility: false }]
     .map((adv) => [`current legacy ${JSON.stringify(adv)}`, currentLegacyWith({ adv })])
 ];
-test('no file the Web loaded before PR-N is refused (BA-OD100)', async () => {
+test('no file the Web loaded before the dialog existed is refused (BA-OD100)', async () => {
   const outcomes = [];
   for (const [name, file] of LOADED_BEFORE) {
     const loaded = await importSession(input(file), { confirmLoadRepairs: async () => true });
@@ -775,7 +775,7 @@ test('no file the Web loaded before PR-N is refused (BA-OD100)', async () => {
 
 // BA-OD100: in a configuration file, a default feature type's shape that is
 // no text and a Linear label visibility that is no text are not used (the
-// drawing's value stays, named in the row), and the shape of a feature type
+// drawing keeps its value, `kept`, named in the row), and the shape of a feature type
 // the defaults lack that names no shape is dropped. The apply reads them with
 // the readers the dialog lists them by.
 test('a configuration file with a shape or Linear visibility that is no text, or an unknown shape of a new feature type, loads with its rows (BA-OD100)', async () => {
@@ -794,9 +794,9 @@ test('a configuration file with a shape or Linear visibility that is no text, or
     assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
     assert.deepEqual(loaded.repairs.filter(({ path }) => /feature_shapes|visibility/.test(path))
       .map(({ code, path, effect, stored, used }) => [code, path, effect, stored, used]), [
-      ['setting-replaced', 'adv.feature_shapes.CDS', 'defaulted', '5', before.CDS],
-      ['setting-replaced', 'adv.linear_accession_visibility', 'defaulted', 'true', before.accession],
-      ['setting-replaced', 'adv.linear_length_visibility', 'defaulted', '0', before.length],
+      ['setting-replaced', 'adv.feature_shapes.CDS', 'kept', '5', before.CDS],
+      ['setting-replaced', 'adv.linear_accession_visibility', 'kept', 'true', before.accession],
+      ['setting-replaced', 'adv.linear_length_visibility', 'kept', '0', before.length],
       ['setting-replaced', 'adv.feature_shapes.gene', 'dropped', 'bogus', undefined]
     ]);
     assert.deepEqual([drawing.adv.feature_shapes.CDS, Object.hasOwn(drawing.adv.feature_shapes, 'gene'), drawing.adv.feature_shapes.misc_feature,
@@ -836,6 +836,46 @@ test('a configuration file drops and lists a rule or whitelist entry that is no 
     const dialogs = [];
     const refused = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
     assert.deepEqual([refused.status, dialogs.length, loadedState() === snapshot], ['error', 0, true], list);
+  }
+});
+
+// A configuration file is installed over the drawing: a settings group or a
+// list it cannot use is not used, and the drawing keeps its current value, so
+// its row says so, never "its default is used". A Session resets the drawing
+// first, so there the default is used, and its row says that.
+test('a configuration file group or list Load does not use keeps the drawing\'s value, and its row says so', async () => {
+  const first = { form: { plot_title: 'Mine', legend: 'left' }, adv: { label_font_size: 21 },
+    rules: [{ feat: 'CDS', qual: 'product', val: 'x', color: '#ff0000', cap: 'Mine' }], whitelist: [{ feat: 'CDS', qual: 'gene', key: 'abc' }] };
+  const kept = 'the drawing keeps its current value.';
+  const cases = [
+    [{ form: 5 }, `Settings: the value "5" (form) cannot be used; ${kept}`],
+    [{ adv: 'x' }, `Settings: the value "x" (adv) cannot be used; ${kept}`],
+    [{ losat: 5 }, `Settings: the value "5" (losat) cannot be used; ${kept}`],
+    [{ circularConservation: 5 }, `Settings: the value "5" (circularConservation) cannot be used; ${kept}`],
+    [{ rules: 'x' }, `Settings: the value "x" (rules) cannot be used; ${kept}`],
+    [{ whitelist: 5 }, `Settings: the value "5" (whitelist) cannot be used; ${kept}`],
+    [{ adv: { feature_shapes: 5 } }, `Settings: the value "5" (adv.feature_shapes) cannot be used; ${kept}`],
+    [{ form: { plot_title: {} } }, `Settings: the value of form.plot_title cannot be used; ${kept}`]
+  ];
+  const outcomes = [];
+  for (const [file] of cases) {
+    assert.equal((await importSession(input(first), { confirmLoadRepairs: async () => true })).status, 'legacy');
+    const drawing = state.drawings[state.mode.value];
+    const shapes = JSON.stringify(drawing.adv.feature_shapes);
+    const asked = [];
+    const loaded = await importSession(input(file), { confirmLoadRepairs: async ({ items }) => { asked.push(...items); return true; } });
+    outcomes.push([JSON.stringify(file), loaded.status, asked, loaded.repairs.map(({ effect }) => effect),
+      drawing.form.plot_title, drawing.adv.label_font_size, drawing.manualSpecificRules.length, drawing.manualWhitelist.length,
+      JSON.stringify(drawing.adv.feature_shapes) === shapes]);
+  }
+  assert.deepEqual(outcomes, cases.map(([file, line]) => [JSON.stringify(file), 'legacy', [line], ['kept'], 'Mine', 21, 1, 1, true]));
+  // A Session's drawing is reset first: the same values are its default.
+  for (const [field, value] of [['feature_shapes', 5], ['plot_title', {}]]) {
+    const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+    session.modes.circular.config[field === 'plot_title' ? 'form' : 'adv'][field] = value;
+    const loaded = await importSession(input(session), { confirmLoadRepairs: async () => true });
+    assert.deepEqual([loaded.status, loaded.repairs.filter(({ path }) => path.endsWith(field)).map(({ effect }) => effect)],
+      ['ok', ['defaulted']], field);
   }
 });
 

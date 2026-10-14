@@ -13,10 +13,11 @@
  */
 /**
  * @template T
- * @typedef {{ value: T, lost: boolean, dropped?: number, leaves?: readonly FieldLeaf[] }} FieldReading
+ * @typedef {{ value: T, lost: boolean, dropped?: number, leaves?: readonly FieldLeaf[], kept?: boolean }} FieldReading
  *   `dropped`: how many entries of a list the reading dropped; `leaves`: the
  *   values inside it the reading replaced (a reading that lost something and
- *   names neither lost the field as a whole).
+ *   names neither lost the field as a whole); `kept`: the stored value is not
+ *   used, and the field keeps the value it holds.
  */
 /**
  * @template T

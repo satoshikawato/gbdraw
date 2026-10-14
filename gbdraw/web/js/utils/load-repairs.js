@@ -3,8 +3,10 @@
 import { SESSION_TABLE_LABELS } from './error-normalization.js';
 
 /**
- * What Load did with a value it could not restore as stored.
- * @typedef {'dropped' | 'defaulted' | 'changed'} LoadRepairEffect
+ * What Load did with a value it could not restore as stored. `kept`: the
+ * value is not used and the drawing keeps its current value (a configuration
+ * file is installed over the drawing).
+ * @typedef {'dropped' | 'defaulted' | 'changed' | 'kept'} LoadRepairEffect
  */
 /**
  * The rule of the producer that could not restore a value: one member per rule.
@@ -146,7 +148,9 @@ const WORDING = {
   // names no value used.
   'setting-replaced': (repairs) => repairs.map(({ path, stored, used, effect }) => (
     `Settings: ${stored === undefined ? `the value of ${path}` : `the value "${stored}" (${path})`} cannot be used; `
-    + `${used !== undefined ? `${used} is used` : { defaulted: 'its default is used', changed: 'it is changed', dropped: 'it is left unset' }[effect]}.`)),
+    + `${used !== undefined ? `${used} is used` : {
+      defaulted: 'its default is used', changed: 'it is changed', dropped: 'it is left unset', kept: 'the drawing keeps its current value'
+    }[effect]}.`)),
   'setting-entries-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
     `Settings: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
   'pending-palette-dropped': (repairs) => repairs.map(({ path, label }) => (

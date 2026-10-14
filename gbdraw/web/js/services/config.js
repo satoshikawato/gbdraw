@@ -1555,7 +1555,7 @@ const readLegacyConfigPayload = (data, drawing, mode) => {
   const installed = cloneJsonData({
     form: drawing.form, adv: drawing.adv, losat: drawing.losat, circularConservation: drawing.circularConservation
   });
-  repairs.push(...configFieldRepairs(installed, migrated, '', { mode }));
+  repairs.push(...configFieldRepairs(installed, migrated, '', { mode, current: true }));
   return { value: migrated, repairs };
 };
 
@@ -2477,8 +2477,9 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
     if (paletteColors) drawing.currentColors.value = paletteColors;
   }
 
-  if (Array.isArray(data.rules)) {
-    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...readColorRules(data.rules).value);
+  const storedRules = readColorRules(data.rules);
+  if (!storedRules.kept) {
+    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...storedRules.value);
     drawing.fileLegendCaptions.value = new Set(
       drawing.manualSpecificRules
         .filter((rule) => rule.fromFile && rule.cap)
@@ -2491,8 +2492,9 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
     replaceQualifierPriorityRules(drawing, data.priorityRules);
   }
   if (data.filterMode) drawing.filterMode.value = readFilterMode(data.filterMode).value;
-  if (Array.isArray(data.whitelist)) {
-    drawing.manualWhitelist.splice(0, drawing.manualWhitelist.length, ...readWhitelistRules(data.whitelist).value);
+  const storedWhitelist = readWhitelistRules(data.whitelist);
+  if (!storedWhitelist.kept) {
+    drawing.manualWhitelist.splice(0, drawing.manualWhitelist.length, ...storedWhitelist.value);
   }
   if (data.blacklistText !== undefined) drawing.manualBlacklist.value = String(data.blacklistText || '');
   if (data.losatProgram) {
