@@ -86,7 +86,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         }),
         startCoordinate: Object.freeze({
           kind: "union",
-          options: Object.freeze([Object.freeze({kind: "integer"}), Object.freeze({kind: "null"})])
+          options: Object.freeze([Object.freeze({kind: "integer", minimum: 1}), Object.freeze({kind: "null"})])
         })
       }),
       optional: Object.freeze([]),
@@ -149,18 +149,19 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           options: Object.freeze([Object.freeze({kind: "ref", name: "CanonicalRecordRegion"}), Object.freeze({kind: "null"})])
         }),
         presentation: Object.freeze({kind: "ref", name: "CanonicalRecordPresentation"}),
-        recordKey: Object.freeze({kind: "string"}),
+        recordKey: Object.freeze({kind: "string", pattern: "\\S"}),
         cardinality: Object.freeze({kind: "literal", values: Object.freeze(["exactly_one", "first", "all"])}),
         display: Object.freeze({kind: "ref", name: "CanonicalRecordDisplayOptions"})
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({display: Object.freeze({isCircular: null, startCoordinate: null})})
     }),
     CanonicalRequestOutput: Object.freeze({
       kind: "object",
       fields: Object.freeze({
         prefix: Object.freeze({kind: "string"}),
-        formats: Object.freeze({kind: "array", items: Object.freeze({kind: "string"})}),
+        formats: Object.freeze({kind: "array", items: Object.freeze({kind: "string"}), minItems: 1}),
         overwrite: Object.freeze({kind: "boolean"}),
         interactiveMetadataPolicy: Object.freeze({kind: "literal", values: Object.freeze(["auto", "required", "omit"])})
       }),
@@ -218,7 +219,11 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       fields: Object.freeze({
         groupId: Object.freeze({kind: "string"}),
         reference: Object.freeze({kind: "ref", name: "CanonicalAlignmentAnchorIdentity"}),
-        records: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalAlignmentRecordDecision"})}),
+        records: Object.freeze({
+          kind: "array",
+          items: Object.freeze({kind: "ref", name: "CanonicalAlignmentRecordDecision"}),
+          minItems: 1
+        }),
         schema: Object.freeze({kind: "literal", values: Object.freeze([2])})
       }),
       optional: Object.freeze([]),
@@ -238,9 +243,9 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       kind: "object",
       fields: Object.freeze({
         multiRecordSizeMode: Object.freeze({kind: "literal", values: Object.freeze(["linear", "auto", "equal"])}),
-        multiRecordMinRadiusRatio: Object.freeze({kind: "number"}),
-        multiRecordColumnGapRatio: Object.freeze({kind: "number"}),
-        multiRecordRowGapRatio: Object.freeze({kind: "number"}),
+        multiRecordMinRadiusRatio: Object.freeze({kind: "number", exclusiveMinimum: 0, maximum: 1}),
+        multiRecordColumnGapRatio: Object.freeze({kind: "number", minimum: 0}),
+        multiRecordRowGapRatio: Object.freeze({kind: "number", minimum: 0}),
         multiRecordPositions: Object.freeze({
           kind: "union",
           options: Object.freeze([
@@ -273,7 +278,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({recordGapPx: 24.0, similarityAlignment: null})
     }),
     CanonicalColorOptions: Object.freeze({
       kind: "object",
@@ -322,7 +328,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
         }),
-        fillOpacity: Object.freeze({kind: "number"}),
+        fillOpacity: Object.freeze({kind: "number", minimum: 0, maximum: 1}),
         hatch: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "ref", name: "CanonicalHatchStyle"}), Object.freeze({kind: "null"})])
@@ -362,8 +368,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
             Object.freeze({kind: "null"})
           ])
         }),
-        start: Object.freeze({kind: "number"}),
-        end: Object.freeze({kind: "number"}),
+        start: Object.freeze({kind: "number", minimum: 1}),
+        end: Object.freeze({kind: "number", minimum: 1}),
         coordinateSpace: Object.freeze({kind: "literal", values: Object.freeze(["source", "local"])}),
         wrapsOrigin: Object.freeze({kind: "boolean"}),
         outOfBounds: Object.freeze({kind: "literal", values: Object.freeze(["clip", "skip", "error"])})
@@ -382,7 +388,11 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
             Object.freeze({kind: "null"})
           ])
         }),
-        selectors: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalFeatureSelector"})}),
+        selectors: Object.freeze({
+          kind: "array",
+          items: Object.freeze({kind: "ref", name: "CanonicalFeatureSelector"}),
+          minItems: 1
+        }),
         envelope: Object.freeze({kind: "literal", values: Object.freeze(["outer_bounds", "segments"])}),
         circularPath: Object.freeze({kind: "literal", values: Object.freeze(["shortest", "forward", "reverse"])})
       }),
@@ -625,7 +635,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
                   Object.freeze({kind: "ref", name: "CanonicalTableRef"}),
                   Object.freeze({kind: "null"})
                 ])
-              })
+              }),
+              minItems: 1
             })
           ])
         }),
@@ -640,15 +651,15 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         height: Object.freeze({kind: "null"}),
         largeTickInterval: Object.freeze({
           kind: "union",
-          options: Object.freeze([Object.freeze({kind: "number"}), Object.freeze({kind: "null"})])
+          options: Object.freeze([Object.freeze({kind: "number", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
         }),
         smallTickInterval: Object.freeze({
           kind: "union",
-          options: Object.freeze([Object.freeze({kind: "number"}), Object.freeze({kind: "null"})])
+          options: Object.freeze([Object.freeze({kind: "number", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
         }),
         tickFontSize: Object.freeze({
           kind: "union",
-          options: Object.freeze([Object.freeze({kind: "number"}), Object.freeze({kind: "null"})])
+          options: Object.freeze([Object.freeze({kind: "number", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
         })
       }),
       optional: Object.freeze([]),
@@ -673,7 +684,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
               fields: Object.freeze({
                 kind: Object.freeze({kind: "literal", values: Object.freeze(["lane"])}),
                 side: Object.freeze({kind: "literal", values: Object.freeze(["outward", "inward"])}),
-                level: Object.freeze({kind: "integer"})
+                level: Object.freeze({kind: "integer", minimum: 1, maximum: 1})
               }),
               optional: Object.freeze([]),
               open: false
@@ -772,7 +783,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
             Object.freeze({kind: "null"})
           ])
         }),
-        dinucleotide: Object.freeze({kind: "string"}),
+        dinucleotide: Object.freeze({kind: "string", pattern: "^\\s*[ACGTUacgtu]{2}\\s*$"}),
         window: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "integer"}), Object.freeze({kind: "null"})])
@@ -789,7 +800,11 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "integer"}), Object.freeze({kind: "null"})])
         }),
-        depthTracks: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalCircularDepthTrack"})}),
+        depthTracks: Object.freeze({
+          kind: "array",
+          items: Object.freeze({kind: "ref", name: "CanonicalCircularDepthTrack"}),
+          minItems: 1
+        }),
         plotTitle: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
@@ -923,7 +938,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
                   Object.freeze({kind: "ref", name: "CanonicalTableRef"}),
                   Object.freeze({kind: "null"})
                 ])
-              })
+              }),
+              minItems: 1
             })
           ])
         }),
@@ -937,19 +953,19 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         }),
         height: Object.freeze({
           kind: "union",
-          options: Object.freeze([Object.freeze({kind: "number"}), Object.freeze({kind: "null"})])
+          options: Object.freeze([Object.freeze({kind: "number", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
         }),
         largeTickInterval: Object.freeze({
           kind: "union",
-          options: Object.freeze([Object.freeze({kind: "number"}), Object.freeze({kind: "null"})])
+          options: Object.freeze([Object.freeze({kind: "number", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
         }),
         smallTickInterval: Object.freeze({
           kind: "union",
-          options: Object.freeze([Object.freeze({kind: "number"}), Object.freeze({kind: "null"})])
+          options: Object.freeze([Object.freeze({kind: "number", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
         }),
         tickFontSize: Object.freeze({
           kind: "union",
-          options: Object.freeze([Object.freeze({kind: "number"}), Object.freeze({kind: "null"})])
+          options: Object.freeze([Object.freeze({kind: "number", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
         })
       }),
       optional: Object.freeze([]),
@@ -974,7 +990,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
               fields: Object.freeze({
                 kind: Object.freeze({kind: "literal", values: Object.freeze(["lane"])}),
                 side: Object.freeze({kind: "literal", values: Object.freeze(["above", "below"])}),
-                level: Object.freeze({kind: "integer"})
+                level: Object.freeze({kind: "integer", minimum: 1, maximum: 1})
               }),
               optional: Object.freeze([]),
               open: false
@@ -1002,7 +1018,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
                   Object.freeze({kind: "string"}),
                   Object.freeze({kind: "ref", name: "CanonicalLinearTrackSlot"})
                 ])
-              })
+              }),
+              minItems: 1
             }),
             Object.freeze({kind: "null"})
           ])
@@ -1067,7 +1084,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
             Object.freeze({kind: "null"})
           ])
         }),
-        dinucleotide: Object.freeze({kind: "string"}),
+        dinucleotide: Object.freeze({kind: "string", pattern: "^\\s*[ACGTUacgtu]{2}\\s*$"}),
         window: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "integer"}), Object.freeze({kind: "null"})])
@@ -1084,7 +1101,11 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "integer"}), Object.freeze({kind: "null"})])
         }),
-        depthTracks: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalLinearDepthTrack"})}),
+        depthTracks: Object.freeze({
+          kind: "array",
+          items: Object.freeze({kind: "ref", name: "CanonicalLinearDepthTrack"}),
+          minItems: 1
+        }),
         plotTitle: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
@@ -1201,35 +1222,44 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           ])
         }),
         collinearityUnitMode: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "literal", values: Object.freeze(["auto", "cds", "locus"])}),
-            Object.freeze({kind: "string"})
-          ])
+          kind: "literal",
+          values: Object.freeze(["auto", "cds", "locus"]),
+          spellings: Object.freeze({blank: "auto"})
         }),
         collinearityAnchorMode: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "literal", values: Object.freeze(["all", "one_to_one", "rbh"])}),
-            Object.freeze({kind: "string"})
-          ])
+          kind: "literal",
+          values: Object.freeze(["all", "one_to_one", "rbh"]),
+          spellings: Object.freeze({
+            aliases: Object.freeze({
+              all_hits: "all",
+              mutual_best: "one_to_one",
+              one2one: "one_to_one",
+              one_to_ones: "one_to_one",
+              raw: "all",
+              reciprocal_best: "rbh",
+              strict_rbh: "rbh",
+              top1: "one_to_one",
+              top_1: "one_to_one",
+              top_n: "all",
+              topn: "all"
+            }),
+            blank: "rbh",
+            foldHyphens: true
+          })
         }),
         collinearitySearchScope: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "literal", values: Object.freeze(["adjacent", "all"])}),
-            Object.freeze({kind: "string"})
-          ])
+          kind: "literal",
+          values: Object.freeze(["adjacent", "all"]),
+          spellings: Object.freeze({blank: "adjacent", foldHyphens: true})
         }),
         collinearityColorMode: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({
-              kind: "literal",
-              values: Object.freeze(["average_identity", "orientation", "orientation_identity"])
-            }),
-            Object.freeze({kind: "string"})
-          ])
+          kind: "literal",
+          values: Object.freeze(["average_identity", "orientation", "orientation_identity"]),
+          spellings: Object.freeze({
+            aliases: Object.freeze({identity: "average_identity"}),
+            blank: "orientation",
+            foldHyphens: true
+          })
         }),
         losatpBin: Object.freeze({
           kind: "union",
@@ -1249,11 +1279,26 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           options: Object.freeze([Object.freeze({kind: "integer"}), Object.freeze({kind: "null"})])
         }),
         orthogroupMembershipMode: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "literal", values: Object.freeze(["anchor_core_v1"])}),
-            Object.freeze({kind: "string"})
-          ])
+          kind: "literal",
+          values: Object.freeze(["anchor_core_v1"]),
+          spellings: Object.freeze({
+            aliases: Object.freeze({
+              anchor_core: "anchor_core_v1",
+              density_split: "anchor_core_v1",
+              distribution_split: "anchor_core_v1",
+              family: "anchor_core_v1",
+              family_merge: "anchor_core_v1",
+              legacy: "anchor_core_v1",
+              local_split: "anchor_core_v1",
+              merge: "anchor_core_v1",
+              orthogroups: "anchor_core_v1",
+              outparalog_split: "anchor_core_v1",
+              rbh: "anchor_core_v1",
+              rbh_only: "anchor_core_v1"
+            }),
+            blank: "anchor_core_v1",
+            foldHyphens: true
+          })
         }),
         orthogroupMemberMaxHits: Object.freeze({
           kind: "union",
@@ -1354,7 +1399,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
             Object.freeze({kind: "literal", values: Object.freeze(["batch"])})
           ])
         }),
-        records: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalRecord"})}),
+        records: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalRecord"}), minItems: 1}),
         diagramOptions: Object.freeze({kind: "ref", name: "CanonicalCircularDiagramOptions"}),
         layout: Object.freeze({
           kind: "union",
@@ -1368,12 +1413,25 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           kind: "union",
           options: Object.freeze([
             Object.freeze({kind: "ref", name: "CanonicalRequestOutput"}),
-            Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalRequestOutput"})})
+            Object.freeze({
+              kind: "array",
+              items: Object.freeze({kind: "ref", name: "CanonicalRequestOutput"}),
+              minItems: 1
+            })
           ])
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({
+        diagramOptions: Object.freeze({featurePlacements: Object.freeze([]), featureOverrides: Object.freeze([])}),
+        output: Object.freeze({
+          prefix: "out",
+          formats: Object.freeze(["svg"]),
+          overwrite: false,
+          interactiveMetadataPolicy: "auto"
+        })
+      })
     }),
     CanonicalLinearRenderRequest: Object.freeze({
       kind: "object",
@@ -1381,7 +1439,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         schema: Object.freeze({kind: "literal", values: Object.freeze([9])}),
         mode: Object.freeze({kind: "literal", values: Object.freeze(["linear"])}),
         grouping: Object.freeze({kind: "literal", values: Object.freeze(["single"])}),
-        records: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalRecord"})}),
+        records: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalRecord"}), minItems: 1}),
         diagramOptions: Object.freeze({kind: "ref", name: "CanonicalLinearDiagramOptions"}),
         layout: Object.freeze({
           kind: "union",
@@ -1394,7 +1452,16 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         output: Object.freeze({kind: "ref", name: "CanonicalRequestOutput"})
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({
+        diagramOptions: Object.freeze({featurePlacements: Object.freeze([]), featureOverrides: Object.freeze([])}),
+        output: Object.freeze({
+          prefix: "out",
+          formats: Object.freeze(["svg"]),
+          overwrite: false,
+          interactiveMetadataPolicy: "auto"
+        })
+      })
     }),
     CanonicalRenderRequest: Object.freeze({
       kind: "union",

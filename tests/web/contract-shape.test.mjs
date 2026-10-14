@@ -12,14 +12,15 @@ import { gunzipSync } from 'node:zlib';
 
 import { CANONICAL_REQUEST_DESCRIPTION } from '../../gbdraw/web/js/contracts/request-shape.generated.js';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
-import { SHAPE_VIOLATION_REASONS, shapeViolations } from '../../gbdraw/web/js/utils/contract-shape.js';
+import { SHAPE_VIOLATION_REASONS, readSpelling, shapeViolations } from '../../gbdraw/web/js/utils/contract-shape.js';
 
-/** @import { ContractShape } from '../../gbdraw/web/js/utils/contract-shape.js' */
+/** @import { ContractShape, LiteralShape } from '../../gbdraw/web/js/utils/contract-shape.js' */
 /**
  * @typedef {{ path: string, reason: string }} Row
  * @typedef {{ id: string, shape: ContractShape, value: unknown, violations: Row[] }} Vector
  * @typedef {{ id: string, shape: ContractShape, text: string, python: Row[], web: Row[] }} JsonDifference
- * @typedef {{ types: Record<string, ContractShape>, reasons: string[], vectors: Vector[], jsonDifferences: JsonDifference[] }} Vectors
+ * @typedef {{ id: string, shape: LiteralShape, value: unknown, read: string | null }} Spelling
+ * @typedef {{ types: Record<string, ContractShape>, reasons: string[], vectors: Vector[], jsonDifferences: JsonDifference[], spellings: Spelling[] }} Vectors
  */
 
 const REPO = new URL('../../', import.meta.url);
@@ -41,6 +42,12 @@ test('both checkers report the same closed set of reasons', () => {
 test('the Web reads each listed JSON difference as listed', () => {
   for (const { id, shape, text, web } of VECTORS.jsonDifferences) {
     assert.deepEqual(shapeViolations(JSON.parse(text), shape, VECTORS.types, 'value'), web, id);
+  }
+});
+
+test('the Web reads each shared spelling as Python does', () => {
+  for (const { id, shape, value, read } of VECTORS.spellings) {
+    assert.equal(readSpelling(value, shape), read, id);
   }
 });
 
@@ -98,7 +105,7 @@ test('the generated request description is frozen and names every shape it refer
   assert.deepEqual(missing, []);
 });
 
-test('each default of the request description is an optional field and fits its shape', () => {
+test('each default of the request description fits its field', () => {
   const { types } = CANONICAL_REQUEST_DESCRIPTION;
   /** @type {string[]} */
   const defaulted = [];
@@ -106,11 +113,18 @@ test('each default of the request description is an optional field and fits its 
     if (shape.kind !== 'object' || !shape.defaults) continue;
     for (const [field, value] of Object.entries(shape.defaults)) {
       defaulted.push(`${name}.${field}`);
-      assert.ok(shape.optional.includes(field), `${name}.${field} is optional`);
       assert.deepEqual(shapeViolations(value, shape.fields[field], types, `${name}.${field}`), []);
     }
   }
-  assert.ok(defaulted.includes('CanonicalProteinComparisonSettings.collinearInferOrthogroups'), defaulted.join(', '));
+  // The defaults a repair of a stored request needs at a part (OV-774).
+  for (const field of [
+    'CanonicalProteinComparisonSettings.collinearInferOrthogroups', 'CanonicalLinearLayout.recordGapPx',
+    'CanonicalLinearLayout.similarityAlignment', 'CanonicalRecord.display',
+    'CanonicalCircularRenderRequest.diagramOptions', 'CanonicalCircularRenderRequest.output',
+    'CanonicalLinearRenderRequest.diagramOptions', 'CanonicalLinearRenderRequest.output'
+  ]) {
+    assert.ok(defaulted.includes(field), `${field} in ${defaulted.join(', ')}`);
+  }
 });
 
 /**

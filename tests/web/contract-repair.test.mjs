@@ -37,9 +37,10 @@ const TABLE = {
   fields: {
     kind: { kind: 'literal', values: ['table'] },
     resourceId: { kind: 'string' },
-    settings: { kind: 'ref', name: 'Settings' }
+    settings: { kind: 'ref', name: 'Settings' },
+    selectors: { kind: 'array', items: { kind: 'string', pattern: '\\S' }, minItems: 1 }
   },
-  optional: ['settings'],
+  optional: ['settings', 'selectors'],
   open: false
 };
 
@@ -62,7 +63,7 @@ const DESCRIPTION = {
       },
       optional: ['comparisons', 'formats', 'layout', 'window', 'tags'],
       open: false,
-      defaults: { formats: ['svg'] }
+      defaults: { formats: ['svg'], options: { dinucleotide: 'GC' } }
     },
     Record: {
       kind: 'object',
@@ -85,7 +86,10 @@ const DESCRIPTION = {
     Table: TABLE,
     Settings: {
       kind: 'object',
-      fields: { identity: { kind: 'number' }, method: { kind: 'literal', values: ['rbh', 'none'] } },
+      fields: {
+        identity: { kind: 'number', minimum: 0, maximum: 1 },
+        method: { kind: 'literal', values: ['rbh', 'none'], spellings: { aliases: { reciprocal_best: 'rbh' }, foldHyphens: true, blank: 'rbh' } }
+      },
       optional: ['method'],
       open: false
     },
@@ -192,7 +196,7 @@ test('a conforming value comes back as the same object, without rows', () => {
 
 test('rule 1: a lossless reading replaces the value without a row, when it conforms', () => {
   const request = validRequest();
-  obj(request.comparisons)[1].settings.method = ' RBH ';
+  obj(request.comparisons)[1].settings.method = 'R B H';
   /** @type {string[]} */
   const asked = [];
   const result = repair(request, {
@@ -200,14 +204,14 @@ test('rule 1: a lossless reading replaces the value without a row, when it confo
     lossless: (pattern, value) => {
       asked.push(pattern);
       return typeof value === 'string' && pattern === 'comparisons[*].settings.method'
-        ? { value: value.trim().toLowerCase() } : null;
+        ? { value: value.replaceAll(' ', '').toLowerCase() } : null;
     }
   });
   assert.deepEqual(result.rows, []);
   assert.equal(obj(result.value).comparisons[1].settings.method, 'rbh');
   assert.ok(asked.includes('comparisons[*].settings.method'));
   // A reading that does not conform is not used; the later rules apply.
-  const rejected = repair(request, { ...POLICY, lossless: () => ({ value: 'RBH' }) });
+  const rejected = repair(request, { ...POLICY, lossless: () => ({ value: 'RBH!' }) });
   assert.deepEqual(rejected.rows, [{
     path: 'renderRequest.comparisons[1].settings.method', pattern: 'comparisons[*].settings.method',
     reason: 'not-in-set', rule: 4, effect: 'dropped'
@@ -393,5 +397,75 @@ test('discriminator: the option its field names is repaired, never another one',
   obj(unnamed.comparisons)[0].kind = 'triple';
   assert.deepEqual(repair(unnamed, policy).rows, [{
     path: 'renderRequest.comparisons[0]', pattern: 'comparisons[*]', reason: 'not-in-set', rule: 5, effect: 'dropped'
+  }]);
+});
+
+test('rule 1: a spelling the description names reads as its name, without a row', () => {
+  const request = validRequest();
+  obj(request.comparisons)[1].settings.method = ' Reciprocal-Best ';
+  const result = repair(request);
+  assert.deepEqual(result.rows, []);
+  assert.equal(obj(result.value).comparisons[1].settings.method, 'rbh');
+  const blank = validRequest();
+  obj(blank.comparisons)[1].settings.method = '';
+  assert.equal(obj(repair(blank).value).comparisons[1].settings.method, 'rbh');
+});
+
+test('a value outside its bounds is repaired like any violation', () => {
+  const request = validRequest();
+  obj(request.comparisons)[1].settings.identity = 1.5;
+  assert.deepEqual(repair(request).rows, [{
+    path: 'renderRequest.comparisons[1]', pattern: 'comparisons[*]', reason: 'out-of-range', rule: 5, effect: 'dropped'
+  }]);
+});
+
+test('too few items: an array that starts or ends too short goes, by the rule for its place', () => {
+  const request = validRequest();
+  obj(request.comparisons)[1].selectors = [];
+  assert.deepEqual(repair(request).rows, [{
+    path: 'renderRequest.comparisons[1].selectors', pattern: 'comparisons[*].selectors', reason: 'too-short', rule: 4, effect: 'dropped'
+  }]);
+  // Its only item is dropped by rule 5; the array is then too short itself,
+  // and it is optional (only the array's row is reported).
+  const emptied = validRequest();
+  obj(emptied.comparisons)[1].selectors = [' '];
+  assert.deepEqual(repair(emptied).rows, [{
+    path: 'renderRequest.comparisons[1].selectors', pattern: 'comparisons[*].selectors', reason: 'too-short', rule: 4, effect: 'dropped'
+  }]);
+  const kept = validRequest();
+  obj(kept.comparisons)[1].selectors = ['a', ' '];
+  const result = repair(kept);
+  assert.deepEqual(result.rows.map(({ path, rule }) => ({ path, rule })), [
+    { path: 'renderRequest.comparisons[1].selectors[1]', rule: 5 }
+  ]);
+  assert.deepEqual(obj(result.value).comparisons[1].selectors, ['a']);
+});
+
+test('a required field with a default takes it, at its own violation and as a part', () => {
+  const wrong = { ...validRequest(), options: 'none' };
+  assert.deepEqual(repair(wrong).rows, [{
+    path: 'renderRequest.options', pattern: 'options', reason: 'wrong-kind', rule: 3, effect: 'defaulted', used: { dinucleotide: 'GC' }
+  }]);
+  const { options: _options, ...missing } = validRequest();
+  const read = repair(missing);
+  assert.deepEqual(read.rows.map(({ path, reason, rule }) => ({ path, reason, rule })), [
+    { path: 'renderRequest.options', reason: 'missing-key', rule: 3 }
+  ]);
+  assert.deepEqual(obj(read.value).options, { dinucleotide: 'GC' });
+  // `options` is a part: a violation inside it that its own fields cannot
+  // absorb puts the default of the whole part.
+  const inside = validRequest();
+  obj(inside.options).ringFiles = 'x';
+  obj(inside.options).extra = 1;
+  const part = repair(inside, { ...POLICY, partBoundary: (pattern) => pattern === 'options' });
+  assert.deepEqual(part.rows.map(({ path, rule }) => ({ path, rule })), [
+    { path: 'renderRequest.options.ringFiles', rule: 4 },
+    { path: 'renderRequest.options.extra', rule: 2 }
+  ]);
+  const deep = validRequest();
+  obj(deep.options).ringFiles = [1];
+  const ringPolicy = { ...POLICY, positionalArrays: ['records', 'options.ringFiles'], partBoundary: (/** @type {string} */ pattern) => pattern === 'options' };
+  assert.deepEqual(repair(deep, ringPolicy).rows, [{
+    path: 'renderRequest.options', pattern: 'options', reason: 'wrong-kind', rule: 6, effect: 'defaulted', used: { dinucleotide: 'GC' }
   }]);
 });

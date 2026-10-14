@@ -275,9 +275,6 @@ _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]
 # - A slot's renderer and side: the track planner reads other spellings of a
 #   name, and the Session writer of request schemas 5 to 9 stored a caller's
 #   spelling until the encoder wrote the name (_SLOT_SPELLINGS, OV-653).
-# - The five comparison mode settings: the decoder reads other spellings of a
-#   name (OV-651) and the Web's Session Load does not check them; they narrow
-#   with the Load check of stage 1d PR-C.
 _NAMES_TYPED_STRING: tuple[str, ...] = (
     "CanonicalCircularOutputOptions.legend",
     "CanonicalCircularTrackSlot.renderer",
@@ -285,62 +282,31 @@ _NAMES_TYPED_STRING: tuple[str, ...] = (
     "CanonicalLinearOutputOptions.legend",
     "CanonicalLinearTrackSlot.renderer",
     "CanonicalLinearTrackSlot.side",
-    "CanonicalProteinComparisonSettings.collinearityAnchorMode",
-    "CanonicalProteinComparisonSettings.collinearityColorMode",
-    "CanonicalProteinComparisonSettings.collinearitySearchScope",
-    "CanonicalProteinComparisonSettings.collinearityUnitMode",
-    "CanonicalProteinComparisonSettings.orthogroupMembershipMode",
 )
 # The decoder refuses a value of a kind the description allows, at every
-# position: Python checks the value itself (a resource, record or feature that
-# must exist, a range, a colour, an array that must hold an item), which no
-# type can say.
+# position: Python checks that a resource, a record or a slot the value names
+# exists, which the description cannot say (a reader of a stored request
+# checks it against the file), or a colour, which the description does not
+# name. The value domains Python checks are bounds of the description.
 _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalAlignmentAnchorIdentity.recordKey": ("another string",),
     "CanonicalAlignmentRecordDecision.recordKey": ("another string",),
-    "CanonicalCircularDepthTrack.largeTickInterval": ("zero", "a negative number"),
-    "CanonicalCircularDepthTrack.smallTickInterval": ("zero", "a negative number"),
-    "CanonicalCircularDepthTrack.source": ("an array",),
-    "CanonicalCircularDepthTrack.tickFontSize": ("zero", "a negative number"),
-    "CanonicalCircularDiagramOptions.depthTracks": ("an array",),
-    "CanonicalCircularDiagramOptions.dinucleotide": ("another string",),
-    "CanonicalCircularFeaturePlacement.placement[lane].level": ("another integer",),
-    "CanonicalCircularLayout.multiRecordMinRadiusRatio": ("another integer",),
-    "CanonicalCircularRenderRequest.output": ("an array",),
-    "CanonicalCircularRenderRequest.records": ("an array",),
     "CanonicalCollinearityResultComparison.resourceId": ("another string",),
-    # 0.5 is below 1; a fraction from 1 reads as its integer part (_FRACTIONS).
-    "CanonicalCoordinateSpan.end": ("a fraction",),
-    "CanonicalCoordinateSpan.start": ("a fraction",),
-    "CanonicalFeatureSpan.selectors": ("an array",),
     "CanonicalFileRef.resourceId": ("another string",),
     "CanonicalGenbankRecordSource.resourceId": ("another string",),
     "CanonicalGffFastaRecordSource.fastaResourceId": ("another string",),
     "CanonicalGffFastaRecordSource.gffResourceId": ("another string",),
     "CanonicalHatchStyle.color": ("another string",),
-    "CanonicalLinearDepthTrack.height": ("zero", "a negative number"),
-    "CanonicalLinearDepthTrack.largeTickInterval": ("zero", "a negative number"),
-    "CanonicalLinearDepthTrack.smallTickInterval": ("zero", "a negative number"),
-    "CanonicalLinearDepthTrack.source": ("an array",),
-    "CanonicalLinearDepthTrack.tickFontSize": ("zero", "a negative number"),
-    "CanonicalLinearDiagramOptions.depthTracks": ("an array",),
-    "CanonicalLinearDiagramOptions.dinucleotide": ("another string",),
-    "CanonicalLinearFeaturePlacement.placement[lane].level": ("another integer",),
     "CanonicalLinearRecordTranslation.recordKey": ("another string",),
-    "CanonicalLinearRenderRequest.records": ("an array",),
     "CanonicalLinearTrackOptions.linearTrackAxisIndex": ("another integer",),
-    "CanonicalLinearTrackOptions.linearTrackSlots": ("an array",),
     "CanonicalNucleotideBlastComparison.queryRecordIndex": ("another integer",),
     "CanonicalNucleotideBlastComparison.resourceId": ("another string",),
     "CanonicalOrthogroupResultComparison.resourceId": ("another string",),
     "CanonicalPrecomputedProteinComparison.queryRecordIndex": ("another integer",),
     "CanonicalPrecomputedProteinComparison.resourceId": ("another string",),
     "CanonicalRegionAnnotationStyle.fill": ("another string",),
-    "CanonicalRegionAnnotationStyle.fillOpacity": ("another integer",),
     "CanonicalRegionAnnotationStyle.labelColor": ("another string",),
     "CanonicalRegionAnnotationStyle.stroke": ("another string",),
-    "CanonicalRequestOutput.formats": ("an array",),
-    "CanonicalSimilarityAlignmentPlan.records": ("an array",),
     "CanonicalTableRef.resourceId": ("another string",),
 }
 _EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
@@ -361,10 +327,10 @@ _EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
 
 
 _UNNAMED = "valueTheDescriptionDoesNotName"
-# Numbers of the right kind outside the range the decoder checks: the
-# description types a depth track's height (Linear only; a Circular one holds
-# null), tick intervals and tick font size ``number``, and Python owns
-# "greater than 0" (U7, BA-OD73).
+# Numbers of the right kind outside the range the decoder checks: a depth
+# track's height (Linear only; a Circular one holds null), tick intervals and
+# tick font size are greater than 0 (DEPTH_TRACK_POSITIVE_FIELDS), which the
+# description bounds (U7, BA-OD73).
 _OUT_OF_RANGE: dict[str, tuple[tuple[str, object], ...]] = {
     f"Canonical{mode}DepthTrack.{key}": (("zero", 0), ("a negative number", -1))
     for mode, keys in (("Circular", ()), ("Linear", ("height",)))
@@ -655,7 +621,9 @@ def test_a_described_default_decodes_as_the_absent_field(
     encoded_requests: dict[str, list[Encoded]], tmp_path: Path
 ) -> None:
     """The Web writes a description's default where a stored field is absent
-    (stage 1d PLAN 12.4 rule 3); the decoder must read it as the absent field."""
+    or unreadable (stage 1d PLAN 12.4 rule 3): the decoder must read an
+    optional field's default as the absent field, and a required field's
+    default as a value it takes."""
 
     exercised: set[str] = set()
     for found in encoded_requests.values():
@@ -675,7 +643,10 @@ def test_a_described_default_decodes_as_the_absent_field(
                     decode = lambda value: encode_canonical_request(decode_canonical_request(  # noqa: E731
                         value, resource_paths=resources, output_directory=output
                     )).payload
-                    assert decode(_with(absent, path, key, default)) == decode(absent), label
+                    if key in shape["optional"]:
+                        assert decode(_with(absent, path, key, default)) == decode(absent), label
+                    else:
+                        decode(_with(absent, path, key, default))
                     exercised.add(label)
     described = {f"{label}.{key}" for label, shape in OBJECTS for key in shape.get("defaults", {})}
     assert exercised == described

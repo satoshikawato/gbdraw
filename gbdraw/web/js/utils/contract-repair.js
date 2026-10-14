@@ -2,7 +2,8 @@
 // Repairs a parsed stored value against a contract description
 // (utils/contract-shape.js). For each place where the value leaves its shape,
 // the first rule that applies:
-//   1. the policy has a lossless reading that conforms: it is used, no row;
+//   1. a lossless reading conforms (a spelling the description names, or the
+//      policy's reading): it is used, without a row;
 //   2. an unknown key is dropped;
 //   3. a field with a default in the description takes it;
 //   4. an optional field is dropped;
@@ -14,7 +15,7 @@
 // it: each reader maps them to its own codes. The input is never changed; a
 // value that needs no repair comes back as the same object.
 
-import { isPlainObject, shapeViolations } from './contract-shape.js';
+import { isPlainObject, readSpelling, shapeViolations } from './contract-shape.js';
 
 /** @import { ContractDescription, ContractShape, JsonValue, ShapeViolation, ShapeViolationReason } from './contract-shape.js' */
 
@@ -209,6 +210,8 @@ const repairPlace = (value, shape, at, conforming, context) => {
   const resolved = resolve(shape, types);
   const found = conforming ? [] : shapeViolations(value, resolved, types, at.path);
   if (found.length) {
+    const name = resolved.kind === 'literal' ? readSpelling(value, resolved) : null;
+    if (name !== null) return repairPlace(name, resolved, at, true, context);
     const reading = policy.lossless?.(at.pattern, value) ?? null;
     if (reading && !shapeViolations(reading.value, resolved, types, at.path).length) {
       return repairPlace(reading.value, resolved, at, true, context);
@@ -232,7 +235,9 @@ const repairPlace = (value, shape, at, conforming, context) => {
     case 'array': case 'tuple': {
       if (!Array.isArray(value)) return dropped(at, firstReason(found));
       const items = /** @type {readonly unknown[]} */ (value);
-      if (resolved.kind === 'tuple' && items.length !== resolved.items.length) return dropped(at, firstReason(found));
+      // Its own violation (a tuple's length, too few items) is not an item's.
+      const own = found.find((violation) => violation.path === at.path);
+      if (own) return dropped(at, own.reason);
       const removable = resolved.kind === 'array' && !context.positional.has(at.pattern);
       /** @type {ContractRepair<R>[]} */
       const rows = [];
@@ -256,6 +261,9 @@ const repairPlace = (value, shape, at, conforming, context) => {
         next.push(outcome.value);
         keptIndices.push(index);
         if (outcome.value !== items[index]) changed = true;
+      }
+      if (resolved.kind === 'array' && resolved.minItems !== undefined && next.length < resolved.minItems) {
+        return dropped(at, 'too-short');
       }
       return changed ? kept(next, rows, keptIndices) : kept(value, [], keptIndices);
     }

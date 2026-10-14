@@ -11,7 +11,7 @@ from typing import Any, get_args
 
 import pytest
 
-from gbdraw.contract_shapes import ViolationReason, shape_violations, violations
+from gbdraw.contract_shapes import ViolationReason, read_spelling, shape_violations, violations
 
 VECTORS: dict[str, Any] = json.loads(
     (Path(__file__).resolve().parent / "fixtures" / "contract_shape_vectors.json").read_text(encoding="utf-8")
@@ -26,7 +26,7 @@ def _rows(value: object, shape: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def test_vector_ids_are_unique() -> None:
-    ids = [vector["id"] for vector in [*VECTORS["vectors"], *VECTORS["jsonDifferences"]]]
+    ids = [vector["id"] for vector in [*VECTORS["vectors"], *VECTORS["jsonDifferences"], *VECTORS["spellings"]]]
     assert len(ids) == len(set(ids))
 
 
@@ -46,6 +46,12 @@ def test_the_checker_reports_python_s_reading_of_a_json_difference(difference: d
     assert _rows(json.loads(difference["text"]), difference["shape"]) == difference["python"]
 
 
+@pytest.mark.parametrize("vector", VECTORS["spellings"], ids=lambda vector: vector["id"])
+def test_a_literal_reads_each_spelling_as_its_name(vector: dict[str, Any]) -> None:
+    shape = vector["shape"]
+    assert read_spelling(vector["value"], shape["values"], shape["spellings"]) == vector["read"]
+
+
 def test_a_message_names_the_expectation_and_never_the_value() -> None:
     def messages(value: object, shape: dict[str, Any]) -> list[str]:
         return violations(value, shape, VECTORS["types"], "value")
@@ -58,3 +64,9 @@ def test_a_message_names_the_expectation_and_never_the_value() -> None:
     assert messages([secret], {"kind": "tuple", "items": []}) == ["value: expected 0 items"]
     assert messages(None, {"kind": "array", "items": {"kind": "string"}}) == ["value: expected an array"]
     assert messages(0.5, {"kind": "integer"}) == ["value: expected integer"]
+    assert messages(0, {"kind": "number", "exclusiveMinimum": 0}) == ["value: expected more than 0"]
+    assert messages(2, {"kind": "integer", "maximum": 1}) == ["value: expected at most 1"]
+    assert messages([], {"kind": "array", "items": {"kind": "string"}, "minItems": 1}) == [
+        "value: expected at least 1 items"
+    ]
+    assert messages(secret, {"kind": "string", "pattern": "^x$"}) == ["value: expected text matching ^x$"]

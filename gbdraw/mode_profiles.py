@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 import math
+import re
 from numbers import Integral, Real
 from types import MappingProxyType
 from typing import Literal, Mapping, cast
@@ -74,19 +75,20 @@ def validate_comparison_threshold(field_name: str, value: object) -> float | int
     return normalized
 
 
-_DINUCLEOTIDE_BASES = frozenset("ACGTU")
+_DINUCLEOTIDE_BASES = "".join(sorted("ACGTU"))
+# Two bases in either case, with outer spaces (the request description names it).
+DINUCLEOTIDE_PATTERN = rf"^\s*[{_DINUCLEOTIDE_BASES}{_DINUCLEOTIDE_BASES.lower()}]{{2}}\s*$"
 
 
 def validate_dinucleotide(value: object, *, field_name: str = "dinucleotide") -> str:
     """Return an upper-case pair from A, C, G, T, and U (U is counted as T)."""
 
-    normalized = value.strip().upper() if isinstance(value, str) else ""
-    if len(normalized) != 2 or not set(normalized) <= _DINUCLEOTIDE_BASES:
+    if not isinstance(value, str) or re.search(DINUCLEOTIDE_PATTERN, value) is None:
         raise ValidationError(
             f"{field_name} must be two letters from A, C, G, T, and U.",
             diagnostic={"code": "INPUT_INVALID", "field": "dinucleotide", "reason": "DINUCLEOTIDE"},
         )
-    return normalized
+    return value.strip().upper()
 
 
 @dataclass(frozen=True)

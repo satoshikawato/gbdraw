@@ -411,16 +411,16 @@
 /**
  * @typedef {object} CanonicalProteinComparisonSettings
  * @property {CanonicalCollinearityParameters | null} collinearityParams
- * @property {'auto' | 'cds' | 'locus' | string} collinearityUnitMode
- * @property {'all' | 'one_to_one' | 'rbh' | string} collinearityAnchorMode
- * @property {'adjacent' | 'all' | string} collinearitySearchScope
- * @property {'average_identity' | 'orientation' | 'orientation_identity' | string} collinearityColorMode
+ * @property {'auto' | 'cds' | 'locus'} collinearityUnitMode
+ * @property {'all' | 'one_to_one' | 'rbh'} collinearityAnchorMode
+ * @property {'adjacent' | 'all'} collinearitySearchScope
+ * @property {'average_identity' | 'orientation' | 'orientation_identity'} collinearityColorMode
  * @property {string | null} losatpBin
  * @property {string | null} ncbiBlastpBin
  * @property {number | null} losatpThreads
  * @property {number} proteinBlastpMaxHits
  * @property {number | null} proteinBlastpCandidateLimit
- * @property {'anchor_core_v1' | string} orthogroupMembershipMode
+ * @property {'anchor_core_v1'} orthogroupMembershipMode
  * @property {number | null} orthogroupMemberMaxHits
  * @property {boolean} [collinearInferOrthogroups]
  * @property {number} collinearMaxParalogLinksPerOrthogroup

@@ -36,14 +36,23 @@ from Bio import SeqIO
 from pandas import DataFrame, read_csv
 
 from gbdraw.analysis.collinearity import (
+    COLLINEARITY_ANCHOR_MODE_SPELLINGS,
+    COLLINEARITY_ANCHOR_MODES,
+    COLLINEARITY_COLOR_MODE_SPELLINGS,
+    COLLINEARITY_COLOR_MODES,
+    COLLINEARITY_SEARCH_SCOPE_SPELLINGS,
+    COLLINEARITY_SEARCH_SCOPES,
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
     LosslessCollinearityParameters,
 )
+from gbdraw.analysis.collinearity_units import _COLLINEARITY_UNIT_MODES, COLLINEARITY_UNIT_MODE_SPELLINGS
 from gbdraw.analysis.conservation import _default_label as _default_conservation_label
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
 from gbdraw.analysis.protein_colinearity import (
+    ORTHOGROUP_MEMBERSHIP_MODE_SPELLINGS,
+    ORTHOGROUP_MEMBERSHIP_MODES,
     OrthogroupMember,
     OrthogroupNameCandidate,
     OrthogroupResult,
@@ -92,6 +101,7 @@ from gbdraw.annotations import (
 )
 
 from .api.options import (
+    DEPTH_TRACK_POSITIVE_FIELDS,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
     CircularOutputOptions,
@@ -1224,10 +1234,7 @@ def _encode_record(
     return {
         "recordKey": record.record_key or f"record-{index}",
         "cardinality": record.cardinality.value,
-        "display": {
-            "isCircular": record.display.is_circular,
-            "startCoordinate": record.display.start_coordinate,
-        },
+        "display": _encode_record_display(record.display),
         "source": source_payload,
         "selector": _encode_selector(selector),
         "region": _encode_region(record.region),
@@ -1239,6 +1246,10 @@ def _encode_record(
             "gridColumn": presentation.grid_column,
         },
     }
+
+
+def _encode_record_display(display: RecordDisplayOptions) -> dict[str, Any]:
+    return {"isCircular": display.is_circular, "startCoordinate": display.start_coordinate}
 
 
 def legacy_record_cardinality(mode: object, record: Mapping[str, Any]) -> RecordCardinality:
@@ -4939,8 +4950,10 @@ def describe_canonical_request() -> dict[str, Any]:
 
     from .contract_shapes import (
         INTEGER, NULL, NUMBER, STRING, UNKNOWN, Shape,
-        array, literal, non_null, nullable, obj, record, ref, shape_of_hint, tuple_of, union,
+        array, bounded, literal, non_null, nullable, obj, record, ref, shape_of_hint, shape_violations, tuple_of,
+        union,
     )
+    from .mode_profiles import DINUCLEOTIDE_PATTERN
     from .session_resources import SessionResourceTable
 
     types_: dict[str, Shape] = {}
@@ -4993,12 +5006,14 @@ def describe_canonical_request() -> dict[str, Any]:
         replace: Mapping[str, Shape] | None = None,
         extra: Mapping[str, Shape] | None = None,
         kind: str | None = None,
+        defaults: Mapping[str, object] | None = None,
     ) -> Shape:
         """The object the encoder writes for a dataclass: one camelCase key per field.
 
         ``files`` are the fields written as resource references, ``replace``
         the fields the encoder writes its own way, ``extra`` the keys it adds,
-        and ``kind`` the tag it adds.
+        ``kind`` the tag it adds, and ``defaults`` the values a repair of a
+        stored request puts at a field (the encoder's form of the default).
         """
 
         hints = _class_type_hints(cls)
@@ -5007,7 +5022,7 @@ def describe_canonical_request() -> dict[str, Any]:
             members[_camel(item.name)] = (replace or {}).get(item.name) or (
                 resource if item.name in files else of
             )(hints[item.name])
-        wire[cls] = named(name or cls.__name__, obj({**members, **(extra or {})}))
+        wire[cls] = named(name or cls.__name__, obj({**members, **(extra or {})}, defaults=defaults))
         return wire[cls]
 
     # _encode_record: RecordInput; _SOURCE_FILE_RESOURCES names each source's resources.
@@ -5015,7 +5030,13 @@ def describe_canonical_request() -> dict[str, Any]:
         _camel(kind): {field: STRING for _resource_kind, field in resource_fields}
         for kind, resource_fields in _SOURCE_FILE_RESOURCES.items()
     })
-    data(RecordDisplayOptions)
+    # The value domains the owners check beyond the kind: a field's bounds sit
+    # beside the class it belongs to, each named with its owner's check.
+    def bound(cls: type, name: str, **bounds: object) -> Shape:
+        return bounded(of(_class_type_hints(cls)[name]), **bounds)
+
+    # RecordDisplayOptions.__post_init__: a positive integer.
+    data(RecordDisplayOptions, replace={"start_coordinate": bound(RecordDisplayOptions, "start_coordinate", minimum=1)})
     data(RecordPresentation)
     region_hints = _class_type_hints(RegionSpec)
     region = named("RecordRegion", obj({  # _encode_region
@@ -5024,17 +5045,19 @@ def describe_canonical_request() -> dict[str, Any]:
         "end": of(region_hints["end"]),
         "reverseComplement": of(region_hints["reverse_complement"]),
     }))
-    records = array(data(RecordInput, "Record", replace={
+    # A request has a record (validate_render_request); RecordInput.__post_init__
+    # refuses a blank record key.
+    records = bounded(array(data(RecordInput, "Record", replace={
         "source": source,
         "region": nullable(region),
-        "record_key": STRING,  # written as given or as record-<n>
-    }))
+        "record_key": bounded(STRING, pattern=r"\S"),  # written as given or as record-<n>
+    }, defaults={"display": _encode_record_display(RecordDisplayOptions())})), minItems=1)
 
     # _encode_output: output_directory is the caller's, overwrite is read and ignored.
     output_hints = _class_type_hints(RenderOutputRequest)
     output = named("RequestOutput", obj({
         "prefix": of(output_hints["output_prefix"]),
-        "formats": array(STRING),
+        "formats": bounded(array(STRING), minItems=1),  # RenderOutputRequest.__post_init__
         "overwrite": of(output_hints["overwrite"]),
         "interactiveMetadataPolicy": of(output_hints["interactive_metadata_policy"]),
     }))
@@ -5044,24 +5067,43 @@ def describe_canonical_request() -> dict[str, Any]:
     data(AlignmentAnchorIdentity)
     data(AlignmentRecordDecision)
     # SimilarityAlignmentPlan.__post_init__ refuses every other schema.
-    data(SimilarityAlignmentPlan, replace={"schema": literal(SIMILARITY_ALIGNMENT_PLAN_SCHEMA)})
+    data(SimilarityAlignmentPlan, replace={
+        "schema": literal(SIMILARITY_ALIGNMENT_PLAN_SCHEMA),
+        "records": bound(SimilarityAlignmentPlan, "records", minItems=1),
+    })
     data(LinearRecordTranslation)
     layouts = {
-        "circular": union(empty, data(CircularMultiRecordOptions, "CircularLayout")),
+        # CircularMultiRecordOptions.__post_init__: a radius ratio in (0, 1], gaps >= 0.
+        "circular": union(empty, data(CircularMultiRecordOptions, "CircularLayout", replace={
+            "multi_record_min_radius_ratio": bound(
+                CircularMultiRecordOptions, "multi_record_min_radius_ratio", exclusiveMinimum=0, maximum=1
+            ),
+            "multi_record_column_gap_ratio": bound(CircularMultiRecordOptions, "multi_record_column_gap_ratio", minimum=0),
+            "multi_record_row_gap_ratio": bound(CircularMultiRecordOptions, "multi_record_row_gap_ratio", minimum=0),
+        })),
         "linear": union(empty, data(LinearMultiRecordOptions, "LinearLayout", extra={
             "similarityAlignment": nullable(wire[SimilarityAlignmentPlan]),
+        }, defaults={
+            "recordGapPx": LinearMultiRecordOptions().record_gap_px,
+            "similarityAlignment": None,
         })),
     }
 
     # _encode_diagram_options and _encode_option_value.
     data(ColorOptions, files=frozenset({"color_table_file", "default_colors_file"}))
     data(HatchStyle)
-    data(RegionAnnotationStyle)
+    data(RegionAnnotationStyle, replace={  # RegionAnnotationStyle.__post_init__
+        "fill_opacity": bound(RegionAnnotationStyle, "fill_opacity", minimum=0, maximum=1),
+    })
     data(FeatureSelector)
     # A Web writer wrote a fraction at lane, start and end (OV-630, BA-OD74);
     # the decoder reads its integer part.
-    data(CoordinateSpan, kind="coordinateSpan", replace={"start": NUMBER, "end": NUMBER})
-    data(FeatureSpan, kind="featureSpan")
+    # CoordinateSpan.__post_init__: 1-based.
+    data(CoordinateSpan, kind="coordinateSpan", replace={
+        "start": bounded(NUMBER, minimum=1), "end": bounded(NUMBER, minimum=1),
+    })
+    # FeatureSpan.__post_init__: at least one selector.
+    data(FeatureSpan, kind="featureSpan", replace={"selectors": bound(FeatureSpan, "selectors", minItems=1)})
     data(FeatureIdentitySpan, kind="featureIdentity")
     data(RegionAnnotation, replace={"lane": nullable(NUMBER)})
     data(AnnotationSet)
@@ -5108,10 +5150,13 @@ def describe_canonical_request() -> dict[str, Any]:
         title = mode.capitalize()
         # A depth track has a height only in a Linear diagram
         # (CircularDiagramOptions.__post_init__).
-        data(
-            DepthTrackInput, f"{title}DepthTrack", files=frozenset({"source"}),
-            replace={"height": NULL} if mode == "circular" else None,
-        )
+        # DepthTrackInput.__post_init__: at least one source, and positive numbers.
+        depth_hints = _class_type_hints(DepthTrackInput)
+        data(DepthTrackInput, f"{title}DepthTrack", files=frozenset({"source"}), replace={
+            "source": bounded(resource(depth_hints["source"]), minItems=1),
+            **{name: bounded(of(depth_hints[name]), exclusiveMinimum=0) for name in DEPTH_TRACK_POSITIVE_FIELDS},
+            **({"height": NULL} if mode == "circular" else {}),
+        })
         # FeaturePlacementOverride.from_mapping: a lane has a level and a side
         # of its mode (FeaturePlacementTarget.validate_mode), main neither.
         wire[FeaturePlacementOverride] = named(f"{title}FeaturePlacement", obj({
@@ -5120,13 +5165,19 @@ def describe_canonical_request() -> dict[str, Any]:
             "placement": union(obj({"kind": literal("main")}), obj({
                 "kind": literal("lane"),
                 "side": literal(*_LANE_SIDES[mode]),
-                "level": non_null(of(target_hints["level"])),
+                # FeaturePlacementTarget: level 1 only.
+                "level": bounded(non_null(of(target_hints["level"])), minimum=1, maximum=1),
             })),
         }))
         # _encode_tracks writes the track fields of both modes, the other mode's as null.
+        # _validate_track_configuration: a Linear slot list holds a slot.
         track_hints = _class_type_hints(track_class)
+        track_bounds: dict[str, dict[str, object]] = {"linear_track_slots": {"minItems": 1}}
         wire[track_class] = named(f"{title}TrackOptions", obj({
-            _camel(item.name): of(track_hints[item.name]) if owner is track_class else NULL
+            _camel(item.name): (
+                bounded(of(track_hints[item.name]), **track_bounds[item.name])
+                if item.name in track_bounds else of(track_hints[item.name])
+            ) if owner is track_class else NULL
             for _options, owner, _output in modes.values()
             for item in fields(owner)
         }))
@@ -5137,9 +5188,16 @@ def describe_canonical_request() -> dict[str, Any]:
             "featureOverrides": array(wire[FeatureOverride]),
         }
         required = sorted(members)
+        # The diagram options' own checks: depth tracks hold a track, and a
+        # dinucleotide is two bases (validate_dinucleotide).
+        option_bounds: dict[str, dict[str, object]] = {
+            "depth_tracks": {"minItems": 1}, "dinucleotide": {"pattern": DINUCLEOTIDE_PATTERN},
+        }
         for item in fields(options_class):
             if item.name not in unwritten:
-                members[_option_wire_key(item.name)] = option(item.name, hints[item.name], mode)
+                members[_option_wire_key(item.name)] = bounded(
+                    option(item.name, hints[item.name], mode), **option_bounds.get(item.name, {})
+                )
         # A shared option of the other mode is accepted at its default only.
         for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
             members.setdefault(_option_wire_key(name), literal(default))
@@ -5166,6 +5224,24 @@ def describe_canonical_request() -> dict[str, Any]:
         "search": _class_type_hints(LosatSearchOptions),
         "runtime": _class_type_hints(LosatRuntimeOptions),
     }
+    # LinearDiagramOptions.__post_init__ normalizes these settings, so the
+    # encoder writes one of the names their normalizers check. The decoder
+    # reads other spellings of a name as well (OV-651).
+    # The description names the other spellings they read, which a reader of a
+    # stored request reads as the name.
+    setting_names: dict[str, Shape] = {
+        "collinearity_unit_mode": literal(*_COLLINEARITY_UNIT_MODES, spellings=COLLINEARITY_UNIT_MODE_SPELLINGS),
+        "collinearity_anchor_mode": literal(
+            *COLLINEARITY_ANCHOR_MODES, spellings=COLLINEARITY_ANCHOR_MODE_SPELLINGS
+        ),
+        "collinearity_search_scope": literal(
+            *COLLINEARITY_SEARCH_SCOPES, spellings=COLLINEARITY_SEARCH_SCOPE_SPELLINGS
+        ),
+        "collinearity_color_mode": literal(*COLLINEARITY_COLOR_MODES, spellings=COLLINEARITY_COLOR_MODE_SPELLINGS),
+        "orthogroup_membership_mode": literal(
+            *ORTHOGROUP_MEMBERSHIP_MODES, spellings=ORTHOGROUP_MEMBERSHIP_MODE_SPELLINGS
+        ),
+    }
     pair = {"queryRecordIndex": INTEGER, "subjectRecordIndex": INTEGER}
     comparison = kinds("Comparison", "Comparison", {
         "nucleotideBlast": {"resourceId": STRING, **pair},
@@ -5182,7 +5258,10 @@ def describe_canonical_request() -> dict[str, Any]:
             "mode": literal(*LOSATP_MODE_WIRE.values()),
             "pairs": array(obj(pair)),
             "settings": named("ProteinComparisonSettings", obj(
-                {key: of(setting_hints[owner][name]) for key, owner, name in _PROTEIN_SETTINGS_WIRE},
+                {
+                    key: setting_names[name] if name in setting_names else of(setting_hints[owner][name])
+                    for key, owner, name in _PROTEIN_SETTINGS_WIRE
+                },
                 optional=sorted(_OPTIONAL_PROTEIN_SETTINGS),
                 defaults={key: _absent_protein_setting(key) for key in _OPTIONAL_PROTEIN_SETTINGS},
             )),
@@ -5206,12 +5285,30 @@ def describe_canonical_request() -> dict[str, Any]:
             # A Circular request has no comparison item.
             "comparisons": array(comparison) if mode == "linear" else tuple_of(),
             # A Circular batch has one output per record.
-            "output": union(output, array(output)) if mode == "circular" else output,
+            "output": bounded(union(output, array(output)), minItems=1) if mode == "circular" else output,
         }
         if set(top) != _TOP_LEVEL_FIELDS_V5:
             raise RuntimeError("The request description and _TOP_LEVEL_FIELDS_V5 differ.")
-        requests.append(named(f"{mode.capitalize()}RenderRequest", obj(top)))
+        # What a repair of a stored request puts at a part it cannot read:
+        # what the encoder writes for the default options and output.
+        options_class = modes[mode][0]
+        requests.append(named(f"{mode.capitalize()}RenderRequest", obj(top, defaults={
+            "diagramOptions": _encode_diagram_options(
+                options_class(), record_count=1, resources=SessionResourceTable().request()
+            ),
+            "output": _encode_output(RenderOutputRequest()),
+        })))
     named("RenderRequest", union(*requests))
+    # Only a default that fits its field is described.
+    for shape in types_.values():
+        if shape["kind"] == "object" and "defaults" in shape:
+            shape["defaults"] = {
+                key: value
+                for key, value in shape["defaults"].items()
+                if not shape_violations(value, shape["fields"][key], types_, key)
+            }
+            if not shape["defaults"]:
+                del shape["defaults"]
     return {"root": "CanonicalRenderRequest", "types": types_}
 
 

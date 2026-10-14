@@ -7,7 +7,9 @@
   "the named shapes of types, from the root path \"value\"; violations lists each {path, reason}",
   "in order, and reasons lists every reason code both checkers report. A reason never repeats",
   "the value. Only values JSON.parse and Python's json read alike are vectors; jsonDifferences",
-  "lists the JSON texts the two read differently, with each checker's violations."
+  "lists the JSON texts the two read differently, with each checker's violations.",
+  "spellings lists, for a literal with spellings, the name each value reads as (read; null when",
+  "none): Python's gbdraw.contract_shapes.read_spelling and the Web's readSpelling."
  ],
  "types": {
   "Point": {
@@ -786,6 +788,227 @@
      "reason": "non-integer"
     }
    ]
+  },
+  {
+   "id": "number-minimum-equal",
+   "shape": {
+    "kind": "number",
+    "minimum": 1
+   },
+   "value": 1,
+   "violations": []
+  },
+  {
+   "id": "number-below-minimum",
+   "shape": {
+    "kind": "number",
+    "minimum": 1
+   },
+   "value": 0.5,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "out-of-range"
+    }
+   ]
+  },
+  {
+   "id": "number-at-exclusive-minimum",
+   "shape": {
+    "kind": "number",
+    "exclusiveMinimum": 0
+   },
+   "value": 0,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "out-of-range"
+    }
+   ]
+  },
+  {
+   "id": "number-above-exclusive-minimum",
+   "shape": {
+    "kind": "number",
+    "exclusiveMinimum": 0
+   },
+   "value": 0.001,
+   "violations": []
+  },
+  {
+   "id": "integer-above-maximum",
+   "shape": {
+    "kind": "integer",
+    "minimum": 1,
+    "maximum": 1
+   },
+   "value": 2,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "out-of-range"
+    }
+   ]
+  },
+  {
+   "id": "number-at-maximum",
+   "shape": {
+    "kind": "number",
+    "minimum": 0,
+    "maximum": 1
+   },
+   "value": 1,
+   "violations": []
+  },
+  {
+   "id": "bounded-number-of-wrong-kind",
+   "shape": {
+    "kind": "number",
+    "minimum": 0
+   },
+   "value": "1",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "bounded-option-of-nullable-number",
+   "shape": {
+    "kind": "union",
+    "options": [
+     {
+      "kind": "number",
+      "exclusiveMinimum": 0
+     },
+     {
+      "kind": "null"
+     }
+    ]
+   },
+   "value": -1,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "out-of-range"
+    }
+   ]
+  },
+  {
+   "id": "array-shorter-than-min-items",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "string"
+    },
+    "minItems": 1
+   },
+   "value": [],
+   "violations": [
+    {
+     "path": "value",
+     "reason": "too-short"
+    }
+   ]
+  },
+  {
+   "id": "array-too-short-before-its-items",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "string"
+    },
+    "minItems": 2
+   },
+   "value": [
+    1
+   ],
+   "violations": [
+    {
+     "path": "value",
+     "reason": "too-short"
+    },
+    {
+     "path": "value[0]",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "array-at-min-items",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "string"
+    },
+    "minItems": 1
+   },
+   "value": [
+    "a"
+   ],
+   "violations": []
+  },
+  {
+   "id": "text-matching-pattern",
+   "shape": {
+    "kind": "string",
+    "pattern": "^\\s*[ACGTUacgtu]{2}\\s*$"
+   },
+   "value": " gc ",
+   "violations": []
+  },
+  {
+   "id": "text-not-matching-pattern",
+   "shape": {
+    "kind": "string",
+    "pattern": "^\\s*[ACGTUacgtu]{2}\\s*$"
+   },
+   "value": "GCA",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
+  },
+  {
+   "id": "blank-text-against-non-space-pattern",
+   "shape": {
+    "kind": "string",
+    "pattern": "\\S"
+   },
+   "value": "  ",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
+  },
+  {
+   "id": "literal-spelling-is-still-a-violation",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "RBH",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "not-in-set"
+    }
+   ]
   }
  ],
  "reasons": [
@@ -795,7 +1018,10 @@
   "null-not-declared",
   "non-integer",
   "not-in-set",
-  "tuple-length"
+  "tuple-length",
+  "out-of-range",
+  "too-short",
+  "pattern"
  ],
  "jsonDifferences": [
   {
@@ -894,6 +1120,341 @@
      "reason": "unknown-key"
     }
    ]
+  }
+ ],
+ "spellings": [
+  {
+   "id": "spelling-name",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "rbh",
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-case-and-spaces",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": " RBH ",
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-hyphen-and-alias",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "Reciprocal-Best",
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-alias-after-folding",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "TOP-1",
+   "read": "one_to_one"
+  },
+  {
+   "id": "spelling-empty-reads-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "",
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-null-reads-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": null,
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-false-reads-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": false,
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-zero-reads-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": 0,
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-empty-array-reads-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": [],
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-spaces-only-read-nothing",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "   ",
+   "read": null
+  },
+  {
+   "id": "spelling-unknown",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "banana",
+   "read": null
+  },
+  {
+   "id": "spelling-number",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": 5,
+   "read": null
+  },
+  {
+   "id": "spelling-true",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": true,
+   "read": null
+  },
+  {
+   "id": "spelling-without-hyphen-folding",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "auto",
+     "cds",
+     "locus"
+    ],
+    "spellings": {
+     "blank": "auto"
+    }
+   },
+   "value": "lo-cus",
+   "read": null
+  },
+  {
+   "id": "spelling-without-folding-case",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "auto",
+     "cds",
+     "locus"
+    ],
+    "spellings": {
+     "blank": "auto"
+    }
+   },
+   "value": " LOCUS ",
+   "read": "locus"
+  },
+  {
+   "id": "spelling-without-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "a_b"
+    ],
+    "spellings": {
+     "foldHyphens": true
+    }
+   },
+   "value": "",
+   "read": null
+  },
+  {
+   "id": "spelling-folded-hyphen",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "a_b"
+    ],
+    "spellings": {
+     "foldHyphens": true
+    }
+   },
+   "value": "A-B",
+   "read": "a_b"
   }
  ]
 }
