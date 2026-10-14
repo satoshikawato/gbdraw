@@ -571,6 +571,46 @@ test('a stored setting its reader cannot restore is listed before the Load (B37,
   assert.equal(state.losatExecution.totalThreadBudget, 'safe');
 });
 
+// OV-765: a Session 27-44 keeps one draft that both drawings read, so a value
+// both read is one place in the file: one record and one row. A Session 46
+// keeps a draft per drawing: the same value in each is two places, two rows.
+test('a value both drawings of a Session 27-44 read is one row; a Session 46 lists each drawing\'s place (OV-765)', async () => {
+  const rowsOf = ({ repairs }) => repairs.map(({ code, path, stored, used }) => `${code} ${path} ${stored} -> ${used}`);
+  const load = async (session, name) => {
+    const dialogs = [];
+    const loaded = await importSession(input(session), {
+      transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; }
+    });
+    assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
+    return { loaded, items: dialogs.flat() };
+  };
+  const lossy = (config) => {
+    config.adv = { ...config.adv, label_rendering: 'sideways', arrow_shaft_width_ratio: '0.5', feature_shapes: { gene: 'bogus' } };
+  };
+  for (const name of ['BGC0000708-BGC0000713.v30.gbdraw-session.json.gz', 'lambda_basic_linear.v44-schema8.gbdraw-session.json.gz',
+    'HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz']) {
+    const session = fixture(name);
+    lossy(session.config);
+    const { loaded, items } = await load(session, name);
+    assert.deepEqual(rowsOf(loaded), [
+      'setting-replaced config.adv.arrow_shaft_width_ratio 0.5 -> 1',
+      'setting-replaced config.adv.label_rendering sideways -> auto',
+      'setting-replaced config.adv.feature_shapes.gene bogus -> undefined'
+    ], name);
+    assert.equal(items.length, 3, name);
+  }
+  const session46 = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  const MODES = ['circular', 'linear'];
+  MODES.forEach((mode) => lossy(session46.modes[mode].config));
+  const { loaded, items } = await load(session46, 'Session 46');
+  assert.deepEqual(rowsOf(loaded), MODES.flatMap((mode) => [
+    `setting-replaced modes.${mode}.config.adv.arrow_shaft_width_ratio 0.5 -> 1`,
+    `setting-replaced modes.${mode}.config.adv.label_rendering sideways -> auto`,
+    `setting-replaced modes.${mode}.config.adv.feature_shapes.gene bogus -> undefined`
+  ]));
+  assert.equal(items.length, 6);
+});
+
 // BA-OD89: a row of a list names the leaf with that leaf's values; free text
 // (a label, an ID) is named by its place only; a row names the value used,
 // and a valid value from another source is no row. BA-OD91 (rule 2): a

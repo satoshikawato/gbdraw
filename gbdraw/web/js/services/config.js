@@ -1,6 +1,6 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
-import { describeLoadRepairs, loadRepair } from '../utils/load-repairs.js';
+import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
 import {
   state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList
 } from '../state.js';
@@ -5555,12 +5555,14 @@ const importSessionDocument = async (e, options = {}) => {
     // BA-D25: what the candidate could not restore is listed before anything
     // changes; Cancel leaves the settings, Results, inputs, History and screen
     // as they are.
-    const repairDialog = describeLoadRepairs(repairs);
+    Object.freeze(repairs);
+    // One record per place in the file and reading (OV-765).
+    const listedRepairs = Object.freeze(distinctLoadRepairs(repairs));
+    const repairDialog = describeLoadRepairs(listedRepairs);
     if (repairDialog) {
       const confirmLoadRepairs = /** @type {ConfirmLoadRepairs} */ (options.confirmLoadRepairs);
       if (!await confirmLoadRepairs(repairDialog) || !options.isCurrent()) return { status: 'canceled' };
     }
-    Object.freeze(repairs);
     // Custom fonts (receipt 〔読み込むとき〕): a font either drawing names that
     // this page cannot draw asks before anything is replaced; Cancel loads nothing.
     // It asks after the repair list, so a Cancel there loads no font either.
@@ -5851,7 +5853,7 @@ const importSessionDocument = async (e, options = {}) => {
       // What the load changed without a loss, for the caller's notice; what
       // it could not restore was listed before the load (`repairs`).
       notices: migratedAnnotationTargetCount > 0 ? [ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount)] : [],
-      repairs,
+      repairs: listedRepairs,
       data,
       decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),

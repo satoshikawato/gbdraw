@@ -125,15 +125,6 @@ const overwrittenLegendEdits = (repairs) => repairs.map((repair) => (
   + ` which a later edit also sets; the later edit is used and this one was dropped.`));
 
 /**
- * One line per stored value (the same value at one path, once).
- * @param {readonly LoadRepair[]} repairs
- * @param {(repair: LoadRepair) => string} describe
- */
-const valueLines = (repairs, describe) => [...new Map(repairs.map((repair) => [
-  JSON.stringify([repair.path, repair.stored, repair.used]), repair
-])).values()].map(describe);
-
-/**
  * The lines of one table's records of one code.
  * @param {readonly LoadRepair[]} repairs
  * @param {(table: string, lines: string, count: number) => string} describe
@@ -153,21 +144,21 @@ const WORDING = {
   // Free text is named by its place only (a changed one, such as an ID made
   // unique, names neither value); a value replaced by a list or an object
   // names no value used.
-  'setting-replaced': (repairs) => valueLines(repairs, ({ path, stored, used, effect }) => (
+  'setting-replaced': (repairs) => repairs.map(({ path, stored, used, effect }) => (
     `Settings: ${stored === undefined ? `the value of ${path}` : `the value "${stored}" (${path})`} cannot be used; `
     + `${used !== undefined ? `${used} is used` : { defaulted: 'its default is used', changed: 'it is changed', dropped: 'it is left unset' }[effect]}.`)),
   'setting-entries-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
     `Settings: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
-  'pending-palette-dropped': (repairs) => valueLines(repairs, ({ path, label }) => (
+  'pending-palette-dropped': (repairs) => repairs.map(({ path, label }) => (
     `Palette: the palette "${label ?? ''}" (${path}) waits to be applied, but Instant Preview is on, which applies a palette at once;`
     + ' it was dropped.')),
   'depth-row-disabled': (repairs) => repairs.map(({ path, label }) => (
     `Track stack: the Depth row "${label ?? ''}" (${path}) names a Depth series its drawing does not have;`
     + ' the row is turned off and no longer names that series.')),
-  'legend-position-defaulted': (repairs) => valueLines(repairs, ({ path, stored, used }) => (
+  'legend-position-defaulted': (repairs) => repairs.map(({ path, stored, used }) => (
     `Legend: the position "${stored}" (${path}) is not one of its mode's positions; `
     + `${used === undefined ? 'it is not used' : `${used} is used`}.`)),
-  'legend-side-defaulted': (repairs) => valueLines(repairs, ({ path, stored, used }) => (
+  'legend-side-defaulted': (repairs) => repairs.map(({ path, stored, used }) => (
     `Legend of a saved Result: the side "${stored}" (${path}) is not one of its mode's positions; `
     + `the Result is read with ${used}.`)),
   'legend-color-dropped': (repairs) => {
@@ -222,6 +213,18 @@ const WORDING = {
     'Record display (recordDisplayDrafts): the stored record display settings could not be read and were dropped.'
   ]
 };
+
+/**
+ * A Load's records, one per place in the file and reading: a Session 27-44
+ * keeps one draft that both drawings read, and each drawing's reader records
+ * what it cannot restore at that one place (OV-765). The first of equal
+ * records is kept, in order.
+ * @param {readonly LoadRepair[]} repairs
+ * @returns {LoadRepair[]}
+ */
+export const distinctLoadRepairs = (repairs) => [...new Map(repairs.map((repair) => [
+  JSON.stringify([repair.code, repair.path, repair.effect, repair.stored, repair.used, repair.count, repair.label, repair.line]), repair
+])).values()];
 
 /**
  * The records the dialog lists.
