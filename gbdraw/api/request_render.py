@@ -149,6 +149,7 @@ from .prepared import (
     prepared_input_cache_active,
     prepared_resource_identity,
     register_prepared_resource_value,
+    RECORD_IDENTITY_TAG,
     register_prepared_value_identity,
 )
 from .record_planning import (
@@ -1412,7 +1413,7 @@ def _normalize_request_records(
         input_index = provenance.input_index
         record_identity = (
             (
-                "record-v1",
+                RECORD_IDENTITY_TAG,
                 typed_source_specs[input_index][0],
                 input_keys[input_index],
                 input_index,
@@ -1420,7 +1421,7 @@ def _normalize_request_records(
                 gff_type_key if isinstance(request.records[input_index].source, GffFastaInputSource) else None,
             )
             if default_collection
-            else ("record-v1", key, provenance.resolved_index)
+            else (RECORD_IDENTITY_TAG, key, provenance.resolved_index)
         )
         register_prepared_value_identity(record, record_identity)
         if provenance.source_feature_catalog:

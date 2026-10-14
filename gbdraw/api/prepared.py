@@ -105,7 +105,14 @@ class _PreparedCacheTransaction:
     # The fonts registered when the transaction starts (D-11): text measured
     # inside a render stage depends on them, so every stage key includes them.
     font_environment: tuple[tuple[str, int, bool, str, int], ...] = ()
+    # O-2 (D-07): a layer built an entry that holds records, or a render stage
+    # that takes a record built (or ran uncacheable). Only then does the commit
+    # check every used owner in full.
+    record_touched: bool = False
 
+
+# The first element of a resolved record's identity (``request_render``).
+RECORD_IDENTITY_TAG = "record-v1"
 
 _ACTIVE_PREPARED_TRANSACTION: ContextVar[_PreparedCacheTransaction | None] = (
     ContextVar("gbdraw_active_prepared_transaction", default=None)
@@ -125,6 +132,7 @@ _CACHE_METRICS = (
     "preparedInputCacheEvictionCount",
     "preparedInputCacheRetainedBytes",
     "preparedInputCacheMutationViolationCount",
+    "preparedInputCacheFullCheckCount",
     "renderStageHitCount",
     "renderStageBuildCount",
     "renderStageUncacheableCount",
@@ -518,8 +526,11 @@ class PreparedBiologicalInputCache:
 
     Ownership guard (D-05): a reused entry is checked by structure when it is
     read and in full, every feature, when the transaction commits, so a change
-    to a cached record fails the same request. After a transaction that did not
-    commit, the next one checks in full when it reads, too.
+    to a cached record fails the same request. The commit checks in full only
+    when the request built an entry that holds records or ran a render stage
+    that takes a record (O-2, D-07); otherwise a change is found by the next
+    request that does. After a transaction that did not commit, the next one
+    checks in full when it reads, too.
     """
 
     def __init__(self) -> None:
@@ -644,6 +655,8 @@ class PreparedBiologicalInputCache:
         walk_features: bool,
     ) -> None:
         expected = entry.owner_stamp if walk_features else entry.structure_stamp
+        if walk_features and layer != _RENDER_STAGE_LAYER and _records_from_value(entry.value) is not None:
+            _record_metric(transaction, "preparedInputCacheFullCheckCount")
         current_stamp = _layer_stamp(layer, entry.value, walk_features=walk_features)
         if current_stamp == expected:
             return
@@ -682,6 +695,8 @@ class PreparedBiologicalInputCache:
         _record_metric(transaction, build_metric)
         value = builder()
         transaction.accessed[layer][key] = value
+        if _records_from_value(value) is not None:
+            transaction.record_touched = True
         if publish is not None and not publish(value):
             return value
         entry = _PreparedCacheEntry(
@@ -733,6 +748,9 @@ class PreparedBiologicalInputCache:
         transaction.used[_RENDER_STAGE_LAYER].add(key)
 
     def _commit(self, transaction: _PreparedCacheTransaction) -> None:
+        # O-2: without a record built or read by a stage, the structure check
+        # (made when each entry was read) is repeated, not the feature walk.
+        walk_features = transaction.record_touched
         replacements: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = {}
         for layer in self._layers:
             retained: OrderedDict[Hashable, _PreparedCacheEntry] = OrderedDict()
@@ -747,7 +765,7 @@ class PreparedBiologicalInputCache:
                     key,
                     entry,
                     transaction,
-                    walk_features=True,
+                    walk_features=walk_features,
                 )
                 retained[key] = entry
             replacements[layer] = retained
@@ -775,6 +793,33 @@ def _key_resource_identities(key: Hashable) -> frozenset[PreparedResourceIdentit
         elif isinstance(item, (tuple, list, frozenset)):
             pending.extend(item)
     return frozenset(identities)
+
+
+def key_names_record(key: Hashable) -> bool:
+    """Whether a render-stage key takes a resolved record itself.
+
+    A stage result a key takes (another stage's key, or a field of one) does
+    not count: that stage read the record, this one reads its result.
+    """
+
+    pending: list[object] = [key]
+    while pending:
+        item = pending.pop()
+        if not isinstance(item, tuple):
+            continue
+        if len(item) == 2 and item[0] == "identity":
+            identity = item[1]
+            if isinstance(identity, tuple) and identity and identity[0] == RECORD_IDENTITY_TAG:
+                return True
+            continue
+        pending.extend(item)
+    return False
+
+
+def mark_record_touched(transaction: _PreparedCacheTransaction) -> None:
+    """A render stage that may read a record built: the commit checks owners in full (O-2)."""
+
+    transaction.record_touched = True
 
 
 def active_render_stage_transaction() -> _PreparedCacheTransaction | None:

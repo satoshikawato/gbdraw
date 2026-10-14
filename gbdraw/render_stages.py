@@ -784,6 +784,8 @@ def render_stage(
     except _Unkeyable as reason:
         logger.debug("render stage %s is not cached: %s", name, reason)
         _metric("Uncacheable", name)
+        # It may take a record without an identity (O-2).
+        prepared.mark_record_touched(transaction)
         result = function(*args, **kwargs)
         _register_result(result, prepared.NO_IDENTITY, _argument_locators(args, kwargs))
         return result
@@ -799,6 +801,8 @@ def render_stage(
         _register_hit(stored, key, args, kwargs)
         return cast(R, stored.result)
 
+    if prepared.key_names_record(key):
+        prepared.mark_record_touched(transaction)
     frame = _StageFrame(name)
     views = {path: _settings_view(config, declared, frame) for path, config in configs}
     call_args = tuple(_with_views(arg, (index,), views) for index, arg in enumerate(args))
