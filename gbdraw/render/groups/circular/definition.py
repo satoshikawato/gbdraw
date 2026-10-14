@@ -6,7 +6,7 @@ from __future__ import annotations
 import math
 import re
 from functools import lru_cache
-from typing import Callable, Dict, List, Literal, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Optional, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
@@ -27,6 +27,9 @@ from ...drawers.circular.definition import DefinitionDrawer
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 CircularDefinitionProfile = Literal["full", "record_summary", "shared_common"]
 _SUPPORTED_DEFINITION_PROFILES = {"full", "record_summary", "shared_common"}
@@ -197,8 +200,10 @@ class DefinitionGroup:
         record_count: int = 1,
         record_transform: RecordDisplayTransform | None = None,
         species_line_count: int = 1,
+        record_presentation: RecordPresentation | None = None,
     ) -> None:
         self.record_transform = record_transform
+        self.record_presentation = record_presentation
         self.species_line_count = max(1, int(species_line_count))
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -257,11 +262,9 @@ class DefinitionGroup:
         metadata = infer_record_source_metadata(self.gb_record)
         strain_name = metadata.strain
         record_name = metadata.organism
-        annotations = getattr(self.gb_record, "annotations", {}) or {}
-        explicit_label = str(annotations.get("gbdraw_record_label") or "").strip()
-        explicit_subtitle = str(
-            annotations.get("gbdraw_record_subtitle") or ""
-        ).strip()
+        presentation = self.record_presentation
+        explicit_label = str((presentation.label if presentation else None) or "").strip()
+        explicit_subtitle = str((presentation.subtitle if presentation else None) or "").strip()
         self.replicon = metadata.replicon
         self.organelle = metadata.organelle
 

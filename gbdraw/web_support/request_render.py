@@ -224,6 +224,7 @@ def _render_canonical_web_request(
                     item.interactive_context,
                     result_index=result_index,
                     result_name=result_name,
+                    drawing=item.drawing,
                     _diagnostics=diagnostics,
                 )
             )

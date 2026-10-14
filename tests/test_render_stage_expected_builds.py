@@ -10,15 +10,6 @@ The classes are those of the DEPMAP measurement (``P1_P2_OPTIONS``). Each
 variant starts from a cache that holds the base: the harness renders the base
 again after each variant. The slow cases are split into chunks of variants,
 each from the case base, so each test fits the 300 s pytest timeout.
-
-Two gaps are listed apart, so removing them shrinks the lists:
-
-- ``LEGEND_INPUT_GAP``: the legend table stages take whole configurators
-  (feature, GC, skew, depth track data), so any field of them rebuilds the
-  legend even when no legend row changes.
-- ``RECORD_PRESENTATION_GAP``: a record label or subtitle is written into the
-  record, so it is part of the record identity and rebuilds every stage of
-  the record.
 """
 
 from __future__ import annotations
@@ -36,6 +27,7 @@ from tests.utils.render_stage_equivalence import (
     OptionSpec,
     Placeholders,
     Variant,
+    base_arguments,
     cost_chunks,
     error_rule_failures,
     matrix_variants,
@@ -86,12 +78,13 @@ P1_P2_OPTIONS: Mapping[str, frozenset[str]] = {
     "L3": frozenset(("align_center (rows)", "track_layout (rows)")),
 }
 
-_LEGEND = frozenset({"legend_table", "legend_measurement"})
-_LEGEND_LAYOUT = frozenset({"legend_measurement"})
+_LEGEND = frozenset({"legend_table", "legend_measurement", "legend_content"})
+_LEGEND_LAYOUT = frozenset({"legend_measurement", "legend_content"})
+_TITLE = frozenset({"plot_title_content"})
 _FEATURE_PLACEMENT = frozenset({"feature_layers", "feature_dom_index"})
 _LABEL_FILTER = _FEATURE_PLACEMENT | {"label_filter_maps"}
 _FEATURE_EDIT = _FEATURE_PLACEMENT | _LEGEND | {"catalog_normalization", "interactive_context"}
-_DEPTH_DATA = frozenset({"depth_track_data"})
+_DEPTH_DATA = frozenset({"depth_track_data", "depth_content"})
 _DEPTH_FRAME = _DEPTH_DATA | {"depth_frame"}
 
 # The stages that hold the content each option changes. An option not named builds nothing.
@@ -102,16 +95,18 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
             "hide_accession", "hide_scale", "keep_definition_left_aligned", "ruler_label_font_size",
             "scale_font_size", "scale_style", "show_replicon", "align_center (rows)", "axis_stroke_width",
             "multi_record_column_gap_ratio", "multi_record_row_gap_ratio",
+            # The legend wraps at the content width, which a tick label or a
+            # line stroke changes.
+            "gc_content_tick_font_size", "line_stroke_width",
         ),
         _LEGEND_LAYOUT,
     ),
     **dict.fromkeys(
-        (
-            "separate_strands", "resolve_overlaps", "feature_overlap_tolerance_bp", "show_labels",
-            "track_layout", "track_layout (rows)", "track_axis_gap",
-        ),
+        ("separate_strands", "resolve_overlaps", "show_labels", "track_layout", "track_axis_gap"),
         _FEATURE_PLACEMENT,
     ),
+    # These also move the content bounds, at whose width the legend wraps.
+    **dict.fromkeys(("feature_overlap_tolerance_bp", "track_layout (rows)"), _FEATURE_PLACEMENT | _LEGEND_LAYOUT),
     **dict.fromkeys(("label_table", "label_whitelist", "label_blacklist", "qualifier_priority"), _LABEL_FILTER),
     # A placement row is a feature edit: the stages that read the edited features rebuild.
     **dict.fromkeys(("feature_override_table", "feature_placement_table"), _FEATURE_EDIT),
@@ -120,39 +115,110 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     **dict.fromkeys(("depth_window", "depth_step", "depth_min", "depth_max", "depth_log_scale"), _DEPTH_FRAME),
     **dict.fromkeys(
         (
-            "depth_track_large_tick_interval", "depth_track_small_tick_interval", "depth_track_tick_font_size",
-            "show_depth_axis", "show_depth_ticks", "depth_large_tick_interval", "depth_small_tick_interval",
-            "depth_tick_font_size", "share_depth_axis",
+            "depth_track_large_tick_interval", "depth_track_small_tick_interval", "show_depth_axis",
+            "show_depth_ticks", "depth_large_tick_interval", "depth_small_tick_interval", "share_depth_axis",
         ),
         _DEPTH_DATA,
     ),
+    **dict.fromkeys(("depth_track_tick_font_size", "depth_tick_font_size"), _DEPTH_DATA | _LEGEND_LAYOUT),
     "depth_track_label": _DEPTH_DATA | _LEGEND,
     "conservation_labels": _LEGEND,
     # The pairwise identity legend is computed from the filtered comparisons.
     **dict.fromkeys(("evalue", "bitscore", "alignment_length"), _LEGEND),
+    **dict.fromkeys(("plot_title", "plot_title_font_size"), _TITLE),
 }
 
-LEGEND_INPUT_GAP: frozenset[str] = frozenset({
-    "arrow_head_length_ratio", "arrow_shaft_width_ratio", "line_stroke_color", "line_stroke_width",
-    "gc_content_mode", "gc_content_min_percent", "gc_content_max_percent", "gc_content_large_tick_interval",
-    "gc_content_small_tick_interval", "gc_content_tick_font_size", "show_gc_content_axis",
-    "show_gc_content_ticks", "feature_overlap_tolerance_bp", "pairwise_match_style", "label_blacklist",
-    "track_layout", "track_layout (rows)", "track_axis_gap", "depth_window", "depth_step", "depth_min",
-    "depth_max", "depth_log_scale", "depth_track_large_tick_interval", "depth_track_small_tick_interval",
-    "depth_track_tick_font_size", "show_depth_axis", "show_depth_ticks", "depth_large_tick_interval",
-    "depth_small_tick_interval", "depth_tick_font_size", "share_depth_axis",
-})
-RECORD_PRESENTATION_GAP: Mapping[str, frozenset[str]] = dict.fromkeys(
-    ("record_label", "record_subtitle"),
-    _FEATURE_EDIT | _DEPTH_FRAME | {"gc_skew_data"},
+# The options a Linear record content (axis, ruler, features, labels) reads.
+_RECORD_CONTENT_OPTIONS = (
+    "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_color", "axis_stroke_width",
+    "line_stroke_color", "line_stroke_width", "feature_height", "feature_overlap_tolerance_bp", "feature_override_table",
+    "feature_placement_table", "feature_visibility_table", "label_table", "label_whitelist", "label_blacklist",
+    "qualifier_priority", "label_font_size", "label_placement", "label_rendering", "linear_label_spacing",
+    "show_labels", "separate_strands", "resolve_overlaps", "track_axis_gap", "track_layout", "track_layout (rows)",
+    # The axis ruler draws with the scale settings.
+    "hide_scale", "scale_interval", "scale_style", "scale_stroke_color", "scale_stroke_width",
+    "scale_font_size", "ruler_label_font_size", "ruler_label_color",
 )
+
+# The group contents an option changes, besides the stages above.
+CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
+    "annotation_table": frozenset({"annotation_content"}),
+    # The ribbons: their geometry and style, and the rows the thresholds keep.
+    **dict.fromkeys(
+        ("align_center", "align_center (rows)", "pairwise_match_style", "comparison_height"),
+        frozenset({"comparison_content"}),
+    ),
+    **dict.fromkeys(("evalue", "bitscore", "alignment_length"), frozenset({"comparison_rows", "comparison_content"})),
+    **dict.fromkeys(
+        (
+            "gc_content_mode", "gc_content_min_percent", "gc_content_max_percent",
+            "gc_content_large_tick_interval", "gc_content_small_tick_interval", "gc_content_tick_font_size",
+            "show_gc_content_axis", "show_gc_content_ticks",
+        ),
+        frozenset({"gc_content_content"}),
+    ),
+    **dict.fromkeys(
+        (
+            "scale_interval", "scale_style", "scale_stroke_color", "scale_stroke_width", "scale_font_size",
+            "ruler_label_font_size", "ruler_label_color", "hide_scale",
+        ),
+        frozenset({"length_bar_content"}),
+    ),
+    **dict.fromkeys(
+        (
+            "definition_font_size", "keep_definition_left_aligned", "definition_line_style", "record_label",
+            "record_subtitle", "show_replicon", "hide_accession", "hide_length",
+        ),
+        frozenset({"definition_content"}),
+    ),
+}
+
+
+# The ribbons take the feature DOM index and both whole record placements,
+# whose comparison extents these track contents set; they rebuild with them.
+_RIBBON_INPUTS = frozenset({"feature_dom_index", "gc_content_content", "depth_content", "annotation_content"})
+# The stages whose results the catalog item reads: it rebuilds when one of them does.
+_CATALOG_INPUTS = frozenset({"record_content", "annotation_content", "comparison_content", "interactive_context"})
+
+
+# The composition plan is keyed by the bounds of the primary content, the
+# legend and the title, and by their placements. These stages hold those bounds.
+_BOUNDS_STAGES = (
+    _LEGEND_LAYOUT
+    | _TITLE
+    | _FEATURE_PLACEMENT
+    | _DEPTH_DATA
+    | {
+        "record_content", "gc_content_content", "gc_skew_content", "annotation_content", "definition_content",
+        "length_bar_content", "comparison_content",
+    }
+)
+# The options the composition request reads without a stage: the placements, and
+# the Circular definition text, which the primary bounds hold (no Circular content
+# stage holds it before PR 4).
+_COMPOSITION_INPUTS = frozenset({"legend", "plot_title_position", "species (no plot title)", "strain (no plot title)"})
+# Options that reshape a mark inside the box its content measures. With a paint
+# option (its ID ends in ``_color``) they move no bound, so the plan must be a hit.
+_MARK_SHAPE_OPTIONS = frozenset({"arrow_head_length_ratio", "arrow_shaft_width_ratio", "pairwise_match_style"})
+
+
+def _moves_bounds(option_id: str, allowed: frozenset[str]) -> bool:
+    if option_id.endswith("_color") or option_id in _MARK_SHAPE_OPTIONS:
+        return False
+    return option_id in _COMPOSITION_INPUTS or bool(allowed & _BOUNDS_STAGES)
 
 
 def allowed_builds(option_id: str) -> frozenset[str]:
-    allowed = EXPECTED_BUILDS.get(option_id, frozenset())
-    if option_id in LEGEND_INPUT_GAP:
-        allowed |= _LEGEND
-    return allowed | RECORD_PRESENTATION_GAP.get(option_id, frozenset())
+    allowed = (
+        EXPECTED_BUILDS.get(option_id, frozenset())
+        | CONTENT_BUILDS.get(option_id, frozenset())
+        | (frozenset({"record_content"}) if option_id in _RECORD_CONTENT_OPTIONS else frozenset())
+    )
+    if allowed & _RIBBON_INPUTS:
+        allowed |= {"comparison_content"}
+    if _moves_bounds(option_id, allowed):
+        allowed |= {"composition_plan"}
+    return allowed | ({"catalog_item"} if allowed & _CATALOG_INPUTS else frozenset())
 
 
 def p1_p2_variants(case_id: str, *, include_slow: bool) -> list[tuple[OptionSpec, Variant]]:
@@ -172,6 +238,10 @@ def lost_hits(
 ) -> list[str]:
     """Render the base, then each P1/P2 variant in ``part`` and the base again.
 
+    An option with prerequisites (``OptionSpec.pre``) goes to its variant from
+    its own base, the case base with those prerequisites, so the step changes
+    the option alone.
+
     Name each stage built beyond the allowed set, each uncacheable stage call (it
     can never be a hit), and each failure of the error rule (``error_rule_failures``).
     """
@@ -185,7 +255,10 @@ def lost_hits(
     outcomes = []
     first = harness.warm(base)
     for option, variant in p1_p2_variants(case_id, include_slow=include_slow)[part]:
+        option_base = base_arguments(case, option, placeholders)
         try:
+            if option_base != base:
+                harness.warm(option_base)
             outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
         except SystemExit:
             continue  # the CLI refuses this variant on this case

@@ -16,6 +16,7 @@ from gbdraw.analysis.depth import depth_df, read_depth_tsv
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
+from gbdraw.legend.sources import DepthLegendSource, LegendSlotSource
 from gbdraw.render_stages import render_stage
 from gbdraw.tracks.parsing import parse_nonnegative_integer
 
@@ -52,7 +53,7 @@ class DepthTrackData:
 
 
 DepthDfBuilder = Callable[..., DataFrame]
-DepthTrack = TypeVar("DepthTrack", DepthTrackSpec, DepthTrackData)
+DepthTrack = TypeVar("DepthTrack", DepthTrackSpec, DepthTrackData, DepthLegendSource)
 
 
 def _has_any(values: Sequence[object | None]) -> bool:
@@ -767,9 +768,9 @@ def build_depth_track_dataframes(
 
 def sync_depth_track_legend_entries(
     out: LegendTable,
-    depth_tracks: Sequence[DepthTrackData] | None,
+    depth_tracks: Sequence[DepthLegendSource] | None,
     *,
-    slots: Sequence[object] | None = None,
+    slots: Sequence[LegendSlotSource] | None = None,
 ) -> LegendTable:
     """Replace the singleton Depth legend with logical-track-aware entries.
 
@@ -780,40 +781,37 @@ def sync_depth_track_legend_entries(
     if not depth_tracks:
         return out
     out.discard_default_track("Depth")
-    track_count = depth_track_data_count([depth_tracks])
-    selected: list[tuple[DepthTrackData, object | None]]
+    track_count = _logical_depth_track_count([depth_tracks])
+    selected: list[tuple[DepthLegendSource, LegendSlotSource | None]]
     if slots is None:
         selected = [(track, None) for track in depth_tracks]
     else:
         tracks_by_index = index_depth_track_row(depth_tracks)
         selected = []
         for slot in slots:
-            if not getattr(slot, "enabled", True):
+            if slot.renderer != "depth":
                 continue
-            if str(getattr(slot, "renderer", "")) != "depth":
-                continue
-            params = getattr(slot, "params", {}) or {}
             track_index = parse_nonnegative_integer(
-                params.get("track_index", 0),
-                field_name=f"depth slot '{getattr(slot, 'id', '')}' track_index",
+                slot.params.get("track_index", 0),
+                field_name=f"depth slot '{slot.id}' track_index",
             )
             track = tracks_by_index.get(track_index)
             if track is not None:
                 selected.append((track, slot))
 
-    for track, slot in selected:
+    for track, selected_slot in selected:
         fallback = str(
             track.label
             or ("Depth" if track_count == 1 else f"Depth {int(track.track_index) + 1}")
         )
-        params = getattr(slot, "params", {}) or {}
+        params = selected_slot.params if selected_slot is not None else {}
         raw_label = params.get("legend_label", params.get("label"))
         override = str(raw_label).strip() if raw_label is not None else ""
         out.add_source(override or fallback, {
             "type": "solid",
-            "fill": track.config.fill_color,
-            "stroke": track.config.stroke_color,
-            "width": track.config.stroke_width,
+            "fill": track.fill_color,
+            "stroke": track.stroke_color,
+            "width": track.stroke_width,
         })
     return out
 

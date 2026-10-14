@@ -8,12 +8,13 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group, Line, Text
 
 from ....auto_sizes import linear_tick_interval
-from ....canvas import LinearCanvasConfigurator
+from ....canvas.linear import LinearCanvasGeometry
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.linear.labels import LabelDrawer
 from ....labels.linear import linear_leader_polyline, prepare_label_list_linear
-from ....layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
+from ....config.models.render_profiles import LinearRenderProfile
+from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayout
 from ....features.factory import FeatureBuildResult
 from ....configurators import FeatureDrawingConfigurator
 from ....svg.ids import record_group_svg_id
@@ -35,10 +36,12 @@ class SeqRecordGroup:
     def __init__(
         self,
         gb_record: SeqRecord,
-        canvas_config: LinearCanvasConfigurator,
+        geometry: LinearCanvasGeometry,
         feature_config: FeatureDrawingConfigurator,
         feature_layers: FeatureBuildResult,
-        render_context: LinearRecordRenderContext,
+        profile: LinearRenderProfile,
+        feature_track_layout: LinearFeatureTrackLayout,
+        axis_ruler_enabled: bool,
         feature_dom_index: LinearFeatureDomIndex,
         precalculated_labels: Optional[list] = None,
         draw_features: bool = True,
@@ -56,8 +59,8 @@ class SeqRecordGroup:
     ) -> None:
         self.record_transform = record_transform
         self.gb_record = gb_record
-        self.canvas_config = canvas_config
-        self.length_param = self.canvas_config.length_param
+        self.geometry = geometry
+        self.length_param = geometry.length_param
         self.feature_config = feature_config
         self.feature_layers = feature_layers
         self.feature_dom_index = feature_dom_index
@@ -81,16 +84,18 @@ class SeqRecordGroup:
         self.record_local_ruler = bool(record_local_ruler)
         self.feature_offset_y = float(feature_offset_y)
         self.feature_lane_geometry = feature_lane_geometry
-        self.render_context = render_context
-        cfg = render_context.profile.config
+        self.profile = profile
+        self._feature_track_layout = feature_track_layout
+        self._axis_ruler_enabled = bool(axis_ruler_enabled)
+        cfg = profile.config
         self._cfg = cfg
 
-        self.show_labels = render_context.profile.record_has_labels(self.record_index)
+        self.show_labels = profile.record_has_labels(self.record_index)
 
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
         # Keep legacy behavior: linear label leader line width uses the "long" value.
         self.label_stroke_width = cfg.labels.stroke_width.long
-        self.normalize_length = cfg.canvas.linear.normalize_length
+        self.normalize_length = geometry.normalize_length
         scale_cfg = cfg.objects.scale
         self.scale_style = str(scale_cfg.style).strip().lower()
         self.scale_stroke_color = scale_cfg.stroke_color
@@ -106,22 +111,22 @@ class SeqRecordGroup:
         self.scale_font_weight = scale_cfg.font_weight
         self.scale_font_family = cfg.objects.text.font_family
         self.scale_interval = scale_cfg.interval
-        self.auto_scale_interval = linear_tick_interval(max(1, int(self.canvas_config.longest_genome)))
-        self.scale_label_context_length = max(1, int(self.canvas_config.longest_genome))
+        self.auto_scale_interval = linear_tick_interval(max(1, int(self.geometry.longest_genome)))
+        self.scale_label_context_length = max(1, int(self.geometry.longest_genome))
         self.axis_stroke_width = self._cfg.objects.axis.linear.stroke_width.for_length_param(self.length_param)
         self.record_group: Group = self.setup_record_group()
 
     @property
     def separate_strands(self) -> bool:
-        return self.render_context.profile.strandedness
+        return self.profile.strandedness
 
     @property
     def track_layout(self) -> str:
-        return self.render_context.feature_track_layout
+        return self._feature_track_layout
 
     @property
     def axis_ruler_enabled(self) -> bool:
-        return self.render_context.axis_ruler_enabled
+        return self._axis_ruler_enabled
 
     def draw_linear_axis(self, alignment_width: float, genome_size_normalization_factor: float) -> Line:
         """
@@ -277,8 +282,10 @@ class SeqRecordGroup:
         if has_feature_shift:
             feature_group = Group(id=f"{self.record_group_id}_features")
 
-        # Process labels if enabled
+        # Process labels if enabled. Each label gets its feature identity on a
+        # copy: the prepared labels are this content's arguments.
         if self.show_labels and self.draw_features_enabled:
+            bound_labels = []
             for label in label_list:
                 source_feature_index = label.get("source_feature_index")
                 feature_id = self.feature_dom_index.by_source_index.get(
@@ -288,7 +295,8 @@ class SeqRecordGroup:
                     raise ValueError(
                         "Prepared linear label has no rendered feature identity."
                     )
-                label["feature_id"] = feature_id
+                label = {**label, "feature_id": feature_id}
+                bound_labels.append(label)
                 leader = linear_leader_polyline(label)
                 if leader:
                     line_path = Line(
@@ -299,6 +307,7 @@ class SeqRecordGroup:
                     )
                     bind_label_part(line_path, feature_id)
                     feature_group.add(line_path)
+            label_list = bound_labels
 
         # Draw features
         if self.draw_features_enabled:
@@ -321,7 +330,7 @@ class SeqRecordGroup:
                     separate_strands=separate_strands,
                     arrow_length=arrow_length,
                     track_layout=self.track_layout,
-                    track_axis_gap=self.canvas_config.track_axis_gap,
+                    track_axis_gap=self.geometry.track_axis_gap,
                     feature_lane_geometry=self.feature_lane_geometry,
                     record_index=self.record_index,
                     record_count=self.record_count,
@@ -355,11 +364,11 @@ class SeqRecordGroup:
         alignment_width: float = (
             self.sequence_width
             if self.sequence_width is not None
-            else self.canvas_config.alignment_width
+            else self.geometry.alignment_width
         )
-        cds_height: float = self.canvas_config.cds_height
-        longest_genome: int = self.canvas_config.longest_genome
-        arrow_length: float = self.canvas_config.arrow_length
+        cds_height: float = self.geometry.cds_height
+        longest_genome: int = self.geometry.longest_genome
+        arrow_length: float = self.geometry.arrow_length
 
         separate_strands = self.separate_strands
         record_group: Group = Group(id=self.record_group_id)
@@ -397,12 +406,12 @@ class SeqRecordGroup:
                     cds_height,
                     separate_strands,
                     self.track_layout,
-                    self.canvas_config.track_axis_gap,
-                    profile=self.render_context.profile,
+                    self.geometry.track_axis_gap,
+                    profile=self.profile,
                     label_font_size=self.label_font_size,
                     orthogroup_label_member_ids=self.orthogroup_label_member_ids,
                     orthogroup_label_top_member_ids=self.orthogroup_label_top_member_ids,
-                    labels_overrides_only=not self.render_context.profile.labels_in_scope(
+                    labels_overrides_only=not self.profile.labels_in_scope(
                         self.record_index
                     ),
                     feature_lane_geometry=self.feature_lane_geometry,

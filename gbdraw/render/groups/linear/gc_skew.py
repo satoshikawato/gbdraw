@@ -6,7 +6,6 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
 
 from ....analysis.skew import skew_df
-from ....config.models import GbdrawConfig
 from ...drawers.linear.gc_skew import SkewDrawer
 from ....configurators import GcSkewConfigurator
 
@@ -27,7 +26,7 @@ class GcSkewGroup:
         alignment_width: float,
         skew_config: GcSkewConfigurator,
         *,
-        cfg: GbdrawConfig,
+        normalize_length: bool,
         start_x: float = 0,
         start_y: float = 0,
         gc_df: DataFrame | None = None,
@@ -50,8 +49,7 @@ class GcSkewGroup:
         self.step: int = self.skew_config.step
         self.dinucleotide: str = self.skew_config.dinucleotide
         self.track_height: float = track_height
-        self._cfg = cfg
-        self.bool_normalize_length = cfg.canvas.linear.normalize_length
+        self.bool_normalize_length = normalize_length
         self.sequence_width = sequence_width
         self.alignment_width: float = (
             float(sequence_width) if sequence_width is not None else alignment_width

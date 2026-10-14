@@ -4,11 +4,12 @@ These classes encapsulate canvas sizing/offset logic for circular and linear dia
 """
 
 from .circular import CircularCanvasConfigurator
-from .linear import LinearCanvasConfigurator
+from .linear import LinearCanvasConfigurator, LinearCanvasGeometry
 
 __all__ = [
     "CircularCanvasConfigurator",
     "LinearCanvasConfigurator",
+    "LinearCanvasGeometry",
 ]
 
 

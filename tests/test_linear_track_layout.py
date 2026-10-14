@@ -222,11 +222,12 @@ def _build_bottom_ruler_fragment(
         legend="none",
     )
     return LengthBarGroup(
-        canvas_config.fig_width,
         canvas_config.alignment_width,
         longest_genome,
-        canvas_config,
-        cfg=cfg,
+        canvas_config.length_param,
+        scale=cfg.objects.scale,
+        font_family=cfg.objects.text.font_family,
+        dpi=cfg.canvas.dpi,
         ruler_width=ruler_width,
     ).get_group().tostring()
 

@@ -539,7 +539,6 @@ def test_circular_multi_conservation_gradient_legend_uses_compact_linear_layout(
     drawing = Drawing(debug=False)
     drawing.add(
         CircularLegendGroup(
-            canvas_config,
             _circular_legend_measurement(
                 canvas_config,
                 legend_config,
@@ -617,7 +616,6 @@ def test_circular_vertical_conservation_legend_centers_feature_and_gradient_bloc
     drawing = Drawing(debug=False)
     drawing.add(
         CircularLegendGroup(
-            canvas_config,
             _circular_legend_measurement(
                 canvas_config,
                 legend_config,
@@ -698,7 +696,6 @@ def test_circular_bottom_conservation_legend_centers_feature_and_gradient_blocks
     drawing = Drawing(debug=False)
     drawing.add(
         CircularLegendGroup(
-            canvas_config,
             _circular_legend_measurement(
                 canvas_config,
                 legend_config,
@@ -760,7 +757,6 @@ def test_circular_bottom_multi_conservation_layout_height_contains_gradient_bloc
     drawing = Drawing(debug=False)
     drawing.add(
         CircularLegendGroup(
-            canvas_config,
             _circular_legend_measurement(
                 canvas_config,
                 legend_config,

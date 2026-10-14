@@ -6,19 +6,20 @@
 from __future__ import annotations
 
 from collections.abc import Collection
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite import Drawing
-from svgwrite.container import Group
 
 from ...canvas import LinearCanvasConfigurator
+from ...canvas.linear import LinearCanvasGeometry
 from ...features.factory import FeatureBuildResult
 from ...layout.linear_multi_record import LinearRecordPlacement
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext, place_linear_definition
 from ...linear_comparison import LinearComparison
 from ...configurators import (
+    BlastMatchConfigurator,
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
@@ -33,6 +34,17 @@ from ...render.groups.linear import (
     PairWiseMatchGroup,
     SeqRecordGroup,
 )
+from ...render.groups.linear.definition import LinearDefinitionStyle
+from ...render.group_content import (
+    CANVAS_SCOPE,
+    DefinitionMeasurement,
+    GroupContent,
+    GroupKey,
+    GroupKind,
+    build_group_content,
+    place_content,
+)
+from ...render_stages import render_stage
 from .positioning import (
     position_linear_track_group,
     position_record_group,
@@ -40,6 +52,9 @@ from .positioning import (
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 def add_record_group(
     canvas: Drawing,
@@ -71,16 +86,23 @@ def add_record_group(
     record_transform: RecordDisplayTransform | None = None,
     record_translation_x: float = 0.0,
     record_translation_y: float = 0.0,
+    *,
+    group_key: GroupKey,
 ) -> Drawing:
     """Adds a record group to the linear canvas."""
     if placement is not None:
         sequence_width = placement.sequence_width
-    record_group: Group = SeqRecordGroup(
+    content = render_stage(
+        "record_content",
+        build_group_content,
+        SeqRecordGroup,
         gb_record=record,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
         feature_config=feature_config,
         feature_layers=feature_layers,
-        render_context=render_context,
+        profile=render_context.profile,
+        feature_track_layout=render_context.feature_track_layout,
+        axis_ruler_enabled=render_context.axis_ruler_enabled,
         feature_dom_index=feature_dom_index,
         precalculated_labels=precalculated_labels,
         draw_features=draw_features,
@@ -95,7 +117,8 @@ def add_record_group(
         feature_offset_y=feature_offset_y,
         feature_lane_geometry=feature_lane_geometry,
         record_transform=record_transform,
-    ).get_group()
+    )
+    record_group = place_content(canvas, content, group_key)
     if slot_id:
         record_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
     if slot_renderer:
@@ -135,21 +158,26 @@ def add_gc_content_group(
     slot_renderer: str | None = None,
     sequence_width: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
-    ) -> Drawing:
+    *,
+    group_key: GroupKey,
+) -> Drawing:
     """Adds a GC content group to the linear canvas."""
-    cfg = canvas_config.profile.config
-    gc_content_group: Group = GcContentGroup(
+    content = render_stage(
+        "gc_content_content",
+        build_group_content,
+        GcContentGroup,
         gb_record=record,
         alignment_width=canvas_config.alignment_width,
         longest_record_len=canvas_config.longest_genome,
         track_height=canvas_config.gc_height if track_height is None else float(track_height),
         gc_config=gc_config,
-        cfg=cfg,
+        normalize_length=canvas_config.normalize_length,
         gc_df=gc_df,
         group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
-    ).get_group()
+    )
+    gc_content_group = place_content(canvas, content, group_key)
     if slot_id:
         gc_content_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
     if slot_renderer:
@@ -177,22 +205,27 @@ def add_depth_group(
     track_height: float | None = None,
     sequence_width: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    *,
+    group_key: GroupKey,
 ) -> Drawing:
     """Adds a depth coverage group to the linear canvas."""
-    cfg = canvas_config.profile.config
-    depth_group: Group = DepthGroup(
+    content = render_stage(
+        "depth_content",
+        build_group_content,
+        DepthGroup,
         gb_record=record,
         alignment_width=canvas_config.alignment_width,
         longest_record_len=canvas_config.longest_genome,
         track_height=canvas_config.depth_height if track_height is None else float(track_height),
         depth_config=depth_config,
-        cfg=cfg,
+        normalize_length=canvas_config.normalize_length,
         depth_df=depth_df,
         group_id=dom_group_id or group_id,
         axis_group_id=dom_axis_group_id or axis_group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
-    ).get_group()
+    )
+    depth_group = place_content(canvas, content, group_key)
     if slot_id:
         depth_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
     if slot_renderer:
@@ -218,21 +251,26 @@ def add_gc_skew_group(
     slot_renderer: str | None = None,
     sequence_width: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    *,
+    group_key: GroupKey,
 ) -> Drawing:
     """Adds a GC skew group to the linear canvas."""
-    cfg = canvas_config.profile.config
-    gc_skew_group: Group = GcSkewGroup(
+    content = render_stage(
+        "gc_skew_content",
+        build_group_content,
+        GcSkewGroup,
         gb_record=record,
         alignment_width=canvas_config.alignment_width,
         longest_record_len=canvas_config.longest_genome,
         track_height=canvas_config.skew_height if track_height is None else float(track_height),
         skew_config=skew_config,
-        cfg=cfg,
+        normalize_length=canvas_config.normalize_length,
         gc_df=gc_df,
         group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
-    ).get_group()
+    )
+    gc_skew_group = place_content(canvas, content, group_key)
     if slot_id:
         gc_skew_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
     if slot_renderer:
@@ -240,6 +278,12 @@ def add_gc_skew_group(
     position_linear_track_group(gc_skew_group, offset, offset_x, canvas_config, track_offset_y)
     canvas.add(gc_skew_group)
     return canvas
+
+
+def _measurement(content: GroupContent) -> DefinitionMeasurement:
+    if content.definition is None:  # pragma: no cover - DefinitionGroup measures itself
+        raise RuntimeError("a record definition content has no measurement")
+    return content.definition
 
 
 def add_record_definition_group(
@@ -260,7 +304,10 @@ def add_record_definition_group(
     record_index: int = 0,
     record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
+    record_presentation: RecordPresentation | None = None,
     definition_column_left: float = 0.0,
+    *,
+    record_key: str,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas.
 
@@ -268,7 +315,8 @@ def add_record_definition_group(
     record-local definition parts, so that measurement and drawing agree on the
     same line kinds.
     """
-    cfg = canvas_config.profile.config
+    style = LinearDefinitionStyle.of(canvas_config.profile.config)
+    length_param = str(canvas_config.length_param)
     keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
     try:
         definition_gap = max(0.0, float(getattr(canvas_config, "definition_gap", 20.0)))
@@ -281,10 +329,13 @@ def add_record_definition_group(
         # A row heading is drawn from the leading record, and only when
         # something describes the row as a whole.
         split_row_definition = placement.column == 0 and bool(row_line_kinds)
-        definition_group_obj = DefinitionGroup(
+        local_content = render_stage(
+            "definition_content",
+            build_group_content,
+            DefinitionGroup,
             record,
-            canvas_config,
-            cfg=cfg,
+            length_param,
+            style=style,
             text_anchor="middle",
             text_x=0.0,
             group_id=group_id,
@@ -292,23 +343,27 @@ def add_record_definition_group(
             record_index=record_index,
             record_count=record_count,
             record_transform=record_transform,
+            record_presentation=record_presentation,
         )
-        record_definition_group = definition_group_obj.get_group()
+        local_measurement = _measurement(local_content)
         header_y = (
             float(definition_header_center_y)
             if definition_header_center_y is not None
             else (
                 placement.axis_y
                 - placement.top_extent
-                + 0.5 * definition_group_obj.definition_bounding_box_height
+                + 0.5 * local_measurement.height
             )
         )
         local_position = place_linear_definition(
-            width=definition_group_obj.definition_bounding_box_width,
+            width=local_measurement.width,
             column_width=0.0,
             record_x=placement.x, gap=definition_gap,
             keep_left=keep_definition_left_aligned, sequence_width=placement.sequence_width,
             column_left=definition_column_left,
+        )
+        record_definition_group = place_content(
+            canvas, local_content, GroupKey(record_key, GroupKind.DEFINITION, "main")
         )
         record_definition_group.translate(
             canvas_config.horizontal_offset + local_position.x,
@@ -316,10 +371,13 @@ def add_record_definition_group(
         )
         canvas.add(record_definition_group)
         if split_row_definition:
-            row_group_obj = DefinitionGroup(
+            row_content = render_stage(
+                "definition_content",
+                build_group_content,
+                DefinitionGroup,
                 record,
-                canvas_config,
-                cfg=cfg,
+                length_param,
+                style=style,
                 text_anchor="start" if keep_definition_left_aligned else "middle",
                 text_x=0.0,
                 group_id=f"{group_id or str(record.id)}_row",
@@ -328,25 +386,27 @@ def add_record_definition_group(
                 record_count=record_count,
                 definition_part="row",
                 record_transform=record_transform,
+                record_presentation=record_presentation,
             )
-            if not row_group_obj.definition_lines:
+            row_measurement = _measurement(row_content)
+            if not row_measurement.line_count:
                 # Nothing describes this row as a whole, so it gets no heading.
                 return canvas
             reserved_width = (
                 max(0.0, float(row_definition_width))
                 if row_definition_width is not None
-                else row_group_obj.definition_bounding_box_width
+                else row_measurement.width
             )
-            row_group = row_group_obj.get_group()
-
             row_position = place_linear_definition(
-                width=row_group_obj.definition_bounding_box_width,
+                width=row_measurement.width,
                 column_width=reserved_width,
                 record_x=placement.x, gap=definition_gap,
                 keep_left=keep_definition_left_aligned,
                 column_left=definition_column_left,
             )
-
+            row_group = place_content(
+                canvas, row_content, GroupKey(record_key, GroupKind.DEFINITION, "row")
+            )
             row_group.translate(
                 canvas_config.horizontal_offset + row_position.x,
                 (
@@ -358,25 +418,32 @@ def add_record_definition_group(
             canvas.add(row_group)
         return canvas
 
-    definition_group_obj = DefinitionGroup(
+    content = render_stage(
+        "definition_content",
+        build_group_content,
+        DefinitionGroup,
         record,
-        canvas_config,
-        cfg=cfg,
+        length_param,
+        style=style,
         text_anchor="start" if keep_definition_left_aligned else None,
         group_id=group_id,
         record_index=record_index,
         record_count=record_count,
         record_transform=record_transform,
+        record_presentation=record_presentation,
     )
+    measurement = _measurement(content)
     definition_position = place_linear_definition(
-        width=definition_group_obj.definition_bounding_box_width,
+        width=measurement.width,
         column_width=max(0.0, float(max_def_width)),
         record_x=record_offset_x,
         gap=definition_gap, keep_left=keep_definition_left_aligned,
-        text_anchor=definition_group_obj.linear_text_anchor,
+        text_anchor=measurement.text_anchor,
         column_left=definition_column_left,
     )
-    record_definition_group = definition_group_obj.get_group()
+    record_definition_group = place_content(
+        canvas, content, GroupKey(record_key, GroupKind.DEFINITION, "main")
+    )
     record_definition_group.translate(
         canvas_config.horizontal_offset + definition_position.x,
         record_offset_y if definition_center_y is None else float(definition_center_y),
@@ -386,19 +453,66 @@ def add_record_definition_group(
     return canvas
 
 
+def linear_comparison_content(
+    comparisons: tuple[LinearComparison, ...],
+    index: int,
+    geometry: LinearCanvasGeometry,
+    blast_config: BlastMatchConfigurator,
+    records: tuple[SeqRecord, ...],
+    *,
+    align_center: bool,
+    height: float,
+    query_placement: LinearRecordPlacement,
+    subject_placement: LinearRecordPlacement,
+    query_y: float,
+    subject_y: float,
+    feature_dom_index: LinearFeatureDomIndex | None,
+    record_transforms: tuple[RecordDisplayTransform, ...] | None,
+) -> GroupContent:
+    """The ribbons of comparison ``index`` (render stage ``comparison_content``).
+
+    It takes the whole ``comparison_rows`` result and an index, because that
+    result, not each comparison in it, has the stage identity.
+    """
+
+    comparison = comparisons[index]
+    return build_group_content(
+        PairWiseMatchGroup,
+        geometry,
+        blast_config.sequence_length_dict,
+        comparison.matches,
+        height,
+        index + 1,
+        blast_config,
+        records,
+        query_record_index=comparison.query_record_index,
+        subject_record_index=comparison.subject_record_index,
+        query_placement=query_placement,
+        subject_placement=subject_placement,
+        query_y=query_y,
+        subject_y=subject_y,
+        feature_dom_index=feature_dom_index,
+        record_transforms=record_transforms,
+        align_center=align_center,
+    )
+
+
 def add_explicit_comparisons_on_linear_canvas(
     canvas: Drawing,
-    comparisons: list[LinearComparison],
+    comparisons: tuple[LinearComparison, ...],
     canvas_config: LinearCanvasConfigurator,
-    blast_config,
+    blast_config: BlastMatchConfigurator,
     records: list[SeqRecord],
     placements: dict[int, LinearRecordPlacement],
     feature_dom_index: LinearFeatureDomIndex | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    *,
+    record_keys: Sequence[str],
 ) -> Drawing:
     """Draw comparisons using explicit endpoint placements."""
 
-    for comparison_count, comparison in enumerate(comparisons, start=1):
+    geometry = canvas_config.geometry()
+    for index, comparison in enumerate(comparisons):
         query = placements[comparison.query_record_index]
         subject = placements[comparison.subject_record_index]
         query_anchor = (
@@ -412,24 +526,34 @@ def add_explicit_comparisons_on_linear_canvas(
             else subject.comparison_top_y
         )
         top_y = min(query_anchor, subject_anchor)
-        height = abs(subject_anchor - query_anchor)
-        match_group = PairWiseMatchGroup(
-            canvas_config,
-            blast_config.sequence_length_dict,
-            comparison.matches,
-            height,
-            comparison_count,
+        content = render_stage(
+            "comparison_content",
+            linear_comparison_content,
+            comparisons,
+            index,
+            geometry,
             blast_config,
-            records,
-            query_record_index=comparison.query_record_index,
-            subject_record_index=comparison.subject_record_index,
+            tuple(records),
+            align_center=bool(canvas_config.align_center),
+            height=abs(subject_anchor - query_anchor),
             query_placement=query,
             subject_placement=subject,
             query_y=query_anchor - top_y,
             subject_y=subject_anchor - top_y,
             feature_dom_index=feature_dom_index,
-            record_transforms=record_transforms,
-        ).get_group()
+            record_transforms=tuple(record_transforms) if record_transforms is not None else None,
+        )
+        match_group = place_content(
+            canvas,
+            content,
+            GroupKey(
+                (
+                    str(record_keys[comparison.query_record_index]),
+                    str(record_keys[comparison.subject_record_index]),
+                ),
+                GroupKind.COMPARISON,
+            ),
+        )
         match_group.translate(canvas_config.horizontal_offset, top_y)
         canvas.add(match_group)
     return canvas
@@ -438,21 +562,19 @@ def add_explicit_comparisons_on_linear_canvas(
 def add_length_bar_on_linear_canvas(
     canvas: Drawing,
     canvas_config: LinearCanvasConfigurator,
-    scale_group,
+    content: GroupContent,
     offset_x: float = 0.0,
 ) -> Drawing:
     """Adds a length bar to the linear canvas."""
-    if canvas_config.legend_position == "bottom" or canvas_config.legend_position == "top":
-        offset_for_length_bar = canvas_config.height_below_final_record
-    else:
-        offset_for_length_bar = canvas_config.height_below_final_record
-    scale_group = scale_group.get_group()
+    offset_for_length_bar = canvas_config.height_below_final_record
+    scale_group = place_content(canvas, content, GroupKey(CANVAS_SCOPE, GroupKind.LENGTH_BAR))
     scale_group.translate(canvas_config.horizontal_offset + offset_x, offset_for_length_bar)
     canvas.add(scale_group)
     return canvas
 
 
 __all__ = [
+    "linear_comparison_content",
     "add_record_group",
     "add_depth_group",
     "add_gc_content_group",

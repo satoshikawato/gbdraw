@@ -5,13 +5,13 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from dataclasses import dataclass
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group, TSpan, Text
 
-from ....canvas import LinearCanvasConfigurator
 from ....config.models import GbdrawConfig
+from ....config.models.objects import ObjectsDefinitionLinearConfig
 from ....core.record_metadata import format_replicon_label, infer_record_source_metadata
 from ....core.numeric import compensated_sum
 from ....core.text import (
@@ -21,14 +21,35 @@ from ....core.text import (
     parse_mixed_content_text,
 )
 from ....layout.spatial import Aabb, union_aabbs
+from ...group_content import DefinitionMeasurement
 from ....svg.ids import definition_group_svg_id
 from ....layout.record_labels import display_coordinate_label
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
+
 _COORD_BASE_KEY = "gbdraw_coord_base"
 _COORD_STEP_KEY = "gbdraw_coord_step"
 _REGION_APPLIED_KEY = "gbdraw_region_applied"
+
+
+@dataclass(frozen=True)
+class LinearDefinitionStyle:
+    """The settings a Linear record definition reads, as plain values."""
+
+    definition: ObjectsDefinitionLinearConfig
+    font_family: str
+    dpi: int
+
+    @classmethod
+    def of(cls, cfg: GbdrawConfig) -> LinearDefinitionStyle:
+        return cls(
+            definition=cfg.objects.definition.linear,
+            font_family=cfg.objects.text.font_family,
+            dpi=cfg.canvas.dpi,
+        )
 
 
 @dataclass
@@ -56,9 +77,9 @@ class DefinitionGroup:
     def __init__(
         self,
         record: SeqRecord,
-        canvas_config: LinearCanvasConfigurator,
+        length_param: str,
         *,
-        cfg: GbdrawConfig,
+        style: LinearDefinitionStyle,
         title_start_x: float = 0,
         title_start_y: float = -9,
         length_start_x: float = 0,
@@ -71,8 +92,10 @@ class DefinitionGroup:
         record_count: int = 1,
         definition_part: str = "main",
         record_transform: RecordDisplayTransform | None = None,
+        record_presentation: RecordPresentation | None = None,
     ) -> None:
         self.record_transform = record_transform
+        self.record_presentation = record_presentation
         self.record: SeqRecord = record
         self.title_start_x: float = title_start_x
         self.title_start_y: float = title_start_y
@@ -80,8 +103,7 @@ class DefinitionGroup:
         self.length_start_y: float = length_start_y
         self.definition_bounding_box_width: float = 0.0
         self.definition_bounding_box_height: float = 0.0
-        self.canvas_config = canvas_config
-        self.length_param = self.canvas_config.length_param
+        self.length_param = length_param
         self.text_x = float(text_x)
         self._explicit_group_id = str(group_id) if group_id else None
         self.record_index = int(record_index)
@@ -92,19 +114,18 @@ class DefinitionGroup:
             if line_kinds is not None
             else None
         )
-        self._cfg = cfg
-        def_cfg = cfg.objects.definition.linear
+        def_cfg = style.definition
         self._def_cfg = def_cfg
         self.linear_definition_stroke: str = def_cfg.stroke
         self.linear_definition_fill: str = def_cfg.fill
         self.linear_definition_font_size: float = def_cfg.font_size.for_length_param(self.length_param)
         self.linear_definition_font_weight: str = def_cfg.font_weight
-        self.linear_definition_font_family: str = cfg.objects.text.font_family
+        self.linear_definition_font_family: str = style.font_family
         self.interval: int = def_cfg.interval
         self.show_replicon: bool = bool(def_cfg.show_replicon)
         self.show_accession: bool = bool(def_cfg.show_accession)
         self.show_length: bool = bool(def_cfg.show_length)
-        self.dpi: int = cfg.canvas.dpi
+        self.dpi: int = style.dpi
         self.linear_text_anchor: str = text_anchor if text_anchor is not None else def_cfg.text_anchor
         self.linear_dominant_baseline: str = def_cfg.dominant_baseline
         self.get_definition_details()
@@ -125,6 +146,15 @@ class DefinitionGroup:
         self.definition_group.attribs["data-gbdraw-record-id"] = str(self.record.id)
         self.definition_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
         self.add_elements_to_group()
+
+    @property
+    def definition_measurement(self) -> DefinitionMeasurement:
+        return DefinitionMeasurement(
+            width=self.definition_bounding_box_width,
+            height=self.definition_bounding_box_height,
+            text_anchor=self.linear_text_anchor,
+            line_count=len(self.definition_lines),
+        )
 
     def calculate_start_coordinates(self) -> None:
         if not self.definition_lines:
@@ -179,21 +209,15 @@ class DefinitionGroup:
             record_count=self.record_count,
         )
 
-        override = None
-        if getattr(self.record, "annotations", None):
-            override = self.record.annotations.get("gbdraw_record_label")
-        if override is not None:
-            override = str(override).strip()
-
-        self.record_name: str = override if override else ""
+        presentation = self.record_presentation
+        override = presentation.label if presentation is not None else None
+        self.record_name: str = override.strip() if override else ""
         self.record_name_parts = parse_mixed_content_text(self.record_name)
         # parse_mixed_content_text parts carry text as str | None (the bool is the italic flag).
         self.record_name_plain = "".join(cast(str, part.get("text") or "") for part in self.record_name_parts).strip()
 
-        subtitle = None
-        if getattr(self.record, "annotations", None):
-            subtitle = self.record.annotations.get("gbdraw_record_subtitle")
-        self.record_subtitle: str = str(subtitle).strip() if subtitle is not None else ""
+        subtitle = presentation.subtitle if presentation is not None else None
+        self.record_subtitle: str = subtitle.strip() if subtitle is not None else ""
         self.record_subtitle_parts = parse_mixed_content_text(self.record_subtitle)
         self.record_subtitle_plain = "".join(
             cast(str, part.get("text") or "") for part in self.record_subtitle_parts
@@ -437,4 +461,4 @@ class DefinitionGroup:
         return self.definition_group
 
 
-__all__ = ["DefinitionGroup"]
+__all__ = ["DefinitionGroup", "LinearDefinitionStyle"]

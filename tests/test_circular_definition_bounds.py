@@ -6,6 +6,7 @@ import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.api.requests import RecordPresentation
 from gbdraw.canvas import CircularCanvasConfigurator
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.toml import load_config_toml
@@ -25,10 +26,6 @@ def _definition(
     cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
     render_profile = CircularRenderProfile(cfg)
     record = SeqRecord(Seq("ATGC" * 250), id="NC_TEST.1")
-    if record_label:
-        record.annotations["gbdraw_record_label"] = record_label
-    if record_subtitle:
-        record.annotations["gbdraw_record_subtitle"] = record_subtitle
     canvas = CircularCanvasConfigurator("test", render_profile, "none", record)
     return DefinitionGroup(
         record,
@@ -39,6 +36,7 @@ def _definition(
         plot_title=plot_title,
         definition_profile=profile,
         definition_group_id=("plot_title" if profile == "shared_common" else None),
+        record_presentation=RecordPresentation(label=record_label, subtitle=record_subtitle),
     )
 
 

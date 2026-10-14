@@ -108,6 +108,20 @@ class LinearComparison:
             raise ValidationError("LinearComparison.matches must be a pandas DataFrame.")
 
 
+@dataclass(frozen=True)
+class ProteinComparisonFrames:
+    """The protein comparisons a Linear diagram draws.
+
+    ``ordered`` pairs record ``i`` with ``i + 1`` (``None`` when the analysis
+    made none); ``pairs`` name their records. A protein analysis or a
+    collinearity projection returns one value of this type whole, so the
+    render stages that take it can key it by the stage that built it.
+    """
+
+    ordered: tuple[DataFrame, ...] | None = None
+    pairs: tuple[LinearComparison, ...] = ()
+
+
 def merge_linear_comparisons(
     comparisons: Sequence[LinearComparison],
 ) -> tuple[LinearComparison, ...]:
@@ -448,6 +462,7 @@ __all__ = [
     "COMPARISON_RECORD_ID_UNMATCHED",
     "ComparisonRecordIdWarning",
     "LinearComparison",
+    "ProteinComparisonFrames",
     "merge_linear_comparisons",
     "project_search_frame_comparisons",
     "validate_linear_comparison_record_ids",

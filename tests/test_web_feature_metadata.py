@@ -100,7 +100,7 @@ def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatchin
 
     marker = tmp_path / "keep.svg"
     marker.write_text("<svg />", encoding="utf-8")
-    original_loader = assemble.load_comparisons
+    original_loader = assemble.read_comparison_table
     wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
 
     payload = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
@@ -108,7 +108,7 @@ def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatchin
     assert payload["error"]["code"] == "RESOURCE_INVALID"
     assert payload["error"]["stage"] == "resource-staging"
     assert set(payload["error"]) == {"code", "operation", "stage", "context"}
-    assert assemble.load_comparisons is original_loader
+    assert assemble.read_comparison_table is original_loader
     assert marker.exists()
 
 

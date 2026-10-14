@@ -15,6 +15,7 @@ from svgwrite import Drawing
 import gbdraw.api.diagram as api_diagram_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.linear as linear_cli_module
+from gbdraw.legend.sources import ComparisonLegendSource
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import LinearDiagramOptions
@@ -22,7 +23,8 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.comparisons import load_comparisons
+from gbdraw.diagrams.linear.assemble import _read_comparison_files, linear_comparison_rows
+from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.legend.table import prepare_legend_table
 from gbdraw.render.drawers.circular.conservation import ConservationDrawer
 from gbdraw.features.ids import (
@@ -126,8 +128,18 @@ def test_modify_config_dict_maps_pairwise_match_style() -> None:
     assert GbdrawConfig.from_dict(modified).objects.blast_match.style == "curve"
 
 
+def _blast_option_rows(blast_path: Path, thresholds: ComparisonThresholds) -> list[pd.DataFrame]:
+    """The matches the ``-b`` path keeps: the files it reads, filtered by the ``comparison_rows`` stage."""
+
+    records = (SeqRecord(Seq("A" * 400), id="q1"), SeqRecord(Seq("A" * 400), id="s1"))
+    rows = linear_comparison_rows(
+        _read_comparison_files([str(blast_path)], thresholds), None, (), thresholds, records, (0, 1), False
+    )
+    return [item.matches for item in rows.comparisons]
+
+
 @pytest.mark.linear
-def test_load_comparisons_filters_hits_below_alignment_length(tmp_path: Path) -> None:
+def test_the_b_option_filters_hits_below_alignment_length(tmp_path: Path) -> None:
     blast_path = tmp_path / "comparisons.tsv"
     _write_blast_table(
         blast_path,
@@ -137,16 +149,16 @@ def test_load_comparisons_filters_hits_below_alignment_length(tmp_path: Path) ->
         ],
     )
 
-    config = SimpleNamespace(evalue=1e-2, bitscore=50, identity=0, alignment_length=100)
+    config = ComparisonThresholds(evalue=1e-2, bitscore=50, identity=0, alignment_length=100)
 
-    comparisons = load_comparisons([str(blast_path)], config)
+    comparisons = _blast_option_rows(blast_path, config)
 
     assert len(comparisons) == 1
     assert comparisons[0]["alignment_length"].tolist() == [150]
 
 
 @pytest.mark.linear
-def test_load_comparisons_applies_alignment_length_with_other_thresholds(tmp_path: Path) -> None:
+def test_the_b_option_applies_alignment_length_with_other_thresholds(tmp_path: Path) -> None:
     blast_path = tmp_path / "comparisons.tsv"
     _write_blast_table(
         blast_path,
@@ -157,9 +169,9 @@ def test_load_comparisons_applies_alignment_length_with_other_thresholds(tmp_pat
         ],
     )
 
-    config = SimpleNamespace(evalue=1e-10, bitscore=50, identity=90, alignment_length=100)
+    config = ComparisonThresholds(evalue=1e-10, bitscore=50, identity=90, alignment_length=100)
 
-    comparisons = load_comparisons([str(blast_path)], config)
+    comparisons = _blast_option_rows(blast_path, config)
 
     assert len(comparisons) == 1
     assert comparisons[0].shape[0] == 1
@@ -384,8 +396,7 @@ def test_identity_100_legend_is_a_safe_zero_span_at_the_maximum_color() -> None:
         hidden_track,
         feature_config,
         [],
-        blast_config=blast_config,
-        has_blast=True,
+        comparison=ComparisonLegendSource.of(blast_config),
         show_gc=False,
         show_skew=False,
         show_depth=False,
@@ -540,6 +551,7 @@ def test_pairwise_match_group_draws_smaller_high_identity_hits_above_broad_hits(
         1,
         blast_config,
         [_build_record(), _build_record()],
+        align_center=canvas_config.align_center,
     ).get_group()
 
     drawing = Drawing(debug=False)

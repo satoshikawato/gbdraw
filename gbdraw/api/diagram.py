@@ -67,6 +67,7 @@ from gbdraw.analysis.depth_tracks import (
 from gbdraw.analysis.gc import circular_dinucleotide_content_df
 from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
+    LosatpCacheState,
     OrthogroupGraphResult,
     OrthogroupMembershipMode,
     OrthogroupResult,
@@ -104,7 +105,7 @@ from gbdraw.auto_sizes import (
     sliding_window,
 )
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
-from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
+from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN, LosatCacheWrite
 from gbdraw.config.models import (
     CircularRenderProfile,
     GbdrawConfig,
@@ -131,7 +132,7 @@ from gbdraw.core.sequence import create_dict_for_sequence_lengths
 from gbdraw.diagrams.circular.assemble import (
     CircularAssemblyResult,
     _assemble_circular_diagram_result,
-    build_circular_legend_table,
+    circular_legend_table,
     plan_circular_annotation_slots,
 )
 from gbdraw.diagrams.circular.positioning import _parse_svg_number
@@ -189,11 +190,16 @@ from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.layout.spatial import Aabb
 from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
+from gbdraw.legend.sources import LegendSources
 from gbdraw.legend.table import (
     LegendTable,
     pairwise_identity_legend_from_comparisons,
 )
-from gbdraw.linear_comparison import ComparisonRecordIdWarning, LinearComparison
+from gbdraw.linear_comparison import (
+    ComparisonRecordIdWarning,
+    LinearComparison,
+    ProteinComparisonFrames,
+)
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
     DEFAULT_FEATURE_TYPES,
@@ -204,7 +210,9 @@ from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
 )
-from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup
+from gbdraw.render.group_content import CANVAS_SCOPE, GroupContent, GroupKey, GroupKind, place_content
+from gbdraw.render.groups.circular import DefinitionGroup
+from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
@@ -226,6 +234,7 @@ from .prepared import ResolvedFeatureInputs
 
 if TYPE_CHECKING:
     from gbdraw.analysis.conservation import ConservationInput
+    from gbdraw.api.requests import RecordPresentation
 
 
 DEFAULT_SELECTED_FEATURES = DEFAULT_FEATURE_TYPES
@@ -1237,6 +1246,7 @@ def _build_circular_plot_title_group(
     species: str | None,
     strain: str | None,
     plot_title: str | None,
+    record_presentation: RecordPresentation | None,
 ) -> tuple[Group, Aabb]:
     plot_title_canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix,
@@ -1253,6 +1263,7 @@ def _build_circular_plot_title_group(
         definition_profile="shared_common",
         definition_group_id="plot_title",
         cfg=cfg,
+        record_presentation=record_presentation,
     )
     return definition.get_group(), definition.local_bounds
 
@@ -1577,16 +1588,17 @@ def _web_normalize_cache_label(label: object, fallback: str) -> str:
 
 def _linear_losat_cache_filenames(
     records: Sequence[SeqRecord],
+    presentations: Sequence[RecordPresentation] | None,
     pairs: Sequence[tuple[int, int]] | None = None,
 ) -> tuple[str, ...]:
     """Raw TSV names of the displayed pairs (consecutive records by default)."""
 
     def label(index: int) -> str:
         record = records[index]
-        annotations = getattr(record, "annotations", {}) or {}
+        presentation = presentations[index] if presentations is not None else None
         fallback = f"seq_{index + 1}"
         return _web_normalize_cache_label(
-            str(annotations.get("gbdraw_record_label") or "").strip()
+            str((presentation.label if presentation is not None else None) or "").strip()
             or str(record.id or "").strip()
             or fallback,
             fallback,
@@ -1600,6 +1612,62 @@ def _linear_losat_cache_filenames(
     return tuple(
         f"{label(query)}.{label(subject)}.losatp.tsv" for query, subject in displayed
     )
+
+
+def project_collinearity_frames(
+    result: CollinearityResult,
+    records: Sequence[SeqRecord],
+    *,
+    color_mode: CollinearityColorMode,
+    search_scope: CollinearitySearchScope,
+    comparison_pairs: Sequence[tuple[int, int]] | None,
+) -> ProteinComparisonFrames:
+    """The comparisons a Linear diagram draws for collinearity blocks.
+
+    Without ``comparison_pairs`` the blocks give one ordered frame per adjacent
+    record pair; with them, one comparison per listed pair.
+    """
+
+    if comparison_pairs is None:
+        return ProteinComparisonFrames(
+            ordered=tuple(
+                convert_collinearity_blocks_to_comparisons(
+                    result,
+                    records=records,
+                    color_mode=color_mode,
+                    search_scope=search_scope,
+                )
+            )
+        )
+    pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
+        result,
+        records=records,
+        color_mode=color_mode,
+        search_scope=search_scope,
+    )
+    allowed_pairs = set(comparison_pairs)
+    return ProteinComparisonFrames(
+        pairs=tuple(
+            LinearComparison(query_index, subject_index, matches)
+            for (query_index, subject_index), matches in pair_comparisons.items()
+            if (query_index, subject_index) in allowed_pairs
+        )
+    )
+
+
+@dataclass(frozen=True)
+class ProteinComparisonAnalysis:
+    """A protein analysis, the comparisons it draws, and its raw-cache writes.
+
+    ``comparisons`` is a direct field, so the stages that draw it can key it
+    by this stage. The caller replays ``cache_writes`` (writes into a fork of
+    the request's raw cache) on its cache on a build and on a hit, since
+    ``session_entries()`` reads the display marks after the drawing.
+    """
+
+    result: ProteinBlastpResult | CollinearityResult
+    comparisons: ProteinComparisonFrames
+    cache_writes: tuple[LosatCacheWrite, ...]
 
 
 def _invoke_protein_analysis_helper(
@@ -1622,18 +1690,24 @@ def _invoke_protein_analysis_helper(
     collinearity_unit_mode: CollinearityUnitMode | str,
     collinearity_anchor_mode: CollinearityAnchorMode,
     collinearity_search_scope: CollinearitySearchScope,
+    collinearity_color_mode: CollinearityColorMode,
     collinear_infer_orthogroups: bool,
     collinearity_comparison_pairs: Sequence[tuple[int, int]] | None,
-    losatp_cache: LosatpCacheManager | None,
+    cache_state: LosatpCacheState | None,
     protein_extraction: ProteinExtractionResult | None,
     feature_visibility_rules: list[dict[str, object]] | None,
     cache_filenames: Sequence[str] | None,
     pairwise_pairs: Sequence[tuple[int, int]] | None = None,
-) -> ProteinBlastpResult | CollinearityResult:
-    """Translate resolved typed values into one real analysis-helper call."""
+) -> ProteinComparisonAnalysis:
+    """The ``protein_analysis`` stage: one analysis-helper call on a fork of the raw cache."""
 
+    losatp_cache = (
+        LosatpCacheManager.from_state(cache_state) if cache_state is not None else None
+    )
+    result: ProteinBlastpResult | CollinearityResult
+    comparisons: ProteinComparisonFrames
     if mode == "pairwise":
-        return build_pairwise_protein_blastp_comparisons(
+        result = build_pairwise_protein_blastp_comparisons(
             records,
             pairs=pairwise_pairs,
             losatp_bin=losatp_bin,
@@ -1650,8 +1724,20 @@ def _invoke_protein_analysis_helper(
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
         )
-    if mode == "orthogroup":
-        return build_rbh_orthogroup_protein_blastp_comparisons(
+        comparisons = (
+            ProteinComparisonFrames(
+                pairs=tuple(
+                    LinearComparison(query_index, subject_index, matches)
+                    for (query_index, subject_index), matches in zip(
+                        pairwise_pairs, result.comparisons, strict=True
+                    )
+                )
+            )
+            if pairwise_pairs is not None
+            else ProteinComparisonFrames(ordered=tuple(result.comparisons))
+        )
+    elif mode == "orthogroup":
+        result = build_rbh_orthogroup_protein_blastp_comparisons(
             records,
             losatp_bin=losatp_bin,
             ncbi_blastp_bin=ncbi_blastp_bin,
@@ -1669,8 +1755,9 @@ def _invoke_protein_analysis_helper(
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
         )
-    if mode == "collinear":
-        return build_orthogroup_collinearity_blocks(
+        comparisons = ProteinComparisonFrames(ordered=tuple(result.comparisons))
+    elif mode == "collinear":
+        result = build_orthogroup_collinearity_blocks(
             records,
             infer_orthogroups=collinear_infer_orthogroups,
             losatp_bin=losatp_bin,
@@ -1694,7 +1781,18 @@ def _invoke_protein_analysis_helper(
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
         )
-    raise ValidationError(f"Unsupported protein analysis mode: {mode!r}.")
+        comparisons = project_collinearity_frames(
+            result,
+            records,
+            color_mode=collinearity_color_mode,
+            search_scope=collinearity_search_scope,
+            comparison_pairs=collinearity_comparison_pairs,
+        )
+    else:
+        raise ValidationError(f"Unsupported protein analysis mode: {mode!r}.")
+    return ProteinComparisonAnalysis(
+        result, comparisons, losatp_cache.writes if losatp_cache is not None else ()
+    )
 
 
 def _shows_identity_labels(record_features: Sequence[ResolvedRecordFeatureInputs]) -> bool:
@@ -1772,6 +1870,7 @@ def assemble_linear_diagram_from_records(
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
@@ -1972,35 +2071,10 @@ def assemble_linear_diagram_from_records(
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
-    resolved_protein_comparisons: list[DataFrame] | None = None
-    resolved_linear_comparisons: list[LinearComparison] = list(linear_comparisons or ())
+    resolved_protein_frames: ProteinComparisonFrames | None = None
     resolved_orthogroups: OrthogroupResult | OrthogroupGraphResult | None = orthogroups
     resolved_collinearity_result: CollinearityResult | None = None
-    losat_cache_filenames = _linear_losat_cache_filenames(records)
-
-    def project_collinearity_comparisons(
-        result: CollinearityResult,
-    ) -> list[DataFrame] | None:
-        if collinearity_comparison_pairs is None:
-            return convert_collinearity_blocks_to_comparisons(
-                result,
-                records=records,
-                color_mode=normalized_collinearity_color_mode,
-                search_scope=normalized_collinearity_search_scope,
-            )
-        pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
-            result,
-            records=records,
-            color_mode=normalized_collinearity_color_mode,
-            search_scope=normalized_collinearity_search_scope,
-        )
-        allowed_pairs = set(collinearity_comparison_pairs)
-        resolved_linear_comparisons.extend(
-            LinearComparison(query_index, subject_index, matches)
-            for (query_index, subject_index), matches in pair_comparisons.items()
-            if (query_index, subject_index) in allowed_pairs
-        )
-        return None
+    losat_cache_filenames = _linear_losat_cache_filenames(records, _record_presentations)
 
     def invoke_protein_analysis(
         mode: ProteinBlastpMode,
@@ -2008,8 +2082,10 @@ def assemble_linear_diagram_from_records(
         *,
         analysis_cache_filenames: Sequence[str] | None = losat_cache_filenames,
         pairwise_pairs: Sequence[tuple[int, int]] | None = None,
-    ) -> ProteinBlastpResult | CollinearityResult:
-        return _invoke_protein_analysis_helper(
+    ) -> ProteinComparisonAnalysis:
+        analysis = render_stage(
+            "protein_analysis",
+            _invoke_protein_analysis_helper,
             mode,
             analysis_records,
             pairwise_pairs=pairwise_pairs,
@@ -2037,16 +2113,20 @@ def assemble_linear_diagram_from_records(
             collinearity_unit_mode=collinearity_unit_mode,
             collinearity_anchor_mode=normalized_collinearity_anchor_mode,
             collinearity_search_scope=normalized_collinearity_search_scope,
+            collinearity_color_mode=normalized_collinearity_color_mode,
             collinear_infer_orthogroups=collinear_infer_orthogroups,
             collinearity_comparison_pairs=collinearity_comparison_pairs,
-            losatp_cache=losatp_cache,
+            cache_state=losatp_cache.state() if losatp_cache is not None else None,
             protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=analysis_cache_filenames,
         )
+        if losatp_cache is not None:
+            losatp_cache.apply_writes(analysis.cache_writes)
+        return analysis
 
     if protein_comparisons is not None:
-        resolved_protein_comparisons = list(protein_comparisons)
+        resolved_protein_frames = ProteinComparisonFrames(ordered=tuple(protein_comparisons))
     elif collinearity_blocks is not None:
         if isinstance(collinearity_blocks, CollinearityResult):
             collinearity_result = collinearity_blocks
@@ -2055,53 +2135,45 @@ def assemble_linear_diagram_from_records(
         resolved_collinearity_result = collinearity_result
         if collinearity_result.orthogroups is not None:
             resolved_orthogroups = collinearity_result.orthogroups
-        resolved_protein_comparisons = project_collinearity_comparisons(
-            collinearity_result
+        resolved_protein_frames = render_stage(
+            "collinearity_projection",
+            project_collinearity_frames,
+            collinearity_result,
+            tuple(records),
+            color_mode=normalized_collinearity_color_mode,
+            search_scope=normalized_collinearity_search_scope,
+            comparison_pairs=collinearity_comparison_pairs,
         )
+    elif normalized_protein_blastp_mode == "pairwise" and normalized_protein_pairs is not None:
+        # One plan for every pair, so records of one file share a database.
+        resolved_protein_frames = invoke_protein_analysis(
+            "pairwise",
+            records,
+            analysis_cache_filenames=_linear_losat_cache_filenames(
+                records, _record_presentations, normalized_protein_pairs
+            ),
+            pairwise_pairs=normalized_protein_pairs,
+        ).comparisons
     elif normalized_protein_blastp_mode == "pairwise":
-        pair_inputs = normalized_protein_pairs
-        if pair_inputs is not None:
-            # One plan for every pair, so records of one file share a database.
-            protein_blastp_result = cast(
-                ProteinBlastpResult,
-                invoke_protein_analysis(
-                    "pairwise",
-                    records,
-                    analysis_cache_filenames=_linear_losat_cache_filenames(
-                        records, pair_inputs
-                    ),
-                    pairwise_pairs=pair_inputs,
-                ),
-            )
-            resolved_linear_comparisons.extend(
-                LinearComparison(query_index, subject_index, matches)
-                for (query_index, subject_index), matches in zip(
-                    pair_inputs, protein_blastp_result.comparisons, strict=True
-                )
-            )
-        else:
-            protein_blastp_result = cast(
-                ProteinBlastpResult,
-                invoke_protein_analysis("pairwise", records),
-            )
-            resolved_protein_comparisons = protein_blastp_result.comparisons
+        resolved_protein_frames = invoke_protein_analysis("pairwise", records).comparisons
     elif normalized_protein_blastp_mode == "orthogroup":
-        protein_blastp_result = cast(
-            ProteinBlastpResult,
-            invoke_protein_analysis("orthogroup", records),
-        )
-        resolved_protein_comparisons = protein_blastp_result.comparisons
-        resolved_orthogroups = protein_blastp_result.orthogroups
+        analysis = invoke_protein_analysis("orthogroup", records)
+        resolved_protein_frames = analysis.comparisons
+        resolved_orthogroups = cast(ProteinBlastpResult, analysis.result).orthogroups
     elif normalized_protein_blastp_mode == "collinear":
-        collinearity_result = cast(
-            CollinearityResult,
-            invoke_protein_analysis("collinear", records),
-        )
+        analysis = invoke_protein_analysis("collinear", records)
+        collinearity_result = cast(CollinearityResult, analysis.result)
         resolved_collinearity_result = collinearity_result
         resolved_orthogroups = collinearity_result.orthogroups
-        resolved_protein_comparisons = project_collinearity_comparisons(
-            collinearity_result
-        )
+        resolved_protein_frames = analysis.comparisons
+    # Ordered frames and explicit pairs, as the reply metadata and the canvas read them.
+    resolved_protein_comparisons = (
+        resolved_protein_frames.ordered if resolved_protein_frames is not None else None
+    )
+    resolved_linear_comparisons = (
+        *(linear_comparisons or ()),
+        *(resolved_protein_frames.pairs if resolved_protein_frames is not None else ()),
+    )
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = _resolve_linear_plot_title_position(
         str(plot_title_position)
@@ -2192,6 +2264,7 @@ def assemble_linear_diagram_from_records(
 
     canvas = assemble_linear_diagram(
         record_transforms=_record_transforms,
+        record_presentations=_record_presentations,
         records=list(records),
         blast_files=list(blast_files) if blast_files else None,
         canvas_config=canvas_config,
@@ -2208,9 +2281,9 @@ def assemble_linear_diagram_from_records(
         plot_title=normalized_plot_title or None,
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
-        comparison_dataframes=resolved_protein_comparisons,
+        protein_comparisons=resolved_protein_frames,
         pairwise_identity_legend=protein_identity_legend,
-        linear_comparisons=resolved_linear_comparisons or None,
+        linear_comparisons=list(linear_comparisons) if linear_comparisons else None,
         linear_layout=layout,
         orthogroups=resolved_orthogroups,
         similarity_alignment=similarity_alignment,
@@ -2219,12 +2292,8 @@ def assemble_linear_diagram_from_records(
     build_result = LinearDiagramBuildResult(
         drawing=canvas,
         metadata=LinearDiagramMetadata(
-            protein_comparisons=(
-                tuple(resolved_protein_comparisons)
-                if resolved_protein_comparisons is not None
-                else None
-            ),
-            linear_comparisons=tuple(resolved_linear_comparisons),
+            protein_comparisons=resolved_protein_comparisons,
+            linear_comparisons=resolved_linear_comparisons,
             orthogroups=resolved_orthogroups,
             collinearity_result=resolved_collinearity_result,
             comparison_warnings=getattr(canvas, "_gbdraw_comparison_record_id_warnings", ()),
@@ -2297,6 +2366,7 @@ def assemble_circular_diagram_from_record(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
+    _record_presentation: RecordPresentation | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
 
@@ -2635,11 +2705,13 @@ def assemble_circular_diagram_from_record(
             species=species,
             strain=strain,
             plot_title=normalized_plot_title or None,
+            record_presentation=_record_presentation,
         )
         title_placement = TitlePlacement(normalized_plot_title_position)
 
     result = _assemble_circular_diagram_result(
         record_transform=_record_transform,
+        record_presentation=_record_presentation,
         gb_record=gb_record,
         canvas_config=canvas_config,
         gc_df=gc_df,
@@ -2739,6 +2811,7 @@ def assemble_circular_diagram_from_records(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
@@ -3087,6 +3160,9 @@ def assemble_circular_diagram_from_records(
             _resolved_feature_inputs=resolved_feature_inputs,
             _resolved_record_features=(_resolved_record_features[record_index],) if _resolved_record_features else (),
             _record_transform=(_record_transforms[record_index] if _record_transforms is not None else None),
+            _record_presentation=(
+                _record_presentations[record_index] if _record_presentations is not None else None
+            ),
         )
         result = _require_circular_assembly_result(sub_canvas)
         record_results.append(result)
@@ -3123,6 +3199,7 @@ def assemble_circular_diagram_from_records(
 
     legend_table = LegendTable()
     legend_target: Group | None = None
+    legend_content: GroupContent | None = None
     legend_bounds: Aabb | None = None
     plot_title_group: Group | None = None
     plot_title_bounds: Aabb | None = None
@@ -3136,6 +3213,7 @@ def assemble_circular_diagram_from_records(
             species=species,
             strain=strain,
             plot_title=normalized_plot_title or None,
+            record_presentation=_record_presentations[0] if _record_presentations else None,
         )
 
     legend_canvas_config = CircularCanvasConfigurator(
@@ -3186,6 +3264,7 @@ def assemble_circular_diagram_from_records(
         canvas_config=legend_canvas_config,
         record_features=_resolved_record_features,
     )
+    legend_sources = LegendSources.of(feature_config, gc_config, skew_config)
     if legend_effective != "none":
         legend_slots, legend_annotations = plan_circular_annotation_slots(
             resolved_annotations,
@@ -3199,13 +3278,9 @@ def assemble_circular_diagram_from_records(
         )
         legend_depth_tracks = representative_depth_tracks(record_depth_track_data)
         legend_depth_track_zero = index_depth_track_row(legend_depth_tracks).get(0)
-        legend_table = render_stage(
-            "legend_table",
-            build_circular_legend_table,
+        legend_table = circular_legend_table(
             records,
-            feature_config=feature_config,
-            gc_config=gc_config,
-            skew_config=skew_config,
+            legend_sources,
             profile=profile,
             depth_config=depth_config,
             depth_df=(
@@ -3232,19 +3307,11 @@ def assemble_circular_diagram_from_records(
                 wrap_width=grid_layout.bounds.width,
             )
             legend_bounds = legend_measurement.local_bounds
-            legend_target = LegendGroup(
-                legend_canvas_config,
-                legend_measurement,
-                legend_table,
-            ).get_group()
+            legend_content = render_stage(
+                "legend_content", circular_legend_content, legend_measurement, legend_table
+            )
 
-    legend_row_facts = LegendRowFacts(
-        records=records,
-        feature_config=feature_config,
-        gc_config=gc_config,
-        skew_config=skew_config,
-        legend_table=legend_table,
-    )
+    legend_row_facts = LegendRowFacts(records=records, sources=legend_sources, legend_table=legend_table)
 
     merged_canvas = Drawing(
         filename=f"{output_prefix}.svg",
@@ -3314,7 +3381,10 @@ def assemble_circular_diagram_from_records(
 
     if plot_title_group is not None:
         merged_canvas.add(plot_title_group)
-    if legend_target is not None:
+    if legend_content is not None:
+        legend_target = place_content(
+            merged_canvas, legend_content, GroupKey(CANVAS_SCOPE, GroupKind.LEGEND)
+        )
         merged_canvas.add(legend_target)
 
     legend_placement = LegendPlacement(str(legend_effective))
@@ -3323,7 +3393,9 @@ def assemble_circular_diagram_from_records(
         if plot_title_group is not None
         else TitlePlacement.NONE
     )
-    composition_plan = plan_composition(
+    composition_plan = render_stage(
+        "composition_plan",
+        plan_composition,
         CompositionRequest(
             primary=CompositionItem("primary", grid_layout.bounds),
             legend=(
@@ -3339,7 +3411,7 @@ def assemble_circular_diagram_from_records(
             legend_placement=legend_placement,
             title_placement=title_placement,
             overlay_obstacles=tuple(grid_overlay_obstacles),
-        )
+        ),
     )
     apply_composition_plan(
         merged_canvas,
@@ -3503,6 +3575,7 @@ def build_circular_diagram(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
+    _record_presentation: RecordPresentation | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
     _label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> Drawing:
@@ -3589,6 +3662,7 @@ def build_circular_diagram(
             _resolved_feature_inputs=feature_inputs,
             _resolved_record_features=_resolved_record_features,
             _record_transform=_record_transform,
+            _record_presentation=_record_presentation,
         )
 
     return _checked_circular_drawing(
@@ -3608,6 +3682,7 @@ def _build_linear_diagram(
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
@@ -3704,6 +3779,7 @@ def _build_linear_diagram(
             _resolved_feature_inputs=feature_inputs,
             _resolved_record_features=_resolved_record_features,
             _record_transforms=_record_transforms,
+            _record_presentations=_record_presentations,
             _alignment_anchor_centers=_alignment_anchor_centers,
             _return_build_result=_return_build_result,
         )
@@ -3754,6 +3830,7 @@ def build_linear_diagram(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
@@ -3770,6 +3847,7 @@ def build_linear_diagram(
         _resolved_annotations=_resolved_annotations,
         _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
+        _record_presentations=_record_presentations,
         _alignment_anchor_centers=_alignment_anchor_centers,
     )
     return cast(Drawing, result)
@@ -3786,6 +3864,7 @@ def build_linear_diagram_result(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> LinearDiagramBuildResult:
@@ -3802,6 +3881,7 @@ def build_linear_diagram_result(
         _resolved_annotations=_resolved_annotations,
         _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
+        _record_presentations=_record_presentations,
         _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=True,
     )
@@ -3818,6 +3898,7 @@ def build_circular_multi_diagram(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _record_presentations: Sequence[RecordPresentation] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
     _label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> Drawing:
@@ -3908,6 +3989,7 @@ def build_circular_multi_diagram(
             _resolved_feature_inputs=feature_inputs,
             _resolved_record_features=_resolved_record_features,
             _record_transforms=_record_transforms,
+            _record_presentations=_record_presentations,
         )
 
     return _checked_circular_drawing(

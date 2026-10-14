@@ -395,7 +395,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
+        lambda canvas, legend_measurement, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -463,7 +463,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
+        lambda canvas, legend_measurement, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1050,7 +1050,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
+        lambda canvas, legend_measurement, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1147,7 +1147,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
+        lambda canvas, legend_measurement, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1264,7 +1264,7 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
+        lambda canvas, legend_measurement, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1379,7 +1379,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
+        lambda canvas, legend_measurement, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1489,7 +1489,7 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
+        lambda canvas, legend_measurement, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1572,7 +1572,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             lambda canvas, gb_record, canvas_config, species, strain, **kwargs: canvas
         )
         circular_assemble_module.add_legend_group_on_canvas = (
-            lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas
+            lambda canvas, legend_measurement, legend_table, **kwargs: canvas
         )
         try:
             assemble_circular_diagram_from_record(

@@ -267,10 +267,57 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
     assert warm["results"] == cold["results"]
     assert warm["metadata"] == cold["metadata"]
     assert render_only["results"] != cold["results"]
-    assert _metrics(warm_diagnostics)["featureCatalogSvgParseCount"] == 1
-    assert _metrics(render_only_diagnostics)["featureCatalogSvgParseCount"] == 1
+    # Circular groups have no contents until PR 4, so the catalog reads the
+    # SVG on every Generate and has no catalog item stage.
+    for diagnostics in (warm_diagnostics, render_only_diagnostics):
+        metrics = _metrics(diagnostics)
+        assert metrics["featureCatalogSvgParseCount"] == 1
+        assert not [name for name in metrics if name.endswith(":catalog_item")]
     assert float(render_only_diagnostics["timingsMs"]["drawing"]) > 0
     assert float(render_only_diagnostics["timingsMs"]["svgWrite"]) > 0
+
+
+def _linear_document(source: Path, *, title: str) -> dict[str, object]:
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(source), record_key="record-1"),),
+        options=LinearDiagramOptions(plot_title=title),
+        output=RenderOutputRequest(output_prefix="prepared-linear", formats=("svg",)),
+    )
+    return build_session_document(request).to_dict()
+
+
+def test_a_linear_title_change_reuses_the_catalog_item(tmp_path: Path) -> None:
+    """The catalog item reads the feature, comparison and annotation contents only."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("linear-record"),))
+    cache = PreparedBiologicalInputCache()
+    document = _linear_document(source, title="Cold title")
+    cold, cold_diagnostics = _render(tmp_path, cache, document, request_id=1)
+    warm, warm_diagnostics = _render(tmp_path, cache, document, request_id=2)
+    retitled, retitled_diagnostics = _render(
+        tmp_path, cache, _linear_document(source, title="Render-only title change"), request_id=3
+    )
+
+    cold_metrics = _metrics(cold_diagnostics)
+    assert cold_metrics["renderStageBuild:catalog_item"] == 1
+    assert cold_metrics["featureCatalogSvgParseCount"] == 1
+    assert cold_metrics["featureCatalogFeatureCandidateCount"] > 0
+    for diagnostics in (warm_diagnostics, retitled_diagnostics):
+        metrics = _metrics(diagnostics)
+        assert metrics["renderStageHit:catalog_item"] == 1
+        assert metrics.get("featureCatalogSvgParseCount", 0) == 0
+        assert metrics.get("featureCatalogFullDomTraversalCount", 0) == 0
+    assert not [name for name in _metrics(warm_diagnostics) if name.startswith("renderStageBuild:")]
+    # A title change builds its own content and the composition plan, nothing else.
+    assert {
+        name for name in _metrics(retitled_diagnostics) if name.startswith("renderStageBuild:")
+    } == {"renderStageBuild:plot_title_content", "renderStageBuild:composition_plan"}
+
+    assert warm["results"] == cold["results"]
+    assert warm["metadata"] == cold["metadata"]
+    assert retitled["results"] != cold["results"]
+    assert retitled["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
 
 
 def test_public_render_request_remains_uncached_by_default(
