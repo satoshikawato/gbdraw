@@ -171,7 +171,12 @@ const DOCUMENT_KEYS = [
   'richFeaturePopup', 'appliedPaletteName', 'appliedPaletteColors', 'downloadDpi', 'featureCatalog',
   'biologicalFeatures', 'extractedFeatures', 'featureRecordIds', 'selectedFeatureRecordIdx', 'autoLabelReflowEnabled',
   'generatedLegendPosition', 'generatedMode', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition',
-  'featurePanelTab', 'lastRunInfo', 'zoom', 'canvasPan', 'displayedResultMetadata'
+  'featurePanelTab', 'lastRunInfo', 'zoom', 'canvasPan', 'displayedResultMetadata', 'activeDrawing',
+  // What Load reports and the Result artifacts it restores.
+  'errorLog', 'comparisonWarnings', 'annotationWarnings', 'featureIdentityNotices', 'originalLegendOrder',
+  'originalLegendColors', 'originalSvgStroke', 'matchSequenceRegistry', 'pairwiseMatchFactors', 'featureOrthogroupIndex',
+  'linearReorderNotice', 'circularRecordDiscovery', 'suppressCircularMultiRecordDefaults', 'featureEditRemovalCount',
+  'generationFailureRecovery', 'svgContent'
 ];
 const stateAreas = () => {
   const areas = {};
