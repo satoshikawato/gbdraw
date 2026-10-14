@@ -21,11 +21,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
+from typing import cast
+
 import pytest
 
+from gbdraw.api.request_render import DiagramRequest
+from tests.utils import render_stage_equivalence
 from tests.utils.render_stage_equivalence import (
     UNIVERSE_MARKS,
     CASES,
+    CapturedRequest,
     EquivalenceHarness,
     Placeholders,
     StepResult,
@@ -36,6 +41,7 @@ from tests.utils.render_stage_equivalence import (
     matrix_steps,
     matrix_variants,
     random_walk,
+    render_captured,
     run_chain,
     synthetic_record,
     write_depth_table,
@@ -49,7 +55,7 @@ pytestmark = pytest.mark.circular
 _BASE = ("--labels", "out", "--gc", "--skew", "-l", "right")
 
 # Chains: one variant per option on C1, named options on C2; the first variant of each.
-# C2-named takes 37 s (a C2 render is 13 s), so it runs with the universe.
+# C2-named takes about 20 s (a C2 render is about 6 s), so it runs with the universe.
 _CHAINS = {
     "C1-fast": ("C1", None),
     "C2-named": ("C2", ("label_table",)),
@@ -82,6 +88,28 @@ def chain(
         variants = matrix_variants(case, option_ids=option_ids, first_variant_only=True, include_slow=False)
     harness = EquivalenceHarness("circular", tmp_path_factory.mktemp(f"chain-{request.param}"))
     return run_chain(harness, matrix_steps(case, placeholders, variants))
+
+
+def test_the_case_base_draws(chain: list[StepResult]) -> None:
+    """A base that ends in an error checks only that warm and cold fail alike (OV-706)."""
+
+    assert chain[0].cold.error is None, f"{chain[0].label}: {chain[0].cold.error}"
+
+
+def test_the_harness_renders_without_the_label_fit_warning_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The search is bounded by wall-clock time, so its renders would depend on machine load (OV-705)."""
+
+    seen: dict[str, object] = {}
+
+    def stop(request: object, **kwargs: object) -> None:
+        seen.update(kwargs)
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(render_stage_equivalence, "render_request", stop)
+    captured = CapturedRequest("circular", cast(DiagramRequest, None), None, ())
+    outcome = render_captured(captured, None)
+    assert outcome.error == ("RuntimeError", "stop")
+    assert seen.get("label_fit_warn_search_seconds") == 0.0
 
 
 def test_matrix_warm_equals_cold(chain: list[StepResult]) -> None:

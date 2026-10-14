@@ -237,10 +237,14 @@ def _reply(
     captured: CapturedRequest,
     diagnostics: dict[str, object] | None,
 ) -> JsonValue:
+    # No label-fit warning search (as the Web): it is bounded by wall-clock
+    # time, so the number of verify renders, and the stages they build, would
+    # depend on machine load (OV-705).
     rendered = render_request(
         captured.request,
         artifacts=captured.artifacts,
         include_feature_catalog=True,
+        label_fit_warn_search_seconds=0.0,
     )
     items: tuple[RequestRenderResult, ...] = (
         rendered.items if isinstance(rendered, CircularBatchRenderResult) else (rendered,)
@@ -688,10 +692,12 @@ CASES: Mapping[str, Case] = {
     "C1": Case("C1", "circular", (
         "--gbk", "{T}/HmmtDNA.gbk", "--labels", "out", "-l", "right", *_TITLES,
         "--plot_title_position", "top", "--gc", "--skew"), _hm_tables()),
+    # C2 resolves overlaps: without it its embedded labels do not fit and the
+    # base ends in LabelsDoNotFitError (OV-706).
     "C2": Case("C2", "circular", (
         "--gbk", "{T}/HmmtDNA.gbk", "{T}/MERS-CoV.gbk", "{T}/NC_001416.gb", "--multi_record_canvas",
         "--labels", "out", "-l", "right", *_TITLES, "--plot_title_position", "top",
-        "--gc", "--skew"), _hm_tables()),
+        "--gc", "--skew", "--resolve_overlaps"), _hm_tables()),
     "C3": Case("C3", "circular", (
         "--gbk", "{E}/MjeNMV.gb", "--labels", "out", "-l", "right", *_TITLES,
         "--plot_title_position", "top", "--gc", "--skew",
@@ -793,7 +799,7 @@ UNIVERSE: tuple[OptionSpec, ...] = (
     _opt("legend_box_size", _CL, ["--legend_box_size", "10"], ["--legend_box_size", "50"]),
     _opt("legend_font_size", _CL, ["--legend_font_size", "10"], ["--legend_font_size", "36"]),
     _opt("separate_strands", _CL, ["--separate_strands"]),
-    _opt("resolve_overlaps", _CL, ["--resolve_overlaps"]),
+    _opt("resolve_overlaps", _CL, ["--resolve_overlaps"], cases=["C1", "C3", "L1", "L2", "L3"]),
     _opt("feature_overlap_tolerance_bp", _CL, ["--feature_overlap_tolerance_bp", "200"],
          pre=["--resolve_overlaps"]),
     _opt("label_rendering", _CL, ["--label_rendering", "embedded_only"],
@@ -1167,17 +1173,19 @@ def random_walk(
 
 # One cold render per case, in seconds, measured 2026-10-14 on the 32-core
 # development machine (load average 2.5-6; a single render ran within 15% of
-# that at a load average of 8-10). A step renders twice: warm and cold in a
-# chain, or the variant and the base again in the expected-builds test.
-RENDER_SECONDS: Mapping[str, float] = {"C1": 0.5, "C2": 13.0, "C3": 1.3, "L1": 0.2, "L2": 1.3, "L3": 1.4}
+# that at a load average of 8-10; C2 on its ``--resolve_overlaps`` base, six
+# renders at once, T/logs/pr4/c2-variants-2a74.log). A step renders twice:
+# warm and cold in a chain, or the variant and the base again in the
+# expected-builds test.
+RENDER_SECONDS: Mapping[str, float] = {"C1": 0.5, "C2": 6.0, "C3": 1.3, "L1": 0.2, "L2": 1.3, "L3": 1.4}
 # Cold renders far above their case: the slower label settings. A heavy step
 # counts three cold renders; the third is a margin for machine load, which can
 # slow a long render by 25-70 % (a warm render is no slower than a cold one).
 HEAVY_RENDER_SECONDS: Mapping[tuple[str, str, str], float] = {
     ("C1", "label_font_size", "--label_font_size 30"): 21.0,
-    ("C2", "circular_label_spacing", "--circular_label_spacing 40"): 25.0,
-    ("C2", "inner_label_x_radius_offset", "--inner_label_x_radius_offset 1.3"): 23.0,
-    ("C2", "inner_label_y_radius_offset", "--inner_label_y_radius_offset 1.3"): 23.0,
+    ("C2", "circular_track_order", "--circular_track_order features,ticks,gc_skew,gc_content"): 33.0,
+    ("C2", "circular_track_slot", "--circular_track_slot gc_content:dinucleotide_content@w=60px"): 25.0,
+    ("C2", "circular_track_table (adds AT skew)", "--circular_track_table {IN}/tracks_hmmt.tsv"): 23.0,
     # C3: half a warm-and-cold step under pytest at a load average of 1.
     ("C3", "labels", "--labels both"): 5.0,
     ("C3", "outer_label_y_radius_offset", "--outer_label_y_radius_offset 0.8"): 7.0,
@@ -1187,15 +1195,16 @@ HEAVY_RENDER_SECONDS: Mapping[tuple[str, str, str], float] = {
     ("C3", "inner_label_y_radius_offset", "--inner_label_y_radius_offset 1.3"): 7.0,
 }
 # C2 variants left out of the universe. Each ends in LabelsDoNotFitError, so the
-# test only checks that warm and cold raise the same error; together they cost
-# about 47 min (cold 68-421 s each at low load). The cause is the slow failing
-# label fit, bug OV-701, which dev has too.
+# test only checks that warm and cold raise the same error; cold 40-252 s each
+# (T/logs/pr4/c2-variants-2a74.log). The cause is the slow failing label fit,
+# bug OV-701, which dev has too.
 LABEL_FIT_FAILURES: frozenset[tuple[str, str, str]] = frozenset({
     ("C2", "label_font_size", "--label_font_size 30"),
-    ("C2", "feature_overlap_tolerance_bp", "--feature_overlap_tolerance_bp 200"),
-    ("C2", "resolve_overlaps", "--resolve_overlaps"),
+    ("C2", "label_rendering", "--label_rendering external_only"),
+    ("C2", "circular_label_spacing", "--circular_label_spacing 40"),
+    ("C2", "outer_label_x_radius_offset", "--outer_label_x_radius_offset 0.8"),
     ("C2", "outer_label_y_radius_offset", "--outer_label_y_radius_offset 0.8"),
-    ("C2", "features", "-k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region,gene"),
+    ("C2", "inner_label_y_radius_offset", "--inner_label_y_radius_offset 1.3"),
 })
 # The estimated time of one chunk.
 CHUNK_BUDGET_SECONDS = 120.0
