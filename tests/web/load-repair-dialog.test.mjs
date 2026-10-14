@@ -410,6 +410,33 @@ test('a legacy configuration lists a setting its reader cannot restore (B48)', a
   ]);
 });
 
+// B47: a group name edit of a group the Session does not hold is dropped
+// and listed. B46: a cache entry Load does not keep is dropped without a row
+// (Q1): the next comparison computes it again.
+test('a similarity-group edit of an unknown group is listed; a dropped cache entry is not (B46, B47)', async () => {
+  const session = fixture('BGC0000708-BGC0000713.v39.gbdraw-session.json.gz');
+  session.orthogroupState.orthogroupNameOverrides = { [session.orthogroupState.groups[0].id]: 'Kept', ghost: 'Gone' };
+  // One derived entry more than the cache keeps (16): the oldest is dropped.
+  const [derived] = session.losatDerivedCache.entries;
+  session.losatDerivedCache.entries.push(...Array.from({ length: 16 }, (_, index) => ({ ...derived, key: `${derived.key}-${index}` })));
+  const dialogs = [];
+  const loaded = await importSession(input(session), {
+    transformLegacyResultSvg,
+    confirmLoadRepairs: async (dialog) => {
+      dialogs.push(dialog.items.filter((line) => !line.startsWith('Features: the feature information')));
+      return true;
+    }
+  });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(dialogs, [[
+    'Similarity groups: 1 name edit(s) (orthogroupState.orthogroupNameOverrides) name a group the saved Result does not have'
+      + ' and were dropped.'
+  ]]);
+  assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'cache-entry-dropped').map(({ path, count }) => [path, count]),
+    [['losatDerivedCache.entries', 1]]);
+  assert.deepEqual({ ...state.drawings.linear.orthogroupNameOverrides }, { [session.orthogroupState.groups[0].id]: 'Kept' });
+});
+
 // A History restore applies captured settings with the same readers and
 // lists nothing (only Load asks): what it installs is unchanged (R11).
 test('a History restore reads stored settings as before and asks nothing', async () => {

@@ -11,6 +11,8 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  * @typedef {'setting-replaced'
  *   | 'setting-entries-dropped'
  *   | 'pending-palette-dropped'
+ *   | 'orthogroup-edit-dropped'
+ *   | 'cache-entry-dropped'
  *   | 'feature-edit-unmatched'
  *   | 'feature-visibility-narrowed'
  *   | 'hash-selector-unmapped'
@@ -69,10 +71,11 @@ const LINE_LIMIT = 12;
 /**
  * Codes whose values had no effect on the figure: Load drops them without a
  * dialog row (Owner answer Q1 of the Load repair receipt). A Session 46 drew
- * the later of two Legend edits of one row.
+ * the later of two Legend edits of one row; the next comparison computes a
+ * LOSAT cache entry again.
  * @type {ReadonlySet<LoadRepairCode>}
  */
-const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ (['legend-edit-overwritten-session46']));
+const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ (['legend-edit-overwritten-session46', 'cache-entry-dropped']));
 
 /** @param {string} value @param {number} limit */
 const bounded = (value, limit) => (value.length > limit ? `${value.slice(0, limit - 1)}…` : value);
@@ -189,6 +192,11 @@ const WORDING = {
     `${table}: ${lines} lacked a required column and ${wasWere(count)} dropped.`)),
   'table-row-invalid': (repairs) => tableLines(repairs, (table, lines, count) => (
     `${table}: ${lines} had a color the table does not accept and ${wasWere(count)} dropped.`)),
+  'orthogroup-edit-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
+    `Similarity groups: ${count} ${path.endsWith('DescriptionOverrides') ? 'description' : 'name'} edit(s) (${path})`
+    + ' name a group the saved Result does not have and were dropped.')),
+  'cache-entry-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
+    `LOSAT cache: ${count} saved value(s) (${path}) could not be read and were dropped.`)),
   'feature-recovery-failed': () => [
     'Features: the feature information of the saved diagram could not be restored from this file;'
     + ' the SVG preview stays, and the next Generate restores it.'

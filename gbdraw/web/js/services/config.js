@@ -293,6 +293,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { DiagnosticContext, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ConfirmLoadRepairs, LoadRepair, Repaired } from '../utils/load-repairs.js' */
+/** @import { ProteinIdentityManifest } from './losat-cache.js' */
 /** @import { DownloadChoicePort } from './text-download.js' */
 
 // The Session document's types are generated from gbdraw/session_contract.py:
@@ -3108,6 +3109,16 @@ const serializeLosatCache = () => {
   }
 };
 
+// A saved LOSAT pair cache entry: a current entry with a key, an older
+// protein candidate (kept in its envelope), or one Load drops; the next
+// comparison computes it again (B46).
+/** @param {unknown} entry @returns {'current' | 'legacy' | 'dropped'} */
+const savedLosatCacheEntryKind = (entry) => {
+  if (classifyRawLosatCacheEntry(entry) === 'protein-legacy') return 'legacy';
+  // A current entry is an object (`isCurrentRawLosatCacheEntry`).
+  return isCurrentRawLosatCacheEntry(entry) && /** @type {{ key?: unknown }} */ (entry).key ? 'current' : 'dropped';
+};
+
 /**
  * @param {DrawingState} drawing
  * @param {unknown} entries
@@ -3128,18 +3139,9 @@ const applyLosatCache = (
 
   if (Array.isArray(entries)) {
     entries.forEach((entry, idx) => {
-      const classification = classifyRawLosatCacheEntry(entry);
-      if (classification === 'protein-legacy') {
-        legacyEntries.push(entry);
-        return;
-      }
-      if (
-        !entry ||
-        !isCurrentRawLosatCacheEntry(entry) ||
-        !entry.key
-      ) {
-        return;
-      }
+      const kind = savedLosatCacheEntryKind(entry);
+      if (kind === 'legacy') legacyEntries.push(entry);
+      if (kind !== 'current') return;
       const excludedFields = new Set([
         'key',
         'filename',
@@ -3208,59 +3210,85 @@ const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
 });
 
 /**
+ * The saved derived LOSAT cache as Load reads it: the current entries by key
+ * (the newest LOSAT_DERIVED_CACHE_LIMIT), the older evidence entries, and how
+ * many entries it drops; the next comparison computes them again (B46).
+ * @param {unknown} entries
+ * @param {{ adoptCurrent?: boolean }} [options]
+ */
+const readLosatDerivedCache = (entries, { adoptCurrent = false } = {}) => {
+  const map = new Map();
+  /** @type {unknown[]} */
+  const legacyEntries = [];
+  let dropped = 0;
+  (Array.isArray(entries) ? entries : []).forEach((entry) => {
+    if (!isLosatDerivedCacheEntry(entry)) {
+      dropped += 1;
+      return;
+    }
+    if (entry.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA) {
+      legacyEntries.push(entry);
+      return;
+    }
+    if (map.has(entry.key)) dropped += 1;
+    map.set(entry.key, {
+      schema: LOSAT_DERIVED_CACHE_SCHEMA,
+      kind: 'derived-losatp-payload',
+      idEncoding: 'runtime-handle-v1',
+      key: entry.key,
+      mode: String(entry.mode || ''),
+      payload: adoptCurrent ? entry.payload : cloneJsonData(entry.payload)
+    });
+  });
+  dropped += Math.max(0, map.size - LOSAT_DERIVED_CACHE_LIMIT);
+  pruneLosatDerivedCache(map);
+  return { map, legacyEntries, dropped };
+};
+
+/**
  * @param {unknown} entries
  * @param {unknown} [legacyEvidence]
  * @param {{ adoptCurrent?: boolean }} [options]
  */
-const applyLosatDerivedCache = (
-  entries,
-  legacyEvidence = null,
-  { adoptCurrent = false } = {}
-) => {
-  const map = new Map();
-  /** @type {unknown[]} */
-  const legacyEntries = [];
-
-  if (Array.isArray(entries)) {
-    entries.forEach((entry) => {
-      if (!isLosatDerivedCacheEntry(entry)) return;
-      if (entry.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA) {
-        legacyEntries.push(entry);
-        return;
-      }
-      map.set(entry.key, {
-        schema: LOSAT_DERIVED_CACHE_SCHEMA,
-        kind: 'derived-losatp-payload',
-        idEncoding: 'runtime-handle-v1',
-        key: entry.key,
-        mode: String(entry.mode || ''),
-        payload: adoptCurrent ? entry.payload : cloneJsonData(entry.payload)
-      });
-    });
-  }
-
-  pruneLosatDerivedCache(map);
+const applyLosatDerivedCache = (entries, legacyEvidence = null, { adoptCurrent = false } = {}) => {
+  const { map, legacyEntries } = readLosatDerivedCache(entries, { adoptCurrent });
   state.losatDerivedCache.value = map;
-  state.legacyProteinDerivedEvidence.value = normalizeLegacyDerivedEvidence(
-    legacyEvidence,
-    legacyEntries
-  );
+  state.legacyProteinDerivedEvidence.value = normalizeLegacyDerivedEvidence(legacyEvidence, legacyEntries);
 };
 
 /**
- * @param {unknown} manifest Unvalidated: `validateProteinIdentityManifest` below admits it or it is dropped.
- * @param {{ adoptCurrent?: boolean }} [options]
+ * @param {unknown} manifest Unvalidated: `validateProteinIdentityManifest` admits it or it is dropped.
+ * @param {{ adoptCurrent?: boolean, valid?: boolean }} [options] `valid`: what Load's check found.
  */
-const applyProteinIdentityManifest = (manifest, { adoptCurrent = false } = {}) => {
-  if (!validateProteinIdentityManifest(manifest)) {
+const applyProteinIdentityManifest = (manifest, { adoptCurrent = false, valid = validateProteinIdentityManifest(manifest) } = {}) => {
+  if (!valid) {
     state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
     adoptedProteinIdentityManifest = null;
     return;
   }
+  // `valid`: `validateProteinIdentityManifest` admitted it.
+  const admitted = /** @type {ProteinIdentityManifest} */ (manifest);
   state.proteinIdentityManifest.value = adoptCurrent
-    ? manifest
-    : cloneJsonData(manifest);
-  adoptedProteinIdentityManifest = adoptCurrent ? manifest : null;
+    ? admitted
+    : cloneJsonData(admitted);
+  adoptedProteinIdentityManifest = adoptCurrent ? admitted : null;
+};
+
+/** @param {unknown} groups Saved similarity groups. @returns {string[]} */
+const orthogroupIdsOf = (groups) => (Array.isArray(groups) ? groups : [])
+  .map((group) => String(group?.id || '').trim())
+  .filter(Boolean);
+
+/**
+ * The group name or description edits of the groups a state holds; an edit
+ * of another group is dropped (B47).
+ * @param {unknown} edits
+ * @param {ReadonlySet<string>} groupIds
+ */
+const orthogroupEditsOf = (edits, groupIds) => {
+  const all = Object.entries(cloneStringMap(edits));
+  const kept = all.filter(([id]) => groupIds.has(id));
+  return { value: Object.fromEntries(kept), dropped: all.length - kept.length };
 };
 
 /**
@@ -3275,9 +3303,7 @@ export const applyOrthogroupStateData = (
   const groups = legacyRecords
     ? migrateLegacyOrthogroupMembers(storedGroups, legacyRecords)
     : storedGroups;
-  const groupIds = groups
-    .map((group) => String(group?.id || '').trim())
-    .filter(Boolean);
+  const groupIds = orthogroupIdsOf(groups);
   const groupIdSet = new Set(groupIds);
   const index = catalogFeatureState?.featureOrthogroupIndex || buildOrthogroupFeatureIndex(groups);
 
@@ -3301,14 +3327,9 @@ export const applyOrthogroupStateData = (
   state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
   state.selectedOrthogroupAlignmentFeature.value = String(orthogroupState.selectedOrthogroupAlignmentFeature || '').trim();
 
-  replaceStringMap(drawing.orthogroupNameOverrides, orthogroupState.orthogroupNameOverrides);
-  replaceStringMap(drawing.orthogroupDescriptionOverrides, orthogroupState.orthogroupDescriptionOverrides);
-  Object.keys(drawing.orthogroupNameOverrides).forEach((id) => {
-    if (!groupIdSet.has(id)) delete drawing.orthogroupNameOverrides[id];
-  });
-  Object.keys(drawing.orthogroupDescriptionOverrides).forEach((id) => {
-    if (!groupIdSet.has(id)) delete drawing.orthogroupDescriptionOverrides[id];
-  });
+  replaceStringMap(drawing.orthogroupNameOverrides, orthogroupEditsOf(orthogroupState.orthogroupNameOverrides, groupIdSet).value);
+  replaceStringMap(drawing.orthogroupDescriptionOverrides,
+    orthogroupEditsOf(orthogroupState.orthogroupDescriptionOverrides, groupIdSet).value);
   if (Object.hasOwn(orthogroupState, 'orthogroupDormantOverrides')) {
     clearObject(drawing.orthogroupDormantOverrides);
     Object.assign(drawing.orthogroupDormantOverrides,
@@ -5647,6 +5668,64 @@ const importSessionDocument = async (e, options = {}) => {
         }));
       }
     }
+    // The similarity groups' state Load installs; a name or description edit
+    // of a group it does not hold is dropped and listed (B47).
+    const loadedOrthogroupState = canonicalSession
+      ? {
+          ...projectionResult.artifactState.orthogroupState,
+          ...(modeScopedSession ? {
+            orthogroupNameOverrides: modeConfigs.linear.webEdits?.orthogroupNameOverrides || {},
+            orthogroupDescriptionOverrides: modeConfigs.linear.webEdits?.orthogroupDescriptionOverrides || {}
+          } : {}),
+          ...(currentCatalogFeatureState
+            ? { groups: currentCatalogFeatureState.orthogroups }
+            : {})
+        }
+      : data.orthogroupState && typeof data.orthogroupState === 'object'
+        ? data.orthogroupState
+      : {
+          groups: Array.isArray(data.orthogroups) ? data.orthogroups : [],
+          selectedOrthogroupId: features.selectedOrthogroupId,
+          selectedOrthogroupAlignmentFeature: features.selectedOrthogroupAlignmentFeature,
+          orthogroupNameOverrides:
+            features.orthogroupNameOverrides ||
+            data.config?.webEdits?.orthogroupNameOverrides ||
+            {},
+          orthogroupDescriptionOverrides:
+            features.orthogroupDescriptionOverrides ||
+            data.config?.webEdits?.orthogroupDescriptionOverrides ||
+            {}
+      };
+    {
+      const groupIds = new Set(orthogroupIdsOf(loadedOrthogroupState.groups));
+      const editsPath = canonicalSession
+        ? (modeScopedSession ? 'modes.linear.config.webEdits' : 'orthogroupState')
+        : (isPlainObject(data.orthogroupState) ? 'orthogroupState' : 'features');
+      /** @type {['orthogroupNameOverrides' | 'orthogroupDescriptionOverrides', unknown][]} */ ([
+        ['orthogroupNameOverrides', loadedOrthogroupState.orthogroupNameOverrides],
+        ['orthogroupDescriptionOverrides', loadedOrthogroupState.orthogroupDescriptionOverrides]
+      ]).forEach(([field, edits]) => {
+        const { dropped } = orthogroupEditsOf(edits, groupIds);
+        if (dropped) repairs.push(loadRepair({ code: 'orthogroup-edit-dropped', path: `${editsPath}.${field}`, effect: 'dropped', count: dropped }));
+      });
+    }
+    // The LOSAT caches and the protein identity manifest Load drops are
+    // computed again by the next comparison: no dialog row (Q1, B46).
+    const cacheSource = canonicalSession ? projectionResult.artifactState : data;
+    const loadedProteinManifest = cacheSource.proteinIdentityManifest;
+    const loadedProteinManifestValid = validateProteinIdentityManifest(loadedProteinManifest);
+    /** @type {[string, number][]} */
+    const droppedCacheEntries = [
+      ['losatCache.entries', (Array.isArray(cacheSource.losatCache?.entries) ? cacheSource.losatCache.entries : [])
+        .filter((/** @type {unknown} */ entry) => savedLosatCacheEntryKind(entry) === 'dropped').length],
+      ['losatDerivedCache.entries', readLosatDerivedCache(cacheSource.losatDerivedCache?.entries, { adoptCurrent: true }).dropped],
+      // A manifest the file holds (the projection reads an absent one as empty).
+      ['proteinIdentityManifest', !loadedProteinManifestValid && data.proteinIdentityManifest != null
+        && !(isPlainObject(data.proteinIdentityManifest) && !Object.keys(data.proteinIdentityManifest).length) ? 1 : 0]
+    ];
+    droppedCacheEntries.forEach(([path, count]) => {
+      if (count) repairs.push(loadRepair({ code: 'cache-entry-dropped', path, effect: 'dropped', count }));
+    });
     // The top-level set, built like the other set, waits in its mode when the
     // Session opens on the other set's mode. The stash starts again with the
     // loaded Session. Its editor state is the one read above.
@@ -5829,10 +5908,9 @@ const importSessionDocument = async (e, options = {}) => {
         projectionResult.artifactState.legacyArtifacts?.proteinDerivedEvidence,
         { adoptCurrent: currentSchemaSession }
       );
-      applyProteinIdentityManifest(
-        projectionResult.artifactState.proteinIdentityManifest,
-        { adoptCurrent: currentSchemaSession }
-      );
+      applyProteinIdentityManifest(loadedProteinManifest, {
+        adoptCurrent: currentSchemaSession, valid: loadedProteinManifestValid
+      });
     } else {
       applyLosatCache(
         state.drawings.linear,
@@ -5843,7 +5921,7 @@ const importSessionDocument = async (e, options = {}) => {
         data.losatDerivedCache?.entries,
         data.legacyArtifacts?.proteinDerivedEvidence
       );
-      applyProteinIdentityManifest(data.proteinIdentityManifest);
+      applyProteinIdentityManifest(loadedProteinManifest, { valid: loadedProteinManifestValid });
     }
     if (collapsedLinearSeqs) {
       state.losatCacheInfo.value = [];
@@ -5867,32 +5945,7 @@ const importSessionDocument = async (e, options = {}) => {
     // Group names are the Linear drawing's (Session 46 `webEdits`).
     applyOrthogroupStateData(
       state.drawings.linear,
-      canonicalSession
-        ? {
-            ...projectionResult.artifactState.orthogroupState,
-            ...(modeScopedSession ? {
-              orthogroupNameOverrides: modeConfigs.linear.webEdits?.orthogroupNameOverrides || {},
-              orthogroupDescriptionOverrides: modeConfigs.linear.webEdits?.orthogroupDescriptionOverrides || {}
-            } : {}),
-            ...(currentCatalogFeatureState
-              ? { groups: currentCatalogFeatureState.orthogroups }
-              : {})
-          }
-        : data.orthogroupState && typeof data.orthogroupState === 'object'
-          ? data.orthogroupState
-        : {
-            groups: Array.isArray(data.orthogroups) ? data.orthogroups : [],
-            selectedOrthogroupId: features.selectedOrthogroupId,
-            selectedOrthogroupAlignmentFeature: features.selectedOrthogroupAlignmentFeature,
-            orthogroupNameOverrides:
-              features.orthogroupNameOverrides ||
-              data.config?.webEdits?.orthogroupNameOverrides ||
-              {},
-            orthogroupDescriptionOverrides:
-              features.orthogroupDescriptionOverrides ||
-              data.config?.webEdits?.orthogroupDescriptionOverrides ||
-              {}
-        },
+      loadedOrthogroupState,
       {
         legacyRecords: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION ? data.renderRequest?.records : null,
         catalogFeatureState: currentCatalogFeatureState
