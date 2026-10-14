@@ -52,6 +52,7 @@ export const SETTINGS_SECTIONS = catalog([
   { key: 'pairwise-comparisons', title: 'Pairwise Comparisons', icon: 'ph-arrows-left-right', short: 'Compare', modes: ['circular'] },
   { key: 'preserved-settings', dock: 'input-genomes', modes: BOTH_MODES },
   { key: 'layout', title: 'Layout', icon: 'ph-layout', short: 'Layout', modes: BOTH_MODES },
+  { key: 'font', title: 'Font', icon: 'ph-text-aa', short: 'Font', modes: BOTH_MODES },
   { key: 'titles', title: 'Titles & Record Labels', icon: 'ph-textbox', short: 'Titles', modes: BOTH_MODES },
   { key: 'legend', title: 'Legend', icon: 'ph-list-bullets', short: 'Legend', modes: BOTH_MODES },
   { key: 'colors', title: 'Colors', icon: 'ph-palette', short: 'Colors', modes: BOTH_MODES },

@@ -20,6 +20,7 @@ from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure, label_fit_mode
+from gbdraw.web_support.export_fonts import pdf_fonts_json, svg_font_embedding_json
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -29,18 +30,6 @@ _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
 # The last figure of each mode drawn with crossing label leaders, for the rows
 # the label fit dialog computes later (OD-F14).
 _WEB_LABEL_FIT_SEARCHES = LabelFitRowSearches()
-
-def read_pdf_font(filename):
-    import base64
-    from importlib.resources import files
-    allowed = {
-        f"Liberation{family}-{style}.ttf"
-        for family in ("Sans", "Serif", "Mono")
-        for style in ("Regular", "Bold", "Italic", "BoldItalic")
-    }
-    if filename not in allowed:
-        raise ValueError("Unknown PDF font")
-    return json.dumps({"base64": base64.b64encode(files("gbdraw.data").joinpath(filename).read_bytes()).decode("ascii")})
 
 def _web_losatp_cache_by_name(name):
     if name == "filtered":
@@ -1675,6 +1664,34 @@ def list_gff_fasta_records(gff_path, fasta_path):
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='listGffFastaRecords', stage="helper")})
 
+def register_web_fonts_json(fonts_json="[]"):
+    """Register font files written into the Worker's file system (custom fonts, PR-2).
+
+    Each entry is {identity, path}; the reply lists, in order, what Python read
+    from each file, the stored font-family list of its family
+    (font_family_list_for), and the face's metrics table for the Web Legend
+    layout. A call registers all of its files or none of them.
+    """
+    try:
+        from gbdraw.core.fonts import font_family_list_for, register_font_file_batch
+        from gbdraw.core.text import font_metrics_table
+        entries = json.loads(str(fonts_json))
+        # All or none: every file is checked before the registry changes (S5).
+        fonts = register_font_file_batch([str(entry["path"]) for entry in entries])
+        registered = [{
+            "identity": str(entry["identity"]),
+            "family": font.family,
+            "fontFamily": font_family_list_for(font.family, font.generic),
+            "weight": font.weight,
+            "italic": font.italic,
+            "generic": font.generic,
+            "measurementName": font.face.measurement_name,
+            "metrics": font_metrics_table(font.face),
+        } for entry, font in zip(entries, fonts)]
+        return json.dumps({"fonts": registered})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='registerFonts', stage="helper")})
+
 def measure_legend_text_json(caption, font_family="Arial", font_size=14, config_json="null", overrides_json="{}"):
     """Measure one legend caption at the DPI the renderer resolves from the request config."""
     try:
@@ -1725,7 +1742,8 @@ _WEB_JSON_HELPERS = {
     "compute_label_fit_row_json": (compute_label_fit_row_json, "computeLabelFitRow"),
     "resolve_similarity_alignment_json": (resolve_similarity_alignment_json, "resolveSimilarityAlignment"),
     "evaluate_rules_json": (evaluate_rules_json, "evaluateRules"),
-    "read_pdf_font": (read_pdf_font, "readPdfFont"),
+    "svg_font_embedding_json": (svg_font_embedding_json, "embedFonts"),
+    "pdf_fonts_json": (pdf_fonts_json, "pdfFonts"),
     "validate_web_config_overrides_json": (validate_web_config_overrides_json, "validateConfigOverrides"),
     "extract_first_fasta": (extract_first_fasta, "extractFirstFasta"),
     "extract_cds_protein_fasta": (extract_cds_protein_fasta, "extractCdsProteinFasta"),
@@ -1740,6 +1758,7 @@ _WEB_JSON_HELPERS = {
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
     "read_feature_override_table_json": (read_feature_override_table_json, "readFeatureOverrideTable"),
     "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),
+    "register_web_fonts_json": (register_web_fonts_json, "registerFonts"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),
     "extract_features_from_gff_fasta": (extract_features_from_gff_fasta, "feature-extraction"),
 }

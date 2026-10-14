@@ -1074,6 +1074,7 @@ const CONFIG_VALUE_OPTIONS = Object.freeze({
   'objects.features.arrow_geometry.shaft_width_ratio': '--arrow_shaft_width_ratio',
   'objects.features.block_stroke_color': '--block_stroke_color',
   'objects.features.line_stroke_color': '--line_stroke_color',
+  'objects.text.font_family': '--font_family',
   'labels.rendering': '--label_rendering',
   'objects.gc_content.mode': '--gc_content_mode',
   'objects.gc_content.min_percent': '--gc_content_min_percent',

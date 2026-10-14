@@ -23,6 +23,42 @@ write-up of a release.
   compatibility, and installation availability. Publication dates are recorded
   in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
 
+- Fonts (CLI, Python, web app): diagram text can use any font, including a
+  font installed on the computer or loaded from a file, and gbdraw measures
+  labels, the legend, and titles with that font instead of Liberation Sans
+  (#1046, #1058).
+  - CLI: `--font_family` takes a family name or a CSS font-family list.
+    `--font_file PATH` (repeatable; `.ttf`, `.otf`, `.ttc`, `.otc`) adds a font
+    file, also with `--session` and `gbdraw render --session`. In Python, set
+    `objects.text.font_family` through `config_overrides`. When the first
+    family of the list is found nowhere, the text is drawn in the next family
+    found, else the nearest Liberation font, with a warning.
+  - SVG and Interactive SVG embed the characters they use of a font that is
+    not bundled with gbdraw, as `@font-face` data in
+    `<defs id="gbdraw-embedded-fonts">`. A font whose license forbids
+    embedding, or allows only bitmaps, is named in a warning and not embedded.
+    `--no_font_embedding`, `embed_fonts=False`, and the web app's **Embed font
+    in exported SVG** keep only the name in SVG and Interactive SVG.
+  - PNG draws the chosen font whatever the embedding setting and the font's
+    license. PDF, EPS, and PS never contain a font whose license forbids
+    embedding, allows only bitmaps, or forbids subsetting; that text is drawn
+    in the nearest Liberation font, and a warning (CLI, Python) or notice (web
+    app) names both. From the command line and Python, PNG, PDF, EPS, and PS
+    draw a `--font_file` font that is not installed where cairo uses
+    fontconfig, as on Linux.
+  - Web app: a new **Font** section offers Liberation Sans, Serif, and Mono,
+    **Load font file…**, and **Choose installed font…** (Chrome and Edge).
+    SVG and Interactive SVG exports embed the font, and PNG export draws it.
+    PDF export embeds the characters it draws, converting OpenType CFF
+    outlines to TrueType. In PDF export, a font that cannot be embedded is
+    drawn in the nearest Liberation font, and a notice names both.
+  - Sessions keep the font name, not the file; saving warns about it. Loading a
+    Session whose font is not available asks to load the font file, use an
+    installed font, or load with the nearest font, which keeps the name for
+    later.
+  - Fixes: OpenType CFF fonts are measured by their glyph outlines, and a font
+    without a Windows Unicode cmap no longer stops measurement (OV-680..683;
+    PD-OI-092, PD-OI-093, PD-OI-098).
 - Legend names (CLI, Python, web app): legend rows that share a name follow
   one rule, and no legend name carries a color ID. Rows with the same name and
   the same swatch (fill and line) are one row. When two or more rows with the

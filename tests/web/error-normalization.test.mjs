@@ -38,6 +38,10 @@ const selectedPairs = normalizeUserFacingError({ code: 'COMPARISON_INPUT', stage
   context: { reason: 'SELECTED_PAIRS_NEED_PAIRWISE' } });
 assert.match(selectedPairs.summary, / Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs\. Choose Run LOSAT for all pairs, or choose Pairwise matches\.$/);
 assert.doesNotMatch(selectedPairs.summary, /does not run LOSAT/);
+// A PNG export never names the SVG embedding opt-out, which does not change PNG.
+const pngFont = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'helper', context: { reason: 'FONT_RASTER' } });
+assert.match(pngFont.summary, /Choose another font/);
+assert.doesNotMatch(pngFont.summary, /Embed font/);
 assert.equal(normalized.context.row, 2);
 assert.deepEqual(normalized.actions, ['edit-pattern', 'retry']);
 assert.doesNotMatch(JSON.stringify(normalized), /PRIVATE_SENTINEL/);

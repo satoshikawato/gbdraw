@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { WebFontEntry } from './services/font-store.js' */
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectSpecificColorQualifierSuggestions } from './services/feature-selector.js';
 import {
@@ -321,6 +322,12 @@ const circularRecordDiscovery = reactive({
   pairedFile: null,
   canonicalRecordIdentities: []
 });
+
+// The fonts registered in this page (custom fonts D-01, services/font-store.js):
+// frozen entries with their bytes, never saved (D-02) and not in History.
+/** @type {WebFontEntry[]} */
+const loadedFontsInitial = [];
+const loadedFonts = ref(loadedFontsInitial);
 
 // Color & Filter State
 const paletteDefinitions = ref({});
@@ -1168,6 +1175,7 @@ export const state = {
   paletteDefinitions,
   paletteNames,
   paletteInstantPreviewEnabled,
+  loadedFonts,
   losatExecution,
   richFeaturePopup,
   appliedPaletteName,

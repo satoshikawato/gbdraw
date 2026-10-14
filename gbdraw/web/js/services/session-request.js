@@ -691,7 +691,8 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   outerLabelYRadiusOffset: 'labels.unified_adjustment.outer_labels.y_radius_offset',
   innerLabelXRadiusOffset: 'labels.unified_adjustment.inner_labels.x_radius_offset',
   innerLabelYRadiusOffset: 'labels.unified_adjustment.inner_labels.y_radius_offset',
-  pairwiseMatchStyle: 'objects.blast_match.style'
+  pairwiseMatchStyle: 'objects.blast_match.style',
+  fontFamily: 'objects.text.font_family'
 });
 
 const SHARED_LENGTH_CONFIG_OVERRIDE_PATHS = Object.freeze({
@@ -874,6 +875,31 @@ export const draftFieldsForConfigValues = (values, mode, adv) => {
   }
   if (Object.keys(formFields).length + Object.keys(advFields).length === 0) throw unknown();
   return { form: formFields, adv: advFields };
+};
+
+// The font leaf that a Session kept as a GUI-unmanaged preserved override
+// (PD-OI-009) before the GUI had a Font setting. A reader moves it into
+// `adv.font_family`, so a preserved override is never a path the GUI manages.
+const PROMOTED_FONT_FAMILY_PATH = CONFIG_OVERRIDE_PATHS.fontFamily;
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+const isPlainRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * A stored draft (`config` of a Session 27-44, or of a Session 46 slice) with
+ * the preserved font override moved into the Font setting. A font the draft
+ * already holds wins; the preserved leaf is dropped either way.
+ * @template T
+ * @param {T} config
+ * @returns {T}
+ */
+export const adoptPromotedPreservedOverrides = (config) => {
+  if (!isPlainRecord(config) || !isPlainRecord(config.unmanagedConfigOverrides)
+    || !Object.hasOwn(config.unmanagedConfigOverrides, PROMOTED_FONT_FAMILY_PATH)) return config;
+  const { [PROMOTED_FONT_FAMILY_PATH]: fontFamily, ...preserved } = config.unmanagedConfigOverrides;
+  const adv = isPlainRecord(config.adv) ? { ...config.adv } : {};
+  adv.font_family ??= fontFamily;
+  return /** @type {T} */ ({ ...config, adv, unmanagedConfigOverrides: preserved });
 };
 
 /** @param {string} semanticName */
@@ -1590,6 +1616,7 @@ const buildConfigOverrides = (
       normalizeArrowShaftWidthRatio(adv.arrow_shaft_width_ratio),
     [CONFIG_OVERRIDE_PATHS.blockStrokeColor]: adv.block_stroke_color || null,
     [CONFIG_OVERRIDE_PATHS.lineStrokeColor]: adv.line_stroke_color || null,
+    [CONFIG_OVERRIDE_PATHS.fontFamily]: adv.font_family || null,
     [CONFIG_OVERRIDE_PATHS.labelRendering]: effectiveLabelRendering(form, adv, circular, linearLabelPlacement),
     [CONFIG_OVERRIDE_PATHS.showGc]: circular ? !form.suppress_gc : Boolean(form.show_gc),
     [CONFIG_OVERRIDE_PATHS.showSkew]: circular
@@ -5472,6 +5499,7 @@ export const projectCanonicalSessionRequest = ({
     arrow_shaft_width_ratio: normalizeArrowShaftWidthRatio(
       overrides.arrow_shaft_width_ratio
     ),
+    font_family: overrides.font_family ?? null,
     nt: options.dinucleotide || 'GC',
     window_size: options.window ?? null,
     step_size: options.step ?? null,

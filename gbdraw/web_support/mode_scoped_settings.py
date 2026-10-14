@@ -125,6 +125,7 @@ _ADV_ROWS = _rows(
     ("feature_shapes", "both", "copy"),
     ("arrow_head_length_ratio", "both", "copy"),
     ("arrow_shaft_width_ratio", "both", "copy"),
+    ("font_family", "both", "copy"),
     ("window_size", "both", "copy"),
     ("step_size", "both", "copy"),
     ("nt", "both", "copy"),

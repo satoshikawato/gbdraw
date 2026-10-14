@@ -307,6 +307,29 @@ rollback failed. After a failed rollback, the message does not claim that the
 previous state was restored. Canceling an operation, replacing it with a newer one, or receiving a late
 answer from an old one shows no new failure and does not apply the old result. Align failures keep the review choices and the last successful Result, so you can correct the choices and select **Apply** again.
 
+### Font
+
+**Font** is its own section after Layout. It sets the font of all diagram text.
+Circular and Linear each have their own setting, which applies on Generate and
+follows Undo, Redo, and **Reset Settings** like other settings. It offers
+**Liberation Sans (default)**, **Liberation Serif**, **Liberation Mono**, the
+fonts loaded in this page, **Load font file…** (`.ttf`, `.otf`), and, only in
+Chrome and Edge, **Choose installed font…** (the browser asks permission; search
+by name). A loaded font lasts until the page is closed. gbdraw measures labels,
+the legend, and titles with the chosen font, and the preview shows it.
+
+For a custom font, a note says that a saved Session keeps only its name, and the
+**Save Session** notice repeats it. The checkbox **Embed font in exported SVG**
+appears when the selected font or the font of the shown result is a custom
+font. It is on by default, is a page setting that is not saved in Sessions, and
+is not an Undo step. It applies to SVG and Interactive SVG exports, not to
+Generate. PNG export always draws the font, and PDF export embeds it whatever
+the checkbox, except a font whose license forbids it, which the PDF draws in the
+nearest Liberation font. See [Fonts](output-formats-and-export.md#fonts) for what each
+format contains and the export notices, and
+[Session fonts](session-and-request-compatibility.md#fonts) for loading a
+Session whose font is not available.
+
 ### Numeric settings
 
 Generate sends every numeric setting as you typed it. An empty field means Auto

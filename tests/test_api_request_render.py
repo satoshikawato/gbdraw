@@ -1382,6 +1382,7 @@ def test_render_request_passes_output_policy_and_returns_existing_paths(
             output_directory=tmp_path,
             formats=("svg", "interactive_svg"),
             overwrite=True,
+            embed_fonts=False,
         ),
     )
     records = (_seqrecord("a"),)
@@ -1427,6 +1428,7 @@ def test_render_request_passes_output_policy_and_returns_existing_paths(
         "output_prefix": "diagram",
         "overwrite": True,
         "interactive_context": context,
+        "embed_fonts": False,
     }
 
 

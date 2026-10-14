@@ -1,0 +1,25 @@
+{
+  "purpose": "Persisted-format evidence (custom fonts PR-2, review R9): a Session written by first-parent main can keep the diagram font as a GUI-unmanaged preserved override (PD-OI-009), objects.text.font_family, in its Web draft. Load moves it into the Font setting (adoptPromotedPreservedOverrides in gbdraw/web/js/services/session-request.js).",
+  "history": "first-parent main",
+  "route": "The Python API writes a Session whose request carries config_overrides {'objects.text.font_family': \"'DejaVu Serif', serif\"}; the Web app of the same commit loads it (the path is not a GUI setting there, so it becomes a preserved override) and Save Session writes it in the draft.",
+  "pythonWriter": "save_session_document(path, CircularDiagramRequest(records=(RecordInput(source=GenBankInputSource('tests/fixtures/sessions/cli-web-mito.gb')),), options=CircularDiagramOptions(config_overrides={'objects.text.font_family': \"'DejaVu Serif', serif\"})), title='font-family-preserved'), run with PYTHONPATH=<git archive <commit> gbdraw> python -P from the repository root",
+  "webWriter": "the commit's gbdraw/web/js/services/config.js importSession then exportSession('font-family-preserved') in Node, with the commit's tests/web/helpers/session-import-node.mjs and tests/web/fake-svg-dom.mjs and the unmanaged-override validator of tests/web/session-cli-compatibility.test.mjs (Python helper validate_web_config_overrides_json of the same commit)",
+  "inputs": {
+    "tests/fixtures/sessions/cli-web-mito.gb": "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
+  },
+  "compression": "gzip -n -9",
+  "fixtures": {
+    "font-family-preserved.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "sessionVersion": 44,
+      "draft": "config.unmanagedConfigOverrides['objects.text.font_family']",
+      "decompressedSha256": "7e0f01896b50634c9b41429caa807bcca035b567a73a53d5b1a517ea60b28c24"
+    },
+    "font-family-preserved.v46.gbdraw-session.json.gz": {
+      "sourceCommit": "9839de8eec50935d9479738f50d7953eedff49fa",
+      "sessionVersion": 46,
+      "draft": "modes.circular.config.unmanagedConfigOverrides['objects.text.font_family']",
+      "decompressedSha256": "793f0a55484152b28fb24a946e6686ea6609f5465d382a1be2d0353b30f11f46"
+    }
+  }
+}

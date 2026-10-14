@@ -153,11 +153,13 @@ New requests use these dotted paths. Retired flat label names and
 | `to_svg()` | static SVG text |
 | `to_svg(interactive=True)` | interactive SVG text with supported metadata |
 | `to_bytes(format="svg")` | SVG, interactive SVG, PNG, PDF, EPS, or PS bytes |
-| `save(path, *, format=None, overwrite=False)` | writes exactly one file and returns its `Path` |
+| `save(path, *, format=None, overwrite=False, embed_fonts=True)` | writes exactly one file and returns its `Path` |
 
 For static SVG, `to_svg()` equals
 `to_bytes("svg").decode("utf-8")`. `save(..., format="svg")` writes that same
 UTF-8 payload.
+
+Set the diagram font with `config_overrides={"objects.text.font_family": "'DejaVu Serif', serif"}`. SVG and interactive SVG embed the characters they draw of a font that is not bundled with gbdraw; `embed_fonts=False` on `to_svg()`, `to_bytes()`, `save()`, or `RenderOutputRequest` keeps only the font name. See [Fonts](output-formats-and-export.md#fonts).
 
 PNG, PDF, EPS, and PS require CairoSVG. `save()` infers a known format from the path unless `format` is explicit and refuses to replace an existing file unless `overwrite=True`.
 

@@ -3197,6 +3197,7 @@ def _render_prepared_request(
             output_prefix=output.output_prefix,
             overwrite=output.overwrite,
             interactive_context=export_interactive_context,
+            embed_fonts=output.embed_fonts,
         )
     return RequestRenderResult(
         mode=prepared.mode,

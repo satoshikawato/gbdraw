@@ -24,7 +24,7 @@ test('the Legend layout owner equals Python on every Gallery Legend and its edit
   const cases = VECTORS.layout.filter((vector) => !vector.name.startsWith('synthetic'));
   const report = await evaluateWithRetainedPromise(page, async (layoutCases) => {
     const { createLegendLayoutActions } = await import('./js/app/legend/layout-actions.js');
-    const actions = createLegendLayoutActions();
+    const actions = createLegendLayoutActions({ readRegisteredFontFaces: () => [] });
     await actions.prepareLegendLayout();
     const sessionText = async (base) => {
       for (const suffix of ['.gbdraw-session.json', '.gbdraw-session.json.gz']) {
@@ -235,7 +235,7 @@ test('a wrapped Circular Legend on top is laid out as Python drew it (Z1 inputs)
   const report = await evaluateWithRetainedPromise(page, async () => {
     const { state: s } = await import('./js/state.js');
     const { createLegendLayoutActions } = await import('./js/app/legend/layout-actions.js');
-    const actions = createLegendLayoutActions();
+    const actions = createLegendLayoutActions({ readRegisteredFontFaces: () => [] });
     await actions.prepareLegendLayout();
     const content = s.results.value[s.selectedResultIndex.value].content;
     const parse = () => new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;

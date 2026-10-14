@@ -115,8 +115,13 @@ import { resetLayoutState, resetSettings as resetSettingsState } from '../servic
 import {
   DIAGRAM_HELPER_OPERATIONS,
   disposeDiagramGenerationWorker,
-  runDiagramHelperOperation
+  runDiagramHelperOperation,
+  setDiagramWorkerFontSource
 } from '../services/diagram-generation.js';
+import { createFontSettings } from './font-settings.js';
+import { customFontSaveWarnings } from '../services/session-fonts.js';
+import { requestFontFamily, webFontFamilyNames } from '../services/font-store.js';
+import { SLICE_MODES } from '../services/mode-scoped-migration.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -1657,6 +1662,29 @@ export const createAppSetup = () => {
   const noticeBanner = createNoticeBanner({ reactive });
   const askChoice = choicePrompt.ask;
   const showNotice = noticeBanner.show;
+  // The Font section: the drawing's text font and the fonts loaded in this page.
+  const fontSettings = createFontSettings({
+    state,
+    runUndoable: history.runUndoable,
+    registerFontsInWorker: async (fonts) => (await runDiagramHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.REGISTER_FONTS, { fonts }
+    )).result,
+    askChoice,
+    committedFontFamily: () => requestFontFamily(getCommittedCanonicalRenderRequest())
+  });
+  // A new diagram Worker registers the page's fonts, and a Generate names
+  // those it uses; a font the new Worker could not register again is named
+  // (OV-686), and loading it again registers it again (OV-740).
+  setDiagramWorkerFontSource({
+    readFonts: () => state.loadedFonts.value,
+    onFontsLost: (lost) => {
+      fontSettings.markFontsLost(lost.map((font) => font.identity));
+      showNotice({
+        text: 'Fonts loaded in this page could not be prepared again for drawing. Load them again in Font, or choose another font.',
+        items: lost.map((font) => font.label)
+      });
+    }
+  });
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor,
@@ -1988,6 +2016,7 @@ export const createAppSetup = () => {
     disposePanZoom();
     setUnmanagedConfigOverrideValidator(null);
     setMainSessionComparisonFrameConverter(null);
+    setDiagramWorkerFontSource(null);
     disposeSessionOperations();
     disposeDiagramGenerationWorker();
   });
@@ -3463,6 +3492,9 @@ export const createAppSetup = () => {
   /** @param {SessionFileInput} event */
   const loadSessionFromFile = (event) => importSessionFromFile(event, {
     availability: sessionSaveLoadAvailability,
+    // Before the Session replaces the current one: a font it names that this
+    // page cannot draw asks first (receipt 〔読み込むとき〕); Cancel loads nothing.
+    confirmSessionFonts: fontSettings.confirmSessionFonts,
     transformLegacyResultSvg,
     beforeImport: async () => {
       await nextTick();
@@ -5533,13 +5565,26 @@ export const createAppSetup = () => {
       if (typeof exportMethod !== 'function') {
         throw new Error('The export service did not provide the requested action.');
       }
-      const result = await exportMethod(snapshot, {
-        loadPdfFont: async (filename) => {
-          const result = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT, { filename });
-          return result.result.base64;
-        }
-      });
+      // Custom fonts in exports (D-05, D-13): the Worker holds the fonts of
+      // this page, so only a page with a loaded font embeds. SVG and
+      // Interactive SVG follow Embed font in exported SVG; a PNG always draws
+      // with the fonts, and a PDF always registers the faces its text uses.
+      /** @type {import('../services/export.js').ExportFontPorts} */
+      const fontPorts = {
+        embedFonts: state.loadedFonts.value.length > 0
+          ? async (svg, kind) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS, { svg, kind })).result
+          : null,
+        embedInSvg: fontSettings.embedInExports.value,
+        resolvePdfFonts: async (runs, known) => (
+          await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PDF_FONTS, { runs, known })
+        ).result
+      };
+      /** @type {import('../services/export.js').ExportOutcome} */
+      const result = await exportMethod(snapshot, fontPorts);
       if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
+      if (result.fontWarnings.length > 0) {
+        showNotice({ text: `Exported ${result.filename}. Find it in your browser's downloads.`, items: result.fontWarnings });
+      }
       return result;
     } catch (error) {
       const normalized = normalizeUserFacingError(error, { operation, stage: 'export-capture' });
@@ -5640,7 +5685,19 @@ export const createAppSetup = () => {
     // The notice names the file the download started.
     onSaved: (/** @type {{ filename: string }} */ { filename }) => {
       history.markSavePoint();
-      showNotice({ text: `Session saved: ${filename}. Find it in your browser's downloads.` });
+      // D-02: a font gbdraw does not bundle is saved by name only (receipt 〔警告〕).
+      showNotice({
+        text: `Session saved: ${filename}. Find it in your browser's downloads.`,
+        // Each drawing's font, and the font of the shown Result, whose committed
+        // request the Session saves too (OV-742).
+        items: customFontSaveWarnings(
+          [
+            ...SLICE_MODES.map((drawingMode) => state.drawings[drawingMode].adv.font_family),
+            requestFontFamily(getCommittedCanonicalRenderRequest())
+          ],
+          webFontFamilyNames(state.loadedFonts.value)
+        )
+      });
     }
   });
 
@@ -6507,6 +6564,7 @@ export const createAppSetup = () => {
   });
 
   return {
+    fontSettings,
     defaultColorGroups,
     recordDisplayControls,
     featureRecordRotationDraft: featureRecordRotation.draft,

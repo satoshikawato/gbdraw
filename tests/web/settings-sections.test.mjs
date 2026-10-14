@@ -18,12 +18,12 @@ const MODES = ['circular', 'linear'];
 
 test('the stacked row lists the sections of each mode in card order', () => {
   assert.deepEqual(settingsEntriesOf('circular', 'stacked').map((section) => section.title), [
-    'Input Genomes', 'Region Annotations', 'Pairwise Comparisons', 'Layout', 'Titles & Record Labels', 'Legend',
+    'Input Genomes', 'Region Annotations', 'Pairwise Comparisons', 'Layout', 'Font', 'Titles & Record Labels', 'Legend',
     'Colors', 'Features', 'Labels', 'Axis & Scale', 'Dinucleotide content/skew'
   ]);
   assert.deepEqual(settingsEntriesOf('linear', 'stacked').map((section) => section.title), [
     'Input Genomes', 'Comparison', 'Advanced comparison and layout', 'Region Annotations', 'Layout',
-    'Titles & Record Labels', 'Legend', 'Colors', 'Features', 'Labels', 'Axis & Scale', 'Dinucleotide content/skew'
+    'Font', 'Titles & Record Labels', 'Legend', 'Colors', 'Features', 'Labels', 'Axis & Scale', 'Dinucleotide content/skew'
   ]);
   assert.equal(new Set(keys).size, keys.length, 'section keys are unique');
   for (const mode of MODES) {
@@ -37,11 +37,11 @@ test('the stacked row lists the sections of each mode in card order', () => {
 
 test('the rail lists the same entries under short names, with About & Citation last', () => {
   assert.deepEqual(settingsEntriesOf('circular', 'rail').map((section) => section.short), [
-    'Input', 'Regions', 'Compare', 'Layout', 'Titles', 'Legend', 'Colors', 'Features', 'Labels', 'Axis',
+    'Input', 'Regions', 'Compare', 'Layout', 'Font', 'Titles', 'Legend', 'Colors', 'Features', 'Labels', 'Axis',
     'GC / skew', 'About'
   ]);
   assert.deepEqual(settingsEntriesOf('linear', 'rail').map((section) => section.short), [
-    'Input', 'Compare', 'Advanced', 'Regions', 'Layout', 'Titles', 'Legend', 'Colors', 'Features', 'Labels',
+    'Input', 'Compare', 'Advanced', 'Regions', 'Layout', 'Font', 'Titles', 'Legend', 'Colors', 'Features', 'Labels',
     'Axis', 'GC / skew', 'About'
   ]);
   for (const mode of MODES) {

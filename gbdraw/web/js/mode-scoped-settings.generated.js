@@ -105,6 +105,7 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "feature_shapes"},
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "arrow_head_length_ratio"},
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "arrow_shaft_width_ratio"},
+    {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "font_family"},
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "window_size"},
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "step_size"},
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "nt"},

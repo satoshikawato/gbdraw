@@ -29,6 +29,7 @@ from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
 )
+from gbdraw.session import with_request_output
 from gbdraw.session_request_codec import decode_canonical_request
 from gbdraw.session_io import materialize_embedded_file, safe_embedded_filename
 from gbdraw.web_support.feature_catalog import (
@@ -179,10 +180,16 @@ def _render_canonical_web_request(
     output_root = Path(output_directory)
     output_root.mkdir(parents=True, exist_ok=True)
     with _web_render_diagnostic_phase(diagnostics, "decode"):
-        request = decode_canonical_request(
-            payload,
-            resource_paths=resource_paths,
-            output_directory=output_root,
+        # The preview is not an export: the page shows the fonts it loaded, and
+        # a Session keeps the preview without font data (D-02). The Web export
+        # adds the fonts itself (gbdraw.render.font_embedding).
+        request = with_request_output(
+            decode_canonical_request(
+                payload,
+                resource_paths=resource_paths,
+                output_directory=output_root,
+            ),
+            embed_fonts=False,
         )
     with _web_render_diagnostic_phase(diagnostics, "renderRequest"):
         try:

@@ -7,6 +7,12 @@ same font facts that ``gbdraw.core.text.get_text_bbox_size_pixels`` reads, so
 this module records them for the bundled faces with
 ``gbdraw.core.text.font_metrics_table``, which the Web also calls for a
 registered font.
+
+It also writes the data of Python's font-family rules
+(``gbdraw.core.fonts.font_family_rules``) for the Web port of
+``resolve_font_family`` (``gbdraw/web/js/services/font-families.js``), and the
+vectors that pin that port and the Legend's face resolution to Python
+(``tests/fixtures/font_family_resolution_vectors.json``).
 """
 
 from __future__ import annotations
@@ -18,6 +24,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET = REPO_ROOT / "gbdraw" / "web" / "js" / "utils" / "legend-font-metrics.generated.js"
+RULES_TARGET = REPO_ROOT / "gbdraw" / "web" / "js" / "utils" / "font-family-rules.generated.js"
+VECTORS_TARGET = REPO_ROOT / "tests" / "fixtures" / "font_family_resolution_vectors.json"
 sys.path.insert(0, str(REPO_ROOT))
 
 from gbdraw.core import fonts as gbdraw_fonts  # noqa: E402
@@ -74,7 +82,6 @@ def render_legend_font_metrics_module() -> str:
             f"      kerning: {_wrapped(face['kerning'], '      ')}\n"
             "    }"
         )
-    aliases = json.dumps(dict(sorted(gbdraw_fonts._BUNDLED_FONT_FAMILY_ALIASES.items())), indent=2)
     bundled = json.dumps(sorted(paths), indent=2)
     return (
         "// @ts-check\n"
@@ -95,14 +102,12 @@ def render_legend_font_metrics_module() -> str:
         " */\n"
         "/**\n"
         " * @typedef {object} LegendFontMetricsTable\n"
-        " * @property {Readonly<Record<string, string>>} familyAliases Python's _BUNDLED_FONT_FAMILY_ALIASES.\n"
         " * @property {readonly string[]} bundledFaces Every bundled face stem, sorted.\n"
         " * @property {Readonly<Record<string, LegendFontFaceTable>>} faces The measured faces, by stem.\n"
         " */\n"
         "\n"
         "/** @type {LegendFontMetricsTable} */\n"
         "export const LEGEND_FONT_METRICS = Object.freeze({\n"
-        f"  familyAliases: Object.freeze({aliases.replace(chr(10), chr(10) + '  ')}),\n"
         f"  bundledFaces: Object.freeze({bundled.replace(chr(10), chr(10) + '  ')}),\n"
         "  faces: Object.freeze({\n"
         + ",\n".join(faces)
@@ -111,26 +116,179 @@ def render_legend_font_metrics_module() -> str:
     )
 
 
+# Requested lists and the families registered in the page. Each vector pins
+# the Web ports of Python's family rules for that registration state: the
+# resolution with the Web's availability (bundled + registered,
+# ``resolve_font_family_among``; ``replaced``: the families before the one
+# drawn, which the Session-load question and the CLI warning name, OV-743), the custom families
+# (``custom_font_families_among``, the rule of the custom-font warnings, D-10),
+# and the face the normal weight and style is measured with (``face``:
+# services/legend-layout.js ``resolveLegendFontFace``; a registered family wins
+# over the bundled alias of its name, review R2).
+RESOLUTION_CASES = (
+    ("'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif", ()),
+    ("'DejaVu Serif', serif", ()),
+    ("'DejaVu Serif', serif", ("DejaVu Serif",)),
+    ("\"DejaVu Serif\", serif", ("dejavu  serif",)),
+    ("DejaVuSerif, serif", ("DejaVu Serif",)),
+    ("'Noto Sans JP', sans-serif", ()),
+    ("'Comic Sans MS'", ()),
+    ("'Comic Sans MS', cursive", ()),
+    ("'Times New Roman', serif", ()),
+    ("Georgia", ()),
+    ("'Source Code Pro'", ()),
+    ("'Fira Code', 'Courier New', monospace", ()),
+    ("'Missing Serif Display'", ()),
+    ("'Missing Sans Serif'", ()),
+    ("'Gone A', 'Gone B', serif, monospace", ()),
+    ("'Gone A', 'Liberation Mono'", ()),
+    ("'Font A', 'Font B', sans-serif", ("Font B",)),
+    ("'O\\'Brien Sans', sans-serif", ()),
+    ("\"O'Brien Sans\", sans-serif", ("O'Brien Sans",)),
+    ("serif", ()),
+    ("monospace, serif", ()),
+    ("system-ui", ()),
+    ("", ()),
+    (" , ,", ()),
+    ("'Liberation Serif', serif", ()),
+    ("Courier", ()),
+    ("'Ming Light'", ()),
+    ("'Garamond Premier', fantasy", ()),
+    ("'Times New Roman', serif", ("Times New Roman",)),
+    ("Arial, sans-serif", ("arial",)),
+    ("'Liberation Serif', serif", ("Liberation Serif",)),
+    ("'Gone A', 'Courier New', monospace", ()),
+    ("'Gone A', 'Font B', 'Courier New'", ("Font B",)),
+    ("serif, 'Font B'", ("Font B",)),
+    ("sans-serif", ("sans-serif",)),
+    ("'Gone A'", ()),
+    ("'Liberation Serif', 'Gone A', serif", ()),
+    ("'Gone A', 'Font B', 'Gone C', serif", ("Font B",)),
+)
+
+
+# The (weight, italic) faces of one registered family, in registration order:
+# the face Python's CSS matching picks for the normal weight and style, which
+# the Web Legend layout ports (services/legend-layout.js `normalFace`).
+FACE_MATCH_CASES = (
+    ((400, False), (700, False)),
+    ((700, False), (400, False)),
+    ((300, False), (500, False)),
+    ((450, False), (500, False)),
+    ((300, False), (600, False)),
+    ((200, False), (300, False)),
+    ((600, False), (800, False)),
+    ((900, False),),
+    ((400, True), (700, False)),
+    ((400, True), (300, True)),
+    ((700, True), (400, True), (500, True)),
+    ((350, False), (400, True), (550, False)),
+)
+
+
+def render_font_family_rules_module() -> str:
+    rules = json.dumps(gbdraw_fonts.font_family_rules(), indent=2)
+    return (
+        "// @ts-check\n"
+        "// Generated by tools/generate_legend_font_metrics.py; do not edit manually.\n"
+        "// The data of Python's font-family rules (gbdraw.core.fonts.font_family_rules),\n"
+        "// which services/font-families.js evaluates as gbdraw.core.fonts does.\n"
+        "\n"
+        "/**\n"
+        " * @typedef {object} FontFamilyRules\n"
+        " * @property {Readonly<Record<string, string>>} bundledFamilyAliases A comparable family name\n"
+        " *   (lower case, no spaces) and the bundled face prefix it resolves to.\n"
+        " * @property {readonly string[]} genericFamilies The CSS generic keywords, never looked up as a font.\n"
+        " * @property {Readonly<Record<string, string>>} liberationFamilyByGeneric The family inserted for a generic.\n"
+        " * @property {readonly string[]} monospaceNameHints\n"
+        " * @property {readonly string[]} serifNameHints\n"
+        " * @property {string} fallbackFace The bundled face prefix of a list that resolves to nothing.\n"
+        " */\n"
+        "\n"
+        "/** @type {FontFamilyRules} */\n"
+        f"export const FONT_FAMILY_RULES = Object.freeze({rules});\n"
+    )
+
+
+def _face_resolution(requested: str, registered: tuple[str, ...]) -> str:
+    """A bundled face's measurement name, or ``registered:<family>``."""
+    names = {gbdraw_fonts._comparable_name(family) for family in registered}
+
+    def registered_face(family: str, _weight: int, _italic: bool) -> gbdraw_fonts.FontFace | None:
+        name = gbdraw_fonts._comparable_name(family)
+        return gbdraw_fonts.FontFace(path=f"registered:{family}", content_id=name) if name in names else None
+
+    family, face = gbdraw_fonts._first_resolving_family(
+        requested,
+        lambda name: gbdraw_fonts._registered_or_bundled_face(name, 400, False, registered_face),
+    )
+    if face is None:
+        face = gbdraw_fonts.resolve_font_face("")
+    assert face is not None
+    return f"registered:{family}" if face.content_id else face.measurement_name
+
+
+def render_resolution_vectors() -> str:
+    vectors = []
+    for requested, registered in RESOLUTION_CASES:
+        resolution = gbdraw_fonts.resolve_font_family_among(requested, registered)
+        vectors.append({
+            "requested": requested,
+            "registered": list(registered),
+            "effective": resolution.effective,
+            "missing": list(resolution.missing),
+            "replaced": list(resolution.replaced),
+            "custom": list(gbdraw_fonts.custom_font_families_among(requested, registered)),
+            "face": _face_resolution(requested, registered),
+        })
+    face_match = []
+    for faces in FACE_MATCH_CASES:
+        candidates = [
+            (weight, italic, gbdraw_fonts.FontFace(path=str(index)))
+            for index, (weight, italic) in enumerate(faces)
+        ]
+        chosen = gbdraw_fonts._match_face(candidates, 400, False)
+        face_match.append({
+            "faces": [{"weight": weight, "italic": italic} for weight, italic in faces],
+            "normal": next(index for index, candidate in enumerate(candidates) if candidate[2] == chosen),
+        })
+    return json.dumps(
+        {"schema": 1, "vectors": vectors, "faceMatch": face_match},
+        indent=2,
+        ensure_ascii=False,
+    ) + "\n"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Fail if the generated browser font metrics are out of sync.",
+        help="Fail if the generated browser font metrics, family rules, or vectors are out of sync.",
     )
     args = parser.parse_args()
 
-    expected = render_legend_font_metrics_module()
+    outputs = (
+        (TARGET, render_legend_font_metrics_module()),
+        (RULES_TARGET, render_font_family_rules_module()),
+        (VECTORS_TARGET, render_resolution_vectors()),
+    )
     if args.check:
-        if not TARGET.is_file() or TARGET.read_text(encoding="utf-8") != expected:
+        stale = [
+            path for path, expected in outputs
+            if not path.is_file() or path.read_text(encoding="utf-8") != expected
+        ]
+        if stale:
             print(
-                "Browser Legend font metrics are stale. "
-                "Run: python tools/generate_legend_font_metrics.py"
+                "Browser font metrics, family rules, or vectors are stale ("
+                + ", ".join(str(path.relative_to(REPO_ROOT)) for path in stale)
+                + "). Run: python tools/generate_legend_font_metrics.py"
             )
             return 1
         return 0
 
-    TARGET.write_text(expected, encoding="utf-8", newline="\n")
+    for path, expected in outputs:
+        path.write_text(expected, encoding="utf-8", newline="\n")
     return 0
 
 

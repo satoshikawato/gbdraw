@@ -16,10 +16,12 @@ import { createDiagramResourceTransport } from './diagram-resource-staging.js';
 import { markCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { normalizeLabelFitFailure } from './label-fit.js';
 /** @import { LabelFitFailure } from './label-fit.js' */
+import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
 /** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
+/** @import { WebFontEntry } from './font-store.js' */
 
 /**
  * The fingerprint of the artifact a Generate returned.
@@ -298,11 +300,57 @@ const resourceTransport = createDiagramResourceTransport();
 /** @type {ReadonlySet<string>} */
 const diagramHelperOperationNames = new Set(DIAGRAM_HELPER_OPERATION_NAMES);
 
+/**
+ * A font the replay into a new Worker could not register (OV-686).
+ * @typedef {{ identity: string, label: string }} LostWorkerFont
+ */
+
+/**
+ * Where the Worker's fonts come from: the page's font store, and who is told
+ * of a font a new Worker could not register again.
+ * @typedef {object} DiagramWorkerFontSource
+ * @property {() => readonly WebFontEntry[]} readFonts
+ * @property {(lost: readonly LostWorkerFont[]) => void} onFontsLost
+ */
+
+/** @type {DiagramWorkerFontSource} */
+const NO_FONT_SOURCE = Object.freeze({ readFonts: () => [], onFontsLost: () => {} });
+/** @type {DiagramWorkerFontSource} */
+let workerFontSource = NO_FONT_SOURCE;
+
+/**
+ * Name the fonts registered in the page (the font store's), so a new Worker
+ * registers them all at start and a Generate names those its request uses.
+ * @param {DiagramWorkerFontSource | null} source Null when the app unmounts.
+ */
+export const setDiagramWorkerFontSource = (source) => {
+  workerFontSource = source || NO_FONT_SOURCE;
+};
+
+// The store's bytes: postMessage makes the one copy the Worker needs.
+/** @param {readonly WebFontEntry[]} fonts */
+const workerFontFiles = (fonts) => fonts.map((font) => ({ identity: font.identity, label: font.label, bytes: font.bytes }));
+
+/** @param {unknown} lost @returns {LostWorkerFont[]} */
+const lostWorkerFonts = (lost) => (Array.isArray(lost) ? lost : []).map((font) => ({
+  identity: String(font?.identity || ''), label: String(font?.label || '')
+}));
+
+/**
+ * The page's fonts a canonical request's text font names.
+ * @param {unknown} request
+ */
+const requestFontIdentities = (request) => {
+  const fontFamily = requestFontFamily(request);
+  return fontFamily ? webFontIdentitiesFor(workerFontSource.readFonts(), fontFamily) : [];
+};
+
 /** @param {string} id */
 const buildInitPayload = (id) => {
   return {
     type: 'init',
     id,
+    fonts: workerFontFiles(workerFontSource.readFonts()),
     ...buildPyodideAssetManifest()
   };
 };
@@ -429,6 +477,8 @@ const ensureWorkerInitialized = (onStep = null) => {
         return;
       }
       workerInitialized = true;
+      const lost = lostWorkerFonts(data.lostFonts);
+      if (lost.length > 0) workerFontSource.onFontsLost(lost);
       resolveInit(currentWorker);
       return;
     }
@@ -543,7 +593,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
       const workerPayload = {
         request: payload.request,
         resourceManifest: preparedResources.resourceManifest,
-        stagedResources: preparedResources.stagedResources
+        stagedResources: preparedResources.stagedResources,
+        fontIdentities: requestFontIdentities(payload.request)
       };
 
       const cleanup = () => {

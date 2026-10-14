@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `50`
+- Contract revision: `51`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -38,8 +38,8 @@ Status: active Product authority
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
-  `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`, and
-  `PD-OI-097`
+  `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
+  `PD-OI-097`, and `PD-OI-098`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -1025,6 +1025,42 @@ Status: active Product authority
   - `PD-OI-088` (a dialog choice is one History step, Cancel records none, the
     dialog is busy while applying) applies to the new dialog unchanged. No
     other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 51 changes: `PD-OI-098` is added
+  (`A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED`, concern
+  `diagram-generation.diagram-font`), and `PD-OI-092` (concern
+  `web.settings-pane.section-index`) and `PD-OI-093` (concern
+  `web.settings-pane.display`) are replaced for scenario revision `2`. They
+  come from the Product Decision Owner `satoshikawato`'s reply of
+  `2026-10-13` on choosing the font of the diagram text in the Web app, the
+  CLI, and the Python API, asked with the three receipt texts below: the
+  new concern, and the two settings pane records that gain a Font section and
+  a Font item.
+  - Reply, to the request to approve the three receipt texts as written or to
+    name what to change:
+    「お願い（1 つ）: 三つとも承認します」
+  - The receipts recorded below are those three texts, byte for byte. The
+    SHA-256 of each is over its UTF-8 bytes without the final newline:
+    `PD-OI-098` `14dc5e981573dce50e9815f4457d34de6786c819ae31a5b4672e178359af3675`,
+    `PD-OI-092` `0fba5433eeb10e8c606b967f142c4a33b938d23db7fc3d6dc7fde5396e636c92`,
+    `PD-OI-093` `81bf15fcf9788503b438545f62256e6eb72f8e21f9e0f1213245ea3f858316c0`.
+  - Scope: scenario revision `2` of `PD-OI-092` keeps the outcome
+    `A / PINNED-ICON-SECTION-INDEX` and adds the **Font** section (icon
+    `Aa`, between Layout and Titles & Record Labels) to the index, so the
+    Circular index has 12 buttons and the Linear index 13. Scenario revision
+    `2` of `PD-OI-093` keeps the outcome
+    `A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH` and adds the Font item to the
+    icon rail and the Linear index button width of its Accepted residual
+    risk. Each replaces scenario revision `1` as a whole; Git history retains
+    the former receipt.
+  - `PD-OI-098` does not supersede another decision. Sessions already kept
+    the font name as the preserved override `objects.text.font_family`; the
+    Web setting is saved as `modes.<mode>.config.adv.font_family` in Session
+    47 (see `docs/internal/SESSION_FORMAT_HISTORY.md`), and no Session stores
+    a font file.
+  - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -5250,88 +5286,90 @@ Decision date: 2026-10-10
 ### PD-OI-092: Settings pane section index
 
 - Concern key: `web.settings-pane.section-index`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-092`, scenario revision `1` (`A / PINNED-ICON-SECTION-INDEX`).
 - Status: `ACCEPTED`
 - Selected outcome: `A / PINNED-ICON-SECTION-INDEX`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
-- Decision source: the Owner replies quoted verbatim in the Revision 43 entry
-  above. The Owner approved the receipt text below as written. The receipt
-  reproduces its fields without translation or additional terms. Dependent
-  runtime requires this authority merged into its base, or merged together
-  with it through the reviewed static Product Contract co-change route; this
-  record supplies no runtime acceptance evidence.
+- Decision source: the Owner reply of `2026-10-13` quoted verbatim in the
+  Revision 51 entry above. The Owner approved the receipt text below as
+  written. The receipt reproduces its fields without translation or
+  additional terms. Scenario revision `2` keeps the outcome and adds the Font section of the Revision 51 entry to the index. The runtime, tests, and documentation that
+  implement it merge with it (static Product Contract co-change); this record
+  supplies no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `36d65d6268ae779c31e4862e915aaf2c2f0d264e1655159f807ba45f85b3f2af`.
+  `0fba5433eeb10e8c606b967f142c4a33b938d23db7fc3d6dc7fde5396e636c92`.
 
 ```text
 PRODUCT_DECISION
 Concern: web.settings-pane.section-index
-Scenario revision: 1
+Scenario revision: 2
 Choice: A / PINNED-ICON-SECTION-INDEX
-Rationale: 設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。
-Must preserve: 〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Pairwise Comparisons、Layout、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 11 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Layout、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 12 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔変えないもの〕card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。
+Rationale: 設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。図の文字の font の設定は図全体にかかるので、section を 1 つ加えて置く。Titles & Record Labels の Default font size は record label の大きさだけなので、その横に置くと図全体の設定に見えない。
+Must preserve: 〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Pairwise Comparisons、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 12 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 13 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔Font section〕図の文字の font の設定（Font）は、Layout と Titles & Record Labels のあいだの新しい section「Font」に置く。目次のアイコンは Aa。〔変えないもの〕Font section を加えること以外の card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。
 May retire: none
-Accepted residual risk: 設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 11、Linear で 12 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture（107 枚のうち約 11 枚）は撮り直すまで古い。
+Accepted residual risk: 設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 12、Linear で 13 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture は、目次のアイコンと section が 1 つ増えるので撮り直すまで古い。設定ペインが 1 section ぶん長くなる。
 Owner: satoshikawato
-Decision date: 2026-10-12
+Decision date: 2026-10-13
 ```
 
 ```json
 {
   "concern": "web.settings-pane.section-index",
-  "scenarioRevision": 1,
+  "scenarioRevision": 2,
   "choice": "A / PINNED-ICON-SECTION-INDEX",
-  "rationale": "設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。",
-  "mustPreserve": "〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Pairwise Comparisons、Layout、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 11 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Layout、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 12 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔変えないもの〕card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。",
+  "rationale": "設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。図の文字の font の設定は図全体にかかるので、section を 1 つ加えて置く。Titles & Record Labels の Default font size は record label の大きさだけなので、その横に置くと図全体の設定に見えない。",
+  "mustPreserve": "〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Pairwise Comparisons、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 12 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 13 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔Font section〕図の文字の font の設定（Font）は、Layout と Titles & Record Labels のあいだの新しい section「Font」に置く。目次のアイコンは Aa。〔変えないもの〕Font section を加えること以外の card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。",
   "mayRetire": "none",
-  "acceptedResidualRisk": "設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 11、Linear で 12 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture（107 枚のうち約 11 枚）は撮り直すまで古い。",
+  "acceptedResidualRisk": "設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 12、Linear で 13 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture は、目次のアイコンと section が 1 つ増えるので撮り直すまで古い。設定ペインが 1 section ぶん長くなる。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-12"
+  "decisionDate": "2026-10-13"
 }
 ```
 
 ### PD-OI-093: Settings pane display switch and icon rail
 
 - Concern key: `web.settings-pane.display`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-093`, scenario revision `1` (`A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`).
 - Status: `ACCEPTED`
 - Selected outcome: `A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
-- Decision source: the Owner replies quoted verbatim in the Revision 44 entry
-  above. The Owner approved the receipt text below as written. The receipt
-  reproduces its fields without translation or additional terms. Dependent
-  runtime requires this authority merged into its base, or merged together
-  with it through the reviewed static Product Contract co-change route; this
-  record supplies no runtime acceptance evidence.
+- Decision source: the Owner reply of `2026-10-13` quoted verbatim in the
+  Revision 51 entry above. The Owner approved the receipt text below as
+  written. The receipt reproduces its fields without translation or
+  additional terms. Scenario revision `2` keeps the outcome and adds the Font item of the Revision 51 entry to the icon rail. The runtime, tests, and documentation that
+  implement it merge with it (static Product Contract co-change); this record
+  supplies no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `d968f8293bba15d7e8d6aa38e49ca4161b03fc4d89a069637b64754b028e260f`.
+  `81bf15fcf9788503b438545f62256e6eb72f8e21f9e0f1213245ea3f858316c0`.
 
 ```text
 PRODUCT_DECISION
 Concern: web.settings-pane.display
-Scenario revision: 1
+Scenario revision: 2
 Choice: A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH
-Rationale: 設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。
-Must preserve: 〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。Circular の layout の警告は、列だけのときは Generate の上の印（Layout warning という名前のボタン）になり、その文は Generate Diagram の説明として読み上げられ、印にマウスを載せる、フォーカスする、押す、タップすると表示される（印を押しても Generate は始まらない）。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。
+Rationale: 設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section も、目次と同じ順で列に置く。
+Must preserve: 〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。Circular の layout の警告は、列だけのときは Generate の上の印（Layout warning という名前のボタン）になり、その文は Generate Diagram の説明として読み上げられ、印にマウスを載せる、フォーカスする、押す、タップすると表示される（印を押しても Generate は始まらない）。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。
 May retire: none
-Accepted residual risk: Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。
+Accepted residual risk: Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 1 つ（Font）増えるので、低い窓では列がスクロールしやすくなる。
 Owner: satoshikawato
-Decision date: 2026-10-12
+Decision date: 2026-10-13
 ```
 
 ```json
 {
   "concern": "web.settings-pane.display",
-  "scenarioRevision": 1,
+  "scenarioRevision": 2,
   "choice": "A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH",
-  "rationale": "設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。",
-  "mustPreserve": "〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。Circular の layout の警告は、列だけのときは Generate の上の印（Layout warning という名前のボタン）になり、その文は Generate Diagram の説明として読み上げられ、印にマウスを載せる、フォーカスする、押す、タップすると表示される（印を押しても Generate は始まらない）。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。",
+  "rationale": "設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section も、目次と同じ順で列に置く。",
+  "mustPreserve": "〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。Circular の layout の警告は、列だけのときは Generate の上の印（Layout warning という名前のボタン）になり、その文は Generate Diagram の説明として読み上げられ、印にマウスを載せる、フォーカスする、押す、タップすると表示される（印を押しても Generate は始まらない）。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。",
   "mayRetire": "none",
-  "acceptedResidualRisk": "Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。",
+  "acceptedResidualRisk": "Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 1 つ（Font）増えるので、低い窓では列がスクロールしやすくなる。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-12"
+  "decisionDate": "2026-10-13"
 }
 ```
 
@@ -5509,6 +5547,51 @@ Decision date: 2026-10-14
   "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-14"
+}
+```
+
+### PD-OI-098: Font of the diagram text
+
+- Concern key: `diagram-generation.diagram-font`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner reply of `2026-10-13` quoted verbatim in the
+  Revision 51 entry above. The Owner approved the receipt text below as
+  written. The receipt reproduces its fields without translation or
+  additional terms. This record does not supersede another decision. The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `14dc5e981573dce50e9815f4457d34de6786c819ae31a5b4672e178359af3675`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.diagram-font
+Scenario revision: 1
+Choice: A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED
+Rationale: 図の文字の font を、システムにインストールされた font も含めて自由に選べるようにする。Web UI では font file の読み込み（A）とインストール済み font の選択（B）の両方を出す。読み込んだ font は Session に保存せず、gbdraw に含まれない font は警告する。システムにない font を使う Session は読み込むときに警告し、読み込む場合は近い font に置き換える。SVG には PowerPoint などと同じように font を埋め込む。
+Must preserve: 〔設定〕図の文字の font は 1 つの設定にする（Python の font_family、CLI の --font_family、Web の Font section の Font）。Web では Circular と Linear の drawing がそれぞれ持つ。既定は Liberation Sans で、font を選ばない図は今と同じ。〔Web での選び方〕Font の欄に Liberation Sans（既定）、Liberation Serif、Liberation Mono、この page で読み込んだ font、Load font file…（.ttf と .otf を選ぶ）を出す。Chrome と Edge では Choose installed font… も出し、インストール済みの font を名前で検索して選べる（ブラウザが許可を求める）。Firefox と Safari では Choose installed font… は出さない。Font は Applies on Generate（Generate で図に入る）。Undo、Redo、Reset Settings は他の設定と同じ。〔測り方と表示〕label の配置、legend、title の文字の幅と高さは、選んだ font そのもので測る。preview も選んだ font で表示する。〔Session〕Session には font の名前（CSS の font-family の並び）だけを保存し、font file は保存しない。Session に入る preview にも font を埋め込まない。〔警告〕gbdraw に含まれない font を選ぶと、Font の欄の下に注意を出す（Session には font の名前だけが残る。別の環境で開くには同じ font が必要で、ないときは近い font に置き換わる）。Web で Session を保存したときも、保存の通知に同じ注意を出す。CLI は --save_session のときに同じ注意を log に出す。〔読み込むとき〕Session の font がその環境にないとき、Web は Session を開く前に dialog で知らせる。ボタンは Load font file…、Use installed font…（Chrome と Edge だけ）、Load with ＜近い font の名前＞、Cancel。font を読み込めばその font で開く。Load with … では Session を開き、文字を近い font で描く。Font の設定には Session の font の名前が残り、あとでその font を読み込めばその font で描く。保存すると元の名前のまま保存する。Cancel では何も変えない。この確認では描画用の Worker を起動しない。CLI と Python は警告を log に出し、近い font で描く。〔近い font〕名前の並びの中で、その環境で使える最初の font。どれも使えないときは、その font の種類（serif、sans-serif、monospace）に合う Liberation（Serif、Sans、Mono）。〔書き出し〕SVG と Interactive SVG は、gbdraw に含まれない font を使っていれば、その font の使った文字だけ（subset）を埋め込む。既定でオンで、Web と CLI のどちらでも切れる。埋め込みを禁止している font（fsType）は埋め込まず、そう知らせる。Liberation は埋め込まない。PNG も同じ埋め込みを使い、選んだ font で描く。PDF も選んだ font で描く。〔変えないもの〕font を選ばない図の文字の配置と出力、Session の保存と読み込みの手順、Gallery の Session。
+May retire: Web で font_family を GUI で編集できない設定（読み取り専用の表示）として扱うこと。
+Accepted residual risk: 別の環境で同じ font がないと、近い font で描くので文字の幅が変わり、label の配置や legend の大きさが変わる。保存した preview は、font がない環境では Generate するまでブラウザの代わりの font で表示される。Web で読み込んだ font は page を閉じると消え、毎回読み込み直す必要がある。インストール済み font の選択は Chrome と Edge だけ。埋め込んだ SVG と PNG は font の subset のぶん大きくなる。font の license は利用者の責任になる（埋め込みを禁止している font は埋め込まない）。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "diagram-generation.diagram-font",
+  "scenarioRevision": 1,
+  "choice": "A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED",
+  "rationale": "図の文字の font を、システムにインストールされた font も含めて自由に選べるようにする。Web UI では font file の読み込み（A）とインストール済み font の選択（B）の両方を出す。読み込んだ font は Session に保存せず、gbdraw に含まれない font は警告する。システムにない font を使う Session は読み込むときに警告し、読み込む場合は近い font に置き換える。SVG には PowerPoint などと同じように font を埋め込む。",
+  "mustPreserve": "〔設定〕図の文字の font は 1 つの設定にする（Python の font_family、CLI の --font_family、Web の Font section の Font）。Web では Circular と Linear の drawing がそれぞれ持つ。既定は Liberation Sans で、font を選ばない図は今と同じ。〔Web での選び方〕Font の欄に Liberation Sans（既定）、Liberation Serif、Liberation Mono、この page で読み込んだ font、Load font file…（.ttf と .otf を選ぶ）を出す。Chrome と Edge では Choose installed font… も出し、インストール済みの font を名前で検索して選べる（ブラウザが許可を求める）。Firefox と Safari では Choose installed font… は出さない。Font は Applies on Generate（Generate で図に入る）。Undo、Redo、Reset Settings は他の設定と同じ。〔測り方と表示〕label の配置、legend、title の文字の幅と高さは、選んだ font そのもので測る。preview も選んだ font で表示する。〔Session〕Session には font の名前（CSS の font-family の並び）だけを保存し、font file は保存しない。Session に入る preview にも font を埋め込まない。〔警告〕gbdraw に含まれない font を選ぶと、Font の欄の下に注意を出す（Session には font の名前だけが残る。別の環境で開くには同じ font が必要で、ないときは近い font に置き換わる）。Web で Session を保存したときも、保存の通知に同じ注意を出す。CLI は --save_session のときに同じ注意を log に出す。〔読み込むとき〕Session の font がその環境にないとき、Web は Session を開く前に dialog で知らせる。ボタンは Load font file…、Use installed font…（Chrome と Edge だけ）、Load with ＜近い font の名前＞、Cancel。font を読み込めばその font で開く。Load with … では Session を開き、文字を近い font で描く。Font の設定には Session の font の名前が残り、あとでその font を読み込めばその font で描く。保存すると元の名前のまま保存する。Cancel では何も変えない。この確認では描画用の Worker を起動しない。CLI と Python は警告を log に出し、近い font で描く。〔近い font〕名前の並びの中で、その環境で使える最初の font。どれも使えないときは、その font の種類（serif、sans-serif、monospace）に合う Liberation（Serif、Sans、Mono）。〔書き出し〕SVG と Interactive SVG は、gbdraw に含まれない font を使っていれば、その font の使った文字だけ（subset）を埋め込む。既定でオンで、Web と CLI のどちらでも切れる。埋め込みを禁止している font（fsType）は埋め込まず、そう知らせる。Liberation は埋め込まない。PNG も同じ埋め込みを使い、選んだ font で描く。PDF も選んだ font で描く。〔変えないもの〕font を選ばない図の文字の配置と出力、Session の保存と読み込みの手順、Gallery の Session。",
+  "mayRetire": "Web で font_family を GUI で編集できない設定（読み取り専用の表示）として扱うこと。",
+  "acceptedResidualRisk": "別の環境で同じ font がないと、近い font で描くので文字の幅が変わり、label の配置や legend の大きさが変わる。保存した preview は、font がない環境では Generate するまでブラウザの代わりの font で表示される。Web で読み込んだ font は page を閉じると消え、毎回読み込み直す必要がある。インストール済み font の選択は Chrome と Edge だけ。埋め込んだ SVG と PNG は font の subset のぶん大きくなる。font の license は利用者の責任になる（埋め込みを禁止している font は埋め込まない）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
 }
 ```
 

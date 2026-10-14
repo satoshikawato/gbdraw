@@ -20,13 +20,13 @@ const LINEAR_SESSION = 'BGC0000708-BGC0000713.gbdraw-session.json';
 const RAIL = {
   circular: [
     ['Input', 'Input Genomes'], ['Regions', 'Region Annotations'], ['Compare', 'Pairwise Comparisons'],
-    ['Layout', 'Layout'], ['Titles', 'Titles & Record Labels'], ['Legend', 'Legend'], ['Colors', 'Colors'],
+    ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'], ['Legend', 'Legend'], ['Colors', 'Colors'],
     ['Features', 'Features'], ['Labels', 'Labels'], ['Axis', 'Axis & Scale'],
     ['GC / skew', 'Dinucleotide content/skew'], ['About', 'About & Citation']
   ],
   linear: [
     ['Input', 'Input Genomes'], ['Compare', 'Comparison'], ['Advanced', 'Advanced comparison and layout'],
-    ['Regions', 'Region Annotations'], ['Layout', 'Layout'], ['Titles', 'Titles & Record Labels'],
+    ['Regions', 'Region Annotations'], ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'],
     ['Legend', 'Legend'], ['Colors', 'Colors'], ['Features', 'Features'], ['Labels', 'Labels'],
     ['Axis', 'Axis & Scale'], ['GC / skew', 'Dinucleotide content/skew'], ['About', 'About & Citation']
   ]

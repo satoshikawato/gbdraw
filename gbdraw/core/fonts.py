@@ -1,8 +1,8 @@
 """Which font file gbdraw measures a CSS ``font-family`` list with.
 
 This module is the one owner of font availability. A family resolves, in this
-order, to a bundled Liberation face (by name or alias), to a font file
-registered in this process (``register_font_file``), to the file fontconfig
+order, to a font file registered in this process (``register_font_file``), to
+a bundled Liberation face (by name or alias), to the file fontconfig
 (``fc-match``) finds for exactly that family, or, when fontconfig is missing or
 does not answer, to a file of that family in the platform's font folders. The
 first family of a list that resolves is the one text is measured with; when
@@ -26,7 +26,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from importlib import resources
-from typing import Dict, Iterator, Literal, Optional, Sequence, Union
+from typing import Callable, Dict, Iterable, Iterator, Literal, Optional, Sequence, Union
 
 from fontTools.ttLib import TTCollection, TTFont
 
@@ -130,29 +130,49 @@ class FontFamilyResolution:
 
     @property
     def substituted(self) -> bool:
+        """Whether ``effective`` differs from ``requested``."""
         return bool(self.missing)
 
     @property
+    def replaced(self) -> tuple[str, ...]:
+        """The requested families before the first one a drawing uses: what
+        is drawn differs from the requested first family only when this is
+        not empty (OV-743). A missing family after one that resolves is
+        dropped from ``effective`` without changing the text."""
+        missing = set(self.missing)
+        leading: list[str] = []
+        for family in parse_font_family_list(self.requested):
+            if family not in missing:
+                break
+            leading.append(family)
+        return tuple(leading)
+
+    @property
+    def nearest(self) -> str:
+        """The family text is drawn with: the first named family of
+        ``effective`` (``effective`` itself when it names only generics)."""
+        return next((name for name in parse_font_family_list(self.effective) if not _is_generic(name)), self.effective)
+
+    @property
     def message(self) -> Optional[str]:
-        """The warning for a substitution; None when nothing was replaced."""
-        if not self.missing:
+        """The warning for a substitution: None when the requested first
+        family is drawn (``replaced`` is empty)."""
+        replaced = self.replaced
+        if not replaced:
             return None
         parts: list[str] = []
-        unavailable = [name for name in self.missing if name not in self.unchecked]
+        unchecked = [name for name in replaced if name in self.unchecked]
+        unavailable = [name for name in replaced if name not in self.unchecked]
         if unavailable:
             noun, verb = ("Font", "is") if len(unavailable) == 1 else ("Fonts", "are")
             parts.append(f"{noun} {_css_family_list(unavailable)} {verb} not available")
-        if self.unchecked:
-            noun = "Font" if len(self.unchecked) == 1 else "Fonts"
+        if unchecked:
+            noun = "Font" if len(unchecked) == 1 else "Fonts"
             parts.append(
-                f"{noun} {_css_family_list(self.unchecked)} could not be checked because fontconfig did not answer"
+                f"{noun} {_css_family_list(unchecked)} could not be checked because fontconfig did not answer"
             )
-        replacement = next(
-            (name for name in parse_font_family_list(self.effective) if not _is_generic(name)),
-            self.effective,
-        )
         return (
-            f"{'; '.join(parts)}; text uses {_css_family_token(replacement)} instead "
+            f"{'; '.join(parts)}; text uses {css_family_token(self.nearest)} instead "
             f"(font-family: {self.effective})."
         )
 
@@ -172,7 +192,8 @@ def _is_generic(family: str) -> bool:
     return _normalize_family_name(family).lower() in _CSS_GENERIC_FAMILIES
 
 
-def _css_family_token(family: str) -> str:
+def css_family_token(family: str) -> str:
+    """One family as a CSS token: a generic keyword bare, a name quoted."""
     name = _normalize_family_name(family)
     if name.lower() in _CSS_GENERIC_FAMILIES:
         return name.lower()
@@ -181,7 +202,7 @@ def _css_family_token(family: str) -> str:
 
 
 def _css_family_list(families: Sequence[str]) -> str:
-    return ", ".join(_css_family_token(name) for name in families)
+    return ", ".join(css_family_token(name) for name in families)
 
 
 def parse_font_family_list(font_family: str) -> list[str]:
@@ -238,7 +259,8 @@ def _match_face(candidates: Sequence[_FaceCandidate], weight: int, italic: bool)
     return next(candidate[2] for candidate in pool if candidate[0] == chosen)
 
 
-def _face_weight_and_italic(font: TTFont) -> tuple[int, bool]:
+def face_weight_and_italic(font: TTFont) -> tuple[int, bool]:
+    """A face's CSS weight (OS/2 ``usWeightClass``) and whether it is italic."""
     os2 = font["OS/2"] if "OS/2" in font else None
     mac_style = int(font["head"].macStyle) if "head" in font else 0
     weight = int(os2.usWeightClass) if os2 is not None else (700 if mac_style & 1 else 400)
@@ -252,7 +274,8 @@ def _face_weight_and_italic(font: TTFont) -> tuple[int, bool]:
 _font_cache: Dict[FontFace, TTFont] = {}
 
 
-def _named_instance(font: TTFont, instance: int) -> TTFont:
+def named_instance(font: TTFont, instance: int) -> TTFont:
+    """A variable font at its 1-based named instance."""
     from fontTools.varLib import instancer
 
     coordinates = font["fvar"].instances[instance - 1].coordinates
@@ -272,7 +295,7 @@ def load_font(face: FontFace) -> Optional[TTFont]:
     try:
         font = TTFont(face.path, fontNumber=face.index)
         if face.instance:
-            font = _named_instance(font, face.instance)
+            font = named_instance(font, face.instance)
     except Exception as exc:
         logger.warning("Failed to load font file %s: %s", face.path, exc)
         return None
@@ -284,6 +307,28 @@ def _forget_face(face: FontFace) -> None:
     font = _font_cache.pop(face, None)
     if font is not None:
         font.close()
+    _registered_data.pop(face, None)
+
+
+def face_source_bytes(face: FontFace) -> bytes:
+    """The bytes of the file a face is in (a whole collection for a .ttc face).
+
+    A registered face: the bytes read at registration. Raises ``ValueError``
+    for a registered face that is no longer registered and ``OSError`` for an
+    unreadable file.
+    """
+    if face.content_id:
+        data = _registered_data.get(face)
+        if data is None:
+            raise ValueError(f"Font {face.measurement_name} ({face.path}) is no longer registered.")
+        return data
+    with open(face.path, "rb") as handle:
+        return handle.read()
+
+
+def is_bundled_face(face: FontFace) -> bool:
+    """Whether a face is one of gbdraw's own (Liberation) files."""
+    return not face.content_id and face.path in bundled_font_paths()
 
 
 def _bundled_font_dirs():
@@ -337,6 +382,8 @@ def _bundled_variant(prefix: str, weight: int, italic: bool) -> Optional[FontFac
 #  Registered font files
 # ------------------------------------------------------------------
 _registered: Dict[str, list[RegisteredFont]] = {}
+# The file bytes of each registered face (the BytesIO its TTFont reads shares them).
+_registered_data: Dict[FontFace, bytes] = {}
 
 
 def _generic_of_font(font: TTFont) -> str:
@@ -362,6 +409,17 @@ def _read_font(source: Union[str, io.BytesIO], index: int, path: str) -> TTFont:
         ) from exc
 
 
+def _read_font_file(font_path: str) -> bytes:
+    try:
+        with open(font_path, "rb") as handle:
+            return handle.read()
+    except OSError as exc:
+        raise ValidationError(
+            f"Cannot read font file {font_path}: {exc}",
+            diagnostic={"code": "INPUT_INVALID", "reason": "FONT_FILE"},
+        ) from exc
+
+
 def register_font_file(path: Union[str, os.PathLike[str]], *, index: int = 0) -> RegisteredFont:
     """Make a TrueType or OpenType file resolvable by its family name.
 
@@ -371,18 +429,66 @@ def register_font_file(path: Union[str, os.PathLike[str]], *, index: int = 0) ->
     A family keeps every registered face; text of a weight and style is
     measured with the face CSS font matching picks (the requested style, then
     the nearest weight). Registering a face with the same family, weight and
-    style again replaces the earlier one.
+    style again replaces the earlier one. A registered family wins over the
+    bundled alias of the same name (a registered "Times New Roman" is not
+    Liberation Serif).
     """
     font_path = os.fspath(path)
+    return _register_faces([(_read_font_file(font_path), index, font_path)])[0]
+
+
+def register_font_file_batch(paths: Sequence[Union[str, os.PathLike[str]]]) -> tuple[RegisteredFont, ...]:
+    """``register_font_file`` for several files, all or none: every file is
+    read and checked before the registry changes, so a failure leaves the
+    earlier registrations, and the faces a later file would replace, as they
+    were."""
+    font_paths = [os.fspath(path) for path in paths]
+    return _register_faces([(_read_font_file(font_path), 0, font_path) for font_path in font_paths])
+
+
+def register_font_file_faces(path: Union[str, os.PathLike[str]]) -> tuple[RegisteredFont, ...]:
+    """``register_font_file`` for every face of a file: each face of a
+    collection (.ttc, .otc), else the one face."""
+    font_path = os.fspath(path)
+    data = _read_font_file(font_path)
+    count = 1
+    if data[:4] == b"ttcf":
+        try:
+            collection = TTCollection(io.BytesIO(data), lazy=True)
+            count = len(collection.fonts)
+            collection.close()
+        except Exception as exc:
+            raise ValidationError(
+                f"Cannot read font file {font_path}: {exc}",
+                diagnostic={"code": "INPUT_INVALID", "reason": "FONT_FILE"},
+            ) from exc
+    return _register_faces([(data, index, font_path) for index in range(count)])
+
+
+@dataclass(frozen=True)
+class _PreparedFace:
+    """A face read and checked, not registered yet."""
+
+    data: bytes
+    font: TTFont
+    registered: RegisteredFont
+
+
+def _register_faces(sources: Sequence[tuple[bytes, int, str]]) -> tuple[RegisteredFont, ...]:
+    """Register (bytes, face index, path) sources, all or none."""
+    prepared: list[_PreparedFace] = []
     try:
-        with open(font_path, "rb") as handle:
-            data = handle.read()
-    except OSError as exc:
-        raise ValidationError(
-            f"Cannot read font file {font_path}: {exc}",
-            diagnostic={"code": "INPUT_INVALID", "reason": "FONT_FILE"},
-        ) from exc
-    # Loaded from the bytes read here, so a later change to the file cannot
+        for data, index, font_path in sources:
+            prepared.append(_prepare_face(data, index, font_path))
+    except BaseException:
+        for face in prepared:
+            face.font.close()
+        raise
+    return tuple(_commit_face(face) for face in prepared)
+
+
+def _prepare_face(data: bytes, index: int, font_path: str) -> _PreparedFace:
+    # Loaded from the bytes read once, so a later change to the file cannot
     # change what this registration measures.
     font = _read_font(io.BytesIO(data), index, font_path)
     try:
@@ -396,7 +502,7 @@ def register_font_file(path: Union[str, os.PathLike[str]], *, index: int = 0) ->
                 f"Font file {font_path} has no family name.",
                 diagnostic={"code": "INPUT_INVALID", "reason": "FONT_FILE"},
             )
-        weight, italic = _face_weight_and_italic(font)
+        weight, italic = face_weight_and_italic(font)
         generic = _generic_of_font(font)
     except BaseException:
         font.close()
@@ -411,7 +517,13 @@ def register_font_file(path: Union[str, os.PathLike[str]], *, index: int = 0) ->
         ),
     )
     registered = RegisteredFont(family=family, weight=weight, italic=italic, generic=generic, face=face)
-    faces = _registered.setdefault(_comparable_name(family), [])
+    return _PreparedFace(data=data, font=font, registered=registered)
+
+
+def _commit_face(prepared: _PreparedFace) -> RegisteredFont:
+    registered, font, data = prepared.registered, prepared.font, prepared.data
+    face, weight, italic = registered.face, registered.weight, registered.italic
+    faces = _registered.setdefault(_comparable_name(registered.family), [])
     for replaced in [entry for entry in faces if (entry.weight, entry.italic) == (weight, italic)]:
         faces.remove(replaced)
         if replaced.face != face:
@@ -420,9 +532,52 @@ def register_font_file(path: Union[str, os.PathLike[str]], *, index: int = 0) ->
         font.close()
     else:
         _font_cache[face] = font
+    _registered_data[face] = data
     faces.append(registered)
-    resolve_font_face.cache_clear()
+    _clear_resolution_caches()
     return registered
+
+
+_fontconfig_files: set[str] = set()
+
+
+def show_font_file_to_cairo(face: FontFace, family: str) -> None:
+    """Add a registered face's file to fontconfig's application fonts, once
+    per file, so CairoSVG draws text with it even when the font is not
+    installed. The CairoSVG export calls it for the registered faces a
+    conversion draws with (gbdraw.render.font_embedding). Without
+    fontconfig, those outputs draw an installed font of that name or a
+    substitute, and a warning (once per file) says so. The browser draws no
+    raster through cairo and is skipped."""
+    font_path = face.path
+    if sys.platform == "emscripten" or font_path in _fontconfig_files:
+        return
+    _fontconfig_files.add(font_path)
+    import ctypes
+    import ctypes.util
+
+    added = 0
+    # The soname first: it is the library cairo already loaded, and finding
+    # it needs no search (``find_library`` runs a subprocess).
+    for soname in ("libfontconfig.so.1", None):
+        library_path = soname or ctypes.util.find_library("fontconfig")
+        if not library_path:
+            continue
+        try:
+            add_file = ctypes.CDLL(library_path).FcConfigAppFontAddFile
+        except (OSError, AttributeError):
+            continue
+        add_file.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        add_file.restype = ctypes.c_int
+        added = add_file(None, os.fsencode(os.path.abspath(font_path)))
+        break
+    if not added:
+        logger.warning(
+            "Font file %s could not be made available to CairoSVG (fontconfig is missing or refused it): "
+            "PNG, PDF, EPS and PS output draw %s with an installed font of that name or a substitute.",
+            font_path,
+            css_family_token(family),
+        )
 
 
 def unregister_font_file(path: Union[str, os.PathLike[str]]) -> tuple[RegisteredFont, ...]:
@@ -438,7 +593,7 @@ def unregister_font_file(path: Union[str, os.PathLike[str]]) -> tuple[Registered
         if not faces:
             del _registered[family]
     if removed:
-        resolve_font_face.cache_clear()
+        _clear_resolution_caches()
     return tuple(removed)
 
 
@@ -448,6 +603,11 @@ def clear_registered_fonts() -> None:
         for registered in faces:
             _forget_face(registered.face)
     _registered.clear()
+    _clear_resolution_caches()
+
+
+def _clear_resolution_caches() -> None:
+    resolve_named_font_face.cache_clear()
     resolve_font_face.cache_clear()
 
 
@@ -581,7 +741,7 @@ def _index_font_dirs(dirs: Sequence[str]) -> Dict[str, list[_FaceCandidate]]:
                 path = os.path.join(root, file_name)
                 try:
                     for face_index, font in _font_file_faces(path):
-                        weight, italic = _face_weight_and_italic(font)
+                        weight, italic = face_weight_and_italic(font)
                         for name in _family_names(font):
                             index.setdefault(name, []).append((weight, italic, FontFace(path, face_index)))
                 except Exception as exc:
@@ -601,14 +761,29 @@ def _platform_face(family: str, weight: int, italic: bool) -> Optional[FontFace]
 # ------------------------------------------------------------------
 #  Resolution
 # ------------------------------------------------------------------
+_RegisteredLookup = Callable[[str, int, bool], Optional[FontFace]]
+
+
+def _registered_or_bundled_face(
+    family: str, weight: int, italic: bool, registered: _RegisteredLookup = _registered_face
+) -> Optional[FontFace]:
+    """A registered face of ``family``, else its bundled alias face (review
+    R2: a registered family wins over the alias of the same name; a generic
+    keyword is never a registered family). ``registered`` stands in for the
+    registry when the Web parity vectors are generated."""
+    if not _is_generic(family):
+        face = registered(family, weight, italic)
+        if face is not None:
+            return face
+    prefix = _BUNDLED_FONT_FAMILY_ALIASES.get(_comparable_name(family))
+    return _bundled_variant(prefix, weight, italic) if prefix is not None else None
+
+
 def _lookup_family(family: str, weight: int, italic: bool) -> tuple[Optional[FontFace], bool]:
     """The face of one family, and whether the lookup was left unchecked
     because fontconfig did not answer."""
-    prefix = _BUNDLED_FONT_FAMILY_ALIASES.get(_comparable_name(family))
-    if prefix is not None:
-        return _bundled_variant(prefix, weight, italic), False
-    face = _registered_face(family, weight, italic)
-    if face is not None or _is_generic(family):
+    face = _registered_or_bundled_face(family, weight, italic)
+    if face is not None or _is_generic(family) or _comparable_name(family) in _BUNDLED_FONT_FAMILY_ALIASES:
         return face, False
     face, status = _fontconfig_face(family, weight, italic)
     if face is None and status != "answered":
@@ -619,6 +794,30 @@ def _lookup_family(family: str, weight: int, italic: bool) -> tuple[Optional[Fon
 
 def _resolve_family(family: str, weight: int, italic: bool) -> Optional[FontFace]:
     return _lookup_family(family, weight, italic)[0]
+
+
+def _first_resolving_family(
+    font_family: str, lookup: Callable[[str], Optional[FontFace]]
+) -> tuple[Optional[str], Optional[FontFace]]:
+    """The first family of a list that ``lookup`` resolves, and its face."""
+    for family in parse_font_family_list(font_family):
+        face = lookup(family)
+        if face is not None:
+            return family, face
+    return None, None
+
+
+@functools.lru_cache(maxsize=1024)
+def resolve_named_font_face(
+    font_family: str,
+    font_weight: FontWeight = "normal",
+    font_style: Optional[str] = "normal",
+) -> tuple[Optional[str], Optional[FontFace]]:
+    """The first family of ``font_family`` that resolves for this weight and
+    style, and its face; ``(None, None)`` when none does. The family is the
+    name a CSS ``@font-face`` rule for the face declares."""
+    weight, italic = _css_weight(font_weight), _is_italic(font_style)
+    return _first_resolving_family(font_family, lambda family: _resolve_family(family, weight, italic))
 
 
 @functools.lru_cache(maxsize=1024)
@@ -633,14 +832,9 @@ def resolve_font_face(
     Liberation Sans face of the weight and style. None only when no bundled
     font exists.
     """
-    weight, italic = _css_weight(font_weight), _is_italic(font_style)
-    face: Optional[FontFace] = None
-    for family in parse_font_family_list(font_family):
-        face = _resolve_family(family, weight, italic)
-        if face is not None:
-            break
+    face = resolve_named_font_face(font_family, font_weight, font_style)[1]
     if face is None:
-        face = _bundled_variant(_FALLBACK_PREFIX, weight, italic)
+        face = _bundled_variant(_FALLBACK_PREFIX, _css_weight(font_weight), _is_italic(font_style))
     if face is None:
         bundled = bundled_font_paths()
         face = FontFace(bundled[0]) if bundled else None
@@ -659,18 +853,14 @@ def _nearest_generic(generics: list[str], missing: tuple[str, ...]) -> str:
     return "sans-serif"
 
 
-def resolve_font_family(font_family: str) -> FontFamilyResolution:
-    """Decide which requested families a drawing can use, and the nearest
-    substitute when none of the named ones is available.
-
-    Generic keywords are kept. A named family is kept when it resolves (bundled,
-    registered, fontconfig, or a platform font folder). When a family is
-    dropped and no named family remains, the Liberation family of the list's
-    generic (else of a guess from the missing names: mono, code, courier,
-    consol -> Mono; serif without sans, times, georgia, garamond, mincho,
-    ming, song, roman -> Serif; else Sans) is inserted before the first
-    generic, and that generic is added when the list has none. A list whose
-    families all resolve comes back unchanged.
+def _resolve_font_family_with(
+    font_family: str, lookup: Callable[[str], tuple[bool, bool]]
+) -> FontFamilyResolution:
+    """``resolve_font_family`` with ``lookup`` answering, for a named
+    (non-generic) family, whether it resolves and whether that could not be
+    checked. The Web runs a port of this rule
+    (gbdraw/web/js/services/font-families.js) on the vectors of
+    tests/fixtures/font_family_resolution_vectors.json.
     """
     requested = str(font_family)
     kept: list[str] = []
@@ -680,8 +870,8 @@ def resolve_font_family(font_family: str) -> FontFamilyResolution:
         if _is_generic(family):
             kept.append(family)
             continue
-        face, family_unchecked = _lookup_family(family, 400, False)
-        if face is not None:
+        available, family_unchecked = lookup(family)
+        if available:
             kept.append(family)
             continue
         missing.append(family)
@@ -704,17 +894,81 @@ def resolve_font_family(font_family: str) -> FontFamilyResolution:
     )
 
 
-def custom_font_families(font_family: str) -> tuple[str, ...]:
-    """The named families of a list that gbdraw does not bundle.
+def custom_font_families_among(font_family: str, registered_families: Iterable[str]) -> tuple[str, ...]:
+    """The named families of a list that gbdraw does not bundle, where the
+    named families are registered (the one custom-font rule; the Web app
+    passes the families loaded in its page).
 
     A Session stores only their names (D-02), so another computer may draw
-    them with a substitute.
+    them with a substitute. A registered family named like a bundled alias
+    is one of them: here it draws with its own file, elsewhere with Liberation.
     """
+    registered = {_comparable_name(family) for family in registered_families}
     return tuple(
         family
         for family in parse_font_family_list(font_family)
-        if not _is_generic(family) and _comparable_name(family) not in _BUNDLED_FONT_FAMILY_ALIASES
+        if not _is_generic(family)
+        and (
+            _comparable_name(family) not in _BUNDLED_FONT_FAMILY_ALIASES
+            or _comparable_name(family) in registered
+        )
     )
+
+
+def custom_font_families(font_family: str) -> tuple[str, ...]:
+    """``custom_font_families_among`` the families registered in this process."""
+    return custom_font_families_among(font_family, _registered)
+
+
+def resolve_font_family(font_family: str) -> FontFamilyResolution:
+    """Decide which requested families a drawing can use, and the nearest
+    substitute when none of the named ones is available.
+
+    Generic keywords are kept. A named family is kept when it resolves (bundled,
+    registered, fontconfig, or a platform font folder). When a family is
+    dropped and no named family remains, the Liberation family of the list's
+    generic (else of a guess from the missing names: mono, code, courier,
+    consol -> Mono; serif without sans, times, georgia, garamond, mincho,
+    ming, song, roman -> Serif; else Sans) is inserted before the first
+    generic, and that generic is added when the list has none. A list whose
+    families all resolve comes back unchanged.
+    """
+
+    def lookup(family: str) -> tuple[bool, bool]:
+        face, unchecked = _lookup_family(family, 400, False)
+        return face is not None, unchecked
+
+    return _resolve_font_family_with(font_family, lookup)
+
+
+def resolve_font_family_among(font_family: str, registered_families: Iterable[str]) -> FontFamilyResolution:
+    """``resolve_font_family`` where only the bundled fonts and the named
+    registered families are available, without fontconfig: what the Web app
+    (Pyodide, fonts registered in the page) resolves.
+    """
+    registered = {_comparable_name(family) for family in registered_families}
+    return _resolve_font_family_with(
+        font_family,
+        lambda family: (
+            _comparable_name(family) in _BUNDLED_FONT_FAMILY_ALIASES or _comparable_name(family) in registered,
+            False,
+        ),
+    )
+
+
+def font_family_rules() -> dict[str, object]:
+    """The data of the family rules above, for the Web port
+    (tools/generate_legend_font_metrics.py writes it to
+    gbdraw/web/js/utils/font-family-rules.generated.js).
+    """
+    return {
+        "bundledFamilyAliases": dict(sorted(_BUNDLED_FONT_FAMILY_ALIASES.items())),
+        "genericFamilies": sorted(_CSS_GENERIC_FAMILIES),
+        "liberationFamilyByGeneric": dict(sorted(_LIBERATION_FAMILY_BY_GENERIC.items())),
+        "monospaceNameHints": list(_MONOSPACE_NAME_HINTS),
+        "serifNameHints": list(_SERIF_NAME_HINTS),
+        "fallbackFace": _FALLBACK_PREFIX,
+    }
 
 
 # ------------------------------------------------------------------
@@ -737,7 +991,7 @@ def font_generic_family(path: Union[str, os.PathLike[str]], *, index: int = 0) -
 
 def font_family_list_for(family: str, generic: str) -> str:
     """The stored ``font-family`` list for one family: ``'Name', generic``."""
-    return f"{_css_family_token(family)}, {_css_family_token(generic)}"
+    return f"{css_family_token(family)}, {css_family_token(generic)}"
 
 
 def complete_font_family(font_family: str) -> str:
@@ -765,13 +1019,25 @@ __all__ = [
     "clear_registered_fonts",
     "complete_font_family",
     "custom_font_families",
+    "custom_font_families_among",
     "font_family_list_for",
+    "css_family_token",
+    "face_source_bytes",
+    "face_weight_and_italic",
+    "font_family_rules",
     "font_generic_family",
+    "is_bundled_face",
     "load_font",
+    "named_instance",
     "parse_font_family_list",
     "register_font_file",
+    "register_font_file_batch",
+    "register_font_file_faces",
     "registered_fonts",
     "resolve_font_face",
     "resolve_font_family",
+    "resolve_font_family_among",
+    "resolve_named_font_face",
+    "show_font_file_to_cairo",
     "unregister_font_file",
 ]

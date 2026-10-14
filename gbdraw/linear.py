@@ -94,7 +94,8 @@ from .cli_utils.common import (
     _add_gc_skew_toggle_args,
     _add_retired_option_args,
     _add_gc_content_axis_args,
-    _add_font_family_arg,
+    _add_font_args,
+    cli_font_family,
     _add_legend_size_args,
     _add_window_step_args,
     add_feature_args,
@@ -121,7 +122,6 @@ from .render.track_slot_metadata import (
     collect_track_slot_geometry_records,
 )
 from .render.output_paths import preflight_output_paths
-from .core.fonts import complete_font_family
 from .session import SessionDocument, load_session_document, session_drawing_artifacts
 from .session_drawings import SessionDrawingArtifacts
 from .session_io import session_to_cli_args
@@ -818,7 +818,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='Manual tick interval for "ruler" scale style (in bp; must be > 0). Overrides automatic calculation; optional',
         type=int)
     _add_legend_size_args(parser)
-    _add_font_family_arg(parser)
+    _add_font_args(parser)
     parser.add_argument(
         '--normalize_length',
         help='Normalize record length (experimental; default: False). ',
@@ -1034,6 +1034,7 @@ def replay_legacy_session(
         )
         args = _get_args(list(run_spec.args), _legacy_session=True)
         args.overwrite = session_request.overwrite
+        args.embed_fonts = session_request.embed_fonts
         args.save_session = session_request.save_session
         args.session_output = session_request.session_output
         args._gbdraw_source_session = (
@@ -1087,6 +1088,8 @@ def linear_main(cmd_args) -> None:
             overwrite=session_request.overwrite,
             save_session=session_request.save_session,
             session_output=session_request.session_output,
+            embed_fonts=session_request.embed_fonts,
+            font_files=session_request.font_files,
         ):
             if session_request.drawings:
                 document.drawing(session_request.drawings[0], mode="linear")
@@ -1438,7 +1441,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         else gc_content_tick_interval
     )
     override_candidates: dict[str, object | None] = {
-        "objects.text.font_family": complete_font_family(args.font_family) if args.font_family else None,
+        "objects.text.font_family": cli_font_family(args),
         "objects.features.block_stroke_color": block_stroke_color,
         "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
         "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,
@@ -1693,6 +1696,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             ),
             formats=tuple(out_formats),
             overwrite=args.overwrite,
+            embed_fonts=args.embed_fonts,
         ),
     )
     diagram_output_paths = diagram_request_output_paths(canonical_request)

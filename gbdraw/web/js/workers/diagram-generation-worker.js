@@ -3,6 +3,7 @@ import { PYTHON_HELPERS } from '../app/python-helpers.js';
 import { DIAGRAM_HELPER_OPERATIONS } from '../services/diagram-worker-protocol.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { createWorkerFontRegistry } from './worker-font-registry.js';
 
 let runtimePromise = null;
 let runtime = null;
@@ -279,6 +280,18 @@ const initializeRuntime = async ({
     runtimePromise = null;
     throw error;
   }
+};
+
+// The fonts registered in this Worker's Python (workers/worker-font-registry.js).
+let fontRegistry = null;
+const fontRegistryFor = (pyodide) => {
+  if (!fontRegistry) {
+    fontRegistry = createWorkerFontRegistry({
+      fs: pyodide.FS,
+      registerInPython: (entries) => callJsonHelper(pyodide, 'register_web_fonts_json', [JSON.stringify(entries)])
+    });
+  }
+  return fontRegistry;
 };
 
 const HELPER_FILE_NAMES = Object.freeze({
@@ -574,10 +587,27 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       String(payload.rowToken || ''), String(payload.kind || '')
     ])
   },
-  [DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT]: {
-    keys: ['filename'],
+  [DIAGRAM_HELPER_OPERATIONS.REGISTER_FONTS]: {
+    keys: ['fonts'],
     fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(pyodide, 'read_pdf_font', [String(payload.filename || '')])
+    run: (pyodide, payload) => fontRegistryFor(pyodide).register(payload.fonts)
+  },
+  // The fonts an export carries (custom fonts D-05, D-13): the embedded-font
+  // block of an SVG (`kind` svg or raster), and the TrueType faces of a PDF's
+  // text runs (fonts by file name).
+  [DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS]: {
+    keys: ['svg', 'kind'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'svg_font_embedding_json', [
+      String(payload.svg || ''), String(payload.kind || 'svg')
+    ])
+  },
+  [DIAGRAM_HELPER_OPERATIONS.PDF_FONTS]: {
+    keys: ['runs', 'known'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'pdf_fonts_json', [
+      jsonArgument(payload.runs, []), jsonArgument(payload.known, [])
+    ])
   },
   [DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES]: {
     keys: [
@@ -884,6 +914,7 @@ const runGeneration = async ({
   request,
   resourceManifest,
   stagedResources,
+  fontIdentities = [],
   requestId,
   testLifecycleEnabled = false
 } = {}) => {
@@ -894,6 +925,11 @@ const runGeneration = async ({
     throw serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' });
   }
   const { pyodide } = runtime;
+  try {
+    fontRegistryFor(pyodide).requireRegistered(fontIdentities);
+  } catch (error) {
+    throw serializeError(error, { operation: 'generate', stage: 'request-validation' });
+  }
   const runWrapper = pyodide.globals.get('run_canonical_request_wrapper');
   const workspace = `/gbdraw-web-render-${Number(requestId) || 0}`;
   let result = null;
@@ -1160,11 +1196,16 @@ const handleWorkerMessage = async (data) => {
   try {
     if (type === 'init') {
       const initialized = await initializeRuntime(data);
+      // The replay of the page's fonts into a new Worker, font by font; the
+      // reply names each font it lost (OV-686), and a Generate that names one
+      // fails (FONT_NOT_LOADED).
+      const lostFonts = await fontRegistryFor(initialized.pyodide).replay(data.fonts);
       self.postMessage({
         id,
         type: 'init',
         ok: true,
-        capabilities: initialized.capabilities
+        capabilities: initialized.capabilities,
+        lostFonts
       });
       return;
     }

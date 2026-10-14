@@ -1,12 +1,13 @@
 // @ts-check
-/** @import { LayoutBox, LegendFontMetrics, LegendLayoutRow, LegendEntryLayout } from '../../services/legend-layout.js' */
+/** @import { LayoutBox, LegendFontMetrics, LegendLayoutRow, LegendEntryLayout, RegisteredLegendFace } from '../../services/legend-layout.js' */
 import {
   buildCircularLegendLayout,
   buildLinearLegendLayout,
   circularLegendLocalBounds,
   linearLegendLocalBounds,
   legendMeasurementFace,
-  loadLegendFontMetrics
+  loadLegendFontMetrics,
+  withRegisteredFontFaces
 } from '../../services/legend-layout.js';
 import { drawnLegendRowName, getComparisonLegendGroup, getLegendEntrySwatch, legendRowShown, pythonLegendKey } from '../../services/legend-svg.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
@@ -122,7 +123,15 @@ const placeEntries = (entries, layouts) => {
 // Result. An unedited Legend keeps every position; an edited one gets the
 // positions Python gives the same rows. The layout owner
 // (app/legend-layout/reposition-actions.js) docks it with the bounds returned.
-export const createLegendLayoutActions = () => {
+/**
+ * @typedef {object} LegendLayoutActionOptions
+ * @property {() => readonly RegisteredLegendFace[]} readRegisteredFontFaces
+ *   The faces of the fonts registered in the page (the font store's), so a Legend in such a font is
+ *   measured with it.
+ */
+
+/** @param {LegendLayoutActionOptions} options */
+export const createLegendLayoutActions = ({ readRegisteredFontFaces }) => {
   /** @type {LegendFontMetrics | null} */
   let fontMetrics = null;
 
@@ -155,7 +164,7 @@ export const createLegendLayoutActions = () => {
       void prepareLegendLayout().catch(() => {});
       return null;
     }
-    const metrics = fontMetrics;
+    const metrics = withRegisteredFontFaces(fontMetrics, readRegisteredFontFaces());
     const metadata = parseCompositionMetadata(svg);
     const recorded = /** @type {RecordedLegendInputs | null} */ (metadata.legendReflow);
     if (!recorded) {

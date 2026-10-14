@@ -158,6 +158,7 @@
  * @property {unknown} [feature_shapes]
  * @property {unknown} [feature_width_circular]
  * @property {unknown} [features]
+ * @property {unknown} [font_family]
  * @property {unknown} [gc_content_max_percent]
  * @property {unknown} [gc_content_min_percent]
  * @property {unknown} [gc_content_mode]

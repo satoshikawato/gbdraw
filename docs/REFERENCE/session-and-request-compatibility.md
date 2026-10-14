@@ -304,6 +304,26 @@ Schema 2 is accepted with sessions 41–42, 44, 46, and 47. Unknown or malformed
 before import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
 
+## Fonts
+
+A Session and a render request store the font by name (the CSS font-family
+list, `objects.text.font_family`), never the font file. The Session's preview
+never embeds a font; only exported SVG does (see
+[Fonts](output-formats-and-export.md#fonts)). For a custom font, the web app
+notes this under **Font** and in the **Save Session** notice, and
+`--save_session` logs it.
+
+When the first family of a Session's font list is not available, the command
+line and Python log a warning and draw the nearest font: the first available
+family of the list, else the Liberation face of its generic kind (serif,
+sans-serif, or monospace). A later family that is not available changes
+nothing, because it is not drawn. Give
+the font with `--font_file` to use it. The web app asks before it loads such a
+Session, without starting the drawing Worker: **Load font file…**, **Use
+installed font…** (Chrome and Edge), **Load with** the nearest font, or
+**Cancel**. **Load with** keeps the requested name in **Font**, shown as not
+available, draws with the nearest font, and saves the original name again.
+
 ## Linear file-level defaults
 
 A Linear source card carries a default **Organism / strain** and **Subtitle /

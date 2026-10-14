@@ -25,6 +25,9 @@ published packages, and [Installation](./INSTALL.md) explains each install route
 - Draw from Python with `draw_circular()` and `draw_linear()`, which return a
   `Diagram` you can save in any format.
 - Choose which records of a multi-record file are drawn (**Choose records…**, **Draw this record**).
+- Draw diagram text in any font: **Font** in the web app, `--font_family` and
+  `--font_file` on the command line. SVG exports embed the characters they use;
+  see [Fonts](./REFERENCE/output-formats-and-export.md#fonts).
 - Install from a wheel or source package that includes the local web app's
   palettes and browser files.
 

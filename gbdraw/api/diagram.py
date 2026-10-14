@@ -336,13 +336,14 @@ def _with_available_font_family(cfg: GbdrawConfig) -> GbdrawConfig:
 
     A family that is not available is replaced with the nearest one
     (``resolve_font_family``), with one warning per requested list and
-    process naming both.
+    process naming both when the requested first family is not drawn.
     """
 
     resolution = resolve_font_family(cfg.objects.text.font_family)
     if not resolution.substituted:
         return cfg
-    if resolution.requested not in _warned_font_families:
+    # The warning only when the drawn family is not the requested first one (OV-743).
+    if resolution.message is not None and resolution.requested not in _warned_font_families:
         _warned_font_families.add(resolution.requested)
         logger.warning(resolution.message)
     text = replace(cfg.objects.text, font_family=resolution.effective)
