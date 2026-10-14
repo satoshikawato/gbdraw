@@ -326,6 +326,48 @@ def test_a_linear_title_change_reuses_the_catalog_item(tmp_path: Path) -> None:
     assert retitled["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
 
 
+def _multi_record_document(source: Path, *, title: str) -> dict[str, object]:
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                source=GenBankInputSource(source), record_key="records-1", cardinality=RecordCardinality.ALL
+            ),
+        ),
+        options=CircularDiagramOptions(
+            plot_title=title,
+            output=CircularOutputOptions(plot_title_position="top"),
+        ),
+        output=RenderOutputRequest(output_prefix="prepared-multi-record", formats=("svg",)),
+    )
+    return build_session_document(request).to_dict()
+
+
+def test_a_multi_record_circular_title_change_reuses_the_merged_records(tmp_path: Path) -> None:
+    """The merged records and the catalog item read no title: a title change builds neither."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("multi-a"), _record("multi-b")))
+    cache = PreparedBiologicalInputCache()
+    cold, cold_diagnostics = _render(tmp_path, cache, _multi_record_document(source, title="Cold title"), request_id=1)
+    retitled, retitled_diagnostics = _render(
+        tmp_path, cache, _multi_record_document(source, title="Render-only title change"), request_id=2
+    )
+
+    cold_metrics = _metrics(cold_diagnostics)
+    assert cold_metrics["renderStageBuild:record_merge"] == 2
+    assert cold_metrics["renderStageBuild:catalog_item"] == 1
+    retitled_metrics = _metrics(retitled_diagnostics)
+    assert retitled_metrics["renderStageHit:record_merge"] == 2
+    assert retitled_metrics["renderStageHit:catalog_item"] == 1
+    assert retitled_metrics.get("featureCatalogSvgParseCount", 0) == 0
+    assert {name for name in retitled_metrics if name.startswith("renderStageBuild:")} == {
+        "renderStageBuild:plot_title_content",
+        "renderStageBuild:composition_plan",
+    }
+    assert retitled["results"] != cold["results"]
+    assert retitled["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
+
+
 def test_public_render_request_remains_uncached_by_default(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
