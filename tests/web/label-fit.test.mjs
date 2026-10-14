@@ -187,7 +187,7 @@ const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {
     runAnalysis: async () => { generates.push(true); },
     errorSummary: () => 'The row could not be computed.'
   });
-  return { dialog, steps, writes, generates };
+  return { dialog, steps, writes, generates, pending };
 };
 
 test('while Apply writes, the dialog is busy and Escape (its Cancel) does nothing (PD-OI-088)', async () => {
@@ -303,8 +303,29 @@ test('rows Generate did not search are computed one after another when the dialo
   assert.equal(dialog.labelFitDialog.selectedKind, 'outward_vertical');
 });
 
+// The status line the shared choice dialog shows, from the label fit dialog's
+// bindings and the choice dialog's template, for the harness's state.
+const choiceDialogStatus = async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const open = html.match(/<choice-dialog v-if="labelFitDialog\.show"[^>]*>/s)?.[0] || '';
+  const busy = open.match(/ :busy="([^"]*)"/)?.[1] || 'false';
+  const busyStatus = open.match(/ :busy-status="([^"]*)"/)?.[1] || 'null';
+  const start = html.indexOf('id="choice-dialog-template"');
+  const template = html.slice(start, html.indexOf('</script>', start));
+  const lines = [...template.matchAll(/<p v-if="busy" role="status"[^>]*>\{\{ (.+?) \}\}<\/p>/g)].map((match) => match[1]);
+  assert.equal(lines.length, 1, 'the choice dialog has one busy status line');
+  const bindings = new Function('dialogChoicePending', 'labelFitDialog', `return [${busy}, ${busyStatus}];`);
+  const text = new Function('busyStatus', `return ${lines[0]};`);
+  return (/** @type {boolean} */ pending, /** @type {object} */ dialog) => {
+    const [isBusy, status] = bindings(pending, dialog);
+    return isBusy ? [text(status)] : [];
+  };
+};
+
 test('Apply or Cancel during a row waits for that row, says so, and starts no further row (LP-D60)', async () => {
   const { readFile } = await import('node:fs/promises');
+  const statusShown = await choiceDialogStatus();
   for (const choice of /** @type {const} */ (['cancel', 'apply'])) {
     const asked = [];
     let release;
@@ -313,14 +334,21 @@ test('Apply or Cancel during a row waits for that row, says so, and starts no fu
       return new Promise((resolve) => { release = () => resolve({ row: row(kind, 'not_found', { reason: 'No value found within 30 seconds.' }) }); });
     };
     const rows = [row('outward_vertical', 'not_computed'), row('combination', 'not_computed'), foundRow('smaller_font', 1.2)];
-    const { dialog, steps, writes, generates } = dialogHarness({ computeRow });
+    const applying = [];
+    let harness;
+    harness = dialogHarness({ computeRow, onWrite: () => {
+      applying.push(statusShown(harness.pending.value, harness.dialog.labelFitDialog));
+    } });
+    const { dialog, steps, writes, generates, pending } = harness;
     const computing = dialog.openLabelFitDialog(normalizeReport(report(rows, { drawn: true })),
       { rowToken: 'circular:1:0', mode: 'circular' });
     assert.equal(dialog.labelFitDialog.rows[0].status, 'computing');
+    assert.deepEqual(statusShown(pending.value, dialog.labelFitDialog), []);
     const chosen = dialog.resolveLabelFitChoice(choice);
-    // The dialog stays open and busy, says it is finishing the row, and takes no second choice.
+    // The dialog stays open and busy, says only that it is finishing the row, and takes no second choice.
     assert.equal(dialog.labelFitDialog.finishing, true);
     assert.equal(dialog.labelFitDialog.show, true);
+    assert.deepEqual(statusShown(pending.value, dialog.labelFitDialog), ['Finishing the choice being computed…'], choice);
     assert.equal(await dialog.resolveLabelFitChoice('apply'), undefined);
     assert.deepEqual([steps.length, writes.length, generates.length], [0, 0, 0]);
     release();
@@ -329,15 +357,15 @@ test('Apply or Cancel during a row waits for that row, says so, and starts no fu
     assert.deepEqual(asked, ['outward_vertical'], choice);
     assert.equal(dialog.labelFitDialog.finishing, false);
     assert.equal(dialog.labelFitDialog.show, false);
-    // Apply: one History step and one Generate; Cancel: none (PD-OI-088).
+    // Apply: one History step and one Generate, "Applying an edit…" while it writes; Cancel: none (PD-OI-088).
     assert.deepEqual([steps.length, writes.length, generates.length], choice === 'apply' ? [1, 1, 1] : [0, 0, 0]);
+    assert.deepEqual(applying, choice === 'apply' ? [['Applying an edit…']] : []);
   }
-  // The template owns the words; the dialog is busy while it finishes the row.
+  // The label fit dialog's words; no status line of its own beside the shared one.
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  const open = html.match(/<choice-dialog v-if="labelFitDialog\.show"[^>]*>/s)?.[0] || '';
-  assert.match(open, /:busy="dialogChoicePending \|\| labelFitDialog\.finishing"/);
-  const body = html.slice(html.indexOf('data-label-fit-dialog'), html.indexOf('</choice-dialog>', html.indexOf('data-label-fit-dialog')));
-  assert.match(body, /<p v-if="labelFitDialog\.finishing"[^>]*role="status"[^>]*>Finishing the choice being computed…<\/p>/);
+  const body = html.slice(html.indexOf('<choice-dialog v-if="labelFitDialog.show"'), html.indexOf('</choice-dialog>', html.indexOf('data-label-fit-dialog')));
+  assert.equal(body.match(/Finishing the choice being computed…/g)?.length, 1);
+  assert.doesNotMatch(body.slice(body.indexOf('>') + 1), /Finishing/);
   const source = await readFile(new URL('../../gbdraw/web/js/app/label-fit-dialog.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /Finishing/);
 });

@@ -325,6 +325,8 @@ In the Web app, the rows appear in the **Labels do not fit** dialog. Generate
 searches no row of a figure drawn anyway; the dialog computes each row that
 Generate did not reach, one after another, for at most 30 seconds each. A row
 that finds no value in that time shows "No value found within 30 seconds."
+The next time the dialog opens, that row is searched again for up to 30
+seconds, continuing from where it stopped, so it can still find a value.
 While a row is being computed, Apply and Cancel first wait for it to finish,
 at most 30 seconds, and the dialog shows "Finishing the choice being
 computed…".

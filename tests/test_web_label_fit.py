@@ -455,6 +455,81 @@ def test_web_rows_computed_after_the_staged_depth_file_is_gone_match_the_rows_wi
         assert gone["status"] != "not_computed"
 
 
+def _two_records_with_files(directory: Path) -> tuple[list[Any], dict[str, Path]]:
+    import copy
+
+    base = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    records = []
+    for record_id in ("SARS_A", "SARS_B"):
+        record = copy.deepcopy(base)
+        record.id = record.name = record_id
+        records.append(record)
+    paths = _write_input_files(directory, records[0])
+    paths["depth"].write_text(
+        "".join(
+            f"{record.id}\t{i}\t{10 + i % 50}\n" for record in records for i in range(1, len(record.seq) + 1)
+        ),
+        encoding="utf-8",
+    )
+    paths["annotations"].write_text(
+        "set_id\tid\tmark\trecord\tstart\tend\tlabel\ns\ta\tband\tSARS_B\t1\t500\tregion\n", encoding="utf-8"
+    )
+    return records, paths
+
+
+def test_rows_of_two_circular_records_computed_after_every_input_file_is_gone(tmp_path) -> None:
+    """OV-732: the multi-record builder reads the Depth, color, visibility, and annotation files once."""
+
+    from gbdraw.api.diagram import build_circular_multi_diagram, label_fit_report, label_fit_row
+
+    drawings = {}
+    for name in ("kept", "gone"):
+        records, paths = _two_records_with_files(tmp_path / name)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            drawings[name] = build_circular_multi_diagram(
+                records, options=_crossing_options_with_files(paths), _label_fit_warn_search_seconds=0.0
+            )
+    for path in (tmp_path / "gone").iterdir():
+        path.unlink()
+
+    report = label_fit_report(drawings["gone"])
+    assert report is not None and report.drawn and len(report.records) == 2 and report.rows
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for row in report.rows:
+            assert label_fit_row(drawings["gone"], row.kind) == label_fit_row(drawings["kept"], row.kind)
+
+
+def test_web_rows_of_two_circular_records_compute_after_their_input_files_are_gone(tmp_path) -> None:
+    """OV-732: on the Web, a multi-record figure's rows compute after the staged files are deleted."""
+
+    import shutil
+
+    records, paths = _two_records_with_files(tmp_path / "inputs")
+    document = build_session_document(
+        CircularDiagramRequest(
+            records=tuple(RecordInput(source=InMemoryRecordSource(record)) for record in records),
+            options=_crossing_options_with_files(paths),
+            output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
+        )
+    ).to_dict()
+    searches = {name: LabelFitRowSearches() for name in ("kept", "gone")}
+    entries = {}
+    for name, search in searches.items():
+        (entries[name],) = _web_render(document, tmp_path / name, search)["metadata"]["labelFitReports"]
+    shutil.rmtree(tmp_path / "gone" / "resources")
+    shutil.rmtree(tmp_path / "inputs")
+
+    assert len(entries["gone"]["report"]["records"]) == 2
+    kinds = [row["kind"] for row in entries["gone"]["report"]["rows"]]
+    assert kinds
+    for kind in kinds:
+        gone = searches["gone"].row(entries["gone"]["rowToken"], kind)
+        assert gone == searches["kept"].row(entries["kept"]["rowToken"], kind)
+        assert gone["status"] != "not_computed"
+
+
 def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() -> None:
     """OV-733: only a label setting the engine cannot draw counts as "does not fit"."""
 
