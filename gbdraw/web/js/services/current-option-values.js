@@ -1,6 +1,7 @@
 // @ts-check
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { normalizeFeatureRenderingMap, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
+import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 
 /**
  * @param {unknown} value
@@ -366,11 +367,11 @@ export const requireCurrentWebStateFieldNames = (config) => {
 };
 
 // The refusals of a stored configuration's fields (BA-OD96): a retired field
-// name, a value no current option names, a feature shape that is none, and an
-// arrow ratio out of range. The one check of the active
-// configuration, of `applyConfigData`, and of Load before its dialog (the
-// Session prediction and the legacy configuration read), so Load refuses such
-// a file before it asks anything.
+// name, a value no current option names (the Linear label visibilities
+// included), a feature shape that is none, and an arrow ratio out of range.
+// The one check of the active configuration, of `applyConfigData`, and of
+// Load before its dialog (the Session prediction and the legacy configuration
+// read), so Load refuses such a file before it asks anything.
 /**
  * @param {unknown} config
  */
@@ -381,6 +382,12 @@ export const requireCurrentConfigFields = (config) => {
   if (isPlainObject(form) && hasOwn(form, 'linear_track_layout')) requireCurrentLinearTrackLayout(form.linear_track_layout);
   if (isPlainObject(adv) && hasOwn(adv, 'label_placement')) requireCurrentLinearLabelPlacement(adv.label_placement);
   if (isPlainObject(adv) && hasOwn(adv, 'multi_record_size_mode')) requireCurrentCircularMultiRecordSizeMode(adv.multi_record_size_mode);
+  if (isPlainObject(adv) && hasOwn(adv, 'linear_accession_visibility')) {
+    requireLinearLabelVisibilityMode(adv.linear_accession_visibility, 'Linear Accession visibility');
+  }
+  if (isPlainObject(adv) && hasOwn(adv, 'linear_length_visibility')) {
+    requireLinearLabelVisibilityMode(adv.linear_length_visibility, 'Linear Length / Coordinates visibility');
+  }
   // The feature shapes and arrow ratios `applyConfigData` installs.
   if (isPlainObject(adv)) normalizedPersistedArrowGeometryState(adv);
   if (isPlainObject(adv) && isPlainObject(adv.feature_shapes)) normalizeFeatureRenderingMap(adv.feature_shapes);

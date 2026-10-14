@@ -42,8 +42,8 @@ import {
   configFieldRepairs, defaultSettingsContainers, installStoredSettings, losatExecutionRepairs, readAnnotationSets, readCanvasPadding,
   readGeneratedCircularPlotTitlePosition, readImportedComparisonAction, readLinearRecordGap, readLinearRecordLayoutEnabled,
   readLinearRecordRows, readFeaturePanelTab, readList, readLosatProgram, readPaletteColors, readPlainObject,
-  readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, sessionUiFieldRepairs,
-  sliceFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS
+  readColorRules, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
+  sessionUiFieldRepairs, sliceFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS
 } from './config-field-readers.js';
 import { drawnLinearSequences } from './record-draw-selection.js';
 import {
@@ -1286,6 +1286,8 @@ const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
   if (!adv) return configData;
   const features = Array.isArray(adv.features) ? adv.features : null;
   if (features && !features.includes('repeat_region')) return configData;
+  // Shapes that are no object are not read (Load lists them).
+  if (!isPlainObject(adv.feature_shapes) && !isUnsetValue(adv.feature_shapes)) return configData;
   const featureShapes = isPlainObject(adv.feature_shapes) ? adv.feature_shapes : {};
   if (Object.prototype.hasOwnProperty.call(featureShapes, 'repeat_region')) return configData;
   return {
@@ -2391,16 +2393,11 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   ['scale_font_size', 'ruler_label_font_size'].forEach((field) => {
     if (isPlainObject(data.adv) && Object.hasOwn(data.adv, field)) drawing.adv[field] = cloneJsonData(data.adv[field]);
   });
-  replacePlainObject(
-    drawing.unmanagedConfigOverrides,
-    isPlainObject(data.unmanagedConfigOverrides)
-      ? cloneJsonData(data.unmanagedConfigOverrides)
-      : {}
-  );
+  replacePlainObject(drawing.unmanagedConfigOverrides, cloneJsonData(readPlainObject(data.unmanagedConfigOverrides).value));
   drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(data.recordDisplayDrafts || []));
   // Omitted: every record is drawn.
   drawing.recordsOff.splice(0, drawing.recordsOff.length, ...(Array.isArray(data.recordsOff) ? data.recordsOff : []));
-  replacePlainObject(drawing.featurePlacementOverrides, cloneJsonData(data.featurePlacementOverrides || {}));
+  replacePlainObject(drawing.featurePlacementOverrides, cloneJsonData(readPlainObject(data.featurePlacementOverrides).value));
   drawing.annotationSets.splice(0, drawing.annotationSets.length, ...readAnnotationSets(data.annotationSets).value);
   const linearLayout = data.linearRecordLayout && typeof data.linearRecordLayout === 'object'
     ? data.linearRecordLayout
@@ -2476,34 +2473,24 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   }
   const importedPalette = String(data.palette || '').trim();
   if (importedPalette) drawing.selectedPalette.value = importedPalette;
-  if (hasColorEntries(data.colors)) {
+  const storedColors = readPlainObject(data.colors).value;
+  if (hasColorEntries(storedColors)) {
     if (data.colorsAreOverrides) {
       const paletteColors = paletteColorsFromDefinitions(drawing.selectedPalette.value) || {};
       drawing.currentColors.value = normalizePaletteColors({
         ...paletteColors,
-        ...normalizeColorMap(data.colors)
+        ...normalizeColorMap(storedColors)
       });
     } else {
-      drawing.currentColors.value = normalizePaletteColors(normalizeColorMap(data.colors));
+      drawing.currentColors.value = normalizePaletteColors(normalizeColorMap(storedColors));
     }
   } else {
     const paletteColors = paletteColorsFromDefinitions(drawing.selectedPalette.value);
     if (paletteColors) drawing.currentColors.value = paletteColors;
   }
 
-  if (data.rules && Array.isArray(data.rules)) {
-    drawing.manualSpecificRules.length = 0;
-    data.rules.forEach((r) => {
-      drawing.manualSpecificRules.push({
-        feat: String(r.feat || ''),
-        qual: String(r.qual || ''),
-        val: String(r.val || ''),
-        color: resolveColorToHex(String(r.color || '#000000')),
-        cap: String(r.cap || ''),
-        // The shape normalizeSpecificRule gives: `fromFile` only when true.
-        ...(r.fromFile ? { fromFile: true } : {})
-      });
-    });
+  if (Array.isArray(data.rules)) {
+    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...readColorRules(data.rules).value);
     drawing.fileLegendCaptions.value = new Set(
       drawing.manualSpecificRules
         .filter((rule) => rule.fromFile && rule.cap)
@@ -2515,16 +2502,9 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   } else if (Object.prototype.hasOwnProperty.call(data, 'priorityRules')) {
     replaceQualifierPriorityRules(drawing, data.priorityRules);
   }
-  if (data.filterMode) drawing.filterMode.value = data.filterMode;
-  if (data.whitelist && Array.isArray(data.whitelist)) {
-    drawing.manualWhitelist.length = 0;
-    data.whitelist.forEach((w) => {
-      drawing.manualWhitelist.push({
-        feat: String(w.feat || ''),
-        qual: String(w.qual || ''),
-        key: String(w.key || '')
-      });
-    });
+  if (data.filterMode) drawing.filterMode.value = readFilterMode(data.filterMode).value;
+  if (Array.isArray(data.whitelist)) {
+    drawing.manualWhitelist.splice(0, drawing.manualWhitelist.length, ...readWhitelistRules(data.whitelist).value);
   }
   if (data.blacklistText !== undefined) drawing.manualBlacklist.value = String(data.blacklistText || '');
   if (data.losatProgram) {

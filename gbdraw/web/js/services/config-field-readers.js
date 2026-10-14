@@ -231,6 +231,75 @@ export const readQualifierPriorityRules = (value) => {
 };
 
 /**
+ * A list of rows read entry by entry: an entry that is no object is dropped
+ * and counted; `readEntry` gives the row and the values of the entry it
+ * replaced. A field the row does not name is not read.
+ * @template T
+ * @param {(entry: Record<string, unknown>) => { row: T, leaves: FieldLeaf[] }} readEntry
+ * @returns {FieldReader<T[]>}
+ */
+const rowList = (readEntry) => (value) => {
+  /** @type {T[]} */
+  const rows = [];
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  let dropped = 0;
+  (Array.isArray(value) ? value : []).forEach((entry, index) => {
+    if (!isPlainObject(entry)) {
+      dropped += 1;
+      return;
+    }
+    const reading = readEntry(entry);
+    rows.push(reading.row);
+    reading.leaves.forEach((leaf) => leaves.push({ ...leaf, at: `[${index}]${leaf.at}` }));
+  });
+  return listReading(rows, value, dropped, leaves);
+};
+/** A rule's text field: an unset or falsy value is ''. @param {unknown} value */
+const ruleText = (value) => String(value || '');
+/**
+ * @param {Record<string, unknown>} entry
+ * @param {Record<string, unknown>} row
+ * @param {readonly string[]} fields
+ * @returns {FieldLeaf[]}
+ */
+const textFieldLeaves = (entry, row, fields) => fields.flatMap((field) => changedLeaves(entry[field], row[field], `.${field}`));
+
+/** @typedef {{ feat: string, qual: string, val: string, color: string, cap: string, fromFile?: true }} StoredColorRule */
+/**
+ * The specific color rules of a configuration (`rules`). A color name reads as
+ * its hex value; an unset color is black; `fromFile` is kept only when set.
+ * @type {FieldReader<StoredColorRule[]>}
+ */
+export const readColorRules = rowList((entry) => {
+  const color = resolveColorToHex(String(entry.color || '#000000'));
+  /** @type {StoredColorRule} */
+  const row = {
+    feat: ruleText(entry.feat), qual: ruleText(entry.qual), val: ruleText(entry.val), color, cap: ruleText(entry.cap),
+    // The shape normalizeSpecificRule gives: `fromFile` only when true.
+    ...(entry.fromFile ? { fromFile: true } : {})
+  };
+  const sameColor = typeof entry.color === 'string' && resolveColorToHex(entry.color) === color;
+  return {
+    row,
+    leaves: [
+      ...textFieldLeaves(entry, row, ['feat', 'qual', 'val', 'cap']),
+      ...(!isUnsetValue(entry.color) && !sameColor && !keepsMeaning(entry.color, color)
+        ? [{ at: '.color', stored: entry.color, used: color }] : []),
+      ...(!isUnsetValue(entry.fromFile) && typeof entry.fromFile !== 'boolean' && !keepsMeaning(entry.fromFile, Boolean(entry.fromFile))
+        ? [{ at: '.fromFile', stored: entry.fromFile, used: Boolean(entry.fromFile) }] : [])
+    ]
+  };
+});
+
+/** @typedef {{ feat: string, qual: string, key: string }} StoredWhitelistRule */
+/** The label whitelist of a configuration (`whitelist`). @type {FieldReader<StoredWhitelistRule[]>} */
+export const readWhitelistRules = rowList((entry) => {
+  const row = { feat: ruleText(entry.feat), qual: ruleText(entry.qual), key: ruleText(entry.key) };
+  return { row, leaves: textFieldLeaves(entry, row, ['feat', 'qual', 'key']) };
+});
+
+/**
  * The annotation sets of a drawing (`normalizeAnnotationSets`), with each
  * stored value it replaces.
  * @type {FieldReader<ReturnType<typeof normalizeAnnotationSets>>}
@@ -298,6 +367,7 @@ const ADV_ROWS = Object.freeze([
   row('multi_record_column_gap_ratio', numberOr(isNonNegative, 0.10, { coerceUnset: true })),
   row('multi_record_row_gap_ratio', numberOr(isNonNegative, 0.05, { coerceUnset: true })),
   row('multi_record_positions', readMultiRecordPositions),
+  row('feature_overlap_tolerance_bp', numberOr((numeric) => Number.isSafeInteger(numeric) && numeric >= 0, 0)),
   row('plot_title_font_size', positiveNumberOrNull),
   row('keep_full_definition_with_plot_title', onlyTrue),
   row('depth_color', (value) => ({ value: resolveColorToHex(String(value || '#4A90E2')), lost: false })),
@@ -421,6 +491,10 @@ export const readLinearRecordLayoutEnabled = (value) => (typeof value === 'boole
 export const readLinearRecordGap = numberOr(isNonNegative, 24, { coerceUnset: true });
 export const readImportedComparisonAction = exactChoice(Object.values(IMPORTED_COMPARISON_ACTIONS), null);
 const readLosatProgramText = exactChoice(['blastn', 'tblastx', 'blastp'], 'blastn');
+/** The label filter, read without case. */
+export const readFilterMode = textChoice(['None', 'Whitelist', 'Blacklist'], 'None', {
+  aliases: { none: 'None', whitelist: 'Whitelist', blacklist: 'Blacklist' }
+});
 /** Read as text. @type {FieldReader<string>} */
 export const readLosatProgram = (value) => readLosatProgramText(value ? String(value) : value);
 
@@ -461,7 +535,13 @@ const VALUE_TABLES = Object.freeze([
         read: (value, container) => (Object.hasOwn(container, 'qualifierPriorityRules')
           ? { value, lost: false } : readQualifierPriorityRules(value))
       },
-      row('annotationSets', readAnnotationSets)
+      row('annotationSets', readAnnotationSets),
+      row('rules', readColorRules),
+      row('whitelist', readWhitelistRules),
+      row('filterMode', readFilterMode),
+      row('colors', readPlainObject),
+      row('featurePlacementOverrides', readPlainObject),
+      row('unmanagedConfigOverrides', readPlainObject)
     ]
   }
 ]);
@@ -668,11 +748,14 @@ const copied = (value) => (value === undefined ? undefined : JSON.parse(JSON.str
  * @returns {SettingLoss[]}
  */
 export const installStoredSettings = (targets, config) => {
+  /** A stored container that is no object is not used (the drawing's stays). @param {Record<string, unknown>} target @param {string} at */
+  const merged = (target, at) => (isPlainObject(config[at]) || isUnsetValue(config[at])
+    ? mergeStoredSettings(target, config[at], at) : [{ at, stored: config[at], used: target }]);
   const losses = [
-    ...mergeStoredSettings(targets.form, config.form, 'form'),
-    ...mergeStoredSettings(targets.adv, config.adv, 'adv'),
-    ...mergeStoredSettings(targets.losat, config.losat, 'losat'),
-    ...mergeStoredSettings(targets.circularConservation, config.circularConservation, 'circularConservation')
+    ...merged(targets.form, 'form'),
+    ...merged(targets.adv, 'adv'),
+    ...merged(targets.losat, 'losat'),
+    ...merged(targets.circularConservation, 'circularConservation')
   ].filter(({ at }) => !RAW_FIELDS.includes(at) && !at.startsWith('losat.blastp.hitLimitsByMode.'));
   CONTAINER_TABLES.forEach(({ at, rows }) => {
     const container = at === 'losat.blastp' ? targets.losat.blastp

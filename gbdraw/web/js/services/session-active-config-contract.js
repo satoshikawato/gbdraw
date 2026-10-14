@@ -13,7 +13,6 @@ import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
-import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
 import { DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION, ORTHOGROUP_INFERENCE_VERSION, SESSION_VERSION } from '../contracts/schema.generated.js';
@@ -268,15 +267,6 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
   assertFields(config.form, new Set(CURRENT_WRITER_FORM_FIELDS), 'config.form'); assertFields(config.adv, new Set(CURRENT_WRITER_ADV_FIELDS), 'config.adv');
   if (has(config.form, 'keep_definition_left_aligned') && typeof config.form.keep_definition_left_aligned !== 'boolean')
     throw new Error('Current session active configuration config.form.keep_definition_left_aligned must be a boolean.');
-  // A Session 46 slice may omit a field: it reads that mode's default (plan 4.1).
-  if (has(config.adv, 'linear_accession_visibility')) requireLinearLabelVisibilityMode(
-    config.adv.linear_accession_visibility,
-    'Linear Accession visibility'
-  );
-  if (has(config.adv, 'linear_length_visibility')) requireLinearLabelVisibilityMode(
-    config.adv.linear_length_visibility,
-    'Linear Length / Coordinates visibility'
-  );
   for (const [path, value] of [['config.adv.losatProgram', config.adv.losatProgram], ['config.losatProgram', config.losatProgram]]) {
     if (value !== undefined && !(/** @type {readonly unknown[]} */ (['blastn', 'tblastx', 'blastp'])).includes(value))
       throw new Error(`Current session active configuration ${path} is invalid.`);

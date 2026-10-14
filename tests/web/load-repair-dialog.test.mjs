@@ -222,6 +222,57 @@ const filledSession = async () => {
   }
   return savedSession('g2-filled');
 };
+/**
+ * Loads `base` with each mutation of each leaf under `roots` and saves it
+ * again. Returns the files refused after the commit and the leaves saved
+ * differently without a row. `savedParts` maps a leaf of the file to its place
+ * in the saved Session; a row names the leaf by its place in the file.
+ */
+const mutationFindings = async (base, roots, savedParts = (parts) => parts) => {
+  const loadedBase = await importSession(input(base), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+  assert.ok(['ok', 'legacy'].includes(loadedBase.status), JSON.stringify(loadedBase.error));
+  assert.ok(Object.isFrozen(loadedBase.repairs));
+  const baseSaved = await savedSession('g2-base');
+  const leaves = roots.flatMap((root) => leafPaths(valueAt(base, root)).map((rest) => [...root, ...rest]))
+    // A leaf the Save writes differently without a change is not this check's.
+    .filter((parts) => JSON.stringify(valueAt(baseSaved, savedParts(parts))) === JSON.stringify(valueAt(base, parts)));
+  const silent = [];
+  const refusedAfterTheCommit = [];
+  let checked = 0;
+  for (const [kind, mutate] of Object.entries(MUTATIONS)) {
+    for (const parts of leaves) {
+      const path = dotted(parts);
+      const savedPath = dotted(savedParts(parts));
+      const mutated = mutate(valueAt(base, parts));
+      if (mutated === undefined || UNLISTED_LEAVES.some(([pattern]) => pattern.test(savedPath)) || otherModeValue(savedPath)) continue;
+      const file = structuredClone(base);
+      valueAt(file, parts.slice(0, -1))[parts.at(-1)] = mutated;
+      let committed = false;
+      const loaded = await importSession(input(file), {
+        confirmLoadRepairs: async () => true,
+        rollbackState: { capture: () => { committed = true; }, restore: () => {} }
+      });
+      if (!['ok', 'legacy'].includes(loaded.status)) {
+        if (committed) refusedAfterTheCommit.push(`${kind} ${path}: ${JSON.stringify(mutated)}`);
+        continue;
+      }
+      checked += 1;
+      let savedFile;
+      try {
+        savedFile = await savedSession(`g2-${checked}`);
+      } catch (error) {
+        silent.push(`${kind} ${path}: ${JSON.stringify(mutated)} -> Save fails: ${error.message}`);
+        continue;
+      }
+      const saved = valueAt(savedFile, savedParts(parts));
+      const kept = JSON.stringify(saved) === JSON.stringify(mutated) || (typeof mutated === 'number' && saved === String(mutated));
+      if (!kept && !named(path, loaded.repairs) && !readBeforeTheDialog(file, savedParts(parts), saved)) {
+        silent.push(`${kind} ${path}: ${JSON.stringify(mutated)} -> ${JSON.stringify(saved)}`);
+      }
+    }
+  }
+  return { checked, refusedAfterTheCommit, silent };
+};
 test('no apply step after the dialog drops or changes a stored value the dialog did not list, apart from the track-slot leaves (G2)', async () => {
   const base = await filledSession();
   for (const mode of ['circular', 'linear']) {
@@ -230,41 +281,22 @@ test('no apply step after the dialog drops or changes a stored value the dialog 
       config.circularConservation.series, config.linearRecordLayout.rows]) assert.ok(list.length > 0, mode);
     assert.equal(config.adv.depth_tracks.length, 2, mode);
   }
-  const loadedBase = await importSession(input(base), { confirmLoadRepairs: async () => assert.fail('the fixture loads as is') });
-  assert.equal(loadedBase.status, 'ok', JSON.stringify(loadedBase.error));
-  assert.ok(Object.isFrozen(loadedBase.repairs));
-  const baseSaved = await savedSession('g2-base');
   const roots = [['ui'], ...['circular', 'linear'].flatMap((mode) => ['config', 'ui', 'features', 'editorState'].map((part) => ['modes', mode, part]))];
-  const leaves = roots.flatMap((root) => leafPaths(valueAt(base, root)).map((rest) => [...root, ...rest]))
-    // A leaf the Save writes differently without a change is not this check's.
-    .filter((parts) => JSON.stringify(valueAt(baseSaved, parts)) === JSON.stringify(valueAt(base, parts)));
-  const silent = [];
-  const refusedAfterTheCommit = [];
-  let checked = 0;
-  for (const [kind, mutate] of Object.entries(MUTATIONS)) {
-    for (const parts of leaves) {
-      const path = dotted(parts);
-      const mutated = mutate(valueAt(base, parts));
-      if (mutated === undefined || UNLISTED_LEAVES.some(([pattern]) => pattern.test(path)) || otherModeValue(path)) continue;
-      const session = structuredClone(base);
-      valueAt(session, parts.slice(0, -1))[parts.at(-1)] = mutated;
-      let committed = false;
-      const loaded = await importSession(input(session), {
-        confirmLoadRepairs: async () => true,
-        rollbackState: { capture: () => { committed = true; }, restore: () => {} }
-      });
-      if (loaded.status !== 'ok') {
-        if (committed) refusedAfterTheCommit.push(`${kind} ${path}: ${JSON.stringify(mutated)}`);
-        continue;
-      }
-      checked += 1;
-      const saved = valueAt(await savedSession(`g2-${checked}`), parts);
-      const kept = JSON.stringify(saved) === JSON.stringify(mutated) || (typeof mutated === 'number' && saved === String(mutated));
-      if (!kept && !named(path, loaded.repairs) && !readBeforeTheDialog(session, parts, saved)) {
-        silent.push(`${kind} ${path}: ${JSON.stringify(mutated)} -> ${JSON.stringify(saved)}`);
-      }
-    }
-  }
+  const { checked, refusedAfterTheCommit, silent } = await mutationFindings(base, roots);
+  assert.ok(checked > 100, String(checked));
+  assert.deepEqual({ refusedAfterTheCommit, silent }, { refusedAfterTheCommit: [], silent: [] });
+});
+
+// G2 for a configuration file (BA-OD99 b): the stored settings of the shown
+// drawing of the same Session, as a standalone file, applied over that drawing.
+test('no apply step after the dialog drops or changes a stored value of a configuration file the dialog did not list (G2)', async () => {
+  const session = await filledSession();
+  const loadedSession = await importSession(input(session), { confirmLoadRepairs: async () => assert.fail('the fixture loads as is') });
+  assert.equal(loadedSession.status, 'ok', JSON.stringify(loadedSession.error));
+  const mode = state.mode.value;
+  const configFile = structuredClone(session.modes[mode].config);
+  for (const list of [configFile.rules, configFile.whitelist]) assert.ok(list.length > 0, mode);
+  const { checked, refusedAfterTheCommit, silent } = await mutationFindings(configFile, [[]], (parts) => ['modes', mode, 'config', ...parts]);
   assert.ok(checked > 100, String(checked));
   assert.deepEqual({ refusedAfterTheCommit, silent }, { refusedAfterTheCommit: [], silent: [] });
 });
@@ -611,12 +643,16 @@ const REFUSED_CONFIG_FIELDS = [
   { adv: { depth_tracks: [{ label: 'D', tick_interval: 5 }] } }, { losat: { blastp: { collinearMaxGeneGap: 2 } } },
   { form: { linear_track_layout: 'sideways' } }, { adv: { label_placement: 'inside' } }, { adv: { multi_record_size_mode: 'huge' } },
   { adv: { feature_shapes: { CDS: 'bogus' } } }, { adv: { feature_shapes: { gene: 'bogus' } } },
-  { adv: { arrow_head_length_ratio: -1 } }, { adv: { arrow_shaft_width_ratio: 2 } }
+  { adv: { arrow_head_length_ratio: -1 } }, { adv: { arrow_shaft_width_ratio: 2 } },
+  // r4 S1: the stored Linear label visibilities, which the merge copies.
+  { adv: { linear_accession_visibility: 'bogus' } }, { adv: { linear_accession_visibility: null } },
+  { adv: { linear_length_visibility: 5 } }
 ];
 test('a configuration field Load refuses is refused before the dialog (BA-OD96)', async () => {
   const legacyOfV39 = fixture('BGC0000708-BGC0000713.v39.gbdraw-session.json.gz').config;
   delete legacyOfV39.unmanagedConfigOverrides;
-  legacyOfV39.form.plot_title = 5;
+  // Lossy otherwise: an unknown GC content mode is a dialog row.
+  legacyOfV39.adv.gc_content_mode = 'ratio';
   const sessionWith = ({ form = {}, adv = {}, losat }) => {
     const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
     const { config } = session.modes.circular;
@@ -625,24 +661,73 @@ test('a configuration field Load refuses is refused before the dialog (BA-OD96)'
     if (losat) config.losat = { ...config.losat, blastp: { ...config.losat?.blastp, ...losat.blastp } };
     return session;
   };
+  // r4 S1: a configuration file with current track stacks, which no older
+  // reading renames or checks first (a Session 46 drawing's settings).
+  const currentLegacyWith = ({ form = {}, adv = {}, losat }) => {
+    const config = structuredClone(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz').modes.circular.config);
+    delete config.unmanagedConfigOverrides;
+    Object.assign(config.form, form);
+    Object.assign(config.adv, { gc_content_mode: 'ratio' }, adv);
+    if (losat) config.losat = { ...config.losat, blastp: { ...config.losat?.blastp, ...losat.blastp } };
+    return config;
+  };
   const files = [['r3 legacy v39', legacyOfV39],
     ...REFUSED_CONFIG_FIELDS.flatMap((fields) => [
-      [`legacy ${JSON.stringify(fields)}`, { ...fields, form: { plot_title: 5, ...fields.form } }],
+      [`legacy ${JSON.stringify(fields)}`, { ...fields, adv: { gc_content_mode: 'ratio', ...fields.adv } }],
+      [`current legacy ${JSON.stringify(fields)}`, currentLegacyWith(fields)],
       [`session ${JSON.stringify(fields)}`, sessionWith(fields)]
     ])];
   const outcomes = [];
   for (const [name, file] of files) {
     const snapshot = loadedState();
     const asked = [];
-    const loaded = await importSession(input(file), { confirmLoadRepairs: async ({ items }) => { asked.push(items); return true; } });
-    outcomes.push([name, loaded.status, asked.length]);
-    if (loaded.status === 'error') assert.equal(loadedState(), snapshot, name);
+    let committed = false;
+    const loaded = await importSession(input(file), {
+      confirmLoadRepairs: async ({ items }) => { asked.push(items); return true; },
+      rollbackState: { capture: () => { committed = true; }, restore: () => {} }
+    });
+    outcomes.push([name, loaded.status, asked.length, committed]);
+    // A refusal after the commit is in `outcomes`; node's rollback is not exact.
+    if (loaded.status === 'error' && !committed) assert.equal(loadedState(), snapshot, name);
   }
   // A legacy file whose track stacks are older than the current schema has
-  // its retired field names renamed first, so it loads and asks for its title.
+  // its retired field names renamed first, so it loads and asks for its GC
+  // content mode.
   const retiredNames = REFUSED_CONFIG_FIELDS.slice(0, 4).map((fields) => JSON.stringify(fields));
   assert.deepEqual(outcomes, files.map(([name]) => (retiredNames.some((fields) => name === `legacy ${fields}`)
-    ? [name, 'legacy', 1] : [name, 'error', 0])));
+    ? [name, 'legacy', 1, true] : [name, 'error', 0, false])));
+});
+
+// r4 S1, BA-OD99 (b): in a configuration file, a color rule or a whitelist
+// entry that is no object is dropped and listed before the dialog, and the
+// apply reads the lists with the same readers, so nothing is refused after
+// [Load]. A Session refuses such an entry before the dialog, as before.
+test('a configuration file drops and lists a rule or whitelist entry that is no object; a Session refuses it (r4 S1)', async () => {
+  const rule = { feat: 'CDS', qual: 'product', val: 'kinase', color: 'red', cap: 'Kinase' };
+  const file = { form: { plot_title: 'Rules' }, rules: [null, rule, 5], whitelist: [null, { feat: 'CDS', qual: 'gene', key: 'dnaA' }] };
+  let committed = false;
+  const asked = [];
+  const loaded = await importSession(input(file), {
+    confirmLoadRepairs: async ({ items }) => { asked.push(items); return true; },
+    rollbackState: { capture: () => { committed = true; }, restore: () => {} }
+  });
+  assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
+  assert.ok(committed);
+  assert.deepEqual(asked, [[
+    'Settings: 2 entries of rules could not be read and were dropped.',
+    'Settings: 1 entry of whitelist could not be read and was dropped.'
+  ]]);
+  const drawing = state.drawings[state.mode.value];
+  assert.deepEqual(JSON.parse(JSON.stringify(drawing.manualSpecificRules)), [{ ...rule, color: '#FF0000' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(drawing.manualWhitelist)), [{ feat: 'CDS', qual: 'gene', key: 'dnaA' }]);
+  for (const list of ['rules', 'whitelist']) {
+    const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+    session.modes.circular.config[list] = [null];
+    const snapshot = loadedState();
+    const dialogs = [];
+    const refused = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+    assert.deepEqual([refused.status, dialogs.length, loadedState() === snapshot], ['error', 0, true], list);
+  }
 });
 
 // The shape of a feature type the user added is a key the default
