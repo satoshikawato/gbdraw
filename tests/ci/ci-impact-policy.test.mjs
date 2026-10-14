@@ -701,3 +701,55 @@ test('carry-forward verdicts follow the allowed path sets', () => {
   assert.deepEqual(verdictsFor([], { identicalTree: true, ancestor: false }), none);
   assert.deepEqual(verdictsFor([], { valid: false }), none);
 });
+
+const pullRequestEvidence = () => ({ ...evidence(), aggregateName: 'PR / gate', headSha: 'f'.repeat(40) });
+const pullRequestTreePlan = (overrides = {}) => createImpactPlan({
+  profile: 'dev',
+  impact: 'web-runtime',
+  capabilities: ['web-runtime'],
+  decision: 'selective',
+  basis: 'IDENTICAL_TREE_WITH_PR_EVIDENCE',
+  changeBaseSha: SHA.base,
+  changeHeadSha: SHA.head,
+  workflowSha: SHA.workflow,
+  changedPathCount: 1,
+  inheritedEvidence: pullRequestEvidence(),
+  ...overrides
+});
+
+test('a merged pull request tree inherits only the dev jobs its pull request run also runs', () => {
+  const all = ['recipes-standard', 'gallery', 'playwright-functional', 'lint'];
+  for (const [capabilities, inherited] of [
+    [['web-runtime'], ['gallery', 'playwright-functional']],
+    [['python-core'], ['gallery', 'lint']],
+    [['packaging'], ['recipes-standard', 'gallery', 'lint']],
+    [['documentation', 'renderer', 'web-runtime'], all],
+    [['tests-only'], all],
+    [['full'], all]
+  ]) {
+    const impactPlan = pullRequestTreePlan({ impact: capabilities.at(-1), capabilities });
+    assert.deepEqual(impactPlan.requiredJobs, knownJobsFor('dev').filter((job) => !inherited.includes(job)),
+      capabilities.join());
+    assert.equal(validateImpactPlan(JSON.parse(JSON.stringify(impactPlan))), true, capabilities.join());
+  }
+  assert.throws(() => validateImpactPlan({
+    ...JSON.parse(JSON.stringify(pullRequestTreePlan())),
+    requiredJobs: ['core', 'browser', 'playwright-performance', 'losat-cache-browser-acceptance']
+  }), { code: 'REQUIRED_JOBS_MISMATCH' });
+});
+
+test('pull request tree evidence fails closed outside dev, for control-plane changes, and without jobs', () => {
+  for (const [overrides, code] of [
+    [{ impact: 'ci-only', capabilities: ['web-runtime', 'ci-only'] }, 'BASIS_IMPACT_MISMATCH'],
+    [{ impact: 'metadata', capabilities: ['metadata'] }, 'BASIS_IMPACT_MISMATCH'],
+    [{ impact: 'none', capabilities: ['none'], changedPathCount: 0 }, 'BASIS_IMPACT_MISMATCH'],
+    [{ profile: 'gallery' }, 'BASIS_DECISION_MISMATCH'],
+    [{ profile: 'pr' }, 'BASIS_DECISION_MISMATCH'],
+    [{ profile: 'release' }, 'BASIS_DECISION_MISMATCH'],
+    [{ decision: 'full' }, 'BASIS_DECISION_MISMATCH'],
+    [{ inheritedEvidence: null }, 'INVALID_EVIDENCE_SCHEMA'],
+    [{ inheritedEvidence: { ...pullRequestEvidence(), headSha: 'f'.repeat(12) } }, 'INVALID_EVIDENCE']
+  ]) {
+    assert.throws(() => pullRequestTreePlan(overrides), { code }, JSON.stringify(overrides));
+  }
+});

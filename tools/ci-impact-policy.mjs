@@ -14,10 +14,12 @@ export const IMPACT_PLAN_BASES = freeze([
   'FULL_CHANGE', 'UNKNOWN_OR_INVALID_CHANGE', 'MANUAL_FULL_RUN',
   'ARCHITECTURE_CHANGE', 'DOCUMENTATION_ONLY_PR', 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
   'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', 'INHERITED_EVIDENCE_UNAVAILABLE',
-  'IDENTICAL_TREE_WITH_DIRECT_PARENT_EVIDENCE', 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE'
+  'IDENTICAL_TREE_WITH_DIRECT_PARENT_EVIDENCE', 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE',
+  'IDENTICAL_TREE_WITH_PR_EVIDENCE'
 ]);
 const IDENTICAL_TREE_BASIS = 'IDENTICAL_TREE_WITH_DIRECT_PARENT_EVIDENCE';
 const LEAF_TEST_BASIS = 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE';
+export const PR_TREE_BASIS = 'IDENTICAL_TREE_WITH_PR_EVIDENCE';
 const PARENT_EVIDENCE_BASES = freeze([
   'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', IDENTICAL_TREE_BASIS, LEAF_TEST_BASIS
 ]);
@@ -55,6 +57,8 @@ const PR_CAPABILITY_JOBS = freeze({
   'ci-only': PR_FULL_TIER_JOBS,
   full: PR_JOBS
 });
+// Jobs whose pull request run executes the same command as the dev tier on the same tree.
+const PR_EVIDENCE_JOBS = freeze(['recipes-standard', 'gallery', 'playwright-functional', 'lint']);
 
 // Runtime changes always receive comprehensive integrated-dev/Gallery validation.
 // Control-plane, dependency, and unknown changes cannot inherit a narrower route.
@@ -67,6 +71,11 @@ export const requiresFullCoverage = (profile, capabilities) => profile === 'rele
 export const isDocumentationOnly = (capabilities) => Array.isArray(capabilities)
   && capabilities.some((capability) => ['documentation', 'policy-documentation'].includes(capability))
   && capabilities.every((capability) => LIGHT_CLASSES.includes(capability));
+// SELECTIVE_CI.md "Merged pull request inheritance": the dev jobs that a pull request run with
+// these capabilities also runs. A control-plane change inherits nothing.
+export const pullRequestEvidenceJobsFor = (capabilities) => freeze(capabilities.includes('ci-only') ? []
+  : DEV_JOBS.filter((job) => PR_EVIDENCE_JOBS.includes(job)
+    && capabilities.some((capability) => PR_CAPABILITY_JOBS[capability]?.includes(job))));
 const orderedCapabilities = (capabilities) => IMPACT_CLASSES.filter((capability) => capabilities.includes(capability));
 const primaryImpact = (capabilities) => capabilities.at(-1);
 const FULL_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
@@ -367,6 +376,10 @@ export const requiredJobsFor = ({
   }
   const all = PROFILE_REQUIRED_JOBS[profile];
   if (decision === 'selective' && basis === IDENTICAL_TREE_BASIS) return freeze([]);
+  if (decision === 'selective' && basis === PR_TREE_BASIS) {
+    const inherited = pullRequestEvidenceJobsFor(capabilities);
+    return freeze(all.filter((job) => !inherited.includes(job)));
+  }
   if (decision === 'selective' && basis === LEAF_TEST_BASIS) {
     validateLeafTests({ profile, capabilities, leafTests });
     const selected = [
@@ -398,13 +411,14 @@ export const knownJobsFor = (profile) => {
   return freeze([...PROFILE_REQUIRED_JOBS[profile]]);
 };
 
+// A parent basis names its parent commit; a pull request basis names the pull request head.
 const validateInheritedEvidence = (evidence, expectedHeadSha) => {
   if (!sameKeys(evidence, EVIDENCE_KEYS)) {
     fail('INVALID_EVIDENCE_SCHEMA', 'Inherited evidence has an invalid schema.');
   }
   if (typeof evidence.workflowPath !== 'string' || !evidence.workflowPath
       || typeof evidence.aggregateName !== 'string' || !evidence.aggregateName
-      || evidence.headSha !== expectedHeadSha
+      || (expectedHeadSha === null ? !isFullObjectId(evidence.headSha) : evidence.headSha !== expectedHeadSha)
       || !Number.isSafeInteger(evidence.runId) || evidence.runId <= 0
       || !Number.isSafeInteger(evidence.aggregateJobId) || evidence.aggregateJobId <= 0
       || typeof evidence.runUrl !== 'string' || !evidence.runUrl
@@ -419,7 +433,8 @@ const validateBasis = (plan) => {
   }
   const selectiveBases = plan.profile === 'pr'
     ? ['LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE']
-    : plan.profile === 'release' ? [] : PARENT_EVIDENCE_BASES;
+    : plan.profile === 'release' ? []
+      : plan.profile === 'dev' ? [...PARENT_EVIDENCE_BASES, PR_TREE_BASIS] : PARENT_EVIDENCE_BASES;
   const documentationOnlyPr = plan.basis === 'DOCUMENTATION_ONLY_PR';
   if (documentationOnlyPr && (plan.profile !== 'pr' || plan.decision !== 'selective'
       || !isDocumentationOnly(plan.capabilities))) {
@@ -430,7 +445,8 @@ const validateBasis = (plan) => {
   }
   if (plan.decision === 'full' && [
     'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
-    ...PARENT_EVIDENCE_BASES
+    ...PARENT_EVIDENCE_BASES,
+    PR_TREE_BASIS
   ].includes(plan.basis)) {
     fail('BASIS_DECISION_MISMATCH', 'Full decision cannot claim inherited evidence.');
   }
@@ -440,6 +456,10 @@ const validateBasis = (plan) => {
         || !['dev', 'gallery'].includes(plan.profile)
         || ![IDENTICAL_TREE_BASIS, 'INHERITED_EVIDENCE_UNAVAILABLE'].includes(plan.basis))) {
     fail('BASIS_IMPACT_MISMATCH', 'Only a proven identical tree has no changed path.');
+  }
+  if (plan.basis === PR_TREE_BASIS && (!Array.isArray(plan.capabilities)
+      || pullRequestEvidenceJobsFor(plan.capabilities).length === 0)) {
+    fail('BASIS_IMPACT_MISMATCH', 'Pull request evidence must cover a dev job and no control-plane change.');
   }
   if (plan.basis !== LEAF_TEST_BASIS && plan.leafTests !== null) {
     fail('UNEXPECTED_LEAF_TESTS', 'Only a leaf-test plan lists leaf tests.');
@@ -491,7 +511,7 @@ export const validateImpactPlan = (plan, expected = {}) => {
     });
   }
   if (plan.decision === 'selective' && plan.basis !== 'DOCUMENTATION_ONLY_PR') {
-    validateInheritedEvidence(plan.inheritedEvidence, plan.changeBaseSha);
+    validateInheritedEvidence(plan.inheritedEvidence, plan.basis === PR_TREE_BASIS ? null : plan.changeBaseSha);
   } else if (plan.inheritedEvidence !== null) {
     fail('UNEXPECTED_EVIDENCE', 'Plans without an evidence basis cannot contain inherited evidence.');
   }
