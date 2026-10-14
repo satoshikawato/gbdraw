@@ -500,7 +500,10 @@ export const readSessionDocument = (value) => {
  * settings-only file, whose content is its settings, when its settings hold
  * nothing or were dropped (D1a: `modes` null or text). A file that holds no
  * part (an envelope-only Session 27-30) loads as before (BA-D20). Each
- * producer that drops a part records the part's key as its path.
+ * producer that drops a part records the part's key as its path; a part
+ * dropped with no row still counts (E-OD21): the `request-dropped` row of a
+ * request Load cannot read (K22) loads the file as settings only, which drops
+ * every other part, so it is judged as a settings-only file (OV-864).
  * @param {SessionEnvelope} stored The document as the file holds it.
  * @param {readonly LoadRepair[]} repairs Every repair of the Load.
  */
@@ -513,7 +516,9 @@ export const restoresNothing = (stored, repairs) => {
     .filter(([key, { part }]) => part !== null && (only === undefined || part === only)
       && !holdsNothing(stored[/** @type {keyof SessionInput} */ (key)]))
     .map(([key]) => key);
-  if (isSettingsOnlySessionDocument(stored)) return held('settings').every((key) => dropped.has(key));
+  if (isSettingsOnlySessionDocument(stored) || repairs.some(({ code }) => code === 'request-dropped')) {
+    return held('settings').every((key) => dropped.has(key));
+  }
   const parts = held();
   return parts.length > 0 && parts.every((key) => dropped.has(key));
 };

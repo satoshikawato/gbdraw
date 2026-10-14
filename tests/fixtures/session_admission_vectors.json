@@ -894,6 +894,9 @@
   },
   "web-46": {
    "fixture": "tests/fixtures/sessions/legend-renamed-rows.v46.gbdraw-session.json.gz"
+  },
+  "cli-42": {
+   "fixture": "tests/fixtures/sessions/se08-main-linear-cli.v42.gbdraw-session.json.gz"
   }
  },
  "vectors": [
@@ -5449,6 +5452,89 @@
    ],
    "python": "accept",
    "web": "loaded"
+  },
+  {
+   "id": "ov864-cli-42-request-missing",
+   "base": "cli-42",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/renderRequest"
+    }
+   ],
+   "finding": "OV-864, E-OD21: a CLI Session 42 holds no Web settings, so when its request cannot be read every content part it holds is dropped (the request with a row, the Results, inputs and caches with the settings-only reading) and Load restores nothing (R4), as for the same file with a null request",
+   "python": "refuse",
+   "pythonMessage": "Session version 42 requires a canonical renderRequest object.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "ov864-cli-42-request-unreadable",
+   "base": "cli-42",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/renderRequest",
+     "value": "x"
+    }
+   ],
+   "finding": "OV-864, E-OD21: a CLI Session 42 holds no Web settings, so when its request cannot be read every content part it holds is dropped (the request with a row, the Results, inputs and caches with the settings-only reading) and Load restores nothing (R4), as for the same file with a null request",
+   "python": "refuse",
+   "pythonMessage": "Session version 42 requires a canonical renderRequest object.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "ov864-cli-42-request-null",
+   "base": "cli-42",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/renderRequest",
+     "value": null
+    }
+   ],
+   "finding": "OV-864, E-OD21: a CLI Session 42 holds no Web settings, so when its request cannot be read every content part it holds is dropped (the request with a row, the Results, inputs and caches with the settings-only reading) and Load restores nothing (R4), as for the same file with a null request",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session cannot contain biological sources.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "ov864-web-46-request-unreadable-empty-modes",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/renderRequest",
+     "value": "x"
+    },
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {}
+    }
+   ],
+   "finding": "OV-864, E-OD21: a Web Session 46 whose request cannot be read loads as settings only; when its settings hold nothing Load restores nothing (R4)",
+   "python": "refuse",
+   "pythonMessage": "requires a canonical renderRequest object.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "control-settings-only-47",
+   "finding": "control",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/version",
+     "value": 47
+    }
+   ],
+   "python": "accept",
+   "web": "loaded",
+   "note": "A settings-only Session 47 as the Web's Save writes it (null request, settings present)."
   }
  ]
 }

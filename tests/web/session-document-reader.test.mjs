@@ -59,6 +59,27 @@ test('R4: a Session whose every held content part was dropped restores nothing',
   assert.equal(restoresNothing(stored, []), false);
 });
 
+test('R4 (E-OD21, OV-864): the row-less drops of a request Load cannot read count, as the settings-only reading drops them', () => {
+  // The one producer of `request-dropped` (K22) drops the request at its part
+  // key (or a place in it) and loads the file as settings only: the Results,
+  // inputs, feature list and caches go with no row of their own.
+  const cli = fixture('se08-main-linear-cli.v42.gbdraw-session.json.gz');
+  const web = fixture(V44);
+  assert.ok(!('config' in cli) && !('modes' in cli) && 'config' in web);
+  for (const path of ['renderRequest', 'renderRequest.mode', 'renderRequest.layout']) {
+    const k22 = [{ code: 'request-dropped', path, effect: 'dropped' }];
+    // A CLI Session holds no settings: nothing is restored, as with a null request.
+    assert.equal(restoresNothing(cli, k22), true, path);
+    assert.equal(restoresNothing({ ...cli, renderRequest: null }, []), true);
+    // A Web Session keeps its settings; dropped too, nothing is left.
+    assert.equal(restoresNothing(web, k22), false, path);
+    assert.equal(restoresNothing(web, [...k22, { code: 'session-part-dropped', path: 'config', effect: 'dropped' }]), true, path);
+    assert.equal(restoresNothing({ ...structuredClone(fixture(V46)), modes: {} }, k22), true, path);
+  }
+  // Without that row, the same file restores its request.
+  assert.equal(restoresNothing(cli, []), false);
+});
+
 const V44_BOUND = 'inactive-class-m.v44.gbdraw-session.json.gz';
 const V44_CIRCULAR = 'HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz';
 
