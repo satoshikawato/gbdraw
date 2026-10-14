@@ -486,7 +486,6 @@
  *   format: 'gbdraw-session',
  *   version: 27 | 28 | 29 | 30,
  *   otherModeResult?: never,
- *   files?: Record<string, unknown> | null,
  *   [key: string]: unknown
  * }} SessionChecked27
  */
@@ -495,7 +494,6 @@
  *   format: 'gbdraw-session',
  *   version: 31 | 32 | 33,
  *   otherModeResult?: never,
- *   files?: Record<string, unknown> | null,
  *   renderRequest: unknown,
  *   resources: Record<string, unknown>,
  *   [key: string]: unknown
@@ -506,13 +504,11 @@
  *   format: 'gbdraw-session',
  *   version: 39,
  *   otherModeResult?: never,
- *   files?: Record<string, unknown> | null,
  *   renderRequest: unknown,
  *   resources: Record<string, unknown>,
  *   losatCache?: CheckedLosatCache | null,
  *   losatDerivedCache?: CheckedLosatDerivedCache | null,
  *   proteinIdentityManifest?: Record<string, unknown> | null,
- *   legacyArtifacts?: Record<string, unknown> | null,
  *   [key: string]: unknown
  * }} SessionChecked39
  */
@@ -550,7 +546,7 @@
  * @property {unknown} [webFiles]
  * @property {unknown} [ui]
  * @property {CheckedSessionOrthogroupState} [orthogroupState]
- * @property {Record<string, unknown> | null} [legacyArtifacts]
+ * @property {unknown} [legacyArtifacts]
  * @property {unknown} [config]
  * @property {Record<string, unknown>} [features]
  */
@@ -779,7 +775,7 @@
  * @property {CheckedSessionOrthogroupState} [orthogroupState]
  * @property {CheckedSessionModes | null} [modes]
  * @property {Record<string, unknown>} [cliOptions]
- * @property {Record<string, unknown> | null} [legacyArtifacts]
+ * @property {unknown} [legacyArtifacts]
  * @property {CheckedSessionOtherModeResult} [otherModeResult]
  */
 /** @typedef {SessionChecked27 | SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46} SessionChecked */

@@ -184,16 +184,9 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
       fields: Object.freeze({
         format: Object.freeze({kind: "literal", values: Object.freeze(["gbdraw-session"])}),
         version: Object.freeze({kind: "literal", values: Object.freeze([27, 28, 29, 30])}),
-        otherModeResult: Object.freeze({kind: "literal", values: Object.freeze([])}),
-        files: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
-            Object.freeze({kind: "null"})
-          ])
-        })
+        otherModeResult: Object.freeze({kind: "literal", values: Object.freeze([])})
       }),
-      optional: Object.freeze(["files", "otherModeResult"]),
+      optional: Object.freeze(["otherModeResult"]),
       open: true
     }),
     SessionChecked31: Object.freeze({
@@ -202,17 +195,10 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         format: Object.freeze({kind: "literal", values: Object.freeze(["gbdraw-session"])}),
         version: Object.freeze({kind: "literal", values: Object.freeze([31, 32, 33])}),
         otherModeResult: Object.freeze({kind: "literal", values: Object.freeze([])}),
-        files: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
-            Object.freeze({kind: "null"})
-          ])
-        }),
         renderRequest: Object.freeze({kind: "unknown"}),
         resources: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})})
       }),
-      optional: Object.freeze(["files", "otherModeResult"]),
+      optional: Object.freeze(["otherModeResult"]),
       open: true,
       defaults: Object.freeze({resources: Object.freeze({})})
     }),
@@ -222,13 +208,6 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         format: Object.freeze({kind: "literal", values: Object.freeze(["gbdraw-session"])}),
         version: Object.freeze({kind: "literal", values: Object.freeze([39])}),
         otherModeResult: Object.freeze({kind: "literal", values: Object.freeze([])}),
-        files: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
-            Object.freeze({kind: "null"})
-          ])
-        }),
         renderRequest: Object.freeze({kind: "unknown"}),
         resources: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
         losatCache: Object.freeze({
@@ -248,23 +227,9 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
             Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
             Object.freeze({kind: "null"})
           ])
-        }),
-        legacyArtifacts: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
-            Object.freeze({kind: "null"})
-          ])
         })
       }),
-      optional: Object.freeze([
-        "files",
-        "legacyArtifacts",
-        "losatCache",
-        "losatDerivedCache",
-        "otherModeResult",
-        "proteinIdentityManifest"
-      ]),
+      optional: Object.freeze(["losatCache", "losatDerivedCache", "otherModeResult", "proteinIdentityManifest"]),
       open: true,
       defaults: Object.freeze({resources: Object.freeze({})})
     }),
@@ -322,13 +287,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         webFiles: Object.freeze({kind: "unknown"}),
         ui: Object.freeze({kind: "unknown"}),
         orthogroupState: Object.freeze({kind: "ref", name: "CheckedSessionOrthogroupState"}),
-        legacyArtifacts: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
-            Object.freeze({kind: "null"})
-          ])
-        }),
+        legacyArtifacts: Object.freeze({kind: "unknown"}),
         config: Object.freeze({kind: "unknown"}),
         features: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})})
       }),
@@ -800,13 +759,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
           options: Object.freeze([Object.freeze({kind: "ref", name: "CheckedSessionModes"}), Object.freeze({kind: "null"})])
         }),
         cliOptions: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
-        legacyArtifacts: Object.freeze({
-          kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
-            Object.freeze({kind: "null"})
-          ])
-        }),
+        legacyArtifacts: Object.freeze({kind: "unknown"}),
         otherModeResult: Object.freeze({kind: "ref", name: "CheckedSessionOtherModeResult"})
       }),
       optional: Object.freeze([

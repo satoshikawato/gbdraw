@@ -444,9 +444,9 @@ def describe_session_admission() -> dict[str, Any]:
         defaults: dict[str, object] = {}
         if minimum < sio.MODE_SCOPED_SESSION_MIN_VERSION:
             fields["otherModeResult"] = literal()  # absent below 46
-        if minimum < sio.CURRENT_AUTHORITY_SESSION_MIN_VERSION:
-            # Python requires an object below 31; dev loads a Session 27-30 without one.
-            fields["files"] = nullable(record(UNKNOWN))
+        # Below 40 `files` stays unknown: Python requires an object below 31 and
+        # refuses another kind below 40, but the Web loads a Session without it
+        # and one whose `files` is not an object (tests/fixtures/session_admission_vectors.json).
         if minimum >= sio.CANONICAL_SESSION_MIN_VERSION:
             fields["renderRequest"] = UNKNOWN  # the request's own reader checks it
             fields["resources"] = record(UNKNOWN)
@@ -456,7 +456,7 @@ def describe_session_admission() -> dict[str, Any]:
             fields["losatCache"] = losat_cache
             fields["losatDerivedCache"] = derived_cache
             fields["proteinIdentityManifest"] = nullable(record(UNKNOWN))
-            fields["legacyArtifacts"] = nullable(record(UNKNOWN))
+            # `legacyArtifacts` stays unknown: the Web loads one that is not an object.
         root = f"SessionChecked{minimum}"
         if minimum < sio.CURRENT_AUTHORITY_SESSION_MIN_VERSION:
             # Below 40 no top-level key is checked.
