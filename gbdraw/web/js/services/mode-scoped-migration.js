@@ -80,16 +80,6 @@ export const modeSliceFieldViolations = (value, container = '') => {
 export const validateModeSliceFields = (value) => {
   if (modeSliceFieldViolations(value).length) throw fieldsError();
 };
-// The drawing's settings whose keys the reader table reads: Load drops a key
-// they may not hold, and a `losat` that is no object, with a dialog row
-// (`config-field-readers.js`, E-OD03).
-const READ_SETTING_CONTAINERS = new Set(['config', 'config.form', 'config.adv', 'config.losat']);
-/** Load: a slice holds only registry fields, apart from what the reader table reads. @param {unknown} value */
-export const requireModeSliceFields = (value) => {
-  if (modeSliceFieldViolations(value).some(({ container, field }) => !READ_SETTING_CONTAINERS.has(container)
-    || (field === null && container !== 'config.losat'))) throw fieldsError();
-};
-
 // The modes a GUI-unmanaged config override leaf belongs to (`by-leaf`): the
 // leaf of one mode's renderer prefixes belongs to that mode, any other leaf to
 // both (gbdraw.api.options._MODE_CONFIG_OVERRIDE_PREFIXES).

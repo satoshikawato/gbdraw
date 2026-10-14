@@ -75,8 +75,6 @@ const invalid = [
   ['missing request', d => { delete d.renderRequest; }, /canonical render request/],
   ['biological binding', d => { d.resources = full.resources; d.webFiles = full.webFiles; }, /biological sources/],
   ['dangling binding', d => { d.webFiles.bindings.whitelist = { resourceId: 'absent', name: 'list.tsv', type: '', lastModified: 0 }; }, /Missing canonical resource/],
-  ['unbound resource', d => { d.resources = full.resources; }, /unbound resource/],
-  ['malformed config', d => { d.config.form = []; }, /active form/],
   ['binding schema', d => { d.webFiles.bindings.schema = 99; }, /binding schema/],
   ['saved Result', d => { d.results = [{ name: 'old.svg', content: '<svg/>' }]; }, /feature catalog/],
   ['committed provenance', d => { d.cliInvocation = {}; }, /committed render artifacts/],
@@ -88,6 +86,20 @@ for (const [name, mutate, error] of invalid) {
     const document = structuredClone(settings);
     mutate(document);
     assert.throws(() => adoptCurrentSessionDocument(document, 42), error);
+  });
+}
+
+// E-OD02: Save refuses these; Load drops a resource no binding names with no
+// row (E-OD06) and reads a setting container of another kind with a row (E1a).
+for (const [name, mutate, error] of [
+  ['unbound resource', d => { d.resources = full.resources; }, /unbound resource/],
+  ['malformed config', d => { d.config.form = []; }, /active form/]
+]) {
+  test(`settings-only Save refuses ${name}, which Load reads`, () => {
+    const document = structuredClone(settings);
+    mutate(document);
+    assert.throws(() => validateSessionAuthorityInventory(structuredClone(document), 42), error);
+    assert.equal(adoptCurrentSessionDocument(document, 42).canonical, null);
   });
 }
 

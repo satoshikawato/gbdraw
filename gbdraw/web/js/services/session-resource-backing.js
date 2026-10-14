@@ -356,7 +356,7 @@ const materializeText = (backing) => {
 };
 
 /**
- * @param {Record<string, RawSessionResourceDescriptor> | null | undefined} resources
+ * @param {Record<string, unknown> | null | undefined} resources Unvalidated; each descriptor is checked here.
  * @returns {SessionResourceTable}
  */
 export const adoptCurrentSessionResources = (resources) => {
@@ -370,7 +370,7 @@ export const adoptCurrentSessionResources = (resources) => {
     if (!resourceId || backings.has(resourceId)) {
       throw new Error('Current session resource IDs must be unique non-empty strings.');
     }
-    backings.set(resourceId, validateDescriptor(resourceId, descriptor));
+    backings.set(resourceId, validateDescriptor(resourceId, /** @type {RawSessionResourceDescriptor | null | undefined} */ (descriptor)));
   });
   /** @type {SessionResourceTable} */
   const table = Object.freeze({});

@@ -149,32 +149,34 @@ test('a file that is not a gbdraw Session is refused as such before its contents
   assert.equal(await reason({ format: 'other', version: 46, bogus: 1 }), 'SESSION_FORMAT');
 });
 
-test('Session 45 and a Session 46 with a retired field or a non-registry slice field are rejected (S3, S4)', async () => {
+// S3, S4 (E-OD03, A7d, A7f): Load refuses a version it does not read; it drops
+// a Session 46's retired homes, whose place the slices fill, with no row, and a
+// key no writer wrote with one.
+test('Session 45 is refused; a Session 46 drops its retired homes with no row and an unknown key with one (S3, S4)', async () => {
   resetDrawings();
   const saved = await save('current');
-  const rejected = async (session, label) => {
+  const rows = async (session, label) => {
     const outcome = await load(session);
-    assert.equal(outcome.status, 'error', label);
+    assert.equal(outcome.status, 'ok', `${label}: ${JSON.stringify(outcome.error)}`);
+    return (outcome.repairs ?? []).map(({ code, path }) => `${code}@${path}`);
   };
-  await rejected({ ...structuredClone(saved), version: 45 }, 'Session 45');
-  await rejected({ ...structuredClone(saved), config: structuredClone(saved.modes.circular.config) }, 'top-level config');
-  await rejected({ ...structuredClone(saved), features: {} }, 'top-level features');
+  const refused = await load({ ...structuredClone(saved), version: 45 });
+  assert.equal(refused.status, 'error', 'Session 45');
+  assert.deepEqual(await rows({ ...structuredClone(saved), config: structuredClone(saved.modes.circular.config) }, 'top-level config'), []);
+  assert.deepEqual(await rows({ ...structuredClone(saved), features: {} }, 'top-level features'), []);
   const retiredUi = structuredClone(saved);
   retiredUi.ui.canvasPadding = { top: 0, right: 0, bottom: 0, left: 0 };
-  await rejected(retiredUi, 'ui.canvasPadding');
+  assert.deepEqual(await rows(retiredUi, 'ui.canvasPadding'), []);
   const retiredLegend = structuredClone(saved);
   retiredLegend.editorState.legend = { ...retiredLegend.editorState.legend, entries: [] };
-  await rejected(retiredLegend, 'editorState.legend.entries');
+  assert.deepEqual(await rows(retiredLegend, 'editorState.legend.entries'), []);
   // A field no slice holds (a flat draft's `modeProfiles`) is dropped with a row (E-OD03).
   const unknownSliceField = structuredClone(saved);
   unknownSliceField.modes.linear.config.modeProfiles = { activeMode: 'linear' };
-  const unknownSliceOutcome = await load(unknownSliceField);
-  assert.equal(unknownSliceOutcome.status, 'ok', JSON.stringify(unknownSliceOutcome.error));
-  assert.deepEqual(unknownSliceOutcome.repairs.map(({ code, path }) => `${code}@${path}`),
-    ['setting-replaced@modes.linear.config.modeProfiles']);
+  assert.deepEqual(await rows(unknownSliceField, 'modeProfiles'), ['setting-replaced@modes.linear.config.modeProfiles']);
   const thirdMode = structuredClone(saved);
   thirdMode.modes.radial = {};
-  await rejected(thirdMode, 'modes.radial');
+  assert.deepEqual(await rows(thirdMode, 'modes.radial'), ['session-field-dropped@modes.radial']);
 });
 
 // OV-160: a named CSS color in a Legend color or a stroke override (also the

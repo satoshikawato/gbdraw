@@ -21,7 +21,7 @@ import pytest
 from gbdraw.contract_shapes import shape_violations
 from gbdraw.exceptions import GbdrawError
 from gbdraw.session_contract import describe_session_admission
-from gbdraw.session_io import load_session
+from gbdraw.session_io import FLAT_DRAFT_TOP_LEVEL_FIELDS, load_session
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads(
@@ -165,6 +165,13 @@ def test_every_row_of_the_admission_description_has_a_vector() -> None:
         root = root or BAND_ROOT[_base(vector["base"])["version"]]
         for row in _rows_left(document, {"kind": "ref", "name": root}, root, ""):
             assert vector["python"] == "refuse", (row, vector["id"])
+            if vector["web"] == "loaded" and row[1] == "*":
+                # E-OD03: a retired home whose place a slice fills is dropped with no row.
+                assert all(edit["path"][1:] in FLAT_DRAFT_TOP_LEVEL_FIELDS for edit in vector["edits"]), (
+                    row,
+                    vector["id"],
+                )
+                continue
             if vector["web"] == "loaded":
                 # Rule 1 (E-OD06): a value that holds nothing at an optional field is dropped with no row.
                 assert row[1] in ADMISSION_TYPES[row[0]]["optional"] and all(

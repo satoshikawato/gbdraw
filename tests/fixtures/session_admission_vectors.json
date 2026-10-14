@@ -5,7 +5,7 @@
   "(tests/web/session-admission-vectors.test.mjs).",
   "A vector applies its edits (JSON Pointer; set or remove) to a copy of its base. python is",
   "accept or refuse, with pythonMessage, a fragment of Python's refusal. web is loaded,",
-  "repaired (webRepairs: the code@path of each row of the Load dialog) or refused (webClass:",
+  "repaired (webRepairs: the code@path of each repair, listed or not) or refused (webClass:",
   "R1-R4 of the Load repair receipt, or interim for a refusal of a content part that PR-E",
   "turns into a repair).",
   "S1: a vector Python accepts is not refused by the Web, unless difference names its open",
@@ -15,7 +15,8 @@
   "A vector whose id starts with row- takes its base out of one row of",
   "describe_session_admission(); every row has one that Python refuses and the Web refuses",
   "or repairs. A vector the Web loads with no row may leave a row only with a value that",
-  "holds nothing (null, [], {}) at an optional field (rule 1, E-OD06)."
+  "holds nothing (null, [], {}) at an optional field (rule 1, E-OD06), or with a retired",
+  "top-level home (config, features) of a mode-scoped Session (E-OD03)."
  ],
  "webOnlyRepairs": [
   {
@@ -32,6 +33,26 @@
    "code": "setting-replaced",
    "path": "ui.lInputType",
    "finding": "OV-594 (BA-D13, BA-D25 c): Python does not read the app input type; the Web reads a type outside gb and gff as GenBank, with a row when no committed request names the type."
+  },
+  {
+   "code": "session-field-dropped",
+   "path": "bogus",
+   "finding": "OV-590, TB6 (E2b-1 A6a): Python's Session 27-39 roots are open and keep an unknown top-level key unread; the Web lists it as left out."
+  },
+  {
+   "code": "session-field-dropped",
+   "path": "orthogroups",
+   "finding": "K17 (E-OD09): Python keeps the Session 27-30 orthogroups key unread; the Web no longer reads data.orthogroups and lists it as left out."
+  },
+  {
+   "code": "session-field-dropped",
+   "path": "modes",
+   "finding": "OV-638, A7a: Python's open roots below Session 40 keep modes unread; below Session 46 the Web lists it as left out."
+  },
+  {
+   "code": "session-field-dropped",
+   "path": "cliOptions",
+   "finding": "OV-638, A7a: Python's open roots below Session 40 keep cliOptions unread; below Session 46 the Web lists it as left out."
   }
  ],
  "bases": {
@@ -942,8 +963,7 @@
    "python": "refuse",
    "note": "The settings of the shown mode hold neither form nor adv.",
    "pythonMessage": "requires an active Web configuration and mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov591-mode-config-without-form",
@@ -958,8 +978,7 @@
    "python": "refuse",
    "note": "The settings of the shown mode lack form.",
    "pythonMessage": "requires an active Web configuration and mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov591-mode-config-without-adv",
@@ -974,8 +993,7 @@
    "python": "refuse",
    "note": "The settings of the shown mode lack adv.",
    "pythonMessage": "requires an active Web configuration and mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov591-linear-mode-config-without-form",
@@ -995,8 +1013,7 @@
    "python": "refuse",
    "note": "The same rule when the shown mode is Linear.",
    "pythonMessage": "requires an active Web configuration and mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov591-linear-mode",
@@ -1041,8 +1058,7 @@
    "python": "refuse",
    "note": "No shown mode.",
    "pythonMessage": "requires an active Web configuration and mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov591-mode-unknown",
@@ -1077,8 +1093,7 @@
    "python": "refuse",
    "note": "The whole Load refused it before this fixture (the admission validator alone did not).",
    "pythonMessage": "losatCache.entries must be an array",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov592-losat-cache-entries-null",
@@ -1094,8 +1109,7 @@
    "python": "refuse",
    "note": "entries is present and null.",
    "pythonMessage": "losatCache.entries must be an array",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov592-losat-cache-array",
@@ -1111,8 +1125,7 @@
    "python": "refuse",
    "note": "The cache container is an array.",
    "pythonMessage": "losatCache must be an object when present",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov592-losat-cache-null",
@@ -1143,8 +1156,7 @@
    "python": "refuse",
    "note": "The derived cache follows the same rule.",
    "pythonMessage": "losatDerivedCache.entries must be an array",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov592-committed-losat-cache-entries-object",
@@ -1160,8 +1172,7 @@
    "python": "refuse",
    "note": "The same rule in a Session with a Result.",
    "pythonMessage": "losatCache.entries must be an array",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov593-circular-records-off-duplicate",
@@ -1637,6 +1648,7 @@
    "pythonMessage": "requires a canonical resources object",
    "web": "repaired",
    "webRepairs": [
+    "session-part-dropped@resources",
     "request-dropped@renderRequest"
    ]
   },
@@ -1656,6 +1668,7 @@
    "pythonMessage": "requires a canonical resources object",
    "web": "repaired",
    "webRepairs": [
+    "session-part-dropped@resources",
     "request-dropped@renderRequest"
    ]
   },
@@ -1711,8 +1724,10 @@
    "python": "refuse",
    "note": "Both sides refuse an unknown top-level key from Session 40.",
    "pythonMessage": "unclassified top-level field",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@bogus"
+   ]
   },
   {
    "id": "ov590-unknown-top-level-key-33",
@@ -1726,10 +1741,11 @@
     }
    ],
    "python": "accept",
-   "web": "refused",
+   "web": "repaired",
    "note": "An unknown top-level key in a Session 31-39.",
-   "difference": "Python checks the top-level keys from Session 40, the Web from Session 31. Expected today; the Owner decides (B6).",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-field-dropped@bogus"
+   ]
   },
   {
    "id": "ov594-circular-input-type-fasta",
@@ -1820,8 +1836,10 @@
    "python": "refuse",
    "note": "From Session 39 a raw cache entry needs a string key.",
    "pythonMessage": "requires a key",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries[0]"
+   ]
   },
   {
    "id": "control-settings-only-42",
@@ -1845,9 +1863,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "requires an active Web configuration and mode",
-   "web": "refused",
-   "note": "A settings-only Session 41-44 whose ui is not an object names no mode; Python raised AttributeError before OV-780.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "A settings-only Session 41-44 whose ui is not an object names no mode; Python raised AttributeError before OV-780."
   },
   {
    "id": "ov780-settings-only-42-ui-array",
@@ -1862,9 +1879,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "requires an active Web configuration and mode",
-   "web": "refused",
-   "note": "A settings-only Session 41-44 whose ui is not an object names no mode; Python raised AttributeError before OV-780.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "A settings-only Session 41-44 whose ui is not an object names no mode; Python raised AttributeError before OV-780."
   },
   {
    "id": "row-checkedfeatureoverridedraftrow-unknown-key",
@@ -2107,9 +2123,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid current LOSAT cache entry at losatCache.entries[0].",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedLosatCacheEntry.kind.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries[0]"
+   ]
   },
   {
    "id": "row-checkedlosatcacheentry-text",
@@ -2124,9 +2142,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid current LOSAT cache entry at losatCache.entries[0].",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedLosatCacheEntry.text.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries[0]"
+   ]
   },
   {
    "id": "row-checkedlosatderivedcacheentry-key",
@@ -2141,9 +2161,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid current derived LOSATP cache entry at losatDerivedCache.entries[0].",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedLosatDerivedCacheEntry.key.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ]
   },
   {
    "id": "row-checkedlosatderivedcacheentry-kind",
@@ -2158,9 +2180,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid current derived LOSATP cache entry at losatDerivedCache.entries[0].",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedLosatDerivedCacheEntry.kind.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ]
   },
   {
    "id": "row-checkedlosatderivedcacheentry-payload",
@@ -2175,9 +2199,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid current derived LOSATP cache entry at losatDerivedCache.entries[0].",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedLosatDerivedCacheEntry.payload.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ]
   },
   {
    "id": "row-checkedrecordanchorintent-unknown-key",
@@ -2819,9 +2845,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session version 40 requires editorState.featureCatalog.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedSessionEditorState.featureCatalog.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-part-dropped@editorState"
+   ]
   },
   {
    "id": "row-checkedsessionmodeslice-unknown-key",
@@ -2836,13 +2864,34 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular cannot contain keyNoWriterWrites.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedSessionModeSlice.*.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-field-dropped@modes.circular.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodeslice-config",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSlice.config.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.config"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodeslice-config",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "settings-only-46",
    "edits": [
     {
@@ -2853,13 +2902,31 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config must be an object.",
-   "web": "refused",
-   "note": "Admission row CheckedSessionModeSlice.config.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSlice.config."
   },
   {
    "id": "row-checkedsessionmodeslice-editorstate",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSlice.editorState.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodeslice-editorstate",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "settings-only-46",
    "edits": [
     {
@@ -2870,13 +2937,31 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState must be an object.",
-   "web": "refused",
-   "note": "Admission row CheckedSessionModeSlice.editorState.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSlice.editorState."
   },
   {
    "id": "row-checkedsessionmodeslice-features",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.features must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSlice.features.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.features"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodeslice-features",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "settings-only-46",
    "edits": [
     {
@@ -2887,13 +2972,31 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.features must be an object.",
-   "web": "refused",
-   "note": "Admission row CheckedSessionModeSlice.features.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSlice.features."
   },
   {
    "id": "row-checkedsessionmodeslice-ui",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/ui",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.ui must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSlice.ui.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.ui"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodeslice-ui",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "settings-only-46",
    "edits": [
     {
@@ -2904,9 +3007,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.ui must be an object.",
-   "web": "refused",
-   "note": "Admission row CheckedSessionModeSlice.ui.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSlice.ui."
   },
   {
    "id": "row-checkedsessionmodesliceconfig-unknown-key",
@@ -2935,14 +3037,32 @@
     {
      "op": "set",
      "path": "/modes/circular/config/adv",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.adv must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.adv.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.adv"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodesliceconfig-adv",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/adv",
      "value": null
     }
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config.adv must be an object.",
-   "web": "refused",
-   "note": "Admission row CheckedSessionModeSliceConfig.adv.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSliceConfig.adv."
   },
   {
    "id": "row-checkedsessionmodesliceconfig-featureplacementoverrides",
@@ -2987,14 +3107,32 @@
     {
      "op": "set",
      "path": "/modes/circular/config/form",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.form must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.form.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.form"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodesliceconfig-form",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/form",
      "value": null
     }
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config.form must be an object.",
-   "web": "refused",
-   "note": "Admission row CheckedSessionModeSliceConfig.form.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSliceConfig.form."
   },
   {
    "id": "row-checkedsessionmodesliceconfig-losat",
@@ -3171,13 +3309,34 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState cannot contain keyNoWriterWrites.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedSessionModeSliceEditorState.*.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodesliceeditorstate-featurestrokes",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState/featureStrokes",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState.featureStrokes must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceEditorState.featureStrokes.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState.featureStrokes"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodesliceeditorstate-featurestrokes",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "settings-only-46",
    "edits": [
     {
@@ -3188,13 +3347,31 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState.featureStrokes must be an object.",
-   "web": "refused",
-   "note": "Admission row CheckedSessionModeSliceEditorState.featureStrokes.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSliceEditorState.featureStrokes."
   },
   {
    "id": "row-checkedsessionmodesliceeditorstate-legend",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState/legend",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState.legend must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceEditorState.legend.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState.legend"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodesliceeditorstate-legend",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "settings-only-46",
    "edits": [
     {
@@ -3205,9 +3382,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState.legend must be an object.",
-   "web": "refused",
-   "note": "Admission row CheckedSessionModeSliceEditorState.legend.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSliceEditorState.legend."
   },
   {
    "id": "row-checkedsessionmodesliceeditorstatefeaturestrokes-unknown-key",
@@ -3222,9 +3398,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState.featureStrokes cannot contain keyNoWriterWrites.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedSessionModeSliceEditorStateFeatureStrokes.*.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState.featureStrokes.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodesliceeditorstatelegend-unknown-key",
@@ -3239,9 +3417,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState.legend cannot contain keyNoWriterWrites.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedSessionModeSliceEditorStateLegend.*.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState.legend.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodeslicefeatures-unknown-key",
@@ -3256,9 +3436,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.features cannot contain keyNoWriterWrites.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedSessionModeSliceFeatures.*.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-field-dropped@modes.circular.features.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodeslicefeatures-featureoverrides",
@@ -3308,9 +3490,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.ui cannot contain keyNoWriterWrites.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedSessionModeSliceUi.*.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-field-dropped@modes.circular.ui.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodes-unknown-key",
@@ -3325,13 +3509,34 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes holds a circular and a linear slice only.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedSessionModes.*.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-field-dropped@modes.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodes-circular",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModes.circular.",
+   "webRepairs": [
+    "session-part-dropped@modes.circular"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodes-circular",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "settings-only-46",
    "edits": [
     {
@@ -3342,13 +3547,31 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular must be an object.",
-   "web": "refused",
-   "note": "Admission row CheckedSessionModes.circular.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModes.circular."
   },
   {
    "id": "row-checkedsessionmodes-linear",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/linear",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.linear must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModes.linear.",
+   "webRepairs": [
+    "session-part-dropped@modes.linear"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodes-linear",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "settings-only-46",
    "edits": [
     {
@@ -3359,9 +3582,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.linear must be an object.",
-   "web": "refused",
-   "note": "Admission row CheckedSessionModes.linear.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModes.linear."
   },
   {
    "id": "row-checkedsessionresult-content",
@@ -3376,9 +3598,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Each current Session Result must be a named plain SVG.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedSessionResult.content.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
   },
   {
    "id": "row-checkedsessionresult-name",
@@ -3393,9 +3617,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Each current Session Result must be a named plain SVG.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row CheckedSessionResult.name.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
   },
   {
    "id": "row-sessionchecked27-format",
@@ -3422,14 +3648,32 @@
     {
      "op": "set",
      "path": "/otherModeResult",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 30 cannot contain otherModeResult.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked27.otherModeResult.",
+   "webRepairs": [
+    "session-field-dropped@otherModeResult"
+   ]
+  },
+  {
+   "id": "null-sessionchecked27-othermoderesult",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
      "value": null
     }
    ],
    "python": "refuse",
    "pythonMessage": "Session version 30 cannot contain otherModeResult.",
-   "web": "refused",
-   "note": "Admission row SessionChecked27.otherModeResult.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row SessionChecked27.otherModeResult."
   },
   {
    "id": "row-sessionchecked27-version",
@@ -3473,14 +3717,32 @@
     {
      "op": "set",
      "path": "/otherModeResult",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 33 cannot contain otherModeResult.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked31.otherModeResult.",
+   "webRepairs": [
+    "session-field-dropped@otherModeResult"
+   ]
+  },
+  {
+   "id": "null-sessionchecked31-othermoderesult",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
      "value": null
     }
    ],
    "python": "refuse",
    "pythonMessage": "Session version 33 cannot contain otherModeResult.",
-   "web": "refused",
-   "note": "Admission row SessionChecked31.otherModeResult.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row SessionChecked31.otherModeResult."
   },
   {
    "id": "row-sessionchecked31-renderrequest",
@@ -3562,9 +3824,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session losatCache must be an object when present.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked39.losatCache.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@losatCache"
+   ]
   },
   {
    "id": "row-sessionchecked39-losatderivedcache",
@@ -3579,13 +3843,34 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session losatDerivedCache must be an object when present.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked39.losatDerivedCache.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache"
+   ]
   },
   {
    "id": "row-sessionchecked39-othermoderesult",
    "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 39 cannot contain otherModeResult.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked39.otherModeResult.",
+   "webRepairs": [
+    "session-field-dropped@otherModeResult"
+   ]
+  },
+  {
+   "id": "null-sessionchecked39-othermoderesult",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "web-39",
    "edits": [
     {
@@ -3596,9 +3881,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session version 39 cannot contain otherModeResult.",
-   "web": "refused",
-   "note": "Admission row SessionChecked39.otherModeResult.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row SessionChecked39.otherModeResult."
   },
   {
    "id": "row-sessionchecked39-proteinidentitymanifest",
@@ -3680,9 +3964,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session contains unclassified top-level field(s): keyNoWriterWrites.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked40.*.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-field-dropped@keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-sessionchecked40-editorstate",
@@ -3709,14 +3995,32 @@
     {
      "op": "set",
      "path": "/features",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session features must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.features.",
+   "webRepairs": [
+    "session-field-dropped@features"
+   ]
+  },
+  {
+   "id": "null-sessionchecked40-features",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/features",
      "value": null
     }
    ],
    "python": "refuse",
    "pythonMessage": "Session features must be an object when present.",
-   "web": "refused",
-   "note": "Admission row SessionChecked40.features.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row SessionChecked40.features."
   },
   {
    "id": "row-sessionchecked40-format",
@@ -3748,9 +4052,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session losatCache must be an object when present.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked40.losatCache.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@losatCache"
+   ]
   },
   {
    "id": "row-sessionchecked40-losatderivedcache",
@@ -3765,13 +4071,34 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session losatDerivedCache must be an object when present.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked40.losatDerivedCache.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache"
+   ]
   },
   {
    "id": "row-sessionchecked40-orthogroupstate",
    "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroupState",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session orthogroupState must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.orthogroupState.",
+   "webRepairs": [
+    "session-field-dropped@orthogroupState"
+   ]
+  },
+  {
+   "id": "null-sessionchecked40-orthogroupstate",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "web-44",
    "edits": [
     {
@@ -3782,9 +4109,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session orthogroupState must be an object when present.",
-   "web": "refused",
-   "note": "Admission row SessionChecked40.orthogroupState.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row SessionChecked40.orthogroupState."
   },
   {
    "id": "row-sessionchecked40-proteinidentitymanifest",
@@ -3832,9 +4158,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session version 40 requires a results array.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked40.results.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
   },
   {
    "id": "row-sessionchecked40-version",
@@ -3861,14 +4189,32 @@
     {
      "op": "set",
      "path": "/cliOptions",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session cliOptions must be an object.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.cliOptions.",
+   "webRepairs": [
+    "session-field-dropped@cliOptions"
+   ]
+  },
+  {
+   "id": "null-sessionchecked46-clioptions",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/cliOptions",
      "value": null
     }
    ],
    "python": "refuse",
    "pythonMessage": "Session cliOptions must be an object.",
-   "web": "refused",
-   "note": "Admission row SessionChecked46.cliOptions.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row SessionChecked46.cliOptions."
   },
   {
    "id": "row-sessionchecked46-editorstate",
@@ -3883,9 +4229,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session version 40 requires editorState.featureCatalog.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked46.editorState.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-part-dropped@editorState"
+   ]
   },
   {
    "id": "row-sessionchecked46-format",
@@ -3917,9 +4265,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session losatDerivedCache must be an object when present.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked46.losatDerivedCache.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache"
+   ]
   },
   {
    "id": "row-sessionchecked46-modes",
@@ -3946,18 +4296,55 @@
     {
      "op": "set",
      "path": "/orthogroupState",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session orthogroupState must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.orthogroupState.",
+   "webRepairs": [
+    "session-field-dropped@orthogroupState"
+   ]
+  },
+  {
+   "id": "null-sessionchecked46-orthogroupstate",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroupState",
      "value": null
     }
    ],
    "python": "refuse",
    "pythonMessage": "Session orthogroupState must be an object when present.",
-   "web": "refused",
-   "note": "Admission row SessionChecked46.orthogroupState.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row SessionChecked46.orthogroupState."
   },
   {
    "id": "row-sessionchecked46-othermoderesult",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session otherModeResult must contain only a committed Result set.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.otherModeResult.",
+   "webRepairs": [
+    "session-part-dropped@otherModeResult"
+   ]
+  },
+  {
+   "id": "null-sessionchecked46-othermoderesult",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
    "base": "settings-only-46",
    "edits": [
     {
@@ -3968,9 +4355,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session otherModeResult must contain only a committed Result set.",
-   "web": "refused",
-   "note": "Admission row SessionChecked46.otherModeResult.",
-   "webClass": "interim"
+   "web": "loaded",
+   "note": "Admission row SessionChecked46.otherModeResult."
   },
   {
    "id": "row-sessionchecked46-proteinidentitymanifest",
@@ -4018,9 +4404,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session version 46 requires a canonical resources object.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked46.resources.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-part-dropped@resources"
+   ]
   },
   {
    "id": "row-sessionchecked46-results",
@@ -4035,9 +4423,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session version 40 requires a results array.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked46.results.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
   },
   {
    "id": "row-sessionchecked46-version",
@@ -4055,6 +4445,457 @@
    "web": "refused",
    "note": "Admission row SessionChecked46.version.",
    "webClass": "R2"
+  },
+  {
+   "id": "k17-orthogroups-30",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroups",
+     "value": [
+      {
+       "id": "g1",
+       "members": []
+      }
+     ]
+    }
+   ],
+   "finding": "K17 (E-OD09): no writer stored top-level orthogroups; dropped as an unknown key",
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@orthogroups"
+   ]
+  },
+  {
+   "id": "tb6-unknown-top-level-key-30",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/bogus",
+     "value": 1
+    }
+   ],
+   "finding": "TB6 (E-OD03): a key no Session 27-30 writer wrote",
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@bogus"
+   ]
+  },
+  {
+   "id": "a7a-modes-30",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {
+      "circular": {}
+     }
+    }
+   ],
+   "finding": "A7a, OV-638: modes below 46",
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@modes"
+   ]
+  },
+  {
+   "id": "a7a-clioptions-33",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/cliOptions",
+     "value": {
+      "a": 1
+     }
+    }
+   ],
+   "finding": "A7a, OV-638: cliOptions below 46",
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@cliOptions"
+   ]
+  },
+  {
+   "id": "a7a-modes-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {
+      "circular": {}
+     }
+    }
+   ],
+   "finding": "A7a: modes below 46",
+   "python": "refuse",
+   "pythonMessage": "Session version 44 cannot contain modes.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@modes"
+   ]
+  },
+  {
+   "id": "a7a-othermoderesult-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": "x"
+    }
+   ],
+   "finding": "A7a: otherModeResult below 46",
+   "python": "refuse",
+   "pythonMessage": "Session version 44 cannot contain otherModeResult.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@otherModeResult"
+   ]
+  },
+  {
+   "id": "a6c-files-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/files",
+     "value": {
+      "c_gb": null
+     }
+    }
+   ],
+   "finding": "A6c: files at 40+ (generated band row)",
+   "python": "refuse",
+   "pythonMessage": "Session version 44 cannot contain legacy files; use resources and webFiles.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@files"
+   ]
+  },
+  {
+   "id": "a7c-features-text-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/features",
+     "value": "x"
+    }
+   ],
+   "finding": "A7c: features of another kind",
+   "python": "refuse",
+   "pythonMessage": "Session features must be an object when present.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@features"
+   ]
+  },
+  {
+   "id": "a7c-features-branch-only-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/features/extractedFeatures",
+     "value": [
+      1
+     ]
+    }
+   ],
+   "finding": "A7c, J3: a development-branch feature field",
+   "python": "refuse",
+   "pythonMessage": "Session version 40 cannot contain derived feature payloads in features: extracte",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@features.extractedFeatures"
+   ]
+  },
+  {
+   "id": "a7c-orthogroupstate-text-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroupState",
+     "value": "x"
+    }
+   ],
+   "finding": "A7c: orthogroupState of another kind",
+   "python": "refuse",
+   "pythonMessage": "Session orthogroupState must be an object when present.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@orthogroupState"
+   ]
+  },
+  {
+   "id": "a7c-orthogroupstate-groups-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroupState",
+     "value": {
+      "groups": [
+       1
+      ]
+     }
+    }
+   ],
+   "finding": "A7c: derived orthogroup groups, no row (BA-OD93 a)",
+   "python": "refuse",
+   "pythonMessage": "Session version 40 cannot contain derived orthogroupState.groups.",
+   "web": "loaded"
+  },
+  {
+   "id": "a7e-losat-execution-unknown-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/ui/losatExecution",
+     "value": {
+      "bogus": 1
+     }
+    }
+   ],
+   "finding": "A7e: an unknown LOSAT execution key",
+   "python": "refuse",
+   "pythonMessage": "ui.losatExecution holds only the LOSAT execution settings.",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-replaced@ui.losatExecution.bogus"
+   ]
+  },
+  {
+   "id": "a7e-losat-execution-text-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/ui/losatExecution",
+     "value": "x"
+    }
+   ],
+   "finding": "A7e: LOSAT execution settings of another kind",
+   "python": "refuse",
+   "pythonMessage": "ui.losatExecution holds only the LOSAT execution settings.",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-replaced@ui.losatExecution"
+   ]
+  },
+  {
+   "id": "a7f-retired-config-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/config",
+     "value": {
+      "form": {}
+     }
+    }
+   ],
+   "finding": "A7f: a retired home, no row",
+   "python": "refuse",
+   "pythonMessage": "Session version 46 keeps the Web draft of each mode in modes; it cannot contain ",
+   "web": "loaded"
+  },
+  {
+   "id": "a7f-retired-ui-canvaspadding-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/ui/canvasPadding",
+     "value": {
+      "top": 1
+     }
+    }
+   ],
+   "finding": "A7f: a retired ui home, no row",
+   "python": "refuse",
+   "pythonMessage": "Session version 46 keeps the Web draft of each mode in modes; it cannot contain ",
+   "web": "loaded"
+  },
+  {
+   "id": "a7d-modes-extra-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/radial",
+     "value": {}
+    }
+   ],
+   "finding": "A7d: a mode no writer wrote",
+   "python": "refuse",
+   "pythonMessage": "Session modes holds a circular and a linear slice only.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@modes.radial"
+   ]
+  },
+  {
+   "id": "a7d-slice-text-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/linear",
+     "value": "x"
+    }
+   ],
+   "finding": "A7d: a slice of another kind",
+   "python": "refuse",
+   "pythonMessage": "Session modes.linear must be an object.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@modes.linear"
+   ]
+  },
+  {
+   "id": "a15-settings-only-results-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results",
+     "value": [
+      {
+       "name": "a.svg",
+       "content": "<svg/>"
+      }
+     ]
+    }
+   ],
+   "finding": "A15: Results in a settings-only Session",
+   "python": "refuse",
+   "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "a15-settings-only-unbound-resource-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources/extra",
+     "value": {
+      "name": "x.tsv",
+      "type": "",
+      "lastModified": 0,
+      "data": "",
+      "size": 0
+     }
+    }
+   ],
+   "finding": "A15, J4: an unbound resource, no row",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session contains an unbound resource.",
+   "web": "loaded"
+  },
+  {
+   "id": "r4-settings-only-modes-null-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": null
+    }
+   ],
+   "finding": "R4: a settings-only Session whose settings hold nothing",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session requires an active Web configuration and mode.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "r4-settings-only-modes-text-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": "x"
+    }
+   ],
+   "finding": "R4: a settings-only Session whose settings cannot be read",
+   "python": "refuse",
+   "pythonMessage": "Session modes holds a circular and a linear slice only.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "row-sessionchecked46-losatcache",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatCache",
+     "value": true
+    }
+   ],
+   "finding": "admission-row",
+   "note": "E-OD05: a cache that is not read is dropped with an unlisted row; R4 still counts it.",
+   "python": "refuse",
+   "pythonMessage": "Session losatCache must be an object when present.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache"
+   ]
+  },
+  {
+   "id": "row-checkedlosatcache-entries",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatCache/entries",
+     "value": "x"
+    }
+   ],
+   "finding": "admission-row",
+   "note": "E-OD05: a cache that is not read is dropped with an unlisted row; R4 still counts it.",
+   "python": "refuse",
+   "pythonMessage": "Session losatCache.entries must be an array.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries"
+   ]
+  },
+  {
+   "id": "row-checkedlosatderivedcache-entries",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries",
+     "value": "x"
+    }
+   ],
+   "finding": "admission-row",
+   "note": "E-OD05: a cache that is not read is dropped with an unlisted row; R4 still counts it.",
+   "python": "refuse",
+   "pythonMessage": "Session losatDerivedCache.entries must be an array.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache.entries"
+   ]
   }
  ]
 }

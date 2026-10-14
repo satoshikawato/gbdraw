@@ -16,11 +16,15 @@ const {
   validateSessionAuthorityInventory
 } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-authority.js')));
 
-assert.equal(SESSION_TOP_LEVEL_AUTHORITY.modes, 'editor-metadata');
-assert.equal(SESSION_TOP_LEVEL_AUTHORITY.cliOptions, 'provenance');
-assert.equal(SESSION_TOP_LEVEL_AUTHORITY.renderRequest, 'canonical-render');
-assert.equal(SESSION_TOP_LEVEL_AUTHORITY.resources, 'resource');
-assert.equal(SESSION_TOP_LEVEL_AUTHORITY.webFiles, 'resource-binding');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.modes.authority, 'editor-metadata');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.cliOptions.authority, 'provenance');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.renderRequest.authority, 'canonical-render');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.resources.authority, 'resource');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.webFiles.authority, 'resource-binding');
+// R4: the content part each key belongs to (null: no content part).
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.results.part, 'results');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.losatCache.part, 'cache');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.title.part, null);
 
 const session = {
   format: 'gbdraw-session', version: 39, createdAt: 'now', title: 'Canonical',

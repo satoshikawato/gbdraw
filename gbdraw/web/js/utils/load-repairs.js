@@ -11,6 +11,8 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
 /**
  * The rule of the producer that could not restore a value: one member per rule.
  * @typedef {'request-dropped'
+ *   | 'session-part-dropped'
+ *   | 'session-field-dropped'
  *   | 'other-result-set-dropped'
  *   | 'request-part-dropped'
  *   | 'request-reference-dropped'
@@ -89,6 +91,23 @@ const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ ([
   'legend-edit-overwritten-session46', 'cache-entry-dropped', 'pending-palette-dropped', 'orthogroup-edit-dropped'
 ]));
 
+/**
+ * The content parts of a Session the reader may drop or replace whole
+ * (`readSessionDocument`), and how the dialog names each.
+ * @type {Readonly<Record<string, string>>}
+ */
+const SESSION_PART_NAMES = Object.freeze({
+  results: 'the saved Results',
+  editorState: 'the feature list and the Legend and stroke edits of the saved diagram',
+  resources: 'the stored input files',
+  otherModeResult: 'the saved diagram of the other mode',
+  modes: 'the settings of both drawings',
+  'modes.circular': 'the settings of the Circular drawing',
+  'modes.linear': 'the settings of the Linear drawing'
+});
+/** The paths of `SESSION_PART_NAMES`. @type {readonly string[]} */
+export const SESSION_PART_PATHS = Object.freeze(Object.keys(SESSION_PART_NAMES));
+
 /** @param {string} value @param {number} limit */
 const bounded = (value, limit) => (value.length > limit ? `${value.slice(0, limit - 1)}…` : value);
 
@@ -151,6 +170,13 @@ const WORDING = {
   'request-dropped': (repairs) => repairs.map(({ path }) => (
     `Saved diagram: the settings of the saved diagram (${path}) could not be read. The file loads as settings only;`
     + ' the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.')),
+  // The Session document (services/session-authority.js `readSessionDocument`).
+  'session-part-dropped': (repairs) => repairs.map(({ path }) => (
+    `Session file: ${SESSION_PART_NAMES[path] ?? path} (${path}) could not be read and ${path === 'results' ? 'are' : 'is'} left out.`)),
+  'session-field-dropped': (repairs) => [
+    `Session file: ${cappedList('the field', 'the fields', repairs.map(({ path }) => path))} could not be read for this Session version`
+    + ` and ${wasWere(repairs.length)} left out.`
+  ],
   'other-result-set-dropped': (repairs) => repairs.map(({ path, label }) => (
     `Saved ${label ?? 'other'} diagram: its settings (${path}) could not be read; that diagram and its Results are left out.`)),
   'request-part-dropped': (repairs) => repairs.map(({ path, label, effect }) => (

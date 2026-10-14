@@ -180,13 +180,16 @@ import {
   adoptCurrentSessionDocument,
   adoptRuntimeCanonicalSession,
   isAdoptedCanonicalSession,
+  isAuthorityBand,
   hasBiologicalSessionInputs,
+  holdsNothing,
   isSettingsOnlySessionDocument,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
-  readSessionInput,
   holdsSettingsOnlyContent,
+  readSessionDocument,
+  restoresNothing,
   settingsOnlySessionCandidate,
   validateSessionAuthorityInventory
 } from './session-authority.js';
@@ -206,8 +209,6 @@ import {
   holdsCliWriterConfig,
   requireActiveConfigContainers,
   validateCurrentWriterActiveConfig,
-  validateImportedCircularTrackSlots,
-  validateImportedLinearTrackSlots,
   draftFeatureOverlapTolerance
 } from './session-active-config-contract.js';
 import {
@@ -238,7 +239,6 @@ import {
   sessionLegendEditsByRowKey,
   splitDraftIntoModes,
   unscopedDraftRows,
-  requireModeSliceFields,
   validateModeSliceFields
 } from './mode-scoped-migration.js';
 
@@ -286,7 +286,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // The Session document's types are generated from gbdraw/session_contract.py:
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
-/** @import { GbdrawSession, SessionEnvelope, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
+/** @import { GbdrawSession, SessionChecked, SessionEnvelope, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
@@ -1351,21 +1351,15 @@ const applyModeSliceData = (drawing, mode, slice, {
 
 const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
 
-/** @param {LoadRepair[]} repairs */
+/**
+ * A Session 27-39 (`readSessionDocument` read its band: a Session 31-39
+ * holds a `resources` object).
+ * @param {LoadRepair[]} repairs
+ */
 const normalizeSessionData = (data, repairs) => {
   const version = data.version;
-  if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION && Object.prototype.hasOwnProperty.call(data, 'files')) {
-    throw new Error(
-      `Session version ${version} cannot contain legacy files; use resources and webFiles.`
-    );
-  }
-  if (version >= CANONICAL_SESSION_MIN_VERSION) {
-    if (!isPlainObject(data.renderRequest)) {
-      throw new Error(`Session version ${version} requires a canonical renderRequest object.`);
-    }
-    if (!isPlainObject(data.resources)) {
-      throw new Error(`Session version ${version} requires a canonical resources object.`);
-    }
+  if (version >= CANONICAL_SESSION_MIN_VERSION && !isPlainObject(data.renderRequest)) {
+    throw new Error(`Session version ${version} requires a canonical renderRequest object.`);
   }
 
   return {
@@ -1502,7 +1496,7 @@ export const buildSessionLegacyArtifacts = ({
 
 // The Web writers of Sessions 27–33 saved every schema-4 Circular slot row with
 // `spacing: null`. With Custom Track Slots off that null is lossless and is
-// dropped; any other obsolete slot field fails validateImportedCircularTrackSlots.
+// dropped; the reader table lists any other obsolete slot field (OV-758).
 const withoutLegacyNullCircularSlotSpacing = (configData) => {
   const adv = configData?.adv;
   if (!isPlainObject(adv) || adv.circular_track_slots_enabled
@@ -1668,8 +1662,7 @@ const readLegacyConfigPayload = (data, drawing, mode) => {
     ),
     isPlainObject(storedShapes) || isUnsetValue(storedShapes)
   );
-  validateImportedCircularTrackSlots(migrated);
-  validateImportedLinearTrackSlots(migrated);
+  // The reader table reads the track slots' leaves (OV-758, OV-788).
   // What `applyConfigData` reads differently (B37, B43, B48), on a copy of
   // the drawing's settings, which it installs the configuration over.
   /** @type {SettingsContainers} */
@@ -1999,25 +1992,30 @@ const readRebuiltGalleryRequest = (data, repairs) => {
 };
 
 /**
- * K19: a settings-only Session 46's shown mode, read before its checks read
- * that mode's slice: a mode of no mode is Circular, with a row.
+ * K19: a settings-only Session's shown mode, read before its checks read that
+ * mode's settings: a mode of no mode is Circular, with a row; a mode the file
+ * does not hold (no `ui`, or a `ui` that holds nothing) is Circular, with none
+ * (E-OD06; OV-780).
  * @template {Record<string, unknown>} T
  * @param {T} data @param {LoadRepair[]} repairs
  * @returns {T}
  */
 const readSettingsOnlyMode = (data, repairs) => {
-  const envelope = /** @type {SessionEnvelope} */ (/** @type {unknown} */ (data));
+  if (!isSettingsOnlySessionDocument(/** @type {SessionEnvelope} */ (/** @type {unknown} */ (data)))) return data;
   // isPlainObject is not a type predicate.
-  const ui = isPlainObject(data.ui) ? /** @type {Record<string, unknown>} */ (data.ui) : null;
-  if (!ui || envelope.version < MODE_SCOPED_SESSION_VERSION || !isSettingsOnlySessionDocument(envelope)
-    || !readSessionUiMode(ui.mode).lost) return data;
-  repairs.push(...sessionUiFieldRepairs({ mode: ui.mode }, 'ui'));
-  return { ...data, ui: { ...ui, mode: readSessionUiMode(ui.mode).value } };
+  const ui = isPlainObject(data.ui) ? /** @type {Record<string, unknown>} */ (data.ui) : {};
+  if (ui !== data.ui && !holdsNothing(data.ui)) repairs.push(loadRepair({ code: 'session-field-dropped', path: 'ui', effect: 'dropped' }));
+  const mode = readSessionUiMode(ui.mode);
+  if (mode.lost) repairs.push(...sessionUiFieldRepairs({ mode: ui.mode }, 'ui'));
+  return ui === data.ui && ui.mode === mode.value ? data : { ...data, ui: { ...ui, mode: mode.value } };
 };
 
-/** @param {LoadRepair[]} repairs Collects what Load cannot restore. */
+/**
+ * @param {SessionChecked} sessionData The document `readSessionDocument` read.
+ * @param {LoadRepair[]} repairs Collects what Load cannot restore.
+ */
 const preflightSessionImport = async (sessionData, repairs) => {
-  const sourceSessionVersion = readSessionInput(sessionData).version;
+  const sourceSessionVersion = sessionData.version;
   // A Session before 47 stored the Legend edits under the shown caption; every
   // reader below reads them by row key (PD-OI-061 revision 5). An edit a later
   // edit of its row overwrote is dropped; a Session 46 drew the later edit, so
@@ -2041,7 +2039,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
   });
   const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs);
   const rawData = readSettingsOnlyMode(requestRead.data, repairs);
-  const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
+  const currentSession = isAuthorityBand(rawData);
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
   /** @type {ReturnType<typeof adoptCurrentSessionResources> | null} */
@@ -2063,7 +2061,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
       adopt: true
     });
     // E1: the other mode's set is validated with its own mode.
-    if (isPlainObject(rawData.otherModeResult)) {
+    if ('otherModeResult' in rawData && isPlainObject(rawData.otherModeResult)) {
       otherModeCatalog = await validateCurrentWriterFeatureCatalog(rawData.otherModeResult, { adopt: true });
     }
     recordSessionLifecycleEvent('feature-catalog-validation-end');
@@ -2083,7 +2081,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
       ? Object.fromEntries(Object.entries(rawData).filter(([key]) => key !== 'config'))
       : rawData);
   } else {
-    validateSessionAuthorityInventory(rawData, sourceSessionVersion, requestRead.storedSchemas);
+    validateSessionAuthorityInventory(rawData, sourceSessionVersion, requestRead.storedSchemas, { load: true });
     normalizedData = normalizeSessionData(rawData, repairs);
   }
 
@@ -2238,14 +2236,9 @@ const preflightSessionImport = async (sessionData, repairs) => {
   }
   // Session 46: each slice is a current-writer draft of its own mode; the
   // committed mode's draft is its slice over its request's projection.
+  // `readSessionDocument` read each slice's keys and kinds; the reader table reads its settings.
   if (modeScopedSession) {
     recordSessionLifecycleEvent('current-draft-validation-start');
-    SLICE_MODES.forEach((mode) => {
-      const slice = data.modes?.[mode];
-      if (slice === undefined) return;
-      requireModeSliceFields(slice);
-      if (isPlainObject(slice.config)) requireActiveConfigContainers({ mode, storedConfig: { form: {}, adv: {}, ...slice.config } });
-    });
     restoredConfig = canonicalProjection && !settingsOnly
       ? overlayModeSliceConfig(canonicalProjection.config, runtimeStoredConfig)
       : null;
@@ -5124,7 +5117,11 @@ const importSessionDocument = async (e, options = {}) => {
     // commit (BA-D25); frozen there, so no step after the commit adds one.
     /** @type {LoadRepair[]} */
     const repairs = [];
-    const preflight = await preflightSessionImport(data, repairs);
+    // The one read of the document (D1c 2.2): its band's description, repaired.
+    const storedDocument = /** @type {SessionEnvelope} */ (data);
+    const document = readSessionDocument(data);
+    repairs.push(...document.repairs);
+    const preflight = await preflightSessionImport(document.value, repairs);
     // The receipts are checked against the requests Load read (RK-2).
     data = preflight.data;
     await validateSimilarityAlignmentResetReceipt(
@@ -5709,7 +5706,7 @@ const importSessionDocument = async (e, options = {}) => {
         // The request's input type wins over a stored one of no type.
         ...Object.fromEntries(/** @type {const} */ (['cInputType', 'lInputType']).filter(requestInputTypeWins).map((field) => [field, undefined]))
       }, 'ui'),
-      ...losatExecutionRepairs(appUi.losatExecution, modeScopedSession ? 'ui.losatExecution' : 'config.losat'),
+      ...losatExecutionRepairs(appUi.losatExecution, modeScopedSession ? 'ui.losatExecution' : 'config.losat', { own: modeScopedSession }),
       ...valueRepairs(readRichFeaturePopup, appUi.richFeaturePopup, modeScopedSession ? 'ui.richFeaturePopup' : 'config.adv.rich_feature_popup')
     );
     let instantPreview = Boolean(typeof appUi.paletteInstantPreviewEnabled === 'boolean'
@@ -5741,7 +5738,7 @@ const importSessionDocument = async (e, options = {}) => {
       : data.orthogroupState && typeof data.orthogroupState === 'object'
         ? data.orthogroupState
       : {
-          groups: Array.isArray(data.orthogroups) ? data.orthogroups : [],
+          groups: [],
           selectedOrthogroupId: features.selectedOrthogroupId,
           selectedOrthogroupAlignmentFeature: features.selectedOrthogroupAlignmentFeature,
           orthogroupNameOverrides:
@@ -5812,6 +5809,8 @@ const importSessionDocument = async (e, options = {}) => {
     // changes; Cancel leaves the settings, Results, inputs, History and screen
     // as they are.
     Object.freeze(repairs);
+    // R4: a file of which Load restores nothing is refused (every producer ran; nothing is committed).
+    if (restoresNothing(storedDocument, repairs)) throw SESSION_FIELDS_ERROR();
     // One record per place in the file and reading (OV-765).
     const listedRepairs = Object.freeze(distinctLoadRepairs(repairs));
     const repairDialog = describeLoadRepairs(listedRepairs);

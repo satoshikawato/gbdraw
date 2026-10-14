@@ -3,7 +3,7 @@
 // also read by tests/test_session_admission_vectors.py (`load_session`, and the
 // rules S1-S3 between the two columns). Each vector edits a copy of its base
 // Session; the Web's verdict is `loaded`, `repaired` with the code@path of each
-// row of the Load dialog (`webRepairs`), or `refused`.
+// repair, listed in the Load dialog or not (`webRepairs`), or `refused`.
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

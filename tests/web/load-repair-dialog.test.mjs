@@ -29,6 +29,7 @@ installSessionImportWorker();
 
 const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
 const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-settings.generated.js');
+const { readSessionDocument } = await import('../../gbdraw/web/js/services/session-authority.js');
 // The Worker's typed override check, run by Python (as session-cli-compatibility does).
 setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
 import json, sys
@@ -1560,7 +1561,8 @@ const NEEDS_DIAGRAM_WORKER = new Set([
   'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', 'q-frame-main-web-losatn.v42.gbdraw-session.json.gz',
   'q-frame-main-web-upload.v42.gbdraw-session.json.gz'
 ]);
-test('every Gallery Session and Session fixture loads without a repair (G3)', async () => {
+// G2b: what Save writes after each of those Loads reads again with no repair.
+test('every Gallery Session and Session fixture loads without a repair (G3), and its Save reads again without one (G2b)', async () => {
   const sessions = (dir, keep) => readdirSync(new URL(dir, import.meta.url)).filter(keep).map((name) => [name, new URL(`${dir}${name}`, import.meta.url)]);
   const corpus = [
     ...sessions('../fixtures/sessions/', (name) => /\.json(\.gz)?$/.test(name) && !/provenance|expected|evidence|vectors/.test(name)),
@@ -1586,6 +1588,12 @@ test('every Gallery Session and Session fixture loads without a repair (G3)', as
     const nodeOnly = FEATURES_NEED_DIAGRAM_WORKER.has(name) ? ['feature-recovery-failed'] : [];
     assert.deepEqual(loaded.repairs.map(({ code }) => code), [...(LOSSY_FIXTURES[name] ?? []), ...nodeOnly], name);
     assert.equal(askedDiagramWorker, nodeOnly.length > 0, `${name}: the Features row comes from the missing diagram Worker`);
+    // A Session 27-39 with a Result is saved only after Generate.
+    const saved = await savedSession(`G2b ${name}`).catch((error) => {
+      if (error?.code !== 'SESSION_SAVE_REQUIRES_GENERATE' || session.version >= 40) throw error;
+      return null;
+    });
+    if (saved) assert.deepEqual(readSessionDocument(saved).repairs, [], `${name}: G2b`);
   }
   globalThis.Worker = ImportWorker;
 });

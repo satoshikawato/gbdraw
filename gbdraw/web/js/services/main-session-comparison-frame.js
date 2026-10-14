@@ -101,7 +101,7 @@ const endpointFrame = async (record, resources, discover) => {
 /**
  * Return the Session with each stored nucleotide table of a reversed endpoint
  * in the search frame. Other Sessions are returned unchanged.
- * @template {FrameSession} T
+ * @template {{ version?: unknown, renderRequest?: unknown, resources?: unknown }} T
  * @param {T} data
  * @param {{ convertTable?: typeof tableConverter, discover?: RecordDiscovery }} [options]
  * @returns {Promise<T>}
@@ -113,14 +113,16 @@ export const convertMainSessionComparisonFrames = async (
     discover = { sequence: discoverSequenceRecords, gffFasta: discoverGffFastaRecords }
   } = {}
 ) => {
-  const request = data?.renderRequest;
+  // The stored request is read here before `readSessionRequests` checks it; each read below is guarded.
+  const frame = /** @type {FrameSession} */ (data);
+  const request = frame?.renderRequest;
   // `Number.isInteger` does not narrow `version`; the second operand runs only for an integer.
-  if (!Number.isInteger(data?.version) || /** @type {number} */ (data.version) > MAIN_DISPLAY_FRAME_SESSION_VERSION
+  if (!Number.isInteger(frame?.version) || /** @type {number} */ (frame.version) > MAIN_DISPLAY_FRAME_SESSION_VERSION
     || request?.mode !== 'linear' || !Array.isArray(request.comparisons)) {
     return data;
   }
   const records = Array.isArray(request.records) ? request.records : [];
-  let resources = data.resources;
+  let resources = frame.resources;
   const converted = new Set();
   for (const comparison of request.comparisons) {
     const resourceId = comparison?.resourceId;
@@ -139,5 +141,5 @@ export const convertMainSessionComparisonFrames = async (
     };
     converted.add(resourceId);
   }
-  return converted.size > 0 ? { ...data, resources } : data;
+  return converted.size > 0 ? /** @type {T} */ ({ ...data, resources }) : data;
 };

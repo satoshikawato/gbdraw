@@ -1450,10 +1450,16 @@ export const notedLossRepairs = (losses, path) => losses.flatMap((loss) => lossR
 
 /**
  * The same for the LOSAT execution settings (`ui.losatExecution` of a Session
- * 46, `config.losat` of an older draft).
+ * 46, `config.losat` of an older draft). `own`: the settings are a container
+ * of their own (`ui.losatExecution`), so a container that is no object and a
+ * key no execution setting names are not read either (A7e).
  * @param {unknown} execution
  * @param {string} path
+ * @param {{ own?: boolean }} [options]
  */
-export const losatExecutionRepairs = (execution, path) => lossRepairs(
-  readValueTables([{ at: '', rows: LOSAT_EXECUTION_ROWS }], execution), path, execution
-);
+export const losatExecutionRepairs = (execution, path, { own = false } = {}) => lossRepairs([
+  ...(own && !isPlainObject(execution) && !isUnsetValue(execution) ? [{ at: '', stored: execution, used: undefined }] : []),
+  ...(own && isPlainObject(execution) ? Object.keys(execution).filter((field) => !LOSAT_EXECUTION_ROWS.some((row) => row.field === field))
+    .map((field) => ({ at: field, stored: execution[field], used: undefined })) : []),
+  ...readValueTables([{ at: '', rows: LOSAT_EXECUTION_ROWS }], execution)
+], path, execution);

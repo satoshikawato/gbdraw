@@ -191,3 +191,12 @@ test('E1a: a configuration file lists what its drawing cannot read, and saves', 
   ]);
   await saves();
 });
+
+// OV-788: a configuration file reads its track slot leaves as a Session does
+// (OV-758): a value Load cannot use is listed, not refused.
+test('a configuration file lists a track slot value it cannot use (OV-788)', async () => {
+  const config = structuredClone(BASES.v46().modes.linear.config);
+  config.adv.linear_track_slots[0].height = -7.5;
+  state.mode.value = 'linear';
+  assert.deepEqual(await load(config), ['setting-replaced adv.linear_track_slots[0].height']);
+});
