@@ -131,7 +131,8 @@ def test_declarations_have_no_undeclared_read_or_uncacheable_stage(
         ("C1", ("annotation_table",)),
         ("C1", ("plot_title_position", "annotation_table")),
         ("C3", ("plot_title_position",)),
-        ("C2", ()),
+        # About 21 s (two C2 renders at load 10): it runs with the universe (D-16).
+        pytest.param("C2", (), marks=UNIVERSE_MARKS),
     ],
 )
 def test_the_circular_catalog_item_of_the_contents_equals_the_catalog_of_the_svg(
