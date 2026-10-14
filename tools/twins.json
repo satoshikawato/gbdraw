@@ -469,7 +469,7 @@
       "id": "function:migrateLegacyCircularTrackSlotSpec",
       "concern": "Retired Circular track slot keys and legacy spacing",
       "pythonOwner": [
-        "gbdraw/session_request_codec.py:_migrate_legacy_circular_track_slot_spec"
+        "gbdraw/tracks/circular.py:_migrate_legacy_circular_track_slot_spec"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/circular-track-slot-model.js:migrateLegacyCircularTrackSlotSpec"

@@ -85,6 +85,7 @@ from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.tracks.circular import (
     _LEGACY_SPACING_PARAM,
     _InternalCircularTrackSlot,
+    _migrate_legacy_circular_track_slot_spec,
     _internal_circular_track_slot,
     _normalize_renderer as _circular_renderer_name,
     parse_circular_track_slot,
@@ -3619,31 +3620,6 @@ def _decode_track_slots(
             )
         result.append(decoded_slot)
     return tuple(result)
-
-
-def _migrate_legacy_circular_track_slot_spec(spec: str) -> str:
-    """Translate retired Circular slot fields at the persisted-data boundary."""
-
-    head, separator, options = str(spec).partition("@")
-    if not separator:
-        return str(spec)
-    migrated: list[str] = []
-    for raw_part in options.split(","):
-        part = raw_part.strip()
-        if not part or "=" not in part:
-            migrated.append(part)
-            continue
-        raw_key, raw_value = part.split("=", 1)
-        key = raw_key.strip().lower()
-        if key in {"strict", "compress", "reserve"}:
-            continue
-        if key == "spacing":
-            migrated.append(
-                f"{_LEGACY_SPACING_PARAM}={raw_value.strip()}"
-            )
-        else:
-            migrated.append(part)
-    return head if not migrated else f"{head}@{','.join(migrated)}"
 
 
 def _decode_scalar_if_needed(value: object, *, path: str) -> object:

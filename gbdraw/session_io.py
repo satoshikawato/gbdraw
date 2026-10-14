@@ -52,7 +52,7 @@ from .session_contract import (
     SessionRunMetadata,
     keys_of,
 )
-from .tracks.circular import _LEGACY_SPACING_PARAM
+from .tracks.circular import _LEGACY_SPACING_PARAM, _migrate_legacy_circular_track_slot_spec
 from .web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     LOSAT_EXECUTION_FIELDS,
@@ -5835,7 +5835,7 @@ def _canonicalize_legacy_session_cli_args(
             continue
         if separator:
             if mode == "circular" and option == "--circular_track_slot":
-                inline_value = _migrate_legacy_circular_slot_cli_value(inline_value)
+                inline_value = _migrate_legacy_circular_track_slot_spec(inline_value)
             if option == "--multi_record_size_mode" and inline_value == "sqrt":
                 inline_value = "auto"
             elif mode == "linear" and option == "--label_placement":
@@ -5863,7 +5863,7 @@ def _canonicalize_legacy_session_cli_args(
                 elif mode == "linear" and previous_option == "--track_layout":
                     token = {"spreadout": "above", "tuckin": "below"}.get(token, token)
                 elif mode == "circular" and previous_option == "--circular_track_slot":
-                    token = _migrate_legacy_circular_slot_cli_value(token)
+                    token = _migrate_legacy_circular_track_slot_spec(token)
         source_to_canonical_index[source_index] = len(canonical_args)
         canonical_args.append(token)
     if pending_retired is not None:
@@ -5871,29 +5871,6 @@ def _canonicalize_legacy_session_cli_args(
         source_to_canonical_index[option_index] = len(canonical_args)
         canonical_args.append(retired.option)
     return canonical_args, source_to_canonical_index
-
-
-def _migrate_legacy_circular_slot_cli_value(value: str) -> str:
-    """Move retired slot fields into the private persisted-data transport."""
-
-    head, separator, raw_options = str(value).partition("@")
-    if not separator:
-        return str(value)
-    migrated: list[str] = []
-    for raw_part in raw_options.split(","):
-        part = raw_part.strip()
-        if not part or "=" not in part:
-            migrated.append(part)
-            continue
-        raw_key, raw_value = part.split("=", 1)
-        key = raw_key.strip().lower()
-        if key in {"strict", "compress", "reserve"}:
-            continue
-        if key == "spacing":
-            migrated.append(f"{_LEGACY_SPACING_PARAM}={raw_value.strip()}")
-        else:
-            migrated.append(part)
-    return head if not migrated else f"{head}@{','.join(migrated)}"
 
 
 def canonicalize_cli_invocation(

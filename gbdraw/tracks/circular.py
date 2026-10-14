@@ -274,6 +274,31 @@ def _normalize_feature_lane(raw: object) -> str:
     return lane
 
 
+def _migrate_legacy_circular_track_slot_spec(spec: str) -> str:
+    """Move retired Circular slot fields of a stored slot text into the private
+    persisted-data transport (Session requests and recorded CLI invocations).
+    """
+
+    head, separator, options = str(spec).partition("@")
+    if not separator:
+        return str(spec)
+    migrated: list[str] = []
+    for raw_part in options.split(","):
+        part = raw_part.strip()
+        if not part or "=" not in part:
+            migrated.append(part)
+            continue
+        raw_key, raw_value = part.split("=", 1)
+        key = raw_key.strip().lower()
+        if key in {"strict", "compress", "reserve"}:
+            continue
+        if key == "spacing":
+            migrated.append(f"{_LEGACY_SPACING_PARAM}={raw_value.strip()}")
+        else:
+            migrated.append(part)
+    return head if not migrated else f"{head}@{','.join(migrated)}"
+
+
 def parse_circular_track_slot(
     raw: str,
     *,
