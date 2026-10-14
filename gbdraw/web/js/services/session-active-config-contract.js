@@ -15,7 +15,7 @@ import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
-import { DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION, ORTHOGROUP_INFERENCE_VERSION, SESSION_VERSION } from '../contracts/schema.generated.js';
+import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 // The Feature overlap tolerance of a new drawing, in bp.
 export const DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP = 0;
@@ -143,18 +143,31 @@ const CLI_WRITER_CONFIG_DOMAINS = new Set(['form', 'adv', 'losat', 'cliOptions',
 export const holdsCliWriterConfig = (session) => [40, 41].includes(session?.version)
   && session.cliInvocation?.generatedBy === 'gbdraw' && isObject(session.config)
   && Object.keys(session.config).every((key) => CLI_WRITER_CONFIG_DOMAINS.has(key));
-export const CURRENT_WRITER_FORM_FIELDS = Object.freeze([...Object.keys(createDefaultForm()), 'legend']);
-// `rich_feature_popup` is read from a Session 40-44 draft only: Session 46
-// keeps the app preference in `ui.richFeaturePopup`.
-export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDefaultAdv()), 'plot_title_position', 'losatProgram', 'rich_feature_popup']);
+/** The configuration domains a draft stores, with the compatibility field `colorsAreOverrides`. */
+export const STORED_CONFIG_DOMAINS = Object.freeze([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
+/**
+ * Stored settings a gbdraw writer wrote and later retired or moved (E-OD03):
+ * Load reads them where they moved, or drops them, with no dialog row (TB19,
+ * TB32), and Save accepts the `form` and `adv` ones in a Session 40-44 draft.
+ * `rich_feature_popup` is read from a Session 40-44 draft only: Session 46
+ * keeps the app preference in `ui.richFeaturePopup`.
+ */
+export const RETIRED_STORED_FIELDS = Object.freeze([
+  'form.legend', 'adv.plot_title_position', 'adv.losatProgram', 'adv.rich_feature_popup', 'blastSource', 'priorityRules'
+]);
+/** @param {string} domain */
+const retiredFieldsOf = (domain) => RETIRED_STORED_FIELDS.filter((at) => at.startsWith(`${domain}.`)).map((at) => at.slice(domain.length + 1));
+export const CURRENT_WRITER_FORM_FIELDS = Object.freeze([...Object.keys(createDefaultForm()), ...retiredFieldsOf('form')]);
+export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDefaultAdv()), ...retiredFieldsOf('adv')]);
 const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'object', cliOptions: 'object', colors: 'object',
   circularConservation: 'object', modeProfiles: 'object', linearRecordLayout: 'object', linearComparisonPlan: 'object', webEdits: 'object',
   importedComparisonResolution: 'object', unmanagedConfigOverrides: 'object',
   recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string',
   losatProgram: 'string', paletteInstantPreviewEnabled: 'boolean' });
-const ROW_FIELDS = { rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
+/** The fields of a stored rule row (Save refuses another; Load drops it with a row). */
+export const STORED_ROW_FIELDS = Object.freeze({ rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
   qualifierPriorityRules: ['feat', 'order'], whitelist: ['feat', 'qual', 'key'],
-  annotationSets: ['id', 'annotations', 'defaultStyle', 'legendLabel'] };
+  annotationSets: ['id', 'annotations', 'defaultStyle', 'legendLabel'] });
 const ANNOTATION_FIELDS = ['id', 'target', 'label', 'mark', 'lane', 'style', 'legendLabel', 'metadata'];
 const OBSOLETE_SLOT_KEYS = new Set(['gapAfter', 'gap_after', 'innerRadius', 'inner_radius', 'outerRadius',
   'outer_radius', 'placement', 'spacing', 'strict', 'compress', 'reserve']);
@@ -185,7 +198,7 @@ const assertRows = (rows, fields, path) => rows.forEach((row, index) => {
  * @param {{ annotationSets?: { annotations?: unknown }[], [domain: string]: unknown }} config
  */
 const validateCollections = (config) => {
-  for (const [domain, fields] of Object.entries(ROW_FIELDS))
+  for (const [domain, fields] of Object.entries(STORED_ROW_FIELDS))
     if (Array.isArray(config[domain])) assertRows(config[domain], fields, `config.${domain}`);
   (config.annotationSets || []).forEach((set, index) => {
     if (!Array.isArray(set.annotations)) throw new Error(`Current session active configuration config.annotationSets[${index}].annotations must be an array.`);
@@ -236,26 +249,36 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
     anchorlessRenderers: ['spacer'], depthTrackCount });
 };
 /**
- * Throws when `storedConfig` is not a current-writer active configuration:
- * a Session 46 slice of `mode`, or (`scopedDrafts`) the flat draft of a
- * Session 40-44, whose record display and placement rows name their mode.
- * `sessionVersion` is the version of the Session that holds the draft; the
- * default, the current version, is for the writer's own draft and a slice.
- * @param {{
- *   mode: unknown, storedConfig: unknown, scopedDrafts?: boolean,
- *   sessionVersion?: number
- * }} input
- * @returns {void}
+ * The containers Load cannot read a drawing's settings without: the mode, the
+ * configuration object and its `form` and `adv`, and the Custom Track Slots.
+ * Load reads the values inside them with the reader table
+ * (`config-field-readers.js`), which lists what it cannot restore.
+ * @param {{ mode: unknown, storedConfig: unknown }} input
+ * @returns {Record<string, unknown> & { form: Record<string, unknown>, adv: Record<string, unknown> }} The configuration.
  */
-export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false, sessionVersion = SESSION_VERSION }) => {
+export const requireActiveConfigContainers = ({ mode, storedConfig: config }) => {
   if (!(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');
   assertSafeObjectKeys(config, 'Current session active configuration');
-  const domains = new Set([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
+  if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
+  validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
+  // The cast: the two tests above.
+  return /** @type {Record<string, unknown> & { form: Record<string, unknown>, adv: Record<string, unknown> }} */ (config);
+};
+/**
+ * Throws when `storedConfig` is not a current-writer active configuration
+ * (Save and Gallery publication): a Session 46 slice of `mode`, or
+ * (`scopedDrafts`) the flat draft of a Session 40-44, whose record display and
+ * placement rows name their mode.
+ * @param {{ mode: unknown, storedConfig: unknown, scopedDrafts?: boolean }} input
+ * @returns {void}
+ */
+export const validateCurrentWriterActiveConfig = ({ mode, storedConfig, scopedDrafts = false }) => {
+  const config = requireActiveConfigContainers({ mode, storedConfig });
+  const domains = new Set(STORED_CONFIG_DOMAINS);
   const unknownDomains = Object.keys(config).filter((domain) => !domains.has(domain));
   if (unknownDomains.length)
     throw new Error(`Current session active configuration contains unknown domain(s): ${unknownDomains.join(', ')}.`);
-  if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
   // A list of Linear card uids or Circular source selectors `#N`, once each, as
   // Python reads it; that a Linear uid names a bound card is checked with the
   // bindings (session-authority.js).
@@ -264,13 +287,7 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     || !config.recordsOff.every((/** @type {unknown} */ key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   validateDomainShapes(config); validateCollections(config); requireCurrentConfigFields(config);
-  // Python checks the record display drafts of a Session from that version
-  // (`validate_session`) and refuses a row whose selector is not text
-  // (gbdraw/session_io.py:853-857). A Session 40 draft is not checked there, so
-  // here it keeps the verdict it had before OV-575.
-  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, {
-    scoped: scopedDrafts, textSelector: sessionVersion >= DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION
-  });
+  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, { scoped: scopedDrafts });
   if (has(config, 'featurePlacementOverrides')) {
     if (scopedDrafts) validateScopedFeaturePlacements(config.featurePlacementOverrides);
     else canonicalFeaturePlacements(config.featurePlacementOverrides, /** @type {'circular' | 'linear'} */ (mode)); // the first check
@@ -334,7 +351,6 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
       throw new Error('Current session active configuration config.importedComparisonResolution.action is invalid.');
     }
   }
-  validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
 };
 
 /** @param {{ scale_font_size?: unknown, ruler_label_font_size?: unknown }} [adv] */

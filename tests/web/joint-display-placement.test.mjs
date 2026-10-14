@@ -69,7 +69,7 @@ test('inactive rotation retains raw intent but cannot emit an invalid effective 
   assert.equal(requestedRecordDisplay(row, draft(row, 1)).startCoordinate, 1);
   assert.equal(requestedRecordDisplay(row, draft(row, null)).startCoordinate, null);
   assert.throws(() => requestedRecordDisplay(row, draft(row, 101)), /between 1 and 100/);
-  assert.throws(() => validateRecordDisplayDrafts([saved, saved]), /Duplicate/);
+  assert.throws(() => validateRecordDisplayDrafts([saved, saved]), /INPUT_INVALID\/FIELDS/);
 });
 
 for (const mode of ['circular', 'linear']) {

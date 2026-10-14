@@ -47,28 +47,47 @@ export const describeLinearLabelVisibility = (mode, options = {}) => {
   return `Auto · ${resolveLinearLabelVisibility(selected, options) ? 'Shown' : 'Hidden'}`;
 };
 
+/** Each current visibility field, its older boolean field, and its label. */
+const LEGACY_VISIBILITY_FIELDS = Object.freeze([
+  ['linear_accession_visibility', 'linear_show_accession', 'Linear Accession visibility'],
+  ['linear_length_visibility', 'linear_show_length', 'Linear Length / Coordinates visibility']
+]);
+
 /**
+ * The older boolean fields read as the current visibility (`show`, `hide`)
+ * where the current field is not stored; with it, the older one is dropped.
+ * A value that is no boolean keeps its older name (not read).
+ * @param {Record<string, unknown>} source
+ * @returns {Record<string, unknown>}
+ */
+export const renameLegacyLinearLabelVisibility = (source) => {
+  if (!LEGACY_VISIBILITY_FIELDS.some(([, legacyKey]) => hasOwn(source, legacyKey))) return source;
+  const migrated = { ...source };
+  for (const [currentKey, legacyKey] of LEGACY_VISIBILITY_FIELDS) {
+    if (!hasOwn(migrated, legacyKey)) continue;
+    if (hasOwn(migrated, currentKey)) delete migrated[legacyKey];
+    else if (typeof migrated[legacyKey] === 'boolean') {
+      migrated[currentKey] = migrated[legacyKey] ? 'show' : 'hide';
+      delete migrated[legacyKey];
+    }
+  }
+  return migrated;
+};
+
+/**
+ * A Session 27-39 or older configuration's visibility: the older boolean
+ * fields renamed, and Show where neither is stored. A stored current value is
+ * kept as stored (the settings' readers read it, and Save requires one of the
+ * modes).
  * @param {Record<string, unknown>} [source]
  * @returns {Record<string, unknown>}
  */
 export const migrateLegacyLinearLabelVisibility = (source = {}) => {
   if (!source || typeof source !== 'object' || Array.isArray(source)) return source;
-  const migrated = { ...source };
-  for (const [currentKey, legacyKey, label] of [
-    ['linear_accession_visibility', 'linear_show_accession', 'Linear Accession visibility'],
-    ['linear_length_visibility', 'linear_show_length', 'Linear Length / Coordinates visibility']
-  ]) {
-    if (hasOwn(migrated, currentKey)) {
-      migrated[currentKey] = requireLinearLabelVisibilityMode(migrated[currentKey], label);
-    } else if (hasOwn(migrated, legacyKey)) {
-      if (typeof migrated[legacyKey] !== 'boolean') {
-        throw new Error(`${label} legacy value must be a boolean.`);
-      }
-      migrated[currentKey] = migrated[legacyKey] ? 'show' : 'hide';
-    } else {
-      migrated[currentKey] = 'show';
-    }
-    delete migrated[legacyKey];
+  const migrated = { ...renameLegacyLinearLabelVisibility(source) };
+  for (const [currentKey, legacyKey, label] of LEGACY_VISIBILITY_FIELDS) {
+    if (hasOwn(migrated, legacyKey)) throw new Error(`${label} legacy value must be a boolean.`);
+    if (!hasOwn(migrated, currentKey)) migrated[currentKey] = 'show';
   }
   return migrated;
 };

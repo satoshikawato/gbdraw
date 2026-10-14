@@ -60,17 +60,33 @@ export const MODE_SLICE_CONTAINERS = (() => {
 // A slice holds only registry fields: the writer and both validators reject
 // any other key (plan 4.2).
 /**
+ * The places of a slice that hold no registry field: a container that is no
+ * object (`field` null), or a key it may not hold.
  * @param {unknown} value
  * @param {string} [container]
+ * @returns {{ container: string, field: string | null }[]}
  */
-export const validateModeSliceFields = (value, container = '') => {
-  if (!isObject(value)) throw fieldsError();
+export const modeSliceFieldViolations = (value, container = '') => {
+  if (!isObject(value)) return [{ container, field: null }];
   const allowed = MODE_SLICE_CONTAINERS[container];
-  for (const [field, child] of Object.entries(/** @type {Record<string, unknown>} */ (value))) {
-    if (!allowed.has(field)) throw fieldsError();
+  return Object.entries(/** @type {Record<string, unknown>} */ (value)).flatMap(([field, child]) => {
+    if (!allowed.has(field)) return [{ container, field }];
     const childContainer = container ? `${container}.${field}` : field;
-    if (Object.hasOwn(MODE_SLICE_CONTAINERS, childContainer)) validateModeSliceFields(child, childContainer);
-  }
+    return Object.hasOwn(MODE_SLICE_CONTAINERS, childContainer) ? modeSliceFieldViolations(child, childContainer) : [];
+  });
+};
+/** Save: a slice holds only registry fields. @param {unknown} value */
+export const validateModeSliceFields = (value) => {
+  if (modeSliceFieldViolations(value).length) throw fieldsError();
+};
+// The drawing's settings whose keys the reader table reads: Load drops a key
+// they may not hold, and a `losat` that is no object, with a dialog row
+// (`config-field-readers.js`, E-OD03).
+const READ_SETTING_CONTAINERS = new Set(['config', 'config.form', 'config.adv', 'config.losat']);
+/** Load: a slice holds only registry fields, apart from what the reader table reads. @param {unknown} value */
+export const requireModeSliceFields = (value) => {
+  if (modeSliceFieldViolations(value).some(({ container, field }) => !READ_SETTING_CONTAINERS.has(container)
+    || (field === null && container !== 'config.losat'))) throw fieldsError();
 };
 
 // The modes a GUI-unmanaged config override leaf belongs to (`by-leaf`): the

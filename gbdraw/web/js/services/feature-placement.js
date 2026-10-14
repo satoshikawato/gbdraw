@@ -196,6 +196,22 @@ export const canonicalFeaturePlacements = (overrides, mode) => /** @type {Canoni
 }));
 
 /**
+ * Whether `canonicalFeaturePlacements` accepts the draft row stored under
+ * `key` for `mode`: Load drops a row it does not accept (OV-764).
+ * @param {string} key
+ * @param {unknown} row
+ * @param {string} mode
+ */
+export const isFeaturePlacementDraftRow = (key, row, mode) => {
+  try {
+    canonicalFeaturePlacements(/** @type {FeaturePlacementDraft} */ ({ [key]: row }), mode);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * @param {FeaturePlacementDraft | null | undefined} overrides
  * @param {string} mode
  * @param {FeatureRequestRecord[]} [records]
@@ -277,6 +293,21 @@ const checkedOverrideRow = (row, draft) => {
 export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(
   /** @type {FeatureOverrideDraft | CanonicalFeatureOverride[] | null | undefined} */ (overrides), checkedOverrideRow
 );
+
+/**
+ * Whether `canonicalFeatureOverrides` accepts the draft row stored under
+ * `key`: Load drops a row it does not accept (A23').
+ * @param {string} key
+ * @param {unknown} row
+ */
+export const isFeatureOverrideDraftRow = (key, row) => {
+  try {
+    canonicalFeatureOverrides(/** @type {FeatureOverrideDraft} */ ({ [key]: row }));
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 // The request rows of the current request's records: the draft's edits, and
 // the label text that a bulk label edit gives a feature without its own

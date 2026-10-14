@@ -1,6 +1,6 @@
 // @ts-check
 import { DEFAULT_FEATURE_RENDERINGS, normalizeFeatureRendering, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
-import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
+import { renameLegacyLinearLabelVisibility, requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { requireComparisonSetting } from './losat-normalization.js';
 
 /**
@@ -65,34 +65,30 @@ const requireCurrentValue = (value, fallback, supported, label) => {
   return /** @type {T} */ (normalized);
 };
 
+// The values of each option a stored configuration names; Save refuses
+// another value (`requireCurrent*`), and Load reads it as the default with a
+// dialog row (`config-field-readers.js`). The older names each read as.
+export const CIRCULAR_MULTI_RECORD_SIZE_MODES = /** @type {const} */ (['auto', 'linear', 'equal']);
+export const LINEAR_TRACK_LAYOUTS = /** @type {const} */ (['above', 'middle', 'below']);
+export const LINEAR_LABEL_PLACEMENTS = /** @type {const} */ (['auto', 'above_feature']);
+export const PROTEIN_BLASTP_MODES = /** @type {const} */ (['pairwise', 'orthogroup', 'collinear']);
+export const CIRCULAR_MULTI_RECORD_SIZE_MODE_ALIASES = Object.freeze({ sqrt: /** @type {const} */ ('auto') });
+export const LINEAR_TRACK_LAYOUT_ALIASES = Object.freeze({ spreadout: /** @type {const} */ ('above'), tuckin: /** @type {const} */ ('below') });
+export const LINEAR_LABEL_PLACEMENT_ALIASES = Object.freeze({ on_feature: /** @type {const} */ ('above_feature') });
+
 /** @param {unknown} value */
 export const requireCurrentCircularMultiRecordSizeMode = (value) => (
-  requireCurrentValue(
-    value,
-    'auto',
-    ['auto', 'linear', 'equal'],
-    'Circular multi-record size mode'
-  )
+  requireCurrentValue(value, 'auto', CIRCULAR_MULTI_RECORD_SIZE_MODES, 'Circular multi-record size mode')
 );
 
 /** @param {unknown} value */
 export const requireCurrentLinearTrackLayout = (value) => (
-  requireCurrentValue(
-    value,
-    'middle',
-    ['above', 'middle', 'below'],
-    'Linear track layout'
-  )
+  requireCurrentValue(value, 'middle', LINEAR_TRACK_LAYOUTS, 'Linear track layout')
 );
 
 /** @param {unknown} value */
 export const requireCurrentLinearLabelPlacement = (value) => (
-  requireCurrentValue(
-    value,
-    'auto',
-    ['auto', 'above_feature'],
-    'Linear label placement'
-  )
+  requireCurrentValue(value, 'auto', LINEAR_LABEL_PLACEMENTS, 'Linear label placement')
 );
 
 /** The Pairwise match styles (the Load reader and Generate read this list). */
@@ -114,12 +110,7 @@ export const normalizeCurrentPairwiseMatchStyle = (value, fallback) => {
 
 /** @param {unknown} value */
 export const requireCurrentProteinBlastpMode = (value) => (
-  requireCurrentValue(
-    value,
-    'orthogroup',
-    ['pairwise', 'orthogroup', 'collinear'],
-    'Protein BLASTP mode'
-  )
+  requireCurrentValue(value, 'orthogroup', PROTEIN_BLASTP_MODES, 'Protein BLASTP mode')
 );
 
 /** @param {unknown} value */
@@ -230,28 +221,30 @@ export const requireCurrentOrthogroupMembershipMode = (value) => (
 );
 
 /** @param {unknown} value */
-export const migratePersistedCircularMultiRecordSizeMode = (value) => {
-  const normalized = normalizedValue(value, 'auto');
-  return requireCurrentCircularMultiRecordSizeMode(
-    normalized === 'sqrt' ? 'auto' : normalized
-  );
+/**
+ * @param {unknown} value
+ * @param {string} fallback
+ * @param {Readonly<Record<string, string>>} aliases
+ */
+const aliasedValue = (value, fallback, aliases) => {
+  const normalized = normalizedValue(value, fallback);
+  return Object.hasOwn(aliases, normalized) ? aliases[normalized] : normalized;
 };
 
 /** @param {unknown} value */
-export const migratePersistedLinearTrackLayout = (value) => {
-  const normalized = normalizedValue(value, 'middle');
-  if (normalized === 'spreadout') return 'above';
-  if (normalized === 'tuckin') return 'below';
-  return requireCurrentLinearTrackLayout(normalized);
-};
+export const migratePersistedCircularMultiRecordSizeMode = (value) => requireCurrentCircularMultiRecordSizeMode(
+  aliasedValue(value, 'auto', CIRCULAR_MULTI_RECORD_SIZE_MODE_ALIASES)
+);
 
 /** @param {unknown} value */
-export const migratePersistedLinearLabelPlacement = (value) => {
-  const normalized = normalizedValue(value, 'auto');
-  return requireCurrentLinearLabelPlacement(
-    normalized === 'on_feature' ? 'above_feature' : normalized
-  );
-};
+export const migratePersistedLinearTrackLayout = (value) => requireCurrentLinearTrackLayout(
+  aliasedValue(value, 'middle', LINEAR_TRACK_LAYOUT_ALIASES)
+);
+
+/** @param {unknown} value */
+export const migratePersistedLinearLabelPlacement = (value) => requireCurrentLinearLabelPlacement(
+  aliasedValue(value, 'auto', LINEAR_LABEL_PLACEMENT_ALIASES)
+);
 
 /**
  * The sections of a Web config document that callers read after the migration. A document without a section, or
@@ -273,6 +266,7 @@ export const migratePersistedWebStateFieldNames = (config) => {
     'depth_tick_interval',
     'depth_large_tick_interval'
   );
+  if (isPlainObject(adv)) adv = renameLegacyLinearLabelVisibility(adv);
   if (isPlainObject(adv) && Array.isArray(adv.depth_tracks)) {
     adv = {
       ...adv,
@@ -343,16 +337,13 @@ export const requireCurrentWebStateFieldNames = (config) => {
 /** @param {unknown} value */
 const installedOverText = (value) => typeof value === 'string' || value === null;
 
-// The refusals of a stored configuration's fields (BA-OD96): a retired field
-// name, a value no current option names (the Linear label visibilities
-// included), a shape of a default feature type that names no shape, and an
-// arrow ratio out of range. Only a value the merge installs is refused
-// (BA-OD100): a visibility or a default type's shape of another kind is read
-// with a dialog row, and the shape of another feature type is the shapes
-// reader's (`config-field-readers.js`), as the Web read them before.
-// The one check of the active configuration, of `applyConfigData`, and of
-// Load before its dialog (the Session prediction and the legacy configuration
-// read), so Load refuses such a file before it asks anything.
+// The invariants of a configuration the app wrote (BA-OD96): no retired field
+// name, no value that no current option names (the Linear label visibilities
+// included), no default feature type's shape that names no shape, and no
+// arrow ratio out of range. Only a value the merge installs is checked
+// (BA-OD100). Save, History (`applyConfigData`) and the Load rollback hold
+// them; Load reads a file's values with the reader table, which lists what it
+// cannot restore (`config-field-readers.js`, E1a), and refuses none of them.
 /**
  * @param {unknown} config
  */

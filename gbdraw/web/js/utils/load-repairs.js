@@ -33,7 +33,6 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  *   | 'legend-edit-overwritten'
  *   | 'legend-edit-overwritten-session46'
  *   | 'legend-edit-rekey-dropped'
- *   | 'record-display-drafts-dropped'
  *   | 'feature-recovery-failed'
  *   | 'match-sequences-unrestored'
  * } LoadRepairCode
@@ -227,9 +226,6 @@ const WORDING = {
   'match-sequences-unrestored': () => [
     'Comparisons: the sequences of the saved comparison matches could not be read again from the input files;'
     + ' the SVG preview stays, and the next Generate reads them.'
-  ],
-  'record-display-drafts-dropped': () => [
-    'Record display (recordDisplayDrafts): the stored record display settings could not be read and were dropped.'
   ]
 };
 

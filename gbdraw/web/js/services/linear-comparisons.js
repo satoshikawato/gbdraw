@@ -1,5 +1,7 @@
 // @ts-check
 import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
+/** @import { FieldLeaf } from '../utils/field-reading.js' */
+/** @typedef {(leaf: FieldLeaf) => void} PlanLossCollector Told each stored value the plan does not use as stored. */
 /**
  * @typedef {'none' | 'adjacent' | 'selected'} LinearComparisonMode
  * @typedef {'losat' | 'upload'} LinearComparisonSource
@@ -202,30 +204,46 @@ export const createLinearComparisonEdge = ({
   losatFilename: String(losatFilename || '')
 });
 
+/** @param {unknown} value */
+const isStored = (value) => value !== undefined && value !== null;
 /**
- * @param {unknown} edge
+ * @param {Readonly<Record<string, unknown>>} source
  * @param {number} index
+ * @param {PlanLossCollector} collect
  */
-const normalizeEdge = (edge, index) => {
-  const source = /** @type {Readonly<Record<string, unknown>>} */ (edge && typeof edge === 'object' ? edge : {});
-  return createLinearComparisonEdge({
+const normalizeEdge = (source, index, collect) => {
+  const normalized = createLinearComparisonEdge({
     ...source,
     id: cleanUid(source.id) || `linear-comparison-draft-${index + 1}`,
     included: source.included === true,
     fileActive: source.fileActive === true,
     losatFilenameActive: source.losatFilenameActive === true
   });
+  /** @type {const} */ (['included', 'fileActive', 'losatFilenameActive', 'source', 'losatFilename']).forEach((field) => {
+    if (isStored(source[field]) && source[field] !== normalized[field]) {
+      collect({ at: `.edges[${index}].${field}`, stored: source[field], used: normalized[field] });
+    }
+  });
+  return normalized;
 };
 
 /**
  * @param {unknown} [plan] unvalidated plan (a session, a draft, or a live plan)
+ * @param {PlanLossCollector} [collect] Load lists what it is told (OV-764).
  * @returns {LinearComparisonPlan}
  */
-export const normalizeLinearComparisonPlan = (plan = {}) => {
+export const normalizeLinearComparisonPlan = (plan = {}, collect = () => {}) => {
   const source = /** @type {{ edges?: unknown, mode?: unknown, defaultSource?: unknown }} */ (
     plan && typeof plan === 'object' && !Array.isArray(plan) ? plan : {}
   );
-  const edges = (Array.isArray(source.edges) ? source.edges : []).map(normalizeEdge);
+  if (isStored(source.edges) && !Array.isArray(source.edges)) collect({ at: '.edges', stored: source.edges, used: [] });
+  // An edge that is no object pairs no records: it is dropped, and the
+  // generated ids keep the stored positions.
+  const edges = (Array.isArray(source.edges) ? source.edges : []).flatMap((edge, index) => {
+    if (edge && typeof edge === 'object' && !Array.isArray(edge)) return [normalizeEdge(edge, index, collect)];
+    collect({ at: `.edges[${index}]`, stored: edge, used: undefined });
+    return [];
+  });
   /** @type {Set<string>} */
   const usedIds = new Set();
   edges.forEach((edge, index) => {
@@ -239,11 +257,15 @@ export const normalizeLinearComparisonPlan = (plan = {}) => {
     edge.id = id;
     usedIds.add(id);
   });
-  return {
+  const normalized = {
     mode: normalizeMode(source.mode),
     defaultSource: normalizeSource(source.defaultSource),
     edges
   };
+  /** @type {const} */ (['mode', 'defaultSource']).forEach((field) => {
+    if (isStored(source[field]) && source[field] !== normalized[field]) collect({ at: `.${field}`, stored: source[field], used: normalized[field] });
+  });
+  return normalized;
 };
 
 /**

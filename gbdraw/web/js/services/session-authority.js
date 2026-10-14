@@ -3,14 +3,15 @@ import { validateAnnotationWarnings } from './session-feature-metadata.js';
 import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateWebFileBindings } from './session-resource-backing.js';
-import { validateCurrentWriterActiveConfig, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
+import { requireActiveConfigContainers, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { canonicalFeatureOverrides, validateFeatureIdentityNotices } from './feature-placement.js';
 import { RENDERED_ID_FEATURE_EDIT_FIELDS, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
-import { LOSAT_EXECUTION_FIELDS, MODE_SCOPED_ROWS, SLICE_MODES, validateModeSliceFields } from './mode-scoped-migration.js';
+import { LOSAT_EXECUTION_FIELDS, MODE_SCOPED_ROWS, SLICE_MODES, requireModeSliceFields, validateModeSliceFields } from './mode-scoped-migration.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import {
   CANONICAL_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
@@ -252,9 +253,11 @@ const validateLinearComparisonPlan = (plan) => {
 
 /**
  * @param {SessionInput} sessionData Unvalidated Session data.
+ * @param {{ load?: boolean }} [options] Load reads the plan (its readers list
+ *   what they change, OV-764); Save requires it as written.
  * @returns {void}
  */
-export const validateCurrentComparisonAuthority = (sessionData) => {
+export const validateCurrentComparisonAuthority = (sessionData, { load = false } = {}) => {
   // Session 46: the comparison draft is the Linear drawing's.
   const draftConfig = Number(sessionData.version) >= MODE_SCOPED_SESSION_VERSION
     ? /** @type {UnvalidatedFields<'linear', UnvalidatedFields<'config'>>} */ (sessionData.modes)?.linear?.config
@@ -323,7 +326,9 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
   const bindingEntries = Array.isArray(bindings.linearComparisons) ? bindings.linearComparisons : [];
   if (!hasWebComparisonDraft && bindingEntries.length === 0) return;
 
-  const edgeIds = validateLinearComparisonPlan(config.linearComparisonPlan);
+  // Load reads the plan as the drawing reads it; Save requires it as written.
+  const edges = load ? normalizeLinearComparisonPlan(config.linearComparisonPlan).edges : null;
+  const edgeIds = edges ? new Set(edges.map(({ id }) => id)) : validateLinearComparisonPlan(config.linearComparisonPlan);
   /** @type {Set<string>} */
   const boundIds = new Set();
   bindingEntries.forEach((binding) => {
@@ -349,7 +354,7 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
     boundIds.add(id);
   });
   // `validateLinearComparisonPlan` above proved the plan's edges: objects with a string `id` and a boolean `fileActive`.
-  /** @type {{ edges: { id: string, fileActive: boolean }[] }} */ (config.linearComparisonPlan).edges.forEach((edge) => {
+  (edges ?? /** @type {{ edges: { id: string, fileActive: boolean }[] }} */ (config.linearComparisonPlan).edges).forEach((edge) => {
     if (edge.fileActive && !boundIds.has(edge.id)) {
       throw new Error(
         `Active comparison file is missing its Web file binding: ${edge.id}.`
@@ -566,11 +571,9 @@ const validateSettingsOnlyFlatDraft = (data) => {
       featurePlacementOverrides: migrateSessionFeaturePlacements(storedConfig.featurePlacementOverrides)
     };
   }
-  // `validateCurrentWriterActiveConfig` is the check of `mode` and of the configuration.
-  validateCurrentWriterActiveConfig({
-    mode: /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode, storedConfig, scopedDrafts: true,
-    sessionVersion: data.version
-  });
+  // The check of `mode` and of the configuration's containers; Load reads
+  // the values inside them with the reader table (`configFieldRepairs`).
+  requireActiveConfigContainers({ mode: /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode, storedConfig });
 };
 
 // One committed Result set: the top-level fields, or `otherModeResult`, whose
@@ -687,8 +690,11 @@ const validateOtherModeResult = (sessionData, version, storedSchemas) => {
 // Session 46 keeps each mode's draft in `modes` (registry fields only) and
 // none of it in its former homes; `ui.losatExecution` holds only the LOSAT
 // execution settings (plan 4.1).
-/** @param {Record<string, any>} sessionData */
-const validateModeScopedFields = (sessionData) => {
+/**
+ * @param {Record<string, any>} sessionData
+ * @param {boolean} load Load reads a drawing's settings with the reader table (`requireModeSliceFields`).
+ */
+const validateModeScopedFields = (sessionData, load) => {
   // A field outside the Session 46 shape is a Session-format error (plan 4.1).
   const fieldsInvalid = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   if (Object.hasOwn(sessionData, 'cliOptions') && !isPlainObject(sessionData.cliOptions)) throw fieldsInvalid();
@@ -710,16 +716,20 @@ const validateModeScopedFields = (sessionData) => {
   // `modes` holds a circular and a linear slice only.
   if (!isPlainObject(sessionData.modes)
     || Object.keys(sessionData.modes).some((mode) => !(/** @type {readonly string[]} */ (SLICE_MODES)).includes(mode))) throw fieldsInvalid();
-  Object.values(sessionData.modes).forEach((slice) => validateModeSliceFields(slice));
+  Object.values(sessionData.modes).forEach((slice) => (load ? requireModeSliceFields : validateModeSliceFields)(slice));
 };
 
 /**
+ * Save's check of the Session it writes, and Load's (`load`), which leaves the
+ * values of the drawings' settings to the reader table: Load drops what it
+ * cannot read with a dialog row before it applies the file (E-OD02).
  * @param {SessionEnvelope} sessionData Unvalidated Session data.
  * @param {number | string} version
  * @param {StoredRequestSchemas} [storedSchemas] The request schemas the file stored, when Load read them.
+ * @param {{ load?: boolean }} [options]
  * @returns {void}
  */
-export const validateSessionAuthorityInventory = (sessionData, version, storedSchemas = {}) => {
+export const validateSessionAuthorityInventory = (sessionData, version, storedSchemas = {}, { load = false } = {}) => {
   if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
     throw new Error('Session authority inventory requires an object.');
   }
@@ -731,7 +741,7 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
       }
     }
   } else {
-    validateModeScopedFields(sessionData);
+    validateModeScopedFields(sessionData, load);
   }
   const bindings = validateWebFileBindings(
     /** @type {UnvalidatedFields<'bindings'>} */ (sessionData.webFiles),
@@ -741,7 +751,8 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
   const linearRecordsOff = /** @type {UnvalidatedFields<'linear', UnvalidatedFields<'config', UnvalidatedFields<'recordsOff'>>>} */ (
     sessionData.modes
   )?.linear?.config?.recordsOff;
-  if (Number(version) >= MODE_SCOPED_SESSION_VERSION && Array.isArray(linearRecordsOff)) {
+  // Load drops a record that names no card (`readRecordsOff`).
+  if (!load && Number(version) >= MODE_SCOPED_SESSION_VERSION && Array.isArray(linearRecordsOff)) {
     const boundUids = new Set(/** @type {unknown[]} */ (Array.isArray(bindings?.linearSeqs) ? bindings.linearSeqs : []).map((sequence) => /** @type {UnvalidatedFields<'uid'>} */ (sequence)?.uid));
     if (/** @type {unknown[]} */ (linearRecordsOff).some((uid) => !boundUids.has(uid))) {
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
@@ -760,7 +771,7 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
     );
   }
   if (Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
-    validateCurrentComparisonAuthority(sessionData);
+    validateCurrentComparisonAuthority(sessionData, { load });
     for (const field of ['cInputType', 'lInputType']) {
       if (
         Object.prototype.hasOwnProperty.call(sessionData.ui || {}, field)
@@ -786,7 +797,8 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
         + forbiddenFeatureFields.join(', ')
       );
     }
-    if (Number(version) >= MODE_SCOPED_SESSION_VERSION) {
+    // Load reads each drawing's feature edits per row (`readFeatureOverrides`).
+    if (Number(version) >= MODE_SCOPED_SESSION_VERSION && !load) {
       SLICE_MODES.forEach((mode) => {
         const sliceFeatures = /** @type {UnvalidatedFields<string, UnvalidatedFields<'features'>>} */ (sessionData.modes)?.[mode]?.features;
         if (!isPlainObject(sliceFeatures) || !Object.hasOwn(sliceFeatures, 'featureOverrides')) return;
@@ -858,7 +870,7 @@ export const adoptRuntimeCanonicalSession = (canonical) => {
  * @returns {{ document: SessionEnvelope, canonical: Record<string, any> | null }}
  */
 export const adoptCurrentSessionDocument = (sessionData, currentVersion, storedSchemas = {}) => {
-  validateSessionAuthorityInventory(sessionData, currentVersion, storedSchemas);
+  validateSessionAuthorityInventory(sessionData, currentVersion, storedSchemas, { load: true });
   if (sessionData.version !== currentVersion) {
     throw new Error('Only the current session schema can use adoptive ownership.');
   }

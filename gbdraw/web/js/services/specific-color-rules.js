@@ -97,12 +97,14 @@ export const savedRuleCaption = (caption, color) => {
   return name.trim() ? name : caption;
 };
 /**
- * Saved rules with each caption read by `savedRuleCaption`.
+ * Saved rules with each caption read by `savedRuleCaption`; an entry that is
+ * no object stays (the rules' reader drops it, listed).
  * @template {{ readonly cap?: unknown, readonly color?: unknown }} Rule
  * @param {readonly Rule[]} rules
  * @returns {Rule[]}
  */
 export const savedSpecificRules = (rules) => rules.map((rule) => {
+  if (!rule || typeof rule !== 'object') return rule;
   const caption = String(rule.cap ?? '');
   const read = savedRuleCaption(caption, rule.color);
   return read === caption ? rule : { ...rule, cap: read };

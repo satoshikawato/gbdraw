@@ -45,9 +45,10 @@ import {
   readGeneratedCircularPlotTitlePosition, readImportedComparisonAction, draftLinearRecordGap, readLinearRecordGap, readLinearRecordLayoutEnabled,
   readLinearRecordRows, readFeaturePanelTab, readList, readLosatProgram, readPaletteColors, readPlainObject,
   readColorRules, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
-  sessionUiFieldRepairs, sliceFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS
+  featurePlacementsReader, readFeatureOverrides, readPalette, recordsOffReader, sessionUiFieldRepairs, sliceFieldRepairs, unreadFieldRepairs, valueRepairs,
+  LOSAT_EXECUTION_ROWS
 } from './config-field-readers.js';
-import { drawnLinearSequences } from './record-draw-selection.js';
+import { drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
@@ -136,7 +137,7 @@ import {
   validateFeatureCatalog,
   validateFeatureCatalogForImport
 } from './feature-catalog.js';
-import { bindRecordDisplayDrafts, migrateLegacyRecordDisplayDrafts, validateRecordDisplayDrafts } from './record-display-model.js';
+import { bindRecordDisplayDrafts, migrateLegacyRecordDisplayDrafts, readRecordDisplayDrafts } from './record-display-model.js';
 import {
   buildOrthogroupFeatureIndex,
   enrichFeaturesWithOrthogroups,
@@ -200,16 +201,7 @@ import {
   recordStructuralMetric
 } from './runtime-test-hooks.js';
 import { setResourcePayloadOwner } from './resource-payload-owner.js';
-import {
-  migratePersistedCircularMultiRecordSizeMode,
-  migratePersistedLinearLabelPlacement,
-  migratePersistedLinearTrackLayout,
-  migratePersistedWebStateFieldNames,
-  requireCurrentCircularMultiRecordSizeMode,
-  requireCurrentLinearLabelPlacement,
-  requireCurrentLinearTrackLayout,
-  requireCurrentConfigFields
-} from './current-option-values.js';
+import { migratePersistedWebStateFieldNames, requireCurrentConfigFields } from './current-option-values.js';
 import {
   validateSimilarityAlignmentResetReceipt,
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
@@ -217,6 +209,7 @@ import {
   LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   reconcileImportedLinearTypographyLink,
   holdsCliWriterConfig,
+  requireActiveConfigContainers,
   validateCurrentWriterActiveConfig,
   validateImportedCircularTrackSlots,
   validateImportedLinearTrackSlots,
@@ -250,6 +243,7 @@ import {
   sessionLegendEditsByRowKey,
   splitDraftIntoModes,
   unscopedDraftRows,
+  requireModeSliceFields,
   validateModeSliceFields
 } from './mode-scoped-migration.js';
 
@@ -433,11 +427,11 @@ const splitLegacyFeatureVisibilityRules = (features = {}) => {
   };
 };
 
-// The identity-keyed per-feature edit draft; a Session or History value is
-// checked as the request rows are (services/feature-placement.js).
+// The identity-keyed per-feature edit draft: the rows a request accepts
+// (services/feature-placement.js); Load lists the others (`sliceFieldRepairs`).
 /** @param {unknown} value */
 const featureOverridesForState = (value) => featureDraftMap(
-  canonicalFeatureOverrides(isPlainObject(value) ? value : {})
+  canonicalFeatureOverrides(readFeatureOverrides(value).value)
 );
 
 /**
@@ -615,25 +609,9 @@ const migratePersistedWebOptionValues = (configData = {}) => {
   if (!configData || typeof configData !== 'object' || Array.isArray(configData)) {
     return configData;
   }
-  const migratedNames = migratePersistedWebStateFieldNames(configData);
-  const form = isPlainObject(migratedNames.form) ? { ...migratedNames.form } : migratedNames.form;
-  const adv = isPlainObject(migratedNames.adv) ? { ...migratedNames.adv } : migratedNames.adv;
-  if (isPlainObject(form) && Object.prototype.hasOwnProperty.call(form, 'linear_track_layout')) {
-    form.linear_track_layout = migratePersistedLinearTrackLayout(form.linear_track_layout);
-  }
-  if (isPlainObject(adv) && Object.prototype.hasOwnProperty.call(adv, 'label_placement')) {
-    adv.label_placement = migratePersistedLinearLabelPlacement(adv.label_placement);
-  }
-  if (isPlainObject(adv) && Object.prototype.hasOwnProperty.call(adv, 'multi_record_size_mode')) {
-    adv.multi_record_size_mode = migratePersistedCircularMultiRecordSizeMode(
-      adv.multi_record_size_mode
-    );
-  }
-  return withCurrentLinearLabelVisibility({
-    ...migratedNames,
-    ...(form === undefined ? {} : { form }),
-    ...(adv === undefined ? {} : { adv })
-  });
+  // The older option values (`spreadout`, `on_feature`, `sqrt`) are read as
+  // their current names by the reader table, at every version.
+  return withCurrentLinearLabelVisibility(migratePersistedWebStateFieldNames(configData));
 };
 
 /**
@@ -1045,13 +1023,17 @@ export const setUnmanagedConfigOverrideValidator = (validator) => {
 };
 
 /**
- * @param {{ mode: DiagramMode, config?: unknown, configOverrides?: unknown, source: ConfigCheckRequest['source'] }} options
+ * @typedef {{ mode: DiagramMode, config?: unknown, configOverrides?: unknown, source: ConfigCheckRequest['source'] }} UnmanagedOverrideCheck
  *   `mode`: a slice's mode, or the mode of a Session's projection (the projection refuses another value; a
  *   settings-only Session's is checked with its draft). `config` and `configOverrides` are saved values,
  *   unvalidated: the validator service checks them.
- * @returns {Promise<Record<string, unknown>>} The overrides the check preserved.
  */
-const validateUnmanagedConfigOverrides = async ({
+/**
+ * The overrides the validator service accepts, or its refusal.
+ * @param {UnmanagedOverrideCheck} options
+ * @returns {Promise<{ overrides: Record<string, unknown> } | { refusal: Error }>}
+ */
+const checkUnmanagedConfigOverrides = async ({
   mode,
   config = null,
   configOverrides = {},
@@ -1067,14 +1049,14 @@ const validateUnmanagedConfigOverrides = async ({
     config === null
     && overridePaths.length === 0
   ) {
-    return {};
+    return { overrides: {} };
   }
   if (
     config === null
     && source !== 'draft'
     && overridePaths.every((path) => managedPaths.includes(path))
   ) {
-    return {};
+    return { overrides: {} };
   }
   if (!unmanagedConfigOverrideValidator) {
     throw new Error('Configuration validation service is unavailable.');
@@ -1087,17 +1069,52 @@ const validateUnmanagedConfigOverrides = async ({
     source
   });
   if (result?.result?.error && typeof result.result.error === 'object') {
-    throw Object.assign(new Error('Configuration validation failed.'), result.result.error);
+    return { refusal: Object.assign(new Error('Configuration validation failed.'), result.result.error) };
   }
   if (typeof result?.result?.error === 'string' && result.result.error.trim()) {
-    throw new Error(result.result.error.trim());
+    return { refusal: new Error(result.result.error.trim()) };
   }
   const preserved = result?.result?.overrides;
   if (!isPlainObject(preserved)) {
     throw new Error('Configuration validation returned an invalid preserved-settings result.');
   }
   // The cast: `isPlainObject(preserved)` above (this module's predicate is no type guard).
-  return cloneJsonData(/** @type {Record<string, unknown>} */ (preserved));
+  return { overrides: cloneJsonData(/** @type {Record<string, unknown>} */ (preserved)) };
+};
+
+/**
+ * Save and a request: the overrides the validator accepts, else its refusal is thrown.
+ * @param {UnmanagedOverrideCheck} options
+ * @returns {Promise<Record<string, unknown>>} The overrides the check preserved.
+ */
+const validateUnmanagedConfigOverrides = async (options) => {
+  const checked = await checkUnmanagedConfigOverrides(options);
+  if ('refusal' in checked) throw checked.refusal;
+  return checked.overrides;
+};
+
+/**
+ * Load: a stored draft's overrides the validator accepts. When it refuses
+ * them, each path is checked alone, and a refused one is dropped with a
+ * dialog row (OV-764). A value that is no object is the settings' reader's
+ * (`readPlainObject`, listed).
+ * @param {UnmanagedOverrideCheck} options
+ * @param {string} path Where the overrides are in the file.
+ * @param {LoadRepair[]} repairs Written.
+ * @returns {Promise<unknown>}
+ */
+const readStoredUnmanagedConfigOverrides = async (options, path, repairs) => {
+  if (!isPlainObject(options.configOverrides)) return options.configOverrides;
+  const checked = await checkUnmanagedConfigOverrides(options);
+  if (!('refusal' in checked)) return checked.overrides;
+  /** @type {Record<string, unknown>} */
+  const kept = {};
+  for (const [key, value] of Object.entries(/** @type {Record<string, unknown>} */ (options.configOverrides))) {
+    const one = await checkUnmanagedConfigOverrides({ ...options, configOverrides: { [key]: value } });
+    if ('refusal' in one) repairs.push(loadRepair({ code: 'setting-replaced', path: `${path}["${key}"]`, effect: 'dropped' }));
+    else kept[key] = value;
+  }
+  return validateUnmanagedConfigOverrides({ ...options, configOverrides: kept });
 };
 
 /** @param {DrawingState} drawing */
@@ -1236,7 +1253,7 @@ const applyModeSliceData = (drawing, mode, slice, {
   projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true
 } = {}) => {
   const config = overlayModeSliceConfig(projectedConfig, slice.config);
-  if (Object.keys(config).length) applyConfigData(drawing, config, { resolveTrackPlacements });
+  if (Object.keys(config).length) applyStoredConfigData(drawing, config, { resolveTrackPlacements });
   const features = isPlainObject(slice.features) ? slice.features : {};
   applyDrawingFeatureData(drawing, { ...features, featureColorOverrides: savedFeatureColorEdits(features.featureColorOverrides) });
   const editorState = slice.editorState;
@@ -1496,6 +1513,29 @@ const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
   });
 };
 
+/**
+ * A Session 40 or newer with its drafts' retired field names read as their
+ * current names, as an older Session's are (A17g): the drafts' readers read
+ * the values.
+ * @template {Record<string, unknown>} T
+ * @param {T} data
+ * @returns {T}
+ */
+const withCurrentDraftFieldNames = (data) => {
+  /** @param {Record<string, unknown>} container A Session, or a slice: its `config` with the current names. */
+  const named = (container) => (isPlainObject(container.config)
+    ? { ...container, config: migratePersistedWebStateFieldNames(/** @type {Record<string, unknown>} */ (container.config)) } : container);
+  const modes = isPlainObject(data.modes) ? /** @type {Record<string, unknown>} */ (data.modes) : null;
+  // The cast: the same Session with its drafts' field names changed.
+  return /** @type {T} */ ({
+    ...named(data),
+    ...(modes ? {
+      modes: Object.fromEntries(Object.entries(modes).map(([mode, slice]) => [mode,
+        isPlainObject(slice) ? named(/** @type {Record<string, unknown>} */ (slice)) : slice]))
+    } : {})
+  });
+};
+
 const LEGACY_CONFIG_KEYS = new Set([
   'form',
   'adv',
@@ -1550,16 +1590,6 @@ const readLegacyConfigPayload = (data, drawing, mode) => {
   );
   validateImportedCircularTrackSlots(migrated);
   validateImportedLinearTrackSlots(migrated);
-  // `applyLegacyConfigPayload` would refuse these fields after the dialog.
-  requireCurrentConfigFields(migrated);
-  if (Object.hasOwn(migrated, 'recordDisplayDrafts')) {
-    try {
-      validateRecordDisplayDrafts(migrated.recordDisplayDrafts);
-    } catch {
-      delete migrated.recordDisplayDrafts;
-      repairs.push(loadRepair({ code: 'record-display-drafts-dropped', path: 'recordDisplayDrafts', effect: 'dropped' }));
-    }
-  }
   // What `applyConfigData` reads differently (B37, B43, B48), on a copy of
   // the drawing's settings, which it installs the configuration over.
   /** @type {SettingsContainers} */
@@ -1567,7 +1597,20 @@ const readLegacyConfigPayload = (data, drawing, mode) => {
     form: drawing.form, adv: drawing.adv, losat: drawing.losat, circularConservation: drawing.circularConservation
   });
   repairs.push(...configFieldRepairs(installed, migrated, '', { mode, current: true }));
-  return { value: migrated, repairs };
+  return { value: mode === 'linear' ? withBoundLinearRecordsOff(migrated, state.linearSeqs) : migrated, repairs };
+};
+
+/**
+ * A Linear drawing turns OFF only records it has: a card uid it does not have
+ * turned nothing off and is dropped, unlisted.
+ * @param {Record<string, unknown>} config
+ * @param {readonly { uid?: unknown }[]} linearSeqs
+ */
+const withBoundLinearRecordsOff = (config, linearSeqs) => {
+  if (!Array.isArray(config.recordsOff)) return config;
+  const bound = new Set(linearSeqs.map(({ uid }) => uid));
+  // Another entry is read (and listed) by the drawing's reader.
+  return { ...config, recordsOff: config.recordsOff.filter((uid) => bound.has(uid) || !isRecordDrawKey('linear', uid)) };
 };
 
 /** @param {DrawingState} drawing @param {Record<string, unknown>} config What `readLegacyConfigPayload` read. */
@@ -1575,7 +1618,7 @@ const applyLegacyConfigPayload = (drawing, config) => {
   state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
     drawing, /** @type {UnvalidatedFields<'multi_record_canvas'>} */ (config.form)
   );
-  applyConfigData(drawing, config);
+  applyStoredConfigData(drawing, config);
   restorePaletteStateAfterConfigImport(drawing);
 };
 
@@ -1694,16 +1737,17 @@ const restoreStoredNonCanonicalConfig = (
 
 // Version-40 config owns the active controls and the next Generate. The
 // canonical projection owns the committed artifact and only fills fields the
-// current writer deliberately omitted.
+// current writer deliberately omitted. Load reads the values with the reader
+// table before its dialog (`configFieldRepairs`).
 export const restoreCurrentWriterActiveConfig = ({
   mode,
   projectedConfig,
   storedConfig
-}, sessionVersion = SESSION_VERSION) => {
+}) => {
   if (!isPlainObject(projectedConfig)) {
     throw new Error('Current session is missing its canonical configuration projection.');
   }
-  validateCurrentWriterActiveConfig({ mode, storedConfig, scopedDrafts: true, sessionVersion });
+  requireActiveConfigContainers({ mode, storedConfig });
   const restored = cloneJsonData(projectedConfig);
   /** @type {string[]} */
   const restoredDomains = [];
@@ -1929,9 +1973,9 @@ const preflightSessionImport = async (sessionData, repairs) => {
     recordSessionLifecycleEvent('resource-table-adoption-end');
     // A CLI-written Session 40-41 `config` is no Web draft (OV-269), as in
     // migrate_session_flat_draft.
-    normalizedData = holdsCliWriterConfig(rawData)
+    normalizedData = withCurrentDraftFieldNames(holdsCliWriterConfig(rawData)
       ? Object.fromEntries(Object.entries(rawData).filter(([key]) => key !== 'config'))
-      : rawData;
+      : rawData);
   } else {
     validateSessionAuthorityInventory(rawData, sourceSessionVersion, requestRead.storedSchemas);
     normalizedData = normalizeSessionData(rawData, repairs);
@@ -2084,7 +2128,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
       mode: canonicalProjection.mode,
       projectedConfig: canonicalProjection.config,
       storedConfig: runtimeStoredConfig
-    }, sourceSessionVersion);
+    });
     recordSessionLifecycleEvent('current-draft-validation-end');
   }
   // Session 46: each slice is a current-writer draft of its own mode; the
@@ -2094,9 +2138,9 @@ const preflightSessionImport = async (sessionData, repairs) => {
     SLICE_MODES.forEach((mode) => {
       const slice = data.modes?.[mode];
       if (slice === undefined) return;
-      validateModeSliceFields(slice);
+      requireModeSliceFields(slice);
       if (isPlainObject(slice.config)) {
-        validateCurrentWriterActiveConfig({
+        requireActiveConfigContainers({
           mode,
           storedConfig: migrateImportedLinearTrackSlots(migrateImportedCircularTrackSlots(
             { form: {}, adv: {}, ...slice.config }
@@ -2250,10 +2294,12 @@ const restoreLoadedSetSequenceSources = async ({
  * @param {'circular' | 'linear'} mode
  * @param {unknown} setEditorState
  * @param {number} sessionVersion The version of the Session `data`.
- * @param {unknown} [rules]
+ * @param {unknown} [storedRules]
  * @returns {SavedResultEdits}
  */
-export const savedResultEdits = (data, mode, setEditorState, sessionVersion, rules) => {
+export const savedResultEdits = (data, mode, setEditorState, sessionVersion, storedRules) => {
+  // An entry that is no object is no rule (the rules' reader drops it, listed).
+  const rules = Array.isArray(storedRules) ? storedRules.filter(isPlainObject) : [];
   const slice = sessionVersion >= MODE_SCOPED_SESSION_VERSION
     ? data.modes?.[mode]
     : { editorState: data.editorState, features: data.features };
@@ -2275,7 +2321,7 @@ export const savedResultEdits = (data, mode, setEditorState, sessionVersion, rul
     legendStrokeOverrides: legend.strokeOverrides,
     originalLegendColors: legend.originalColors,
     originalLegendOrder: legend.originalOrder,
-    rules: savedSpecificRules(Array.isArray(rules) ? rules : []),
+    rules: savedSpecificRules(rules),
     legendRekeys,
     mode,
     sessionVersion
@@ -2482,11 +2528,11 @@ const resolvedTrackStacks = (adv, form) => {
 // Captured or stored settings (History Undo and Redo, the failed Session Load
 // rollback, a settings-only Session) pass `resolveTrackPlacements: false`: the
 // track stacks are installed as given, so unset slot sides, lane directions,
-// and axis indexes stay unset (R11).
+// and axis indexes stay unset (R11). Load applies a file's settings with the
+// readers it listed their losses with before its dialog (`configFieldRepairs`).
 /** @param {DrawingState} drawing */
-export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true } = {}) => {
-  // Load ran this check before its dialog; a History restore holds captured settings.
-  requireCurrentConfigFields(data);
+const applyStoredConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true } = {}) => {
+  const mode = drawing === state.drawings.linear ? 'linear' : 'circular';
   if (data.losat) {
     // The execution settings of a Session 44 or older draft or of a request
     // projection are app-level (`state.losatExecution`); the drawing keeps the
@@ -2499,10 +2545,10 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   // The stored settings' merge and readers (Load lists what they cannot restore first).
   installStoredSettings(drawing, data, drawing === state.drawings.linear ? 'linear' : 'circular');
   replacePlainObject(drawing.unmanagedConfigOverrides, cloneJsonData(readPlainObject(data.unmanagedConfigOverrides).value));
-  drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(data.recordDisplayDrafts || []));
+  drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(readRecordDisplayDrafts(data.recordDisplayDrafts).value));
   // Omitted: every record is drawn.
-  drawing.recordsOff.splice(0, drawing.recordsOff.length, ...(Array.isArray(data.recordsOff) ? data.recordsOff : []));
-  replacePlainObject(drawing.featurePlacementOverrides, cloneJsonData(readPlainObject(data.featurePlacementOverrides).value));
+  drawing.recordsOff.splice(0, drawing.recordsOff.length, ...recordsOffReader(mode)(data.recordsOff).value);
+  replacePlainObject(drawing.featurePlacementOverrides, cloneJsonData(featurePlacementsReader(mode)(data.featurePlacementOverrides).value));
   drawing.annotationSets.splice(0, drawing.annotationSets.length, ...readAnnotationSets(data.annotationSets).value);
   const linearLayout = data.linearRecordLayout && typeof data.linearRecordLayout === 'object'
     ? data.linearRecordLayout
@@ -2532,20 +2578,11 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
     data.linearComparisonPlan || createDefaultLinearComparisonPlan()
   );
   drawing.importedComparisonIntent.action = readImportedComparisonAction(data.importedComparisonResolution?.action).value;
-  drawing.adv.label_placement = requireCurrentLinearLabelPlacement(
-    drawing.adv.label_placement
-  );
-  drawing.form.linear_track_layout = requireCurrentLinearTrackLayout(
-    drawing.form.linear_track_layout
-  );
   drawing.form.plot_title = String(drawing.form.plot_title || '');
   // `form.legend` and `adv.plot_title_position` are accessors over
   // `layoutPreferences` (state.js) whose setters normalize a merged value.
   // Writing the resolved value back would only pin an unset Circular
   // multi-record preference, so neither is rewritten here.
-  drawing.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
-    drawing.adv.multi_record_size_mode
-  );
   drawing.adv.circular_track_slots_schema_version = CIRCULAR_TRACK_SLOT_SCHEMA_VERSION;
   drawing.adv.circular_track_slots_enabled = drawing.adv.circular_track_slots_enabled === true;
   if (resolveTrackPlacements) {
@@ -2566,7 +2603,7 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   if (typeof data.paletteInstantPreviewEnabled === 'boolean') {
     state.paletteInstantPreviewEnabled.value = data.paletteInstantPreviewEnabled;
   }
-  const importedPalette = String(data.palette || '').trim();
+  const importedPalette = readPalette(data.palette).value;
   if (importedPalette) drawing.selectedPalette.value = importedPalette;
   const storedColors = readPlainObject(data.colors).value;
   if (hasColorEntries(storedColors)) {
@@ -2618,6 +2655,18 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   // Absent in older Sessions: no dormant names (D-21).
   clearObject(drawing.orthogroupDormantOverrides);
   Object.assign(drawing.orthogroupDormantOverrides, normalizeOrthogroupDormantOverrides(webEdits.orthogroupDormantOverrides));
+};
+
+/**
+ * Applies captured settings (History Undo and Redo, the Load rollback): they
+ * hold only values the app wrote, which `requireCurrentConfigFields` checks.
+ * @param {DrawingState} drawing
+ * @param {Record<string, unknown>} data
+ * @param {{ resolveTrackPlacements?: boolean, applyAlignment?: boolean }} [options]
+ */
+export const applyConfigData = (drawing, data, options = {}) => {
+  requireCurrentConfigFields(data);
+  applyStoredConfigData(drawing, data, options);
 };
 
 /** @param {DrawingState} drawing */
@@ -4983,7 +5032,14 @@ const importSessionDocument = async (e, options = {}) => {
       // rolls back (OV-710); its History is not restarted.
       const legacyMode = state.mode.value === 'linear' ? 'linear' : 'circular';
       const legacyConfig = readLegacyConfigPayload(data, state.drawings[legacyMode], legacyMode);
-      const legacyDialog = describeLoadRepairs(legacyConfig.repairs);
+      const legacyRepairs = [...legacyConfig.repairs];
+      const legacyOverrides = readPlainObject(legacyConfig.value.unmanagedConfigOverrides).value;
+      if (Object.keys(legacyOverrides).length > 0) {
+        legacyConfig.value.unmanagedConfigOverrides = await readStoredUnmanagedConfigOverrides({
+          mode: legacyMode, configOverrides: legacyOverrides, source: 'draft'
+        }, 'unmanagedConfigOverrides', legacyRepairs);
+      }
+      const legacyDialog = describeLoadRepairs(legacyRepairs);
       if (legacyDialog) {
         const confirmLoadRepairs = /** @type {ConfirmLoadRepairs} */ (options.confirmLoadRepairs);
         if (!await confirmLoadRepairs(legacyDialog) || !options.isCurrent()) return { status: 'canceled' };
@@ -4994,7 +5050,7 @@ const importSessionDocument = async (e, options = {}) => {
       }
       commitStarted = true;
       applyLegacyConfigPayload(state.drawings[legacyMode], legacyConfig.value);
-      return { status: 'legacy', repairs: Object.freeze([...legacyConfig.repairs]) };
+      return { status: 'legacy', repairs: Object.freeze(legacyRepairs) };
     }
 
     recordSessionLifecycleEvent('current-session-preflight-start');
@@ -5029,9 +5085,11 @@ const importSessionDocument = async (e, options = {}) => {
       settingsOnly
     } = preflight;
     if (restoredConfig && unmanagedConfigValidation) {
-      restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(
-        unmanagedConfigValidation
-      );
+      // A stored draft's overrides are read; a request's are checked.
+      restoredConfig.unmanagedConfigOverrides = unmanagedConfigValidation.source === 'draft'
+        ? await readStoredUnmanagedConfigOverrides(unmanagedConfigValidation, sourceSessionVersion >= MODE_SCOPED_SESSION_VERSION
+          ? `modes.${unmanagedConfigValidation.mode}.config.unmanagedConfigOverrides` : 'config.unmanagedConfigOverrides', repairs)
+        : await validateUnmanagedConfigOverrides(unmanagedConfigValidation);
     }
     const canonicalSession = projectionResult !== null;
     const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
@@ -5413,6 +5471,9 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {Record<string, any>} */
     let appUi = modeScopedSession && isPlainObject(data.ui) ? data.ui : {};
     let sessionCliOptions = modeScopedSession ? data.cliOptions : undefined;
+    // The stored draft a Session 27-44's drawings both read.
+    /** @type {unknown} */
+    let flatDraft = null;
     if (modeScopedSession) {
       modeSlices = {
         circular: isPlainObject(data.modes?.circular) ? data.modes.circular : {},
@@ -5422,6 +5483,7 @@ const importSessionDocument = async (e, options = {}) => {
       const flatConfig = hasFlatDraft
         ? restoredConfig
         : migratedAnnotationTargetCount > 0 && restoredConfig ? { annotationSets: restoredConfig.annotationSets } : {};
+      flatDraft = hasFlatDraft ? restoredConfig : null;
       const legend = isPlainObject(restoredEditorState?.legend) ? restoredEditorState.legend : {};
       // The split writes what the Session saved and its migrations wrote
       // (plan 4.2), not the empty defaults Load reads in their place.
@@ -5519,6 +5581,7 @@ const importSessionDocument = async (e, options = {}) => {
         : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, modeSlices[mode].config);
       // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
       if (Array.isArray(modeConfigs[mode].rules)) modeConfigs[mode].rules = savedSpecificRules(modeConfigs[mode].rules);
+      if (mode === 'linear') modeConfigs.linear = withBoundLinearRecordsOff(modeConfigs.linear, candidateFiles.linearSeqs);
       // The form's legend position is the drawing's layout slot (state.js), which reads it in its mode.
       if (isPlainObject(modeConfigs[mode].form)) {
         repairs.push(...readLegendPositionOfMode(modeConfigs[mode].form.legend, mode,
@@ -5528,19 +5591,20 @@ const importSessionDocument = async (e, options = {}) => {
       // B43), installed as `applyModeSliceData` installs it over the drawing
       // Load resets; and of the drawing's `ui` and feature edits.
       installedSettings[mode] = defaultSettingsContainers(mode);
-      // What `applyModeSliceData` installs; `applyConfigData` would refuse its fields after the dialog.
+      // What `applyModeSliceData` installs.
       const installedConfig = overlayModeSliceConfig(null, modeConfigs[mode]);
-      requireCurrentConfigFields(installedConfig);
       repairs.push(...configFieldRepairs(installedSettings[mode], installedConfig,
         modeScopedSession ? `modes.${mode}.config` : 'config', { stored: modeSlices[mode].config, mode }));
+      repairs.push(...unreadFieldRepairs(modeScopedSession ? modeSlices[mode].config : flatDraft,
+        modeScopedSession ? `modes.${mode}.config` : 'config', mode));
       // (A Session 27-44 keeps them in its `ui` and `features`.)
       repairs.push(...sliceFieldRepairs(modeSlices[mode], modeScopedSession ? `modes.${mode}` : '', mode));
       // A saved unmanaged override is checked against its own drawing's mode (PD-OI-009, OV-106).
       const savedOverrides = modeSlices[mode].config?.unmanagedConfigOverrides;
       if (isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
-        modeConfigs[mode].unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
+        modeConfigs[mode].unmanagedConfigOverrides = await readStoredUnmanagedConfigOverrides({
           mode, configOverrides: savedOverrides, source: 'draft'
-        });
+        }, `${modeScopedSession ? `modes.${mode}.config` : 'config'}.unmanagedConfigOverrides`, repairs);
       }
     }
     // What each drawing's Depth fit drops (B45): it runs on the restored files.

@@ -4,8 +4,10 @@
 // request and Session services read them. The Record Display controls
 // (app/record-display-options.js) edit it.
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 /** @import { RecordEntryInput } from './record-options.js' */
+/** @import { FieldReading } from '../utils/field-reading.js' */
 /** @typedef {'circular' | 'linear'} RecordDisplayScope */
 /**
  * @typedef {{
@@ -57,12 +59,15 @@ import { resolveDisambiguatedRecordSelection } from './record-options.js';
  * }} RecordDisplayRow
  */
 
+/** @param {unknown} selector `#N`, as text (OV-639: a list is no selector). */
+const isRecordSelectorText = (selector) => typeof selector === 'string' && /^#[1-9]\d*$/.test(selector);
+
 // A record display row or draft names its source input and record. A drawing
 // holds the drafts of its own mode's inputs (PD-OI-086): `circular`, or a
 // Linear File card's UID.
 /** @param {{ sourceUid?: string, selector: string }} identity */
 export const recordDisplayKey = ({ sourceUid, selector }) => {
-  if (!sourceUid || !/^#[1-9]\d*$/.test(selector)) {
+  if (!sourceUid || !isRecordSelectorText(selector)) {
     throw new Error('Record display requires a source UID and exact record selector.');
   }
   return JSON.stringify([sourceUid, selector]);
@@ -153,6 +158,21 @@ const ANCHOR_INTENT_KEYS = [
   'schema'
 ];
 
+/** @param {unknown} text Text without a NUL. */
+const isIdText = (text) => typeof text === 'string' && Boolean(text) && !text.includes('\0');
+/** @param {unknown} value An anchor intent (`validateAnchorIntent`) or not. */
+const isAnchorIntent = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const intent = /** @type {Record<string, unknown>} */ (value);
+  return Object.keys(intent).sort().join(',') === ANCHOR_INTENT_KEYS.join(',')
+    && intent.schema === 1 && isIdText(intent.recordKey) && isIdText(intent.biologicalFeatureId)
+    && (/** @type {readonly unknown[]} */ (['anchor', 'feature-end'])).includes(intent.placement)
+    && (intent.placement === 'anchor'
+      ? (/** @type {readonly unknown[]} */ (['five-prime', 'midpoint', 'three-prime'])).includes(intent.anchor)
+      : intent.anchor === null)
+    && Number.isSafeInteger(intent.offsetBp)
+    && typeof intent.orientForward === 'boolean';
+};
 /**
  * The value is untrusted; every field read below is checked before it is trusted.
  * @param {Partial<Record<keyof AnchorIntent, unknown>> | null | undefined} intent
@@ -160,19 +180,7 @@ const ANCHOR_INTENT_KEYS = [
  */
 export const validateAnchorIntent = (intent) => {
   if (intent === null) return null;
-  if (!intent || Object.keys(intent).sort().join(',') !== ANCHOR_INTENT_KEYS.join(',')
-    || intent.schema !== 1
-    || typeof intent.recordKey !== 'string' || !intent.recordKey || intent.recordKey.includes('\0')
-    || typeof intent.biologicalFeatureId !== 'string' || !intent.biologicalFeatureId
-    || intent.biologicalFeatureId.includes('\0')
-    || !(/** @type {readonly unknown[]} */ (['anchor', 'feature-end'])).includes(intent.placement)
-    || (intent.placement === 'anchor'
-      ? !(/** @type {readonly unknown[]} */ (['five-prime', 'midpoint', 'three-prime'])).includes(intent.anchor)
-      : intent.anchor !== null)
-    || !Number.isSafeInteger(intent.offsetBp)
-    || typeof intent.orientForward !== 'boolean') {
-    throw new Error('Invalid record display anchor intent.');
-  }
+  if (!isAnchorIntent(intent)) throw new Error('Invalid record display anchor intent.');
   return /** @type {AnchorIntent} */ (intent); // every field was checked above
 };
 
@@ -190,36 +198,56 @@ export const migrateLegacyRecordDisplayDrafts = (drafts) => {
 };
 
 // A Session 41-44 draft also named each row's mode (`scoped`); the Session 46
-// split moves each row into its mode's drawing. A row's selector is text
-// (OV-575); `textSelector: false` reads a row of a Session Python does not
-// check (`validateCurrentWriterActiveConfig` owns which), whose selector is
-// only matched against `#N` by `recordDisplayKey`.
+// split moves each row into its mode's drawing. A row names its source input
+// and a record by a `#N` selector, as text (OV-575, OV-639).
+const DRAFT_FIELDS = 'anchorIntent,recordId,reverseComplementOverride,selector,sourceUid,startCoordinate,topologyOverride';
+const SCOPED_DRAFT_FIELDS = 'anchorIntent,recordId,reverseComplementOverride,scope,selector,sourceUid,startCoordinate,topologyOverride';
+/** @param {unknown} value @param {boolean} scoped */
+const isRecordDisplayDraft = (value, scoped) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const draft = /** @type {Record<string, unknown>} */ (value);
+  const { startCoordinate } = draft;
+  return Object.keys(draft).sort().join(',') === (scoped ? SCOPED_DRAFT_FIELDS : DRAFT_FIELDS)
+    && (!scoped || draft.scope === 'circular' || draft.scope === 'linear')
+    && typeof draft.recordId === 'string' && !draft.recordId.includes('\0')
+    && isIdText(draft.sourceUid) && isRecordSelectorText(draft.selector)
+    && (draft.topologyOverride === null || typeof draft.topologyOverride === 'boolean')
+    && (draft.reverseComplementOverride === null || typeof draft.reverseComplementOverride === 'boolean')
+    && (startCoordinate === null || (Number.isSafeInteger(startCoordinate) && /** @type {number} */ (startCoordinate) >= 1))
+    && (draft.anchorIntent === null || isAnchorIntent(draft.anchorIntent));
+};
+
 /**
+ * The record display drafts Load reads, row by row (OV-639, OV-611; E-OD04): a
+ * row that is no draft, or that repeats an earlier row's record, is dropped;
+ * a value that is no list is read as none.
  * @param {unknown} drafts
- * @param {{ scoped?: boolean, textSelector?: boolean }} [options]
+ * @param {{ scoped?: boolean }} [options]
+ * @returns {FieldReading<RecordDisplayDraft[]>}
  */
-export const validateRecordDisplayDrafts = (drafts, { scoped = false, textSelector = true } = {}) => {
-  if (!Array.isArray(drafts)) throw new Error('Record display drafts must be an array.');
-  const fields = scoped
-    ? 'anchorIntent,recordId,reverseComplementOverride,scope,selector,sourceUid,startCoordinate,topologyOverride'
-    : 'anchorIntent,recordId,reverseComplementOverride,selector,sourceUid,startCoordinate,topologyOverride';
+export const readRecordDisplayDrafts = (drafts, { scoped = false } = {}) => {
+  if (!Array.isArray(drafts)) return { value: [], lost: drafts !== undefined && drafts !== null };
+  /** @type {Set<string>} */
   const identities = new Set();
-  for (const draft of drafts) {
-    if (!draft || Object.keys(draft).sort().join(',') !== fields
-      || (scoped && !['circular', 'linear'].includes(draft.scope))
-      || typeof draft.recordId !== 'string' || draft.recordId.includes('\0')
-      || typeof draft.sourceUid !== 'string' || draft.sourceUid.includes('\0')
-      || (textSelector && typeof draft.selector !== 'string')
-      || (draft.topologyOverride !== null && typeof draft.topologyOverride !== 'boolean')
-      || (draft.reverseComplementOverride !== null
-        && typeof draft.reverseComplementOverride !== 'boolean')
-      || (draft.startCoordinate !== null && (!Number.isSafeInteger(draft.startCoordinate) || draft.startCoordinate < 1))) {
-      throw new Error('Invalid record display draft; only source-bound requested intent is supported.');
-    }
-    validateAnchorIntent(draft.anchorIntent);
-    const key = scoped ? JSON.stringify([draft.scope, recordDisplayKey(draft)]) : recordDisplayKey(draft);
-    if (identities.has(key)) throw new Error('Duplicate record display draft identity.');
+  const kept = /** @type {RecordDisplayDraft[]} */ (drafts.filter((draft) => {
+    if (!isRecordDisplayDraft(draft, scoped)) return false;
+    const key = JSON.stringify([scoped ? draft.scope : '', draft.sourceUid, draft.selector]);
+    if (identities.has(key)) return false;
     identities.add(key);
+    return true;
+  }));
+  const dropped = drafts.length - kept.length;
+  return { value: kept, lost: dropped > 0, ...(dropped ? { dropped } : {}) };
+};
+
+/**
+ * Save keeps only drafts Load reads without a loss.
+ * @param {unknown} drafts
+ * @param {{ scoped?: boolean }} [options]
+ */
+export const validateRecordDisplayDrafts = (drafts, { scoped = false } = {}) => {
+  if (!Array.isArray(drafts) || readRecordDisplayDrafts(drafts, { scoped }).lost) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   }
   return drafts;
 };

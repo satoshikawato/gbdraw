@@ -332,7 +332,7 @@ test('a priority rule, a form value of another kind and an annotation mark or la
 // BA-D15 (OV-569, OV-710): a legacy configuration file is read before it is
 // applied; malformed record display settings are dropped and listed, and
 // Cancel leaves the drawing as it was.
-test('a legacy configuration with malformed record display settings loads with the key dropped and listed (PLAN 12.7 (3))', async () => {
+test('a legacy configuration with malformed record display settings loads with the rows dropped and listed (PLAN 12.7 (3), E-OD04)', async () => {
   const legacy = { form: { legend: 'left' }, recordDisplayDrafts: [{ junk: 1 }, 5, 'x'] };
   const drawing = state.drawings[state.mode.value === 'linear' ? 'linear' : 'circular'];
   drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length);
@@ -342,11 +342,11 @@ test('a legacy configuration with malformed record display settings loads with t
   assert.equal(canceled.status, 'canceled');
   assert.equal(JSON.stringify(drawing.form), formBefore);
   assert.deepEqual(dialogs.map(({ items }) => items), [
-    ['Record display (recordDisplayDrafts): the stored record display settings could not be read and were dropped.']
+    ['Settings: 3 entries of recordDisplayDrafts could not be read and were dropped.']
   ]);
   const loaded = await importSession(input(legacy), { confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
-  assert.deepEqual(loaded.repairs.map(({ code, path }) => [code, path]), [['record-display-drafts-dropped', 'recordDisplayDrafts']]);
+  assert.deepEqual(loaded.repairs.map(({ code, path }) => [code, path]), [['setting-entries-dropped', 'recordDisplayDrafts']]);
   assert.deepEqual([...drawing.recordDisplayDrafts], []);
   assert.equal(drawing.form.legend, 'left');
 });
@@ -592,6 +592,7 @@ test('a value both drawings of a Session 27-44 read is one row; a Session 46 lis
     const session = fixture(name);
     lossy(session.config);
     const { loaded, items } = await load(session, name);
+    // The text '0.5' reads as its number (no row).
     assert.deepEqual(rowsOf(loaded), [
       'setting-replaced config.adv.label_rendering sideways -> auto',
       'setting-replaced config.adv.feature_shapes.gene bogus -> undefined'
@@ -705,7 +706,7 @@ test('a legacy configuration lists a setting its reader cannot restore (B48)', a
 // a Session slice and for a legacy configuration that is lossy otherwise, and
 // nothing changes. One case is a Session 39's configuration as a legacy file
 // (its track stacks are current, so its retired names are not renamed).
-const REFUSED_CONFIG_FIELDS = [
+const READ_CONFIG_FIELDS = [
   { adv: { linear_show_accession: true } }, { adv: { depth_tick_interval: 5 } },
   { adv: { depth_tracks: [{ label: 'D', tick_interval: 5 }] } }, { losat: { blastp: { collinearMaxGeneGap: 2 } } },
   { form: { linear_track_layout: 'sideways' } }, { adv: { label_placement: 'inside' } }, { adv: { multi_record_size_mode: 'huge' } },
@@ -737,36 +738,36 @@ const currentLegacyWith = ({ form = {}, adv = {}, losat }) => {
 };
 // The same as a minimal configuration file, which older readings migrate first.
 const legacyWith = (fields) => ({ ...fields, adv: { gc_content_mode: 'ratio', ...fields.adv } });
-test('a configuration field Load refuses is refused before the dialog (BA-OD96)', async () => {
+// E1a (OV-757, A17c-A17g): a configuration field Load refused (BA-OD96) is
+// read in every file: a retired name as its current name, an older option
+// value as its current name, and a value of no choice as the default with a
+// row. A Session 46 lists only what its drawing draws (A17b'); the
+// configuration files list their unknown GC content mode too.
+test('a configuration field Load refused is read with its row before the dialog (E1a)', async () => {
   const legacyOfV39 = fixture('BGC0000708-BGC0000713.v39.gbdraw-session.json.gz').config;
   delete legacyOfV39.unmanagedConfigOverrides;
   // Lossy otherwise: an unknown GC content mode is a dialog row.
   legacyOfV39.adv.gc_content_mode = 'ratio';
   const files = [['r3 legacy v39', legacyOfV39],
-    ...REFUSED_CONFIG_FIELDS.flatMap((fields) => [
+    ...READ_CONFIG_FIELDS.flatMap((fields) => [
       [`legacy ${JSON.stringify(fields)}`, legacyWith(fields)],
       [`current legacy ${JSON.stringify(fields)}`, currentLegacyWith(fields)],
       [`session ${JSON.stringify(fields)}`, sessionWith(fields)]
     ])];
   const outcomes = [];
   for (const [name, file] of files) {
-    const snapshot = loadedState();
     const asked = [];
-    let committed = false;
-    const loaded = await importSession(input(file), {
-      confirmLoadRepairs: async ({ items }) => { asked.push(items); return true; },
-      rollbackState: { capture: () => { committed = true; }, restore: () => {} }
-    });
-    outcomes.push([name, loaded.status, asked.length, committed]);
-    // A refusal after the commit is in `outcomes`; node's rollback is not exact.
-    if (loaded.status === 'error' && !committed) assert.equal(loadedState(), snapshot, name);
+    const loaded = await importSession(input(file), { confirmLoadRepairs: async ({ items }) => { asked.push(items); return true; } });
+    outcomes.push([name, loaded.status, asked.flat().length]);
+    if (loaded.status === 'ok' || loaded.status === 'legacy') await savedSession(name);
   }
-  // A legacy file whose track stacks are older than the current schema has
-  // its retired field names renamed first, so it loads and asks for its GC
-  // content mode.
-  const retiredNames = REFUSED_CONFIG_FIELDS.slice(0, 4).map((fields) => JSON.stringify(fields));
-  assert.deepEqual(outcomes, files.map(([name]) => (retiredNames.some((fields) => name === `legacy ${fields}`)
-    ? [name, 'legacy', 1, true] : [name, 'error', 0, false])));
+  // The Circular drawing of a Session 46 draws these; a retired name reads as its current name.
+  const circularRows = [{ adv: { multi_record_size_mode: 'huge' } }, { adv: { feature_shapes: { CDS: 'bogus' } } },
+    { adv: { arrow_head_length_ratio: -1 } }, { adv: { arrow_shaft_width_ratio: 2 } }].map((fields) => `session ${JSON.stringify(fields)}`);
+  assert.deepEqual(outcomes, files.map(([name]) => (name.startsWith('session ')
+    ? [name, 'ok', circularRows.includes(name) ? 1 : 0]
+    // The shown (Circular) drawing reads a configuration file; it draws no Linear setting.
+    : [name, 'legacy', /multi_record_size_mode|"CDS":"bogus"|arrow/.test(name) ? 2 : 1])));
 });
 
 // BA-OD100: Load refuses no file the Web loaded before the dialog existed. These files
@@ -832,8 +833,8 @@ test('a configuration file with a shape or Linear visibility that is no text, or
 // BA-OD99 (b): in a configuration file, a color rule or a whitelist
 // entry that is no object is dropped and listed before the dialog, and the
 // apply reads the lists with the same readers, so nothing is refused after
-// [Load]. A Session refuses such an entry before the dialog, as before.
-test('a configuration file drops and lists a rule or whitelist entry that is no object; a Session refuses it', async () => {
+// [Load]. A Session drops and lists it too.
+test('a configuration file or a Session drops and lists a rule or whitelist entry that is no object', async () => {
   const rule = { feat: 'CDS', qual: 'product', val: 'kinase', color: 'red', cap: 'Kinase' };
   const file = { form: { plot_title: 'Rules' }, rules: [null, rule, 5], whitelist: [null, { feat: 'CDS', qual: 'gene', key: 'dnaA' }] };
   let committed = false;
@@ -854,10 +855,9 @@ test('a configuration file drops and lists a rule or whitelist entry that is no 
   for (const list of ['rules', 'whitelist']) {
     const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
     session.modes.circular.config[list] = [null];
-    const snapshot = loadedState();
     const dialogs = [];
-    const refused = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
-    assert.deepEqual([refused.status, dialogs.length, loadedState() === snapshot], ['error', 0, true], list);
+    const read = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+    assert.deepEqual([read.status, dialogs], ['ok', [[`Settings: 1 entry of modes.circular.config.${list} could not be read and was dropped.`]]], list);
   }
 });
 
@@ -1399,15 +1399,24 @@ test('a flat configuration override name of a schema-1 request loads as the deco
 });
 
 // Only a stored request is read with the decoder's flat names (D-OD11): a
-// draft's unmanaged overrides keep the base check and its error.
-test('a flat override name in a draft is refused as before (OV-799)', async () => {
+// draft's unmanaged overrides keep the base check. Load drops a path that
+// check refuses, with a row (OV-764), and Save still refuses it.
+test('a flat override name in a draft is not read: Load drops it with a row and Save refuses it (OV-799, OV-764)', async () => {
   for (const [overrides, reason] of [[{ gc_stroke_color: 'red' }, 'UNKNOWN_CONFIG_PATH'], [{ label_blacklist: 'foo,bar' }, 'UNKNOWN_CONFIG_PATH']]) {
+    const [key] = Object.keys(overrides);
     const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
     session.modes.circular.config.unmanagedConfigOverrides = overrides;
-    const refused = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
-    assert.equal(refused.status, 'error', JSON.stringify(overrides));
-    assert.deepEqual([refused.error.code, refused.error.context?.field, refused.error.context?.reason],
-      ['INPUT_INVALID', 'configOverrides', reason], JSON.stringify(refused.error));
+    const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual(loaded.repairs.map(({ code, path, effect }) => [code, path, effect]),
+      [['setting-replaced', `modes.circular.config.unmanagedConfigOverrides["${key}"]`, 'dropped']], JSON.stringify(overrides));
+    assert.equal(Object.hasOwn(state.drawings.circular.unmanagedConfigOverrides, key), false);
+    state.drawings.circular.unmanagedConfigOverrides[key] = overrides[key];
+    await assert.rejects(exportSession('flat-override', { askChoice: async () => 'download' }), (error) => {
+      assert.deepEqual([error.code, error.context?.field, error.context?.reason], ['INPUT_INVALID', 'configOverrides', reason], JSON.stringify(error));
+      return true;
+    }, JSON.stringify(overrides));
+    delete state.drawings.circular.unmanagedConfigOverrides[key];
   }
 });
 

@@ -917,7 +917,9 @@ const stateBeforeInvalidActiveConfig = {
   sessionTitle: state.sessionTitle.value
 };
 const invalidActiveConfigSession = structuredClone(activeIntentSession);
-invalidActiveConfigSession.modes.circular.config.form.linear_track_layout = 'spreadout';
+// A form that is no object (an older option value such as `spreadout` is read
+// as its current name, and a value of no choice is listed in the Load dialog).
+invalidActiveConfigSession.modes.circular.config.form = 'spreadout';
 const invalidActiveConfigEvent = {
   target: {
     files: [new Blob([JSON.stringify(invalidActiveConfigSession)], { type: 'application/json' })],
@@ -935,7 +937,7 @@ try {
 }
 assert.equal(invalidActiveConfigImport.status, 'error');
 assert.equal(invalidActiveConfigImport.error.code, 'INPUT_INVALID');
-assert.deepEqual(invalidActiveConfigImport.error.context, {field:'linear_track_layout',reason:'LINEAR_TRACK_LAYOUT'});
+assert.deepEqual(invalidActiveConfigImport.error.context, { field: 'schema', reason: 'FIELDS' });
 assert.deepEqual(compactActiveIntentSnapshot(), stateBeforeInvalidActiveConfig.activeIntent);
 assert.strictEqual(state.results.value, stateBeforeInvalidActiveConfig.results);
 assert.strictEqual(state.featureCatalog.value, stateBeforeInvalidActiveConfig.featureCatalog);
