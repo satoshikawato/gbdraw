@@ -87,7 +87,8 @@ const createFetch = ({
   currentRuns = [runFixture()],
   jobPages = [[jobFixture()]],
   jobTotalCount = jobPages.reduce((count, page) => count + page.length, 0),
-  jobLinks = []
+  jobLinks = [],
+  artifacts = []
 } = {}) => {
   const calls = [];
   let currentRunIndex = 0;
@@ -121,6 +122,9 @@ const createFetch = ({
         total_count: jobTotalCount,
         jobs: jobPages[page - 1] ?? []
       }, { link });
+    }
+    if (/\/actions\/runs\/\d+\/artifacts$/.test(url.pathname)) {
+      return response({ total_count: artifacts.length, artifacts });
     }
     if (/\/actions\/runs\/\d+$/.test(url.pathname)) {
       const snapshot = currentRuns[Math.min(currentRunIndex, currentRuns.length - 1)];
@@ -577,4 +581,80 @@ test('CLI failure returns nonzero with expected identity and bounded diagnostics
   assert.match(stderr, /Expected:/);
   assert.match(stderr, /Observed:/);
   assert.ok(!stderr.includes('fixture-token'));
+});
+
+// A dev push that merges a pull request reads that pull request's run (SELECTIVE_CI.md
+// "Merged pull request inheritance").
+const pullRequestRun = (overrides = {}) => runFixture({
+  event: 'pull_request',
+  head_branch: 'feat/example',
+  head_repository: { full_name: REPOSITORY },
+  ...overrides
+});
+const pullRequestGate = () => jobFixture({ name: 'PR / gate' });
+const artifactFixture = (id, name, runId = 701) => ({ id, name, workflow_run: { id: runId } });
+const verifyPullRequest = (fetchOptions = {}, overrides = {}) => verify({
+  expectedEvent: 'pull_request',
+  expectedBranch: null,
+  expectedAggregateName: 'PR / gate',
+  recordPrefix: 'ci-impact-pr-plan.tree.',
+  fetchImpl: createFetch({
+    runPages: [[pullRequestRun()]],
+    currentRuns: [pullRequestRun()],
+    jobPages: [[pullRequestGate()]],
+    ...fetchOptions
+  }),
+  ...overrides
+});
+
+test('same-repository pull request evidence returns the run records under the prefix', async () => {
+  const fetchImpl = createFetch({
+    runPages: [[pullRequestRun()]],
+    currentRuns: [pullRequestRun()],
+    jobPages: [[pullRequestGate()]],
+    artifacts: [
+      artifactFixture(1, 'playwright-functional-shard-1-traces-701-1'),
+      artifactFixture(2, 'ci-impact-pr-plan.tree.gallery.lint'),
+      artifactFixture(3, 'ci-impact-pr-plan.other.gallery')
+    ]
+  });
+  const evidence = await verifyPullRequest({}, { fetchImpl });
+  assert.equal(evidence.run.event, 'pull_request');
+  assert.equal(evidence.aggregateJob.name, 'PR / gate');
+  assert.deepEqual(evidence.records, ['ci-impact-pr-plan.tree.gallery.lint']);
+  const runsQuery = new URL(fetchImpl.calls[1].url).searchParams;
+  assert.equal(runsQuery.get('event'), 'pull_request');
+  assert.equal(runsQuery.has('branch'), false);
+  assert.equal(fetchImpl.calls.length, 6);
+  assert.equal((await verify()).records, null);
+});
+
+test('pull request evidence rejects forks, push identities, other workflows, and foreign artifacts', async () => {
+  await rejectsWith(
+    verifyPullRequest({ runPages: [[pullRequestRun({ head_repository: { full_name: 'attacker/gbdraw' } })]] }),
+    'NO_MATCHING_RUN',
+    /No workflow run matches/
+  );
+  await rejectsWith(
+    verifyPullRequest({ runPages: [[pullRequestRun({ head_repository: null })]] }),
+    'NO_MATCHING_RUN',
+    /No workflow run matches/
+  );
+  await rejectsWith(verifyPullRequest({}, { expectedBranch: 'dev' }), 'UNSUPPORTED_STAGING_IDENTITY',
+    /same-repository pull request runs/);
+  await rejectsWith(verifyPullRequest({}, { expectedAggregateName: TEST_AGGREGATE }), 'AGGREGATE_CONTRACT_MISMATCH',
+    /does not match the workflow contract/);
+  await rejectsWith(verifyPullRequest({}, { workflowPath: GALLERY_WORKFLOW_PATH }), 'UNSUPPORTED_WORKFLOW',
+    /not a promotion evidence producer/);
+  await rejectsWith(verifyPullRequest({}, { recordPrefix: '' }), 'INVALID_RECORD_PREFIX', /nonempty string/);
+  await rejectsWith(
+    verifyPullRequest({ artifacts: [artifactFixture(2, 'ci-impact-pr-plan.tree.gallery', 999)] }),
+    'MALFORMED_ARTIFACT',
+    /another run/
+  );
+  await rejectsWith(
+    verifyPullRequest({ jobPages: [[jobFixture({ name: 'PR / gate', conclusion: 'failure' })]] }),
+    'AGGREGATE_JOB_NOT_SUCCESSFUL',
+    /not completed successfully/
+  );
 });
