@@ -45,10 +45,10 @@ import {
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 import {
-  normalizeCollinearAnchorMode,
-  normalizeCollinearSearchScope,
-  normalizeOrthogroupMembershipMode
-} from './losat-normalization.js';
+  applyConfigFieldRows, configFieldRepairs, losatExecutionRepairs, readDepthTrack, readDepthTracks, readImportedComparisonAction, readLinearRecordGap,
+  readLinearRecordLayoutEnabled, readLinearRecordRows, readFeaturePanelTab, readLosatProgram, readSessionUiMode,
+  sessionUiFieldRepairs, LOSAT_EXECUTION_ROWS
+} from './config-field-readers.js';
 import { normalizeDefinitionLineStyleState } from './definition-line-style-state.js';
 import { drawnLinearSequences } from './record-draw-selection.js';
 import {
@@ -206,13 +206,11 @@ import {
   recordStructuralMetric
 } from './runtime-test-hooks.js';
 import { setResourcePayloadOwner } from './resource-payload-owner.js';
-import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
   migratePersistedLinearTrackLayout,
   migratePersistedWebStateFieldNames,
-  normalizeCurrentPairwiseMatchStyle,
   requireCurrentCircularMultiRecordSizeMode,
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
@@ -231,7 +229,6 @@ import {
   validateImportedLinearTrackSlots
 } from './session-active-config-contract.js';
 import {
-  IMPORTED_COMPARISON_ACTIONS,
   IMPORTED_COMPARISON_DISPOSITIONS,
   classifyImportedComparisonIntent,
   createImportedComparisonIntentState,
@@ -273,28 +270,9 @@ const LOSAT_EXECUTION_FIELDS = MODE_SCOPED_SETTINGS.losatExecutionFields;
  * @param {SessionLosatExecution} source Unvalidated: each field is matched or converted here.
  */
 export const applyLosatExecutionData = (source) => {
-  const target = state.losatExecution;
-  const rawParallelWorkers = String(source.parallelWorkers ?? '').trim().toLowerCase();
-  const parsedParallelWorkers = Number(rawParallelWorkers);
-  target.parallelWorkers = Number.isInteger(parsedParallelWorkers) && parsedParallelWorkers >= 1
-    ? rawParallelWorkers
-    : undefined;
-  const rawExecutionMode = String(source.executionMode ?? '').trim().toLowerCase();
-  target.executionMode = ['auto', 'serial', 'threaded'].includes(rawExecutionMode)
-    ? rawExecutionMode
-    : 'auto';
-  const rawThreadsPerJob = String(source.threadsPerJob ?? 'auto').trim().toLowerCase();
-  const parsedThreadsPerJob = Number(rawThreadsPerJob);
-  target.threadsPerJob = rawThreadsPerJob === 'auto' ||
-    (Number.isInteger(parsedThreadsPerJob) && parsedThreadsPerJob >= 1)
-    ? rawThreadsPerJob
-    : 'auto';
-  const rawTotalThreadBudget = String(source.totalThreadBudget ?? 'safe').trim().toLowerCase();
-  const parsedTotalThreadBudget = Number(rawTotalThreadBudget);
-  target.totalThreadBudget = ['safe', 'auto', 'available'].includes(rawTotalThreadBudget) ||
-    (Number.isInteger(parsedTotalThreadBudget) && parsedTotalThreadBudget >= 1)
-    ? (rawTotalThreadBudget === 'auto' ? 'safe' : rawTotalThreadBudget)
-    : 'safe';
+  LOSAT_EXECUTION_ROWS.forEach(({ field, read }) => {
+    state.losatExecution[field] = read(source[/** @type {keyof SessionLosatExecution} */ (field)], source).value;
+  });
 };
 /** @returns {Record<string, any>} The settings as Save writes them (`ui.losatExecution`). */
 export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
@@ -664,32 +642,12 @@ const buildSessionFilename = (title) => {
   return `${safe}.gbdraw-session.json.gz`;
 };
 
-/** @param {unknown} value */
-const normalizeLabelRendering = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['auto', 'embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
-};
-
 const withCurrentLinearLabelVisibility = (configData) => {
   if (!isPlainObject(configData) || !isPlainObject(configData.adv)) return configData;
   return {
     ...configData,
     adv: migrateLegacyLinearLabelVisibility(configData.adv)
   };
-};
-
-/** @param {unknown} value */
-const normalizePositiveNumberOrNull = (value) => {
-  if (
-    value === null ||
-    value === undefined ||
-    value === '' ||
-    String(value).trim().toLowerCase() === 'auto'
-  ) {
-    return null;
-  }
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 };
 
 /**
@@ -816,61 +774,6 @@ const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion =
 /** @param {unknown} value */
 const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
-/**
- * @template F
- * @param {unknown} value
- * @param {F} fallback
- */
-const normalizePositiveInteger = (value, fallback) => {
-  const numeric = Number(value);
-  return Number.isInteger(numeric) && numeric > 0 ? numeric : fallback;
-};
-
-/** @param {unknown} value */
-const normalizeBlastpMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
-};
-
-/** @param {unknown} value */
-const normalizeCollinearColorMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  if (normalized === 'identity') return 'average_identity';
-  return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
-};
-
-/** @param {unknown} value */
-const normalizeCircularConservationSource = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return normalized === 'upload' ? 'upload' : 'losat';
-};
-
-/** @param {unknown} value */
-const normalizeCircularConservationLosatProgram = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return normalized === 'tblastx' ? 'tblastx' : 'blastn';
-};
-
-/** @param {unknown} value */
-const normalizeCircularConservationReference = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['auto', 'query', 'subject'].includes(normalized) ? normalized : 'auto';
-};
-
-/**
- * @param {unknown} value
- * @param {string} [fallback]
- */
-const normalizeHexColor = (value, fallback = '#4e79a7') => {
-  const resolved = resolveColorToHex(String(value || fallback).trim());
-  const color = String(resolved || fallback).trim();
-  const shortMatch = color.match(/^#([0-9a-fA-F]{3})$/);
-  if (shortMatch) {
-    return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
-  }
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
-};
-
 // A stored entry color is read with the Default colors domain (D-41). An entry
 // whose color lies outside it is dropped and, when `repairs` is given, listed
 // there for the Load dialog (D-43) under `path`, the stored Legend. A list
@@ -946,76 +849,6 @@ const normalizeStringArray = (source) => {
   return source
     .map((value) => String(value || '').trim())
     .filter(Boolean);
-};
-
-/** @param {unknown} series */
-const normalizeCircularConservationSeries = (series) => {
-  if (!Array.isArray(series)) return [];
-  return series
-    .filter((entry) => entry && typeof entry === 'object')
-    .map((entry, index) => ({
-      sourceKey: String(entry.sourceKey || ''),
-      fileName: String(entry.fileName || ''),
-      sourceIndex: Number.isInteger(Number(entry.sourceIndex)) ? Number(entry.sourceIndex) : index,
-      label: String(entry.label ?? entry.name ?? ''),
-      color: normalizeHexColor(entry.color, '#4e79a7'),
-      losat_gencode: normalizePositiveInteger(entry.losat_gencode, 1)
-    }));
-};
-
-const DEPTH_TRACK_FALLBACK_COLORS = [
-  '#4A90E2',
-  '#E45756',
-  '#2CA02C',
-  '#F28E2B',
-  '#9467BD',
-  '#8C564B',
-  '#17BECF',
-  '#7F7F7F'
-];
-
-/**
- * @param {UnvalidatedFields<'label' | 'color' | 'height' | 'large_tick_interval' | 'small_tick_interval'
- *   | 'tick_font_size'>} entry A saved Depth track row, unvalidated.
- * @param {number} index
- * @param {{ depth_color?: unknown, depth_height?: unknown, depth_large_tick_interval?: unknown,
- *   depth_small_tick_interval?: unknown, depth_tick_font_size?: unknown }} [legacyAdv]
- */
-const normalizeDepthTrackConfig = (entry, index, legacyAdv = {}) => {
-  // The cast: the row when it is a non-null object, or the empty object.
-  const source = /** @type {NonNullable<typeof entry>} */ (entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {});
-  const hasHeight = Object.prototype.hasOwnProperty.call(source, 'height');
-  const fallbackColor =
-    index === 0
-      ? String(legacyAdv.depth_color || DEPTH_TRACK_FALLBACK_COLORS[0])
-      : DEPTH_TRACK_FALLBACK_COLORS[index % DEPTH_TRACK_FALLBACK_COLORS.length];
-  return {
-    label: String(source.label ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
-    color: resolveColorToHex(String(source.color || fallbackColor)),
-    height: normalizePositiveNumberOrNull(hasHeight ? source.height : legacyAdv.depth_height),
-    large_tick_interval: normalizePositiveNumberOrNull(
-      source.large_tick_interval ?? (index === 0 ? legacyAdv.depth_large_tick_interval : null)
-    ),
-    small_tick_interval: normalizePositiveNumberOrNull(
-      source.small_tick_interval ?? (index === 0 ? legacyAdv.depth_small_tick_interval : null)
-    ),
-    tick_font_size: normalizePositiveNumberOrNull(
-      source.tick_font_size ?? (index === 0 ? legacyAdv.depth_tick_font_size : null)
-    )
-  };
-};
-
-/**
- * @param {unknown} tracks
- * @param {Parameters<typeof normalizeDepthTrackConfig>[2]} [legacyAdv]
- */
-const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
-  const rawTracks = Array.isArray(tracks) ? tracks : [];
-  const normalized = rawTracks.map((entry, index) => normalizeDepthTrackConfig(entry, index, legacyAdv));
-  if (normalized.length === 0) {
-    normalized.push(normalizeDepthTrackConfig(null, 0, legacyAdv));
-  }
-  return normalized;
 };
 
 /** @type {string | null} */
@@ -1834,6 +1667,8 @@ const readLegacyConfigPayload = (data) => {
       repairs.push(loadRepair({ code: 'record-display-drafts-dropped', path: 'recordDisplayDrafts', effect: 'dropped' }));
     }
   }
+  // What `applyConfigData` reads differently (B37, B43, B48).
+  repairs.push(...configFieldRepairs(migrated, ''));
   return { value: migrated, repairs };
 };
 
@@ -2662,28 +2497,9 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
     ? data.linearRecordLayout
     : null;
   // Omission takes the fresh default in every Session version.
-  drawing.linearRecordLayoutEnabled.value = typeof linearLayout?.enabled === 'boolean'
-    ? linearLayout.enabled
-    : WEB_UX_PROFILE.linear.arrangeInRowsByDefault;
-  const linearRecordGap = Number(linearLayout?.recordGap);
-  drawing.linearRecordGap.value = Number.isFinite(linearRecordGap) && linearRecordGap >= 0
-    ? linearRecordGap
-    : 24;
-  drawing.linearRecordRows.splice(
-    0,
-    drawing.linearRecordRows.length,
-    ...(Array.isArray(linearLayout?.rows) ? linearLayout.rows : [])
-      .map((entry) => ({
-        uid: String(entry?.uid || ''), row: Number(entry?.row),
-        ...(entry?.canonicalCardinality === 'exactly_one'
-          ? { canonicalCardinality: 'exactly_one' } : {}),
-        ...(Number(entry?.canonicalRow) === Number(entry?.row)
-          && Number.isInteger(entry?.canonicalColumn) && entry.canonicalColumn > 0
-          ? { canonicalRow: entry.canonicalRow, canonicalColumn: entry.canonicalColumn }
-          : {})
-      }))
-      .filter((entry) => entry.uid && Number.isInteger(entry.row) && entry.row > 0)
-  );
+  drawing.linearRecordLayoutEnabled.value = readLinearRecordLayoutEnabled(linearLayout?.enabled).value;
+  drawing.linearRecordGap.value = readLinearRecordGap(linearLayout?.recordGap).value;
+  drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...readLinearRecordRows(linearLayout?.rows).value);
   // The record translations and alignment plan are the Linear mode's
   // artifact; only the Linear drawing's settings carry them. A History
   // config step carries neither and leaves them alone (OV-383).
@@ -2704,34 +2520,12 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
     drawing.linearComparisonPlan,
     data.linearComparisonPlan || createDefaultLinearComparisonPlan()
   );
-  drawing.importedComparisonIntent.action = Object.values(IMPORTED_COMPARISON_ACTIONS)
-    .includes(data.importedComparisonResolution?.action)
-    ? data.importedComparisonResolution.action
-    : null;
+  drawing.importedComparisonIntent.action = readImportedComparisonAction(data.importedComparisonResolution?.action).value;
   drawing.adv.label_placement = requireCurrentLinearLabelPlacement(
     drawing.adv.label_placement
   );
-  drawing.adv.label_rendering = normalizeLabelRendering(drawing.adv.label_rendering);
-  drawing.adv.circular_label_placement =
-    String(drawing.adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
-      ? 'radial'
-      : 'horizontal';
-  drawing.adv.circular_label_spacing = normalizePositiveNumberOrNull(drawing.adv.circular_label_spacing);
-  drawing.adv.linear_label_spacing = normalizePositiveNumberOrNull(drawing.adv.linear_label_spacing);
-  const rawTrackAxisGap = drawing.adv.track_axis_gap;
-  if (
-    rawTrackAxisGap === null ||
-    rawTrackAxisGap === undefined ||
-    rawTrackAxisGap === '' ||
-    String(rawTrackAxisGap).trim().toLowerCase() === 'auto'
-  ) {
-    drawing.adv.track_axis_gap = null;
-  } else {
-    const numericTrackAxisGap = Number(rawTrackAxisGap);
-    drawing.adv.track_axis_gap = Number.isFinite(numericTrackAxisGap) && numericTrackAxisGap >= 0
-      ? numericTrackAxisGap
-      : null;
-  }
+  // The stored settings' readers (Load lists what they cannot restore first).
+  applyConfigFieldRows(drawing.adv, 'adv');
   drawing.form.linear_track_layout = requireCurrentLinearTrackLayout(
     drawing.form.linear_track_layout
   );
@@ -2745,66 +2539,6 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   drawing.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
     drawing.adv.multi_record_size_mode
   );
-  const numericMinRadiusRatio = Number(drawing.adv.multi_record_min_radius_ratio);
-  drawing.adv.multi_record_min_radius_ratio =
-    Number.isFinite(numericMinRadiusRatio) && numericMinRadiusRatio > 0 && numericMinRadiusRatio <= 1
-      ? numericMinRadiusRatio
-      : 0.55;
-  const numericColumnGapRatio = Number(drawing.adv.multi_record_column_gap_ratio);
-  drawing.adv.multi_record_column_gap_ratio =
-    Number.isFinite(numericColumnGapRatio) && numericColumnGapRatio >= 0
-      ? numericColumnGapRatio
-      : 0.10;
-  const numericRowGapRatio = Number(drawing.adv.multi_record_row_gap_ratio);
-  drawing.adv.multi_record_row_gap_ratio =
-    Number.isFinite(numericRowGapRatio) && numericRowGapRatio >= 0
-      ? numericRowGapRatio
-      : 0.05;
-  const rawMultiRecordPositions = Array.isArray(drawing.adv.multi_record_positions)
-    ? drawing.adv.multi_record_positions
-    : [];
-  /** @type {MultiRecordPosition[]} */
-  const dedupedMultiRecordPositions = [];
-  const seenMultiRecordSelectors = new Set();
-  rawMultiRecordPositions.forEach((/** @type {{ selector?: unknown, row?: unknown } | null} */ entry) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
-    const selector = String(entry.selector ?? '').trim();
-    if (!selector || seenMultiRecordSelectors.has(selector)) return;
-    const rowValue = Number(entry.row);
-    const normalizedRow = Number.isInteger(rowValue) && rowValue > 0 ? rowValue : 1;
-    seenMultiRecordSelectors.add(selector);
-    dedupedMultiRecordPositions.push({ selector, row: normalizedRow });
-  });
-  drawing.adv.multi_record_positions = dedupedMultiRecordPositions
-    .map((entry, index) => ({ ...entry, __index: index }))
-    .sort((left, right) => {
-      if (left.row !== right.row) return left.row - right.row;
-      return left.__index - right.__index;
-    })
-    .map(({ __index, ...entry }) => entry);
-  const rawPlotTitleFontSize = drawing.adv.plot_title_font_size;
-  if (
-    rawPlotTitleFontSize === null ||
-    rawPlotTitleFontSize === undefined ||
-    rawPlotTitleFontSize === ''
-  ) {
-    drawing.adv.plot_title_font_size = null;
-  } else {
-    const numericPlotTitleFontSize = Number(rawPlotTitleFontSize);
-    drawing.adv.plot_title_font_size =
-      Number.isFinite(numericPlotTitleFontSize) && numericPlotTitleFontSize > 0
-        ? numericPlotTitleFontSize
-        : null;
-  }
-  drawing.adv.keep_full_definition_with_plot_title =
-    drawing.adv.keep_full_definition_with_plot_title === true;
-  drawing.adv.depth_color = resolveColorToHex(String(drawing.adv.depth_color || '#4A90E2'));
-  drawing.adv.depth_normalize = drawing.adv.depth_normalize === true;
-  drawing.adv.depth_show_axis = drawing.adv.depth_show_axis !== false;
-  drawing.adv.depth_show_ticks = drawing.adv.depth_show_ticks !== false;
-  drawing.adv.depth_share_axis = drawing.adv.depth_share_axis === true;
-  drawing.adv.depth_height = normalizePositiveNumberOrNull(drawing.adv.depth_height);
-  drawing.adv.depth_width_circular = normalizePositiveNumberOrNull(drawing.adv.depth_width_circular);
   drawing.adv.circular_track_slots_schema_version = CIRCULAR_TRACK_SLOT_SCHEMA_VERSION;
   drawing.adv.circular_track_slots_enabled = drawing.adv.circular_track_slots_enabled === true;
   if (resolveTrackPlacements) {
@@ -2866,65 +2600,6 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
       drawing.adv[key].splice(0, drawing.adv[key].length, ...cloneJsonData(drawing.adv[key]));
     });
   }
-  drawing.adv.depth_window_size = normalizePositiveNumberOrNull(drawing.adv.depth_window_size);
-  drawing.adv.depth_step_size = normalizePositiveNumberOrNull(drawing.adv.depth_step_size);
-  drawing.adv.depth_large_tick_interval = normalizePositiveNumberOrNull(
-    drawing.adv.depth_large_tick_interval
-  );
-  drawing.adv.depth_small_tick_interval = normalizePositiveNumberOrNull(drawing.adv.depth_small_tick_interval);
-  drawing.adv.depth_tick_font_size = normalizePositiveNumberOrNull(drawing.adv.depth_tick_font_size);
-  drawing.adv.depth_tracks.splice(
-    0,
-    drawing.adv.depth_tracks.length,
-    ...normalizeDepthTracks(drawing.adv.depth_tracks, drawing.adv)
-  );
-  drawing.adv.gc_content_mode = String(drawing.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
-    ? 'percent'
-    : 'deviation';
-  drawing.adv.gc_content_show_axis = drawing.adv.gc_content_show_axis !== false;
-  drawing.adv.gc_content_show_ticks = drawing.adv.gc_content_show_ticks !== false;
-  drawing.adv.gc_content_tick_interval = normalizePositiveNumberOrNull(drawing.adv.gc_content_tick_interval);
-  drawing.adv.gc_content_small_tick_interval = normalizePositiveNumberOrNull(drawing.adv.gc_content_small_tick_interval);
-  drawing.adv.gc_content_tick_font_size = normalizePositiveNumberOrNull(drawing.adv.gc_content_tick_font_size);
-  /** @param {unknown} value */
-  const normalizeNonNegativeNumberOrNull = (value) => {
-    if (
-      value === null ||
-      value === undefined ||
-      value === '' ||
-      String(value).trim().toLowerCase() === 'auto'
-    ) {
-      return null;
-    }
-    const numeric = Number(value);
-    return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
-  };
-  drawing.adv.center_reserved_radius = normalizeNonNegativeNumberOrNull(drawing.adv.center_reserved_radius);
-  drawing.adv.depth_min = normalizeNonNegativeNumberOrNull(drawing.adv.depth_min);
-  drawing.adv.depth_max = normalizeNonNegativeNumberOrNull(drawing.adv.depth_max);
-  if (
-    drawing.adv.depth_min !== null &&
-    drawing.adv.depth_max !== null &&
-    drawing.adv.depth_min > drawing.adv.depth_max
-  ) {
-    drawing.adv.depth_max = null;
-  }
-  /**
-   * @template F
-   * @param {unknown} value
-   * @param {F} fallback
-   */
-  const normalizeFiniteNumberOrFallback = (value, fallback) => {
-    if (value === null || value === undefined || value === '') return fallback;
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : fallback;
-  };
-  drawing.adv.gc_content_min_percent = normalizeFiniteNumberOrFallback(drawing.adv.gc_content_min_percent, 0);
-  drawing.adv.gc_content_max_percent = normalizeFiniteNumberOrFallback(drawing.adv.gc_content_max_percent, 100);
-  if (drawing.adv.gc_content_min_percent > drawing.adv.gc_content_max_percent) {
-    drawing.adv.gc_content_max_percent = drawing.adv.gc_content_min_percent;
-  }
-  drawing.adv.linear_show_replicon = drawing.adv.linear_show_replicon === true;
   drawing.adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
     drawing.adv.linear_accession_visibility,
     'Linear Accession visibility'
@@ -2936,10 +2611,6 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   drawing.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(
     drawing.adv.linear_definition_line_styles
   );
-  drawing.adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
-    drawing.adv.pairwise_match_style,
-    'ribbon'
-  );
   if (data.losat) {
     // The execution settings of a Session 44 or older draft or of a request
     // projection are app-level (`state.losatExecution`); the drawing keeps the
@@ -2949,16 +2620,7 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
       applyLosatExecutionData(Object.fromEntries(executionFields.map((field) => [field, data.losat[field]])));
     }
     safeDeepMerge(drawing.losat, data.losat);
-    drawing.losat.blastp.mode = normalizeBlastpMode(drawing.losat.blastp?.mode);
-    drawing.losat.blastp.collinearInferOrthogroups = data.losat.blastp?.collinearInferOrthogroups ?? (drawing.losat.blastp.mode === 'collinear');
-    drawing.losat.blastp.hitLimitsByMode = {
-      ...createDefaultLosatpHitLimits(), ...cloneJsonData(data.losat.blastp?.hitLimitsByMode || {})
-    };
-    drawing.losat.blastp.maxHits = normalizePositiveInteger(drawing.losat.blastp?.maxHits, 5);
-    drawing.losat.blastp.candidateLimit = normalizePositiveInteger(
-      drawing.losat.blastp?.candidateLimit,
-      null
-    );
+    // A Session's older `orthogroupMaxHits` is read as the member hit limit.
     if (
       drawing.losat.blastp.orthogroupMemberMaxHits === undefined &&
       drawing.losat.blastp.orthogroupMaxHits !== null &&
@@ -2966,36 +2628,11 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
     ) {
       drawing.losat.blastp.orthogroupMemberMaxHits = drawing.losat.blastp.orthogroupMaxHits;
     }
-    drawing.losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(drawing.losat.blastp?.orthogroupMembershipMode);
-    drawing.losat.blastp.orthogroupMemberMaxHits = normalizePositiveInteger(drawing.losat.blastp?.orthogroupMemberMaxHits, null);
-    drawing.losat.blastp.collinearMinAnchors = normalizePositiveInteger(drawing.losat.blastp?.collinearMinAnchors, 1);
-    {
-      const maxGap = Number(drawing.losat.blastp?.collinearMaxUnitGap);
-      drawing.losat.blastp.collinearMaxUnitGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
-      const diagonalDrift = Number(drawing.losat.blastp?.collinearMaxDiagonalDrift);
-      drawing.losat.blastp.collinearMaxDiagonalDrift = Number.isInteger(diagonalDrift) && diagonalDrift >= 0 ? diagonalDrift : 0;
-      const mergeConflicts = Number(drawing.losat.blastp?.collinearMaxConflictsInMergeGap);
-      drawing.losat.blastp.collinearMaxConflictsInMergeGap = Number.isInteger(mergeConflicts) && mergeConflicts >= 0 ? mergeConflicts : 1;
-      const paralogLinks = Number(drawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup);
-      drawing.losat.blastp.collinearMaxParalogLinksPerOrthogroup = Number.isInteger(paralogLinks) && paralogLinks > 0 ? paralogLinks : 2;
-      drawing.losat.blastp.collinearColorMode = normalizeCollinearColorMode(drawing.losat.blastp?.collinearColorMode);
-      const unitMode = String(drawing.losat.blastp?.collinearUnitMode || '').trim().toLowerCase();
-      drawing.losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(unitMode) ? unitMode : 'auto';
-      drawing.losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(drawing.losat.blastp?.collinearAnchorMode);
-      const mergeOrientation = String(
-        drawing.losat.blastp?.collinearMergeOrientation || ''
-      ).trim().toLowerCase();
-      drawing.losat.blastp.collinearMergeOrientation = [
-        'strand',
-        'order',
-        'either'
-      ].includes(mergeOrientation) ? mergeOrientation : 'either';
-      drawing.losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope);
-    }
-    delete drawing.losat.blastp.collinearBlockMergeGap;
-    delete drawing.losat.blastp.collinearSingletonMergeGap;
-    delete drawing.losat.blastp.orthogroupHitPolicy;
-    delete drawing.losat.blastp.orthogroupMaxHits;
+    applyConfigFieldRows(drawing.losat.blastp, 'losat.blastp');
+    drawing.losat.blastp.collinearInferOrthogroups = data.losat.blastp?.collinearInferOrthogroups ?? (drawing.losat.blastp.mode === 'collinear');
+    drawing.losat.blastp.hitLimitsByMode = {
+      ...createDefaultLosatpHitLimits(), ...cloneJsonData(data.losat.blastp?.hitLimitsByMode || {})
+    };
   }
   if (typeof data.paletteInstantPreviewEnabled === 'boolean') {
     state.paletteInstantPreviewEnabled.value = data.paletteInstantPreviewEnabled;
@@ -3054,27 +2691,13 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   }
   if (data.blacklistText !== undefined) drawing.manualBlacklist.value = String(data.blacklistText || '');
   if (data.losatProgram) {
-    const program = String(data.losatProgram);
-    drawing.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
+    drawing.losatProgram.value = readLosatProgram(data.losatProgram).value;
   }
   if (data.circularConservation) {
     safeDeepMerge(drawing.circularConservation, data.circularConservation);
   }
-  drawing.circularConservation.enabled = drawing.circularConservation.enabled === true;
-  drawing.circularConservation.source = normalizeCircularConservationSource(drawing.circularConservation.source);
-  drawing.circularConservation.losat_program = normalizeCircularConservationLosatProgram(
-    drawing.circularConservation.losat_program
-  );
-  drawing.circularConservation.subject_gencode = normalizePositiveInteger(drawing.circularConservation.subject_gencode, 1);
-  drawing.circularConservation.reference = normalizeCircularConservationReference(drawing.circularConservation.reference);
+  applyConfigFieldRows(drawing.circularConservation, 'circularConservation');
   drawing.circularConservation.labels = String(drawing.circularConservation.labels || '');
-  drawing.circularConservation.series.splice(
-    0,
-    drawing.circularConservation.series.length,
-    ...normalizeCircularConservationSeries(drawing.circularConservation.series)
-  );
-  drawing.circularConservation.ring_width = normalizePositiveNumberOrNull(drawing.circularConservation.ring_width);
-  drawing.circularConservation.ring_gap = normalizePositiveNumberOrNull(drawing.circularConservation.ring_gap);
   const webEdits = data.webEdits && typeof data.webEdits === 'object' ? data.webEdits : {};
   if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupNameOverrides')) {
     replaceStringMap(drawing.orthogroupNameOverrides, webEdits.orthogroupNameOverrides);
@@ -3132,6 +2755,9 @@ const restoreAppliedPaletteFromSession = (drawing, ui = {}) => {
   state.appliedPaletteColors.value = normalizePaletteColors(cloneColors(savedAppliedPaletteColors));
 };
 
+/** @param {SavedPaletteFields | undefined} ui A saved `ui`. */
+const pendingPaletteName = (ui) => String(ui?.pendingPaletteName || '').trim();
+
 // A drawing's pending palette applies only while Instant Preview is off.
 /**
  * @param {DrawingState} drawing
@@ -3139,7 +2765,7 @@ const restoreAppliedPaletteFromSession = (drawing, ui = {}) => {
  */
 const restorePendingPaletteFromSession = (drawing, ui = {}) => {
   const draftColors = normalizePaletteColors(cloneColors(drawing.currentColors.value));
-  const savedPendingPaletteName = String(ui.pendingPaletteName || '').trim();
+  const savedPendingPaletteName = pendingPaletteName(ui);
   const savedPendingPaletteColors =
     ui.pendingPaletteColors && typeof ui.pendingPaletteColors === 'object'
       ? Object.fromEntries(
@@ -4271,9 +3897,9 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode) => {
   };
   let normalizedTracks;
   if (mode === 'linear') {
-    normalizedTracks = normalizeDepthTracks(drawing.adv.depth_tracks, drawing.adv);
+    normalizedTracks = readDepthTracks(drawing.adv.depth_tracks, drawing.adv).value;
     while (normalizedTracks.length < Math.max(1, linearDepthCount)) {
-      normalizedTracks.push(normalizeDepthTrackConfig(null, normalizedTracks.length, drawing.adv));
+      normalizedTracks.push(readDepthTrack(null, normalizedTracks.length, drawing.adv).value);
     }
   } else {
     normalizedTracks = reconcileDepthTracksToFiles(/** @type {Record<string, any>} */ ({
@@ -5528,7 +5154,7 @@ const importSessionDocument = async (e, options = {}) => {
             : committedMode
         }
       : (data.ui || {});
-    const candidateMode = ui.mode === 'linear' ? 'linear' : 'circular';
+    const candidateMode = readSessionUiMode(ui.mode).value;
     const generatedMode = (committedMode || ui.mode) === 'linear' ? 'linear' : 'circular';
     // The legend position the shown Result was drawn with (OV-652, BA-D11).
     const generatedLegend = ui.generatedLegendPosition
@@ -5993,12 +5619,32 @@ const importSessionDocument = async (e, options = {}) => {
         repairs.push(...readLegendPositionOfMode(modeConfigs[mode].form.legend, mode,
           `${modeScopedSession ? `modes.${mode}.config` : 'config'}.form.legend`).repairs);
       }
+      // What the settings' readers cannot restore of the stored draft (B37, B43).
+      repairs.push(...configFieldRepairs(modeConfigs[mode], modeScopedSession ? `modes.${mode}.config` : 'config',
+        modeSlices[mode].config));
       // A saved unmanaged override is checked against its own drawing's mode (PD-OI-009, OV-106).
       const savedOverrides = modeSlices[mode].config?.unmanagedConfigOverrides;
       if (isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
         modeConfigs[mode].unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
           mode, configOverrides: savedOverrides, requireUnmanagedOnly: true
         });
+      }
+    }
+    // The app settings Load reads from `ui` (B36, B43), and a drawing's
+    // pending palette, which Instant Preview drops (B44): the drafts apply in
+    // SLICE_MODES order, each over the Instant Preview the one before left.
+    repairs.push(...sessionUiFieldRepairs(ui, 'ui'),
+      ...losatExecutionRepairs(appUi.losatExecution, modeScopedSession ? 'ui.losatExecution' : 'config.losat'));
+    let instantPreview = Boolean(typeof appUi.paletteInstantPreviewEnabled === 'boolean'
+      ? appUi.paletteInstantPreviewEnabled : ui.paletteInstantPreviewEnabled);
+    for (const mode of SLICE_MODES) {
+      if (typeof modeConfigs[mode].paletteInstantPreviewEnabled === 'boolean') instantPreview = modeConfigs[mode].paletteInstantPreviewEnabled;
+      const pendingPalette = pendingPaletteName(modeSlices[mode].ui);
+      if (pendingPalette && instantPreview) {
+        repairs.push(loadRepair({
+          code: 'pending-palette-dropped', path: `${modeScopedSession ? `modes.${mode}.ui` : 'ui'}.pendingPaletteName`,
+          effect: 'dropped', label: pendingPalette
+        }));
       }
     }
     // The top-level set, built like the other set, waits in its mode when the
@@ -6075,11 +5721,7 @@ const importSessionDocument = async (e, options = {}) => {
       typeof appUi.paletteInstantPreviewEnabled === 'boolean'
         ? appUi.paletteInstantPreviewEnabled : ui.paletteInstantPreviewEnabled
     );
-    if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
-      state.featurePanelTab.value = ui.featurePanelTab;
-    } else {
-      state.featurePanelTab.value = 'colors';
-    }
+    state.featurePanelTab.value = readFeaturePanelTab(ui.featurePanelTab).value;
     state.generatedMode.value = generatedMode;
     if (generatedLegend) state.generatedLegendPosition.value = generatedLegend.value;
     state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);

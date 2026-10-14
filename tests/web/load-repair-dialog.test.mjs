@@ -348,6 +348,96 @@ test('Gallery publication refuses a Session with a table row Load would repair',
   assert.match(run.stderr, /TABLE_INVALID/);
 });
 
+// B37, B43: the settings' readers of `applyConfigData` lose an out-of-set
+// value; Load lists it before it applies the draft. Case and outer spaces,
+// aliases, and a sort are no row.
+test('a stored setting its reader cannot restore is listed before the Load (B37, B43)', async () => {
+  const session = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+  Object.assign(session.config.adv, {
+    label_rendering: 'sideways', circular_label_placement: ' Radial ', multi_record_min_radius_ratio: 5,
+    multi_record_positions: [{ selector: '#2', row: 2 }, { selector: '#1', row: 1 }, { selector: '#2', row: 3 }]
+  });
+  session.config.losat = { ...session.config.losat, totalThreadBudget: 'auto', executionMode: 'turbo' };
+  const dialogs = [];
+  const loaded = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(dialogs, [[
+    'Settings: the value "sideways" (config.adv.label_rendering) cannot be used; auto is used.',
+    'Settings: the value "5" (config.adv.multi_record_min_radius_ratio) cannot be used; 0.55 is used.',
+    'Settings: the value "turbo" (config.losat.executionMode) cannot be used; auto is used.',
+    'Settings: 1 entry of config.adv.multi_record_positions could not be read and was dropped.'
+  ]]);
+  assert.equal(state.drawings.linear.adv.label_rendering, 'auto');
+  // The circular settings are the Circular drawing's (the split, plan 4.2).
+  const { adv } = state.drawings.circular;
+  assert.equal(adv.circular_label_placement, 'radial');
+  assert.equal(adv.multi_record_min_radius_ratio, 0.55);
+  assert.deepEqual(adv.multi_record_positions, [{ selector: '#1', row: 1 }, { selector: '#2', row: 2 }]);
+  assert.equal(state.losatExecution.executionMode, 'auto');
+  assert.equal(state.losatExecution.totalThreadBudget, 'safe');
+});
+
+// B36, B43, B44: the app settings of `ui`, and a pending palette that
+// Instant Preview drops.
+test('a Session 46 app setting or pending palette Load cannot restore is listed (B36, B43, B44)', async () => {
+  const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  session.ui = {
+    ...session.ui, featurePanelTab: 'banana', paletteInstantPreviewEnabled: true,
+    losatExecution: { ...session.ui?.losatExecution, threadsPerJob: '-2' }
+  };
+  session.modes.linear.ui = { ...session.modes.linear.ui, pendingPaletteName: 'Pastel' };
+  const dialogs = [];
+  const loaded = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(dialogs, [[
+    'Settings: the value "banana" (ui.featurePanelTab) cannot be used; colors is used.',
+    'Settings: the value "-2" (ui.losatExecution.threadsPerJob) cannot be used; auto is used.',
+    'Palette: the palette "Pastel" (modes.linear.ui.pendingPaletteName) waits to be applied, but Instant Preview is on,'
+      + ' which applies a palette at once; it was dropped.'
+  ]]);
+  assert.equal(state.featurePanelTab.value, 'colors');
+  assert.equal(state.losatExecution.threadsPerJob, 'auto');
+  assert.equal(state.drawings.linear.pendingPaletteName.value, '');
+});
+
+test('a legacy configuration lists a setting its reader cannot restore (B48)', async () => {
+  const loaded = await importSession(input({ form: { legend: 'left' }, adv: { gc_content_mode: 'ratio' } }), {
+    confirmLoadRepairs: async () => true
+  });
+  assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
+  assert.deepEqual(loaded.repairs.map(({ code, path, stored, used }) => [code, path, stored, used]), [
+    ['setting-replaced', 'adv.gc_content_mode', 'ratio', 'deviation']
+  ]);
+});
+
+// A History restore applies captured settings with the same readers and
+// lists nothing (only Load asks): what it installs is unchanged (R11).
+test('a History restore reads stored settings as before and asks nothing', async () => {
+  const { applyConfigData } = await import('../../gbdraw/web/js/services/config.js');
+  const drawing = state.drawings.circular;
+  applyConfigData(drawing, {
+    adv: {
+      label_rendering: 'sideways', multi_record_column_gap_ratio: null, multi_record_row_gap_ratio: 'x',
+      depth_min: 5, depth_max: 2, gc_content_min_percent: 60, gc_content_max_percent: 40, track_axis_gap: 'auto',
+      depth_tracks: [{ label: 'D', height: -1 }]
+    },
+    losat: { blastp: { mode: 'x', collinearMaxConflictsInMergeGap: null, orthogroupMaxHits: 3, orthogroupHitPolicy: 'old' } },
+    circularConservation: { source: 'UPLOAD', series: [null, { color: 'nonsense', losat_gencode: 0 }] },
+    linearRecordLayout: { recordGap: null, rows: [{ uid: '', row: 1 }, { uid: 'a', row: 2 }] },
+    losatProgram: 'BLASTP'
+  }, { resolveTrackPlacements: false });
+  const { adv, losat, circularConservation } = drawing;
+  assert.deepEqual([adv.label_rendering, adv.multi_record_column_gap_ratio, adv.multi_record_row_gap_ratio, adv.depth_max,
+    adv.gc_content_max_percent, adv.track_axis_gap], ['auto', 0, 0.05, null, 60, null]);
+  assert.deepEqual(adv.depth_tracks.map(({ label, height }) => [label, height]), [['D', null]]);
+  assert.deepEqual([losat.blastp.mode, losat.blastp.collinearMaxConflictsInMergeGap, losat.blastp.orthogroupMemberMaxHits,
+    Object.hasOwn(losat.blastp, 'orthogroupMaxHits'), Object.hasOwn(losat.blastp, 'orthogroupHitPolicy')], ['orthogroup', 0, null, false, false]);
+  assert.deepEqual([circularConservation.source, circularConservation.series.map(({ color, losat_gencode }) => [color, losat_gencode])],
+    ['upload', [['#4e79a7', 1]]]);
+  assert.deepEqual([drawing.linearRecordGap.value, [...drawing.linearRecordRows]], [0, [{ uid: 'a', row: 2 }]]);
+  assert.equal(drawing.losatProgram.value, 'blastn');
+});
+
 // G3: every Gallery Session and every Session fixture loads without a repair;
 // a repair there is a producer bug. Two fixtures are lossy on purpose. In
 // node, a Session older than 40 lists its feature recovery, which needs the

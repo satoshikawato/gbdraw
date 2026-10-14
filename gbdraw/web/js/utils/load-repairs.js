@@ -8,7 +8,10 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  */
 /**
  * The rule of the producer that could not restore a value: one member per rule.
- * @typedef {'feature-edit-unmatched'
+ * @typedef {'setting-replaced'
+ *   | 'setting-entries-dropped'
+ *   | 'pending-palette-dropped'
+ *   | 'feature-edit-unmatched'
  *   | 'feature-visibility-narrowed'
  *   | 'hash-selector-unmapped'
  *   | 'table-row-joined'
@@ -138,6 +141,13 @@ const tableLines = (repairs, describe) => [...new Set(repairs.map(({ path }) => 
  * @type {Readonly<Record<LoadRepairCode, (repairs: readonly LoadRepair[]) => string[]>>}
  */
 const WORDING = {
+  'setting-replaced': (repairs) => valueLines(repairs, ({ path, stored, used }) => (
+    `Settings: the value "${stored}" (${path}) cannot be used; ${used === undefined ? 'it is left unset' : `${used} is used`}.`)),
+  'setting-entries-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
+    `Settings: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
+  'pending-palette-dropped': (repairs) => valueLines(repairs, ({ path, label }) => (
+    `Palette: the palette "${label ?? ''}" (${path}) waits to be applied, but Instant Preview is on, which applies a palette at once;`
+    + ' it was dropped.')),
   'legend-position-defaulted': (repairs) => valueLines(repairs, ({ path, stored, used }) => (
     `Legend: the position "${stored}" (${path}) is not one of its mode's positions; `
     + `${used === undefined ? 'it is not used' : `${used} is used`}.`)),

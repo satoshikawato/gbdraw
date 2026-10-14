@@ -21,6 +21,7 @@ const modulePaths = [
   'gbdraw/web/js/utils/color-utils.js',
   'gbdraw/web/js/utils/named-colors.js',
   'gbdraw/web/js/services/losat-normalization.js',
+  'gbdraw/web/js/utils/field-reading.js',
   'gbdraw/web/js/services/file-content-cache.js',
   'gbdraw/web/js/services/feature-catalog.js',
   'gbdraw/web/js/contracts/schema.generated.js',

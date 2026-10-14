@@ -47,6 +47,7 @@ await writeFile(
   tempNormalizationPath,
   (await readFile(new URL('../services/losat-normalization.js', sourceRoot), 'utf8'))
     .replace("../contracts/schema.generated.js", new URL("../contracts/schema.generated.js", sourceRoot).href)
+    .replace("../utils/field-reading.js", new URL("../utils/field-reading.js", sourceRoot).href)
 );
 
 const { createLosatSettings } = await import(pathToFileURL(tempModulePath));

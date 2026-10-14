@@ -2,6 +2,7 @@
 import { LEGEND_POSITIONS } from '../contracts/schema.generated.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { loadRepair } from '../utils/load-repairs.js';
+import { textChoice } from '../utils/field-reading.js';
 
 /** @import { LoadRepair, Repaired } from '../utils/load-repairs.js' */
 
@@ -29,11 +30,9 @@ import { loadRepair } from '../utils/load-repairs.js';
  */
 /** @typedef {{ legend?: unknown, plotTitlePosition?: unknown }} StoredLayoutSides */
 
+export const readCircularPlotTitlePosition = textChoice(['none', 'top', 'bottom'], 'none');
 /** @param {unknown} value */
-export const normalizeCircularPlotTitlePosition = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
-};
+export const normalizeCircularPlotTitlePosition = (value) => readCircularPlotTitlePosition(value).value;
 
 /** @param {unknown} value */
 export const normalizeLinearPlotTitlePosition = (value) => {

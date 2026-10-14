@@ -650,20 +650,6 @@
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
-      "id": "function:normalizeDepthTracks",
-      "concern": "Depth track lists (two different conversions)",
-      "pythonOwner": [
-        "gbdraw/analysis/depth_tracks.py:normalize_depth_tracks"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/config.js:normalizeDepthTracks"
-      ],
-      "vector": null,
-      "reason": "Name clash: the Web normalizes stored depth-track settings; Python merges the public depth inputs per record.",
-      "retireWhen": "one side is renamed: the two functions do different work",
-      "source": "twin.unregistered.v1 on origin/dev 927b658b"
-    },
-    {
       "id": "function:normalizeFamilyName",
       "concern": "Font family list rules: parsing a CSS font-family list, the custom-font rule (D-10), the nearest substitute, and the face a list is measured with",
       "pythonOwner": [
@@ -692,7 +678,7 @@
         "gbdraw/core/color.py:normalize_hex_color"
       ],
       "jsOwner": [
-        "gbdraw/web/js/services/config.js:normalizeHexColor"
+        "gbdraw/web/js/services/config-field-readers.js:normalizeHexColor"
       ],
       "vector": null,
       "reason": "Partly the same: the Web also resolves color names and falls back to a default; Python refuses. No shared vector.",
@@ -706,7 +692,7 @@
         "gbdraw/labels/policy.py:normalize_label_rendering"
       ],
       "jsOwner": [
-        "gbdraw/web/js/services/config.js:normalizeLabelRendering"
+        "gbdraw/web/js/services/config-field-readers.js:normalizeLabelRendering"
       ],
       "vector": null,
       "reason": "Partly the same: the same values; the Web falls back to auto, Python refuses. No shared vector.",
