@@ -1,213 +1,149 @@
 {
  "fixtures": {
   "lambda_basic_linear.v31-schema1.gbdraw-session.json.gz": {
-   "strict": {
-    "oracle": {
-     "load": {
-      "status": "error",
-      "error": {
-       "code": "VALIDATION_UNCLASSIFIED",
-       "operation": "validateConfigOverrides"
-      },
-      "dialog": [],
-      "notices": null
-     },
-     "save": {
-      "status": "saved",
-      "error": null
-     },
-     "areas": "44e98e5d7fbb"
+   "oracle": {
+    "load": {
+     "status": "ok",
+     "error": null,
+     "dialog": [
+      "Settings: 1 entry of files.linearCanonicalComparisons could not be read and was dropped.",
+      "Features: the feature information of the saved diagram could not be restored from this file; the SVG preview stays, and the next Generate restores it."
+     ],
+     "notices": []
     },
-    "requests": {
-     "committed": null,
-     "saved": null
-    }
+    "save": {
+     "status": "error",
+     "error": "SESSION_SAVE_REQUIRES_GENERATE"
+    },
+    "areas": "fd31b190dc5c"
    },
-   "migrated": {
-    "oracle": {
-     "load": {
-      "status": "ok",
-      "error": null,
-      "dialog": [
-       "Settings: the value \"none\" (config.adv.depth_small_tick_interval) cannot be used; its default is used.",
-       "Settings: the value \"none\" (config.adv.gc_content_small_tick_interval) cannot be used; its default is used.",
-       "Features: the feature information of the saved diagram could not be restored from this file; the SVG preview stays, and the next Generate restores it."
-      ],
-      "notices": []
-     },
-     "save": {
-      "status": "error",
-      "error": "SESSION_SAVE_REQUIRES_GENERATE"
-     },
-     "areas": "63a72e950041"
+   "requests": {
+    "committed": {
+     "schema": 5,
+     "mode": "linear",
+     "sha256": "d79e5537190aa7363e64bb0fb4e4e1cc14fc6958f630b42ab309c9e7ac7df63a"
     },
-    "requests": {
-     "committed": {
-      "schema": 1,
-      "mode": "linear",
-      "sha256": "c320149a6cb5434d10049023b14f27d16b3815f10cc983df0db2e0071cfbc2f3"
-     },
-     "saved": null
-    }
+    "saved": null
    }
   },
   "HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz": {
-   "strict": {
-    "oracle": {
-     "load": {
-      "status": "error",
-      "error": {
-       "code": "VALIDATION_UNCLASSIFIED",
-       "operation": "validateConfigOverrides"
-      },
-      "dialog": [],
-      "notices": null
-     },
-     "save": {
-      "status": "saved",
-      "error": null
-     },
-     "areas": "44e98e5d7fbb"
+   "oracle": {
+    "load": {
+     "status": "ok",
+     "error": null,
+     "dialog": [],
+     "notices": []
     },
-    "requests": {
-     "committed": null,
-     "saved": null
-    }
+    "save": {
+     "status": "error",
+     "error": "SESSION_SAVE_REQUIRES_GENERATE"
+    },
+    "areas": "e4840608b75c"
    },
-   "migrated": {
-    "oracle": {
-     "load": {
-      "status": "ok",
-      "error": null,
-      "dialog": [
-       "Settings: the value \"none\" (config.adv.depth_small_tick_interval) cannot be used; its default is used.",
-       "Settings: the value \"none\" (config.adv.gc_content_small_tick_interval) cannot be used; its default is used."
-      ],
-      "notices": []
-     },
-     "save": {
-      "status": "error",
-      "error": "SESSION_SAVE_REQUIRES_GENERATE"
-     },
-     "areas": "e4840608b75c"
+   "requests": {
+    "committed": {
+     "schema": 5,
+     "mode": "circular",
+     "sha256": "d53a4fb34595d7e7c17c4664d026dbcb02a807f717473e2b831e4cca0264589e"
     },
-    "requests": {
-     "committed": {
-      "schema": 1,
-      "mode": "circular",
-      "sha256": "21d7e9ce8570d3b7d3b813ce119fe17d76cee803f6731d08d4b203e599512a07"
-     },
-     "saved": null
-    }
+    "saved": null
    }
   },
   "scale-interval-zero-circular-web.v33.gbdraw-session.json.gz": {
-   "strict": {
-    "oracle": {
-     "load": {
-      "status": "ok",
-      "error": null,
-      "dialog": [],
-      "notices": []
-     },
-     "save": {
-      "status": "saved",
-      "error": null
-     },
-     "areas": "b224ccd30cd1"
+   "oracle": {
+    "load": {
+     "status": "ok",
+     "error": null,
+     "dialog": [],
+     "notices": []
     },
-    "requests": {
-     "committed": {
-      "schema": 9,
-      "mode": "circular",
-      "sha256": "48af11224395ece025afc253a8f5d6637fdb60f7b8d95e18ffa886b65f89ba1f"
-     },
-     "saved": {
-      "schema": 9,
-      "mode": "circular",
-      "sha256": "16373e399f15e9713721ced533030ad141d3fa86ca12da8e0ca7c40b8eba681c"
-     }
-    }
+    "save": {
+     "status": "saved",
+     "error": null
+    },
+    "areas": "b224ccd30cd1"
    },
-   "migrated": "strict"
+   "requests": {
+    "committed": {
+     "schema": 9,
+     "mode": "circular",
+     "sha256": "48af11224395ece025afc253a8f5d6637fdb60f7b8d95e18ffa886b65f89ba1f"
+    },
+    "saved": {
+     "schema": 9,
+     "mode": "circular",
+     "sha256": "16373e399f15e9713721ced533030ad141d3fa86ca12da8e0ca7c40b8eba681c"
+    }
+   }
   },
   "feature-edits-circular.v33.gbdraw-session.json.gz": {
-   "strict": {
-    "oracle": {
-     "load": {
-      "status": "error",
-      "error": {
-       "code": "WORKER_INIT",
-       "operation": "feature-extraction"
-      },
-      "dialog": [],
-      "notices": null
+   "oracle": {
+    "load": {
+     "status": "error",
+     "error": {
+      "code": "WORKER_INIT",
+      "operation": "feature-extraction"
      },
-     "save": {
-      "status": "saved",
-      "error": null
-     },
-     "areas": "44e98e5d7fbb"
+     "dialog": [],
+     "notices": null
     },
-    "requests": {
-     "committed": null,
-     "saved": null
-    }
+    "save": {
+     "status": "saved",
+     "error": null
+    },
+    "areas": "44e98e5d7fbb"
    },
-   "migrated": "strict"
+   "requests": {
+    "committed": null,
+    "saved": null
+   }
   },
   "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz": {
-   "strict": {
-    "oracle": {
-     "load": {
-      "status": "error",
-      "error": {
-       "code": "WORKER_INIT",
-       "operation": "feature-extraction"
-      },
-      "dialog": [],
-      "notices": null
+   "oracle": {
+    "load": {
+     "status": "error",
+     "error": {
+      "code": "WORKER_INIT",
+      "operation": "feature-extraction"
      },
-     "save": {
-      "status": "saved",
-      "error": null
-     },
-     "areas": "44e98e5d7fbb"
+     "dialog": [],
+     "notices": null
     },
-    "requests": {
-     "committed": null,
-     "saved": null
-    }
+    "save": {
+     "status": "saved",
+     "error": null
+    },
+    "areas": "44e98e5d7fbb"
    },
-   "migrated": "strict"
+   "requests": {
+    "committed": null,
+    "saved": null
+   }
   },
   "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz": {
-   "strict": {
-    "oracle": {
-     "load": {
-      "status": "ok",
-      "error": null,
-      "dialog": [
-       "Features: the feature information of the saved diagram could not be restored from this file; the SVG preview stays, and the next Generate restores it."
-      ],
-      "notices": []
-     },
-     "save": {
-      "status": "error",
-      "error": "SESSION_SAVE_REQUIRES_GENERATE"
-     },
-     "areas": "97465f0d3fd1"
+   "oracle": {
+    "load": {
+     "status": "ok",
+     "error": null,
+     "dialog": [
+      "Features: the feature information of the saved diagram could not be restored from this file; the SVG preview stays, and the next Generate restores it."
+     ],
+     "notices": []
     },
-    "requests": {
-     "committed": {
-      "schema": 9,
-      "mode": "linear",
-      "sha256": "6a9482aaf598c04b192c047ad597aee8b3e952a0341a7aad25c2713e81eb49ac"
-     },
-     "saved": null
-    }
+    "save": {
+     "status": "error",
+     "error": "SESSION_SAVE_REQUIRES_GENERATE"
+    },
+    "areas": "97465f0d3fd1"
    },
-   "migrated": "strict"
+   "requests": {
+    "committed": {
+     "schema": 9,
+     "mode": "linear",
+     "sha256": "6a9482aaf598c04b192c047ad597aee8b3e952a0341a7aad25c2713e81eb49ac"
+    },
+    "saved": null
+   }
   }
  },
  "areaSets": {
@@ -360,142 +296,6 @@
    "save.ui": "017b2d6bb4a37fb0",
    "save.version": "31489056e0916d59",
    "save.webFiles": "96f89d2929391e3d"
-  },
-  "63a72e950041": {
-   "state.mode": "5ca9f085671a9ddf",
-   "state.sessionTitle": "a536a4afcf7f36dd",
-   "state.results": "db4ef099c7d90688",
-   "state.selectedResultIndex": "23d7b286bd429460",
-   "state.cInputType": "8e5a70e03ba5cc79",
-   "state.lInputType": "8e5a70e03ba5cc79",
-   "state.files": "f5b4d30095972d0b",
-   "state.linearSeqs": "a9b731bc4d57dad3",
-   "state.losatCacheInfo": "99bcfca61a865fe7",
-   "state.losatCache": "9824fab45bb6e8f5",
-   "state.losatDerivedCache": "9824fab45bb6e8f5",
-   "state.proteinIdentityManifest": "2e390a4732be1359",
-   "state.legacyProteinRawCandidates": "f578d2150e2cfd11",
-   "state.legacyProteinDerivedEvidence": "f578d2150e2cfd11",
-   "state.orthogroups": "99bcfca61a865fe7",
-   "state.collinearGroups": "99bcfca61a865fe7",
-   "state.similarityAlignmentPlan": "1c197daef20de3f4",
-   "state.similarityAlignmentResetReceipt": "1c197daef20de3f4",
-   "state.linearRecordTranslations": "99bcfca61a865fe7",
-   "state.legacySimilarityAlignment": "bb001f17526b40d9",
-   "state.selectedOrthogroupId": "cff59dd7cecf22f4",
-   "state.selectedOrthogroupAlignmentFeature": "cff59dd7cecf22f4",
-   "state.circularRecordList": "99bcfca61a865fe7",
-   "state.paletteInstantPreviewEnabled": "1e544d43b574a8e3",
-   "state.losatExecution": "1a4b07e11f0e0b96",
-   "state.richFeaturePopup": "8c5aaab6e1efdec7",
-   "state.appliedPaletteName": "d75d3e8804c53838",
-   "state.appliedPaletteColors": "8c86758dd964b065",
-   "state.downloadDpi": "7943537b871f5581",
-   "state.featureCatalog": "1c197daef20de3f4",
-   "state.biologicalFeatures": "99bcfca61a865fe7",
-   "state.extractedFeatures": "99bcfca61a865fe7",
-   "state.featureRecordIds": "99bcfca61a865fe7",
-   "state.selectedFeatureRecordIdx": "23d7b286bd429460",
-   "state.autoLabelReflowEnabled": "1e544d43b574a8e3",
-   "state.generatedLegendPosition": "ca5db3dba9f0af0a",
-   "state.generatedMode": "5ca9f085671a9ddf",
-   "state.generatedMultiRecordCanvas": "1e544d43b574a8e3",
-   "state.generatedCircularPlotTitlePosition": "8a815bf53aa5b075",
-   "state.featurePanelTab": "75ec6b2dd786e2fb",
-   "state.lastRunInfo": "1c197daef20de3f4",
-   "state.zoom": "48208f9428d64634",
-   "state.canvasPan": "cc978be5ab093d2b",
-   "state.displayedResultMetadata": "a6e2d80227b7e09d",
-   "drawings.circular.addedLegendCaptions": "0f0bc932a5b9fc1e",
-   "drawings.circular.adv": "e297fc5e99874f28",
-   "drawings.circular.annotationSets": "4f53cda18c2baa0c",
-   "drawings.circular.canonicalLabelOverrideRows": "99bcfca61a865fe7",
-   "drawings.circular.canvasPadding": "9b646bdfa19d75d9",
-   "drawings.circular.circularConservation": "4a2e8242bce9c982",
-   "drawings.circular.currentColors": "8c86758dd964b065",
-   "drawings.circular.deletedLegendEntries": "99bcfca61a865fe7",
-   "drawings.circular.dormantLegendEntries": "99bcfca61a865fe7",
-   "drawings.circular.featureColorOverrides": "44136fa355b3678a",
-   "drawings.circular.featureOverrides": "44136fa355b3678a",
-   "drawings.circular.featurePlacementOverrides": "44136fa355b3678a",
-   "drawings.circular.featureStrokeOverrides": "44136fa355b3678a",
-   "drawings.circular.featureVisibilityManualRules": "4f53cda18c2baa0c",
-   "drawings.circular.fileLegendCaptions": "0f0bc932a5b9fc1e",
-   "drawings.circular.filterMode": "7ab553d1c5e4b2e9",
-   "drawings.circular.form": "f849fa4240d9a9d8",
-   "drawings.circular.importedComparisonIntent": "dffdd2f6142b68a7",
-   "drawings.circular.labelTextBulkOverrides": "44136fa355b3678a",
-   "drawings.circular.layoutPreferences": "872fad4c41833071",
-   "drawings.circular.legendColorOverrides": "44136fa355b3678a",
-   "drawings.circular.legendEntries": "99bcfca61a865fe7",
-   "drawings.circular.legendStrokeOverrides": "44136fa355b3678a",
-   "drawings.circular.linearComparisonPlan": "a658f2c797b87f6c",
-   "drawings.circular.linearRecordGap": "cab47f574c69a069",
-   "drawings.circular.linearRecordLayoutEnabled": "8c5aaab6e1efdec7",
-   "drawings.circular.linearRecordRows": "4f53cda18c2baa0c",
-   "drawings.circular.linearTypographyLinked": "8c5aaab6e1efdec7",
-   "drawings.circular.losat": "9d3a2c0d33aa9f6d",
-   "drawings.circular.losatProgram": "2f2cc84e9fa93529",
-   "drawings.circular.manualBlacklist": "cff59dd7cecf22f4",
-   "drawings.circular.manualPriorityRules": "4f53cda18c2baa0c",
-   "drawings.circular.manualSpecificRules": "4f53cda18c2baa0c",
-   "drawings.circular.manualWhitelist": "4f53cda18c2baa0c",
-   "drawings.circular.orthogroupDescriptionOverrides": "44136fa355b3678a",
-   "drawings.circular.orthogroupDormantOverrides": "44136fa355b3678a",
-   "drawings.circular.orthogroupNameOverrides": "44136fa355b3678a",
-   "drawings.circular.pendingPaletteColors": "e51f6892eadb3a06",
-   "drawings.circular.pendingPaletteName": "cff59dd7cecf22f4",
-   "drawings.circular.recordDisplayDrafts": "4f53cda18c2baa0c",
-   "drawings.circular.recordsOff": "4f53cda18c2baa0c",
-   "drawings.circular.selectedPalette": "d75d3e8804c53838",
-   "drawings.circular.unmanagedConfigOverrides": "44136fa355b3678a",
-   "drawings.circular.form.legend": "6157fe4ca13ffd6b",
-   "drawings.circular.adv.plot_title_position": "30a0924a3360be68",
-   "drawings.linear.addedLegendCaptions": "0f0bc932a5b9fc1e",
-   "drawings.linear.adv": "138dbab2acc2ddb5",
-   "drawings.linear.annotationSets": "4f53cda18c2baa0c",
-   "drawings.linear.canonicalLabelOverrideRows": "99bcfca61a865fe7",
-   "drawings.linear.canvasPadding": "9b646bdfa19d75d9",
-   "drawings.linear.circularConservation": "4a2e8242bce9c982",
-   "drawings.linear.currentColors": "8c86758dd964b065",
-   "drawings.linear.deletedLegendEntries": "99bcfca61a865fe7",
-   "drawings.linear.dormantLegendEntries": "99bcfca61a865fe7",
-   "drawings.linear.featureColorOverrides": "44136fa355b3678a",
-   "drawings.linear.featureOverrides": "44136fa355b3678a",
-   "drawings.linear.featurePlacementOverrides": "44136fa355b3678a",
-   "drawings.linear.featureStrokeOverrides": "44136fa355b3678a",
-   "drawings.linear.featureVisibilityManualRules": "4f53cda18c2baa0c",
-   "drawings.linear.fileLegendCaptions": "0f0bc932a5b9fc1e",
-   "drawings.linear.filterMode": "7ab553d1c5e4b2e9",
-   "drawings.linear.form": "547748f823435060",
-   "drawings.linear.importedComparisonIntent": "4faeb6c38147157c",
-   "drawings.linear.labelTextBulkOverrides": "44136fa355b3678a",
-   "drawings.linear.layoutPreferences": "872fad4c41833071",
-   "drawings.linear.legendColorOverrides": "44136fa355b3678a",
-   "drawings.linear.legendEntries": "99bcfca61a865fe7",
-   "drawings.linear.legendStrokeOverrides": "44136fa355b3678a",
-   "drawings.linear.linearComparisonPlan": "a658f2c797b87f6c",
-   "drawings.linear.linearRecordGap": "cab47f574c69a069",
-   "drawings.linear.linearRecordLayoutEnabled": "8c5aaab6e1efdec7",
-   "drawings.linear.linearRecordRows": "7743117f9c6e1792",
-   "drawings.linear.linearTypographyLinked": "8c5aaab6e1efdec7",
-   "drawings.linear.losat": "f4ff8407350ac7ce",
-   "drawings.linear.losatProgram": "2f2cc84e9fa93529",
-   "drawings.linear.manualBlacklist": "cff59dd7cecf22f4",
-   "drawings.linear.manualPriorityRules": "4f53cda18c2baa0c",
-   "drawings.linear.manualSpecificRules": "4f53cda18c2baa0c",
-   "drawings.linear.manualWhitelist": "4f53cda18c2baa0c",
-   "drawings.linear.orthogroupDescriptionOverrides": "44136fa355b3678a",
-   "drawings.linear.orthogroupDormantOverrides": "44136fa355b3678a",
-   "drawings.linear.orthogroupNameOverrides": "44136fa355b3678a",
-   "drawings.linear.pendingPaletteColors": "e51f6892eadb3a06",
-   "drawings.linear.pendingPaletteName": "cff59dd7cecf22f4",
-   "drawings.linear.recordDisplayDrafts": "4f53cda18c2baa0c",
-   "drawings.linear.recordsOff": "4f53cda18c2baa0c",
-   "drawings.linear.selectedPalette": "d75d3e8804c53838",
-   "drawings.linear.unmanagedConfigOverrides": "f4e6f129e5dbad15",
-   "drawings.linear.form.legend": "6157fe4ca13ffd6b",
-   "drawings.linear.adv.plot_title_position": "90ac7d874c657830"
   },
   "97465f0d3fd1": {
    "state.mode": "5ca9f085671a9ddf",
@@ -918,6 +718,142 @@
    "drawings.linear.selectedPalette": "d75d3e8804c53838",
    "drawings.linear.unmanagedConfigOverrides": "44136fa355b3678a",
    "drawings.linear.form.legend": "90ac7d874c657830",
+   "drawings.linear.adv.plot_title_position": "90ac7d874c657830"
+  },
+  "fd31b190dc5c": {
+   "state.mode": "5ca9f085671a9ddf",
+   "state.sessionTitle": "a536a4afcf7f36dd",
+   "state.results": "db4ef099c7d90688",
+   "state.selectedResultIndex": "23d7b286bd429460",
+   "state.cInputType": "8e5a70e03ba5cc79",
+   "state.lInputType": "8e5a70e03ba5cc79",
+   "state.files": "f5b4d30095972d0b",
+   "state.linearSeqs": "a99f4d1cc9b9a8e4",
+   "state.losatCacheInfo": "99bcfca61a865fe7",
+   "state.losatCache": "9824fab45bb6e8f5",
+   "state.losatDerivedCache": "9824fab45bb6e8f5",
+   "state.proteinIdentityManifest": "2e390a4732be1359",
+   "state.legacyProteinRawCandidates": "f578d2150e2cfd11",
+   "state.legacyProteinDerivedEvidence": "f578d2150e2cfd11",
+   "state.orthogroups": "99bcfca61a865fe7",
+   "state.collinearGroups": "99bcfca61a865fe7",
+   "state.similarityAlignmentPlan": "1c197daef20de3f4",
+   "state.similarityAlignmentResetReceipt": "1c197daef20de3f4",
+   "state.linearRecordTranslations": "99bcfca61a865fe7",
+   "state.legacySimilarityAlignment": "bb001f17526b40d9",
+   "state.selectedOrthogroupId": "cff59dd7cecf22f4",
+   "state.selectedOrthogroupAlignmentFeature": "cff59dd7cecf22f4",
+   "state.circularRecordList": "99bcfca61a865fe7",
+   "state.paletteInstantPreviewEnabled": "1e544d43b574a8e3",
+   "state.losatExecution": "1a4b07e11f0e0b96",
+   "state.richFeaturePopup": "8c5aaab6e1efdec7",
+   "state.appliedPaletteName": "d75d3e8804c53838",
+   "state.appliedPaletteColors": "8c86758dd964b065",
+   "state.downloadDpi": "7943537b871f5581",
+   "state.featureCatalog": "1c197daef20de3f4",
+   "state.biologicalFeatures": "99bcfca61a865fe7",
+   "state.extractedFeatures": "99bcfca61a865fe7",
+   "state.featureRecordIds": "99bcfca61a865fe7",
+   "state.selectedFeatureRecordIdx": "23d7b286bd429460",
+   "state.autoLabelReflowEnabled": "1e544d43b574a8e3",
+   "state.generatedLegendPosition": "ca5db3dba9f0af0a",
+   "state.generatedMode": "5ca9f085671a9ddf",
+   "state.generatedMultiRecordCanvas": "1e544d43b574a8e3",
+   "state.generatedCircularPlotTitlePosition": "8a815bf53aa5b075",
+   "state.featurePanelTab": "75ec6b2dd786e2fb",
+   "state.lastRunInfo": "1c197daef20de3f4",
+   "state.zoom": "48208f9428d64634",
+   "state.canvasPan": "cc978be5ab093d2b",
+   "state.displayedResultMetadata": "a6e2d80227b7e09d",
+   "drawings.circular.addedLegendCaptions": "0f0bc932a5b9fc1e",
+   "drawings.circular.adv": "e297fc5e99874f28",
+   "drawings.circular.annotationSets": "4f53cda18c2baa0c",
+   "drawings.circular.canonicalLabelOverrideRows": "99bcfca61a865fe7",
+   "drawings.circular.canvasPadding": "9b646bdfa19d75d9",
+   "drawings.circular.circularConservation": "4a2e8242bce9c982",
+   "drawings.circular.currentColors": "8c86758dd964b065",
+   "drawings.circular.deletedLegendEntries": "99bcfca61a865fe7",
+   "drawings.circular.dormantLegendEntries": "99bcfca61a865fe7",
+   "drawings.circular.featureColorOverrides": "44136fa355b3678a",
+   "drawings.circular.featureOverrides": "44136fa355b3678a",
+   "drawings.circular.featurePlacementOverrides": "44136fa355b3678a",
+   "drawings.circular.featureStrokeOverrides": "44136fa355b3678a",
+   "drawings.circular.featureVisibilityManualRules": "4f53cda18c2baa0c",
+   "drawings.circular.fileLegendCaptions": "0f0bc932a5b9fc1e",
+   "drawings.circular.filterMode": "7ab553d1c5e4b2e9",
+   "drawings.circular.form": "f849fa4240d9a9d8",
+   "drawings.circular.importedComparisonIntent": "dffdd2f6142b68a7",
+   "drawings.circular.labelTextBulkOverrides": "44136fa355b3678a",
+   "drawings.circular.layoutPreferences": "872fad4c41833071",
+   "drawings.circular.legendColorOverrides": "44136fa355b3678a",
+   "drawings.circular.legendEntries": "99bcfca61a865fe7",
+   "drawings.circular.legendStrokeOverrides": "44136fa355b3678a",
+   "drawings.circular.linearComparisonPlan": "a658f2c797b87f6c",
+   "drawings.circular.linearRecordGap": "cab47f574c69a069",
+   "drawings.circular.linearRecordLayoutEnabled": "8c5aaab6e1efdec7",
+   "drawings.circular.linearRecordRows": "4f53cda18c2baa0c",
+   "drawings.circular.linearTypographyLinked": "8c5aaab6e1efdec7",
+   "drawings.circular.losat": "9d3a2c0d33aa9f6d",
+   "drawings.circular.losatProgram": "2f2cc84e9fa93529",
+   "drawings.circular.manualBlacklist": "cff59dd7cecf22f4",
+   "drawings.circular.manualPriorityRules": "4f53cda18c2baa0c",
+   "drawings.circular.manualSpecificRules": "4f53cda18c2baa0c",
+   "drawings.circular.manualWhitelist": "4f53cda18c2baa0c",
+   "drawings.circular.orthogroupDescriptionOverrides": "44136fa355b3678a",
+   "drawings.circular.orthogroupDormantOverrides": "44136fa355b3678a",
+   "drawings.circular.orthogroupNameOverrides": "44136fa355b3678a",
+   "drawings.circular.pendingPaletteColors": "e51f6892eadb3a06",
+   "drawings.circular.pendingPaletteName": "cff59dd7cecf22f4",
+   "drawings.circular.recordDisplayDrafts": "4f53cda18c2baa0c",
+   "drawings.circular.recordsOff": "4f53cda18c2baa0c",
+   "drawings.circular.selectedPalette": "d75d3e8804c53838",
+   "drawings.circular.unmanagedConfigOverrides": "44136fa355b3678a",
+   "drawings.circular.form.legend": "6157fe4ca13ffd6b",
+   "drawings.circular.adv.plot_title_position": "30a0924a3360be68",
+   "drawings.linear.addedLegendCaptions": "0f0bc932a5b9fc1e",
+   "drawings.linear.adv": "138dbab2acc2ddb5",
+   "drawings.linear.annotationSets": "4f53cda18c2baa0c",
+   "drawings.linear.canonicalLabelOverrideRows": "99bcfca61a865fe7",
+   "drawings.linear.canvasPadding": "9b646bdfa19d75d9",
+   "drawings.linear.circularConservation": "4a2e8242bce9c982",
+   "drawings.linear.currentColors": "8c86758dd964b065",
+   "drawings.linear.deletedLegendEntries": "99bcfca61a865fe7",
+   "drawings.linear.dormantLegendEntries": "99bcfca61a865fe7",
+   "drawings.linear.featureColorOverrides": "44136fa355b3678a",
+   "drawings.linear.featureOverrides": "44136fa355b3678a",
+   "drawings.linear.featurePlacementOverrides": "44136fa355b3678a",
+   "drawings.linear.featureStrokeOverrides": "44136fa355b3678a",
+   "drawings.linear.featureVisibilityManualRules": "4f53cda18c2baa0c",
+   "drawings.linear.fileLegendCaptions": "0f0bc932a5b9fc1e",
+   "drawings.linear.filterMode": "7ab553d1c5e4b2e9",
+   "drawings.linear.form": "547748f823435060",
+   "drawings.linear.importedComparisonIntent": "165e5812301d4bca",
+   "drawings.linear.labelTextBulkOverrides": "44136fa355b3678a",
+   "drawings.linear.layoutPreferences": "872fad4c41833071",
+   "drawings.linear.legendColorOverrides": "44136fa355b3678a",
+   "drawings.linear.legendEntries": "99bcfca61a865fe7",
+   "drawings.linear.legendStrokeOverrides": "44136fa355b3678a",
+   "drawings.linear.linearComparisonPlan": "a658f2c797b87f6c",
+   "drawings.linear.linearRecordGap": "cab47f574c69a069",
+   "drawings.linear.linearRecordLayoutEnabled": "8c5aaab6e1efdec7",
+   "drawings.linear.linearRecordRows": "4411f7fec7375eab",
+   "drawings.linear.linearTypographyLinked": "8c5aaab6e1efdec7",
+   "drawings.linear.losat": "5f915241dfcb5837",
+   "drawings.linear.losatProgram": "02149c6919bd86c6",
+   "drawings.linear.manualBlacklist": "cff59dd7cecf22f4",
+   "drawings.linear.manualPriorityRules": "4f53cda18c2baa0c",
+   "drawings.linear.manualSpecificRules": "4f53cda18c2baa0c",
+   "drawings.linear.manualWhitelist": "4f53cda18c2baa0c",
+   "drawings.linear.orthogroupDescriptionOverrides": "44136fa355b3678a",
+   "drawings.linear.orthogroupDormantOverrides": "44136fa355b3678a",
+   "drawings.linear.orthogroupNameOverrides": "44136fa355b3678a",
+   "drawings.linear.pendingPaletteColors": "e51f6892eadb3a06",
+   "drawings.linear.pendingPaletteName": "cff59dd7cecf22f4",
+   "drawings.linear.recordDisplayDrafts": "4f53cda18c2baa0c",
+   "drawings.linear.recordsOff": "4f53cda18c2baa0c",
+   "drawings.linear.selectedPalette": "d75d3e8804c53838",
+   "drawings.linear.unmanagedConfigOverrides": "f4e6f129e5dbad15",
+   "drawings.linear.form.legend": "6157fe4ca13ffd6b",
    "drawings.linear.adv.plot_title_position": "90ac7d874c657830"
   }
  }

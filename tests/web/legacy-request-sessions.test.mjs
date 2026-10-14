@@ -4,6 +4,11 @@
 // `helpers/load-oracle-probe.mjs` for each full fixture, recorded in
 // `legacy-request-load.expected.json` as one SHA-256 per state area and saved
 // part. The committed request is recorded apart: a new reading changes it.
+// The record is the Load of PR-D: the lift and Load's configuration check
+// running the decoder's migration of a stored full config (OV-790). It equals
+// the base Load with that migration added, but for the differences the
+// hand-off of PR-D step D2 classes (no rows for Python's "none" small tick
+// interval, OV-791; schema-1 comparisons read as their schema-2 re-saves).
 //
 //   UPDATE_LEGACY_LOAD_EXPECTATIONS=1 node --test tests/web/legacy-request-sessions.test.mjs
 //
@@ -100,16 +105,12 @@ const recorded = (dump) => ({
   }
 });
 const runProbe = promisify(execFile);
-const probe = async (name, validator) => JSON.parse((await runProbe(
-  process.execPath, [PROBE, '--validator', validator, fileURLToPath(new URL(name, SESSIONS))],
+const probe = async (name) => JSON.parse((await runProbe(
+  process.execPath, [PROBE, fileURLToPath(new URL(name, SESSIONS))],
   { maxBuffer: 1 << 28, cwd: fileURLToPath(new URL('../../', import.meta.url)) }
 )).stdout);
 
-// `strict` is the Load as it is; `migrated` runs the decoder's migration of a
-// stored full `config` in the Load's configuration check (OV-790), so it
-// shows what the rest of the Load reads from a schema-1 request.
-// The file keeps each distinct area map once (`areaSets`), and `"strict"` for
-// a `migrated` record equal to the `strict` one.
+// The file keeps each distinct area map once (`areaSets`).
 const packed = (records) => {
   const areaSets = {};
   const pack = ({ oracle, requests }) => {
@@ -117,23 +118,15 @@ const packed = (records) => {
     areaSets[key] = oracle.areas;
     return { oracle: { ...oracle, areas: key }, requests };
   };
-  const fixtures = Object.fromEntries(Object.entries(records).map(([name, { strict, migrated }]) => [name, {
-    strict: pack(strict),
-    migrated: JSON.stringify(strict) === JSON.stringify(migrated) ? 'strict' : pack(migrated)
-  }]));
+  const fixtures = Object.fromEntries(Object.entries(records).map(([name, record]) => [name, pack(record)]));
   return { fixtures, areaSets: Object.fromEntries(Object.entries(areaSets).sort()) };
 };
-const unpacked = ({ fixtures, areaSets }) => Object.fromEntries(Object.entries(fixtures).map(([name, { strict, migrated }]) => {
-  const unpack = (record) => ({ ...record, oracle: { ...record.oracle, areas: areaSets[record.oracle.areas] } });
-  return [name, { strict: unpack(strict), migrated: unpack(migrated === 'strict' ? strict : migrated) }];
-}));
+const unpacked = ({ fixtures, areaSets }) => Object.fromEntries(Object.entries(fixtures).map(([name, record]) => (
+  [name, { ...record, oracle: { ...record.oracle, areas: areaSets[record.oracle.areas] } }]
+)));
 
-test('Load and Save of each legacy full fixture are what the base records', async () => {
-  const actual = {};
-  for (const name of FULL_FIXTURES) {
-    const [strict, migrated] = await Promise.all(['strict', 'migrated'].map((validator) => probe(name, validator)));
-    actual[name] = { strict: recorded(strict), migrated: recorded(migrated) };
-  }
+test('Load and Save of each legacy full fixture are what the record holds', async () => {
+  const actual = Object.fromEntries(await Promise.all(FULL_FIXTURES.map(async (name) => [name, recorded(await probe(name))])));
   if (process.env.UPDATE_LEGACY_LOAD_EXPECTATIONS === '1') {
     writeFileSync(EXPECTED, `${JSON.stringify(packed(actual), null, 1)}\n`);
     return;
@@ -141,17 +134,13 @@ test('Load and Save of each legacy full fixture are what the base records', asyn
   const expected = unpacked(JSON.parse(readFileSync(EXPECTED, 'utf8')));
   assert.deepEqual(Object.keys(actual), Object.keys(expected));
   for (const name of FULL_FIXTURES) {
-    for (const validator of ['strict', 'migrated']) {
-      const { oracle } = actual[name][validator];
-      const want = expected[name][validator].oracle;
-      const changed = Object.keys({ ...oracle.areas, ...want.areas }).filter((area) => oracle.areas[area] !== want.areas[area]);
-      assert.deepEqual(changed, [], `${name} (${validator}): areas changed`);
-      assert.deepEqual(oracle, want, `${name} (${validator})`);
-    }
+    const { oracle } = actual[name];
+    const want = expected[name].oracle;
+    const changed = Object.keys({ ...oracle.areas, ...want.areas }).filter((area) => oracle.areas[area] !== want.areas[area]);
+    assert.deepEqual(changed, [], `${name}: areas changed`);
+    assert.deepEqual(oracle, want, name);
   }
   // Recorded apart: the committed and saved requests (a new reading changes them).
-  const requests = (records) => Object.fromEntries(Object.entries(records).map(([name, { strict, migrated }]) => [
-    name, { strict: strict.requests, migrated: migrated.requests }
-  ]));
+  const requests = (records) => Object.fromEntries(Object.entries(records).map(([name, { requests: stored }]) => [name, stored]));
   assert.deepEqual(requests(actual), requests(expected));
 });

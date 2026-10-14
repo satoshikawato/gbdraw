@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -51,6 +52,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEPTH_FILE_SCHEMA", "gbdraw.session_io", "DEPTH_FILE_SCHEMA"),
     ("DEPTH_FILE_ENCODING", "gbdraw.session_io", "DEPTH_FILE_ENCODING"),
     ("LEGEND_POSITIONS", "gbdraw.api.options", "LEGEND_POSITIONS"),
+    ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.config.models.objects", "UNSET_NUMBER_SPELLINGS"),
     # Session field sets: the keys of the classes of gbdraw/session_contract.py.
     ("FLAT_DRAFT_TOP_LEVEL_FIELDS", "gbdraw.session_io", "FLAT_DRAFT_TOP_LEVEL_FIELDS"),
     ("OTHER_MODE_RESULT_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_FIELDS"),
@@ -60,12 +62,22 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("OTHER_MODE_RESULT_RUN_METADATA_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_RUN_METADATA_FIELDS"),
     ("CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS", "gbdraw.session_io", "CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS"),
 )
-_CAPABILITIES = ("EXPECTED_WEB_RUNTIME_CAPABILITIES", "gbdraw.web_support.capabilities", "get_web_runtime_capabilities")
+# (Web name, Python module, function): values a Python function derives from
+# its owner, written in this order after the constants.
+_DERIVED: tuple[tuple[str, str, str], ...] = (
+    ("EXPECTED_WEB_RUNTIME_CAPABILITIES", "gbdraw.web_support.capabilities", "get_web_runtime_capabilities"),
+    ("CONFIG_UNSET_NUMBER_PATHS", "gbdraw.config.modify", "config_paths_reading_unset_spellings"),
+    ("LEGACY_REQUEST_TABLES", "gbdraw.session_request_codec", "describe_legacy_request_tables"),
+)
 _IDENTIFIER = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*|0|[1-9][0-9]*")
 
 
 def _scalar(value: object) -> str:
-    if isinstance(value, bool) or not isinstance(value, (int, str)):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and math.isfinite(value):
+        return repr(value)
+    if not isinstance(value, (int, str)):
         raise TypeError(f"Unsupported Web contract value: {value!r}")
     if isinstance(value, int):
         return str(value)
@@ -78,9 +90,9 @@ def _frozen(value: object, indent: str = "") -> str:
     if isinstance(value, dict):
         fields = []
         for key, item in value.items():
-            if not _IDENTIFIER.fullmatch(str(key)):
-                raise TypeError(f"Unsupported Web contract key: {key!r}")
-            fields.append(f"{inner}{key}: {_frozen(item, inner)}")
+            # A key that is no identifier or index is quoted (a dotted config path).
+            name = str(key) if _IDENTIFIER.fullmatch(str(key)) else json.dumps(key)
+            fields.append(f"{inner}{name}: {_frozen(item, inner)}")
         return "Object.freeze({\n" + ",\n".join(fields) + f"\n{indent}}})"
     if isinstance(value, list):
         return "Object.freeze([" + ", ".join(_scalar(item) for item in value) + "])"
@@ -122,9 +134,14 @@ def render_web_contracts_module() -> str:
     for web_name, module, name in _CONSTANTS:
         value = getattr(importlib.import_module(module), name)
         parts.append(_owner(module, name) + _declaration(web_name, value))
-    web_name, module, name = _CAPABILITIES
-    manifest = getattr(importlib.import_module(module), name)()
-    parts.append(_owner(module, f"{name}()") + f"export const {web_name} = {_frozen(manifest)};\n")
+    for web_name, module, name in _DERIVED:
+        value = getattr(importlib.import_module(module), name)()
+        declaration = (
+            _declaration(web_name, value)
+            if isinstance(value, (frozenset, set))
+            else f"export const {web_name} = {_frozen(value)};\n"
+        )
+        parts.append(_owner(module, f"{name}()") + declaration)
     return "\n".join(parts)
 
 

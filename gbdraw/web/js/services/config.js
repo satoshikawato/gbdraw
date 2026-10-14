@@ -151,6 +151,7 @@ import {
   migrateLegacyLinearComparisonDraft,
   promoteGallerySessionToCurrent
 } from './gallery-session-migration.js';
+import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import {
   compressSessionData,
   largeSessionDownloadMegabytes
@@ -1243,6 +1244,21 @@ const applyModeSliceData = (drawing, mode, slice, {
 
 const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
 
+/**
+ * The Session with a stored request of schema 1 or 2 read as schema 5 (PR-D);
+ * any other Session as it is.
+ * @template {Record<string, unknown>} T
+ * @param {T} data
+ * @param {LoadRepair[]} repairs
+ * @returns {T}
+ */
+const withLiftedRenderRequest = (data, repairs) => {
+  const lifted = liftLegacyRenderRequest(data.renderRequest);
+  if (lifted.value === data.renderRequest) return data;
+  repairs.push(...lifted.repairs);
+  return { ...data, renderRequest: lifted.value };
+};
+
 /** @param {LoadRepair[]} repairs */
 const normalizeSessionData = (data, repairs) => {
   const version = data.version;
@@ -1927,12 +1943,14 @@ const preflightSessionImport = async (sessionData, repairs) => {
     migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   }
 
+  // A stored request of schema 1 or 2 is read as schema 5 (PR-D); the
+  // Gallery promotion of a schema-2 Session reads its own.
   const promotedData = !currentSession && (
     sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
     Number(normalizedData.renderRequest?.schema) === 2
   )
-    ? readRebuiltGalleryRequest(promoteGallerySessionToCurrent(normalizedData), repairs)
-    : normalizedData;
+    ? readRebuiltGalleryRequest(promoteGallerySessionToCurrent(normalizedData, { repairs }), repairs)
+    : withLiftedRenderRequest(normalizedData, repairs);
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
   await validateSessionLosatArtifactsForImport(promotedData, sourceSessionVersion);
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');

@@ -23,12 +23,14 @@ import {
   resolveLinearComparisonPlan
 } from './linear-comparisons.js';
 import { textToBase64, textToBytes } from './file-content-cache.js';
+import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import { SESSION_VERSION } from '../contracts/schema.generated.js';
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
 /** @typedef {{ losatCache?: { entries?: unknown } | null }} LosatCacheSession A Session as the conservation restore reads it. */
 /** @typedef {{ filename?: unknown, text?: unknown }} CachedLosatEntry */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+/** @import { LoadRepair } from '../utils/load-repairs.js' */
 
 
 /**
@@ -738,9 +740,10 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
 
 /**
  * @param {Record<string, any>} session An unvalidated historical Gallery Session.
+ * @param {{ repairs?: LoadRepair[] }} [options] `repairs` receives what the read of its request could not carry.
  * @returns {Record<string, any>} A current-request Session with its flat draft (`config`), which publication and Load split into mode slices.
  */
-export const promoteGallerySessionToCurrent = (session) => {
+export const promoteGallerySessionToCurrent = (session, { repairs } = {}) => {
   if (!isPlainObject(session) || !isPlainObject(session.renderRequest)) {
     throw new Error('Gallery session must contain a canonical renderRequest.');
   }
@@ -776,7 +779,11 @@ export const promoteGallerySessionToCurrent = (session) => {
   const args = sessionArgs(session);
   const cliAuthored = isPlainObject(session?.config?.cliOptions)
     && !isPlainObject(session?.config?.linearRecordLayout);
+  // Its request is read as schema 5 (PR-D) before the projection reads it.
+  const lifted = liftLegacyRenderRequest(session.renderRequest);
+  repairs?.push(...lifted.repairs);
+  const liftedSession = { ...session, renderRequest: lifted.value };
   return cliAuthored
-    ? promoteCliAuthoredSession(session, args)
-    : promoteGuiAuthoredSession(session, args);
+    ? promoteCliAuthoredSession(liftedSession, args)
+    : promoteGuiAuthoredSession(liftedSession, args);
 };

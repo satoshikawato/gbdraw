@@ -220,11 +220,11 @@ class _LegacyStandardCollinearityPayload:
 
     def to_lossless(self) -> LosslessCollinearityParameters:
         return LosslessCollinearityParameters(
-            min_anchors=self.min_anchors,
-            max_unit_gap=self.max_gene_gap,
-            max_diagonal_drift=self.max_diagonal_drift,
-            max_conflicts=self.max_conflicts_in_merge_gap,
-            merge_orientation="either",
+            **{
+                lossless: getattr(self, standard)
+                for standard, lossless in _LEGACY_STANDARD_COLLINEARITY_FIELDS.items()
+            },
+            merge_orientation=_LEGACY_STANDARD_MERGE_ORIENTATION,
         )
 
 
@@ -283,6 +283,23 @@ _LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
 _LEGACY_CONFIG_OVERRIDE_KEYS = {
     "depth_tick_interval": "depth_large_tick_interval",
 }
+# Schemas 1-2 diagramOptions names of the feature visibility table.
+_LEGACY_FEATURE_VISIBILITY_RENAMES = (
+    ("featureTable", "featureVisibilityTable"),
+    ("featureTableFile", "featureVisibilityTableFile"),
+)
+# A ``kind=standard`` collinearity payload (schemas 1-2) read as lossless
+# parameters: standard field -> lossless field, and the merge orientation.
+_LEGACY_STANDARD_COLLINEARITY_FIELDS = {
+    "min_anchors": "min_anchors",
+    "max_gene_gap": "max_unit_gap",
+    "max_diagonal_drift": "max_diagonal_drift",
+    "max_conflicts_in_merge_gap": "max_conflicts",
+}
+_LEGACY_STANDARD_MERGE_ORIENTATION: Literal["either"] = "either"
+# The paralog link setting a ``kind=standard`` payload's own value replaces
+# in collinear mode, when the setting holds this default.
+_LEGACY_PARALOG_LINKS_DEFAULT = 2
 _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES = {
     "label_placement": {
         "on_feature": "above_feature",
@@ -1953,10 +1970,7 @@ def _migrate_legacy_feature_visibility_fields(
     """Move removed feature-table aliases at the legacy schema boundary."""
 
     migrated = dict(payload)
-    for old_name, current_name in (
-        ("featureTable", "featureVisibilityTable"),
-        ("featureTableFile", "featureVisibilityTableFile"),
-    ):
+    for old_name, current_name in _LEGACY_FEATURE_VISIBILITY_RENAMES:
         if old_name not in migrated:
             continue
         old_value = migrated.pop(old_name)
@@ -2767,7 +2781,7 @@ def _decode_option_value(
     if schema < DISPLAY_PLACEMENT_SCHEMA:
         value = _without_unwritten_feature_tolerance(name, value, CanonicalRequestDecodingError)
     if name == "config":
-        return _migrate_legacy_full_config(
+        return migrate_legacy_full_config(
             _object(value, path="renderRequest.diagramOptions.config"),
             mode=mode,
             path="renderRequest.diagramOptions.config",
@@ -2836,13 +2850,17 @@ def _decode_option_value(
     return value
 
 
-def _migrate_legacy_full_config(
+def migrate_legacy_full_config(
     value: Mapping[str, Any],
     *,
     mode: Literal["circular", "linear"],
     path: str,
 ) -> dict[str, Any]:
-    """Move persisted config aliases onto the current typed schema."""
+    """Move persisted config aliases onto the current typed schema.
+
+    The decoder reads every stored full ``config`` with it, and so does the Web
+    Load check of a stored request (OV-790).
+    """
 
     migrated = deepcopy(dict(value))
     canvas = migrated.get("canvas")
@@ -4178,7 +4196,8 @@ def _decode_pipeline(
     if (
         mode == "collinear"
         and legacy_max_paralog_links is not None
-        and result["collinear_max_paralog_links_per_orthogroup"] == 2
+        and result["collinear_max_paralog_links_per_orthogroup"]
+        == _LEGACY_PARALOG_LINKS_DEFAULT
     ):
         result["collinear_max_paralog_links_per_orthogroup"] = (
             legacy_max_paralog_links
@@ -4941,6 +4960,55 @@ def _undescribed_parts(payload: object) -> list[str]:
     return violations(payload, ref(description["root"]), description["types"], "renderRequest")
 
 
+def describe_legacy_request_tables() -> dict[str, Any]:
+    """The tables of the request schemas 1-2 reading, with wire names.
+
+    The Web lift of a stored schema 1 or 2 request into schema 5
+    (``gbdraw/web/js/services/legacy-render-request.js``) reads them from the
+    generated ``LEGACY_REQUEST_TABLES``; this module's tables stay their owner.
+    """
+
+    paralog_key = next(
+        key
+        for key, _owner, name in _PROTEIN_SETTINGS_WIRE
+        if name == "collinear_max_paralog_links_per_orthogroup"
+    )
+    return {
+        "comparisonDefaults": {
+            _option_wire_key(name): value
+            for name, value in _LEGACY_SPARSE_COMPARISON_DEFAULTS.items()
+        },
+        "featureTypes": list(_LEGACY_SPARSE_FEATURE_TYPES),
+        "configOverrides": {
+            mode: dict(overrides)
+            for mode, overrides in _LEGACY_SPARSE_CONFIG_OVERRIDES.items()
+        },
+        "configOverrideRenames": dict(_LEGACY_CONFIG_OVERRIDE_KEYS),
+        "linearConfigOverrideValues": {
+            name: dict(values)
+            for name, values in _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES.items()
+        },
+        # The canonical paths of the flat names the lift reads by value: the
+        # Linear values above and a comparison height (B17, Web only).
+        "configOverridePaths": {
+            name: list(_LEGACY_FLAT_CONFIG_OVERRIDE_PATHS[name])
+            for name in (*_LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES, "comparison_height")
+        },
+        "diagramOptionRenames": dict(_LEGACY_FEATURE_VISIBILITY_RENAMES),
+        "collinearityStandardParameters": [
+            _camel(item.name) for item in fields(_LegacyStandardCollinearityPayload)
+        ],
+        "collinearityStandardFields": {
+            _camel(standard): _camel(lossless)
+            for standard, lossless in _LEGACY_STANDARD_COLLINEARITY_FIELDS.items()
+        },
+        "collinearityMergeOrientation": _LEGACY_STANDARD_MERGE_ORIENTATION,
+        "collinearityStandardParalogLinks": _camel("max_paralog_links_per_orthogroup"),
+        "paralogLinksSetting": paralog_key,
+        "paralogLinksDefault": _LEGACY_PARALOG_LINKS_DEFAULT,
+    }
+
+
 def describe_canonical_request() -> dict[str, Any]:
     """Describe the JSON of a current-schema request as neutral data.
 
@@ -5377,7 +5445,9 @@ __all__ = [
     "decode_canonical_typed_resource",
     "decode_canonical_request",
     "describe_canonical_request",
+    "describe_legacy_request_tables",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
+    "migrate_legacy_full_config",
     "with_automatic_scale_interval",
 ]

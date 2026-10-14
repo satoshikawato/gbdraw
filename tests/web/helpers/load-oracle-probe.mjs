@@ -9,7 +9,8 @@
 // `tests/web/helpers/` and `tests/web/fake-svg-dom.mjs` are loaded, so one
 // probe measures any commit. `<input>` is a Session file (.json or .json.gz)
 // or `git:<blob>[:<name>]`, read with `git cat-file` in the current
-// directory's repository. One process per input: Load state is module-global.
+// directory's repository; Load reads its bytes as the browser does (gzip
+// included). One process per input: Load state is module-global.
 //
 // The dump: `load` (status, error, the dialogs the Load port was asked, the
 // repairs, the after-Load notices); `state`, what a Load replaces, by area
@@ -22,9 +23,9 @@
 // and `crypto.randomUUID` counts, so the dump is the same on every run.
 //
 // `--validator migrated` runs Python's decoder migration of a stored full
-// `config` (`_migrate_legacy_full_config`) in the Load's configuration
-// check, which today refuses `canvas.show_labels` (OV-790): it shows what
-// the rest of the Load does with such a request.
+// `config` in the Load's configuration check of a tree older than PR-D,
+// which refuses `canvas.show_labels` there (OV-790): it shows what the rest
+// of that Load does with such a request. From PR-D the check runs it itself.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { gunzipSync } from 'node:zlib';
@@ -88,8 +89,9 @@ import json, sys
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 p = json.load(sys.stdin)
 if p.get('migrateConfig') and isinstance(p.get('config'), dict):
-    from gbdraw.session_request_codec import _migrate_legacy_full_config
-    p['config'] = _migrate_legacy_full_config(p['config'], mode=p['mode'], path='renderRequest.diagramOptions.config')
+    import gbdraw.session_request_codec as codec
+    if hasattr(codec, '_migrate_legacy_full_config'):
+        p['config'] = codec._migrate_legacy_full_config(p['config'], mode=p['mode'], path='renderRequest.diagramOptions.config')
 print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
     json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['requireUnmanagedOnly']))
 `], { input: JSON.stringify({ ...payload, migrateConfig: VALIDATOR_MODE === 'migrated' }), encoding: 'utf8', cwd: TREE }));
@@ -211,7 +213,10 @@ const dump = {
 const dialogs = [];
 let loaded;
 try {
-  loaded = await importSession({ target: { files: [new File([text], 'session.json', { type: 'application/json' })], value: 'selected' } }, {
+  const file = isGzip(source.raw)
+    ? new File([source.raw], 'session.json.gz', { type: 'application/gzip' })
+    : new File([source.raw], 'session.json', { type: 'application/json' });
+  loaded = await importSession({ target: { files: [file], value: 'selected' } }, {
     transformLegacyResultSvg,
     confirmLoadRepairs: async (dialog) => { dialogs.push(canon(dialog)); return true; }
   });

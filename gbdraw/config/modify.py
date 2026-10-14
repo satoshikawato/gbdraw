@@ -17,7 +17,7 @@ from gbdraw.exceptions import ValidationError
 
 from .models import GbdrawConfig
 from .models.canvas import linear_axis_ruler_applies
-from .models.objects import circular_definition_interval_for_font
+from .models.objects import UNSET_NUMBER_SPELLINGS, circular_definition_interval_for_font
 from .models.root import validate_style_leaf
 
 
@@ -119,6 +119,38 @@ def config_to_raw_dict(config: GbdrawConfig) -> dict[str, Any]:
     # fields separately, which is not the input shape expected by from_dict().
     raw["labels"]["filtering"] = deepcopy(config.labels.filtering.as_dict())
     return raw
+
+
+@lru_cache(maxsize=1)
+def config_paths_reading_unset_spellings() -> frozenset[str]:
+    """The leaf paths whose reader takes every ``UNSET_NUMBER_SPELLINGS`` text as unset.
+
+    A stored full config writes an unset optional number as Python's config
+    file does (``small_tick_interval = "none"``); the Web reads it as unset
+    there and nowhere else (OV-791).
+    """
+
+    from .toml import load_config_toml
+
+    default = config_to_raw_dict(GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")))
+    paths = set()
+    for path in canonical_config_override_paths():
+        if path == "labels.filtering.raw":
+            continue
+        try:
+            unset = True
+            for spelling in sorted(UNSET_NUMBER_SPELLINGS):
+                raw = deepcopy(default)
+                _set_raw_config_path(raw, path, spelling)
+                parent, _, leaf = path.rpartition(".")
+                read = _raw_config_value(config_to_raw_dict(GbdrawConfig.from_dict(raw)), parent)
+                unset = unset and isinstance(read, MappingABC) and leaf in read and read[leaf] is None
+        except (ValidationError, KeyError, TypeError, ValueError, IndexError, AttributeError):
+            # The leaf does not read text at all.
+            continue
+        if unset:
+            paths.add(path)
+    return frozenset(paths)
 
 
 def with_config_overrides(
@@ -446,6 +478,7 @@ def modify_config_dict(
 
 __all__ = [
     "canonical_config_override_paths",
+    "config_paths_reading_unset_spellings",
     "config_to_raw_dict",
     "modify_config_dict",
     "validate_config_overrides",

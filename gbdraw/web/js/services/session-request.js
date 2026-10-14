@@ -99,6 +99,8 @@ import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignm
 import { isCurrentRequestSchema } from '../utils/request-schema.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
+  CONFIG_UNSET_NUMBER_PATHS,
+  CONFIG_UNSET_NUMBER_SPELLINGS,
   SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 } from '../contracts/schema.generated.js';
@@ -4258,6 +4260,13 @@ const projectFullConfigOverrides = (config, mode) => {
   paths.forEach((path) => {
     const value = nestedConfigValue(config, path);
     if (value !== undefined) projected[path] = value;
+  });
+  // A number Python's config reads as unset ("none", "auto") is the Web's null (OV-791).
+  CONFIG_UNSET_NUMBER_PATHS.forEach((path) => {
+    const value = projected[path];
+    if (typeof value === 'string' && CONFIG_UNSET_NUMBER_SPELLINGS.includes(value.trim().toLowerCase())) {
+      projected[path] = null;
+    }
   });
   if (!Object.prototype.hasOwnProperty.call(projected, labelScopePath)) {
     const modeShowLabels = nestedConfigValue(config, `canvas.${mode}.show_labels`);

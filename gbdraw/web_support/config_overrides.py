@@ -16,7 +16,7 @@ from gbdraw.config.modify import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.labels.filtering import DERIVED_LABEL_FILTERING_KEYS
-from gbdraw.session_request_codec import with_automatic_scale_interval
+from gbdraw.session_request_codec import migrate_legacy_full_config, with_automatic_scale_interval
 from gbdraw.web_support.error_adapter import serialize_web_error
 
 
@@ -76,6 +76,9 @@ def validate_and_project_web_config_overrides(
     # Web Load checks a stored request, which reads a scale interval <= 0 as automatic.
     stored = with_automatic_scale_interval({"config": config, "configOverrides": overrides})
     config, overrides = stored["config"], stored["configOverrides"]
+    # It reads a stored full config as the request decoder reads it (OV-790).
+    if isinstance(config, Mapping):
+        config = migrate_legacy_full_config(config, mode=mode, path="diagramOptions.config")
     if overrides is not None and not isinstance(overrides, Mapping):
         raise ValidationError("diagramOptions.configOverrides must be an object or null.")
     if managed_paths is None:

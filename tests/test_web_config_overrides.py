@@ -180,3 +180,40 @@ def test_explicit_raw_filtering_and_unmanaged_filter_changes_remain_preserved():
         mode="circular", config=config, managed_paths=["labels.filtering.blacklist_keywords"],
     )
     assert projected["labels.filtering.raw"] == raw
+
+
+def _legacy_label_config() -> dict:
+    """A stored full config of a request schema 1 or 2 (Sessions 31-33, OV-790)."""
+    config = load_default_config()
+    config["canvas"]["show_labels"] = True
+    config["canvas"]["circular"]["allow_inner_labels"] = True
+    config["canvas"]["linear"]["track_layout"] = "spreadout"
+    config["labels"]["circular"].pop("scope")
+    config["labels"]["linear"].pop("scope")
+    config["labels"]["linear"]["placement"] = "on_feature"
+    return config
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_stored_full_config_is_read_as_the_request_decoder_reads_it(mode):
+    # The Load check reads a stored config with the decoder's migration of
+    # retired config keys (OV-790), as decode_canonical_request does.
+    from gbdraw.session_request_codec import migrate_legacy_full_config
+
+    legacy = _legacy_label_config()
+    migrated = migrate_legacy_full_config(legacy, mode=mode, path="diagramOptions.config")
+    assert "show_labels" not in migrated["canvas"]
+    projected = validate_and_project_web_config_overrides(mode=mode, config=legacy, managed_paths=[])
+    assert projected == validate_and_project_web_config_overrides(
+        mode=mode, config=migrated, managed_paths=[]
+    )
+    assert projected[f"labels.{mode}.scope"] == ("both" if mode == "circular" else "all")
+    assert legacy["canvas"]["show_labels"] is True
+
+
+def test_stored_full_config_with_conflicting_label_values_is_refused():
+    legacy = _legacy_label_config()
+    legacy["canvas"]["show_labels"] = False
+    legacy["canvas"]["circular"]["show_labels"] = True
+    result = json.loads(validate_web_config_overrides_json("circular", json.dumps(legacy), "null", "[]"))
+    assert result["error"]["operation"] == "validateConfigOverrides"
