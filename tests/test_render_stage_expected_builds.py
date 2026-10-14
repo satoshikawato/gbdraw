@@ -139,6 +139,14 @@ _RECORD_CONTENT_OPTIONS = (
     "scale_font_size", "ruler_label_font_size", "ruler_label_color",
 )
 
+# The options Circular label placement reads: the arrow geometry the labels
+# anchor on, the outer content radius of the radial layout (axis and scale
+# bands) they clear, and the definition text in the centre they avoid.
+_CIRCULAR_LABEL_OPTIONS = (
+    "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_width", "scale_interval", "hide_scale",
+    "keep_full_definition_with_plot_title",
+)
+
 # The group contents an option changes, besides the stages above.
 CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     "annotation_table": frozenset({"annotation_content"}),
@@ -212,6 +220,7 @@ def allowed_builds(option_id: str) -> frozenset[str]:
         EXPECTED_BUILDS.get(option_id, frozenset())
         | CONTENT_BUILDS.get(option_id, frozenset())
         | (frozenset({"record_content"}) if option_id in _RECORD_CONTENT_OPTIONS else frozenset())
+        | (frozenset({"circular_labels"}) if option_id in _CIRCULAR_LABEL_OPTIONS else frozenset())
     )
     if allowed & _RIBBON_INPUTS:
         allowed |= {"comparison_content"}

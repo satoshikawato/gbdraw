@@ -75,11 +75,26 @@ RenderStageName = Literal[
     "derived_losat_entries",
     "feature_layers",
     "feature_dom_index",
+    "circular_labels",
+    "circular_radial_labels",
 ]
 
 # The sections of GbdrawConfig each stage reads (design 2.2). A section is a
 # top node ("canvas", "labels", "objects": its direct values) or one of the
 # dataclasses below it ("labels.filtering", "objects.features", ...).
+_CIRCULAR_LABEL_SECTIONS = frozenset(
+    {
+        "canvas",
+        "canvas.circular",
+        "labels",
+        "labels.font_size",
+        "labels.length_threshold",
+        "labels.spacing",
+        "labels.unified_adjustment",
+        "objects.features",
+        "objects.text",
+    }
+)
 RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "color_rules": frozenset(),
     "default_colors": frozenset(),
@@ -119,6 +134,11 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "derived_losat_entries": frozenset(),
     "feature_layers": frozenset(),
     "feature_dom_index": frozenset(),
+    # One function (CA ``circular_labels``) under two names: radial labels also
+    # replan the radial layout as they grow the radius, which reads the axis
+    # and tick sections; horizontal labels never do.
+    "circular_labels": _CIRCULAR_LABEL_SECTIONS,
+    "circular_radial_labels": _CIRCULAR_LABEL_SECTIONS | {"objects.axis", "objects.scale", "objects.ticks"},
 }
 
 _TOP_SECTIONS = ("canvas", "labels", "objects")
