@@ -73,8 +73,7 @@
       "vector": "tests/fixtures/contract_shape_vectors.json",
       "reason": "Python's request decoder and the Web Load check a stored request against the same generated description (contracts/request-shape.generated.js); the vectors pin the reason codes, and jsonDifferences lists what JSON.parse and Python's json read differently. A stored request of schemas 5 to 8 can hold another spelling of a comparison setting, which both readers read as its name.",
       "retireWhen": "the Web checks a stored document through the Python Worker; Loading a saved preview leaves the Worker unconstructed (gbdraw/web/CLAUDE.md), so until then the Web keeps its checker",
-      "source": "boundary-audit stage 1d PLAN 3.2 and K3 (PR-C step C1)",
-      "pending": true
+      "source": "boundary-audit stage 1d PLAN 3.2 and K3 (PR-C step C1)"
     },
     {
       "id": "vector:tests/fixtures/default_color_domain.json",

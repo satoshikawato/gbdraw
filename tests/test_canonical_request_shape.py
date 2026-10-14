@@ -651,6 +651,36 @@ def test_every_described_field_is_held_by_a_request_or_named_by_the_decoder(
     assert {name for name in described - held if "DiagramOptions." not in name} == set()
 
 
+def test_a_described_default_decodes_as_the_absent_field(
+    encoded_requests: dict[str, list[Encoded]], tmp_path: Path
+) -> None:
+    """The Web writes a description's default where a stored field is absent
+    (stage 1d PLAN 12.4 rule 3); the decoder must read it as the absent field."""
+
+    exercised: set[str] = set()
+    for found in encoded_requests.values():
+        for payload, resources in found:
+            for path, shape in _objects(payload, ROOT):
+                for key, default in shape.get("defaults", {}).items():
+                    label = f"{LABELS[id(shape)]}.{key}"
+                    if label in exercised:
+                        continue
+                    absent = deepcopy(payload)
+                    target: Any = absent
+                    for step in path:
+                        target = target[step]
+                    target.pop(key, None)
+                    output = tmp_path / "output"
+                    # The encoder writes a decoded request in its one form.
+                    decode = lambda value: encode_canonical_request(decode_canonical_request(  # noqa: E731
+                        value, resource_paths=resources, output_directory=output
+                    )).payload
+                    assert decode(_with(absent, path, key, default)) == decode(absent), label
+                    exercised.add(label)
+    described = {f"{label}.{key}" for label, shape in OBJECTS for key in shape.get("defaults", {})}
+    assert exercised == described
+
+
 def _stored_requests(value: object) -> Iterator[dict[str, Any]]:
     if isinstance(value, dict):
         if value.get("schema") == CANONICAL_REQUEST_SCHEMA and "diagramOptions" in value:

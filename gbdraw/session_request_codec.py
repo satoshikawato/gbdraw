@@ -4119,7 +4119,7 @@ def _decode_pipeline(
     if schema < 8:
         owned_settings.append((_LEGACY_ALIGNMENT_SETTING, "legacy", "align_orthogroup_feature"))
     for key, owner, name in owned_settings:
-        raw = settings.get(key, True) if name == "collinear_infer_orthogroups" else settings[key]
+        raw = settings[key] if key in settings else _absent_protein_setting(key)
         if owner == "search":
             search_values[name] = raw
             continue
@@ -4170,6 +4170,13 @@ def _decode_pipeline(
             legacy_max_paralog_links
         )
     return result
+
+
+def _absent_protein_setting(key: str) -> object:
+    """The value of an optional protein setting (``_OPTIONAL_PROTEIN_SETTINGS``) that a request does not hold."""
+
+    name = next(name for wire, _owner, name in _PROTEIN_SETTINGS_WIRE if wire == key)
+    return getattr(_DEFAULT_LINEAR_OPTIONS, name)
 
 
 def _setting_names(name: str) -> tuple[str, ...]:
@@ -4934,6 +4941,7 @@ def describe_canonical_request() -> dict[str, Any]:
         INTEGER, NULL, NUMBER, STRING, UNKNOWN, Shape,
         array, literal, non_null, nullable, obj, record, ref, shape_of_hint, tuple_of, union,
     )
+    from .session_resources import SessionResourceTable
 
     types_: dict[str, Shape] = {}
 
@@ -5135,8 +5143,17 @@ def describe_canonical_request() -> dict[str, Any]:
         # A shared option of the other mode is accepted at its default only.
         for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
             members.setdefault(_option_wire_key(name), literal(default))
+        # The decoder leaves an absent option at the dataclass default; the
+        # default is written as the encoder writes it, and None is "unset".
+        defaults = _DEFAULT_CIRCULAR_OPTIONS if mode == "circular" else _DEFAULT_LINEAR_OPTIONS
         diagram_options[mode] = named(f"{title}DiagramOptions", obj(
-            members, optional=sorted(set(members) - set(required))
+            members, optional=sorted(set(members) - set(required)), defaults={
+                _option_wire_key(item.name): _encode_option_value(
+                    item.name, getattr(defaults, item.name), resources=SessionResourceTable().request()
+                )
+                for item in fields(options_class)
+                if item.name not in unwritten and getattr(defaults, item.name) is not None
+            },
         ))
 
     # _encode_comparisons; _PROTEIN_SETTINGS_WIRE names each setting's typed owner.
@@ -5167,6 +5184,7 @@ def describe_canonical_request() -> dict[str, Any]:
             "settings": named("ProteinComparisonSettings", obj(
                 {key: of(setting_hints[owner][name]) for key, owner, name in _PROTEIN_SETTINGS_WIRE},
                 optional=sorted(_OPTIONAL_PROTEIN_SETTINGS),
+                defaults={key: _absent_protein_setting(key) for key in _OPTIONAL_PROTEIN_SETTINGS},
             )),
         },
     })

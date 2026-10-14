@@ -1,11 +1,13 @@
 {
  "description": [
   "Shared vectors of the structural checker of a gbdraw.contract_shapes description:",
-  "Python's gbdraw.contract_shapes.violations (tests/test_contract_shape_vectors.py) and,",
-  "with stage 1d PR-C, the Web's twin. Each vector checks value against shape, with the",
-  "named shapes of types, from the root path \"value\"; violations lists \"<path>: <reason>\"",
-  "in order. A reason never repeats the value. Only values JSON.parse and Python's json",
-  "read alike are listed (1.0 is an integer to JSON.parse and a float to Python)."
+  "Python's gbdraw.contract_shapes.shape_violations (tests/test_contract_shape_vectors.py) and",
+  "its Web twin shapeViolations in gbdraw/web/js/utils/contract-shape.js",
+  "(tests/web/contract-shape-vectors.test.mjs). Each vector checks value against shape, with",
+  "the named shapes of types, from the root path \"value\"; violations lists each {path, reason}",
+  "in order, and reasons lists every reason code both checkers report. A reason never repeats",
+  "the value. Only values JSON.parse and Python's json read alike are vectors; jsonDifferences",
+  "lists the JSON texts the two read differently, with each checker's violations."
  ],
  "types": {
   "Point": {
@@ -35,7 +37,10 @@
     "a": 1
    },
    "violations": [
-    "value.a: unknown field"
+    {
+     "path": "value.a",
+     "reason": "unknown-key"
+    }
    ]
   },
   {
@@ -65,7 +70,10 @@
    },
    "value": {},
    "violations": [
-    "value.a: required field is absent"
+    {
+     "path": "value.a",
+     "reason": "missing-key"
+    }
    ]
   },
   {
@@ -102,7 +110,10 @@
     "b": 1
    },
    "violations": [
-    "value.a: expected integer"
+    {
+     "path": "value.a",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -112,7 +123,10 @@
    },
    "value": true,
    "violations": [
-    "value: expected integer"
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -122,7 +136,10 @@
    },
    "value": 0.5,
    "violations": [
-    "value: expected integer"
+    {
+     "path": "value",
+     "reason": "non-integer"
+    }
    ]
   },
   {
@@ -140,7 +157,10 @@
    },
    "value": false,
    "violations": [
-    "value: expected number"
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -150,7 +170,10 @@
    },
    "value": null,
    "violations": [
-    "value: expected string"
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
    ]
   },
   {
@@ -160,7 +183,10 @@
    },
    "value": 0,
    "violations": [
-    "value: expected boolean"
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -173,7 +199,10 @@
    },
    "value": 1,
    "violations": [
-    "value: expected one of [true]"
+    {
+     "path": "value",
+     "reason": "not-in-set"
+    }
    ]
   },
   {
@@ -187,7 +216,10 @@
    },
    "value": "1",
    "violations": [
-    "value: expected one of [1,\"a\"]"
+    {
+     "path": "value",
+     "reason": "not-in-set"
+    }
    ]
   },
   {
@@ -214,7 +246,10 @@
     "a"
    ],
    "violations": [
-    "value[1]: expected integer"
+    {
+     "path": "value[1]",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -227,7 +262,10 @@
    },
    "value": {},
    "violations": [
-    "value: expected an array"
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -247,7 +285,10 @@
     1
    ],
    "violations": [
-    "value: expected 2 items"
+    {
+     "path": "value",
+     "reason": "tuple-length"
+    }
    ]
   },
   {
@@ -268,7 +309,10 @@
     2
    ],
    "violations": [
-    "value[1]: expected string"
+    {
+     "path": "value[1]",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -293,7 +337,10 @@
     "l": "x"
    },
    "violations": [
-    "value.k: expected string"
+    {
+     "path": "value.k",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -306,7 +353,10 @@
    },
    "value": [],
    "violations": [
-    "value: expected an object"
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -319,7 +369,10 @@
    },
    "value": null,
    "violations": [
-    "value: expected an object"
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
    ]
   },
   {
@@ -379,7 +432,10 @@
     "x": 1
    },
    "violations": [
-    "value.x: expected string"
+    {
+     "path": "value.x",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -397,7 +453,10 @@
    },
    "value": 0.5,
    "violations": [
-    "value: expected string"
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -411,7 +470,10 @@
     "y": "2"
    },
    "violations": [
-    "value.y: expected integer"
+    {
+     "path": "value.y",
+     "reason": "wrong-kind"
+    }
    ]
   },
   {
@@ -442,7 +504,10 @@
     ]
    },
    "violations": [
-    "value.a[1].y: required field is absent"
+    {
+     "path": "value.a[1].y",
+     "reason": "missing-key"
+    }
    ]
   },
   {
@@ -457,6 +522,378 @@
     ]
    },
    "violations": []
+  },
+  {
+   "id": "null-is-not-a-literal-without-null",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "a"
+    ]
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "null-is-not-an-array",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "integer"
+    }
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "null-is-not-a-tuple",
+   "shape": {
+    "kind": "tuple",
+    "items": [
+     {
+      "kind": "integer"
+     }
+    ]
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "null-is-not-an-object",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "null-in-a-union-without-null",
+   "shape": {
+    "kind": "union",
+    "options": [
+     {
+      "kind": "string"
+     },
+     {
+      "kind": "integer"
+     }
+    ]
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "string-is-not-integer",
+   "shape": {
+    "kind": "integer"
+   },
+   "value": "1",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "string-is-not-an-array",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "integer"
+    }
+   },
+   "value": "a",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "tuple-too-long",
+   "shape": {
+    "kind": "tuple",
+    "items": [
+     {
+      "kind": "integer"
+     }
+    ]
+   },
+   "value": [
+    1,
+    2
+   ],
+   "violations": [
+    {
+     "path": "value",
+     "reason": "tuple-length"
+    }
+   ]
+  },
+  {
+   "id": "inherited-name-is-not-a-field",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "toString": {
+      "kind": "string"
+     }
+    },
+    "optional": [],
+    "open": false
+   },
+   "value": {},
+   "violations": [
+    {
+     "path": "value.toString",
+     "reason": "missing-key"
+    }
+   ]
+  },
+  {
+   "id": "inherited-name-is-an-unknown-key",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "value": {
+    "constructor": 1,
+    "hasOwnProperty": 2
+   },
+   "violations": [
+    {
+     "path": "value.constructor",
+     "reason": "unknown-key"
+    },
+    {
+     "path": "value.hasOwnProperty",
+     "reason": "unknown-key"
+    }
+   ]
+  },
+  {
+   "id": "inherited-name-at-a-record",
+   "shape": {
+    "kind": "record",
+    "values": {
+     "kind": "integer"
+    }
+   },
+   "value": {
+    "toString": "x"
+   },
+   "violations": [
+    {
+     "path": "value.toString",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "optional-field-of-another-kind",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "integer"
+     }
+    },
+    "optional": [
+     "a"
+    ],
+    "open": false
+   },
+   "value": {
+    "a": null
+   },
+   "violations": [
+    {
+     "path": "value.a",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "violations-in-order",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "integer"
+     },
+     "b": {
+      "kind": "integer"
+     },
+     "c": {
+      "kind": "integer"
+     }
+    },
+    "optional": [],
+    "open": false
+   },
+   "value": {
+    "c": "x",
+    "z": 1,
+    "a": 0.5
+   },
+   "violations": [
+    {
+     "path": "value.z",
+     "reason": "unknown-key"
+    },
+    {
+     "path": "value.b",
+     "reason": "missing-key"
+    },
+    {
+     "path": "value.c",
+     "reason": "wrong-kind"
+    },
+    {
+     "path": "value.a",
+     "reason": "non-integer"
+    }
+   ]
+  }
+ ],
+ "reasons": [
+  "unknown-key",
+  "missing-key",
+  "wrong-kind",
+  "null-not-declared",
+  "non-integer",
+  "not-in-set",
+  "tuple-length"
+ ],
+ "jsonDifferences": [
+  {
+   "id": "integral-fraction-at-an-integer",
+   "note": "JSON.parse reads 1.0 as the integer 1; Python's json reads a float.",
+   "shape": {
+    "kind": "integer"
+   },
+   "text": "1.0",
+   "python": [
+    {
+     "path": "value",
+     "reason": "non-integer"
+    }
+   ],
+   "web": []
+  },
+  {
+   "id": "integer-above-2^53-at-an-integer",
+   "note": "Both accept it; JSON.parse rounds it to 9007199254740992.",
+   "shape": {
+    "kind": "integer"
+   },
+   "text": "9007199254740993",
+   "python": [],
+   "web": []
+  },
+  {
+   "id": "integer-above-2^53-at-a-literal",
+   "note": "JSON.parse rounds the value to the literal; Python compares the exact integer.",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     9007199254740992
+    ]
+   },
+   "text": "9007199254740993",
+   "python": [
+    {
+     "path": "value",
+     "reason": "not-in-set"
+    }
+   ],
+   "web": []
+  },
+  {
+   "id": "proto-as-an-own-key",
+   "note": "JSON.parse makes __proto__ an own key, so both report it; a reader must not copy it with assignment.",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "text": "{\"__proto__\": 1}",
+   "python": [
+    {
+     "path": "value.__proto__",
+     "reason": "unknown-key"
+    }
+   ],
+   "web": [
+    {
+     "path": "value.__proto__",
+     "reason": "unknown-key"
+    }
+   ]
+  },
+  {
+   "id": "integer-like-keys-come-first",
+   "note": "A JavaScript object lists integer-like keys first, in ascending order; Python keeps the text's order.",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "text": "{\"b\": 1, \"1\": 2}",
+   "python": [
+    {
+     "path": "value.b",
+     "reason": "unknown-key"
+    },
+    {
+     "path": "value.1",
+     "reason": "unknown-key"
+    }
+   ],
+   "web": [
+    {
+     "path": "value.1",
+     "reason": "unknown-key"
+    },
+    {
+     "path": "value.b",
+     "reason": "unknown-key"
+    }
+   ]
   }
  ]
 }
