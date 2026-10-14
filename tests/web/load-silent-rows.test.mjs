@@ -186,6 +186,22 @@ test('A20: a Result set whose Results Load cannot compose is dropped with its ro
   await saved();
 });
 
+test('OV-789: a Session 27-39 Result Load cannot admit drops the Results with their row before the dialog; the settings load (E-OD17)', async () => {
+  const malformed = '<svg xmlns="http://www.w3.org/2000/svg"><g></svg>';
+  for (const name of ['scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz']) {
+    // A Result that is no SVG, and one the composition transform cannot compose.
+    for (const content of ['x', malformed]) {
+      const session = fixture(name);
+      session.results[0].content = content;
+      session.ui.selectedResultIndex = 0;
+      assert.deepEqual(await load(session), ['session-part-dropped results'], `${name} ${content}`);
+      assert.equal(state.results.value.length, 0);
+      assert.equal(state.biologicalFeatures.value.length, 0);
+      assert.equal(state.mode.value, session.ui.mode);
+    }
+  }
+});
+
 test('OV-822: a configuration file\'s null LOSAT group loads with no row, and saves', async () => {
   assert.deepEqual(await load(BASES.g47L()), []);
   const config = structuredClone(BASES.g47L().modes.linear.config);

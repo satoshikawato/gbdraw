@@ -218,7 +218,9 @@ export const holdsNothing = (value) => value === undefined || value === null
  *   (config-field-readers.js): the reader checks only that each is an object;
  * - `readerOwnedValues`: types whose values the reader table reads: the reader
  *   checks their keys and kind;
- * - `resultSetMembers`: what names a Result set's Results, dropped with them.
+ * - `resultSetMembers`: what names a Result set's Results, dropped with them;
+ *   `features`: the feature state a Session 27-39 recovered from its Results,
+ *   which a Session 40+ holds in its catalog (OV-789).
  * Every top-level key is a part (rule 6), and a cache part is dropped with no
  * row (E-OD05).
  */
@@ -230,7 +232,8 @@ export const SESSION_PART_RULES = Object.freeze({
   readerOwnedValues: Object.freeze(['CheckedSessionModeSliceFeatures']),
   resultSetMembers: Object.freeze({
     session: Object.freeze(['runMetadata', 'cliInvocation']),
-    ui: Object.freeze(['selectedResultIndex', ...ARTIFACT_UI_FIELDS])
+    ui: Object.freeze(['selectedResultIndex', ...ARTIFACT_UI_FIELDS]),
+    features: CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS
   })
 });
 
@@ -344,11 +347,12 @@ const isModeScopedVersion = (document) => document.version >= MODE_SCOPED_SESSIO
  */
 const withoutResultSetMembers = (document) => {
   if (!isPlainObject(document)) return document;
-  const { session, ui: uiMembers } = SESSION_PART_RULES.resultSetMembers;
+  const { session, ui: uiMembers, features: featureMembers } = SESSION_PART_RULES.resultSetMembers;
   const next = Object.fromEntries(Object.entries(document).filter(([key]) => !session.includes(key)));
   if (isPlainObject(document.ui)) {
     next.ui = Object.fromEntries(Object.entries(document.ui).filter(([key]) => !uiMembers.includes(key)));
   }
+  if (Object.hasOwn(document, 'features')) next.features = withoutFields(document.features, (field) => featureMembers.includes(field));
   if (isPlainObject(document.editorState)) next.editorState = { ...document.editorState, featureCatalog: null };
   return next;
 };
@@ -1235,9 +1239,9 @@ const withReadRunNotices = (set) => {
  * before the dialog (E-OD02). The other mode's set is dropped whole when it
  * cannot be restored: without its request (`other-result-set-dropped`, A7g),
  * or with a fault of its own (`session-part-dropped`).
- * A set whose Results Load's composition transform could not compose (A20,
- * `uncomposedSets`: its path prefix) has a `results` fault: Load reads the
- * file again without them (E-OD16).
+ * A set whose Results Load could not admit or compose (A20, `uncomposedSets`:
+ * its path prefix) has a `results` fault: Load reads the file again without
+ * them (E-OD16), in every band (OV-789, E-OD17).
  * @template {SessionInput} T
  * @param {T} sessionData
  * @param {number} version
@@ -1247,15 +1251,14 @@ const withReadRunNotices = (set) => {
  * @returns {T}
  */
 export const readSessionAuthorityParts = (sessionData, version, storedSchemas, repairs, uncomposedSets = []) => {
-  if (version < CANONICAL_SESSION_MIN_VERSION) return sessionData;
   /** @param {ResultSetPath} at @returns {ResultSetFault[]} */
   const uncomposed = (at) => (uncomposedSets.includes(at) ? [{ kind: 'results', message: 'RESULT_UNCOMPOSED' }] : []);
+  // A Session 27-39 holds no committed Result set Save checks: only Load's own fault.
+  const topFaults = version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
+    ? committedResultSetFaults(sessionData, version, storedSchemas.renderRequest ?? storedRequestSchema(sessionData)) : [];
   /** @type {SessionInput} */
-  let data = sessionData;
-  if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
-    data = readCommittedResultSet(data, [...committedResultSetFaults(data, version,
-      storedSchemas.renderRequest ?? storedRequestSchema(data)), ...uncomposed('')], '', repairs);
-  }
+  let data = readCommittedResultSet(sessionData, [...topFaults, ...uncomposed('')], '', repairs);
+  if (version < CANONICAL_SESSION_MIN_VERSION) return /** @type {T} */ (data);
   if (Object.hasOwn(data, 'otherModeResult')) {
     const faults = [...otherModeResultFaults(data, version, storedSchemas), ...uncomposed('otherModeResult.')];
     const { otherModeResult: other, ...rest } = data;

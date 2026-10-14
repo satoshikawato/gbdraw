@@ -180,6 +180,31 @@ test('run notices that do not match their Results are dropped before the dialog 
   assert.equal(Object.hasOwn(kept.value.otherModeResult.runMetadata, 'comparisonWarnings'), false);
 });
 
+test('a Session 27-39 Result set Load could not admit is read again without its Results (OV-789, E-OD17)', () => {
+  for (const name of ['scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz']) {
+    const session = JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))));
+    const read = (uncomposed) => {
+      const repairs = [];
+      const value = readSessionAuthorityParts(session, session.version, {}, repairs, uncomposed);
+      return { value, rows: repairs.map(({ code, path }) => `${code}@${path}`) };
+    };
+    assert.equal(read([]).value, session);
+    const dropped = read(['']);
+    assert.deepEqual(dropped.rows, ['session-part-dropped@results'], name);
+    assert.deepEqual([dropped.value.results, Object.hasOwn(dropped.value, 'runMetadata'), Object.hasOwn(dropped.value.ui, 'selectedResultIndex')],
+      [[], false, false], name);
+    // The feature state recovered from the Results goes with them; the settings and edits stay.
+    assert.deepEqual(['biologicalFeatures', 'extractedFeatures', 'featureCatalog', 'featureRecordIds', 'featureSelectorSafetyScope']
+      .filter((field) => Object.hasOwn(dropped.value.features, field)), [], name);
+    assert.deepEqual(Object.keys(dropped.value.features).filter((field) => !Object.hasOwn(session.features, field)), []);
+    assert.equal(dropped.value.config, session.config);
+  }
+  const v39 = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/BGC0000708-BGC0000713.v39.gbdraw-session.json.gz', import.meta.url))));
+  const kept = readSessionAuthorityParts(v39, 39, {}, [], ['']).features;
+  assert.equal(kept.featureColorOverrides, v39.features.featureColorOverrides);
+  assert.equal(kept.labelTextFeatureOverrides, v39.features.labelTextFeatureOverrides);
+});
+
 test('a Result set Load\'s composition transform could not compose is read again without its Results (A20, E-OD16)', () => {
   const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
   const circular = gallery('HmmtDNA_basic_circular.gbdraw-session.json');

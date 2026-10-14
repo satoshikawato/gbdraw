@@ -5198,9 +5198,9 @@ const exportSessionDocument = async (
  */
 
 /**
- * A Result set of a Session 40+ whose Results the composition transform
- * cannot compose (A20): Load reads the file again with that set's Results
- * dropped and listed (`readSessionAuthorityParts`, E-OD16). It never leaves
+ * A Result set whose Results Load cannot admit or compose (A20, OV-789):
+ * Load reads the file again with that set's Results dropped and listed
+ * (`readSessionAuthorityParts`, E-OD16, E-OD17). It never leaves
  * `importSessionDocument`.
  */
 class UncomposedResultSet extends Error {
@@ -5453,19 +5453,26 @@ const importSessionDocument = async (e, options = {}) => {
     // A Result of `mode`; `composition` is the legacy composition of the
     // committed set (null for the other set, which has none).
     // A Result's set is the top-level one (`results`) or the other mode's.
-    // A Result of a Session 40+ it cannot compose drops its set's Results (A20).
+    // A Result Load cannot admit or compose drops its set's Results (A20,
+    // OV-789): the first reading names the set, and Load reads the file again.
+    /** @template R @param {ResultSetPath} at @param {() => R} admit @returns {R} */
+    const admittedOrUncomposed = (at, admit) => {
+      try {
+        return admit();
+      } catch (error) {
+        if (error instanceof UncomposedResultSet || uncomposedSets.includes(at)) throw error;
+        throw new UncomposedResultSet(at, error);
+      }
+    };
     /** @param {'circular' | 'linear'} mode @param {LegacyResultSvgData['composition']} composition */
     const loadedResultTransform = (mode, composition) => (/** @type {SVGSVGElement} */ svg) => {
       /** @type {ResultSetPath} */
       const at = mode === committedDraftMode ? '' : 'otherModeResult.';
-      try {
+      return admittedOrUncomposed(at, () => {
         const legendGroupsChanged = composition ? normalizeLegacyLegendEntryGroups(svg) : false;
         const legacyResultChanged = transformLegacyResultSvg(svg, { composition, mode, repairs, path: `${at}results` });
         return legendGroupsChanged || legacyResultChanged;
-      } catch (error) {
-        if (currentSchemaSession && !uncomposedSets.includes(at)) throw new UncomposedResultSet(at, error);
-        throw error;
-      }
+      });
     };
     /** @param {'circular' | 'linear'} mode @param {LegacyResultSvgData['composition']} composition @returns {LegacyResultNormalization | null} */
     const loadedResultNormalization = (mode, composition) => (transformLegacyResultSvg
@@ -5516,10 +5523,10 @@ const importSessionDocument = async (e, options = {}) => {
           savedEdits: committedSavedEdits,
           legacy: loadedResultNormalization(committedDraftMode, committedLegacyComposition)
         })
-      : admitLegacyImportedResults(
+      : admittedOrUncomposed('', () => admitLegacyImportedResults(
           createLegacyImportResultSource(logicalImportedResults),
           { transformSvg: transformRestoredSessionSvg, selectedFeatureTypes }
-        );
+        ));
     recordSessionLifecycleEvent('svg-admission-end');
     // E1: a Session with a Result set of each mode builds both sets' artifact
     // slots with one function. It opens on its shown mode when that mode has a
