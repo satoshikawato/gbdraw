@@ -181,6 +181,7 @@ import {
   adoptRuntimeCanonicalSession,
   isAdoptedCanonicalSession,
   isAuthorityBand,
+  isCanonicalBand,
   hasBiologicalSessionInputs,
   holdsNothing,
   isSettingsOnlySessionDocument,
@@ -188,6 +189,7 @@ import {
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
   holdsSettingsOnlyContent,
+  readSessionAuthorityParts,
   readSessionDocument,
   restoresNothing,
   settingsOnlySessionCandidate,
@@ -201,6 +203,7 @@ import {
 import { setResourcePayloadOwner } from './resource-payload-owner.js';
 import { migratePersistedWebStateFieldNames, requireCurrentConfigFields } from './current-option-values.js';
 import {
+  readSimilarityAlignmentResetReceipt,
   validateSimilarityAlignmentResetReceipt,
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
@@ -262,7 +265,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
   LOSAT_EXECUTION_FIELDS.map((/** @type {string} */ field) => [field, state.losatExecution[field]])
 ));
 
-/** @import { ActiveWebConfig } from './session-active-config-contract.js' */
+/** @import { ActiveWebConfig, AlignmentResetCanonical } from './session-active-config-contract.js' */
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -286,7 +289,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // The Session document's types are generated from gbdraw/session_contract.py:
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
-/** @import { GbdrawSession, SessionChecked, SessionEnvelope, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
+/** @import { GbdrawSession, SessionChecked, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
@@ -1353,15 +1356,11 @@ const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'sc
 
 /**
  * A Session 27-39 (`readSessionDocument` read its band: a Session 31-39
- * holds a `resources` object).
+ * holds a `resources` object, and preflight its request object).
  * @param {LoadRepair[]} repairs
  */
 const normalizeSessionData = (data, repairs) => {
   const version = data.version;
-  if (version >= CANONICAL_SESSION_MIN_VERSION && !isPlainObject(data.renderRequest)) {
-    throw new Error(`Session version ${version} requires a canonical renderRequest object.`);
-  }
-
   return {
     ...data,
     editorState: normalizeEditorStateData(data.editorState, { repairs, sessionVersion: version })
@@ -1385,90 +1384,152 @@ const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
   };
 };
 
-/** @param {'losatCache' | 'losatDerivedCache'} field */
+/** @param {'losatCache' | 'losatDerivedCache'} field @returns {unknown[] | null} null: no entry list can be read */
 const sessionArtifactEntries = (data, field) => {
   const container = data[field];
   if (container === undefined || container === null) return [];
-  if (!isPlainObject(container)) throw SESSION_FIELDS_ERROR();
+  if (!isPlainObject(container)) return null;
   const entries = Object.prototype.hasOwnProperty.call(container, 'entries')
     ? container.entries
     : [];
-  if (!Array.isArray(entries)) throw SESSION_FIELDS_ERROR();
-  return entries;
+  return Array.isArray(entries) ? entries : null;
 };
 
-// A raw key names one cache entry; a repeated or missing key is a malformed
-// Session (R6: classified, without document values).
-const rejectInvalidLosatCacheKeys = (entries, { requireKey = false } = {}) => {
+// A raw key names one cache entry: an entry with a key an earlier entry has,
+// or without one where a key is required, is in `faults`.
+/** @param {readonly unknown[]} entries @param {Set<number>} faults @param {{ requireKey?: boolean }} [options] */
+const collectInvalidLosatCacheKeys = (entries, faults, { requireKey = false } = {}) => {
   const seen = new Set();
-  for (const entry of entries) {
-    const key = isPlainObject(entry) && typeof entry.key === 'string'
-      ? entry.key
-      : '';
+  entries.forEach((entry, index) => {
+    const stored = isPlainObject(entry) ? /** @type {{ key?: unknown }} */ (entry).key : '';
+    const key = typeof stored === 'string' ? stored : '';
     if (!key) {
-      if (requireKey) throw SESSION_FIELDS_ERROR();
-      continue;
-    }
-    if (seen.has(key)) throw SESSION_FIELDS_ERROR();
-    seen.add(key);
-  }
+      if (requireKey) faults.add(index);
+    } else if (seen.has(key)) faults.add(index);
+    else seen.add(key);
+  });
 };
 
-/** @param {number} sourceSessionVersion */
+/** A protein identity manifest that holds no protein. */
+const EMPTY_PROTEIN_IDENTITY_MANIFEST = Object.freeze({ schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} });
+
+/**
+ * What a Session's LOSAT caches hold that the app cannot read (A13): a cache
+ * whose entries are no list (`containers`), the raw and derived entries that
+ * cannot be read or repeat a key, and a protein identity manifest that cannot
+ * be read (`manifest`), checked as the empty manifest, so the protein entries
+ * that need it are faults too. One step per raw entry (Load yields to the page).
+ * @typedef {{ containers: Set<'losatCache' | 'losatDerivedCache'>, raw: Set<number>, derived: Set<number>, manifest: boolean }} LosatArtifactFaults
+ * @param {number} sourceSessionVersion
+ * @returns {Generator<void, LosatArtifactFaults>}
+ */
 function* sessionLosatArtifactSteps(data, sourceSessionVersion) {
-  if (sourceSessionVersion < CURRENT_ARTIFACT_SESSION_MIN_VERSION) return;
-  const rawEntries = sessionArtifactEntries(data, 'losatCache');
-  const derivedEntries = sessionArtifactEntries(data, 'losatDerivedCache');
-  const manifest = data.proteinIdentityManifest;
-  rejectInvalidLosatCacheKeys(rawEntries, { requireKey: true });
-  rejectInvalidLosatCacheKeys(derivedEntries);
+  /** @type {LosatArtifactFaults} */
+  const faults = { containers: new Set(), raw: new Set(), derived: new Set(), manifest: false };
+  if (sourceSessionVersion < CURRENT_ARTIFACT_SESSION_MIN_VERSION) return faults;
+  const rawRead = sessionArtifactEntries(data, 'losatCache');
+  const derivedRead = sessionArtifactEntries(data, 'losatDerivedCache');
+  if (rawRead === null) faults.containers.add('losatCache');
+  if (derivedRead === null) faults.containers.add('losatDerivedCache');
+  const rawEntries = rawRead ?? [];
+  const derivedEntries = derivedRead ?? [];
+  collectInvalidLosatCacheKeys(rawEntries, faults.raw, { requireKey: true });
+  collectInvalidLosatCacheKeys(derivedEntries, faults.derived);
 
   if (sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
     recordStructuralMetric('currentSessionPreflightProteinManifestValidationCount');
   }
-  const identityIndex = buildValidatedProteinIdentityIndex(manifest);
-  if (!identityIndex) throw SESSION_FIELDS_ERROR();
-  let invalidDerivedEntry = false;
+  let manifest = data.proteinIdentityManifest;
+  let identityIndex = buildValidatedProteinIdentityIndex(manifest);
+  if (!identityIndex) {
+    faults.manifest = true;
+    manifest = EMPTY_PROTEIN_IDENTITY_MANIFEST;
+    identityIndex = buildValidatedProteinIdentityIndex(manifest);
+  }
   try {
-    for (const entry of rawEntries) {
+    for (const [index, entry] of rawEntries.entries()) {
+      if (faults.raw.has(index)) continue;
       const classification = classifyRawLosatCacheEntry(entry);
       if (!['protein-current', 'nucleotide-current'].includes(classification)) {
-        throw SESSION_FIELDS_ERROR();
+        faults.raw.add(index);
+        continue;
       }
       yield;
       if (classification !== 'protein-current') continue;
       if (sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
         recordStructuralMetric('currentSessionPreflightProteinRawTextValidationCount');
       }
-      if (
-        !validateProteinRawEntryReferences(entry, manifest, { identityIndex })
-      ) {
-        throw SESSION_FIELDS_ERROR();
-      }
+      if (!validateProteinRawEntryReferences(entry, manifest, { identityIndex })) faults.raw.add(index);
     }
-    invalidDerivedEntry = derivedEntries.some(
-      (entry) => !validateDerivedProteinReferences(entry, manifest, { identityIndex })
-    );
+    derivedEntries.forEach((entry, index) => {
+      if (!faults.derived.has(index) && !validateDerivedProteinReferences(entry, manifest, { identityIndex })) faults.derived.add(index);
+    });
   } finally {
     releaseValidatedProteinIdentityIndex(identityIndex);
   }
-  if (invalidDerivedEntry) throw SESSION_FIELDS_ERROR();
+  return faults;
 };
 
-/** @param {number} sourceSessionVersion */
+/** @param {LosatArtifactFaults} faults */
+const holdsLosatArtifactFault = (faults) => faults.manifest || faults.containers.size > 0 || faults.raw.size > 0 || faults.derived.size > 0;
+
+/** Save: a Session's LOSAT caches hold no fault. @param {number} sourceSessionVersion */
 export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
-  for (const _step of sessionLosatArtifactSteps(data, sourceSessionVersion)) { /* exhaust validation */ }
+  const steps = sessionLosatArtifactSteps(data, sourceSessionVersion);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  if (holdsLosatArtifactFault(step.value)) throw SESSION_FIELDS_ERROR();
 };
 
-/** @param {number} sourceSessionVersion */
-const validateSessionLosatArtifactsForImport = async (data, sourceSessionVersion) => {
+/**
+ * Load: a Session's LOSAT caches as far as they can be read (A13, E-OD05): a
+ * cache whose entries are no list, an entry that cannot be read, and a
+ * manifest that cannot be read are dropped (the manifest read as the empty
+ * one), each with a row the dialog does not list; the next comparison
+ * computes them again. The document is copied where it changed.
+ * @template {SessionInput} T
+ * @param {T} data
+ * @param {number} sourceSessionVersion
+ * @param {LoadRepair[]} repairs
+ * @returns {Promise<T>}
+ */
+const readSessionLosatArtifacts = async (data, sourceSessionVersion, repairs) => {
   let deadline = performance.now() + 16;
-  for (const _step of sessionLosatArtifactSteps(data, sourceSessionVersion)) {
+  const steps = sessionLosatArtifactSteps(data, sourceSessionVersion);
+  let step = steps.next();
+  while (!step.done) {
     if (performance.now() >= deadline) {
       await new Promise((resolve) => setTimeout(resolve, 0));
       deadline = performance.now() + 16;
     }
+    step = steps.next();
   }
+  const faults = step.value;
+  if (!holdsLosatArtifactFault(faults)) return data;
+  /** @type {Record<string, unknown>} */
+  const next = { ...data };
+  /** @param {string} path */
+  const dropped = (path) => repairs.push(loadRepair({ code: 'cache-entry-dropped', path, effect: 'dropped' }));
+  faults.containers.forEach((field) => {
+    dropped(field);
+    delete next[field];
+  });
+  /** @param {'losatCache' | 'losatDerivedCache'} field @param {Set<number>} indices */
+  const withoutEntries = (field, indices) => {
+    if (!indices.size || faults.containers.has(field)) return;
+    indices.forEach((index) => dropped(`${field}.entries[${index}]`));
+    // Not a `containers` fault: the cache is an object whose entries are a list.
+    const cache = /** @type {{ entries: unknown[] }} */ (next[field]);
+    next[field] = { ...cache, entries: cache.entries.filter((_, index) => !indices.has(index)) };
+  };
+  withoutEntries('losatCache', faults.raw);
+  withoutEntries('losatDerivedCache', faults.derived);
+  if (faults.manifest) {
+    // A manifest the file does not hold is no loss (E-OD06).
+    if (!holdsNothing(data.proteinIdentityManifest)) dropped('proteinIdentityManifest');
+    next.proteinIdentityManifest = { ...EMPTY_PROTEIN_IDENTITY_MANIFEST };
+  }
+  return /** @type {T} */ (next);
 };
 
 /**
@@ -1885,6 +1946,79 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
 };
 
 /**
+ * Load: a committed Result set's feature catalog, checked with its Results
+ * by the check Generate and admission refuse with (A9, OV-711): one that does
+ * not describe its Results is `dropped`.
+ * @param {SessionInput} set
+ * @returns {Promise<{ catalog: Awaited<ReturnType<typeof validateCurrentWriterFeatureCatalog>>, dropped: boolean }>}
+ */
+const readCurrentWriterFeatureCatalog = async (set) => {
+  try {
+    return { catalog: await validateCurrentWriterFeatureCatalog(set, { adopt: true }), dropped: false };
+  } catch (error) {
+    if (normalizeCaughtError(error).code !== 'FEATURE_METADATA') throw error;
+    return { catalog: null, dropped: true };
+  }
+};
+
+/**
+ * Load: the feature catalog of each committed Result set (A9, OV-711): one
+ * that does not describe its Results is dropped. The top-level Results stay
+ * without one (`feature-recovery-failed`); the other mode's set, which loads
+ * only with its catalog, is dropped whole (`session-part-dropped`).
+ * @template {SessionInput} T
+ * @param {T} data
+ * @param {LoadRepair[]} repairs
+ */
+const readSessionFeatureCatalogs = async (data, repairs) => {
+  const top = await readCurrentWriterFeatureCatalog(data);
+  let next = data;
+  if (top.dropped) {
+    repairs.push(loadRepair({ code: 'feature-recovery-failed', path: 'editorState.featureCatalog', effect: 'dropped' }));
+    const editorState = /** @type {Record<string, unknown>} */ (isPlainObject(data.editorState) ? data.editorState : {});
+    next = /** @type {T} */ ({ ...data, editorState: { ...editorState, featureCatalog: null } });
+  }
+  // E1: the other mode's set is validated with its own mode.
+  const other = isPlainObject(next.otherModeResult)
+    ? await readCurrentWriterFeatureCatalog(/** @type {SessionInput} */ (next.otherModeResult)) : null;
+  if (other?.dropped) {
+    repairs.push(loadRepair({ code: 'session-part-dropped', path: 'otherModeResult', effect: 'dropped' }));
+    const { otherModeResult: _dropped, ...kept } = next;
+    next = /** @type {T} */ (kept);
+  }
+  return { data: next, catalog: top.catalog, otherCatalog: other ? other.catalog : null };
+};
+
+/**
+ * Load: the alignment reset receipt of each committed Result set, read
+ * against the request Load read (RK-2): one that does not bind its plan and
+ * sources reads as none, with a row (A19); History, Align and Save refuse it
+ * (`validateSimilarityAlignmentResetReceipt`).
+ * @template {SessionInput} T
+ * @param {T} data
+ * @param {LoadRepair[]} repairs
+ * @returns {Promise<T>}
+ */
+const readSessionResetReceipts = async (data, repairs) => {
+  /** @param {SessionInput} set @param {string} at @returns {Promise<SessionInput>} */
+  const read = async (set, at) => {
+    const editorState = isPlainObject(set.editorState) ? /** @type {Record<string, unknown>} */ (set.editorState) : {};
+    const receipt = editorState.alignmentResetReceipt;
+    if (receipt === null || receipt === undefined) return set;
+    // Load read the requests and resources before (`readSessionRequests`, `readSessionInputs`).
+    const canonical = /** @type {AlignmentResetCanonical} */ ({ renderRequest: set.renderRequest, resources: data.resources });
+    const { stale } = await readSimilarityAlignmentResetReceipt(receipt, canonical);
+    if (!stale) return set;
+    repairs.push(loadRepair({ code: 'session-field-dropped', path: `${at}editorState.alignmentResetReceipt`, effect: 'dropped' }));
+    return { ...set, editorState: { ...editorState, alignmentResetReceipt: null } };
+  };
+  const top = await read(data, '');
+  const other = isPlainObject(top.otherModeResult)
+    ? await read(/** @type {SessionInput} */ (top.otherModeResult), 'otherModeResult.') : top.otherModeResult;
+  return /** @type {T} */ (other === top.otherModeResult ? top : { ...top, otherModeResult: other });
+};
+
+/**
  * The stored requests of a Session, read before anything adopts them: the
  * top-level request and `otherModeResult.renderRequest` (OV-670). Returns a
  * new data object when a request changed (the parsed file is never changed),
@@ -2038,7 +2172,15 @@ const preflightSessionImport = async (sessionData, repairs) => {
     }));
   });
   const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs);
-  const rawData = readSettingsOnlyMode(requestRead.data, repairs);
+  const requestData = readSettingsOnlyMode(requestRead.data, repairs);
+  // K22 of a Session 31-41, which has no settings-only form: a Session whose
+  // request cannot be read restores nothing (R4; C-OD17, BA-OD63 d).
+  if (isCanonicalBand(requestData) && !isSettingsOnlySessionDocument(requestData) && !isPlainObject(requestData.renderRequest)) {
+    throw SESSION_FIELDS_ERROR();
+  }
+  const rawData = await readSessionResetReceipts(
+    readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs), repairs
+  );
   const currentSession = isAuthorityBand(rawData);
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
@@ -2057,29 +2199,26 @@ const preflightSessionImport = async (sessionData, repairs) => {
     adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion, requestRead.storedSchemas);
     recordSessionLifecycleEvent('session-authority-validation-end');
     recordSessionLifecycleEvent('feature-catalog-validation-start');
-    validatedFeatureCatalog = await validateCurrentWriterFeatureCatalog(rawData, {
-      adopt: true
-    });
-    // E1: the other mode's set is validated with its own mode.
-    if ('otherModeResult' in rawData && isPlainObject(rawData.otherModeResult)) {
-      otherModeCatalog = await validateCurrentWriterFeatureCatalog(rawData.otherModeResult, { adopt: true });
-    }
+    const catalogRead = await readSessionFeatureCatalogs(rawData, repairs);
+    const catalogData = catalogRead.data;
+    validatedFeatureCatalog = catalogRead.catalog;
+    otherModeCatalog = catalogRead.otherCatalog;
     recordSessionLifecycleEvent('feature-catalog-validation-end');
     recordSessionLifecycleEvent('editor-state-normalization-start');
-    normalizedEditorState = normalizeEditorStateData(rawData.editorState, {
+    normalizedEditorState = normalizeEditorStateData(catalogData.editorState, {
       featureCatalog: validatedFeatureCatalog,
       repairs,
       sessionVersion: sourceSessionVersion
     });
     recordSessionLifecycleEvent('editor-state-normalization-end');
     recordSessionLifecycleEvent('resource-table-adoption-start');
-    currentResourceTable = adoptCurrentSessionResources(rawData.resources);
+    currentResourceTable = adoptCurrentSessionResources(catalogData.resources);
     recordSessionLifecycleEvent('resource-table-adoption-end');
     // A CLI-written Session 40-41 `config` is no Web draft (OV-269), as in
     // migrate_session_flat_draft.
-    normalizedData = withCurrentDraftFieldNames(holdsCliWriterConfig(rawData)
-      ? Object.fromEntries(Object.entries(rawData).filter(([key]) => key !== 'config'))
-      : rawData);
+    normalizedData = withCurrentDraftFieldNames(holdsCliWriterConfig(catalogData)
+      ? Object.fromEntries(Object.entries(catalogData).filter(([key]) => key !== 'config'))
+      : catalogData);
   } else {
     validateSessionAuthorityInventory(rawData, sourceSessionVersion, requestRead.storedSchemas, { load: true });
     normalizedData = normalizeSessionData(rawData, repairs);
@@ -2094,11 +2233,11 @@ const preflightSessionImport = async (sessionData, repairs) => {
     ? readRebuiltGalleryRequest(promoteReadGallerySession(normalizedData), repairs)
     : normalizedData;
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
-  await validateSessionLosatArtifactsForImport(promotedData, sourceSessionVersion);
+  const cacheData = await readSessionLosatArtifacts(promotedData, sourceSessionVersion, repairs);
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
   const data = adoptPromotedPreservedSettings(currentSession
-    ? promotedData
-    : migrateSessionDataToCurrent(promotedData, sourceSessionVersion), repairs);
+    ? cacheData
+    : migrateSessionDataToCurrent(cacheData, sourceSessionVersion), repairs);
   // A Gallery migration rebuilt its request, which is classified as rebuilt.
   const comparisonClassification = promotedData === normalizedData && requestRead.comparisonClassification
     ? requestRead.comparisonClassification
@@ -5122,18 +5261,8 @@ const importSessionDocument = async (e, options = {}) => {
     const document = readSessionDocument(data);
     repairs.push(...document.repairs);
     const preflight = await preflightSessionImport(document.value, repairs);
-    // The receipts are checked against the requests Load read (RK-2).
+    // Preflight read the receipts against the requests Load read (RK-2).
     data = preflight.data;
-    await validateSimilarityAlignmentResetReceipt(
-      data.editorState?.alignmentResetReceipt,
-      { renderRequest: data.renderRequest, resources: data.resources }
-    );
-    if (isPlainObject(data.otherModeResult)) {
-      await validateSimilarityAlignmentResetReceipt(
-        data.otherModeResult.editorState?.alignmentResetReceipt,
-        { renderRequest: data.otherModeResult.renderRequest, resources: data.resources }
-      );
-    }
     recordSessionLifecycleEvent('current-session-preflight-end');
     const {
       sourceSessionVersion,

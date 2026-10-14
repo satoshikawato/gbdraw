@@ -76,7 +76,8 @@ const invalid = [
   ['biological binding', d => { d.resources = full.resources; d.webFiles = full.webFiles; }, /biological sources/],
   ['dangling binding', d => { d.webFiles.bindings.whitelist = { resourceId: 'absent', name: 'list.tsv', type: '', lastModified: 0 }; }, /Missing canonical resource/],
   ['binding schema', d => { d.webFiles.bindings.schema = 99; }, /binding schema/],
-  ['saved Result', d => { d.results = [{ name: 'old.svg', content: '<svg/>' }]; }, /feature catalog/],
+  // Load read the committed Result set before (`readSessionAuthorityParts`); the settings-only check refuses it.
+  ['saved Result', d => { d.results = [{ name: 'old.svg', content: '<svg/>' }]; }, /committed render artifacts/],
   ['committed provenance', d => { d.cliInvocation = {}; }, /committed render artifacts/],
   ['empty annotation warning artifact', d => { d.runMetadata = { annotationWarnings: [] }; }, /committed render artifacts/],
   ['track geometry artifact', d => { d.runMetadata = { trackSlotGeometry: {} }; }, /committed render artifacts/]

@@ -174,8 +174,8 @@ const WORDING = {
   'session-part-dropped': (repairs) => repairs.map(({ path }) => (
     `Session file: ${SESSION_PART_NAMES[path] ?? path} (${path}) could not be read and ${path === 'results' ? 'are' : 'is'} left out.`)),
   'session-field-dropped': (repairs) => [
-    `Session file: ${cappedList('the field', 'the fields', repairs.map(({ path }) => path))} could not be read for this Session version`
-    + ` and ${wasWere(repairs.length)} left out.`
+    `Session file: ${cappedList('the field', 'the fields', repairs.map(({ path, label }) => (label === undefined ? path : `${path} (${label})`)))}`
+    + ` could not be read and ${wasWere(repairs.length)} left out.`
   ],
   'other-result-set-dropped': (repairs) => repairs.map(({ path, label }) => (
     `Saved ${label ?? 'other'} diagram: its settings (${path}) could not be read; that diagram and its Results are left out.`)),

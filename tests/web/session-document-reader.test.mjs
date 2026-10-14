@@ -1,13 +1,16 @@
 // readSessionDocument (E2b-1): the band reader drops a content part it cannot
 // read with a row whose path is the part's key, and R4 (`restoresNothing`)
-// refuses a Session whose every held content part was dropped.
+// refuses a Session whose every held content part was dropped. E2b-2: the
+// hand-written checks of the input files and the committed Result sets repair
+// before the dialog what Save refuses.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import {
-  readSessionDocument, restoresNothing, SESSION_TOP_LEVEL_AUTHORITY
+  readSessionAuthorityParts, readSessionDocument, restoresNothing, SESSION_TOP_LEVEL_AUTHORITY, validateSessionAuthorityInventory
 } from '../../gbdraw/web/js/services/session-authority.js';
+import { validateWebFileBindings } from '../../gbdraw/web/js/services/session-resource-backing.js';
 
 const fixture = (name) => {
   const bytes = readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url));
@@ -36,7 +39,9 @@ test('a content part of another kind is dropped with one row at its key', () => 
     assert.deepEqual(rows(base), [], name);
     for (const [key, code] of Object.entries(expected)) {
       assert.notEqual(SESSION_TOP_LEVEL_AUTHORITY[key].part, null, key);
-      assert.deepEqual(rows({ ...structuredClone(base), [key]: true }), [`${code}@${key}`], `${name} ${key}`);
+      // A binding that names a dropped resource is dropped with its own row (A6b).
+      const own = rows({ ...structuredClone(base), [key]: true }).filter((row) => !row.startsWith('file-entry-dropped@webFiles.bindings.'));
+      assert.deepEqual(own, [`${code}@${key}`], `${name} ${key}`);
     }
   }
 });
@@ -52,4 +57,87 @@ test('R4: a Session whose every held content part was dropped restores nothing',
   // A row inside a part does not drop the part.
   assert.equal(restoresNothing(stored, dropped(held.map((key) => `${key}[0]`))), false);
   assert.equal(restoresNothing(stored, []), false);
+});
+
+const V44_BOUND = 'inactive-class-m.v44.gbdraw-session.json.gz';
+const V44_CIRCULAR = 'HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz';
+
+test('the input files are read before the dialog: a resource or binding that cannot be read is dropped with a row (A8, A6b)', () => {
+  const base = fixture(V44_BOUND);
+  const [id] = Object.keys(base.resources);
+  // A checksum or lastModified the app recomputes is dropped with no row.
+  const recomputed = structuredClone(base);
+  Object.assign(recomputed.resources[id], { checksum: 'abc', lastModified: -1 });
+  const read = readSessionDocument(recomputed);
+  assert.deepEqual(read.repairs, []);
+  assert.equal(Object.hasOwn(read.value.resources[id], 'checksum'), false);
+  assert.equal(Object.hasOwn(read.value.resources[id], 'lastModified'), false);
+  assert.equal(recomputed.resources[id].checksum, 'abc', 'the stored document is not changed');
+  // A resource that cannot be read: its row, and the row of the binding that named it.
+  const unreadable = structuredClone(base);
+  unreadable.resources[id].size = -1;
+  unreadable.resources.unnamed = 5; // nothing names it: no row (E-OD06)
+  const dropped = readSessionDocument(unreadable);
+  assert.deepEqual(dropped.repairs.map(({ code, path }) => `${code}@${path}`),
+    [`file-entry-dropped@resources.${id}`, 'file-entry-dropped@webFiles.bindings.c_gb']);
+  assert.deepEqual(Object.keys(dropped.value.resources), []);
+  assert.equal(dropped.value.webFiles.bindings.c_gb, null);
+  // An inventory field no writer wrote, and a list element that names no resource.
+  const listed = structuredClone(base);
+  listed.webFiles.bindings.c_conservation_blasts = [{ resourceId: 'zzz', name: 'x', type: 'y', lastModified: 0 }];
+  listed.webFiles.bindings.extra = 1;
+  const read2 = readSessionDocument(listed);
+  assert.deepEqual(read2.repairs.map(({ code, path }) => `${code}@${path}`),
+    ['session-field-dropped@webFiles.bindings.extra', 'file-entry-dropped@webFiles.bindings.c_conservation_blasts[0]']);
+  assert.deepEqual(read2.value.webFiles.bindings.c_conservation_blasts, []);
+  assert.equal(Object.hasOwn(read2.value.webFiles.bindings, 'extra'), false);
+  // Save refuses each of these as before (E-OD02).
+  for (const document of [unreadable, listed]) {
+    assert.throws(() => validateWebFileBindings(document.webFiles, document.resources));
+  }
+});
+
+test('the legacy files of a Session 40+ are named with the inputs they held (A6c)', () => {
+  const document = { ...fixture(V44), files: { c_gb: { name: 'phage.gb', data: 'x' }, linearSeqs: [{ gff: { name: 'phage.gff' } }] } };
+  const [repair] = readSessionDocument(document).repairs;
+  assert.deepEqual([repair.code, repair.path, repair.label], ['session-field-dropped', 'files', 'phage.gb, phage.gff']);
+});
+
+test('a committed Result set is read as far as it can be restored before the dialog (A7b, A7g, A9, A19, A20)', () => {
+  const base = fixture(V44_CIRCULAR);
+  const read = (document) => {
+    const repairs = [];
+    const value = readSessionAuthorityParts(document, document.version, {}, repairs);
+    return { value, rows: repairs.map(({ code, path }) => `${code}@${path}`) };
+  };
+  assert.deepEqual(read(base).rows, []);
+  const notSvg = structuredClone(base);
+  notSvg.results[0].content = 'x';
+  const dropped = read(notSvg);
+  assert.deepEqual(dropped.rows, ['session-part-dropped@results']);
+  assert.deepEqual([dropped.value.results, dropped.value.editorState.featureCatalog, Object.hasOwn(dropped.value, 'runMetadata')], [[], null, false]);
+  const catalog = structuredClone(base);
+  catalog.editorState.featureCatalog.schema = 1;
+  catalog.runMetadata.annotationWarnings = 'x'; // derived again by the next Generate: no row
+  const kept = read(catalog);
+  assert.deepEqual(kept.rows, ['feature-recovery-failed@editorState.featureCatalog']);
+  assert.equal(kept.value.results.length, base.results.length);
+  assert.equal(Object.hasOwn(kept.value.runMetadata, 'annotationWarnings'), false);
+  // The other mode's set: without its request it is dropped as a set; with a
+  // fault of its own, as a part (the part key is the path, for R4).
+  const linear = fixture(V44);
+  const withOther = (other) => ({ ...structuredClone(base), version: 46, otherModeResult: other });
+  const other = { renderRequest: linear.renderRequest, results: linear.results, editorState: { featureCatalog: null } };
+  const otherRows = ({ rows }) => rows.filter((row) => row.includes('otherModeResult'));
+  const noRequest = read(withOther({ ...other, renderRequest: undefined }));
+  assert.deepEqual(otherRows(noRequest), ['other-result-set-dropped@otherModeResult.renderRequest']);
+  assert.equal(Object.hasOwn(noRequest.value, 'otherModeResult'), false);
+  // R4 counts the set dropped for its request as the part `otherModeResult`.
+  const onlyOther = { format: 'gbdraw-session', version: 46, otherModeResult: other };
+  assert.equal(restoresNothing(onlyOther, [{ code: 'other-result-set-dropped', path: 'otherModeResult.renderRequest', effect: 'dropped' }]), true);
+  assert.deepEqual(otherRows(read(withOther(other))), ['session-part-dropped@otherModeResult']);
+  // Save refuses each fault as before (E-OD02).
+  for (const document of [notSvg, catalog]) {
+    assert.throws(() => validateSessionAuthorityInventory(document, document.version));
+  }
 });

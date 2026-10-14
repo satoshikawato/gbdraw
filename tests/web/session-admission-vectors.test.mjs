@@ -54,17 +54,24 @@ const edited = (vector) => {
 };
 
 // The diagram Worker that recovers the Features of a Session 27-39 does not run
-// in node; its row is the environment's, as in the G3 corpus test.
-const NODE_ONLY_REPAIRS = new Set(['feature-recovery-failed']);
+// in node; its row (at `features`) is the environment's, as in the G3 corpus test.
+const nodeOnly = ({ code, path }) => code === 'feature-recovery-failed' && path === 'features';
+// The diagnostic reason of each refusal class of the Load repair receipt (S2).
+const CLASS_REASONS = { R2: 'SESSION_FORMAT', R3: 'SESSION_TOO_OLD', R4: 'FIELDS' };
+const diagnosticText = (error) => (error?.details ?? []).map(({ text }) => text).join('\n');
 
 for (const vector of FIXTURE.vectors) {
   test(`${vector.id}: the Web's Load: ${vector.web} (${vector.finding})`, async () => {
     const outcome = await importSession({
       target: { files: [new Blob([JSON.stringify(edited(vector))], { type: 'application/json' })], value: 'selected' }
     }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
-    const repairs = (outcome?.repairs ?? []).filter(({ code }) => !NODE_ONLY_REPAIRS.has(code)).map(({ code, path }) => `${code}@${path}`);
+    const repairs = (outcome?.repairs ?? []).filter((repair) => !nodeOnly(repair)).map(({ code, path }) => `${code}@${path}`);
     const verdict = outcome?.status !== 'ok' ? 'refused' : repairs.length > 0 ? 'repaired' : 'loaded';
     assert.equal(verdict, vector.web, JSON.stringify(outcome?.error ?? repairs));
     assert.deepEqual(repairs, vector.webRepairs ?? []);
+    if (verdict === 'refused') {
+      assert.equal(outcome.error.code, 'INPUT_INVALID', vector.id);
+      assert.match(diagnosticText(outcome.error), new RegExp(`reason: ${CLASS_REASONS[vector.webClass]}$`, 'm'), vector.id);
+    }
   });
 }

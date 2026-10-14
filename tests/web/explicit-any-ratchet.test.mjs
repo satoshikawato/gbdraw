@@ -99,7 +99,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/right-drawer-state.js': 8,
   'services/rule-matchers.js': 10,
   'services/session-active-config-contract.js': 23,
-  'services/session-authority.js': 16,
+  'services/session-authority.js': 14,
   'services/session-file.js': 1,
   'services/session-request.js': 36,
   'services/session-resources.js': 4,

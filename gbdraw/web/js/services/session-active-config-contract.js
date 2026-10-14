@@ -501,40 +501,50 @@ const sortedValue = (value) => Array.isArray(value)
  */
 
 /**
- * @param {unknown} receipt The stored receipt, unvalidated: this function checks it.
+ * The one shape check of a stored alignment reset receipt (OV-115, OV-130):
+ * whether `receipt` is absent or is the receipt of `request`'s plan.
+ * @param {unknown} receipt The stored receipt, unvalidated.
  * @param {AlignmentResetRequest | null | undefined} request
- * @returns {AlignmentResetReceipt | null}
+ * @returns {boolean}
  */
-export const validateAlignmentResetReceiptShape = (receipt, request) => {
-  if (receipt === null || receipt === undefined) return null;
-  // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
-  /** @type {() => never} */
-  const invalid = () => { throw diagnosticError('ALIGNMENT_RESET_EVIDENCE'); };
+export const alignmentResetReceiptShapeHolds = (receipt, request) => {
+  if (receipt === null || receipt === undefined) return true;
   if (!isObject(receipt)
     || Object.keys(receipt).sort().join(',') !== 'binding,directions,referenceDeltaX'
     || typeof receipt.binding !== 'string' || !/^[0-9a-f]{64}$/.test(receipt.binding)
     || !Array.isArray(receipt.directions)
-    || request?.mode !== 'linear' || !request.layout?.similarityAlignment) invalid();
+    || request?.mode !== 'linear' || !request.layout?.similarityAlignment) return false;
   const plan = request.layout.similarityAlignment;
   const eligible = new Set(plan.records.filter(({ status }) => status !== 'skipped')
     .map(({ recordKey }) => recordKey));
   /** @type {Set<unknown>} */
   const keys = new Set();
-  receipt.directions.forEach((delta) => {
+  const directionsHold = receipt.directions.every((delta) => {
     if (!isObject(delta) || Object.keys(delta).sort().join(',') !== 'after,before,recordKey'
       || !eligible.has(delta.recordKey) || keys.has(delta.recordKey)
       || typeof delta.before !== 'boolean' || typeof delta.after !== 'boolean'
-      || delta.before === delta.after) invalid();
+      || delta.before === delta.after) return false;
     keys.add(delta.recordKey);
+    return true;
   });
   const delta = receipt.referenceDeltaX;
-  if (delta !== null && (!isObject(delta)
-    || Object.keys(delta).sort().join(',') !== 'deltaX,recordKey'
-    || delta.recordKey !== plan.reference.recordKey
-    || typeof delta.deltaX !== 'number' || !Number.isFinite(delta.deltaX)
-    || delta.deltaX === 0)) invalid();
-  // Every field was checked above.
-  return /** @type {AlignmentResetReceipt} */ (receipt);
+  return directionsHold && (delta === null || (isObject(delta)
+    && Object.keys(delta).sort().join(',') === 'deltaX,recordKey'
+    && delta.recordKey === plan.reference.recordKey
+    && typeof delta.deltaX === 'number' && Number.isFinite(delta.deltaX)
+    && delta.deltaX !== 0));
+};
+
+/**
+ * @param {unknown} receipt The stored receipt, unvalidated: this function checks it.
+ * @param {AlignmentResetRequest | null | undefined} request
+ * @returns {AlignmentResetReceipt | null}
+ */
+export const validateAlignmentResetReceiptShape = (receipt, request) => {
+  // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
+  if (!alignmentResetReceiptShapeHolds(receipt, request)) throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
+  // Absent, or every field checked above.
+  return /** @type {AlignmentResetReceipt | null} */ (receipt ?? null);
 };
 
 /** @param {AlignmentResetCanonical} canonical */
@@ -576,16 +586,30 @@ const resetBinding = async (canonical) => {
 };
 
 /**
+ * The one reader of a stored alignment reset receipt: the receipt when it is
+ * the receipt of `canonical`'s plan and sources, else none, with `stale` set.
+ * Load reads a stale receipt as none, with a row (A19); History, Align and
+ * Save refuse it (`validateSimilarityAlignmentResetReceipt`).
+ * @param {unknown} receipt The stored receipt, unvalidated.
+ * @param {AlignmentResetCanonical | null | undefined} canonical
+ * @returns {Promise<{ value: AlignmentResetReceipt | null, stale: boolean }>}
+ */
+export const readSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
+  if (!alignmentResetReceiptShapeHolds(receipt, canonical?.renderRequest)) return { value: null, stale: true };
+  const value = /** @type {AlignmentResetReceipt | null} */ (receipt ?? null); // checked above
+  // A receipt that passed the shape check needs `request.mode === 'linear'`, so `canonical` is set.
+  if (value && value.binding !== await resetBinding(/** @type {AlignmentResetCanonical} */ (canonical))) return { value: null, stale: true };
+  return { value, stale: false };
+};
+
+/**
  * @param {unknown} receipt The stored receipt, unvalidated.
  * @param {AlignmentResetCanonical | null | undefined} canonical
  */
 export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
-  const validated = validateAlignmentResetReceiptShape(receipt, canonical?.renderRequest);
-  // A receipt that passed the shape check needs `request.mode === 'linear'`, so `canonical` is set.
-  if (validated && validated.binding !== await resetBinding(/** @type {AlignmentResetCanonical} */ (canonical))) {
-    throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
-  }
-  return validated;
+  const read = await readSimilarityAlignmentResetReceipt(receipt, canonical);
+  if (read.stale) throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
+  return read.value;
 };
 
 /**

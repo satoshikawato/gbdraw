@@ -6,8 +6,8 @@
   "A vector applies its edits (JSON Pointer; set or remove) to a copy of its base. python is",
   "accept or refuse, with pythonMessage, a fragment of Python's refusal. web is loaded,",
   "repaired (webRepairs: the code@path of each repair, listed or not) or refused (webClass:",
-  "R1-R4 of the Load repair receipt, or interim for a refusal of a content part that PR-E",
-  "turns into a repair).",
+  "R1-R4, the refusal classes of the Load repair receipt; the Web's diagnostic names the",
+  "class's reason).",
   "S1: a vector Python accepts is not refused by the Web, unless difference names its open",
   "finding. S2: a refusal has a class. S3: a vector Python accepts and the Web repairs lists",
   "only repairs of webOnlyRepairs ({code, path, finding}: what the Web repairs and Python",
@@ -883,6 +883,12 @@
   },
   "settings-only-42": {
    "fixture": "tests/fixtures/sessions/settings-only.v42.json.gz"
+  },
+  "web-44-linear": {
+   "fixture": "tests/fixtures/sessions/lambda_basic_linear.v44-schema8.gbdraw-session.json.gz"
+  },
+  "web-46": {
+   "fixture": "tests/fixtures/sessions/legend-renamed-rows.v46.gbdraw-session.json.gz"
   }
  },
  "vectors": [
@@ -1649,6 +1655,7 @@
    "web": "repaired",
    "webRepairs": [
     "session-part-dropped@resources",
+    "file-entry-dropped@webFiles.bindings.c_gb",
     "request-dropped@renderRequest"
    ]
   },
@@ -1669,6 +1676,7 @@
    "web": "repaired",
    "webRepairs": [
     "session-part-dropped@resources",
+    "file-entry-dropped@webFiles.bindings.c_gb",
     "request-dropped@renderRequest"
    ]
   },
@@ -1688,8 +1696,10 @@
    "python": "refuse",
    "note": "A settings-only Linear row is an object.",
    "pythonMessage": "cannot contain biological sources",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@webFiles.bindings.linearSeqs[0]"
+   ]
   },
   {
    "id": "ov566-linear-row-string",
@@ -1707,8 +1717,10 @@
    "python": "refuse",
    "note": "A settings-only Linear row is an object.",
    "pythonMessage": "cannot contain biological sources",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@webFiles.bindings.linearSeqs[0]"
+   ]
   },
   {
    "id": "ov590-unknown-top-level-key-46",
@@ -3758,7 +3770,7 @@
    "pythonMessage": "Session version 33 requires a canonical renderRequest object.",
    "web": "refused",
    "note": "Admission row SessionChecked31.renderRequest.",
-   "webClass": "interim"
+   "webClass": "R4"
   },
   {
    "id": "row-sessionchecked31-resources",
@@ -3775,7 +3787,7 @@
    "pythonMessage": "Session version 33 requires a canonical resources object.",
    "web": "refused",
    "note": "Admission row SessionChecked31.resources.",
-   "webClass": "interim"
+   "webClass": "R4"
   },
   {
    "id": "row-sessionchecked31-version",
@@ -3897,9 +3909,37 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid proteinIdentityManifest schema-2 artifact.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked39.proteinIdentityManifest.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@proteinIdentityManifest",
+    "cache-entry-dropped@losatCache.entries[0]",
+    "cache-entry-dropped@losatCache.entries[1]",
+    "cache-entry-dropped@losatCache.entries[2]",
+    "cache-entry-dropped@losatCache.entries[3]",
+    "cache-entry-dropped@losatCache.entries[4]",
+    "cache-entry-dropped@losatCache.entries[5]",
+    "cache-entry-dropped@losatCache.entries[6]",
+    "cache-entry-dropped@losatCache.entries[7]",
+    "cache-entry-dropped@losatCache.entries[8]",
+    "cache-entry-dropped@losatCache.entries[9]",
+    "cache-entry-dropped@losatCache.entries[10]",
+    "cache-entry-dropped@losatCache.entries[11]",
+    "cache-entry-dropped@losatCache.entries[12]",
+    "cache-entry-dropped@losatCache.entries[13]",
+    "cache-entry-dropped@losatCache.entries[14]",
+    "cache-entry-dropped@losatCache.entries[15]",
+    "cache-entry-dropped@losatCache.entries[16]",
+    "cache-entry-dropped@losatCache.entries[17]",
+    "cache-entry-dropped@losatCache.entries[18]",
+    "cache-entry-dropped@losatCache.entries[19]",
+    "cache-entry-dropped@losatCache.entries[20]",
+    "cache-entry-dropped@losatCache.entries[21]",
+    "cache-entry-dropped@losatCache.entries[22]",
+    "cache-entry-dropped@losatCache.entries[23]",
+    "cache-entry-dropped@losatCache.entries[24]",
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ]
   },
   {
    "id": "row-sessionchecked39-renderrequest",
@@ -3915,7 +3955,7 @@
    "pythonMessage": "Session version 39 requires a canonical renderRequest object.",
    "web": "refused",
    "note": "Admission row SessionChecked39.renderRequest.",
-   "webClass": "interim"
+   "webClass": "R4"
   },
   {
    "id": "row-sessionchecked39-resources",
@@ -3932,7 +3972,7 @@
    "pythonMessage": "Session version 39 requires a canonical resources object.",
    "web": "refused",
    "note": "Admission row SessionChecked39.resources.",
-   "webClass": "interim"
+   "webClass": "R4"
   },
   {
    "id": "row-sessionchecked39-version",
@@ -3983,9 +4023,12 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked40.editorState.",
-   "webClass": "interim"
+   "webRepairs": [
+    "session-part-dropped@editorState",
+    "feature-recovery-failed@editorState.featureCatalog"
+   ]
   },
   {
    "id": "row-sessionchecked40-features",
@@ -4125,9 +4168,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid proteinIdentityManifest schema-2 artifact.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked40.proteinIdentityManifest.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@proteinIdentityManifest"
+   ]
   },
   {
    "id": "row-sessionchecked40-renderrequest",
@@ -4141,9 +4186,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session version 44 requires a canonical renderRequest object.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked40.renderRequest.",
-   "webClass": "interim"
+   "webRepairs": [
+    "request-dropped@renderRequest"
+   ]
   },
   {
    "id": "row-sessionchecked40-results",
@@ -4286,7 +4333,7 @@
    "pythonMessage": "Session modes holds a circular and a linear slice only.",
    "web": "refused",
    "note": "Admission row SessionChecked46.modes.",
-   "webClass": "interim"
+   "webClass": "R4"
   },
   {
    "id": "row-sessionchecked46-orthogroupstate",
@@ -4371,9 +4418,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid proteinIdentityManifest schema-2 artifact.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked46.proteinIdentityManifest.",
-   "webClass": "interim"
+   "webRepairs": [
+    "cache-entry-dropped@proteinIdentityManifest"
+   ]
   },
   {
    "id": "row-sessionchecked46-renderrequest",
@@ -4387,9 +4436,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session version 46 requires a canonical renderRequest object.",
-   "web": "refused",
+   "web": "repaired",
    "note": "Admission row SessionChecked46.renderRequest.",
-   "webClass": "interim"
+   "webRepairs": [
+    "request-dropped@renderRequest"
+   ]
   },
   {
    "id": "row-sessionchecked46-resources",
@@ -4895,6 +4946,362 @@
    "web": "repaired",
    "webRepairs": [
     "cache-entry-dropped@losatDerivedCache.entries"
+   ]
+  },
+  {
+   "id": "a6b-bindings-not-object-30",
+   "finding": "A6b: webFiles.bindings that is no object",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/webFiles",
+     "value": {
+      "bindings": 5
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session webFiles.bindings must be an object.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@webFiles.bindings"
+   ]
+  },
+  {
+   "id": "a6b-bindings-schema-7-44",
+   "finding": "A6b: a binding schema no writer wrote",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/webFiles/bindings/schema",
+     "value": 7
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Unsupported Web file binding schema.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@webFiles.bindings"
+   ]
+  },
+  {
+   "id": "a6b-binding-missing-resource-44",
+   "finding": "A6b: a binding that names no resource",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/webFiles/bindings/c_gb",
+     "value": {
+      "resourceId": "zzz"
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Web file binding references a missing resource: zzz.",
+   "web": "repaired",
+   "webRepairs": [
+    "file-entry-dropped@webFiles.bindings.c_gb"
+   ]
+  },
+  {
+   "id": "a6b-binding-missing-resource-46",
+   "finding": "A6b: a binding that names no resource",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/webFiles/bindings/c_gb",
+     "value": {
+      "resourceId": "zzz"
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Web file binding references a missing resource: zzz.",
+   "web": "repaired",
+   "webRepairs": [
+    "file-entry-dropped@webFiles.bindings.c_gb"
+   ]
+  },
+  {
+   "id": "a8-resource-size-44",
+   "finding": "A8: a resource whose declared size is invalid",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources/record-1-genbank/size",
+     "value": -1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid Web file binding resource payload.",
+   "web": "repaired",
+   "webRepairs": [
+    "file-entry-dropped@resources.record-1-genbank",
+    "file-entry-dropped@webFiles.bindings.c_gb",
+    "request-dropped@renderRequest"
+   ]
+  },
+  {
+   "id": "a8-resource-checksum-44",
+   "finding": "A8: a resource checksum that is no digest (recomputed)",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources/record-1-genbank/checksum",
+     "value": "abc"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Canonical resource 'record-1-genbank' is invalid: Embedded resource checksum does not matc",
+   "web": "loaded"
+  },
+  {
+   "id": "a8-resource-last-modified-44",
+   "finding": "A8: a resource lastModified out of range (recomputed)",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources/record-1-genbank/lastModified",
+     "value": -1
+    }
+   ],
+   "python": "accept",
+   "web": "loaded"
+  },
+  {
+   "id": "a7b-result-not-svg-44",
+   "finding": "A7b, A20: a Result that is no SVG",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/content",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Each current Session Result must be a named plain SVG.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "a20-result-interactive-44",
+   "finding": "A20: an interactive Result",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/name",
+     "value": "x.interactive.svg"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Each current Session Result must be a named plain SVG.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "a7b-editorstate-missing-44",
+   "finding": "A7b, A9: Results without an editorState",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/editorState"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@editorState",
+    "feature-recovery-failed@editorState.featureCatalog"
+   ]
+  },
+  {
+   "id": "a9-catalog-schema-1-44",
+   "finding": "A9, OV-711: a feature catalog of another schema",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/editorState/featureCatalog/schema",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session feature catalog must contain one version-compatible item per Result.",
+   "web": "repaired",
+   "webRepairs": [
+    "feature-recovery-failed@editorState.featureCatalog"
+   ]
+  },
+  {
+   "id": "a9-catalog-items-empty-44",
+   "finding": "A9, OV-711: a feature catalog that names no feature of its Results",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/editorState/featureCatalog/items",
+     "value": []
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session feature catalog must contain one version-compatible item per Result.",
+   "web": "repaired",
+   "webRepairs": [
+    "feature-recovery-failed@editorState.featureCatalog"
+   ]
+  },
+  {
+   "id": "a19-receipt-bad-44",
+   "finding": "A19: an alignment reset receipt of a Session without an alignment",
+   "base": "web-44-linear",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/editorState/alignmentResetReceipt",
+     "value": {
+      "binding": "0000000000000000000000000000000000000000000000000000000000000000",
+      "directions": [],
+      "referenceDeltaX": null
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Alignment reset receipt is malformed or stale.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@editorState.alignmentResetReceipt"
+   ]
+  },
+  {
+   "id": "a19-receipt-circular-46",
+   "finding": "A19: an alignment reset receipt of a Circular Session",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/editorState/alignmentResetReceipt",
+     "value": {
+      "binding": "0000000000000000000000000000000000000000000000000000000000000000",
+      "directions": [],
+      "referenceDeltaX": null
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Alignment reset receipt is malformed or stale.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@editorState.alignmentResetReceipt"
+   ]
+  },
+  {
+   "id": "annotation-warnings-text-44",
+   "finding": "OV-638: run metadata annotation warnings of another kind (re-derived)",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/runMetadata/annotationWarnings",
+     "value": "x"
+    }
+   ],
+   "python": "accept",
+   "web": "loaded"
+  },
+  {
+   "id": "annotation-warnings-text-33",
+   "finding": "OV-638: run metadata annotation warnings of another kind (re-derived)",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/runMetadata",
+     "value": {
+      "annotationWarnings": "x"
+     }
+    }
+   ],
+   "python": "accept",
+   "web": "loaded"
+  },
+  {
+   "id": "a13-entry-duplicate-key-39",
+   "finding": "A13: a LOSAT cache entry whose key repeats an earlier one",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatCache/entries/1/key",
+     "value": "DUP"
+    },
+    {
+     "op": "set",
+     "path": "/losatCache/entries/0/key",
+     "value": "DUP"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Duplicate LOSAT cache key: 'DUP'.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries[1]"
+   ]
+  },
+  {
+   "id": "a13-manifest-missing-39",
+   "finding": "A13: no protein identity manifest for the protein cache entries",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/proteinIdentityManifest"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Current protein LOSATP cache entries require proteinIdentityManifest.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries[0]",
+    "cache-entry-dropped@losatCache.entries[1]",
+    "cache-entry-dropped@losatCache.entries[2]",
+    "cache-entry-dropped@losatCache.entries[3]",
+    "cache-entry-dropped@losatCache.entries[4]",
+    "cache-entry-dropped@losatCache.entries[5]",
+    "cache-entry-dropped@losatCache.entries[6]",
+    "cache-entry-dropped@losatCache.entries[7]",
+    "cache-entry-dropped@losatCache.entries[8]",
+    "cache-entry-dropped@losatCache.entries[9]",
+    "cache-entry-dropped@losatCache.entries[10]",
+    "cache-entry-dropped@losatCache.entries[11]",
+    "cache-entry-dropped@losatCache.entries[12]",
+    "cache-entry-dropped@losatCache.entries[13]",
+    "cache-entry-dropped@losatCache.entries[14]",
+    "cache-entry-dropped@losatCache.entries[15]",
+    "cache-entry-dropped@losatCache.entries[16]",
+    "cache-entry-dropped@losatCache.entries[17]",
+    "cache-entry-dropped@losatCache.entries[18]",
+    "cache-entry-dropped@losatCache.entries[19]",
+    "cache-entry-dropped@losatCache.entries[20]",
+    "cache-entry-dropped@losatCache.entries[21]",
+    "cache-entry-dropped@losatCache.entries[22]",
+    "cache-entry-dropped@losatCache.entries[23]",
+    "cache-entry-dropped@losatCache.entries[24]",
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
    ]
   }
  ]

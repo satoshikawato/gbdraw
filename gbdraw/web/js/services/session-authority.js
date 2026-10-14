@@ -2,8 +2,8 @@
 import { validateAnnotationWarnings } from './session-feature-metadata.js';
 import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
-import { validateWebFileBindings } from './session-resource-backing.js';
-import { SESSION_INPUT_TYPES, requireActiveConfigContainers, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
+import { readSessionResources, validateWebFileBindings, webFileBindingFaults } from './session-resource-backing.js';
+import { SESSION_INPUT_TYPES, alignmentResetReceiptShapeHolds, requireActiveConfigContainers } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { canonicalFeatureOverrides, validateFeatureIdentityNotices } from './feature-placement.js';
@@ -37,6 +37,7 @@ import {
  *   SessionEnvelope, SessionInput, SessionResult } from '../contracts/session.generated.js'
  */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { AlignmentResetRequest } from './session-active-config-contract.js' */
 /** @import { ContractRepair, RepairPolicy } from '../utils/contract-repair.js' */
 /** @import { ContractShape } from '../utils/contract-shape.js' */
 /** @import { LoadRepair, Repaired } from '../utils/load-repairs.js' */
@@ -300,12 +301,37 @@ const bandRepair = (row, stored, root) => {
   if (row.path === key && isModeScopedVersion(stored) && FLAT_DRAFT_TOP_LEVEL_FIELDS.includes(key)) return null;
   const part = Object.hasOwn(SESSION_TOP_LEVEL_AUTHORITY, key)
     ? SESSION_TOP_LEVEL_AUTHORITY[/** @type {keyof SessionInput} */ (key)].part : null;
+  // The legacy `files` of a Session 40+ is named with the inputs it held,
+  // which load from no other place (A6c).
+  const inputs = row.path === 'files' ? heldInputNames(storedAt(stored, 'files')) : [];
   return loadRepair({
     code: part === 'cache' ? 'cache-entry-dropped'
       : bandHolds(root, key) && SESSION_PART_PATHS.includes(row.path) ? 'session-part-dropped' : 'session-field-dropped',
     path: row.path,
-    effect: row.effect
+    effect: row.effect,
+    ...(inputs.length ? { label: inputs.join(', ') } : {})
   });
+};
+
+/**
+ * The names of the input files a value holds: each `name` text of an object
+ * in it, in order, once.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+const heldInputNames = (value) => {
+  /** @type {Set<string>} */
+  const names = new Set();
+  /** @param {unknown} item */
+  const visit = (item) => {
+    if (Array.isArray(item)) item.forEach(visit);
+    else if (isPlainObject(item)) {
+      if (typeof item.name === 'string' && item.name.trim()) names.add(item.name.trim());
+      Object.values(item).forEach(visit);
+    }
+  };
+  visit(value);
+  return [...names];
 };
 
 /** @param {SessionEnvelope} document */
@@ -385,6 +411,63 @@ const readWebOnlyFields = (document, repairs) => {
 };
 
 /**
+ * The place of one binding under `webFiles.bindings`, as
+ * `webFileBindingFaults` names it: a slot, an element of a slot's list, or a
+ * slot of a list row.
+ */
+const BINDING_PATH = /^(\w+)(?:\[(\d+)\])?(?:\.(\w+))?$/;
+
+/**
+ * The input files of a Session as the app reads them (A8, A6b): a resource
+ * whose descriptor cannot be read is dropped, with a row when a binding or
+ * a request names it, and so is each
+ * binding that names a resource the Session does not hold (the slot it
+ * filled is named), or that cannot be read; an inventory that is no object or
+ * of a schema no writer wrote is dropped whole. The request's references to a
+ * dropped resource are its reader's (`readSessionRequests`).
+ * @param {SessionChecked} document
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {SessionChecked}
+ */
+const readSessionInputs = (document, repairs) => {
+  /** @type {Record<string, unknown>} */
+  let next = document;
+  const resources = readSessionResources(next.resources);
+  // A resource nothing names is dropped with no row (E-OD06, A15).
+  const named = collectCanonicalResourceIds([next.renderRequest, /** @type {UnvalidatedFields<'renderRequest'>} */ (next.otherModeResult)?.renderRequest,
+    /** @type {UnvalidatedFields<'bindings'>} */ (next.webFiles)?.bindings]);
+  resources.dropped.filter((id) => named.has(id.trim())).forEach((id) => repairs.push(
+    loadRepair({ code: 'file-entry-dropped', path: `resources.${id}`, effect: 'dropped' })
+  ));
+  if (resources.value !== next.resources) next = { ...next, resources: resources.value };
+  const webFiles = /** @type {UnvalidatedFields<'bindings'>} */ (next.webFiles);
+  const faults = webFileBindingFaults(webFiles,
+    /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (next.resources));
+  if (!faults.length || !isPlainObject(webFiles)) return /** @type {SessionChecked} */ (next);
+  if (faults.some(({ path }) => path === null)) {
+    repairs.push(loadRepair({ code: 'session-field-dropped', path: 'webFiles.bindings', effect: 'dropped' }));
+    const { bindings: _dropped, ...kept } = webFiles;
+    return /** @type {SessionChecked} */ ({ ...next, webFiles: kept }); // the inventory is optional in every band
+  }
+  // `webFileBindingFaults` found an object inventory.
+  const bindings = /** @type {Record<string, unknown>} */ (JSON.parse(JSON.stringify(webFiles.bindings)));
+  /** @type {Map<string, Set<number>>} */
+  const removed = new Map();
+  faults.forEach(({ path, field }) => {
+    repairs.push(loadRepair({ code: field ? 'session-field-dropped' : 'file-entry-dropped', path: `webFiles.bindings.${path}`, effect: 'dropped' }));
+    const [, key, index, slot] = /** @type {RegExpExecArray} */ (BINDING_PATH.exec(/** @type {string} */ (path)));
+    if (field) delete bindings[key];
+    else if (index === undefined) bindings[key] = null;
+    else if (slot !== undefined) /** @type {Record<string, unknown>[]} */ (bindings[key])[Number(index)][slot] = null;
+    else removed.set(key, (removed.get(key) ?? new Set()).add(Number(index)));
+  });
+  removed.forEach((indices, key) => {
+    bindings[key] = /** @type {unknown[]} */ (bindings[key]).filter((_, index) => !indices.has(index));
+  });
+  return /** @type {SessionChecked} */ ({ ...next, webFiles: { ...webFiles, bindings } }); // bindings read as above
+};
+
+/**
  * The one reader of a parsed Session document (D1c 2.1): its envelope
  * (`readSessionInput`, R2 and R3), then its version band of
  * `SESSION_ADMISSION_DESCRIPTION`, repaired by `repairByDescription` with
@@ -404,7 +487,7 @@ export const readSessionDocument = (value) => {
   const repairs = read.rows.flatMap((row) => bandRepair(row, envelope, band.root) ?? []);
   const repaired = read.rows.some(({ path }) => path === 'results') ? withoutResultSetMembers(read.value) : read.value;
   const checked = /** @type {SessionChecked} */ (repaired); // the band's description holds, as repaired
-  return { value: readSettingsOnlyParts(readWebOnlyFields(checked, repairs), repairs), repairs };
+  return { value: readSettingsOnlyParts(readSessionInputs(readWebOnlyFields(checked, repairs), repairs), repairs), repairs };
 };
 
 /**
@@ -418,7 +501,9 @@ export const readSessionDocument = (value) => {
  * @param {readonly LoadRepair[]} repairs Every repair of the Load.
  */
 export const restoresNothing = (stored, repairs) => {
-  const dropped = new Set(repairs.filter(({ effect }) => effect === 'dropped' || effect === 'defaulted').map(({ path }) => path));
+  // The other mode's set dropped for its request is the part `otherModeResult`.
+  const dropped = new Set(repairs.filter(({ effect }) => effect === 'dropped' || effect === 'defaulted')
+    .map(({ code, path }) => (code === 'other-result-set-dropped' ? 'otherModeResult' : path)));
   /** @param {SessionContentPart | null} [only] */
   const held = (only) => Object.entries(SESSION_TOP_LEVEL_AUTHORITY)
     .filter(([key, { part }]) => part !== null && (only === undefined || part === only)
@@ -792,18 +877,37 @@ const settingsOnlyFaults = (data) => {
 };
 
 /**
- * Load: a settings-only Session's Results and GenBank, GFF and FASTA inputs
- * are dropped with a row; its other committed artifacts and the resources no
- * binding names are dropped with none, as the settings-only Session of an
- * unreadable request drops them (`settingsOnlySessionCandidate`; A15, J4).
+ * A settings-only Session's Linear rows that are no object, dropped with a
+ * row: Python's reader requires each row to be an object (OV-566, A6b).
  * @param {SessionChecked} document
  * @param {LoadRepair[]} repairs Collects the rows.
  * @returns {SessionChecked}
  */
-const readSettingsOnlyParts = (document, repairs) => {
-  if (!isSettingsOnlySessionDocument(document)) return document;
+const withoutLinearRowsOfAnotherKind = (document, repairs) => {
+  const webFiles = /** @type {UnvalidatedFields<'bindings'>} */ (document.webFiles);
+  const bindings = /** @type {UnvalidatedFields<'linearSeqs'>} */ (webFiles?.bindings);
+  const rows = bindings?.linearSeqs;
+  if (!Array.isArray(rows) || rows.every(isPlainObject)) return document;
+  rows.forEach((row, index) => {
+    if (!isPlainObject(row)) repairs.push(loadRepair({ code: 'session-field-dropped', path: `webFiles.bindings.linearSeqs[${index}]`, effect: 'dropped' }));
+  });
+  // `rows` was read from `webFiles.bindings`, so both are objects.
+  return /** @type {SessionChecked} */ ({ ...document, webFiles: { ...webFiles, bindings: { ...bindings, linearSeqs: rows.filter(isPlainObject) } } });
+};
+
+/**
+ * Load: a settings-only Session's Results and GenBank, GFF and FASTA inputs
+ * are dropped with a row; its other committed artifacts and the resources no
+ * binding names are dropped with none, as the settings-only Session of an
+ * unreadable request drops them (`settingsOnlySessionCandidate`; A15, J4).
+ * @param {SessionChecked} stored
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {SessionChecked}
+ */
+const readSettingsOnlyParts = (stored, repairs) => {
+  if (!isSettingsOnlySessionDocument(stored)) return stored;
+  const document = withoutLinearRowsOfAnotherKind(stored, repairs);
   const faults = settingsOnlyFaults(document);
-  // A Linear row that is not an object is refused (A6b, E2b-2).
   if (!faults.rows || !(faults.biological || faults.results || faults.artifacts || faults.unboundResources.length)) return document;
   if (faults.results) repairs.push(loadRepair({ code: 'session-part-dropped', path: 'results', effect: 'dropped' }));
   const bindings = /** @type {Record<string, unknown>} */ (/** @type {{ bindings: unknown }} */ (document.webFiles).bindings);
@@ -891,96 +995,153 @@ const validateSettingsOnlyFlatDraft = (data) => {
 // One committed Result set: the top-level fields, or `otherModeResult`, whose
 // fields mirror them.
 /**
- * @param {Record<string, any>} set
+ * One thing a committed Result set holds that its Results cannot be restored
+ * with: Save refuses the first (`validateCommittedResultSet`), Load repairs
+ * each (`readCommittedResultSet`).
+ * - `results`: no list, or a Result that is no named plain SVG (A7b, A20);
+ * - `editorState`: no editor state that holds `featureCatalog`;
+ * - `receipt-missing`: no alignment reset receipt where the request needs one;
+ * - `receipt`: a receipt that is not of the request's plan (A19);
+ * - `catalog`: a feature catalog of another schema; `catalog-null`: none for
+ *   saved Results (A9).
+ * @typedef {{ kind: 'results' | 'editorState' | 'receipt-missing' | 'receipt' | 'catalog' | 'catalog-null', message: string }} ResultSetFault
+ */
+/** @param {unknown} result */
+const isPlainSvgResult = (result) => {
+  const resultName = isPlainObject(result) && typeof result.name === 'string' ? result.name.trim() : '';
+  const content = isPlainObject(result) ? result.content : null;
+  return Boolean(resultName) && !resultName.toLowerCase().endsWith('.interactive.svg')
+    && typeof content === 'string' && content.includes('<svg')
+    && !content.includes('gbdraw-interactive-feature-metadata') && !content.includes('gbdraw-interactive-feature-script');
+};
+
+/** @param {SessionInput} set */
+const storedRequestSchema = (set) => /** @type {UnvalidatedFields<'schema'>} */ (set.renderRequest)?.schema;
+
+/**
+ * @param {SessionInput} set
+ * @param {number | string} version
+ * @param {unknown} [storedSchema] The schema the file stored, before Load read the request (RK-1).
+ * @returns {ResultSetFault[]}
+ */
+const committedResultSetFaults = (set, version, storedSchema = storedRequestSchema(set)) => {
+  /** @type {ResultSetFault[]} */
+  const faults = [];
+  const results = set.results;
+  if (!Array.isArray(results)) faults.push({ kind: 'results', message: `Session version ${String(version)} requires a results array.` });
+  else if (!results.every(isPlainSvgResult)) faults.push({ kind: 'results', message: 'Each current Session Result must be a named plain SVG.' });
+  const editorState = isPlainObject(set.editorState) ? set.editorState : {};
+  if (!Object.hasOwn(editorState, 'featureCatalog')) {
+    faults.push({ kind: 'editorState', message: `Session version ${String(version)} requires editorState.featureCatalog.` });
+  }
+  // Load read the request before (`readSessionRequests`); Save holds a canonical one.
+  const request = /** @type {AlignmentResetRequest | null | undefined} */ (set.renderRequest);
+  if (Number(storedSchema) >= 8 && request?.layout?.similarityAlignment && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
+    faults.push({ kind: 'receipt-missing', message: 'Current alignment Session requires editorState.alignmentResetReceipt.' });
+  } else if (!alignmentResetReceiptShapeHolds(editorState.alignmentResetReceipt, request)) {
+    faults.push({ kind: 'receipt', message: 'ALIGNMENT_RESET_EVIDENCE' });
+  }
+  const featureCatalog = Object.hasOwn(editorState, 'featureCatalog') ? editorState.featureCatalog : null;
+  const expectedCatalogSchema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[Number(version)] ?? 3;
+  if (featureCatalog !== null && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)) {
+    faults.push({ kind: 'catalog', message: `Session version ${String(version)} requires a schema-${expectedCatalogSchema} editorState.featureCatalog.` });
+  } else if (Array.isArray(results) && results.length > 0 && featureCatalog === null && faults[0]?.kind !== 'results') {
+    faults.push({ kind: 'catalog-null', message: `Session version ${String(version)} requires a feature catalog for saved results.` });
+  }
+  return faults;
+};
+
+/**
+ * Save: refuses the first fault of a committed Result set.
+ * @param {readonly { kind: string, message: string }[]} faults
+ */
+const refuseFirstFault = ([fault]) => {
+  if (!fault) return;
+  // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
+  if (fault.kind === 'receipt') throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
+  throw new Error(fault.message);
+};
+
+/**
+ * Load: a committed Result set as far as it can be restored (A7b, A9, A19,
+ * A20). Results that cannot be read are dropped with the members that name
+ * them (positional: rule 6); an absent editor state reads as an empty one; a
+ * stale receipt reads as none, with a row; a catalog that cannot be read is
+ * dropped, and the Results stay without one (`feature-recovery-failed`).
+ * @param {SessionInput} set
+ * @param {readonly ResultSetFault[]} faults Of `set` (`committedResultSetFaults`).
+ * @param {string} at The set's path prefix (`''` or `otherModeResult.`).
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {SessionInput}
+ */
+const readCommittedResultSet = (set, faults, at, repairs) => {
+  if (!faults.length) return set;
+  const kinds = new Set(faults.map(({ kind }) => kind));
+  const editorState = { ...(isPlainObject(set.editorState) ? set.editorState : {}) };
+  if (kinds.has('editorState')) {
+    if (!holdsNothing(set.editorState) && !isPlainObject(set.editorState)) {
+      repairs.push(loadRepair({ code: 'session-part-dropped', path: `${at}editorState`, effect: 'defaulted' }));
+    }
+    editorState.featureCatalog = null;
+  }
+  // A receipt the file does not hold reads as none (E-OD06).
+  if (kinds.has('receipt-missing')) editorState.alignmentResetReceipt = null;
+  if (kinds.has('receipt')) {
+    repairs.push(loadRepair({ code: 'session-field-dropped', path: `${at}editorState.alignmentResetReceipt`, effect: 'dropped' }));
+    editorState.alignmentResetReceipt = null;
+  }
+  if (kinds.has('catalog') || kinds.has('catalog-null')) {
+    repairs.push(loadRepair({ code: 'feature-recovery-failed', path: `${at}editorState.featureCatalog`, effect: 'dropped' }));
+    editorState.featureCatalog = null;
+  }
+  if (!kinds.has('results')) return { ...set, editorState };
+  repairs.push(loadRepair({ code: 'session-part-dropped', path: `${at}results`, effect: 'dropped' }));
+  return /** @type {SessionInput} */ (withoutResultSetMembers({ ...set, results: [], editorState }));
+};
+
+/**
+ * @param {SessionInput} set
  * @param {number | string} version
  * @param {unknown} [storedSchema] The schema the file stored, before Load read the request (RK-1).
  */
-const validateCommittedResultSet = (set, version, storedSchema = set.renderRequest?.schema) => {
-  if (!Array.isArray(set.results)) {
-    throw new Error(`Session version ${String(version)} requires a results array.`);
-  }
-  set.results.forEach((result) => {
-    const resultName = (
-      isPlainObject(result) && typeof result.name === 'string'
-        ? result.name.trim()
-        : ''
-    );
-    const content = isPlainObject(result) ? result.content : null;
-    if (
-      !resultName
-      || resultName.toLowerCase().endsWith('.interactive.svg')
-      || typeof content !== 'string'
-      || !content.includes('<svg')
-      || content.includes('gbdraw-interactive-feature-metadata')
-      || content.includes('gbdraw-interactive-feature-script')
-    ) {
-      throw new Error('Each current Session Result must be a named plain SVG.');
-    }
-  });
-  const editorState = set.editorState;
-  if (
-    !isPlainObject(editorState)
-    || !Object.prototype.hasOwnProperty.call(editorState, 'featureCatalog')
-  ) {
-    throw new Error(
-      `Session version ${String(version)} requires editorState.featureCatalog.`
-    );
-  }
-  if (Number(storedSchema) >= 8
-    && set.renderRequest?.layout?.similarityAlignment
-    && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
-    throw new Error('Current alignment Session requires editorState.alignmentResetReceipt.');
-  }
-  validateAlignmentResetReceiptShape(editorState.alignmentResetReceipt, set.renderRequest);
-  const featureCatalog = editorState.featureCatalog;
-  const expectedCatalogSchema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[Number(version)] ?? 3;
-  if (
-    featureCatalog !== null
-    && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)
-  ) {
-    throw new Error(
-      `Session version ${String(version)} requires a schema-${expectedCatalogSchema} editorState.featureCatalog.`
-    );
-  }
-  if (
-    Array.isArray(set.results)
-    && set.results.length > 0
-    && featureCatalog === null
-  ) {
-    throw new Error(
-      `Session version ${String(version)} requires a feature catalog for saved results.`
-    );
-  }
+const validateCommittedResultSet = (set, version, storedSchema = storedRequestSchema(set)) => {
+  refuseFirstFault(committedResultSetFaults(set, version, storedSchema));
 };
 
 // E1: Session 46 keeps the other diagram mode's Result set beside the
 // top-level set. It needs a committed top-level request of the other mode, at
 // least one Result, and resources in the top-level table.
 /**
- * @param {Record<string, any>} sessionData
+ * What the other mode's Result set holds that it cannot be restored with:
+ * `set` and `request` faults come first; `set` faults of its committed Result
+ * set follow (`committedResultSetFaults`). Annotation warnings are read by
+ * `readSessionAuthorityParts`.
+ * @param {SessionInput} sessionData
  * @param {number | string} version
  * @param {StoredRequestSchemas} storedSchemas
+ * @returns {{ kind: 'set' | 'request' | ResultSetFault['kind'], message: string }[]}
  */
-const validateOtherModeResult = (sessionData, version, storedSchemas) => {
+const otherModeResultFaults = (sessionData, version, storedSchemas) => {
   const other = sessionData.otherModeResult;
   if (!isPlainObject(other) || Object.keys(other).some((key) => !OTHER_MODE_RESULT_FIELDS.includes(key))) {
-    throw new Error('Session otherModeResult must contain only a committed Result set.');
+    return [{ kind: 'set', message: 'Session otherModeResult must contain only a committed Result set.' }];
   }
   const mode = /** @type {UnvalidatedFields<'mode'>} */ (other.renderRequest)?.mode;
   if (!isPlainObject(sessionData.renderRequest) || !isPlainObject(other.renderRequest)
     || !(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode) || mode === sessionData.renderRequest.mode) {
-    throw new Error('Session otherModeResult requires a committed request of the other mode.');
+    return [{ kind: 'request', message: 'Session otherModeResult requires a committed request of the other mode.' }];
   }
-  validateCommittedResultSet(other, version, storedSchemas.otherModeResult ?? other.renderRequest?.schema);
-  // `validateCommittedResultSet` proved `results` an array of named SVG Results and `editorState` an object.
+  const setFaults = committedResultSetFaults(other, version, storedSchemas.otherModeResult ?? storedRequestSchema(other));
+  if (setFaults.some(({ kind }) => kind === 'results' || kind === 'editorState')) return setFaults;
+  /** @type {{ kind: 'set' | ResultSetFault['kind'], message: string }[]} */
+  const faults = [...setFaults];
+  // The checks above proved `results` an array of named SVG Results and `editorState` an object.
   const results = /** @type {SessionResult[]} */ (other.results);
   const editorState = /** @type {Record<string, unknown>} */ (other.editorState);
-  if (results.length === 0) throw new Error('Session otherModeResult requires a Result.');
+  if (results.length === 0) faults.push({ kind: 'set', message: 'Session otherModeResult requires a Result.' });
   const missing = [...collectCanonicalResourceIds(other.renderRequest)]
-    .filter((resourceId) => !Object.hasOwn(sessionData.resources || {}, resourceId));
-  if (missing.length > 0) {
-    throw new Error(`Session otherModeResult names missing resource(s): ${missing.join(', ')}`);
-  }
+    .filter((resourceId) => !(isPlainObject(sessionData.resources) && Object.hasOwn(sessionData.resources, resourceId)));
+  if (missing.length > 0) faults.push({ kind: 'set', message: `Session otherModeResult names missing resource(s): ${missing.join(', ')}` });
   // One rule with gbdraw/session_io.py: a present field is an object (null is not).
   const ui = Object.hasOwn(other, 'ui') ? other.ui : {};
   const legend = Object.hasOwn(editorState, 'legend') ? editorState.legend : {};
@@ -988,15 +1149,112 @@ const validateOtherModeResult = (sessionData, version, storedSchemas) => {
   if (!isPlainObject(ui) || Object.keys(ui).some((key) => !OTHER_MODE_RESULT_UI_FIELDS.includes(key))
     || Object.keys(editorState).some((key) => !OTHER_MODE_RESULT_EDITOR_FIELDS.includes(key))
     || !isPlainObject(legend) || Object.keys(legend).some((key) => !OTHER_MODE_RESULT_LEGEND_FIELDS.includes(key))) {
-    throw new Error('Session otherModeResult editorState and ui hold only that Result set\'s fields.');
+    faults.push({ kind: 'set', message: 'Session otherModeResult editorState and ui hold only that Result set\'s fields.' });
   }
   if (!isPlainObject(runMetadata)
     || Object.keys(runMetadata).some((key) => !OTHER_MODE_RESULT_RUN_METADATA_FIELDS.includes(key))) {
-    throw new Error('Session otherModeResult.runMetadata holds only that Result set\'s metadata.');
+    faults.push({ kind: 'set', message: 'Session otherModeResult.runMetadata holds only that Result set\'s metadata.' });
   }
-  validateAnnotationWarnings(runMetadata.annotationWarnings, results);
-  validateFeatureIdentityNotices(runMetadata.featureIdentityNotices, results);
-  validateComparisonWarnings(runMetadata.comparisonWarnings, results);
+  return faults;
+};
+
+/**
+ * Save: the other mode's Result set (E1).
+ * @param {SessionInput} sessionData
+ * @param {number | string} version
+ * @param {StoredRequestSchemas} storedSchemas
+ */
+const validateOtherModeResult = (sessionData, version, storedSchemas) => {
+  refuseFirstFault(otherModeResultFaults(sessionData, version, storedSchemas));
+  // The check above proved the set an object.
+  const other = /** @type {SessionInput} */ (sessionData.otherModeResult);
+  validateAnnotationWarnings(/** @type {UnvalidatedFields<'annotationWarnings'>} */ (other.runMetadata)?.annotationWarnings, storedResults(other));
+  validateRunNotices(other);
+};
+
+/**
+ * A Result set's Results, read by index (unvalidated).
+ * @param {SessionInput} set
+ */
+const storedResults = (set) => /** @type {{ readonly [index: number]: UnvalidatedFields<'name'> } | null | undefined} */ (set.results);
+
+/**
+ * The feature identity notices and comparison warnings of a Result set's run
+ * metadata: Save and Load refuse ones that do not match its Results.
+ * @param {SessionInput} set A Session or the other mode's Result set.
+ */
+const validateRunNotices = (set) => {
+  const runMetadata = /** @type {UnvalidatedFields<'featureIdentityNotices' | 'comparisonWarnings'>} */ (set.runMetadata);
+  validateFeatureIdentityNotices(runMetadata?.featureIdentityNotices, set.results);
+  validateComparisonWarnings(runMetadata?.comparisonWarnings, storedResults(set));
+};
+
+/**
+ * `runMetadata` without annotation warnings that do not match `results`:
+ * Load drops them with no row, as the next Generate derives them again
+ * (OV-638, J2); Generate and Save refuse them.
+ * @template {SessionInput} T
+ * @param {T} set A Session or the other mode's Result set.
+ * @returns {T}
+ */
+const withReadAnnotationWarnings = (set) => {
+  const runMetadata = set.runMetadata;
+  if (!isPlainObject(runMetadata)) return set;
+  try {
+    validateAnnotationWarnings(runMetadata.annotationWarnings, storedResults(set));
+    return set;
+  } catch {
+    // `validateAnnotationWarnings` is pure: it throws only for warnings that do not hold.
+  }
+  const { annotationWarnings: _dropped, ...kept } = runMetadata;
+  return /** @type {T} */ ({ ...set, runMetadata: kept });
+};
+
+/**
+ * Load: the committed Result sets of a Session, read after its requests
+ * (the receipts are checked against the requests Load read, RK-2): what
+ * Save refuses in them (`validateSessionAuthorityInventory`) is repaired
+ * before the dialog (E-OD02). The other mode's set is dropped whole when it
+ * cannot be restored: without its request (`other-result-set-dropped`, A7g),
+ * or with a fault of its own (`session-part-dropped`).
+ * @template {SessionInput} T
+ * @param {T} sessionData
+ * @param {number} version
+ * @param {StoredRequestSchemas} storedSchemas
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {T}
+ */
+export const readSessionAuthorityParts = (sessionData, version, storedSchemas, repairs) => {
+  if (version < CANONICAL_SESSION_MIN_VERSION) return sessionData;
+  /** @type {SessionInput} */
+  let data = sessionData;
+  if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
+    data = readCommittedResultSet(data, committedResultSetFaults(data, version,
+      storedSchemas.renderRequest ?? storedRequestSchema(data)), '', repairs);
+  }
+  if (Object.hasOwn(data, 'otherModeResult')) {
+    const faults = otherModeResultFaults(data, version, storedSchemas);
+    const { otherModeResult: other, ...rest } = data;
+    if (faults.some(({ kind }) => kind === 'request')) {
+      const mode = /** @type {UnvalidatedFields<'renderRequest', UnvalidatedFields<'mode'>>} */ (other)?.renderRequest?.mode;
+      repairs.push(loadRepair({
+        code: 'other-result-set-dropped', path: 'otherModeResult.renderRequest', effect: 'dropped',
+        ...(mode === 'circular' || mode === 'linear' ? { label: mode === 'circular' ? 'Circular' : 'Linear' } : {})
+      }));
+      data = rest;
+    } else if (faults.some(({ kind }) => !['receipt', 'receipt-missing'].includes(kind))) {
+      repairs.push(loadRepair({ code: 'session-part-dropped', path: 'otherModeResult', effect: 'dropped' }));
+      data = rest;
+    } else {
+      // `otherModeResultFaults` found no `set` fault: the set is an object.
+      // Without `set` and `request` faults, the rest are the set's own (`committedResultSetFaults`).
+      const setFaults = /** @type {ResultSetFault[]} */ (faults.filter(({ kind }) => kind !== 'set' && kind !== 'request'));
+      const kept = withReadAnnotationWarnings(readCommittedResultSet(/** @type {SessionInput} */ (other), setFaults, 'otherModeResult.', repairs));
+      validateRunNotices(kept);
+      data = { ...data, otherModeResult: kept };
+    }
+  }
+  return /** @type {T} */ (withReadAnnotationWarnings(data));
 };
 
 // Session 46 keeps each mode's draft in `modes` (registry fields only) and
@@ -1127,10 +1385,14 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
         throw new Error(`Session ui.${field} must be gb or gff when present.`);
       }
     }
-    validateCommittedResultSet(sessionData, version,
-      storedSchemas.renderRequest ?? /** @type {UnvalidatedFields<'schema'>} */ (sessionData.renderRequest)?.schema);
+    // Load read the committed Result sets (`readSessionAuthorityParts`): it
+    // keeps Results whose catalog it dropped, which Save refuses.
+    if (!load) {
+      validateCommittedResultSet(sessionData, version,
+        storedSchemas.renderRequest ?? /** @type {UnvalidatedFields<'schema'>} */ (sessionData.renderRequest)?.schema);
+    }
   }
-  if (Object.hasOwn(sessionData, 'otherModeResult')) validateOtherModeResult(sessionData, version, storedSchemas);
+  if (!load && Object.hasOwn(sessionData, 'otherModeResult')) validateOtherModeResult(sessionData, version, storedSchemas);
   const runMetadata = /** @type {UnvalidatedFields<'annotationWarnings' | 'featureIdentityNotices' | 'comparisonWarnings'>} */ (
     sessionData.runMetadata
   );

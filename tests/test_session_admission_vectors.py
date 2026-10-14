@@ -56,9 +56,8 @@ def _edited(vector: dict[str, Any]) -> dict[str, Any]:
     return document
 
 
-# R1-R4: the only refusals the Load repair receipt keeps. `interim` is a
-# refusal of a content part that PR-E turns into a repair (BA-D25).
-WEB_CLASSES = {"R1", "R2", "R3", "R4", "interim"}
+# R1-R4: the only refusals the Load repair receipt keeps (BA-D25).
+WEB_CLASSES = {"R1", "R2", "R3", "R4"}
 
 
 def test_vector_ids_are_unique_and_each_verdict_is_complete() -> None:
