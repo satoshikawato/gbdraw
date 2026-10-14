@@ -70,6 +70,7 @@ const {
   validateSessionLosatArtifacts
 } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { promoteCanonicalRenderRequestToCurrent } = await import('../../gbdraw/web/js/services/session-request.js');
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 
@@ -525,7 +526,8 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   assert.equal(state.selectedOrthogroupAlignmentFeature.value, '');
 
   state.files.linearCanonicalComparisons = [];
-  adoptCanonicalRenderArtifacts({ renderRequest, resources });
+  // Generate adopts what Load committed: the request of schema 9.
+  adoptCanonicalRenderArtifacts({ renderRequest: getCommittedCanonicalSession().renderRequest, resources });
   const collinearityReencodesBefore = resourceReencodesByName.get('collinearity.json') || 0;
   assert.deepEqual(
     state.files.linearCanonicalComparisons.map((comparison) => comparison.kind),
@@ -554,7 +556,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   assert.equal(serialized.linearCanonicalComparisons[2].valueKind, 'blocks');
   assert.deepEqual(
     serialized.linearCanonicalComparisons[3],
-    generatedProteinComparison
+    { ...generatedProteinComparison, settings: promotedSettings }
   );
 });
 
@@ -954,7 +956,7 @@ ORIGIN
   );
 
   adoptCanonicalRenderArtifacts({
-    renderRequest,
+    renderRequest: promoteCanonicalRenderRequestToCurrent(renderRequest),
     resources,
     webFiles: {
       conservationBlastSource: 'losat-cache',

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
 const ref = (value) => ({ value });
 // The fixture refs are plain objects, so a watcher runs only on `flushWatchers()`.
@@ -36,7 +37,7 @@ const targetA = member('b', 'target-a', 1, '-', true);
 const targetB = member('b', 'target-b', 2, '+');
 const targetC = member('c', 'target-c', 3, null);
 const renderRequest = {
-  schema: 8, mode: 'linear', layout:{recordTranslations:[],similarityAlignment:null}, records: ['a', 'b', 'c'].map((recordKey) => ({
+  schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear', layout:{recordTranslations:[],similarityAlignment:null}, records: ['a', 'b', 'c'].map((recordKey) => ({
     recordKey, source:{kind:'genbank',resourceId:'source'}, selector:{kind:'recordId',id:recordKey},cardinality:'exactly_one',display:{isCircular:null,startCoordinate:null}, region: null, presentation: { reverseComplement: false }
   }))
 };

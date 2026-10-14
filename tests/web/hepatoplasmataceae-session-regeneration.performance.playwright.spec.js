@@ -5,6 +5,7 @@ const os = require('node:os');
 const { join, resolve } = require('node:path');
 const {
   CURRENT_FEATURE_CATALOG_SCHEMA,
+  CURRENT_REQUEST_SCHEMA,
   getDiagramWorkerActivity,
   openApp,
   expectSessionLoadedWithoutWarnings,
@@ -624,7 +625,8 @@ test('exact saved Session regenerates twice with bounded work and fresh readines
       catalogResultIndex: 0,
       activePlan: { mode: 'adjacent', defaultSource: 'losat', edgeCount: 0 },
       committedRequest: {
-        schema: 5,
+        // Load commits every stored request at the current schema.
+        schema: CURRENT_REQUEST_SCHEMA,
         precomputedComparisonCount: 4,
         pairs: [[0, 1], [1, 2], [2, 3], [3, 4]]
       }
