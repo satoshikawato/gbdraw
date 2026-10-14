@@ -86,7 +86,7 @@ def test_api_diagram_options_forward_collinearity_search_scope(monkeypatch: pyte
     monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram_from_records", fake_assemble)
 
     api_diagram_module.build_linear_diagram(
-        [],
+        [SeqRecord(Seq("ATGC"), id="rec1")],
         options=LinearDiagramOptions(
             losat_search=LosatSearchOptions(
                 program="losatp",
@@ -376,7 +376,9 @@ def test_diagram_options_attach_explicit_label_tables(
             [SeqRecord(Seq("ATGC"), id="rec1")], options=options
         )
     else:
-        api_diagram_module.build_linear_diagram([], options=options)
+        api_diagram_module.build_linear_diagram(
+            [SeqRecord(Seq("ATGC"), id="rec1")], options=options
+        )
 
     cfg = captured["cfg"]
     filtering = cfg.labels.filtering.as_dict()
@@ -424,7 +426,7 @@ def test_diagram_options_attach_explicit_label_files(
         fake_assemble,
     )
     api_diagram_module.build_linear_diagram(
-        [],
+        [SeqRecord(Seq("ATGC"), id="rec1")],
         options=LinearDiagramOptions(
             label_whitelist_file="whitelist.tsv",
             qualifier_priority_file="priority.tsv",
@@ -550,6 +552,64 @@ def _call_high_level_builder(
     return api_diagram_module.build_linear_diagram([record], options=options)
 
 
+_ASSEMBLERS = {
+    "circular": "assemble_circular_diagram_from_record",
+    "circular_multi": "assemble_circular_diagram_from_records",
+    "linear": "assemble_linear_diagram_from_records",
+}
+# What the builder's readers return, and so what every assembly receives.
+_FEATURE_INPUTS_READ = object()
+_DEPTH_SPECS_READ = object()
+_DEPTH_TRACKS_READ = object()
+
+
+def _capture_build(
+    monkeypatch: pytest.MonkeyPatch, builder_name: str
+) -> tuple[dict[str, object], dict[str, object]]:
+    """The assembler's keyword arguments, and those of the builder's file readers.
+
+    A builder reads the color, visibility and Depth inputs once, before it
+    assembles (a label fit row assembles again, OV-732): those options reach
+    the readers, and the readers' results reach the assembler.
+    """
+
+    assembled: dict[str, object] = {}
+    read: dict[str, object] = {}
+
+    def fake_assemble(*_args, **kwargs):
+        assembled.update(kwargs)
+        return object()
+
+    def fake_feature_inputs(**kwargs):
+        read.update(kwargs)
+        return _FEATURE_INPUTS_READ
+
+    def fake_normalize_depth(_records, **kwargs):
+        read.update(kwargs)
+        return _DEPTH_SPECS_READ
+
+    def fake_depth_inputs(specs):
+        assert specs is _DEPTH_SPECS_READ
+        return _DEPTH_TRACKS_READ
+
+    monkeypatch.setattr(api_diagram_module, _ASSEMBLERS[builder_name], fake_assemble)
+    monkeypatch.setattr(api_diagram_module, "_resolve_feature_render_inputs", fake_feature_inputs)
+    monkeypatch.setattr(api_diagram_module, "normalize_depth_tracks", fake_normalize_depth)
+    monkeypatch.setattr(api_diagram_module, "depth_track_inputs", fake_depth_inputs)
+    return assembled, read
+
+
+def _forwarded(assembled: dict[str, object], read: dict[str, object], name: str) -> object:
+    """What the build received for ``name``: a read option goes to its reader only."""
+
+    assert assembled["_resolved_feature_inputs"] is _FEATURE_INPUTS_READ
+    assert assembled["depth_tracks"] is _DEPTH_TRACKS_READ
+    if name in read:
+        assert name not in assembled
+        return read[name]
+    return assembled[name]
+
+
 def _assert_forwarded_value(actual: object, expected: object) -> None:
     if isinstance(expected, pd.DataFrame):
         assert actual is expected
@@ -581,18 +641,7 @@ def test_diagram_options_forward_shared_non_default_values(
     expected: object,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
-
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
-        return object()
-
-    target = {
-        "circular": "assemble_circular_diagram_from_record",
-        "circular_multi": "assemble_circular_diagram_from_records",
-        "linear": "assemble_linear_diagram_from_records",
-    }[builder_name]
-    monkeypatch.setattr(api_diagram_module, target, fake_assemble)
+    assembled, read = _capture_build(monkeypatch, builder_name)
 
     _call_high_level_builder(
         builder_name,
@@ -606,7 +655,7 @@ def test_diagram_options_forward_shared_non_default_values(
             None,
             resolve_mode_profile_overrides(mode, value),
         )
-    _assert_forwarded_value(captured[assembler_name], expected)
+    _assert_forwarded_value(_forwarded(assembled, read, assembler_name), expected)
 
 
 @pytest.mark.parametrize("builder_name", ["circular", "circular_multi", "linear"])
@@ -614,20 +663,9 @@ def test_diagram_option_bundles_forward_non_default_values(
     builder_name: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    assembled, read = _capture_build(monkeypatch, builder_name)
     color_table = pd.DataFrame({"color": ["#123456"]})
     default_colors = pd.DataFrame({"color": ["#abcdef"]})
-
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
-        return object()
-
-    target = {
-        "circular": "assemble_circular_diagram_from_record",
-        "circular_multi": "assemble_circular_diagram_from_records",
-        "linear": "assemble_linear_diagram_from_records",
-    }[builder_name]
-    monkeypatch.setattr(api_diagram_module, target, fake_assemble)
 
     tracks = (
         LinearTrackOptions(
@@ -658,19 +696,22 @@ def test_diagram_option_bundles_forward_non_default_values(
     )
     _call_high_level_builder(builder_name, options)
 
-    assert captured["color_table"] is color_table
-    assert captured["default_colors"] is default_colors
-    assert captured["default_colors_palette"] == "ajisai"
-    assert captured["output_prefix"] == "out"
-    assert captured["legend"] == "left"
-    assert captured["plot_title_position"] == "top"
+    def forwarded(name: str) -> object:
+        return _forwarded(assembled, read, name)
+
+    assert forwarded("color_table") is color_table
+    assert forwarded("default_colors") is default_colors
+    assert forwarded("default_colors_palette") == "ajisai"
+    assert forwarded("output_prefix") == "out"
+    assert forwarded("legend") == "left"
+    assert forwarded("plot_title_position") == "top"
     if builder_name == "linear":
-        assert captured["linear_track_slots"] == ["features:features"]
-        assert captured["linear_track_axis_index"] == 1
+        assert forwarded("linear_track_slots") == ["features:features"]
+        assert forwarded("linear_track_axis_index") == 1
     else:
-        assert captured["circular_track_slots"] == ["features:features"]
-        assert captured["circular_track_axis_index"] == 1
-        assert captured["center_reserved_radius"] == 0.2
+        assert forwarded("circular_track_slots") == ["features:features"]
+        assert forwarded("circular_track_axis_index") == 1
+        assert forwarded("center_reserved_radius") == 0.2
 
 
 @pytest.mark.parametrize("builder_name", ["circular", "circular_multi", "linear"])
@@ -689,18 +730,7 @@ def test_plural_depth_options_forward_with_mode_specific_shape(
     expected: object,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
-
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
-        return object()
-
-    target = {
-        "circular": "assemble_circular_diagram_from_record",
-        "circular_multi": "assemble_circular_diagram_from_records",
-        "linear": "assemble_linear_diagram_from_records",
-    }[builder_name]
-    monkeypatch.setattr(api_diagram_module, target, fake_assemble)
+    assembled, read = _capture_build(monkeypatch, builder_name)
     _call_high_level_builder(
         builder_name,
         _mode_options(builder_name, **{field_name: value}),
@@ -709,9 +739,9 @@ def test_plural_depth_options_forward_with_mode_specific_shape(
     if builder_name == "circular":
         singular_name = "depth_table" if field_name == "depth_tables" else "depth_file"
         singular_value = expected[0]
-        _assert_forwarded_value(captured[singular_name], singular_value)
+        _assert_forwarded_value(_forwarded(assembled, read, singular_name), singular_value)
     else:
-        _assert_forwarded_value(captured[assembler_name], expected)
+        _assert_forwarded_value(_forwarded(assembled, read, assembler_name), expected)
 
 
 _CIRCULAR_ONLY_FORWARDING_CASES = [
@@ -827,26 +857,17 @@ def test_diagram_options_forward_linear_only_non_default_values(
     expected: object,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
-
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
-        return object()
-
-    monkeypatch.setattr(
-        api_diagram_module,
-        "assemble_linear_diagram_from_records",
-        fake_assemble,
-    )
+    assembled, read = _capture_build(monkeypatch, "linear")
     _call_high_level_builder(
         "linear",
         LinearDiagramOptions(**{field_name: value}),
     )
 
+    forwarded = _forwarded(assembled, read, assembler_name)
     if expected is None:
-        assert captured[assembler_name] is value
+        assert forwarded is value
     else:
-        _assert_forwarded_value(captured[assembler_name], expected)
+        _assert_forwarded_value(forwarded, expected)
 
 
 @pytest.mark.parametrize(
