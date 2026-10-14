@@ -647,38 +647,42 @@ const REFUSED_CONFIG_FIELDS = [
   { adv: { linear_show_accession: true } }, { adv: { depth_tick_interval: 5 } },
   { adv: { depth_tracks: [{ label: 'D', tick_interval: 5 }] } }, { losat: { blastp: { collinearMaxGeneGap: 2 } } },
   { form: { linear_track_layout: 'sideways' } }, { adv: { label_placement: 'inside' } }, { adv: { multi_record_size_mode: 'huge' } },
-  { adv: { feature_shapes: { CDS: 'bogus' } } }, { adv: { feature_shapes: { gene: 'bogus' } } },
+  // A default feature type's shape the merge installs (text or null) that names no shape.
+  { adv: { feature_shapes: { CDS: 'bogus' } } }, { adv: { feature_shapes: { CDS: null } } },
   { adv: { arrow_head_length_ratio: -1 } }, { adv: { arrow_shaft_width_ratio: 2 } },
-  // r4 S1: the stored Linear label visibilities, which the merge copies.
-  { adv: { linear_accession_visibility: 'bogus' } }, { adv: { linear_accession_visibility: null } },
-  { adv: { linear_length_visibility: 5 } }
+  // r4 S1: the stored Linear label visibilities the merge copies (text or null).
+  { adv: { linear_accession_visibility: 'bogus' } }, { adv: { linear_accession_visibility: null } }
 ];
+// A Session 46 with `fields` in its Circular drawing's settings.
+const sessionWith = ({ form = {}, adv = {}, losat }) => {
+  const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  const { config } = session.modes.circular;
+  Object.assign(config.form, form);
+  Object.assign(config.adv, adv);
+  if (losat) config.losat = { ...config.losat, blastp: { ...config.losat?.blastp, ...losat.blastp } };
+  return session;
+};
+// r4 S1: a configuration file with current track stacks, which no older
+// reading renames or checks first (a Session 46 drawing's settings), made
+// lossy by an unknown GC content mode.
+const currentLegacyWith = ({ form = {}, adv = {}, losat }) => {
+  const config = structuredClone(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz').modes.circular.config);
+  delete config.unmanagedConfigOverrides;
+  Object.assign(config.form, form);
+  Object.assign(config.adv, { gc_content_mode: 'ratio' }, adv);
+  if (losat) config.losat = { ...config.losat, blastp: { ...config.losat?.blastp, ...losat.blastp } };
+  return config;
+};
+// The same as a minimal configuration file, which older readings migrate first.
+const legacyWith = (fields) => ({ ...fields, adv: { gc_content_mode: 'ratio', ...fields.adv } });
 test('a configuration field Load refuses is refused before the dialog (BA-OD96)', async () => {
   const legacyOfV39 = fixture('BGC0000708-BGC0000713.v39.gbdraw-session.json.gz').config;
   delete legacyOfV39.unmanagedConfigOverrides;
   // Lossy otherwise: an unknown GC content mode is a dialog row.
   legacyOfV39.adv.gc_content_mode = 'ratio';
-  const sessionWith = ({ form = {}, adv = {}, losat }) => {
-    const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
-    const { config } = session.modes.circular;
-    Object.assign(config.form, form);
-    Object.assign(config.adv, adv);
-    if (losat) config.losat = { ...config.losat, blastp: { ...config.losat?.blastp, ...losat.blastp } };
-    return session;
-  };
-  // r4 S1: a configuration file with current track stacks, which no older
-  // reading renames or checks first (a Session 46 drawing's settings).
-  const currentLegacyWith = ({ form = {}, adv = {}, losat }) => {
-    const config = structuredClone(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz').modes.circular.config);
-    delete config.unmanagedConfigOverrides;
-    Object.assign(config.form, form);
-    Object.assign(config.adv, { gc_content_mode: 'ratio' }, adv);
-    if (losat) config.losat = { ...config.losat, blastp: { ...config.losat?.blastp, ...losat.blastp } };
-    return config;
-  };
   const files = [['r3 legacy v39', legacyOfV39],
     ...REFUSED_CONFIG_FIELDS.flatMap((fields) => [
-      [`legacy ${JSON.stringify(fields)}`, { ...fields, adv: { gc_content_mode: 'ratio', ...fields.adv } }],
+      [`legacy ${JSON.stringify(fields)}`, legacyWith(fields)],
       [`current legacy ${JSON.stringify(fields)}`, currentLegacyWith(fields)],
       [`session ${JSON.stringify(fields)}`, sessionWith(fields)]
     ])];
@@ -701,6 +705,66 @@ test('a configuration field Load refuses is refused before the dialog (BA-OD96)'
   const retiredNames = REFUSED_CONFIG_FIELDS.slice(0, 4).map((fields) => JSON.stringify(fields));
   assert.deepEqual(outcomes, files.map(([name]) => (retiredNames.some((fields) => name === `legacy ${fields}`)
     ? [name, 'legacy', 1, true] : [name, 'error', 0, false])));
+});
+
+// BA-OD100: Load refuses no file the Web loaded before PR-N. These files
+// loaded on origin/dev 28c8277f (fix4 probe: one process per file, the value
+// in a minimal and a current configuration file and in a Session 46); the
+// merge did not use the value or the feature type's shape was not read.
+const LOADED_BEFORE = [
+  ...[{ CDS: 5 }, { CDS: true }, { gene: 'bogus' }, { gene: 5 }, { gene: null }, { gene: { a: 1 } }, { '': 'arrow' }, { ' ': 'bogus' }]
+    .flatMap((feature_shapes) => {
+      const fields = { adv: { feature_shapes } };
+      return [[`legacy ${JSON.stringify(fields)}`, legacyWith(fields)], [`current legacy ${JSON.stringify(fields)}`, currentLegacyWith(fields)],
+        [`session ${JSON.stringify(fields)}`, sessionWith(fields)]];
+    }),
+  // A Linear label visibility of another kind in a configuration file with current track stacks.
+  ...[{ linear_accession_visibility: 5 }, { linear_accession_visibility: true }, { linear_accession_visibility: {} },
+    { linear_length_visibility: 0 }, { linear_length_visibility: false }]
+    .map((adv) => [`current legacy ${JSON.stringify(adv)}`, currentLegacyWith({ adv })])
+];
+test('no file the Web loaded before PR-N is refused (BA-OD100)', async () => {
+  const outcomes = [];
+  for (const [name, file] of LOADED_BEFORE) {
+    const loaded = await importSession(input(file), { confirmLoadRepairs: async () => true });
+    outcomes.push([name, loaded.status === 'ok' || loaded.status === 'legacy' ? 'loaded' : loaded.error?.message ?? loaded.status]);
+    if (loaded.status === 'ok' || loaded.status === 'legacy') await savedSession(name);
+  }
+  assert.deepEqual(outcomes, LOADED_BEFORE.map(([name]) => [name, 'loaded']));
+});
+
+// BA-OD100: in a configuration file, a default feature type's shape that is
+// no text and a Linear label visibility that is no text are not used (the
+// drawing's value stays, named in the row), and the shape of a feature type
+// the defaults lack that names no shape is dropped. The apply reads them with
+// the readers the dialog lists them by.
+test('a configuration file with a shape or Linear visibility that is no text, or an unknown shape of a new feature type, loads with its rows (BA-OD100)', async () => {
+  const shownMode = state.mode.value;
+  state.mode.value = 'linear';
+  try {
+    const drawing = state.drawings.linear;
+    const before = { CDS: drawing.adv.feature_shapes.CDS, accession: drawing.adv.linear_accession_visibility,
+      length: drawing.adv.linear_length_visibility };
+    const file = currentLegacyWith({ adv: {} });
+    Object.assign(file.adv, {
+      feature_shapes: { ...file.adv.feature_shapes, CDS: 5, gene: 'bogus', misc_feature: ' Rectangle ' },
+      linear_accession_visibility: true, linear_length_visibility: 0
+    });
+    const loaded = await importSession(input(file), { confirmLoadRepairs: async () => true });
+    assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
+    assert.deepEqual(loaded.repairs.filter(({ path }) => /feature_shapes|visibility/.test(path))
+      .map(({ code, path, effect, stored, used }) => [code, path, effect, stored, used]), [
+      ['setting-replaced', 'adv.feature_shapes.CDS', 'defaulted', '5', before.CDS],
+      ['setting-replaced', 'adv.linear_accession_visibility', 'defaulted', 'true', before.accession],
+      ['setting-replaced', 'adv.linear_length_visibility', 'defaulted', '0', before.length],
+      ['setting-replaced', 'adv.feature_shapes.gene', 'dropped', 'bogus', undefined]
+    ]);
+    assert.deepEqual([drawing.adv.feature_shapes.CDS, Object.hasOwn(drawing.adv.feature_shapes, 'gene'), drawing.adv.feature_shapes.misc_feature,
+      drawing.adv.linear_accession_visibility, drawing.adv.linear_length_visibility], [before.CDS, false, 'rectangle', before.accession, before.length]);
+    await savedSession('BA-OD100');
+  } finally {
+    state.mode.value = shownMode;
+  }
 });
 
 // r4 S1, BA-OD99 (b): in a configuration file, a color rule or a whitelist

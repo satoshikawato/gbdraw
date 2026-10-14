@@ -20,6 +20,8 @@ import {
   readLinearTypographyLinked
 } from './session-active-config-contract.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
+import { FEATURE_RENDERING_VALUES } from '../utils/feature-rendering.js';
+import { LINEAR_LABEL_VISIBILITY_MODES } from './linear-label-visibility.js';
 
 /** @import { FieldLeaf, FieldReader, FieldReading } from '../utils/field-reading.js' */
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
@@ -356,6 +358,32 @@ const isRadiusRatio = (numeric) => numeric > 0 && numeric <= 1;
 const isNonNegative = (numeric) => numeric >= 0;
 const readNonNegativeNumberOrNull = nonNegativeNumberOrNull;
 
+/**
+ * The feature shapes after the merge (`adv.feature_shapes`): a shape is read
+ * without case and outer spaces, a feature type without outer spaces. An
+ * entry whose type is empty or whose shape names none is dropped (BA-OD100):
+ * the merge copies the shape of a feature type the defaults lack as stored,
+ * and a default type's shape of another kind is not used (a text one that
+ * names no shape is refused before, `requireCurrentConfigFields`).
+ * @type {FieldReader<Record<string, string>>}
+ */
+const readFeatureShapes = (value) => {
+  /** @type {Record<string, string>} */
+  const shapes = {};
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  Object.entries(isPlainObject(value) ? value : {}).forEach(([key, shape]) => {
+    const featureType = key.trim();
+    const name = typeof shape === 'string' ? shape.trim().toLowerCase() : '';
+    if (featureType && FEATURE_RENDERING_VALUES.includes(name)) shapes[featureType] = name;
+    // An entry of no feature type, or an unset shape, drew nothing: no row.
+    else if (featureType && !isUnsetValue(shape)) leaves.push({ at: `.${key}`, stored: shape, used: undefined });
+  });
+  return { value: shapes, lost: leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
+};
+// A stored visibility the merge installs names a mode (`requireCurrentConfigFields`).
+const readLinearLabelVisibility = textChoice(LINEAR_LABEL_VISIBILITY_MODES, 'auto');
+
 /** `adv`, in the order the rows depend on each other. @type {readonly FieldRow[]} */
 const ADV_ROWS = Object.freeze([
   row('label_rendering', normalizeLabelRendering),
@@ -411,6 +439,9 @@ const ADV_ROWS = Object.freeze([
     }
   },
   row('linear_show_replicon', onlyTrue),
+  row('linear_accession_visibility', readLinearLabelVisibility),
+  row('linear_length_visibility', readLinearLabelVisibility),
+  row('feature_shapes', readFeatureShapes),
   row('pairwise_match_style', textChoice(PAIRWISE_MATCH_STYLES, 'ribbon')),
   row('linear_definition_line_styles', readDefinitionLineStyles)
 ]);

@@ -46,10 +46,7 @@ import {
   sessionUiFieldRepairs, sliceFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS
 } from './config-field-readers.js';
 import { drawnLinearSequences } from './record-draw-selection.js';
-import {
-  migrateLegacyLinearLabelVisibility,
-  requireLinearLabelVisibilityMode
-} from './linear-label-visibility.js';
+import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
   legendPositionOrDefault,
@@ -2438,7 +2435,6 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   // `layoutPreferences` (state.js) whose setters normalize a merged value.
   // Writing the resolved value back would only pin an unset Circular
   // multi-record preference, so neither is rewritten here.
-  drawing.adv.feature_shapes = normalizeFeatureRenderingMap(drawing.adv.feature_shapes);
   Object.assign(drawing.adv, normalizedPersistedArrowGeometryState(data.adv));
   drawing.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
     drawing.adv.multi_record_size_mode
@@ -2460,14 +2456,6 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
       drawing.adv[key].splice(0, drawing.adv[key].length, ...cloneJsonData(drawing.adv[key]));
     });
   }
-  drawing.adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
-    drawing.adv.linear_accession_visibility,
-    'Linear Accession visibility'
-  );
-  drawing.adv.linear_length_visibility = requireLinearLabelVisibilityMode(
-    drawing.adv.linear_length_visibility,
-    'Linear Length / Coordinates visibility'
-  );
   if (typeof data.paletteInstantPreviewEnabled === 'boolean') {
     state.paletteInstantPreviewEnabled.value = data.paletteInstantPreviewEnabled;
   }
