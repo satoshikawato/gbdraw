@@ -1115,13 +1115,16 @@ def random_walk(
     base, or undoes the previous step (a return to the state before it). A
     walk leaves out the slow and heavy variants (``SLOW_VARIANTS``,
     ``HEAVY_RENDER_SECONDS``, ``LABEL_FIT_FAILURES``): a heavy setting stays in the state and makes
-    every later step heavy. The matrix chunks cover them.
+    every later step heavy. It also leaves out the variants that end in a
+    user-input error (``WALK_INPUT_ERRORS``), which would fail every later
+    step. The matrix chunks cover them.
     """
 
     def walkable(option: OptionSpec, variant: Variant) -> bool:
         key = (option.option_id, variant.label)
         full = (case.case_id, *key)
-        return key not in SLOW_VARIANTS and full not in HEAVY_RENDER_SECONDS and full not in LABEL_FIT_FAILURES
+        left_out = HEAVY_RENDER_SECONDS.keys() | LABEL_FIT_FAILURES | WALK_INPUT_ERRORS
+        return key not in SLOW_VARIANTS and full not in left_out
 
     rng = np.random.default_rng(seed)
     options = [option for option in options_for(case) if any(walkable(option, v) for v in option.variants)]
@@ -1205,6 +1208,23 @@ LABEL_FIT_FAILURES: frozenset[tuple[str, str, str]] = frozenset({
     ("C2", "outer_label_x_radius_offset", "--outer_label_x_radius_offset 0.8"),
     ("C2", "outer_label_y_radius_offset", "--outer_label_y_radius_offset 0.8"),
     ("C2", "inner_label_y_radius_offset", "--inner_label_y_radius_offset 1.3"),
+})
+# C2 variants left out of the random walks. Each ends at once in a user-input
+# error (ValidationError, _InsideFitError) on the C2 base; in a walk it stays in
+# the state, so every later step fails with it and the walk tests nothing
+# (C2 seed 24). The matrix chain keeps them (the error rule). Measured at the
+# PR 4 review fixes: T/logs/pr4/fix8-c2-walk-pool.log.
+WALK_INPUT_ERRORS: frozenset[tuple[str, str, str]] = frozenset({
+    ("C2", "features", "-k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region,gene"),
+    ("C2", "definition_font_size", "--definition_font_size 40"),
+    ("C2", "separate_strands", "--separate_strands"),
+    ("C2", "keep_full_definition_with_plot_title", "--keep_full_definition_with_plot_title"),
+    ("C2", "center_reserved_radius", "--center_reserved_radius 400"),
+    ("C2", "center_reserved_radius", "--center_reserved_radius 250"),
+    ("C2", "feature_width", "--feature_width 120"),
+    ("C2", "gc_content_radius", "--gc_content_radius 0.9"),
+    ("C2", "gc_content_radius", "--gc_content_radius 0.7"),
+    ("C2", "gc_skew_radius", "--gc_skew_radius 0.7"),
 })
 # The estimated time of one chunk.
 CHUNK_BUDGET_SECONDS = 120.0
