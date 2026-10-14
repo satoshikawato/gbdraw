@@ -12,6 +12,7 @@ from gbdraw.svg.elements import Group, Line
 
 from ....canvas import CircularCanvasConfigurator
 from ....features.factory import FeatureBuildResult
+from ....labels.circular_types import CircularLabel
 from ....layout.circular import CircularRecordRenderContext
 from ...drawers.circular.labels import LabelDrawer
 from ...label_binding import bind_label_part
@@ -28,7 +29,7 @@ class LabelsGroup:
         render_context: CircularRecordRenderContext,
         *,
         outer_arena: tuple[float, float] | None = None,
-        precalculated_labels: Optional[list[dict]] = None,
+        precalculated_labels: Optional[list[CircularLabel]] = None,
         feature_track_ratio_factor_override: float | None = None,
         feature_anchor_radius_px: float | None = None,
         phase: Literal["all", "leaders", "text"] = "all",
@@ -38,7 +39,7 @@ class LabelsGroup:
         self.feature_layers = feature_layers
         self.render_context = render_context
         self.outer_arena = outer_arena
-        self.precalculated_labels: Optional[list[dict]] = precalculated_labels
+        self.precalculated_labels: Optional[list[CircularLabel]] = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
         self.feature_anchor_radius_px = feature_anchor_radius_px
         self.phase = phase if phase in {"all", "leaders", "text"} else "all"
