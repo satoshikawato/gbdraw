@@ -818,21 +818,39 @@ const assertSingleWorkerRun = async (page) => {
   return activity;
 };
 
-// A Load of a file that loses nothing ends without the Load repair dialog
-// (BA-D25). It waits until the Load ends (its notice or its error) or the
-// dialog opens, and fails with the dialog's lines when it opened.
-const expectNoLoadRepairDialog = async (page, { timeout = 180_000 } = {}) => {
+// What a Load that ended or asked shows: no dialog lines, no error (r3 S3).
+const expectNoRepairsOrError = async (page) => {
   const prompt = page.locator('[data-choice-prompt]');
-  await page.waitForFunction(() => document.querySelector('[data-choice-prompt]') || window.__GBDRAW_APP__?.errorLog
-    || /Session loaded/.test(document.querySelector('[data-app-notice]')?.textContent || ''), null, { timeout });
   expect(await prompt.locator('li').allTextContents(), 'the Load listed repairs').toEqual([]);
   await expect(prompt).toHaveCount(0);
+  expect(await page.evaluate(() => {
+    const error = window.__GBDRAW_APP__.errorLog;
+    return error ? { code: error.code, summary: error.summary } : null;
+  }), 'the Load failed').toBeNull();
+};
+
+// A Load of a file that loses nothing ends without the Load repair dialog
+// (BA-D25). Called right after the file is chosen, it waits until the new
+// Load has started, so a notice of an earlier Load does not end the wait
+// (r3 S3), then until the Load ends or the dialog opens. It fails with the
+// dialog's lines when the dialog opened, and with the error when the Load
+// failed.
+const expectNoLoadRepairDialog = async (page, { timeout = 180_000 } = {}) => {
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending, null, { timeout });
+  await page.waitForFunction(() => document.querySelector('[data-choice-prompt]') || !window.__GBDRAW_APP__.sessionImportPending,
+    null, { timeout });
+  await expectNoRepairsOrError(page);
 };
 
 // A Session Load succeeded with no warning: the notice says "Session loaded"
 // and lists nothing (each warning of a Load is one list item of the notice).
+// Its callers may have waited for the Load's end or answered its dialog, so it
+// does not wait for the start; a notice or an error counts once no Load runs.
 const expectSessionLoadedWithoutWarnings = async (page, { timeout = 120_000 } = {}) => {
-  await expectNoLoadRepairDialog(page, { timeout });
+  await page.waitForFunction(() => document.querySelector('[data-choice-prompt]') || (!window.__GBDRAW_APP__?.sessionImportPending
+    && (window.__GBDRAW_APP__?.errorLog || /Session loaded/.test(document.querySelector('[data-app-notice]')?.textContent || ''))),
+  null, { timeout });
+  await expectNoRepairsOrError(page);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout });
   await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
 };

@@ -3,7 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync, gzipSync } = require('node:zlib');
 const {
-  openApp, expectSessionLoadedWithoutWarnings, generateAndWaitForResult, answerLoadRepairs
+  openApp, expectNoLoadRepairDialog, expectSessionLoadedWithoutWarnings, generateAndWaitForResult, answerLoadRepairs
 } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
 
@@ -426,8 +426,9 @@ test('Load Session asks before it replaces work changed since the last Save or L
   await confirm.getByRole('button', { name: 'Load Session', exact: true }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles(baselineSession);
+  // The page shows the first Load's notice: wait for this Load to start (r3 S3).
+  await expectNoLoadRepairDialog(page);
   await expectSessionLoadedWithoutWarnings(page);
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
   await expect.poll(undoCount).toBe(0);
   await expect(prefix).not.toHaveValue('unsaved-work');
 
