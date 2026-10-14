@@ -134,6 +134,11 @@ def _small_radial_canvas():
     return canvas_config
 
 
+def _small_radial_inputs() -> dict[str, object]:
+    canvas_config = _small_radial_canvas()
+    return {"geometry": canvas_config.geometry(), "cfg": canvas_config.profile.config}
+
+
 _NUMERIC_STACK = (
     CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
     CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
@@ -174,7 +179,7 @@ def test_track_fit_failure_reports_row_and_band_without_slot_id(
     with pytest.raises(ValidationError) as caught:
         resolve_circular_radial_layout(
             total_length=1000,
-            canvas_config=_small_radial_canvas(),
+            **_small_radial_inputs(),
             slots=list(slots),
             definition_reserved_radius_px=70.0 if cause is not None else 30.0,
             center_reserved_radius_explicit=explicit_radius,
@@ -275,7 +280,7 @@ def test_radial_layout_conflicts_report_track_row_without_slot_id(
     with pytest.raises(ValidationError) as caught:
         resolve_circular_radial_layout(
             total_length=1000,
-            canvas_config=_small_radial_canvas(),
+            **_small_radial_inputs(),
             slots=list(slots),
             definition_reserved_radius_px=definition_px,
             center_reserved_radius_explicit=explicit_radius,

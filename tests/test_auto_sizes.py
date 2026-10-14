@@ -238,7 +238,7 @@ def test_circular_auto_values_equal_render_time_resolution(cfg: GbdrawConfig, le
         "tuckin",
         CircularPresetContext(
             cfg=cfg,
-            canvas_config=canvas,
+            geometry=canvas.geometry(),
             total_length=length,
             strandedness=False,
             show_features=True,
@@ -318,7 +318,7 @@ def test_mixed_circular_canvas_reports_the_harmonized_long_styles(cfg: GbdrawCon
             "tuckin",
             CircularPresetContext(
                 cfg=harmonized,
-                canvas_config=canvas,
+                geometry=canvas.geometry(),
                 total_length=length,
                 strandedness=False,
                 show_features=True,

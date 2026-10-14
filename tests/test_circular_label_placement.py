@@ -782,7 +782,9 @@ def _load_hmmtdna_external_labels_with_feature_width(
         float(canvas_config.radius) * float(canvas_config.track_ratio)
     )
     default_anchor_px, default_arc_outer_px = circular_assemble_module._default_outer_label_arena(
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
+        strandedness=canvas_config.profile.strandedness,
     )
     if default_arc_outer_px < default_anchor_px:
         default_anchor_px, default_arc_outer_px = default_arc_outer_px, default_anchor_px

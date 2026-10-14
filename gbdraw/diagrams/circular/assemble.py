@@ -23,7 +23,7 @@ from svgwrite import Drawing
 from svgwrite.container import Group
 
 from ...auto_sizes import circular_track_width_px
-from ...canvas import CircularCanvasConfigurator
+from ...canvas import CircularCanvasConfigurator, CircularCanvasGeometry
 from ...analysis.conservation import (
     ConservationLegendSource,
     ConservationTrack,
@@ -1199,20 +1199,20 @@ def _text_element_plain_text(element: Any) -> str:
 
 def _definition_reserved_radius_px(
     gb_record: SeqRecord,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     species: str | None,
     strain: str | None,
     *,
+    cfg: GbdrawConfig,
     plot_title: str | None,
     definition_profile: str,
     record_transform: RecordDisplayTransform | None = None,
     species_line_count: int = 1,
     record_presentation: RecordPresentation | None = None,
 ) -> float:
-    cfg = canvas_config.profile.config
     definition_group = DefinitionGroup(
         gb_record,
-        canvas_config.geometry(),
+        geometry,
         cfg=cfg,
         species=species,
         strain=strain,
@@ -1244,7 +1244,7 @@ def _definition_reserved_radius_px(
             text,
             str(attribs.get("font-family", cfg.objects.text.font_family)),
             font_size,
-            int(canvas_config.dpi),
+            int(geometry.dpi),
         )
         half_width = 0.5 * float(width_px)
         half_height = 0.5 * float(height_px if height_px else font_size)
@@ -1258,7 +1258,7 @@ def _definition_reserved_radius_px(
 
     if max_extent <= FEATURE_BAND_EPSILON:
         return 0.0
-    padding_px = max(8.0, 0.02 * float(canvas_config.radius))
+    padding_px = max(8.0, 0.02 * float(geometry.radius))
     return float(max_extent + padding_px)
 
 
@@ -1285,7 +1285,8 @@ def _resolve_radial_layout_fitting_definition(
     resolve_layout: Callable[[float | None], CircularRadialLayout],
     *,
     gb_record: SeqRecord,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
+    cfg: GbdrawConfig,
     species: str | None,
     strain: str | None,
     plot_title: str | None,
@@ -1315,9 +1316,10 @@ def _resolve_radial_layout_fitting_definition(
     def reserved_for(line_count: int) -> float:
         return _definition_reserved_radius_px(
             gb_record,
-            canvas_config,
+            geometry,
             species,
             strain,
+            cfg=cfg,
             plot_title=plot_title,
             definition_profile=definition_profile,
             record_transform=record_transform,
@@ -1329,7 +1331,7 @@ def _resolve_radial_layout_fitting_definition(
     try:
         return resolve_layout(reserved), reserved, 1
     except ValidationError as error:
-        font_size = float(canvas_config.profile.config.objects.definition.circular.font_size)
+        font_size = float(cfg.objects.definition.circular.font_size)
         if (
             _track_layout_reason(error) != "DEFINITION_RESERVED"
             or str(definition_profile) != "full"
@@ -1911,19 +1913,18 @@ def _draw_resolved_circular_slot(
 
 def _default_outer_label_arena(
     *,
-    canvas_config: CircularCanvasConfigurator,
-    config: GbdrawConfig | None = None,
+    geometry: CircularCanvasGeometry,
+    cfg: GbdrawConfig,
+    strandedness: bool,
 ) -> tuple[float, float]:
     """Return default (anchor_radius_px, arc_outer_radius_px) for outer labels.
 
-    ``config`` replaces the canvas config's labels settings (a fit probe).
+    ``cfg`` gives the labels settings (a fit probe passes its own).
     """
-    profile = canvas_config.profile
-    cfg = config if config is not None else profile.config
-    length_param = str(canvas_config.length_param)
+    length_param = str(geometry.length_param)
     track_type = _circular_preset_for_layout(cfg)
-    strands = "separate" if profile.strandedness else "single"
-    base_radius = float(canvas_config.radius)
+    strands = "separate" if strandedness else "single"
+    base_radius = float(geometry.radius)
 
     anchor_radius = float(cfg.labels.radius_factor[track_type][strands][length_param]) * base_radius
     offset_cfg = cfg.labels.unified_adjustment.outer_labels
@@ -2117,7 +2118,7 @@ def add_record_on_circular_canvas(
             circular_preset,
             CircularPresetContext(
                 cfg=cfg,
-                canvas_config=canvas_config,
+                geometry=canvas_config.geometry(),
                 total_length=len(gb_record.seq),
                 strandedness=profile.strandedness,
                 show_features=show_features,
@@ -2137,7 +2138,7 @@ def add_record_on_circular_canvas(
             circular_preset,
             CircularPresetContext(
                 cfg=cfg,
-                canvas_config=canvas_config,
+                geometry=canvas_config.geometry(),
                 total_length=len(gb_record.seq),
                 strandedness=profile.strandedness,
                 show_features=show_features,
@@ -2239,7 +2240,8 @@ def add_record_on_circular_canvas(
         _resolve_radial_layout_fitting_definition(
             lambda reserved_radius_px: resolve_circular_radial_layout(
                 total_length=len(gb_record.seq),
-                canvas_config=canvas_config,
+                geometry=canvas_config.geometry(),
+                cfg=cfg,
                 slots=layout_slots,
                 feature_dict=layout_feature_dict,
                 definition_reserved_radius_px=reserved_radius_px,
@@ -2248,7 +2250,8 @@ def add_record_on_circular_canvas(
                 center_reserved_radius_explicit=center_reserved_radius is not None,
             ),
             gb_record=gb_record,
-            canvas_config=canvas_config,
+            geometry=canvas_config.geometry(),
+            cfg=cfg,
             species=species,
             strain=strain,
             plot_title=plot_title,
@@ -2286,7 +2289,9 @@ def add_record_on_circular_canvas(
     outer_arena: tuple[float, float] | None = None
     if show_external_labels:
         default_anchor_px, default_arc_outer_px = _default_outer_label_arena(
-            canvas_config=canvas_config,
+            geometry=canvas_config.geometry(),
+            cfg=cfg,
+            strandedness=profile.strandedness,
         )
         if default_arc_outer_px < default_anchor_px:
             default_anchor_px, default_arc_outer_px = default_arc_outer_px, default_anchor_px
@@ -2337,7 +2342,11 @@ def add_record_on_circular_canvas(
             label_profile,
             # The arena follows the outer label offsets, which a probe may change.
             outer_arena=(
-                _default_outer_label_arena(canvas_config=canvas_config, config=label_profile.config)
+                _default_outer_label_arena(
+                    geometry=canvas_config.geometry(),
+                    cfg=label_profile.config,
+                    strandedness=profile.strandedness,
+                )
                 if outer_arena is not None
                 else None
             ),
@@ -2464,7 +2473,8 @@ def add_record_on_circular_canvas(
                 )
                 radial_layout = resolve_circular_radial_layout(
                     total_length=len(gb_record.seq),
-                    canvas_config=canvas_config,
+                    geometry=canvas_config.geometry(),
+                    cfg=cfg,
                     slots=layout_slots,
                     feature_dict=layout_feature_dict,
                     definition_reserved_radius_px=definition_reserved_radius_px,
@@ -2493,7 +2503,9 @@ def add_record_on_circular_canvas(
                         )
                     )
                 default_anchor_px, default_arc_outer_px = _default_outer_label_arena(
-                    canvas_config=canvas_config,
+                    geometry=canvas_config.geometry(),
+                    cfg=cfg,
+                    strandedness=profile.strandedness,
                 )
                 if default_arc_outer_px < default_anchor_px:
                     default_anchor_px, default_arc_outer_px = default_arc_outer_px, default_anchor_px

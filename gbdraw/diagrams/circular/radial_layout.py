@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Collection, Literal, Mapping, Sequence, TypedDict
 
 from ...auto_sizes import circular_track_width_px
-from ...canvas import CircularCanvasConfigurator
+from ...canvas import CircularCanvasGeometry
 from ...config.models import GbdrawConfig
 from ...configurators import DepthConfigurator
 from ...exceptions import ValidationError
@@ -415,14 +415,14 @@ def build_circular_feature_layout(
 def _tick_layout_from_params(
     *,
     total_length: int,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     params: Mapping[str, Any],
     anchor_radius_px: float,
     width_px: float,
     explicit_width: bool,
 ) -> CircularTickLayout:
-    base_radius = float(canvas_config.radius)
+    base_radius = float(geometry.radius)
     tick_preset = normalize_circular_track_preset(str(params.get("preset", params.get("track_preset", "tuckin"))))
     tick_label_layout = str(params.get("tick_label_layout", "label_out_tick_in")).strip().lower()
     label_side, tick_side = tick_sides_for_tick_label_layout(
@@ -440,7 +440,7 @@ def _tick_layout_from_params(
             total_len=int(total_length),
             size="large",
             track_type=tick_preset,
-            strandedness=canvas_config.profile.strandedness,
+            strandedness=bool(cfg.canvas.strandedness),
             tick_side=tick_side,
             tick_length_px=tick_length_px,
             length_reference_radius_px=base_radius,
@@ -453,10 +453,10 @@ def _tick_layout_from_params(
         center_radius_px=float(anchor_radius_px),
         total_len=int(total_length),
         track_type=tick_preset,
-        strandedness=canvas_config.profile.strandedness,
+        strandedness=bool(cfg.canvas.strandedness),
         font_size=float(cfg.objects.ticks.tick_labels.font_size),
         font_family=str(cfg.objects.text.font_family),
-        dpi=int(canvas_config.dpi),
+        dpi=int(geometry.dpi),
         manual_interval=cfg.objects.scale.interval,
         label_side=label_side,
         tick_side=tick_side,
@@ -483,16 +483,16 @@ def _tick_layout_from_params(
 def _default_width_px(
     renderer: str,
     *,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
 ) -> float:
     if renderer == "ticks":
         return 0.0
     return circular_track_width_px(
         renderer,
-        radius=canvas_config.radius,
-        track_ratio=canvas_config.track_ratio,
-        factors=cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)],
+        radius=geometry.radius,
+        track_ratio=geometry.track_ratio,
+        factors=geometry.track_ratio_factors,
     )
 
 
@@ -503,11 +503,11 @@ def _default_spacing_px(axis_radius_px: float) -> float:
 def _slot_intents(
     slots: Sequence[CircularTrackSlot],
     *,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     preferred_anchor_slot_ids: Collection[str] = (),
 ) -> list[_RadialSlotIntent]:
-    axis_radius_px = float(canvas_config.radius)
+    axis_radius_px = float(geometry.radius)
     preferred_ids = {str(slot_id) for slot_id in preferred_anchor_slot_ids}
     intents: list[_RadialSlotIntent] = []
     for slot in normalize_circular_track_slots(slots):
@@ -525,7 +525,7 @@ def _slot_intents(
         )
         width_px = slot.width.resolve(axis_radius_px) if slot.width is not None else None
         if width_px is None:
-            width_px = _default_width_px(slot.renderer, canvas_config=canvas_config, cfg=cfg)
+            width_px = _default_width_px(slot.renderer, geometry=geometry, cfg=cfg)
         default_gap_px = _default_spacing_px(axis_radius_px)
         spacing_px = (
             float(slot.legacy_spacing.resolve(axis_radius_px))
@@ -603,7 +603,7 @@ def _measure_radial_slot(
     width_px: float | None = None,
     axis_radius_px: float,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -621,7 +621,7 @@ def _measure_radial_slot(
             width_px=resolved_width,
             track_type=str(feature_preset) if feature_preset is not None else None,
             lane_direction=str(intent.params.get("lane_direction", "inside")),
-            strandedness=canvas_config.profile.strandedness,
+            strandedness=bool(cfg.canvas.strandedness),
             anchor_radius_px=anchor_radius_px,
             lane_spacing_px=float(intent.spacing_px),
         )
@@ -659,7 +659,7 @@ def _measure_radial_slot(
         tick_params["_slot_side"] = intent.side
         tick_layout = _tick_layout_from_params(
             total_length=int(total_length),
-            canvas_config=canvas_config,
+            geometry=geometry,
             cfg=cfg,
             params=tick_params,
             anchor_radius_px=anchor_radius_px,
@@ -787,7 +787,7 @@ def _place_outside_auto(
     axis_radius_px: float,
     placement_window: PlacementWindow,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -801,7 +801,7 @@ def _place_outside_auto(
                 width_px=width_px,
                 axis_radius_px=axis_radius_px,
                 feature_dict=feature_dict,
-                canvas_config=canvas_config,
+                geometry=geometry,
                 cfg=cfg,
                 total_length=total_length,
                 depth_config=depth_config,
@@ -865,7 +865,7 @@ def _try_measure_inside_interval(
     occupied: Sequence[tuple[str, RadialBand]],
     axis_radius_px: float,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -903,7 +903,7 @@ def _try_measure_inside_interval(
                 width_px=width_px,
                 axis_radius_px=axis_radius_px,
                 feature_dict=feature_dict,
-                canvas_config=canvas_config,
+                geometry=geometry,
                 cfg=cfg,
                 total_length=total_length,
                 depth_config=depth_config,
@@ -941,7 +941,7 @@ def _place_inside_auto(
     axis_radius_px: float,
     placement_window: PlacementWindow,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -955,7 +955,7 @@ def _place_inside_auto(
             axis_radius_px=axis_radius_px,
             placement_window=placement_window,
             feature_dict=feature_dict,
-            canvas_config=canvas_config,
+            geometry=geometry,
             cfg=cfg,
             total_length=total_length,
             depth_config=depth_config,
@@ -978,7 +978,7 @@ def _place_inside_auto_fixed_width(
     axis_radius_px: float,
     placement_window: PlacementWindow,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -998,7 +998,7 @@ def _place_inside_auto_fixed_width(
             occupied=occupied,
             axis_radius_px=axis_radius_px,
             feature_dict=feature_dict,
-            canvas_config=canvas_config,
+            geometry=geometry,
             cfg=cfg,
             total_length=total_length,
             depth_config=depth_config,
@@ -1021,7 +1021,7 @@ def _measure_anchored_inside(
     axis_radius_px: float,
     placement_window: PlacementWindow,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -1034,7 +1034,7 @@ def _measure_anchored_inside(
         width_px=width_px,
         axis_radius_px=axis_radius_px,
         feature_dict=feature_dict,
-        canvas_config=canvas_config,
+        geometry=geometry,
         cfg=cfg,
         total_length=total_length,
         depth_config=depth_config,
@@ -1313,7 +1313,7 @@ def _place_inside_auto_stack_group(
     axis_radius_px: float,
     placement_window: PlacementWindow,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -1335,7 +1335,7 @@ def _place_inside_auto_stack_group(
                 axis_radius_px=axis_radius_px,
                 placement_window=replace(placement_window, outer_px=working_outer),
                 feature_dict=feature_dict,
-                canvas_config=canvas_config,
+                geometry=geometry,
                 cfg=cfg,
                 total_length=total_length,
                 depth_config=depth_config,
@@ -1380,7 +1380,7 @@ def _place_outside_auto_stack_group(
     axis_radius_px: float,
     placement_window: PlacementWindow,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -1397,7 +1397,7 @@ def _place_outside_auto_stack_group(
             axis_radius_px=axis_radius_px,
             placement_window=PlacementWindow(working_inner, float(placement_window.outer_px)),
             feature_dict=feature_dict,
-            canvas_config=canvas_config,
+            geometry=geometry,
             cfg=cfg,
             total_length=total_length,
             depth_config=depth_config,
@@ -1524,7 +1524,7 @@ def _try_place_preferred_numeric_group_at_anchors(
     placement_window: PlacementWindow,
     axis_radius_px: float,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -1536,7 +1536,7 @@ def _try_place_preferred_numeric_group_at_anchors(
             width_px=float(intent.width_px),
             axis_radius_px=axis_radius_px,
             feature_dict=feature_dict,
-            canvas_config=canvas_config,
+            geometry=geometry,
             cfg=cfg,
             total_length=total_length,
             depth_config=depth_config,
@@ -1562,7 +1562,7 @@ def _place_inside_auto_group_with_width_scale(
     placement_window: PlacementWindow,
     axis_radius_px: float,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -1581,7 +1581,7 @@ def _place_inside_auto_group_with_width_scale(
             axis_radius_px=axis_radius_px,
             placement_window=replace(placement_window, outer_px=working_outer),
             feature_dict=feature_dict,
-            canvas_config=canvas_config,
+            geometry=geometry,
             cfg=cfg,
             total_length=total_length,
             depth_config=depth_config,
@@ -1613,7 +1613,7 @@ def _place_preferred_numeric_group(
     placement_window: PlacementWindow,
     axis_radius_px: float,
     feature_dict: Mapping[str, Any] | None,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthConfigurator | None,
@@ -1624,7 +1624,7 @@ def _place_preferred_numeric_group(
         placement_window=placement_window,
         axis_radius_px=axis_radius_px,
         feature_dict=feature_dict,
-        canvas_config=canvas_config,
+        geometry=geometry,
         cfg=cfg,
         total_length=total_length,
         depth_config=depth_config,
@@ -1640,7 +1640,7 @@ def _place_preferred_numeric_group(
             placement_window=placement_window,
             axis_radius_px=axis_radius_px,
             feature_dict=feature_dict,
-            canvas_config=canvas_config,
+            geometry=geometry,
             cfg=cfg,
             total_length=total_length,
             depth_config=depth_config,
@@ -1725,7 +1725,7 @@ def _minimum_future_inside_width_px(
     intent: _RadialSlotIntent,
     *,
     axis_radius_px: float,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     feature_dict: Mapping[str, Any] | None,
@@ -1745,7 +1745,7 @@ def _minimum_future_inside_width_px(
             width_px=width,
             axis_radius_px=float(axis_radius_px),
             feature_dict=feature_dict,
-            canvas_config=canvas_config,
+            geometry=geometry,
             cfg=cfg,
             total_length=int(total_length),
             depth_config=depth_config,
@@ -1767,7 +1767,7 @@ def _future_unresolved_inside_span_px(
     start_pos: int,
     current_outer_intent: _RadialSlotIntent,
     axis_radius_px: float,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     feature_dict: Mapping[str, Any] | None,
@@ -1784,7 +1784,7 @@ def _future_unresolved_inside_span_px(
         span += _gap_between_inner_outer_tracks(future, outer_neighbor) + _minimum_future_inside_width_px(
             future,
             axis_radius_px=axis_radius_px,
-            canvas_config=canvas_config,
+            geometry=geometry,
             cfg=cfg,
             total_length=total_length,
             feature_dict=feature_dict,
@@ -1825,7 +1825,7 @@ def _inside_placement_window(
     inside_max_outer: float,
     occupied: Sequence[tuple[str, RadialBand]],
     axis_radius_px: float,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
     feature_dict: Mapping[str, Any] | None,
@@ -1865,7 +1865,7 @@ def _inside_placement_window(
         start_pos=start_pos,
         current_outer_intent=current_outer_intent,
         axis_radius_px=axis_radius_px,
-        canvas_config=canvas_config,
+        geometry=geometry,
         cfg=cfg,
         total_length=total_length,
         feature_dict=feature_dict,
@@ -1918,7 +1918,8 @@ class _RadialLayoutInputs(TypedDict):
     """Keyword arguments shared by both _resolve_circular_radial_layout attempts."""
 
     total_length: int
-    canvas_config: CircularCanvasConfigurator
+    geometry: CircularCanvasGeometry
+    cfg: GbdrawConfig
     slots: Sequence[CircularTrackSlot]
     feature_dict: Mapping[str, Any] | None
     preferred_anchor_slot_ids: Collection[str]
@@ -1930,7 +1931,8 @@ class _RadialLayoutInputs(TypedDict):
 def resolve_circular_radial_layout(
     *,
     total_length: int,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
+    cfg: GbdrawConfig,
     slots: Sequence[CircularTrackSlot],
     feature_dict: Mapping[str, Any] | None = None,
     definition_reserved_radius_px: float | None = None,
@@ -1948,7 +1950,8 @@ def resolve_circular_radial_layout(
 
     layout_inputs = _RadialLayoutInputs(
         total_length=total_length,
-        canvas_config=canvas_config,
+        geometry=geometry,
+        cfg=cfg,
         slots=slots,
         feature_dict=feature_dict,
         preferred_anchor_slot_ids=preferred_anchor_slot_ids,
@@ -1987,7 +1990,8 @@ def resolve_circular_radial_layout(
 def _resolve_circular_radial_layout(
     *,
     total_length: int,
-    canvas_config: CircularCanvasConfigurator,
+    geometry: CircularCanvasGeometry,
+    cfg: GbdrawConfig,
     slots: Sequence[CircularTrackSlot],
     feature_dict: Mapping[str, Any] | None = None,
     definition_reserved_radius_px: float | None = None,
@@ -1996,11 +2000,10 @@ def _resolve_circular_radial_layout(
     center_reserved_radius_explicit: bool = False,
     keep_preset_lanes: bool = True,
 ) -> CircularRadialLayout:
-    cfg = canvas_config.profile.config
-    axis_radius_px = float(canvas_config.radius)
+    axis_radius_px = float(geometry.radius)
     axis = CircularAxisLayout(
         radius_px=axis_radius_px,
-        stroke_width_px=float(cfg.objects.axis.circular.stroke_width.for_length_param(str(canvas_config.length_param))),
+        stroke_width_px=float(cfg.objects.axis.circular.stroke_width.for_length_param(str(geometry.length_param))),
     )
     definition_band = (
         RadialBand(0.0, float(definition_reserved_radius_px))
@@ -2013,7 +2016,7 @@ def _resolve_circular_radial_layout(
 
     intents = _slot_intents(
         slots,
-        canvas_config=canvas_config,
+        geometry=geometry,
         cfg=cfg,
         preferred_anchor_slot_ids=preferred_anchor_slot_ids,
     )
@@ -2039,7 +2042,7 @@ def _resolve_circular_radial_layout(
             anchor_offset_px=anchor_offset,
             axis_radius_px=axis_radius_px,
             feature_dict=feature_dict,
-            canvas_config=canvas_config,
+            geometry=geometry,
             cfg=cfg,
             total_length=int(total_length),
             depth_config=depth_config,
@@ -2112,7 +2115,7 @@ def _resolve_circular_radial_layout(
                     resolved_by_index=resolved_by_index,
                 ),
                 feature_dict=feature_dict,
-                canvas_config=canvas_config,
+                geometry=geometry,
                 cfg=cfg,
                 total_length=int(total_length),
                 depth_config=depth_config,
@@ -2148,7 +2151,7 @@ def _resolve_circular_radial_layout(
                 anchor_offset_px=0.0,
                 axis_radius_px=axis_radius_px,
                 feature_dict=feature_dict,
-                canvas_config=canvas_config,
+                geometry=geometry,
                 cfg=cfg,
                 total_length=int(total_length),
                 depth_config=depth_config,
@@ -2170,7 +2173,7 @@ def _resolve_circular_radial_layout(
                     inside_max_outer=outer_limit,
                     occupied=occupied,
                     axis_radius_px=axis_radius_px,
-                    canvas_config=canvas_config,
+                    geometry=geometry,
                     cfg=cfg,
                     total_length=int(total_length),
                     feature_dict=feature_dict,
@@ -2184,7 +2187,7 @@ def _resolve_circular_radial_layout(
                     axis_radius_px=axis_radius_px,
                     placement_window=placement_window,
                     feature_dict=feature_dict,
-                    canvas_config=canvas_config,
+                    geometry=geometry,
                     cfg=cfg,
                     total_length=int(total_length),
                     depth_config=depth_config,
@@ -2211,7 +2214,7 @@ def _resolve_circular_radial_layout(
                     inside_max_outer=outer_limit,
                     occupied=occupied,
                     axis_radius_px=axis_radius_px,
-                    canvas_config=canvas_config,
+                    geometry=geometry,
                     cfg=cfg,
                     total_length=int(total_length),
                     feature_dict=feature_dict,
@@ -2225,7 +2228,7 @@ def _resolve_circular_radial_layout(
                     placement_window=placement_window,
                     axis_radius_px=axis_radius_px,
                     feature_dict=feature_dict,
-                    canvas_config=canvas_config,
+                    geometry=geometry,
                     cfg=cfg,
                     total_length=int(total_length),
                     depth_config=depth_config,
@@ -2252,7 +2255,7 @@ def _resolve_circular_radial_layout(
                 inside_max_outer=outer_limit,
                 occupied=occupied,
                 axis_radius_px=axis_radius_px,
-                canvas_config=canvas_config,
+                geometry=geometry,
                 cfg=cfg,
                 total_length=int(total_length),
                 feature_dict=feature_dict,
@@ -2267,7 +2270,7 @@ def _resolve_circular_radial_layout(
                         axis_radius_px=axis_radius_px,
                         placement_window=placement_window,
                         feature_dict=feature_dict,
-                        canvas_config=canvas_config,
+                        geometry=geometry,
                         cfg=cfg,
                         total_length=int(total_length),
                         depth_config=depth_config,
@@ -2288,7 +2291,7 @@ def _resolve_circular_radial_layout(
                         inside_max_outer=outer_limit,
                         occupied=occupied,
                         axis_radius_px=axis_radius_px,
-                        canvas_config=canvas_config,
+                        geometry=geometry,
                         cfg=cfg,
                         total_length=int(total_length),
                         feature_dict=feature_dict,
@@ -2301,7 +2304,7 @@ def _resolve_circular_radial_layout(
                         axis_radius_px=axis_radius_px,
                         placement_window=fallback_window,
                         feature_dict=feature_dict,
-                        canvas_config=canvas_config,
+                        geometry=geometry,
                         cfg=cfg,
                         total_length=int(total_length),
                         depth_config=depth_config,
@@ -2320,7 +2323,7 @@ def _resolve_circular_radial_layout(
                 axis_radius_px=axis_radius_px,
                 placement_window=placement_window,
                 feature_dict=feature_dict,
-                canvas_config=canvas_config,
+                geometry=geometry,
                 cfg=cfg,
                 total_length=int(total_length),
                 depth_config=depth_config,

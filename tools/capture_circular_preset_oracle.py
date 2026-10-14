@@ -119,7 +119,7 @@ def capture_case(
     )
     context = CircularPresetContext(
         cfg=cfg,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
         total_length=len(record.seq),
         strandedness=strandedness,
         show_features=True,
@@ -141,7 +141,8 @@ def capture_case(
     )
     layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=radial_plan.slots,
         feature_dict=_feature_dict(record, cfg),
         preferred_anchor_slot_ids=radial_plan.preferred_anchor_slot_ids,

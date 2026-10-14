@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from typing import Literal, Sequence, cast
 
 from ...auto_sizes import circular_track_width_px
-from ...canvas import CircularCanvasConfigurator
+from ...canvas import CircularCanvasGeometry
 from ...config.models import GbdrawConfig
 from ...tracks.circular import (
     CircularTrackSlot,
@@ -44,7 +44,7 @@ _RENDERER_ALIASES: dict[str, str] = {
 @dataclass(frozen=True)
 class CircularPresetContext:
     cfg: GbdrawConfig
-    canvas_config: CircularCanvasConfigurator
+    geometry: CircularCanvasGeometry
     total_length: int
     strandedness: bool
     show_features: bool
@@ -104,9 +104,9 @@ def _normalized_renderer(raw: object) -> str:
 def _default_width_px(renderer: str, context: CircularPresetContext) -> float:
     return circular_track_width_px(
         renderer,
-        radius=context.canvas_config.radius,
-        track_ratio=context.canvas_config.track_ratio,
-        factors=context.cfg.canvas.circular.track_ratio_factors[str(context.canvas_config.length_param)],
+        radius=context.geometry.radius,
+        track_ratio=context.geometry.track_ratio,
+        factors=context.geometry.track_ratio_factors,
     )
 
 
@@ -124,11 +124,11 @@ def _numeric_slot(
         "gc_skew": "skew_track",
     }.get(slot_id)
     track_id = (
-        context.canvas_config.track_ids.get(track_id_key)
+        context.geometry.track_id(track_id_key)
         if track_id_key is not None
         else None
     )
-    length_param = str(context.canvas_config.length_param)
+    length_param = str(context.geometry.length_param)
     radius = None
     if track_id is not None:
         radius = _scalar_factor(
@@ -140,8 +140,8 @@ def _numeric_slot(
         side="inside",
         radius=radius,
         width=_scalar_px(_default_width_px(renderer, context)),
-        inner_gap_px=max(1.0, 0.01 * float(context.canvas_config.radius)),
-        outer_gap_px=max(1.0, 0.01 * float(context.canvas_config.radius)),
+        inner_gap_px=max(1.0, 0.01 * float(context.geometry.radius)),
+        outer_gap_px=max(1.0, 0.01 * float(context.geometry.radius)),
         params=dict(params or {}),
     )
 
@@ -163,7 +163,7 @@ def _tick_slot_for_preset(
     preset: CircularTrackPreset,
     context: CircularPresetContext,
 ) -> CircularTrackSlot:
-    base_radius = float(context.canvas_config.radius)
+    base_radius = float(context.geometry.radius)
     tick_inner_ratio, tick_outer_ratio = get_circular_tick_path_ratio_bounds(
         int(context.total_length),
         preset,
@@ -188,7 +188,7 @@ def _tick_slot_for_preset(
             strandedness=bool(context.strandedness),
             font_size=float(context.cfg.objects.ticks.tick_labels.font_size),
             font_family=str(context.cfg.objects.text.font_family),
-            dpi=int(context.canvas_config.dpi),
+            dpi=int(context.geometry.dpi),
             manual_interval=context.cfg.objects.scale.interval,
             tick_width=float(context.cfg.objects.ticks.tick_width),
             tick_side=tick_side,
@@ -232,8 +232,8 @@ def circular_track_slots_for_preset(
                 side="overlay" if feature_defaults.lane_direction == "split" else feature_defaults.lane_direction,
                 radius=feature_defaults.radius,
                 width=feature_defaults.width,
-                inner_gap_px=max(1.0, 0.01 * float(context.canvas_config.radius)),
-                outer_gap_px=max(1.0, 0.01 * float(context.canvas_config.radius)),
+                inner_gap_px=max(1.0, 0.01 * float(context.geometry.radius)),
+                outer_gap_px=max(1.0, 0.01 * float(context.geometry.radius)),
                 params={
                     "lane_direction": feature_defaults.lane_direction,
                     "stack_preset": normalized,

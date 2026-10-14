@@ -12,6 +12,7 @@ import gbdraw.circular as circular_cli_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.labels.circular as circular_labels_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record
+from gbdraw.canvas import CircularCanvasGeometry
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
@@ -924,18 +925,18 @@ def test_feature_width_75_keeps_outer_labels_outside_local_feature_tracks() -> N
     base_radius = float(cfg.canvas.circular.radius)
     base_track_ratio = float(cfg.canvas.circular.track_ratio)
     feature_ratio_override = 75.0 / (base_radius * base_track_ratio)
-    canvas_stub = type(
-        "_CanvasStub",
-        (),
-        {
-            "radius": base_radius,
-            "track_ratio": base_track_ratio,
-            "length_param": "short",
-            "profile": CircularRenderProfile(cfg),
-        },
-    )()
+    geometry = CircularCanvasGeometry(
+        radius=base_radius,
+        track_ratio=base_track_ratio,
+        dpi=int(cfg.canvas.dpi),
+        length_param="short",
+        track_ratio_factors=tuple(cfg.canvas.circular.track_ratio_factors["short"]),
+        track_ids=(),
+    )
     default_anchor, default_arc_outer = circular_assemble_module._default_outer_label_arena(
-        canvas_config=canvas_stub,
+        geometry=geometry,
+        cfg=cfg,
+        strandedness=CircularRenderProfile(cfg).strandedness,
     )
     outer_arena = (float(default_anchor), float(default_arc_outer))
 

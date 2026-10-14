@@ -887,7 +887,7 @@ def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
     )
     context = CircularPresetContext(
         cfg=cfg,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
         total_length=len(record.seq),
         strandedness=bool(cfg.canvas.strandedness),
         show_features=True,
@@ -928,7 +928,7 @@ def test_blank_builtin_numeric_slots_keep_the_preset_anchors_of_the_default_stac
     )
     context = CircularPresetContext(
         cfg=cfg,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
         total_length=len(record.seq),
         strandedness=bool(cfg.canvas.strandedness),
         show_features=True,
@@ -961,7 +961,8 @@ def test_blank_builtin_numeric_slots_keep_the_preset_anchors_of_the_default_stac
 
     layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=plan.slots,
         preferred_anchor_slot_ids=plan.preferred_anchor_slot_ids,
     )
@@ -980,7 +981,8 @@ def test_blank_builtin_numeric_slots_keep_the_preset_anchors_of_the_default_stac
     default_plan = circular_radial_plan_for_preset("middle", context)
     default_layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=default_plan.slots,
         preferred_anchor_slot_ids=default_plan.preferred_anchor_slot_ids,
     )
@@ -1010,7 +1012,7 @@ def test_custom_conservation_slot_keeps_auto_width_for_compression() -> None:
     )
     context = CircularPresetContext(
         cfg=cfg,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
         total_length=len(record.seq),
         strandedness=bool(cfg.canvas.strandedness),
         show_features=True,
@@ -1055,7 +1057,8 @@ def test_custom_conservation_slot_keeps_auto_width_for_compression() -> None:
 
     layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=plan.slots,
         preferred_anchor_slot_ids=plan.preferred_anchor_slot_ids,
     )
@@ -1143,9 +1146,10 @@ def test_default_preset_slots_compress_to_clear_center_definition(
     ) -> None:
         captured["definition_reserved"] = circular_assemble_module._definition_reserved_radius_px(
             record,
-            canvas_config,
+            canvas_config.geometry(),
             None,
             None,
+            cfg=canvas_config.profile.config,
             plot_title=None,
             definition_profile="full",
         )
@@ -1779,9 +1783,10 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
         if "definition_reserved" not in captured:
             captured["definition_reserved"] = circular_assemble_module._definition_reserved_radius_px(
                 gb_record,
-                canvas_config,
+                canvas_config.geometry(),
                 None,
                 None,
+                cfg=canvas_config.profile.config,
                 plot_title=None,
                 definition_profile="full",
             )
