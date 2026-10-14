@@ -250,8 +250,8 @@ instead of refused, and each repair is a row in the dialog:
   replaced by its default when it has one;
 - a reference to a file or record the Session does not hold is left out.
 
-When the saved diagram's settings cannot be read at all, or are missing, the
-file loads as settings only if it holds the web app's own settings: a Session
+When the saved diagram's settings cannot be read at all (for example, their
+`schema` is not an integer), or are missing, the file loads as settings only if it holds the web app's own settings: a Session
 of version 42, 44, 46 or 47 saved by the web app. A row says that the saved
 Results, the GenBank, GFF and FASTA inputs, the feature list and the caches
 are left out. A Session of version 42, 44 or 47 written by the CLI or the

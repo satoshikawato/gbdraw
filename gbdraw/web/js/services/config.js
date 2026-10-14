@@ -1753,11 +1753,12 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
  * when Load reads no stored request.
  * @template {object} T
  * @param {T} rawData
+ * @param {number} version The Session version Load read.
  * @param {LoadRepair[]} repairs
  * @returns {{ data: T, storedSchemas: StoredRequestSchemas, settingsOnly: boolean,
  *   comparisonClassification: ImportedComparisonIntent | null }}
  */
-const readSessionRequests = (rawData, repairs) => {
+const readSessionRequests = (rawData, version, repairs) => {
   const top = /** @type {Record<string, unknown>} */ (rawData);
   const other = isPlainObject(top.otherModeResult) ? /** @type {Record<string, unknown>} */ (top.otherModeResult) : null;
   const storedSchemas = {
@@ -1766,9 +1767,13 @@ const readSessionRequests = (rawData, repairs) => {
   };
   // A missing request of a version with a settings-only form is one its
   // reader cannot read (K22, C-OD07; OV-785): no writer omits the key. An
-  // older version keeps its refusal (C-OD17).
+  // older version keeps its refusal (C-OD17). A Session before 31 holds no
+  // request (no writer wrote one), so Load reads none (OV-862).
   const settingsOnlyForm = isSettingsOnlySessionDocument({ .../** @type {SessionEnvelope} */ (rawData), renderRequest: null });
-  if (top.renderRequest === null || (!Object.hasOwn(top, 'renderRequest') && !settingsOnlyForm)) {
+  if (
+    version < CANONICAL_SESSION_MIN_VERSION || top.renderRequest === null
+    || (!Object.hasOwn(top, 'renderRequest') && !settingsOnlyForm)
+  ) {
     return { data: rawData, storedSchemas, settingsOnly: false, comparisonClassification: null };
   }
   const resourceIds = new Set(isPlainObject(top.resources) ? Object.keys(/** @type {object} */ (top.resources)) : []);
@@ -1861,7 +1866,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
       used: outcome.rowKey
     }));
   });
-  const requestRead = readSessionRequests(legendRead.session, repairs);
+  const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs);
   const rawData = requestRead.data;
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */

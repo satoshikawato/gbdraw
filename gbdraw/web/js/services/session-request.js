@@ -6224,12 +6224,13 @@ const keepConservationSlotsOnTheirRings = (request, rows, path) => {
 
 /**
  * The one reader of a stored render request: the only place in `js/` where an
- * unchecked value becomes a `CanonicalRenderRequest`. A schema outside the
- * supported set is refused as a Session-format error; schemas 1 and 2 are
+ * unchecked value becomes a `CanonicalRenderRequest`. An integer schema
+ * outside the supported set is refused as a Session-format error; schemas 1 and 2 are
  * returned as stored (schema 2 is rebuilt by the Gallery migration, whose
  * request is read again here); schemas 5 to 8 are promoted once, with the
  * Load context; then the request is repaired against its description. What
- * cannot be read at its root is a dropped request (K22).
+ * cannot be read at its root, a schema that is no integer included, is a
+ * dropped request (K22).
  * @param {unknown} value
  * @param {StoredRequestContext} context
  * @returns {Repaired<CanonicalRenderRequest | StoredRenderRequest> | StoredRequestDropped}
@@ -6237,6 +6238,9 @@ const keepConservationSlotsOnTheirRings = (request, rows, path) => {
 export const readStoredRenderRequest = (value, context) => {
   const { path } = context;
   if (!isPlainObject(value)) return { kind: 'request-dropped', path, reason: 'wrong-kind' };
+  // No writer wrote a schema that is no integer: the request is unreadable
+  // (K22, OV-863), not another format.
+  if (!Number.isInteger(value.schema)) return { kind: 'request-dropped', path: `${path}.schema`, reason: 'wrong-kind' };
   if (!SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET.has(/** @type {number} */ (value.schema))) {
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
   }

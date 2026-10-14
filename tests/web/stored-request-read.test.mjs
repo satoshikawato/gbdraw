@@ -73,13 +73,17 @@ const load = async (session) => {
   return { result, dialogs };
 };
 
-test('a request schema the app does not read is a Session-format error (OV-773)', () => {
-  for (const schema of [3, 4, 10, undefined]) {
+test('a request schema the app does not read is a Session-format error (OV-773); a schema that is no integer leaves the request unread (OV-863)', () => {
+  for (const schema of [3, 4, 10]) {
     assert.throws(
       () => readRequest(gallery('lambda_basic_linear'), (request) => { request.schema = schema; }),
       (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'SESSION_FORMAT',
       String(schema)
     );
+  }
+  for (const schema of [undefined, null, 'nine', '9', 9.5]) {
+    assert.deepEqual(readRequest(gallery('lambda_basic_linear'), (request) => { request.schema = schema; }),
+      { kind: 'request-dropped', path: 'renderRequest.schema', reason: 'wrong-kind' }, String(schema));
   }
 });
 
@@ -465,6 +469,68 @@ test('a request that cannot be read at its root in a Session that keeps no setti
     assert.deepEqual([result.error?.code, result.error?.context?.field, result.error?.context?.reason],
       ['INPUT_INVALID', 'schema', 'FIELDS'], `${name}: ${JSON.stringify(result.error)}`);
     assert.deepEqual(dialogs, [], name);
+  }
+});
+
+// Requests no reader can read at their root: a root the repair drops, none,
+// and an object whose schema is no integer (OV-861, OV-863).
+const UNREADABLE_REQUESTS = [{ schema: 9, bogus: 1 }, {}, { schema: 'nine' }, { schema: null, mode: 'linear' }];
+/** Load refuses with the typed Session-fields error and commits nothing. */
+const assertRefusedUnread = async (session, name) => {
+  const before = getCommittedCanonicalSession();
+  const { result, dialogs } = await load(session);
+  assert.deepEqual([result.status, result.error?.code, result.error?.context?.field, result.error?.context?.reason],
+    ['error', 'INPUT_INVALID', 'schema', 'FIELDS'], `${name}: ${JSON.stringify(result.error)}`);
+  assert.deepEqual(dialogs, [], name);
+  assert.equal(getCommittedCanonicalSession(), before, name);
+};
+
+test('a Session 31 to 41 whose request cannot be read at its root is refused with the typed Session-fields error (OV-861, OV-863, C-OD17)', async () => {
+  for (const name of ['scale-interval-zero-circular-web.v33.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz',
+    'HmmtDNA_ATskew.v40-schema5.json', 'cli-linear-tables.v41.gbdraw-session.json.gz']) {
+    for (const request of UNREADABLE_REQUESTS) {
+      const session = fixture(name);
+      session.renderRequest = clone(request);
+      await assertRefusedUnread(session, `${name} ${JSON.stringify(request)}`);
+    }
+  }
+});
+
+test('a request whose schema is no integer is unreadable (K22): settings only with its Web settings, refused without them; an integer the app does not read stays a Session-format error (OV-863)', async () => {
+  for (const request of UNREADABLE_REQUESTS.slice(1)) {
+    const session = gallery('lambda_basic_linear');
+    session.renderRequest = clone(request);
+    const { result, dialogs } = await load(session);
+    assert.equal(result.status, 'ok', `${JSON.stringify(request)}: ${JSON.stringify(result.error)}`);
+    assert.equal(state.results.value.length, 0);
+    assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'renderRequest.schema']]);
+    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(renderRequest\.schema\) could not be read\. The file loads as settings only/);
+    for (const name of ['se08-main-linear-cli.v42.gbdraw-session.json.gz', 'scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz']) {
+      const cli = fixture(name);
+      cli.renderRequest = clone(request);
+      await assertRefusedUnread(cli, `${name} ${JSON.stringify(request)}`);
+    }
+  }
+  for (const schema of [3, 4, 10]) {
+    const session = gallery('lambda_basic_linear');
+    session.renderRequest.schema = schema;
+    const { result } = await load(session);
+    assert.deepEqual([result.error?.code, result.error?.context?.reason], ['INPUT_INVALID', 'SESSION_FORMAT'], String(schema));
+  }
+});
+
+test('a Session 27 to 30 loads as before whatever its renderRequest key holds: no writer wrote one and Load reads none (OV-862)', async () => {
+  const name = 'BGC0000708-BGC0000713.v30.gbdraw-session.json.gz';
+  const plain = await load(fixture(name));
+  assert.equal(plain.result.status, 'ok', JSON.stringify(plain.result.error));
+  const committed = JSON.stringify(getCommittedCanonicalSession());
+  for (const request of [...UNREADABLE_REQUESTS, { schema: 10 }, { schema: 3 }]) {
+    const session = fixture(name);
+    session.renderRequest = clone(request);
+    const { result } = await load(session);
+    assert.equal(result.status, 'ok', `${JSON.stringify(request)}: ${JSON.stringify(result.error)}`);
+    assert.deepEqual(result.repairs, plain.result.repairs, JSON.stringify(request));
+    assert.equal(JSON.stringify(getCommittedCanonicalSession()), committed, JSON.stringify(request));
   }
 });
 
