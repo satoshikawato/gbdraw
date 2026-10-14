@@ -177,6 +177,10 @@ _COLOR_NAME_MAP = {
 }
 
 
+# The SVG/CSS color names named_color_hex reads (in any case), as data.
+COLOR_NAMES: tuple[str, ...] = tuple(_COLOR_NAME_MAP)
+
+
 def named_color_hex(color_name: str) -> str | None:
     """The hex code of an SVG/CSS color name (any case), or ``None``."""
 

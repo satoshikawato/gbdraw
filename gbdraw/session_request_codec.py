@@ -4954,6 +4954,8 @@ def describe_canonical_request() -> dict[str, Any]:
         union,
     )
     from .mode_profiles import DINUCLEOTIDE_PATTERN
+    from .annotations.models import BLANK_TEXT_PATTERN, HEX_COLOR_TEXT_PATTERN
+    from .io.colors import COLOR_NAMES
     from .session_resources import SessionResourceTable
 
     types_: dict[str, Shape] = {}
@@ -5091,10 +5093,18 @@ def describe_canonical_request() -> dict[str, Any]:
 
     # _encode_diagram_options and _encode_option_value.
     data(ColorOptions, files=frozenset({"color_table_file", "default_colors_file"}))
-    data(HatchStyle)
+    # annotations.models._color: a hex of 3 or 6 digits or a color name in any
+    # case, with outer spaces; an unset fill is null or a blank text.
+    color = named("AnnotationColor", union(
+        bounded(STRING, pattern=HEX_COLOR_TEXT_PATTERN), literal(*COLOR_NAMES, spellings={}),
+    ))
+    hatch_default, style_default = HatchStyle(), RegionAnnotationStyle()
+    data(HatchStyle, replace={"color": color}, defaults={"color": hatch_default.color})
     data(RegionAnnotationStyle, replace={  # RegionAnnotationStyle.__post_init__
         "fill_opacity": bound(RegionAnnotationStyle, "fill_opacity", minimum=0, maximum=1),
-    })
+        "stroke": color, "label_color": color,
+        "fill": union(color, bounded(STRING, pattern=BLANK_TEXT_PATTERN), NULL),
+    }, defaults={"stroke": style_default.stroke, "labelColor": style_default.label_color, "fill": style_default.fill})
     data(FeatureSelector)
     # A Web writer wrote a fraction at lane, start and end (OV-630, BA-OD74);
     # the decoder reads its integer part.

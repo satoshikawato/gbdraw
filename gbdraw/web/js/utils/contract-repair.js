@@ -101,6 +101,25 @@ const entryPlace = (at, key) => ({ ...fieldPlace(at, key), pattern: at.pattern ?
 const resolve = (shape, types) => (shape.kind === 'ref' ? resolve(types[shape.name], types) : shape);
 
 /**
+ * The name a literal with spellings, or a literal option of a union, reads
+ * `value` as (rule 1), or null.
+ * @param {unknown} value
+ * @param {ContractShape} shape  resolved
+ * @param {Readonly<Record<string, ContractShape>>} types
+ * @returns {string | null}
+ */
+const spelledName = (value, shape, types) => {
+  if (shape.kind === 'literal') return readSpelling(value, shape);
+  if (shape.kind !== 'union') return null;
+  for (const option of shape.options) {
+    const resolved = resolve(option, types);
+    const name = resolved.kind === 'literal' ? readSpelling(value, resolved) : null;
+    if (name !== null) return name;
+  }
+  return null;
+};
+
+/**
  * @template {string} R
  * @param {unknown} value
  * @param {readonly ContractRepair<NoInfer<R>>[]} rows
@@ -210,7 +229,7 @@ const repairPlace = (value, shape, at, conforming, context) => {
   const resolved = resolve(shape, types);
   const found = conforming ? [] : shapeViolations(value, resolved, types, at.path);
   if (found.length) {
-    const name = resolved.kind === 'literal' ? readSpelling(value, resolved) : null;
+    const name = spelledName(value, resolved, types);
     if (name !== null) return repairPlace(name, resolved, at, true, context);
     const reading = policy.lossless?.(at.pattern, value) ?? null;
     if (reading && !shapeViolations(reading.value, resolved, types, at.path).length) {

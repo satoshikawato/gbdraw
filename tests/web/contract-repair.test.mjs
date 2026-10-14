@@ -8,6 +8,7 @@ import test from 'node:test';
 
 import { repairByDescription } from '../../gbdraw/web/js/utils/contract-repair.js';
 import { shapeViolations } from '../../gbdraw/web/js/utils/contract-shape.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../../gbdraw/web/js/contracts/request-shape.generated.js';
 
 /** @import { ContractDescription, ContractShape } from '../../gbdraw/web/js/utils/contract-shape.js' */
 /** @import { RepairPolicy } from '../../gbdraw/web/js/utils/contract-repair.js' */
@@ -468,4 +469,32 @@ test('a required field with a default takes it, at its own violation and as a pa
   assert.deepEqual(repair(deep, ringPolicy).rows, [{
     path: 'renderRequest.options', pattern: 'options', reason: 'wrong-kind', rule: 6, effect: 'defaulted', used: { dinucleotide: 'GC' }
   }]);
+});
+
+test('an annotation colour: a spelling of a name reads as it, another text takes the default', () => {
+  // annotations.models._color, described as data: a hex of 3 or 6 digits or a
+  // colour name in any case, with outer spaces; a fill is unset as null or blank.
+  /** @param {Record<string, unknown>} changes */
+  const style = (changes) => ({
+    stroke: '#404040', strokeWidth: 1.5, strokeDasharray: [], lineCap: 'tick', fill: null, fillOpacity: 0.2,
+    hatch: { angle: 45, spacing: 5, color: '#666666', width: 1, cross: false }, labelColor: '#202020',
+    labelFontSize: null, labelOrientation: 'auto', labelPosition: 'center', labelOffset: 4, ...changes
+  });
+  const root = { type: 'CanonicalRegionAnnotationStyle', path: 'style' };
+  /** @type {RepairPolicy} */
+  const policy = { positionalArrays: [], partBoundary: () => false };
+  /** @param {Record<string, unknown>} changes */
+  const read = (changes) => repairByDescription(style(changes), root, CANONICAL_REQUEST_DESCRIPTION, policy);
+  const kept = style({ stroke: ' #AbC ', fill: '  ', labelColor: 'navy' });
+  assert.equal(repairByDescription(kept, root, CANONICAL_REQUEST_DESCRIPTION, policy).value, kept);
+  const spelled = read({ stroke: ' Red ', labelColor: 'NAVY' });
+  assert.deepEqual(spelled.rows, []);
+  assert.deepEqual([obj(spelled.value).stroke, obj(spelled.value).labelColor], ['red', 'navy']);
+  const unusable = read({ stroke: 'notacolor', fill: '#abcd', labelColor: 'rgb(1,2,3)', hatch: { ...style({}).hatch, color: 'none' } });
+  assert.deepEqual(unusable.rows.map(({ path, reason, rule, used }) => ({ path, reason, rule, used })), [
+    { path: 'style.stroke', reason: 'pattern', rule: 3, used: '#404040' },
+    { path: 'style.fill', reason: 'pattern', rule: 3, used: null },
+    { path: 'style.hatch.color', reason: 'pattern', rule: 3, used: '#666666' },
+    { path: 'style.labelColor', reason: 'pattern', rule: 3, used: '#202020' }
+  ]);
 });

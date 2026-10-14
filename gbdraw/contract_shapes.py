@@ -19,8 +19,8 @@ A value domain that Python checks beyond the kind is written on the shape
 number or an integer, ``minItems`` on an array, and ``pattern`` (a regular
 expression that must match somewhere in the text) on a string. A
 literal may name the other spellings its reader takes as one of its values
-(``spellings``: ``aliases``, ``foldHyphens``, ``blank``); the check does not
-read them.
+(``spellings``: ``aliases``, ``foldHyphens``, ``blank``; empty, it reads case
+and outer spaces only); the check does not read them.
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ def literal(*values: object, spellings: Spellings | None = None) -> Shape:
         if value is not None and not isinstance(value, (str, int, bool)):
             raise TypeError(f"A literal must be a string, an integer, a boolean or null: {value!r}")
     shape: Shape = {"kind": "literal", "values": list(values)}
-    if spellings:
+    if spellings is not None:
         shape["spellings"] = json.loads(json.dumps(spellings, allow_nan=False, sort_keys=True))
     return shape
 

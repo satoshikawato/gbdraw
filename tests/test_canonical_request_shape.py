@@ -286,8 +286,8 @@ _NAMES_TYPED_STRING: tuple[str, ...] = (
 # The decoder refuses a value of a kind the description allows, at every
 # position: Python checks that a resource, a record or a slot the value names
 # exists, which the description cannot say (a reader of a stored request
-# checks it against the file), or a colour, which the description does not
-# name. The value domains Python checks are bounds of the description.
+# checks it against the file). The value domains Python checks, colours
+# included, are bounds of the description.
 _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalAlignmentAnchorIdentity.recordKey": ("another string",),
     "CanonicalAlignmentRecordDecision.recordKey": ("another string",),
@@ -296,7 +296,6 @@ _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalGenbankRecordSource.resourceId": ("another string",),
     "CanonicalGffFastaRecordSource.fastaResourceId": ("another string",),
     "CanonicalGffFastaRecordSource.gffResourceId": ("another string",),
-    "CanonicalHatchStyle.color": ("another string",),
     "CanonicalLinearRecordTranslation.recordKey": ("another string",),
     "CanonicalLinearTrackOptions.linearTrackAxisIndex": ("another integer",),
     "CanonicalNucleotideBlastComparison.queryRecordIndex": ("another integer",),
@@ -304,9 +303,6 @@ _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalOrthogroupResultComparison.resourceId": ("another string",),
     "CanonicalPrecomputedProteinComparison.queryRecordIndex": ("another integer",),
     "CanonicalPrecomputedProteinComparison.resourceId": ("another string",),
-    "CanonicalRegionAnnotationStyle.fill": ("another string",),
-    "CanonicalRegionAnnotationStyle.labelColor": ("another string",),
-    "CanonicalRegionAnnotationStyle.stroke": ("another string",),
     "CanonicalTableRef.resourceId": ("another string",),
 }
 _EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
