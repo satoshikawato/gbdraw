@@ -170,13 +170,18 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
 }
 
 
+# The stages whose results the catalog item reads: it rebuilds when one of them does.
+_CATALOG_INPUTS = frozenset({"record_content", "annotation_content", "comparison_content", "interactive_context"})
+
+
 def allowed_builds(option_id: str) -> frozenset[str]:
-    return (
+    allowed = (
         EXPECTED_BUILDS.get(option_id, frozenset())
         | CONTENT_BUILDS.get(option_id, frozenset())
         | (frozenset({"record_content"}) if option_id in _RECORD_CONTENT_OPTIONS else frozenset())
         | _COMPOSITION
     )
+    return allowed | ({"catalog_item"} if allowed & _CATALOG_INPUTS else frozenset())
 
 
 def p1_p2_variants(case_id: str, *, include_slow: bool) -> list[tuple[OptionSpec, Variant]]:

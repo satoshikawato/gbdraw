@@ -48,6 +48,7 @@ from gbdraw.api.request_render import (
     RequestRenderResult,
 )
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
+from gbdraw.io.cli_tables import read_comparisons_table
 from gbdraw.legend.row_facts import collect_legend_row_facts
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
@@ -155,15 +156,20 @@ def capture_cli_request(mode: Mode, argv: Sequence[str]) -> CapturedRequest:
 
 
 def input_files(argv: Sequence[str]) -> tuple[Path, ...]:
-    """Every command-line token that names an existing file, once, in order."""
+    """Every command-line token that names an existing file, and the comparison
+    files a ``--comparisons_table`` names (a Worker stages both), once, in order."""
 
     paths: dict[Path, None] = {}
-    for token in argv:
+    for previous, token in zip(("", *argv), argv):
         if token.startswith("-"):
             continue
         path = Path(token)
         if path.is_file():
             paths[path.resolve()] = None
+            if previous == "--comparisons_table":
+                for row in read_comparisons_table(str(path)).rows:
+                    if row.blast and Path(row.blast).is_file():
+                        paths[Path(row.blast).resolve()] = None
     return tuple(paths)
 
 
@@ -249,6 +255,7 @@ def _reply(
                 item.interactive_context,
                 result_index=result_index,
                 result_name=result_name,
+                drawing=item.drawing,
                 _diagnostics=diagnostics,
             )
         )

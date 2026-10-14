@@ -149,6 +149,16 @@ class GroupContent:
         return "".join(element_text(child) for child in self.children)
 
     @cached_property
+    def text(self) -> str:
+        """The group as its group class built it: its own attributes and children, unplaced."""
+
+        group = Group(debug=False)
+        if self.parameter is not None:
+            group._parameter = self.parameter
+        group.attribs = dict(self.attributes)
+        return start_tag(group) + self.children_text + "</g>"
+
+    @cached_property
     def revision(self) -> str:
         """A digest of the serialized children."""
 

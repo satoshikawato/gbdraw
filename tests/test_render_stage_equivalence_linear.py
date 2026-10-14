@@ -46,6 +46,7 @@ from tests.utils.render_stage_equivalence import (
     matrix_variants,
     random_walk,
     run_chain,
+    state_arguments,
     synthetic_record,
     write_depth_table,
     write_genbank,
@@ -137,6 +138,30 @@ def test_random_walk_warm_equals_cold(
     assert len(results) > steps // 2, "too many refused steps"
     failures = equivalence_failures(results)
     assert not failures, "\n".join(failures)
+
+
+@pytest.mark.parametrize(
+    ("case_id", "option_id"),
+    [("L1", "reverse_complement"), ("L2", "annotation_table")],
+)
+def test_the_catalog_item_of_the_contents_equals_the_catalog_of_the_svg(
+    case_id: str,
+    option_id: str,
+    placeholders: Placeholders,
+    tmp_path: Path,
+) -> None:
+    """A cache transaction reads the catalog from the feature, comparison and
+    annotation contents; without one it reads the SVG. Both give the same reply
+    (record source spans on L1, ribbons and annotations on L2)."""
+
+    case = CASES[case_id]
+    ((option, variant), *_rest) = matrix_variants(case, option_ids=(option_id,))
+    arguments = state_arguments(case, {option: variant}, placeholders)
+    harness = EquivalenceHarness("linear", tmp_path / "out")
+    cold = harness.cold(arguments)
+    assert cold.error is None
+    assert cold.stages.builds["catalog_item"] == 1
+    assert_same_outcome(harness.uncached(arguments), cold, f"{case_id} {option_id} (uncached vs cold)")
 
 
 # --- Identity (M1, M5, M10) --------------------------------------------------------------------

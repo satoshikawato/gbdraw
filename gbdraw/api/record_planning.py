@@ -38,6 +38,7 @@ from gbdraw.io.record_select import (
 )
 from gbdraw.io.regions import RegionSpec, apply_region_specs, parse_region_spec
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.api.prepared import register_prepared_resource_value
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -1447,7 +1448,8 @@ def resolve_linear_options(
             losat_pairs.append((query_index, subject_index))
             continue
         try:
-            matches = read_comparison_table(row.blast)
+            # The file's staged identity keys the stages that take its rows.
+            matches = register_prepared_resource_value(read_comparison_table(row.blast), row.blast)
         except ValidationError as exc:
             raise ValidationError(
                 f"{table.table_path}: row {row.row_number}, column 'blast': {exc}"
