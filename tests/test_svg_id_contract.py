@@ -135,14 +135,7 @@ def _linear_legend_svg() -> str:
         wrap_width=canvas_config.total_width,
     )
     drawing = Drawing(debug=False)
-    drawing.add(
-        LegendGroup(
-            canvas_config,
-            legend_measurement,
-            legend_table,
-            cfg=cfg,
-        ).get_group()
-    )
+    drawing.add(LegendGroup(legend_measurement, legend_table).get_group())
     return drawing.tostring()
 
 

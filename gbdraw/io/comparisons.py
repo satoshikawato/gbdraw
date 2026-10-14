@@ -11,14 +11,13 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import Protocol
 
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
-from ..configurators import BlastMatchConfigurator
 from ..exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -347,8 +346,24 @@ def read_comparison_table(
         ) from None
 
 
+class ComparisonFilter(Protocol):
+    """The thresholds a comparison table is filtered by."""
+
+    @property
+    def evalue(self) -> float: ...
+
+    @property
+    def bitscore(self) -> float: ...
+
+    @property
+    def identity(self) -> float: ...
+
+    @property
+    def alignment_length(self) -> int: ...
+
+
 def filter_comparison_dataframe(
-    df: DataFrame, blast_config: BlastMatchConfigurator
+    df: DataFrame, blast_config: ComparisonFilter
 ) -> DataFrame:
     """Apply pairwise match thresholds to a comparison DataFrame."""
 
@@ -364,38 +379,10 @@ def filter_comparison_dataframe(
     ]
 
 
-def load_comparisons(
-    comparison_files: List[str], blast_config: BlastMatchConfigurator
-) -> List[DataFrame]:
-    """Read and filter one comparison table per file, keeping their order.
-
-    Every file must be readable: a skipped file would shift later tables onto
-    the wrong record pair, so a missing or malformed file raises ValidationError.
-    """
-
-    logger.info(
-        "INFO: BLAST output visualization settings: e-value threshold: {}; bitscore threshold: {}; identity threshold: {}; alignment length threshold: {}".format(
-            blast_config.evalue,
-            blast_config.bitscore,
-            blast_config.identity,
-            blast_config.alignment_length,
-        )
-    )
-    comparison_list: list[DataFrame] = []
-    logger.info("INFO: Loading comparison file(s)...")
-    for comparison_file in comparison_files:
-        logger.info("INFO: Loading {}".format(comparison_file))
-        comparison_list.append(
-            filter_comparison_dataframe(read_comparison_table(comparison_file), blast_config)
-        )
-    logger.info("INFO:             ... finished loading comparison file(s)")
-    return comparison_list
-
-
 __all__ = [
     "COMPARISON_COLUMNS",
+    "ComparisonFilter",
     "filter_comparison_dataframe",
-    "load_comparisons",
     "normalize_comparison_dataframe",
     "read_comparison_table",
 ]

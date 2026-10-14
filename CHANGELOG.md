@@ -1949,6 +1949,12 @@ Retired names and their replacements are listed under
   every surface. `gbdraw.api.apply_config_overrides` now shares `labels.filtering` with its
   input when no override touches it. A collection region with a file selector no longer
   reuses the crop of another file inside one cache (OV-700, #1055).
+- Performance (web app): a Generate after a small change also reuses the legend and plot
+  title contents, the composition plan, the contents of every Linear group, the feature
+  catalog item of a Linear Result and the protein comparison analysis. SVG, PNG, and PDF
+  bytes are unchanged. The internal record annotations `gbdraw_record_label` and
+  `gbdraw_record_subtitle` are no longer written; labels come from the request.
+  `gbdraw.io.comparisons.load_comparisons` is removed (#1059).
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 

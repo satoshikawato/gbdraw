@@ -12,6 +12,9 @@ from types import MappingProxyType
 import xml.etree.ElementTree as ET
 from typing import Any, Iterable, TypeVar, cast
 
+from svgwrite import Drawing
+
+from gbdraw.render.group_content import ContentGroup, GroupContent, GroupKind
 from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import disambiguate_feature_ids
@@ -437,16 +440,8 @@ def _snapshot_attributes(
     )
 
 
-def _record_catalog_index_metrics(
-    diagnostics: MutableMapping[str, Any] | None,
-    index: _RenderedSvgCatalogIndex,
-) -> None:
-    if diagnostics is None:
-        return
-    metrics = diagnostics.setdefault("metrics", {})
-    if not isinstance(metrics, MutableMapping):
-        raise GbdrawError("Feature catalog diagnostics metrics must be a mapping.")
-    values = {
+def _catalog_index_metrics(index: _RenderedSvgCatalogIndex) -> dict[str, int]:
+    return {
         "featureCatalogSvgParseCount": 1,
         "featureCatalogFullDomTraversalCount": 1,
         "featureCatalogRenderedFeatureCollectionCount": 1,
@@ -461,14 +456,22 @@ def _record_catalog_index_metrics(
             index.annotation_candidates
         ),
     }
-    for name, value in values.items():
+
+
+def _record_catalog_index_metrics(
+    diagnostics: MutableMapping[str, Any] | None,
+    index: _RenderedSvgCatalogIndex,
+) -> None:
+    if diagnostics is None:
+        return
+    metrics = diagnostics.setdefault("metrics", {})
+    if not isinstance(metrics, MutableMapping):
+        raise GbdrawError("Feature catalog diagnostics metrics must be a mapping.")
+    for name, value in _catalog_index_metrics(index).items():
         metrics[name] = int(metrics.get(name, 0)) + value
 
 
-def _build_rendered_svg_catalog_index(
-    svg_source: str,
-    diagnostics: MutableMapping[str, Any] | None,
-) -> _RenderedSvgCatalogIndex:
+def _parse_catalog_svg(svg_source: str) -> ET.Element:
     try:
         root = ET.fromstring(svg_source)
     except ET.ParseError as exc:
@@ -477,6 +480,11 @@ def _build_rendered_svg_catalog_index(
         ) from exc
     if root.tag.rsplit("}", 1)[-1] != "svg":
         raise GbdrawError("Feature catalog generation expected an SVG root.")
+    return root
+
+
+def _build_rendered_svg_catalog_index(root: ET.Element) -> _RenderedSvgCatalogIndex:
+    """Collect the catalog state of one SVG tree in document order."""
 
     rendered_features: dict[str, _RenderedFeatureEntry] = {}
     match_candidates: list[_SvgCatalogCandidate] = []
@@ -510,7 +518,7 @@ def _build_rendered_svg_catalog_index(
                 )
             )
 
-    index = _RenderedSvgCatalogIndex(
+    return _RenderedSvgCatalogIndex(
         rendered_features=MappingProxyType(rendered_features),
         match_candidates=tuple(match_candidates),
         annotation_candidates=tuple(annotation_candidates),
@@ -518,8 +526,6 @@ def _build_rendered_svg_catalog_index(
         feature_candidate_count=feature_candidate_count,
         record_source_spans=MappingProxyType(record_source_spans),
     )
-    _record_catalog_index_metrics(diagnostics, index)
-    return index
 
 
 def _match_kind(attributes: Mapping[str, object]) -> str:
@@ -2093,23 +2099,110 @@ def _reference_reconstructible_nucleotide_sequences(
             break
 
 
+# The group kinds whose elements the catalog reads: features (record and axis
+# groups, with the record source span), comparison ribbons and annotations.
+_CATALOG_GROUP_KINDS = frozenset(
+    {GroupKind.AXIS, GroupKind.FEATURES, GroupKind.COMPARISON, GroupKind.ANNOTATIONS}
+)
+# The namespaces of an svgwrite root, so the contents parse as in the document.
+_CATALOG_CONTENTS_ROOT = (
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:ev="http://www.w3.org/2001/xml-events"'
+    ' xmlns:xlink="http://www.w3.org/1999/xlink">'
+)
+
+
+def _catalog_contents(drawing: Drawing) -> tuple[GroupContent, ...] | None:
+    """The contents whose elements the catalog reads, in document order.
+
+    ``None`` when a top-level element other than ``defs`` is not a placed
+    content (Circular groups have none yet): the catalog then reads the SVG.
+    """
+
+    contents: list[GroupContent] = []
+    for element in drawing.elements:
+        if element is drawing.defs:
+            continue
+        if not isinstance(element, ContentGroup) or not element.holds_content_children():
+            return None
+        if element.key.kind in _CATALOG_GROUP_KINDS:
+            contents.append(element.content)
+    return tuple(contents)
+
+
+def feature_catalog_item_from_contents(
+    contents: tuple[GroupContent, ...],
+    context: InteractiveSvgContext,
+    *,
+    result_index: int,
+    result_name: str,
+) -> dict[str, Any]:
+    """The ``catalog_item`` stage: one catalog item from the contents it reads.
+
+    No other group of the drawing holds a feature, match, annotation or record
+    source span, so a change elsewhere (a title, a legend, a position) reuses it.
+    """
+
+    from gbdraw.api.prepared import record_prepared_input_metric
+
+    root = _parse_catalog_svg(
+        _CATALOG_CONTENTS_ROOT + "".join(content.text for content in contents) + "</svg>"
+    )
+    svg_index = _build_rendered_svg_catalog_index(root)
+    for name, value in _catalog_index_metrics(svg_index).items():
+        record_prepared_input_metric(name, value)
+    return _feature_catalog_item(
+        svg_index, context, result_index=result_index, result_name=result_name
+    )
+
+
 def build_feature_catalog_item(
     svg_source: str,
     context: InteractiveSvgContext | None,
     *,
     result_index: int,
     result_name: str,
+    drawing: Drawing | None = None,
     _diagnostics: MutableMapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Normalize one prepared render context without reading source files."""
+    """Normalize one prepared render context without reading source files.
+
+    In a cache transaction, a ``drawing`` whose groups are all placed contents
+    gives the ``catalog_item`` stage, keyed by the contents it reads; otherwise
+    the catalog reads ``svg_source``.
+    """
+
+    from gbdraw.api.prepared import prepared_input_cache_active
 
     if not isinstance(context, InteractiveSvgContext):
         raise GbdrawError("Feature catalog generation requires prepared context.")
-    svg_index = _build_rendered_svg_catalog_index(
-        svg_source,
-        _diagnostics,
+    contents = (
+        _catalog_contents(drawing)
+        if drawing is not None and prepared_input_cache_active()
+        else None
+    )
+    if contents is not None:
+        return render_stage(
+            "catalog_item",
+            feature_catalog_item_from_contents,
+            contents,
+            context,
+            result_index=int(result_index),
+            result_name=str(result_name),
+        )
+    svg_index = _build_rendered_svg_catalog_index(_parse_catalog_svg(svg_source))
+    _record_catalog_index_metrics(_diagnostics, svg_index)
+    return _feature_catalog_item(
+        svg_index, context, result_index=result_index, result_name=result_name
     )
 
+
+def _feature_catalog_item(
+    svg_index: _RenderedSvgCatalogIndex,
+    context: InteractiveSvgContext,
+    *,
+    result_index: int,
+    result_name: str,
+) -> dict[str, Any]:
     record_keys = _record_keys(context)
     stored_features, stored_index = render_stage(
         "catalog_normalization",

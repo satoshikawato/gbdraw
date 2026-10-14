@@ -14,11 +14,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.features.colors import precompute_used_color_rules
+from gbdraw.legend.sources import LegendSources
 from gbdraw.legend.table import (
     LegendRowKey,
     LegendTable,
@@ -27,13 +28,6 @@ from gbdraw.legend.table import (
     prepare_legend_table,
 )
 from gbdraw.render_stages import render_stage
-
-if TYPE_CHECKING:
-    from gbdraw.configurators import (
-        FeatureDrawingConfigurator,
-        GcContentConfigurator,
-        GcSkewConfigurator,
-    )
 
 LEGEND_ROW_FACTS_ATTR = "_gbdraw_legend_row_facts"
 
@@ -48,15 +42,11 @@ class LegendRowFacts:
         self,
         *,
         records: Sequence[SeqRecord],
-        feature_config: FeatureDrawingConfigurator,
-        gc_config: GcContentConfigurator,
-        skew_config: GcSkewConfigurator,
+        sources: LegendSources,
         legend_table: LegendTable,
     ) -> None:
         self._records = tuple(records)
-        self._feature_config = feature_config
-        self._gc_config = gc_config
-        self._skew_config = skew_config
+        self._sources = sources
         self.drawn: tuple[LegendRowKey, ...] = tuple(legend_table)
         self._shared = legend_table.shared_keys
 
@@ -72,9 +62,7 @@ class LegendRowFacts:
             "legend_table",
             producible_legend_rows,
             self._records,
-            self._feature_config,
-            self._gc_config,
-            self._skew_config,
+            self._sources,
         )
         rows = dict.fromkeys([*producible, *self._shared])
         drawn = set(self.drawn)
@@ -83,9 +71,7 @@ class LegendRowFacts:
 
 def producible_legend_rows(
     records: tuple[SeqRecord, ...],
-    feature_config: FeatureDrawingConfigurator,
-    gc_config: GcContentConfigurator,
-    skew_config: GcSkewConfigurator,
+    sources: LegendSources,
 ) -> tuple[LegendRowKey, ...]:
     """Every feature row the records can name (render stage ``legend_table``).
 
@@ -100,19 +86,20 @@ def producible_legend_rows(
             str(feature.type) for record in records for feature in record.features
         )
     )
+    features = sources.features
     used_rules, default_used = precompute_used_color_rules(
         records,
-        feature_config.specific_color_rules,
-        feature_config.default_color_map,
-        set(feature_config.selected_features_set),
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-        record_features=feature_config.record_features,
+        features.specific_color_rules,
+        features.default_color_map,
+        set(features.selected_features),
+        feature_visibility_rules=features.feature_visibility_rules,
+        record_features=features.record_features,
         include_hidden=True,
     )
     producible = prepare_legend_table(
-        gc_config,
-        skew_config,
-        feature_config,
+        sources.gc,
+        sources.skew,
+        features,
         feature_types,
         used_color_rules=used_rules,
         default_used_features=default_used,

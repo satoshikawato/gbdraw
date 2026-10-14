@@ -15,7 +15,7 @@ import math
 import copy
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import Any, Callable, Optional, Mapping, Sequence, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, Mapping, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -51,12 +51,10 @@ from ...configurators import (
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...render_stages import render_stage
-from ...core.sequence import check_feature_presence
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
 from ...config.modify import with_config_overrides
 from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
-from ...features.colors import precompute_used_color_rules
 from ...features.factory import FeatureBuildResult, create_feature_layers
 from ...labels.circular import (
     CircularLabelProbeStopped,
@@ -91,6 +89,15 @@ from ...layout.composition import (
 )
 from ...layout.spatial import Aabb, union_aabbs
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
+from ...legend.sources import (
+    DepthLegendSource,
+    LegendSlotSource,
+    LegendSources,
+    NumericLegendSource,
+    depth_legend_sources,
+    feature_legend_presence,
+    legend_slot_sources,
+)
 from ...legend.table import LegendTable, prepare_legend_table
 from ...tracks import (
     CircularTrackSlot,
@@ -139,6 +146,9 @@ from .presets import (
     circular_track_slots_from_preset_order,
     normalize_circular_track_preset,
 )
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 
 LEGEND_LABEL_MARGIN_PX = 2.0 * DEFAULT_COMPOSITION_SPACING.overlay_clearance_px
@@ -1192,6 +1202,7 @@ def _definition_reserved_radius_px(
     definition_profile: str,
     record_transform: RecordDisplayTransform | None = None,
     species_line_count: int = 1,
+    record_presentation: RecordPresentation | None = None,
 ) -> float:
     cfg = canvas_config.profile.config
     definition_group = DefinitionGroup(
@@ -1204,6 +1215,7 @@ def _definition_reserved_radius_px(
         definition_profile=definition_profile,
         record_transform=record_transform,
         species_line_count=species_line_count,
+        record_presentation=record_presentation,
     ).get_group()
 
     # Track-slot reservation is a record-local compatibility contract. Keep its
@@ -1276,6 +1288,7 @@ def _resolve_radial_layout_fitting_definition(
     definition_position: str,
     center_reserved_radius: float | None,
     record_transform: RecordDisplayTransform | None,
+    record_presentation: RecordPresentation | None,
 ) -> tuple[CircularRadialLayout, float | None, int]:
     """Place the slots around the center definition (PD-OI-078).
 
@@ -1304,6 +1317,7 @@ def _resolve_radial_layout_fitting_definition(
             definition_profile=definition_profile,
             record_transform=record_transform,
             species_line_count=line_count,
+            record_presentation=record_presentation,
         )
 
     reserved = reserved_for(1)
@@ -1402,31 +1416,42 @@ def _slot_dataframe_for_nt(
 
 
 
-def _slot_legend_label(slot: CircularTrackSlot, fallback: str) -> str:
-    params = slot.params or {}
-    raw_label = params.get("legend_label", params.get("label"))
+def _slot_legend_label(slot: LegendSlotSource, fallback: str) -> str:
+    raw_label = slot.params.get("legend_label", slot.params.get("label"))
     label = str(raw_label).strip() if raw_label is not None else ""
     return label or fallback
+
+
+def _add_numeric_legend_sources(out: LegendTable, label: str, swatch: NumericLegendSource) -> None:
+    stroke = {"stroke": swatch.stroke_color, "width": swatch.stroke_width}
+    if swatch.high_fill_color == swatch.low_fill_color:
+        out.add_source(label, {"type": "solid", "fill": swatch.high_fill_color, **stroke})
+    else:
+        out.add_source(f"{label} (+)", {"type": "solid", "fill": swatch.high_fill_color, **stroke})
+        out.add_source(f"{label} (-)", {"type": "solid", "fill": swatch.low_fill_color, **stroke})
 
 
 def _sync_legend_table_for_circular_slots(
     out: LegendTable,
     *,
-    circular_track_slots: list[CircularTrackSlot] | None,
-    gc_config: GcContentConfigurator,
-    skew_config: GcSkewConfigurator,
-    depth_config: DepthConfigurator | None,
-    depth_df: DataFrame | None,
-    depth_tracks: Sequence[DepthTrackData] | None = None,
-    cfg: GbdrawConfig,
+    slots: Sequence[LegendSlotSource] | None,
+    gc: NumericLegendSource,
+    skew: NumericLegendSource,
+    depth: DepthLegendSource | None,
+    depth_tracks: Sequence[DepthLegendSource] | None = None,
     conservation_legend: Sequence[ConservationLegendSource] = (),
+    conservation_colors: tuple[str, str] = ("", ""),
     conservation_min_identity: float | None = None,
 ) -> LegendTable:
-    """Replace singleton numeric legend entries with slot-aware entries."""
-    if circular_track_slots is None:
+    """Replace singleton numeric legend entries with slot-aware entries.
+
+    ``depth`` is the lone depth track's swatch when its frame was built;
+    ``conservation_colors`` the default gradient ends (min, max).
+    """
+    if slots is None:
         return out
 
-    default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
+    default_nt = str(gc.dinucleotide).upper()
     removable = {
         "Depth",
         f"{default_nt} content",
@@ -1440,90 +1465,46 @@ def _sync_legend_table_for_circular_slots(
         out.discard_default_track(key)
 
     depth_by_index = index_depth_track_row(depth_tracks or ())
-    for slot in circular_track_slots:
-        if not slot.enabled:
-            continue
-        renderer = str(slot.renderer)
+    for slot in slots:
+        renderer = slot.renderer
         if renderer == "depth":
             if depth_by_index:
                 track_index = parse_nonnegative_integer(
-                    (slot.params or {}).get("track_index", 0),
+                    slot.params.get("track_index", 0),
                     field_name=f"depth slot '{slot.id}' track_index",
                 )
                 track = depth_by_index.get(track_index)
                 if track is None:
                     continue
+                swatch = track
                 label = _slot_legend_label(slot, track.label)
-                out.add_source(label, {
-                    "type": "solid",
-                    "fill": track.config.fill_color,
-                    "stroke": track.config.stroke_color,
-                    "width": track.config.stroke_width,
-                })
+            elif depth is None:
                 continue
-            if depth_config is None or depth_df is None:
-                continue
-            label = _slot_legend_label(slot, "Depth")
+            else:
+                swatch = depth
+                label = _slot_legend_label(slot, "Depth")
             out.add_source(label, {
                 "type": "solid",
-                "fill": depth_config.fill_color,
-                "stroke": depth_config.stroke_color,
-                "width": depth_config.stroke_width,
+                "fill": swatch.fill_color,
+                "stroke": swatch.stroke_color,
+                "width": swatch.stroke_width,
             })
         elif renderer == "dinucleotide_content":
             nt = slot_dinucleotide(slot.params, default_nt)
-            label = _slot_legend_label(slot, f"{nt} content")
-            if gc_config.high_fill_color == gc_config.low_fill_color:
-                out.add_source(label, {
-                    "type": "solid",
-                    "fill": gc_config.high_fill_color,
-                    "stroke": gc_config.stroke_color,
-                    "width": gc_config.stroke_width,
-                })
-            else:
-                out.add_source(f"{label} (+)", {
-                    "type": "solid",
-                    "fill": gc_config.high_fill_color,
-                    "stroke": gc_config.stroke_color,
-                    "width": gc_config.stroke_width,
-                })
-                out.add_source(f"{label} (-)", {
-                    "type": "solid",
-                    "fill": gc_config.low_fill_color,
-                    "stroke": gc_config.stroke_color,
-                    "width": gc_config.stroke_width,
-                })
+            _add_numeric_legend_sources(out, _slot_legend_label(slot, f"{nt} content"), gc)
         elif renderer == "dinucleotide_skew":
             nt = slot_dinucleotide(slot.params, default_nt)
-            label = _slot_legend_label(slot, f"{nt} skew")
-            slot_skew_config = _slot_skew_config(skew_config, slot, nt)
-            if slot_skew_config.high_fill_color == slot_skew_config.low_fill_color:
-                out.add_source(label, {
-                    "type": "solid",
-                    "fill": slot_skew_config.high_fill_color,
-                    "stroke": slot_skew_config.stroke_color,
-                    "width": slot_skew_config.stroke_width,
-                })
-            else:
-                out.add_source(f"{label} (+)", {
-                    "type": "solid",
-                    "fill": slot_skew_config.high_fill_color,
-                    "stroke": slot_skew_config.stroke_color,
-                    "width": slot_skew_config.stroke_width,
-                })
-                out.add_source(f"{label} (-)", {
-                    "type": "solid",
-                    "fill": slot_skew_config.low_fill_color,
-                    "stroke": slot_skew_config.stroke_color,
-                    "width": slot_skew_config.stroke_width,
-                })
+            _add_numeric_legend_sources(
+                out, _slot_legend_label(slot, f"{nt} skew"), skew.for_skew_slot(slot, nt)
+            )
     if conservation_legend:
+        default_min_color, default_max_color = conservation_colors
         if any(track.track_color for track in conservation_legend):
             for conservation_track in conservation_legend:
                 min_color, max_color = conservation_track_gradient_colors(
                     conservation_track.track_color,
-                    default_min_color=cfg.objects.conservation.min_color,
-                    default_max_color=cfg.objects.conservation.max_color,
+                    default_min_color=default_min_color,
+                    default_max_color=default_max_color,
                 )
                 out.add_source(conservation_track.track_label, {
                     "type": "gradient",
@@ -1536,8 +1517,8 @@ def _sync_legend_table_for_circular_slots(
         else:
             out.add_source("Conservation identity", {
                 "type": "gradient",
-                "min_color": cfg.objects.conservation.min_color,
-                "max_color": cfg.objects.conservation.max_color,
+                "min_color": default_min_color,
+                "max_color": default_max_color,
                 "stroke": "none",
                 "width": 0,
                 "min_value": float(conservation_min_identity or 0.0),
@@ -2032,6 +2013,7 @@ def add_record_on_circular_canvas(
     annotation_record_index: int = 0,
     definition_record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
+    record_presentation: RecordPresentation | None = None,
 ) -> _CircularPlotAssembly:
     """
     Adds various record-related groups to a circular canvas.
@@ -2242,6 +2224,7 @@ def add_record_on_circular_canvas(
             definition_position=definition_position,
             center_reserved_radius=center_reserved_radius,
             record_transform=record_transform,
+            record_presentation=record_presentation,
         )
     )
     resolved_track_slots = list(radial_layout.slots)
@@ -2656,6 +2639,7 @@ def add_record_on_circular_canvas(
         strain,
         **definition_kwargs,
         record_transform=record_transform,
+        record_presentation=record_presentation,
     )
     definition_target = next(
         (
@@ -2702,12 +2686,7 @@ def add_record_on_circular_canvas(
         and legend_measurement.local_bounds.height > 0.0
     ):
         legend_target_start = len(getattr(canvas, "elements", []))
-        canvas = add_legend_group_on_canvas(
-            canvas,
-            canvas_config,
-            legend_measurement,
-            legend_table,
-        )
+        canvas = add_legend_group_on_canvas(canvas, legend_measurement, legend_table)
         legend_target = next(
             (
                 element
@@ -2769,7 +2748,9 @@ def _compose_circular_plot(
         if title_target is not None and title_bounds is not None
         else None
     )
-    plan = plan_composition(
+    plan = render_stage(
+        "composition_plan",
+        plan_composition,
         CompositionRequest(
             primary=CompositionItem("primary", plot.source_content_bounds),
             legend=legend_item,
@@ -2777,7 +2758,7 @@ def _compose_circular_plot(
             legend_placement=legend_placement,
             title_placement=resolved_title_placement,
             overlay_obstacles=plot.source_overlay_obstacles,
-        )
+        ),
     )
 
     apply_composition_plan(
@@ -2832,17 +2813,19 @@ def _compose_circular_plot(
 def build_circular_legend_table(
     records: Sequence[SeqRecord],
     *,
-    feature_config: FeatureDrawingConfigurator,
-    gc_config: GcContentConfigurator,
-    skew_config: GcSkewConfigurator,
-    profile: CircularRenderProfile,
-    depth_config: DepthConfigurator | None = None,
-    depth_df: DataFrame | None = None,
-    depth_tracks: Sequence[DepthTrackData] | None = None,
+    sources: LegendSources,
+    show_gc: bool,
+    show_skew: bool,
+    show_depth: bool,
+    depth: DepthLegendSource | None = None,
+    has_depth_frame: bool = False,
+    depth_tracks: tuple[DepthLegendSource, ...] | None = None,
     depth_track_count_value: int = 0,
-    circular_track_slots: list[CircularTrackSlot] | None = None,
+    slots: tuple[LegendSlotSource, ...] | None = None,
+    annotation_slots: tuple[LegendSlotSource, ...] | None = None,
     annotations: ResolvedAnnotationBundle | None = None,
     conservation_legend: Sequence[ConservationLegendSource] = (),
+    conservation_colors: tuple[str, str] = ("", ""),
     conservation_min_identity: float = 0.0,
 ) -> LegendTable:
     """Build the one Circular legend table for the records drawn on a canvas.
@@ -2850,70 +2833,92 @@ def build_circular_legend_table(
     Single-record and Multi-Record Canvas output both call this owner, so slot
     renderer parameters, region annotation and depth ``legend_label`` values,
     and conservation rows reach every Circular legend in the same order.
-    ``circular_track_slots`` is the slot list after annotation planning.
+    ``circular_legend_table`` translates the drawing settings into these
+    legend-only arguments.
     """
 
-    cfg = profile.config
-    records = list(records)
-    color_map = feature_config.specific_color_rules
-    default_color_map = feature_config.default_color_map
-    features_present = check_feature_presence(
-        records,
-        feature_config.selected_features_set,
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-        specific_color_rules=color_map,
-        record_features=feature_config.record_features,
-    )
-    used_color_rules, default_used_features = precompute_used_color_rules(
-        records,
-        color_map,
-        default_color_map,
-        set(feature_config.selected_features_set),
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-        record_features=feature_config.record_features,
+    features_present, used_color_rules, default_used_features = feature_legend_presence(
+        records, sources.features
     )
     singleton_depth = bool(
-        profile.show_depth
-        and depth_config is not None
-        and (depth_df is not None or int(depth_track_count_value) == 1)
+        show_depth
+        and depth is not None
+        and (has_depth_frame or int(depth_track_count_value) == 1)
     )
     legend_table = prepare_legend_table(
-        gc_config,
-        skew_config,
-        feature_config,
+        sources.gc,
+        sources.skew,
+        sources.features,
         features_present,
         used_color_rules=used_color_rules,
         default_used_features=default_used_features,
-        depth_config=depth_config if singleton_depth else None,
-        show_gc=profile.show_gc,
-        show_skew=profile.show_skew,
+        depth=depth if singleton_depth else None,
+        show_gc=show_gc,
+        show_skew=show_skew,
         show_depth=singleton_depth,
     )
-    if depth_tracks and circular_track_slots is None:
+    if depth_tracks and slots is None:
         legend_table = sync_depth_track_legend_entries(legend_table, depth_tracks)
     legend_table = _sync_legend_table_for_circular_slots(
         legend_table,
-        circular_track_slots=circular_track_slots,
-        gc_config=gc_config,
-        skew_config=skew_config,
-        depth_config=depth_config,
-        depth_df=depth_df,
+        slots=slots,
+        gc=sources.gc,
+        skew=sources.skew,
+        depth=depth if has_depth_frame else None,
         depth_tracks=depth_tracks,
-        cfg=cfg,
         conservation_legend=conservation_legend,
+        conservation_colors=conservation_colors,
         conservation_min_identity=conservation_min_identity,
     )
     if annotations is not None:
-        legend_table = sync_annotation_legend_entries(
-            legend_table,
-            annotations,
-            (
-                normalize_circular_track_slots(circular_track_slots)
-                if circular_track_slots is not None
-                else None
-            ),
-        )
+        legend_table = sync_annotation_legend_entries(legend_table, annotations, annotation_slots)
     return legend_table
+
+
+def circular_legend_table(
+    records: Sequence[SeqRecord],
+    sources: LegendSources,
+    *,
+    profile: CircularRenderProfile,
+    depth_config: DepthConfigurator | None,
+    depth_df: DataFrame | None,
+    depth_tracks: Sequence[DepthTrackData] | None,
+    depth_track_count_value: int,
+    circular_track_slots: list[CircularTrackSlot] | None,
+    annotations: ResolvedAnnotationBundle | None,
+    conservation_legend: Sequence[ConservationLegendSource],
+    conservation_min_identity: float,
+) -> LegendTable:
+    """Call the ``legend_table`` stage with the legend-only parts of the drawing settings.
+
+    ``circular_track_slots`` is the slot list after annotation planning;
+    annotation rows read it normalized.
+    """
+
+    conservation = profile.config.objects.conservation
+    return render_stage(
+        "legend_table",
+        build_circular_legend_table,
+        list(records),
+        sources=sources,
+        show_gc=profile.show_gc,
+        show_skew=profile.show_skew,
+        show_depth=profile.show_depth,
+        depth=DepthLegendSource.of_config(depth_config) if depth_config is not None else None,
+        has_depth_frame=depth_df is not None,
+        depth_tracks=depth_legend_sources(depth_tracks) if depth_tracks is not None else None,
+        depth_track_count_value=depth_track_count_value,
+        slots=legend_slot_sources(circular_track_slots),
+        annotation_slots=(
+            legend_slot_sources(normalize_circular_track_slots(circular_track_slots))
+            if circular_track_slots is not None and annotations is not None
+            else None
+        ),
+        annotations=annotations,
+        conservation_legend=tuple(conservation_legend),
+        conservation_colors=(conservation.min_color, conservation.max_color),
+        conservation_min_identity=conservation_min_identity,
+    )
 
 
 def _assemble_circular_diagram_result(
@@ -2949,6 +2954,7 @@ def _assemble_circular_diagram_result(
     title_bounds: Aabb | None = None,
     title_placement: TitlePlacement | str = TitlePlacement.NONE,
     record_transform: RecordDisplayTransform | None = None,
+    record_presentation: RecordPresentation | None = None,
 ) -> CircularAssemblyResult:
     """
     Assembles a circular diagram for a GenBank record and returns the SVG canvas.
@@ -2989,6 +2995,7 @@ def _assemble_circular_diagram_result(
         record_transform=record_transform,
     )
 
+    legend_sources = LegendSources.of(feature_config, gc_config, skew_config)
     legend_table = LegendTable()
     legend_measurement = measure_legend(
         legend_config,
@@ -2997,13 +3004,9 @@ def _assemble_circular_diagram_result(
         wrap_width=canvas_config.total_width,
     )
     if canvas_config.legend_position != "none":
-        legend_table = render_stage(
-            "legend_table",
-            build_circular_legend_table,
+        legend_table = circular_legend_table(
             [gb_record],
-            feature_config=feature_config,
-            gc_config=gc_config,
-            skew_config=skew_config,
+            legend_sources,
             profile=profile,
             depth_config=depth_config,
             depth_df=depth_df,
@@ -3019,9 +3022,7 @@ def _assemble_circular_diagram_result(
         canvas,
         LegendRowFacts(
             records=[gb_record],
-            feature_config=feature_config,
-            gc_config=gc_config,
-            skew_config=skew_config,
+            sources=legend_sources,
             legend_table=legend_table,
         ),
     )
@@ -3058,6 +3059,7 @@ def _assemble_circular_diagram_result(
         annotation_record_index=annotation_record_index,
         definition_record_count=definition_record_count,
         record_transform=record_transform,
+        record_presentation=record_presentation,
     )
     return _compose_circular_plot(
         plot,

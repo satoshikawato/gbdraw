@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -16,6 +16,7 @@ from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...features.factory import FeatureBuildResult
 from ...layout.circular import CircularRecordRenderContext
+from ...legend.table import LegendTable
 from ...configurators import (
     FeatureDrawingConfigurator,
     DepthConfigurator,
@@ -42,6 +43,9 @@ from .positioning import (
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 def add_depth_group_on_canvas(
     canvas: Drawing,
@@ -241,6 +245,7 @@ def add_record_definition_group_on_canvas(
     record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
     species_line_count: int = 1,
+    record_presentation: RecordPresentation | None = None,
 ) -> Drawing:
     """
     Adds the record definition group to the canvas.
@@ -268,6 +273,7 @@ def add_record_definition_group_on_canvas(
         record_count=record_count,
         record_transform=record_transform,
         species_line_count=species_line_count,
+        record_presentation=record_presentation,
     )
     definition_group: Group = definition_builder.get_group()
     setattr(definition_group, "_gbdraw_local_bounds", definition_builder.local_bounds)
@@ -440,27 +446,21 @@ def add_labels_group_on_canvas(
 
 def add_legend_group_on_canvas(
     canvas: Drawing,
-    canvas_config: CircularCanvasConfigurator,
     legend_measurement: LegendMeasurement,
-    legend_table,
+    legend_table: LegendTable,
 ) -> Drawing:
     """
     Adds the legend group to the canvas.
 
     Parameters:
     canvas (Drawing): The SVG drawing canvas.
-    canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
     legend_measurement: Immutable measurement for the legend.
     legend_table: The legend table data.
 
     Returns:
     Drawing: The updated SVG drawing with the legend group added.
     """
-    legend_group = LegendGroup(
-        canvas_config,
-        legend_measurement,
-        legend_table,
-    ).get_group()
+    legend_group = LegendGroup(legend_measurement, legend_table).get_group()
     setattr(legend_group, "_gbdraw_local_bounds", legend_measurement.local_bounds)
     canvas.add(legend_group)
 

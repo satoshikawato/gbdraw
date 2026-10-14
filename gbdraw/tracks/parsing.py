@@ -3,8 +3,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from numbers import Integral
-from typing import TYPE_CHECKING, Any, Collection, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Collection, Literal, Mapping, Protocol, Sequence
 
+from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.mode_profiles import validate_dinucleotide
 
 if TYPE_CHECKING:
@@ -167,6 +168,47 @@ def normalize_dinucleotide_skew_color_params(params: dict) -> dict:
     return params
 
 
+class SlotWithParams(Protocol):
+    """A track slot as its params readers see it (any slot type of either mode)."""
+
+    @property
+    def params(self) -> Mapping[str, object]: ...
+
+
+class SlotView(SlotWithParams, Protocol):
+    """A track slot as the legend reads it: identity, renderer, params, and whether it draws."""
+
+    @property
+    def id(self) -> str: ...
+
+    @property
+    def renderer(self) -> str: ...
+
+    @property
+    def enabled(self) -> bool: ...
+
+
+def _slot_param_text(slot: SlotWithParams, *names: str) -> str | None:
+    params = slot.params
+    for name in names:
+        value = params.get(name)
+        text = str(value).strip() if value is not None else ""
+        if text:
+            return text
+    return None
+
+
+def slot_skew_colors(slot: SlotWithParams) -> tuple[str | None, str | None]:
+    """The high and low fill colors a skew slot sets in its params, as hex, or ``None``."""
+
+    positive_color = _slot_param_text(slot, "positive_color", "high_color")
+    negative_color = _slot_param_text(slot, "negative_color", "low_color")
+    return (
+        resolve_color_to_hex(positive_color) if positive_color else None,
+        resolve_color_to_hex(negative_color) if negative_color else None,
+    )
+
+
 def slot_dinucleotide(params: Mapping[str, Any] | None, default: str) -> str:
     """Return a numeric slot's validated pair; an unset ``nt`` uses ``default``."""
 
@@ -196,9 +238,12 @@ def strip_inline_comment(raw: str) -> str:
 
 __all__ = [
     "CircularTrackSlotParseError",
+    "SlotView",
+    "SlotWithParams",
     "normalize_dinucleotide_params",
     "parse_bool",
     "parse_nonnegative_integer",
+    "slot_skew_colors",
     "parse_track_slot_text",
     "slot_dinucleotide",
     "split_kv_list",

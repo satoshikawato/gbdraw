@@ -9,7 +9,8 @@ input file named on the command line.
 
 A render's reply is the SVG text of every Result plus the metadata the Web
 reply carries (feature catalog, Legend rows, track-slot geometry), built by the
-same production functions, and the remaining fields of the typed result
+same production functions, the group manifest of each Result (keys, order,
+positions, content revisions), and the remaining fields of the typed result
 (interactive context, Linear metadata, LOSAT entries, warnings and notices) in
 a canonical JSON form. A render that fails is an outcome too: its error type and
 message are compared, and only a user-input validation error
@@ -48,7 +49,11 @@ from gbdraw.api.request_render import (
     RequestRenderResult,
 )
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
+from gbdraw.io.cli_tables import read_comparisons_table
 from gbdraw.legend.row_facts import collect_legend_row_facts
+from svgwrite import Drawing
+
+from gbdraw.render.group_content import group_manifest
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
@@ -155,15 +160,20 @@ def capture_cli_request(mode: Mode, argv: Sequence[str]) -> CapturedRequest:
 
 
 def input_files(argv: Sequence[str]) -> tuple[Path, ...]:
-    """Every command-line token that names an existing file, once, in order."""
+    """Every command-line token that names an existing file, and the comparison
+    files a ``--comparisons_table`` names (a Worker stages both), once, in order."""
 
     paths: dict[Path, None] = {}
-    for token in argv:
+    for previous, token in zip(("", *argv), argv):
         if token.startswith("-"):
             continue
         path = Path(token)
         if path.is_file():
             paths[path.resolve()] = None
+            if previous == "--comparisons_table":
+                for row in read_comparisons_table(str(path)).rows:
+                    if row.blast and Path(row.blast).is_file():
+                        paths[Path(row.blast).resolve()] = None
     return tuple(paths)
 
 
@@ -249,6 +259,7 @@ def _reply(
                 item.interactive_context,
                 result_index=result_index,
                 result_name=result_name,
+                drawing=item.drawing,
                 _diagnostics=diagnostics,
             )
         )
@@ -278,6 +289,7 @@ def _reply(
                 "proteinIdentityManifest": canonical(item.protein_identity_manifest),
                 "annotationWarnings": canonical(item.annotation_warnings),
                 "featureIdentityNotices": canonical(item.feature_identity_notices),
+                "manifest": _manifest(item.drawing),
             }
         )
     return {
@@ -293,6 +305,21 @@ def _reply(
             build_track_slot_geometry_run_metadata(mode=captured.mode, records=geometry)
         ),
     }
+
+
+def _manifest(drawing: Drawing) -> JsonValue:
+    """The placed groups of a drawing: keys, order, positions and content revisions (design 2.4)."""
+
+    return [
+        {
+            "key": canonical((entry.key.scope, entry.key.kind.value, entry.key.slot)),
+            "domId": entry.dom_id,
+            "position": entry.position,
+            "revision": entry.content.revision,
+            "definitions": list(entry.definition_ids),
+        }
+        for entry in group_manifest(drawing)
+    ]
 
 
 def _metrics(diagnostics: Mapping[str, object]) -> dict[str, int]:
@@ -1023,12 +1050,18 @@ def matrix_variants(
     first_variant_only: bool = False,
     include_slow: bool = True,
 ) -> list[tuple[OptionSpec, Variant]]:
-    """The variants of the selected options of a case, in universe order, without ``LABEL_FIT_FAILURES``."""
+    """The variants of the selected options of a case, without ``LABEL_FIT_FAILURES``.
 
+    They come in universe order, or in the order of ``option_ids``: the cache
+    keeps only what the previous request used, so a chain names the step a
+    later step reuses right before it.
+    """
+
+    options = options_for(case)
+    if option_ids is not None:
+        options = tuple(option for option_id in option_ids for option in options if option.option_id == option_id)
     selected: list[tuple[OptionSpec, Variant]] = []
-    for option in options_for(case):
-        if option_ids is not None and option.option_id not in option_ids:
-            continue
+    for option in options:
         variants = [
             variant
             for variant in option.variants

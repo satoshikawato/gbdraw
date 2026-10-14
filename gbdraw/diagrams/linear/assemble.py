@@ -46,7 +46,6 @@ from ...config.models import (
 )
 from ...exceptions import ValidationError
 from ...configurators import (
-    BlastMatchConfigurator,
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
@@ -57,15 +56,36 @@ from ...configurators import (
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...core.text import calculate_bbox_dimensions
-from ...core.sequence import check_feature_presence
-from ...render.groups.linear import LengthBarGroup, LegendGroup, PlotTitleGroup
+from ...render.group_content import (
+    CANVAS_SCOPE,
+    GroupContent,
+    GroupKey,
+    GroupKind,
+    build_group_content,
+    place_content,
+)
+from ...render.groups.linear import (
+    LengthBarGroup,
+    linear_legend_content,
+    plot_title_content,
+)
 from ...render.groups.linear.length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
     format_linear_tick_label,
 )
-from ...io.comparisons import filter_comparison_dataframe, load_comparisons
+from ...io.comparisons import filter_comparison_dataframe, read_comparison_table
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
+from ...legend.sources import (
+    ComparisonLegendSource,
+    DepthLegendSource,
+    LegendSlotSource,
+    LegendSources,
+    NumericLegendSource,
+    depth_legend_sources,
+    feature_legend_presence,
+    legend_slot_sources,
+)
 from ...legend.table import (
     LegendTable,
     PairwiseIdentityLegend,
@@ -106,8 +126,11 @@ from ...layout.similarity_alignment import (
     AlignmentDecisionStatus,
     SimilarityAlignmentPlan,
 )
+from ...mode_profiles import ComparisonThresholds
 from ...linear_comparison import (
+    ComparisonRecordIdWarning,
     LinearComparison,
+    ProteinComparisonFrames,
     merge_linear_comparisons,
     project_search_frame_comparisons,
     validate_linear_comparison_record_ids,
@@ -128,7 +151,6 @@ from ...tracks import (
     normalize_linear_track_slots_with_axis,
     parse_nonnegative_integer,
 )
-from ...tracks.linear import NormalizedLinearTrackSlot
 from ...tracks.parsing import slot_dinucleotide
 from ...annotations import (
     AnnotationOptions,
@@ -143,7 +165,7 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
-from ...render.drawers.linear.annotations import draw_linear_annotation_track
+from ...render.drawers.linear.annotations import linear_annotation_track_content
 from ...render.groups.linear import build_linear_feature_dom_index
 from ...render.composition import apply_composition_plan
 
@@ -167,7 +189,6 @@ from .precalc import (
     _precalculate_label_dimensions,
     _resolve_linear_diagram_label_font_size,
 )
-from ...features.colors import precompute_used_color_rules
 from ...features.ids import make_linear_dom_id
 from ...svg.ids import (
     definition_group_svg_id,
@@ -188,6 +209,7 @@ _COMPARISON_ENDPOINT_GAP_PX = 4.0
 
 if TYPE_CHECKING:
     from ...api.options import LinearMultiRecordOptions
+    from ...api.requests import RecordPresentation
 
 
 def _linear_feature_placement_slot(side: str, separate_strands: bool) -> FeaturePlacementSlot:
@@ -434,9 +456,8 @@ def _clone_gc_config_with_dinucleotide(gc_config: GcContentConfigurator, dinucle
 
 
 
-def _slot_legend_label(slot, fallback: str) -> str:
-    params = getattr(slot, "params", {}) or {}
-    raw_label = params.get("legend_label", params.get("label"))
+def _slot_legend_label(slot: LegendSlotSource, fallback: str) -> str:
+    raw_label = slot.params.get("legend_label", slot.params.get("label"))
     label = str(raw_label).strip() if raw_label is not None else ""
     return label or fallback
 
@@ -444,20 +465,20 @@ def _slot_legend_label(slot, fallback: str) -> str:
 def _sync_legend_table_for_linear_slots(
     legend_table: LegendTable,
     *,
-    linear_track_slots: list | None,
-    skew_config: GcSkewConfigurator,
-    depth_tracks: list[DepthTrackData] | None,
+    slots: Sequence[LegendSlotSource] | None,
+    skew: NumericLegendSource,
+    depth_tracks: Sequence[DepthLegendSource] | None,
 ) -> LegendTable:
     """Replace singleton numeric legends with slot-authoritative entries."""
-    if linear_track_slots is None:
+    if slots is None:
         return legend_table
 
     out = sync_depth_track_legend_entries(
         legend_table,
         depth_tracks,
-        slots=linear_track_slots,
+        slots=slots,
     )
-    default_nt = str(getattr(skew_config, "dinucleotide", "GC")).upper()
+    default_nt = str(skew.dinucleotide).upper()
     for key in (
         f"{default_nt} skew",
         f"{default_nt} skew (+)",
@@ -465,33 +486,31 @@ def _sync_legend_table_for_linear_slots(
     ):
         out.discard_default_track(key)
 
-    for slot in linear_track_slots:
-        if not getattr(slot, "enabled", True):
-            continue
-        if str(getattr(slot, "renderer", "")) != "dinucleotide_skew":
+    for slot in slots:
+        if slot.renderer != "dinucleotide_skew":
             continue
         nt = slot_dinucleotide(slot.params, default_nt)
         label = _slot_legend_label(slot, f"{nt} skew")
-        slot_skew_config = _slot_skew_config(skew_config, slot, nt)
-        if slot_skew_config.high_fill_color == slot_skew_config.low_fill_color:
+        slot_skew = skew.for_skew_slot(slot, nt)
+        if slot_skew.high_fill_color == slot_skew.low_fill_color:
             out.add_source(label, {
                 "type": "solid",
-                "fill": slot_skew_config.high_fill_color,
-                "stroke": slot_skew_config.stroke_color,
-                "width": slot_skew_config.stroke_width,
+                "fill": slot_skew.high_fill_color,
+                "stroke": slot_skew.stroke_color,
+                "width": slot_skew.stroke_width,
             })
         else:
             out.add_source(f"{label} (+)", {
                 "type": "solid",
-                "fill": slot_skew_config.high_fill_color,
-                "stroke": slot_skew_config.stroke_color,
-                "width": slot_skew_config.stroke_width,
+                "fill": slot_skew.high_fill_color,
+                "stroke": slot_skew.stroke_color,
+                "width": slot_skew.stroke_width,
             })
             out.add_source(f"{label} (-)", {
                 "type": "solid",
-                "fill": slot_skew_config.low_fill_color,
-                "stroke": slot_skew_config.stroke_color,
-                "width": slot_skew_config.stroke_width,
+                "fill": slot_skew.low_fill_color,
+                "stroke": slot_skew.stroke_color,
+                "width": slot_skew.stroke_width,
             })
     return out
 
@@ -616,38 +635,107 @@ def _serialize_linear_track_slot_geometry(
     }
 
 
-def _load_linear_comparison_dataframes(
-    blast_files,
-    comparison_dataframes: list[DataFrame] | None,
-    blast_config,
-) -> list[DataFrame]:
-    if not (blast_files or comparison_dataframes):
-        return []
+def _content_bounds(content: GroupContent) -> Aabb:
+    """The measured bounds of a content whose group class measures them."""
 
-    comparison_sources: list[list[DataFrame]] = []
-    if blast_files:
-        comparison_sources.append(load_comparisons(blast_files, blast_config))
-    if comparison_dataframes:
-        comparison_sources.append(
-            [
-                filter_comparison_dataframe(comparison, blast_config)
-                for comparison in comparison_dataframes
-            ]
+    if content.local_bounds is None:  # pragma: no cover - the group classes measure them
+        raise ValueError("this group content has no measured bounds")
+    return content.local_bounds
+
+
+def _read_comparison_files(
+    blast_files: Sequence[str] | None,
+    thresholds: ComparisonThresholds,
+) -> tuple[DataFrame, ...]:
+    """Read each comparison file of the request and log the thresholds that will filter it.
+
+    A file the request staged as a resource gives its table that resource's
+    identity, so the ``comparison_rows`` stage that filters it can be reused.
+    This runs outside that stage, so every request logs what it reads.
+    """
+
+    # gbdraw.api imports this module, so its prepared-input owner is imported here.
+    from gbdraw.api.prepared import register_prepared_resource_value
+
+    if not blast_files:
+        return ()
+    logger.info(
+        "INFO: BLAST output visualization settings: e-value threshold: {}; bitscore threshold: {}; "
+        "identity threshold: {}; alignment length threshold: {}".format(
+            thresholds.evalue, thresholds.bitscore, thresholds.identity, thresholds.alignment_length
         )
+    )
+    logger.info("INFO: Loading comparison file(s)...")
+    tables: list[DataFrame] = []
+    for comparison_file in blast_files:
+        logger.info("INFO: Loading {}".format(comparison_file))
+        tables.append(
+            register_prepared_resource_value(read_comparison_table(comparison_file), comparison_file)
+        )
+    logger.info("INFO:             ... finished loading comparison file(s)")
+    return tuple(tables)
 
-    comparisons: list[DataFrame] = []
-    max_source_len = max((len(source) for source in comparison_sources), default=0)
-    for index in range(max_source_len):
-        frames = [
-            source[index]
-            for source in comparison_sources
-            if index < len(source)
-        ]
-        if len(frames) == 1:
-            comparisons.append(frames[0])
-        elif frames:
-            comparisons.append(pd.concat(frames, ignore_index=True))
-    return comparisons
+
+@dataclass(frozen=True)
+class LinearComparisonRows:
+    """The comparisons a Linear diagram draws and the record-ID warnings they raise."""
+
+    comparisons: tuple[LinearComparison, ...]
+    record_id_warnings: tuple[ComparisonRecordIdWarning, ...]
+
+
+def linear_comparison_rows(
+    blast_tables: tuple[DataFrame, ...],
+    protein_comparisons: ProteinComparisonFrames | None,
+    linear_comparisons: tuple[LinearComparison, ...],
+    thresholds: ComparisonThresholds,
+    records: tuple[SeqRecord, ...],
+    rows_by_record: tuple[int, ...],
+    multi_record_enabled: bool,
+) -> LinearComparisonRows:
+    """Filter, merge, validate and project the comparisons (render stage ``comparison_rows``).
+
+    The ordered tables (comparison files, then protein comparisons) pair
+    record ``i`` with ``i + 1``; explicit comparisons (given, then protein
+    pairs) name their records.
+    """
+
+    proteins = protein_comparisons or ProteinComparisonFrames()
+    sources = [
+        [filter_comparison_dataframe(table, thresholds) for table in source]
+        for source in (blast_tables, proteins.ordered)
+        if source
+    ]
+    ordered_frames: list[DataFrame] = []
+    for index in range(max((len(source) for source in sources), default=0)):
+        frames = [source[index] for source in sources if index < len(source)]
+        ordered_frames.append(frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True))
+    normalized = [
+        LinearComparison(
+            item.query_record_index,
+            item.subject_record_index,
+            filter_comparison_dataframe(item.matches, thresholds),
+        )
+        for item in (*linear_comparisons, *proteins.pairs)
+    ]
+    if ordered_frames:
+        if multi_record_enabled:
+            raise ValidationError(
+                "Ordered BLAST/protein comparison inputs are ambiguous when a Linear row "
+                "contains multiple records; provide explicit LinearComparison endpoints."
+            )
+        normalized.extend(
+            LinearComparison(index, index + 1, frame)
+            for index, frame in enumerate(ordered_frames)
+            if index + 1 < len(records)
+        )
+    normalized = list(merge_linear_comparisons(normalized))
+    validate_linear_comparison_topology(normalized, rows_by_record)
+    warnings = validate_linear_comparison_record_ids(normalized, records)
+    return LinearComparisonRows(
+        comparisons=tuple(project_search_frame_comparisons(normalized, records)),
+        record_id_warnings=tuple(warnings),
+    )
 
 
 def _gc_config_matching_linear_depth_axis_font_size(
@@ -924,21 +1012,18 @@ def _centered_vertical_band(center_y: float, height: float) -> VerticalBand | No
 
 
 _ROW_ELIGIBLE_LINE_KINDS: tuple[str, ...] = ("name", "subtitle")
-_ROW_ELIGIBLE_ANNOTATIONS: dict[str, str] = {
-    "name": "gbdraw_record_label",
-    "subtitle": "gbdraw_record_subtitle",
-}
 _RECORD_LOCAL_LINE_KINDS = frozenset({"replicon", "accession", "length"})
 
 
-def _record_definition_text(record: SeqRecord, annotation: str) -> str:
-    """Return one explicit definition annotation of a record, or an empty string."""
-    annotations = getattr(record, "annotations", None) or {}
-    return str(annotations.get(annotation) or "").strip()
+def _record_definition_text(presentation: RecordPresentation | None, kind: str) -> str:
+    """Return a record's explicit label ("name") or subtitle, or an empty string."""
+    if presentation is None:
+        return ""
+    return str((presentation.label if kind == "name" else presentation.subtitle) or "").strip()
 
 
 def _row_wide_definition_line_kinds(
-    records: list[SeqRecord],
+    presentations: Sequence[RecordPresentation | None],
     row_record_indices: list[int],
     *,
     leading_index: int,
@@ -962,14 +1047,13 @@ def _row_wide_definition_line_kinds(
 
     row_wide: set[str] = set()
     for kind in _ROW_ELIGIBLE_LINE_KINDS:
-        annotation = _ROW_ELIGIBLE_ANNOTATIONS[kind]
-        leading_text = _record_definition_text(records[leading_index], annotation)
+        leading_text = _record_definition_text(presentations[leading_index], kind)
         if not leading_text:
             break
         if any(
             text and text != leading_text
             for text in (
-                _record_definition_text(records[index], annotation)
+                _record_definition_text(presentations[index], kind)
                 for index in row_record_indices
             )
         ):
@@ -979,7 +1063,7 @@ def _row_wide_definition_line_kinds(
 
 
 def _split_definition_line_kinds(
-    records: list[SeqRecord],
+    presentations: Sequence[RecordPresentation | None],
     *,
     rows_by_record: tuple[int, ...],
     row_leading_indices: set[int],
@@ -996,7 +1080,7 @@ def _split_definition_line_kinds(
     """
 
     row_record_indices: dict[int, list[int]] = {}
-    for index in range(len(records)):
+    for index in range(len(presentations)):
         row_record_indices.setdefault(rows_by_record[index], []).append(index)
 
     leading_index_by_row = {
@@ -1004,7 +1088,7 @@ def _split_definition_line_kinds(
     }
     row_wide_by_row = {
         row: _row_wide_definition_line_kinds(
-            records,
+            presentations,
             indices,
             leading_index=leading_index_by_row[row],
         )
@@ -1013,7 +1097,7 @@ def _split_definition_line_kinds(
 
     local_kinds: list[frozenset[str]] = []
     row_kinds: list[frozenset[str]] = []
-    for index in range(len(records)):
+    for index in range(len(presentations)):
         row_wide = row_wide_by_row[rows_by_record[index]]
         local_kinds.append(
             _RECORD_LOCAL_LINE_KINDS | (frozenset(_ROW_ELIGIBLE_LINE_KINDS) - row_wide)
@@ -1508,7 +1592,7 @@ def _collect_linear_primary_bounds(
     render_context: LinearRecordRenderContext,
     cfg: GbdrawConfig,
     multi_record_enabled: bool,
-    length_bar_group: LengthBarGroup | None,
+    length_bar_group: GroupContent | None,
     length_bar_offset_x: float,
     length_bar_offset_y: float,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
@@ -1668,9 +1752,9 @@ def _collect_linear_primary_bounds(
             )
         )
 
-    if length_bar_group is not None and length_bar_group.local_bounds.width > 0.0:
+    if length_bar_group is not None and _content_bounds(length_bar_group).width > 0.0:
         bounds.append(
-            length_bar_group.local_bounds.translated(
+            _content_bounds(length_bar_group).translated(
                 horizontal_offset + float(length_bar_offset_x),
                 float(length_bar_offset_y),
             )
@@ -1769,58 +1853,45 @@ def _final_record_translations(
 def build_linear_legend_table(
     records: Sequence[SeqRecord],
     *,
-    feature_config: FeatureDrawingConfigurator,
-    gc_config: GcContentConfigurator,
-    skew_config: GcSkewConfigurator,
-    blast_config: BlastMatchConfigurator,
-    has_blast: bool,
+    sources: LegendSources,
+    comparison: ComparisonLegendSource | None,
     pairwise_identity_legend: PairwiseIdentityLegend,
-    depth_config: DepthConfigurator | None,
+    depth: DepthLegendSource | None,
     show_gc: bool,
     show_skew: bool,
-    linear_track_slots: list[NormalizedLinearTrackSlot],
-    depth_tracks: list[DepthTrackData] | None,
+    slots: tuple[LegendSlotSource, ...] | None,
+    depth_tracks: tuple[DepthLegendSource, ...] | None,
     annotations: ResolvedAnnotationBundle,
 ) -> LegendTable:
     """Build the Linear legend table (render stage ``legend_table``).
 
-    ``depth_config`` is given only when one depth track has a singleton row.
+    ``depth`` is given only when one depth track has a singleton row.
     """
 
-    color_map = feature_config.specific_color_rules
-    default_color_map = feature_config.default_color_map
-    features_present = check_feature_presence(
-        records,
-        feature_config.selected_features_set,
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-        specific_color_rules=color_map,
-        record_features=feature_config.record_features,
-    )
-    used_color_rules, default_used_features = precompute_used_color_rules(
-        records,
-        color_map,
-        default_color_map,
-        set(feature_config.selected_features_set),
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-        record_features=feature_config.record_features,
+    features_present, used_color_rules, default_used_features = feature_legend_presence(
+        records, sources.features
     )
     legend_table = prepare_legend_table(
-        gc_config, skew_config, feature_config, features_present, blast_config, has_blast,
+        sources.gc,
+        sources.skew,
+        sources.features,
+        features_present,
+        comparison=comparison,
         used_color_rules=used_color_rules,
         default_used_features=default_used_features,
-        depth_config=depth_config,
+        depth=depth,
         show_gc=show_gc,
         show_skew=show_skew,
-        show_depth=depth_config is not None,
+        show_depth=depth is not None,
         pairwise_identity_legend=pairwise_identity_legend,
     )
     legend_table = _sync_legend_table_for_linear_slots(
         legend_table,
-        linear_track_slots=linear_track_slots,
-        skew_config=skew_config,
+        slots=slots,
+        skew=sources.skew,
         depth_tracks=depth_tracks,
     )
-    return sync_annotation_legend_entries(legend_table, annotations, linear_track_slots)
+    return sync_annotation_legend_entries(legend_table, annotations, slots)
 
 
 def assemble_linear_diagram(
@@ -1841,7 +1912,7 @@ def assemble_linear_diagram(
     plot_title: str | None = None,
     plot_title_position: str = "bottom",
     plot_title_font_size: float = 32.0,
-    comparison_dataframes: list[DataFrame] | None = None,
+    protein_comparisons: ProteinComparisonFrames | None = None,
     pairwise_identity_legend: PairwiseIdentityLegend | None = None,
     linear_comparisons: list[LinearComparison] | None = None,
     linear_layout: LinearMultiRecordOptions | None = None,
@@ -1849,13 +1920,19 @@ def assemble_linear_diagram(
     similarity_alignment: SimilarityAlignmentPlan | None = None,
     alignment_anchor_centers: Sequence[float | None] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    record_presentations: Sequence[RecordPresentation] | None = None,
 ) -> Drawing:
     """
     Assembles a linear diagram of genomic records with optional BLAST comparison data,
     and returns the SVG canvas (not saved).
+
+    ``record_presentations`` hold each record's label and subtitle.
     """
     profile = canvas_config.profile
     cfg = profile.config
+    presentations: tuple[RecordPresentation | None, ...] = (
+        tuple(record_presentations) if record_presentations is not None else (None,) * len(records)
+    )
     record_keys = stable_record_keys(records)
     ordered_record_indices, rows_by_record = resolve_record_row_positions(
         records,
@@ -1921,46 +1998,36 @@ def assemble_linear_diagram(
     if normalized_plot_title_position not in {"center", "top", "bottom"}:
         raise ValueError("plot_title_position must be one of: center, top, bottom")
 
-    plot_title_obj: PlotTitleGroup | None = None
+    title_content: GroupContent | None = None
     if normalized_plot_title:
-        plot_title_obj = PlotTitleGroup(
+        title_content = render_stage(
+            "plot_title_content",
+            plot_title_content,
             normalized_plot_title,
+            font_family=cfg.objects.text.font_family,
             font_size=float(plot_title_font_size),
-            cfg=cfg,
+            dpi=int(cfg.canvas.dpi),
         )
 
-    legacy_comparison_frames = _load_linear_comparison_dataframes(
-        blast_files,
-        comparison_dataframes,
-        blast_config,
+    comparison_thresholds = ComparisonThresholds(
+        evalue=blast_config.evalue,
+        bitscore=blast_config.bitscore,
+        identity=blast_config.identity,
+        alignment_length=blast_config.alignment_length,
     )
-    normalized_comparisons: list[LinearComparison] = []
-    if linear_comparisons:
-        normalized_comparisons.extend(
-            LinearComparison(
-                item.query_record_index,
-                item.subject_record_index,
-                filter_comparison_dataframe(item.matches, blast_config),
-            )
-            for item in linear_comparisons
-        )
-    if legacy_comparison_frames:
-        if multi_record_enabled:
-            raise ValidationError(
-                "Ordered BLAST/protein comparison inputs are ambiguous when a Linear row "
-                "contains multiple records; provide explicit LinearComparison endpoints."
-            )
-        normalized_comparisons.extend(
-            LinearComparison(index, index + 1, frame)
-            for index, frame in enumerate(legacy_comparison_frames)
-            if index + 1 < len(records)
-        )
-    normalized_comparisons = list(merge_linear_comparisons(normalized_comparisons))
-    validate_linear_comparison_topology(normalized_comparisons, rows_by_record)
-    comparison_record_id_warnings = validate_linear_comparison_record_ids(
-        normalized_comparisons, records
+    comparison_rows = render_stage(
+        "comparison_rows",
+        linear_comparison_rows,
+        _read_comparison_files(blast_files, comparison_thresholds),
+        protein_comparisons,
+        tuple(linear_comparisons or ()),
+        comparison_thresholds,
+        tuple(records),
+        tuple(rows_by_record),
+        bool(multi_record_enabled),
     )
-    normalized_comparisons = list(project_search_frame_comparisons(normalized_comparisons, records))
+    normalized_comparisons = list(comparison_rows.comparisons)
+    comparison_record_id_warnings = comparison_rows.record_id_warnings
     comparisons = [item.matches for item in normalized_comparisons]
     has_blast = bool(normalized_comparisons)
 
@@ -2084,7 +2151,7 @@ def assemble_linear_diagram(
             local_definition_line_kinds,
             row_definition_line_kinds,
         ) = _split_definition_line_kinds(
-            records,
+            presentations,
             rows_by_record=rows_by_record,
             row_leading_indices=row_leading_indices,
         )
@@ -2094,6 +2161,7 @@ def assemble_linear_diagram(
         cfg=cfg,
         line_kinds_by_record=local_definition_line_kinds,
         record_transforms=record_transforms,
+        record_presentations=presentations,
     )
     row_definition_width = 0.0
     row_definition_widths = [0.0 for _record in records]
@@ -2109,6 +2177,7 @@ def assemble_linear_diagram(
             cfg=cfg,
             line_kinds_by_record=list(row_definition_line_kinds),
             record_transforms=record_transforms,
+            record_presentations=presentations,
         )
 
     record_depth_data: list[list[DepthTrackData]] = (
@@ -2178,6 +2247,7 @@ def assemble_linear_diagram(
         [None for _ in records],
     )
     # Prepare legend group
+    legend_sources = LegendSources.of(feature_config, gc_config, skew_config)
     legend_table = LegendTable()
     if canvas_config.legend_position != "none":
         singleton_depth = render_context.depth_enabled and depth_track_count(record_depth_tracks) == 1
@@ -2186,21 +2256,24 @@ def assemble_linear_diagram(
             "legend_table",
             build_linear_legend_table,
             records,
-            feature_config=feature_config,
-            gc_config=gc_config,
-            skew_config=skew_config,
-            blast_config=blast_config,
-            has_blast=has_blast,
+            sources=legend_sources,
+            comparison=ComparisonLegendSource.of(blast_config) if has_blast and blast_config else None,
             pairwise_identity_legend=(
                 comparison_identity_legend
                 or pairwise_identity_legend
                 or PairwiseIdentityLegend()
             ),
-            depth_config=depth_config if singleton_depth else None,
+            depth=(
+                DepthLegendSource.of_config(depth_config)
+                if singleton_depth and depth_config is not None
+                else None
+            ),
             show_gc=profile.show_gc,
             show_skew=profile.show_skew,
-            linear_track_slots=normalized_linear_track_slots,
-            depth_tracks=representative_depth_data if render_context.depth_enabled else None,
+            slots=legend_slot_sources(normalized_linear_track_slots),
+            depth_tracks=(
+                depth_legend_sources(representative_depth_data) if render_context.depth_enabled else None
+            ),
             annotations=resolved_annotations,
         )
     definition_reserve_width = (
@@ -2494,7 +2567,7 @@ def assemble_linear_diagram(
             current_y += resolution.axis_gap
         current_y = max(record_offsets, default=current_y)
 
-    length_bar_group: LengthBarGroup | None = None
+    length_bar_group: GroupContent | None = None
     length_bar_offset_x = 0.0
     draw_length_bar = (
         cfg.objects.scale.show
@@ -2664,16 +2737,20 @@ def assemble_linear_diagram(
             for placement in record_placements.values()
         )
         length_bar_offset_x = min_record_x
-        length_bar_group = LengthBarGroup(
-            canvas_config.fig_width,
+        length_bar_group = render_stage(
+            "length_bar_content",
+            build_group_content,
+            LengthBarGroup,
             canvas_config.alignment_width,
             canvas_config.longest_genome,
-            canvas_config,
-            cfg=cfg,
+            canvas_config.length_param,
+            scale=cfg.objects.scale,
+            font_family=cfg.objects.text.font_family,
+            dpi=cfg.canvas.dpi,
             ruler_width=max_record_x - min_record_x,
         )
-        length_bar_bottom = (
-            length_bar_offset_y + float(length_bar_group.local_bounds.max_y)
+        length_bar_bottom = length_bar_offset_y + float(
+            _content_bounds(length_bar_group).max_y
         )
         canvas_config.total_height = max(
             1.0,
@@ -2695,13 +2772,14 @@ def assemble_linear_diagram(
     if has_blast and comparison_placements is not None:
         canvas = add_explicit_comparisons_on_linear_canvas(
             canvas,
-            normalized_comparisons,
+            comparison_rows.comparisons,
             canvas_config,
             blast_config,
             records,
             comparison_placements,
             feature_dom_index=feature_dom_index,
             record_transforms=record_transforms,
+            record_keys=record_keys,
         )
 
     label_font_size = _resolve_linear_diagram_label_font_size(
@@ -2793,6 +2871,7 @@ def assemble_linear_diagram(
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                         record_translation_x=final_translations[record_index][0],
                         record_translation_y=final_translations[record_index][1],
+                        group_key=GroupKey(str(record_keys[record_index]), GroupKind.FEATURES, str(slot.id)),
                     )
                     feature_rendered = True
                     continue
@@ -2825,8 +2904,9 @@ def assemble_linear_diagram(
                             else len(record.seq) / max(1, canvas_config.longest_genome)
                         )
                     )
-                    annotation_group = draw_linear_annotation_track(
-                        canvas,
+                    annotation_content = render_stage(
+                        "annotation_content",
+                        linear_annotation_track_content,
                         annotation_layout,
                         record_id=str(record.id),
                         record_index=record_index,
@@ -2841,6 +2921,11 @@ def assemble_linear_diagram(
                         semantic_slot_id=(
                             str(slot.id) if slot_group_id is not None else None
                         ),
+                    )
+                    annotation_group = place_content(
+                        canvas,
+                        annotation_content,
+                        GroupKey(str(record_keys[record_index]), GroupKind.ANNOTATIONS, str(slot.id)),
                     )
                     annotation_group.translate(
                         offset_x + canvas_config.horizontal_offset,
@@ -2882,6 +2967,7 @@ def assemble_linear_diagram(
                         track_offset_y=track_offset_y,
                         sequence_width=sequence_width,
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                        group_key=GroupKey(str(record_keys[record_index]), GroupKind.DEPTH, str(slot.id)),
                     )
                     continue
 
@@ -2926,6 +3012,7 @@ def assemble_linear_diagram(
                         slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                        group_key=GroupKey(str(record_keys[record_index]), GroupKind.GC_CONTENT, str(slot.id)),
                     )
                     continue
 
@@ -2953,6 +3040,7 @@ def assemble_linear_diagram(
                         slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                        group_key=GroupKey(str(record_keys[record_index]), GroupKind.GC_SKEW, str(slot.id)),
                     )
 
             if not feature_rendered:
@@ -2981,6 +3069,7 @@ def assemble_linear_diagram(
                     record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                     record_translation_x=final_translations[record_index][0],
                     record_translation_y=final_translations[record_index][1],
+                    group_key=GroupKey(str(record_keys[record_index]), GroupKind.AXIS),
                 )
             add_record_definition_group(
                 canvas,
@@ -3019,7 +3108,9 @@ def assemble_linear_diagram(
                 record_index=record_index,
                 record_count=total_records,
                 record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                record_presentation=presentations[record_index],
                 definition_column_left=definition_column_left,
+                record_key=str(record_keys[record_index]),
             )
             continue
 
@@ -3064,17 +3155,18 @@ def assemble_linear_diagram(
             legend_measurement.local_bounds.width > 0.0
             and legend_measurement.local_bounds.height > 0.0
         ):
-            legend_target = LegendGroup(
-                canvas_config,
-                legend_measurement,
-                legend_table,
-                cfg=cfg,
-            ).get_group()
+            legend_target = place_content(
+                canvas,
+                render_stage(
+                    "legend_content", linear_legend_content, legend_measurement, legend_table
+                ),
+                GroupKey(CANVAS_SCOPE, GroupKind.LEGEND),
+            )
             canvas.add(legend_target)
 
     title_target = (
-        plot_title_obj.get_group()
-        if plot_title_obj is not None
+        place_content(canvas, title_content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE))
+        if title_content is not None
         else None
     )
     if title_target is not None:
@@ -3086,7 +3178,9 @@ def assemble_linear_diagram(
         if title_target is not None
         else TitlePlacement.NONE
     )
-    composition_plan = plan_composition(
+    composition_plan = render_stage(
+        "composition_plan",
+        plan_composition,
         CompositionRequest(
             primary=CompositionItem("primary", source_primary_bounds),
             legend=(
@@ -3095,13 +3189,15 @@ def assemble_linear_diagram(
                 else None
             ),
             title=(
-                CompositionItem("title", plot_title_obj.local_bounds)
-                if title_target is not None and plot_title_obj is not None
+                CompositionItem("title", title_content.local_bounds)
+                if title_target is not None
+                and title_content is not None
+                and title_content.local_bounds is not None
                 else None
             ),
             legend_placement=legend_placement,
             title_placement=title_placement,
-        )
+        ),
     )
     apply_composition_plan(
         canvas,
@@ -3151,9 +3247,7 @@ def assemble_linear_diagram(
         canvas,
         LegendRowFacts(
             records=records,
-            feature_config=feature_config,
-            gc_config=gc_config,
-            skew_config=skew_config,
+            sources=legend_sources,
             legend_table=legend_table,
         ),
     )

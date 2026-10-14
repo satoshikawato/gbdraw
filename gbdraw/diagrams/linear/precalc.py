@@ -13,7 +13,7 @@ from gbdraw.features.placement import FeaturePlacementSlot
 
 from collections.abc import Collection
 import math
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from ...canvas import LinearCanvasConfigurator
@@ -28,13 +28,16 @@ from ...features.factory import (
     create_feature_layers,
 )
 from ...features.objects import FeatureObject
-from ...render.groups.linear import DefinitionGroup
+from ...render.groups.linear import DefinitionGroup, LinearDefinitionStyle
 from ...labels.filtering import label_filter_maps
 from ...render_stages import render_stage
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 
 FeatureDict = dict[str, FeatureObject]
@@ -70,6 +73,7 @@ def _precalculate_definition_metrics(
     cfg: GbdrawConfig,
     line_kinds_by_record: Sequence[Collection[str] | None] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    record_presentations: Sequence[RecordPresentation | None] | None = None,
 ) -> tuple[float, list[float], list[float]]:
     """
     Pre-calculate definition widths and heights for all records.
@@ -80,6 +84,7 @@ def _precalculate_definition_metrics(
     if not records:
         return 0.0, definition_widths, definition_heights
 
+    style = LinearDefinitionStyle.of(cfg)
     if line_kinds_by_record is not None and len(line_kinds_by_record) != len(records):
         raise ValueError("line_kinds_by_record must match the number of records")
     for index, record in enumerate(records):
@@ -90,10 +95,11 @@ def _precalculate_definition_metrics(
         )
         def_group = DefinitionGroup(
             record,
-            canvas_config,
-            cfg=cfg,
+            str(canvas_config.length_param),
+            style=style,
             line_kinds=line_kinds,
             record_transform=(record_transforms[index] if record_transforms is not None else None),
+            record_presentation=(record_presentations[index] if record_presentations is not None else None),
         )
         if def_group.definition_bounding_box_width > max_definition_width:
             max_definition_width = def_group.definition_bounding_box_width

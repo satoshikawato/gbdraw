@@ -18,6 +18,7 @@ import gbdraw.analysis.collinearity as collinearity_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
+from gbdraw.legend.sources import ComparisonLegendSource
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
@@ -3102,8 +3103,7 @@ def test_orientation_collinearity_suppresses_pairwise_identity_legend() -> None:
         skew_config,
         feature_config,
         [],
-        blast_config=blast_config,
-        has_blast=True,
+        comparison=ComparisonLegendSource.of(blast_config),
         show_gc=False,
         show_skew=False,
         show_depth=False,
@@ -3147,8 +3147,7 @@ def test_average_identity_collinearity_legend_uses_average_identity_label() -> N
         skew_config,
         feature_config,
         [],
-        blast_config=blast_config,
-        has_blast=True,
+        comparison=ComparisonLegendSource.of(blast_config),
         show_gc=False,
         show_skew=False,
         show_depth=False,
@@ -3193,8 +3192,7 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
         skew_config,
         feature_config,
         [],
-        blast_config=blast_config,
-        has_blast=True,
+        comparison=ComparisonLegendSource.of(blast_config),
         show_gc=False,
         show_skew=False,
         show_depth=False,
@@ -3239,12 +3237,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
         legend_table,
     )
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(
-        canvas_config,
-        legend_measurement,
-        legend_table,
-        cfg=cfg,
-    )
+    legend_group = LegendGroup(legend_measurement, legend_table)
     drawing.add(legend_group.get_group())
     svg_text = drawing.tostring()
 
@@ -3267,7 +3260,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
         "Collinear",
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_group.dpi,
+        legend_measurement.dpi,
     )
     assert bar_x == pytest.approx(
         label_width + 0.2 * legend_measurement.color_rect_size
@@ -3300,12 +3293,7 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
         legend_table,
     )
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(
-        canvas_config,
-        legend_measurement,
-        legend_table,
-        cfg=cfg,
-    )
+    legend_group = LegendGroup(legend_measurement, legend_table)
     drawing.add(legend_group.get_group())
     root = ET.fromstring(drawing.tostring())
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -3345,7 +3333,7 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
         feature_key,
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_group.dpi,
+        legend_measurement.dpi,
     )
     text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width
@@ -3390,12 +3378,7 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
         legend_table,
     )
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(
-        canvas_config,
-        legend_measurement,
-        legend_table,
-        cfg=cfg,
-    )
+    legend_group = LegendGroup(legend_measurement, legend_table)
     drawing.add(legend_group.get_group())
     root = ET.fromstring(drawing.tostring())
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -3420,7 +3403,7 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
         feature_key,
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_group.dpi,
+        legend_measurement.dpi,
     )
     text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width
@@ -3450,10 +3433,10 @@ def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(mon
         ]
     )
 
-    def fake_load_comparisons(_blast_files, _blast_config):
-        return [frame]
+    def fake_read_comparison_table(_blast_file):
+        return frame
 
-    monkeypatch.setattr(linear_assemble_module, "load_comparisons", fake_load_comparisons)
+    monkeypatch.setattr(linear_assemble_module, "read_comparison_table", fake_read_comparison_table)
 
     svg_text = assemble_linear_diagram_from_records(
         [_record("record_a", []), _record("record_b", [])],
@@ -3717,6 +3700,7 @@ def test_collinearity_match_group_draws_inversions_above_plus_blocks() -> None:
         1,
         blast_config,
         [_record("record_a", []), _record("record_b", [])],
+        align_center=canvas_config.align_center,
     ).get_group()
 
     drawing = Drawing(debug=False)

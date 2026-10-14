@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from typing import TextIO
 
 from svgwrite import Drawing
+from svgwrite.base import BaseElement
+
+from gbdraw.render.group_content import ContentGroup, element_text, start_tag
 
 
 @dataclass(frozen=True)
@@ -28,28 +31,46 @@ class SvgDocument:
         handle.write(self.body)
 
 
-class _TextParts:
-    """A text sink that keeps each write svgwrite makes as one part."""
+_DECLARATION = '<?xml version="1.0" encoding="utf-8" ?>\n'
+_STYLESHEET = (
+    '<?xml-stylesheet href="%s" type="text/css" title="%s" alternate="%s" media="%s"?>\n'
+)
 
-    def __init__(self) -> None:
-        self.parts: list[str] = []
 
-    def write(self, text: str) -> int:
-        self.parts.append(text)
-        return len(text)
+def _child_text(element: BaseElement) -> str:
+    if (
+        isinstance(element, ContentGroup)
+        and element.content.children
+        and element.holds_content_children()
+    ):
+        return start_tag(element) + element.content.children_text + f"</{element.elementname}>"
+    # defs, a group without content, and an empty group (``<g ... />``).
+    return element_text(element)
 
 
 def write_svg_document(drawing: Drawing) -> SvgDocument:
-    """Serialize ``drawing`` once with svgwrite's own file writer.
+    """Serialize ``drawing`` once, as ``Drawing.write`` would write it.
 
-    ``Drawing.write`` writes the prolog and then the root element as its last
-    write, so the file text and the body come from the same serialization.
+    The prolog is svgwrite's: the XML declaration and the stylesheet
+    instructions. The body is the root start tag, then each top-level child,
+    then the root end tag. A placed content group with children is written as
+    its start tag, the stored text of its children and its end tag; every
+    other child by svgwrite's own serialization.
     """
 
-    sink = _TextParts()
-    drawing.write(sink)
-    *prolog, body = sink.parts
-    return SvgDocument(prolog="".join(prolog), body=body)
+    prolog = _DECLARATION + "".join(
+        _STYLESHEET % stylesheet for stylesheet in drawing._stylesheets
+    )
+    if not drawing.elements:
+        return SvgDocument(prolog=prolog, body=drawing.tostring())
+    body = "".join(
+        (
+            start_tag(drawing),
+            *(_child_text(element) for element in drawing.elements),
+            f"</{drawing.elementname}>",
+        )
+    )
+    return SvgDocument(prolog=prolog, body=body)
 
 
 __all__ = ["SvgDocument", "write_svg_document"]

@@ -92,11 +92,7 @@ def test_circular_legend_measurement_carries_the_render_layout() -> None:
     assert measurement.has_gradient is True
     assert not hasattr(configurator, "legend_width")
 
-    group = CircularLegendGroup(
-        canvas_config,
-        measurement,
-        _legend_table(),
-    )
+    group = CircularLegendGroup(measurement, _legend_table())
     assert group.layout is measurement.circular_layout
 
 
@@ -163,12 +159,7 @@ def test_linear_legend_measurement_is_the_renderer_geometry_authority(
         placement=canvas_config.legend_position,
         wrap_width=canvas_config.total_width,
     )
-    group = LinearLegendGroup(
-        canvas_config,
-        measurement,
-        legend_table,
-        cfg=profile.config,
-    )
+    group = LinearLegendGroup(measurement, legend_table)
 
     assert measurement.circular_layout is None
     assert measurement.linear_layout is not None

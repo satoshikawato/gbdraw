@@ -46,6 +46,7 @@ from gbdraw.api.request_render import (
     build_prepared_interactive_context,
     build_request_diagram,
     normalize_request_records,
+    resolve_request_records,
     plan_request,
     plan_circular_request,
     plan_circular_batch_request,
@@ -814,11 +815,14 @@ def test_normalize_in_memory_record_applies_region_and_presentation_without_muta
         )
     )
 
-    (normalized,) = normalize_request_records(request)
+    resolved = resolve_request_records(request)
+    (normalized,) = resolved.records
 
     assert str(normalized.seq) == "GGTT"
-    assert normalized.annotations["gbdraw_record_label"] == "Label A"
-    assert normalized.annotations["gbdraw_record_subtitle"] == "Sub A"
+    assert resolved.provenance[0].presentation.label == "Label A"
+    assert resolved.provenance[0].presentation.subtitle == "Sub A"
+    assert "gbdraw_record_label" not in normalized.annotations
+    assert "gbdraw_record_subtitle" not in normalized.annotations
     assert str(source_record.seq) == "AACCGG"
     assert "gbdraw_record_label" not in source_record.annotations
 

@@ -183,8 +183,10 @@ def test_selection_reverse_region_order_and_provenance(tmp_path: Path) -> None:
     record = resolved.records[0]
     provenance = resolved.provenance[0]
     assert str(record.seq) == "GGT"
-    assert record.annotations["gbdraw_record_label"] == "Shown"
-    assert record.annotations["gbdraw_record_subtitle"] == "Detail"
+    assert provenance.presentation.label == "Shown"
+    assert provenance.presentation.subtitle == "Detail"
+    assert "gbdraw_record_label" not in record.annotations
+    assert "gbdraw_record_subtitle" not in record.annotations
     assert record.annotations["gbdraw_input_index"] == 0
     assert record.annotations["gbdraw_source_record_index"] == 1
     assert record.annotations["gbdraw_source_file"] == str(source_path)
@@ -217,11 +219,12 @@ def test_records_resolved_from_one_source_write_only_their_own_fields(
     )
 
     first, second, third = resolved.records
-    assert [record.annotations["gbdraw_record_label"] for record in resolved.records] == [
+    assert [item.presentation.label for item in resolved.provenance] == [
         "first",
         "second",
         "third",
     ]
+    assert all("gbdraw_record_label" not in record.annotations for record in resolved.records)
     assert "gbdraw_record_label" not in source_record.annotations
     assert first.features is not source_record.features
     # The planned records share the parsed features; nothing writes them.
