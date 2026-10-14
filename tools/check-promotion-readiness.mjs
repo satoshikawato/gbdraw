@@ -17,6 +17,15 @@ export const PROMOTION_WORKFLOW_CONTRACTS = Object.freeze({
   '.github/workflows/gallery-publication.yml': 'Gallery readiness / gate',
   '.github/workflows/test.yml': 'Dev staging / gate'
 });
+// Evidence identities by event: dev push runs, and same-repository pull request runs of any
+// head branch (null), which a dev push that merges the pull request reads (SELECTIVE_CI.md).
+const EVIDENCE_IDENTITIES = Object.freeze({
+  push: Object.freeze({ branch: 'dev', contracts: PROMOTION_WORKFLOW_CONTRACTS }),
+  pull_request: Object.freeze({
+    branch: null,
+    contracts: Object.freeze({ '.github/workflows/test.yml': 'PR / gate' })
+  })
+});
 
 const isObject = (value) => value !== null
   && typeof value === 'object'
@@ -64,14 +73,14 @@ const repositoryParts = (repository) => {
   return repository.split('/').map(encodeURIComponent);
 };
 
-const workflowContract = (workflowPath, expectedAggregateName) => {
-  if (!Object.hasOwn(PROMOTION_WORKFLOW_CONTRACTS, workflowPath)) {
+const workflowContract = (workflowPath, expectedAggregateName, contracts) => {
+  if (!Object.hasOwn(contracts, workflowPath)) {
     fail('UNSUPPORTED_WORKFLOW', 'workflow path is not a promotion evidence producer.', {
-      expected: { workflowPaths: Object.keys(PROMOTION_WORKFLOW_CONTRACTS) },
+      expected: { workflowPaths: Object.keys(contracts) },
       observed: { workflowPath: boundedText(workflowPath) }
     });
   }
-  const aggregateName = PROMOTION_WORKFLOW_CONTRACTS[workflowPath];
+  const aggregateName = contracts[workflowPath];
   if (expectedAggregateName !== aggregateName) {
     fail('AGGREGATE_CONTRACT_MISMATCH', 'aggregate job name does not match the workflow contract.', {
       expected: { workflowPath, aggregateName },
@@ -311,6 +320,7 @@ const runIdentity = (run) => ({
   repository: run?.repository?.full_name,
   event: run?.event,
   branch: run?.head_branch,
+  headRepository: run?.head_repository?.full_name,
   headSha: run?.head_sha,
   status: run?.status,
   conclusion: run?.conclusion
@@ -336,7 +346,9 @@ const runMatches = (run, expected) => run.workflow_id === expected.workflowId
   && run.path === expected.workflowPath
   && run.repository.full_name === expected.repository
   && run.event === expected.event
-  && run.head_branch === expected.branch
+  && (expected.branch === null
+    ? run.head_repository?.full_name === expected.repository
+    : run.head_branch === expected.branch)
   && run.head_sha.toLowerCase() === expected.headSha;
 
 const validateRunUrls = (run, repositoryApiPath, expected) => {
@@ -398,32 +410,39 @@ const exactRunSnapshot = ({ run, selectedRun, expected, repositoryApiPath }) => 
   return run;
 };
 
+// `recordPrefix`, when given, also returns the names of the run's artifacts that start with it.
 export const verifyWorkflowEvidence = async ({
   repository,
   workflowPath,
   expectedEvent = 'push',
-  expectedBranch = 'dev',
+  expectedBranch = EVIDENCE_IDENTITIES[expectedEvent]?.branch,
   expectedHeadSha,
   expectedAggregateName,
+  recordPrefix = null,
   token,
   fetchImpl = globalThis.fetch
 }) => {
   const [owner, repo] = repositoryParts(repository);
-  workflowContract(workflowPath, expectedAggregateName);
+  const identity = Object.hasOwn(EVIDENCE_IDENTITIES, expectedEvent) ? EVIDENCE_IDENTITIES[expectedEvent] : null;
+  if (identity === null || expectedBranch !== identity.branch) {
+    fail('UNSUPPORTED_STAGING_IDENTITY',
+      'Workflow evidence is limited to push runs on dev and same-repository pull request runs.', {
+        expected: { events: Object.keys(EVIDENCE_IDENTITIES) },
+        observed: { event: boundedText(String(expectedEvent)), branch: expectedBranch }
+      });
+  }
+  workflowContract(workflowPath, expectedAggregateName, identity.contracts);
   const headSha = normalizeObjectId(expectedHeadSha, 'expectedHeadSha');
   const expectedIdentity = {
     repository,
     workflowPath,
-    event: 'push',
-    branch: 'dev',
+    event: expectedEvent,
+    branch: expectedBranch,
     headSha,
     aggregateName: expectedAggregateName
   };
-  if (expectedEvent !== 'push' || expectedBranch !== 'dev') {
-    fail('UNSUPPORTED_STAGING_IDENTITY', 'Promotion evidence is limited to push runs on dev.', {
-      expected: expectedIdentity,
-      observed: { event: expectedEvent, branch: expectedBranch }
-    });
+  if (recordPrefix !== null && (typeof recordPrefix !== 'string' || !recordPrefix)) {
+    fail('INVALID_RECORD_PREFIX', 'recordPrefix must be a nonempty string.', { expected: expectedIdentity });
   }
   if (typeof token !== 'string' || !token.trim()) {
     fail('MISSING_TOKEN', 'A GitHub token with Actions read access is required.', {
@@ -462,8 +481,8 @@ export const verifyWorkflowEvidence = async ({
   const runExpected = { ...expectedIdentity, workflowId: workflow.id };
   const runsPath = `${repositoryApiPath}/actions/workflows/${workflow.id}/runs`;
   const runParameters = new Map([
-    ['branch', 'dev'],
-    ['event', 'push'],
+    ...(expectedBranch === null ? [] : [['branch', expectedBranch]]),
+    ['event', expectedEvent],
     ['exclude_pull_requests', 'true'],
     ['head_sha', headSha],
     ['per_page', String(PER_PAGE)]
@@ -554,6 +573,30 @@ export const verifyWorkflowEvidence = async ({
     });
   }
 
+  let records = null;
+  if (recordPrefix !== null) {
+    const artifactsPath = `${repositoryApiPath}/actions/runs/${currentRun.id}/artifacts`;
+    const artifactParameters = new Map([['per_page', String(PER_PAGE)]]);
+    const artifactsUrl = new URL(`${API_ORIGIN}${artifactsPath}`);
+    artifactParameters.forEach((value, name) => artifactsUrl.searchParams.set(name, value));
+    const artifacts = await collectPaginated({
+      initialUrl: artifactsUrl.toString(),
+      pathname: artifactsPath,
+      immutableParameters: artifactParameters,
+      arrayField: 'artifacts',
+      token,
+      fetchImpl,
+      expected: { ...runExpected, runId: currentRun.id }
+    });
+    if (artifacts.some((artifact) => typeof artifact.name !== 'string'
+        || artifact.workflow_run?.id !== currentRun.id)) {
+      fail('MALFORMED_ARTIFACT', 'GitHub artifact metadata is malformed or belongs to another run.', {
+        expected: { ...runExpected, runId: currentRun.id }
+      });
+    }
+    records = artifacts.map(({ name }) => name).filter((name) => name.startsWith(recordPrefix)).sort();
+  }
+
   const { body: finalRunBody } = await requestJson({
     url: currentRunUrl,
     token,
@@ -608,7 +651,8 @@ export const verifyWorkflowEvidence = async ({
       basis: 'newest exact-identity run by created_at, then run_number, then run ID; current attempt revalidated after job inspection',
       matchingRunIds: matchingRuns.map(({ id }) => id),
       ignoredOlderRunIds: matchingRuns.slice(1).map(({ id }) => id)
-    }
+    },
+    records
   };
 };
 
