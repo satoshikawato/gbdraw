@@ -5,8 +5,6 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from gbdraw.svg.elements import Group
 
-from ....auto_sizes import determine_length_parameter
-from ....config.models import GbdrawConfig
 from ...drawers.circular.gc_skew import SkewDrawer
 from ....configurators import GcSkewConfigurator
 
@@ -25,10 +23,8 @@ class GcSkewGroup:
         radius: float,
         track_width: float,
         skew_config: GcSkewConfigurator,
-        track_id: str,
         *,
-        cfg: GbdrawConfig,
-        norm_factor_override: float | None = None,
+        norm_factor_override: float,
         group_id: str | None = None,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
@@ -40,14 +36,7 @@ class GcSkewGroup:
         self.skew_config: GcSkewConfigurator = skew_config
         self.record_len: int = len(self.gb_record.seq)
         self.skew_group: Group = Group(id=group_id or "skew")
-        self.track_type = cfg.canvas.circular.track_type
-        self.length_threshold = cfg.labels.length_threshold.circular
-        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
-        self.norm_factor = (
-            float(norm_factor_override)
-            if norm_factor_override is not None
-            else cfg.canvas.circular.track_dict[self.length_param][self.track_type][str(track_id)]
-        )
+        self.norm_factor = float(norm_factor_override)
         self.dinucleotide: str = self.skew_config.dinucleotide
         self.add_elements_to_group()
 

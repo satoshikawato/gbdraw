@@ -106,7 +106,7 @@ _CIRCULAR_LABEL_SECTIONS = frozenset(
         "objects.text",
     }
 )
-# Circular track groups size themselves from the length threshold and the
+# The Circular tick group sizes itself from the length threshold and the
 # preset track table.
 _CIRCULAR_TRACK_SECTIONS = frozenset({"canvas.circular", "labels.length_threshold"})
 RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
@@ -124,9 +124,10 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     # The Circular title is a shared-common definition (its font and interval).
     "circular_plot_title_content": frozenset({"objects.definition", "objects.text"}),
     "composition_plan": frozenset(),
-    "gc_content_content": _CIRCULAR_TRACK_SECTIONS,
-    "gc_skew_content": _CIRCULAR_TRACK_SECTIONS,
-    "depth_content": _CIRCULAR_TRACK_SECTIONS,
+    # The Circular track groups take their norm factor from the radial plan.
+    "gc_content_content": frozenset(),
+    "gc_skew_content": frozenset(),
+    "depth_content": frozenset(),
     "length_bar_content": frozenset(),
     "definition_content": frozenset(),
     # The Circular centre or edge definition reads its font and interval.

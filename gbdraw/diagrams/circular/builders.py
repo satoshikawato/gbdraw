@@ -151,7 +151,7 @@ def add_depth_group_on_canvas(
     *,
     group_key: GroupKey,
     track_width_override: float | None = None,
-    norm_factor_override: float | None = None,
+    norm_factor_override: float,
     group_id: str | None = None,
     axis_group_id: str | None = None,
     slot_group_id: str | None = None,
@@ -180,11 +180,9 @@ def add_depth_group_on_canvas(
         canvas_config.radius,
         depth_track_width,
         depth_config,
-        canvas_config.track_ids["depth_track"],
         norm_factor_override=norm_factor_override,
         group_id=group_id,
         axis_group_id=axis_group_id,
-        cfg=canvas_config.profile.config,
         record_transform=record_transform,
     )
     return _add_track_content(
@@ -236,7 +234,7 @@ def add_gc_skew_group_on_canvas(
     *,
     group_key: GroupKey,
     track_width_override: float | None = None,
-    norm_factor_override: float | None = None,
+    norm_factor_override: float,
     group_id: str | None = None,
     slot_group_id: str | None = None,
     slot_id: str | None = None,
@@ -268,10 +266,8 @@ def add_gc_skew_group_on_canvas(
         canvas_config.radius,
         skew_track_width,
         skew_config,
-        canvas_config.track_ids["skew_track"],
         norm_factor_override=norm_factor_override,
         group_id=group_id,
-        cfg=canvas_config.profile.config,
         record_transform=record_transform,
     )
     return _add_track_content(
@@ -288,7 +284,7 @@ def add_gc_content_group_on_canvas(
     *,
     group_key: GroupKey,
     track_width_override: float | None = None,
-    norm_factor_override: float | None = None,
+    norm_factor_override: float,
     group_id: str | None = None,
     slot_group_id: str | None = None,
     slot_id: str | None = None,
@@ -320,10 +316,8 @@ def add_gc_content_group_on_canvas(
         canvas_config.radius,
         gc_content_track_width,
         gc_config,
-        canvas_config.track_ids["gc_track"],
         norm_factor_override=norm_factor_override,
         group_id=group_id,
-        cfg=canvas_config.profile.config,
         record_transform=record_transform,
     )
     return _add_track_content(
