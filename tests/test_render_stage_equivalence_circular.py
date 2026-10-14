@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -157,6 +157,63 @@ def test_random_walk_warm_equals_cold(
     assert len(results) > steps // 2, "too many refused steps"
     failures = equivalence_failures(results)
     assert not failures, "\n".join(failures)
+
+
+# --- Record stages (PR 4) ----------------------------------------------------------------------
+
+
+_RADIAL_GROWTH = ("--label_placement", "radial", "--labels", "both", "--resolve_overlaps")
+
+
+def test_radial_growth_replans_copies_of_the_feature_layers(
+    placeholders: Placeholders, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The radial growth loop replans feature placements on copies: a stage result is never changed."""
+
+    import gbdraw.diagrams.circular.assemble as assemble
+
+    layouts: list[int] = []
+    layout_features = assemble._radial_layout_feature_dict
+    built: list[tuple[Any, dict[str, tuple[int, object]]]] = []
+    create = assemble.create_feature_layers
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        layouts.append(1)
+        return layout_features(*args, **kwargs)
+
+    def kept(*args: Any, **kwargs: Any) -> Any:
+        result = create(*args, **kwargs)
+        built.append((result, _placements(result)))
+        return result
+
+    monkeypatch.setattr(assemble, "_radial_layout_feature_dict", counted)
+    monkeypatch.setattr(assemble, "create_feature_layers", kept)
+    case = CASES["C1"]
+    outcome = EquivalenceHarness("circular", tmp_path / "radial").uncached(
+        [*placeholders.expand(case, case.base), *_RADIAL_GROWTH]
+    )
+    assert outcome.error is None, outcome.error
+    assert len(layouts) == 2, "the case must grow the radius and replan once"
+    [(layers, before)] = built
+    assert _placements(layers) == before
+
+
+def _placements(layers: Any) -> dict[str, tuple[int, object]]:
+    return {key: (id(feature.placement), feature.feature_track_id) for key, feature in layers.foreground_features.items()}
+
+
+def test_labels_after_a_radial_growth_reuse_the_feature_layers(placeholders: Placeholders, tmp_path: Path) -> None:
+    case = CASES["C1"]
+    harness = EquivalenceHarness("circular", tmp_path / "radial")
+    first = harness.warm([*placeholders.expand(case, case.base), *_RADIAL_GROWTH])
+    assert first.error is None, first.error
+    assert first.stages.builds.get("feature_layers") == 1
+    # Horizontal labels take the same feature layers and do not replan.
+    horizontal = [*placeholders.expand(case, case.base), *_RADIAL_GROWTH[2:]]
+    second = harness.warm(horizontal)
+    assert second.stages.hits.get("feature_layers") == 1
+    assert not second.stages.builds.get("feature_layers")
+    assert_same_outcome(second, harness.cold(horizontal), "horizontal after radial")
 
 
 # --- Identity (M1, M5) -------------------------------------------------------------------------

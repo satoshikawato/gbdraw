@@ -56,6 +56,7 @@ from ...config.modify import with_config_overrides
 from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
+from ...features.objects import FeatureObject
 from ...labels.circular import (
     CircularLabelProbeStopped,
     assign_leader_start_points,
@@ -2012,6 +2013,22 @@ def _centre_definition_text(definition: DefinitionGroup) -> tuple[Aabb, ...]:
     return tuple(box.translated(dx, dy) for box in definition.line_bounds)
 
 
+def _radial_layout_feature_dict(feature_layers: FeatureBuildResult) -> dict[str, FeatureObject]:
+    """The features the radial layout measures: foreground, then underlays."""
+
+    layout_feature_dict = {
+        f"foreground:{feature_id}": feature
+        for feature_id, feature in feature_layers.foreground_features.items()
+    }
+    layout_feature_dict.update(
+        {
+            f"underlay:{feature_index}": feature
+            for feature_index, feature in enumerate(feature_layers.underlay_features)
+        }
+    )
+    return layout_feature_dict
+
+
 def add_record_on_circular_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
@@ -2186,7 +2203,9 @@ def add_record_on_circular_canvas(
         if compute_label_text
         else {}
     )
-    feature_layers = create_feature_layers(
+    feature_layers = render_stage(
+        "feature_layers",
+        create_feature_layers,
         gb_record,
         feature_config.specific_color_rules,
         feature_config.selected_features_set,
@@ -2206,16 +2225,7 @@ def add_record_on_circular_canvas(
         record_transform=record_transform,
     )
     precomputed_feature_dict: dict = feature_layers.foreground_features
-    layout_feature_dict = {
-        f"foreground:{feature_id}": feature
-        for feature_id, feature in feature_layers.foreground_features.items()
-    }
-    layout_feature_dict.update(
-        {
-            f"underlay:{feature_index}": feature
-            for feature_index, feature in enumerate(feature_layers.underlay_features)
-        }
-    )
+    layout_feature_dict = _radial_layout_feature_dict(feature_layers)
     if feature_layers.underlay_features:
         (
             layout_slots,
@@ -2453,6 +2463,13 @@ def add_record_on_circular_canvas(
                     from ...features.placement import plan_feature_placements
 
                     if feature_slot is not None:
+                        # The layers are a stage result: replan on copies of the features.
+                        precomputed_feature_dict = {
+                            feature_id: copy.copy(feature)
+                            for feature_id, feature in precomputed_feature_dict.items()
+                        }
+                        feature_layers = replace(feature_layers, foreground_features=precomputed_feature_dict)
+                        layout_feature_dict = _radial_layout_feature_dict(feature_layers)
                         plan_feature_placements(
                             precomputed_feature_dict,
                             slot=FeaturePlacementSlot(
