@@ -281,10 +281,12 @@ After a successful repair, the labels around the repaired defects make room:
 the labels of the defects and up to 12 neighbouring labels on each side of
 them, on the same side of the circle, may move within the same limits toward
 shorter, more radial leader lines, and labels next to a crowded run may move
-up away from it. Each moved leader meets its label at the point its direction
-of arrival selects. This step never adds a defect or a leader line through
-another label's text; if it would, the repaired layout is kept. Records the
-repair does not change are not affected.
+away from it along the circle. Each leader in the window meets its label at the
+point its direction of arrival selects. This step never adds a defect or a
+leader line through another label's text; if it would, the repaired layout is
+kept. It can enlarge the canvas by up to about 24 px and adds about 1 to 8 s to
+the drawing of a repaired map. Records the repair does not change are not
+affected.
 
 - If any labels overlap, or radial labels need more room than the circular
   tracks leave, nothing is drawn. The command line prints `ERROR:` with the

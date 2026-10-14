@@ -63,8 +63,9 @@ write-up of a release.
   label defects, the labels around the repaired defects make room (up to 12
   neighbours on each side; moves within 24 px of text and 12 px of elbow), so
   their leader lines are shorter and straighter. The step never adds a defect
-  or a leader line through another label's text. Maps that fit without a
-  repair are byte-identical.
+  or a leader line through another label's text. A repaired map takes about 1
+  to 8 s longer to draw and its canvas can grow by up to about 24 px. Maps that
+  fit without a repair are byte-identical.
 - The label fit warning names the search bound the caller passed (the web app
   passes 0 s) instead of always saying 5 s.
 - Legend names (CLI, Python, web app): legend rows that share a name follow
