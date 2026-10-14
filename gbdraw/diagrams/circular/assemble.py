@@ -2635,7 +2635,7 @@ def add_record_on_circular_canvas(
         radial_layout=radial_layout,
     )
 
-    canvas = add_axis_group_on_canvas(canvas, canvas_config, group_key=GroupKey(record_key, GroupKind.AXIS))
+    canvas = add_axis_group_on_canvas(canvas, canvas_config, group_key=GroupKey(record_key, GroupKind.AXIS_CIRCLE))
 
     if show_external_labels:
         canvas = add_labels_group_on_canvas(

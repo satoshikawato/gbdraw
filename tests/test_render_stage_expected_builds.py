@@ -23,6 +23,7 @@ from tests.utils.render_stage_equivalence import (
     UNIVERSE_MARKS,
     CASES,
     EquivalenceHarness,
+    Mode,
     OptionSpec,
     Placeholders,
     Variant,
@@ -127,20 +128,32 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     **dict.fromkeys(("plot_title", "plot_title_font_size"), _TITLE),
 }
 
-# The options a record content reads: Linear axis, ruler, features and labels;
-# Circular features and embedded labels, which sit on the radial layout that the
-# centre definition reserve moves.
-_RECORD_CONTENT_OPTIONS = (
-    "keep_full_definition_with_plot_title",
-    "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_color", "axis_stroke_width",
-    "line_stroke_color", "line_stroke_width", "feature_height", "feature_overlap_tolerance_bp", "feature_override_table",
-    "feature_placement_table", "feature_visibility_table", "label_table", "label_whitelist", "label_blacklist",
-    "qualifier_priority", "label_font_size", "label_placement", "label_rendering", "linear_label_spacing",
-    "show_labels", "separate_strands", "resolve_overlaps", "track_axis_gap", "track_layout", "track_layout (rows)",
-    # The axis ruler draws with the scale settings.
-    "hide_scale", "scale_interval", "scale_style", "scale_stroke_color", "scale_stroke_width",
-    "scale_font_size", "ruler_label_font_size", "ruler_label_color",
-)
+# The options a record content reads, per mode: the Linear record draws the
+# axis, the ruler, features and labels; the Circular record draws features and
+# embedded labels (options that move its radial layout are listed below).
+_RECORD_CONTENT: Mapping[Mode, tuple[str, frozenset[str]]] = {
+    "linear": (
+        "record_content",
+        frozenset(
+            (
+                "keep_full_definition_with_plot_title",
+                "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_color", "axis_stroke_width",
+                "line_stroke_color", "line_stroke_width", "feature_height", "feature_overlap_tolerance_bp",
+                "feature_override_table", "feature_placement_table", "feature_visibility_table", "label_table",
+                "label_whitelist", "label_blacklist", "qualifier_priority", "label_font_size", "label_placement",
+                "label_rendering", "linear_label_spacing", "show_labels", "separate_strands", "resolve_overlaps",
+                "track_axis_gap", "track_layout", "track_layout (rows)",
+                # The axis ruler draws with the scale settings.
+                "hide_scale", "scale_interval", "scale_style", "scale_stroke_color", "scale_stroke_width",
+                "scale_font_size", "ruler_label_font_size", "ruler_label_color",
+            )
+        ),
+    ),
+    "circular": (
+        "circular_record_content",
+        frozenset(("arrow_head_length_ratio", "arrow_shaft_width_ratio", "line_stroke_color", "line_stroke_width")),
+    ),
+}
 
 # The options Circular label placement reads: the arrow geometry the labels
 # anchor on, the outer content radius of the radial layout (axis band) they
@@ -162,15 +175,15 @@ _RADIAL_LAYOUT_OPTIONS = (
     "show_depth_axis", "show_depth_ticks", "depth_tick_font_size", "feature_overlap_tolerance_bp",
 )
 _RADIAL_LAYOUT_STAGES = _CIRCULAR_LABELS | {
-    "record_content", "ticks_content", "gc_content_content", "gc_skew_content", "depth_content",
+    "circular_record_content", "ticks_content", "gc_content_content", "gc_skew_content", "depth_content",
     "conservation_content", "annotation_content",
 }
 
 # The per-record Circular contents a Multi-Record merge takes: it rebuilds with any of them.
 _RECORD_MERGE_INPUTS = frozenset(
     {
-        "axis_content", "record_content", "ticks_content", "gc_content_content", "gc_skew_content", "depth_content",
-        "conservation_content", "annotation_content", "label_leaders_content", "label_text_content",
+        "axis_content", "circular_record_content", "ticks_content", "gc_content_content", "gc_skew_content",
+        "depth_content", "conservation_content", "annotation_content", "label_leaders_content", "label_text_content",
         "definition_content",
     }
 )
@@ -194,7 +207,7 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     # A ring's slot carries its label, and the labels and the record content
     # take the radial layout that holds the slots (measured on C3).
     "conservation_labels": frozenset(
-        {"conservation_tracks", "conservation_content", "circular_labels", "record_content"}
+        {"conservation_tracks", "conservation_content", "circular_labels", "circular_record_content"}
     ),
     **dict.fromkeys(
         (
@@ -240,15 +253,17 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
 }
 
 
+# The Circular record content draws the embedded labels of the placed labels: it rebuilds with them.
+_PLACED_LABELS = frozenset({"circular_labels", "circular_radial_labels"})
 # The ribbons take the feature DOM index and both whole record placements,
 # whose comparison extents these track contents set; they rebuild with them.
 _RIBBON_INPUTS = frozenset({"feature_dom_index", "gc_content_content", "depth_content", "annotation_content"})
 # The stages whose results the catalog item reads: it rebuilds when one of them does
-# (Circular: the axis, the rings and the merged Multi-Record records too).
+# (Circular: the rings and the merged Multi-Record records too; not the axis circle).
 _CATALOG_INPUTS = frozenset(
     {
-        "record_content", "annotation_content", "comparison_content", "interactive_context", "axis_content",
-        "conservation_content", "record_merge",
+        "record_content", "circular_record_content", "annotation_content", "comparison_content",
+        "interactive_context", "conservation_content", "record_merge",
     }
 )
 
@@ -261,7 +276,8 @@ _BOUNDS_STAGES = (
     | _FEATURE_PLACEMENT
     | _DEPTH_DATA
     | {
-        "record_content", "gc_content_content", "gc_skew_content", "annotation_content", "definition_content",
+        "record_content", "circular_record_content", "gc_content_content", "gc_skew_content",
+        "annotation_content", "definition_content",
         "length_bar_content", "comparison_content",
         # Circular: the placed labels are obstacles of the composition.
         "circular_labels",
@@ -284,16 +300,19 @@ def _moves_bounds(option_id: str, allowed: frozenset[str]) -> bool:
     return option_id in _COMPOSITION_INPUTS or bool(allowed & _BOUNDS_STAGES)
 
 
-def allowed_builds(option_id: str) -> frozenset[str]:
+def allowed_builds(option_id: str, mode: Mode) -> frozenset[str]:
+    record_content, record_content_options = _RECORD_CONTENT[mode]
     allowed = (
         EXPECTED_BUILDS.get(option_id, frozenset())
         | CONTENT_BUILDS.get(option_id, frozenset())
-        | (frozenset({"record_content"}) if option_id in _RECORD_CONTENT_OPTIONS else frozenset())
+        | (frozenset({record_content}) if option_id in record_content_options else frozenset())
         | (_CIRCULAR_LABELS if option_id in _CIRCULAR_LABEL_OPTIONS else frozenset())
         | (_RADIAL_LAYOUT_STAGES if option_id in _RADIAL_LAYOUT_OPTIONS else frozenset())
     )
     if allowed & _RIBBON_INPUTS:
         allowed |= {"comparison_content"}
+    if allowed & _PLACED_LABELS:
+        allowed |= {"circular_record_content"}
     if allowed & _RECORD_MERGE_INPUTS:
         allowed |= {"record_merge"}
     if _moves_bounds(option_id, allowed):
@@ -345,7 +364,7 @@ def lost_hits(
         label = f"{case_id} {option.option_id} {variant.label}"
         outcomes.append((label, outcome))
         if outcome.error is None:
-            extra = set(outcome.stages.builds) - allowed_builds(option.option_id)
+            extra = set(outcome.stages.builds) - allowed_builds(option.option_id, case.mode)
             if extra:
                 failures.append(f"{label}: built {sorted(extra)}")
             uncacheable = sorted(name for name, count in outcome.stages.uncacheable.items() if count)

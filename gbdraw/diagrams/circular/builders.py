@@ -409,7 +409,7 @@ def add_record_group_on_canvas(
 ) -> Drawing:
     """Adds the record group (features and embedded labels) to the canvas."""
     content = render_stage(
-        "record_content",
+        "circular_record_content",
         build_group_content,
         SeqRecordGroup,
         gb_record=record,

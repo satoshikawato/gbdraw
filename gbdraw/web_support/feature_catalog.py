@@ -2101,6 +2101,7 @@ def _reference_reconstructible_nucleotide_sequences(
 
 # The group kinds whose elements the catalog reads: features (record and axis
 # groups, with the record source span), comparison ribbons and annotations.
+# The Circular axis circle (AXIS_CIRCLE) holds neither.
 # A Circular conservation ring carries the hits the catalog binds to features.
 # RECORD: a Multi-Record Circular record, all its groups merged into one content.
 _CATALOG_GROUP_KINDS = frozenset(

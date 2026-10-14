@@ -158,7 +158,7 @@ def test_circular_track_groups_are_placed_contents_with_their_slot_ids_inside() 
         circular_track_slots=["features:features", "ticks:ticks", "gc_content:dinucleotide_content", "gc_skew:dinucleotide_skew"],
     )
     kinds = {entry.key.kind for entry in group_manifest(drawing)}
-    assert {GroupKind.AXIS, GroupKind.FEATURES, GroupKind.TICKS, GroupKind.GC_CONTENT, GroupKind.GC_SKEW} <= kinds
+    assert {GroupKind.AXIS_CIRCLE, GroupKind.FEATURES, GroupKind.TICKS, GroupKind.GC_CONTENT, GroupKind.GC_SKEW} <= kinds
     for element in drawing.elements:
         if isinstance(element, ContentGroup) and element.key.kind in {GroupKind.GC_CONTENT, GroupKind.GC_SKEW}:
             # The slot DOM id (not the slot id) is already the stored content's id.

@@ -371,7 +371,7 @@ def _build_mock_circular_subcanvas(width: float, height: float, inset: float) ->
     axis = canvas.g(id="Axis")
     radius = max(1.0, (width * 0.5) - float(inset))
     axis.add(canvas.circle(center=(0, 0), r=radius, fill="none", stroke="gray"))
-    axis_group = place_content(canvas, GroupContent.of(axis), GroupKey("record", GroupKind.AXIS))
+    axis_group = place_content(canvas, GroupContent.of(axis), GroupKey("record", GroupKind.AXIS_CIRCLE))
     axis_group.translate(width * 0.5, height * 0.5)
     canvas.add(axis_group)
     return _with_mock_circular_result(
@@ -1749,7 +1749,7 @@ def test_multi_record_positions_group_rows_and_preserve_within_row_order(
         )
         marker = canvas.g(id=f"marker_{gb_record.id}")
         marker.add(canvas.circle(center=(10, 10), r=1))
-        canvas.add(place_content(canvas, GroupContent.of(marker), GroupKey("record", GroupKind.AXIS)))
+        canvas.add(place_content(canvas, GroupContent.of(marker), GroupKey("record", GroupKind.AXIS_CIRCLE)))
         return _with_mock_circular_result(canvas)
 
     monkeypatch.setattr(
@@ -1907,7 +1907,7 @@ def test_multi_record_positions_accept_record_id_selectors(
         )
         marker = canvas.g(id=f"marker_{gb_record.id}")
         marker.add(canvas.circle(center=(10, 10), r=1))
-        canvas.add(place_content(canvas, GroupContent.of(marker), GroupKey("record", GroupKind.AXIS)))
+        canvas.add(place_content(canvas, GroupContent.of(marker), GroupKey("record", GroupKind.AXIS_CIRCLE)))
         return _with_mock_circular_result(canvas)
 
     monkeypatch.setattr(

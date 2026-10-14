@@ -64,6 +64,7 @@ RenderStageName = Literal[
     "definition_content",
     "annotation_content",
     "record_content",
+    "circular_record_content",
     "comparison_content",
     "interactive_context",
     "catalog_normalization",
@@ -126,17 +127,19 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     # Circular: the centre or edge definition reads its font, interval and the dpi.
     "definition_content": frozenset({"canvas", "objects.definition", "objects.text"}),
     "annotation_content": frozenset(),
+    # Linear: the record group draws the axis, the ruler, features and labels.
     "record_content": frozenset(
+        {"labels.stroke_color", "labels.stroke_width", "objects.axis", "objects.scale", "objects.text"}
+    ),
+    # Circular: the record group sizes features and embedded labels.
+    "circular_record_content": frozenset(
         {
-            # Circular: the record group sizes features and embedded labels.
             "canvas",
             "canvas.circular",
             "labels.font_size",
             "labels.length_threshold",
             "labels.stroke_color",
             "labels.stroke_width",
-            "objects.axis",
-            "objects.scale",
             "objects.text",
         }
     ),

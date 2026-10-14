@@ -36,7 +36,10 @@ P = ParamSpec("P")
 class GroupKind(str, Enum):
     """The closed set of group kinds a content can have."""
 
+    # Linear: the record group that draws the axis and the ruler (it carries the record span).
     AXIS = "axis"
+    # Circular: the axis circle alone.
+    AXIS_CIRCLE = "axis_circle"
     FEATURES = "features"
     LABEL_LEADERS = "label_leaders"
     LABEL_TEXT = "label_text"
