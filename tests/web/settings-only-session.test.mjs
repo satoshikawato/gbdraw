@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
-import { adoptCurrentSessionDocument, hasBiologicalSessionInputs, isSettingsOnlySessionDocument,
+import { adoptCurrentSessionDocument, hasBiologicalSessionInputs, isSettingsOnlySessionDocument, readSessionDocument,
   validateSessionAuthorityInventory } from '../../gbdraw/web/js/services/session-authority.js';
 import { buildSessionResources } from '../../gbdraw/web/js/services/session-resources.js';
 import { adoptCurrentSessionResources } from '../../gbdraw/web/js/services/session-resource-backing.js';
@@ -114,6 +114,22 @@ test('settings-only Load lists an unknown setting, which Save refuses', () => {
     ['setting-replaced@config.adv.unsupportedSetting']);
   const written = { form: createDefaultForm(), adv: { ...createDefaultAdv('circular'), unsupportedSetting: true } };
   assert.throws(() => validateCurrentWriterActiveConfig({ mode: 'circular', storedConfig: written }), /unknown.*field/);
+});
+
+// OV-860 (E-OD06, E-OD02): Load reads a settings-only Session (a null request)
+// without a Web input inventory as one that binds nothing, with no row for the
+// inventory it never held; Save still refuses the inventory it lacks.
+test('OV-860: settings-only Load reads a missing Web input inventory as the empty one; Save refuses it', () => {
+  for (const mutate of [(d) => { delete d.webFiles.bindings; }, (d) => { delete d.webFiles; }, (d) => { delete d.webFiles.bindings.c_gff; }]) {
+    const document = structuredClone(settings);
+    mutate(document);
+    assert.throws(() => validateSessionAuthorityInventory(structuredClone(document), 42), /explicit Web input inventory/);
+    const read = readSessionDocument(document);
+    assert.deepEqual(read.repairs, []);
+    const { bindings } = read.value.webFiles;
+    assert.deepEqual([bindings.c_gb, bindings.c_gff, bindings.c_fasta, Array.isArray(bindings.linearSeqs)], [null, null, null, true]);
+    assert.equal(adoptCurrentSessionDocument(read.value, 42).canonical, null);
+  }
 });
 
 test('released schema-1 and schema-2 full documents retain admission', () => {

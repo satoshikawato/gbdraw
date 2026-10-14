@@ -4844,6 +4844,56 @@
    ]
   },
   {
+   "id": "ov860-request-null-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/renderRequest",
+     "value": null
+    }
+   ],
+   "finding": "OV-860: a null request makes a Session 44 a settings-only one; its Results are dropped and its Web input inventory, which it never held, is the empty one (A15, E-OD06)",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session requires an explicit Web input inventory.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "ov860-request-null-44-linear",
+   "base": "web-44-linear",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/renderRequest",
+     "value": null
+    }
+   ],
+   "finding": "OV-860: a null request makes a Session 44 a settings-only one; its Results are dropped and its Web input inventory, which it never held, is the empty one (A15, E-OD06)",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session requires an explicit Web input inventory.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "ov860-settings-only-no-inventory-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/webFiles/bindings"
+    }
+   ],
+   "finding": "OV-860: a settings-only Session without its Web input inventory reads the empty one, which binds nothing (E-OD06)",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session requires an explicit Web input inventory.",
+   "web": "loaded"
+  },
+  {
    "id": "a15-settings-only-unbound-resource-46",
    "base": "settings-only-46",
    "edits": [

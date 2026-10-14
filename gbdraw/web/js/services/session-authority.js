@@ -904,6 +904,8 @@ const withoutLinearRowsOfAnotherKind = (document, repairs) => {
  * are dropped with a row; its other committed artifacts and the resources no
  * binding names are dropped with none, as the settings-only Session of an
  * unreadable request drops them (`settingsOnlySessionCandidate`; A15, J4).
+ * A Web input inventory the file does not hold is the empty one, with no row
+ * (E-OD06; OV-860: a full Session whose request is null holds none).
  * @param {SessionChecked} stored
  * @param {LoadRepair[]} repairs Collects the rows.
  * @returns {SessionChecked}
@@ -912,17 +914,20 @@ const readSettingsOnlyParts = (stored, repairs) => {
   if (!isSettingsOnlySessionDocument(stored)) return stored;
   const document = withoutLinearRowsOfAnotherKind(stored, repairs);
   const faults = settingsOnlyFaults(document);
-  if (!faults.rows || !(faults.biological || faults.results || faults.artifacts || faults.unboundResources.length)) return document;
+  if (faults.rows && !(faults.biological || faults.results || faults.artifacts || faults.unboundResources.length)) return document;
   if (faults.results) repairs.push(loadRepair({ code: 'session-part-dropped', path: 'results', effect: 'dropped' }));
-  const bindings = /** @type {Record<string, unknown>} */ (/** @type {{ bindings: unknown }} */ (document.webFiles).bindings);
-  BIOLOGICAL_BINDINGS.filter((key) => hasBiologicalSessionInputs({ [key]: bindings[key] })).forEach((key) => repairs.push(
-    loadRepair({ code: 'session-field-dropped', path: `webFiles.bindings.${key}`, effect: 'dropped' })
-  ));
-  /** @type {unknown[]} */ (bindings.linearSeqs).forEach((row, index) => {
-    if (hasBiologicalSessionInputs({ linearSeqs: [row] })) {
-      repairs.push(loadRepair({ code: 'session-field-dropped', path: `webFiles.bindings.linearSeqs[${index}]`, effect: 'changed' }));
-    }
-  });
+  const bindings = /** @type {UnvalidatedFields<'bindings'>} */ (document.webFiles)?.bindings;
+  if (isPlainObject(bindings)) {
+    const held = /** @type {Record<string, unknown>} */ (bindings); // isPlainObject is no type predicate
+    BIOLOGICAL_BINDINGS.filter((key) => hasBiologicalSessionInputs({ [key]: held[key] })).forEach((key) => repairs.push(
+      loadRepair({ code: 'session-field-dropped', path: `webFiles.bindings.${key}`, effect: 'dropped' })
+    ));
+    (Array.isArray(held.linearSeqs) ? held.linearSeqs : []).forEach((row, index) => {
+      if (hasBiologicalSessionInputs({ linearSeqs: [row] })) {
+        repairs.push(loadRepair({ code: 'session-field-dropped', path: `webFiles.bindings.linearSeqs[${index}]`, effect: 'changed' }));
+      }
+    });
+  }
   return /** @type {SessionChecked} */ (settingsOnlySessionCandidate(document)); // the band's shape, with parts emptied
 };
 
