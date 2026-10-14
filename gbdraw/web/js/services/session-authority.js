@@ -14,6 +14,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import {
   CANONICAL_SESSION_MIN_VERSION,
+  CURRENT_ARTIFACT_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
   CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS,
   FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
@@ -28,7 +29,10 @@ import {
   SUPPORTED_SESSION_VERSIONS,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
-/** @import { SessionEnvelope, SessionInput, SessionResult } from '../contracts/session.generated.js' */
+/**
+ * @import { SessionChecked, SessionChecked31, SessionChecked39, SessionChecked40, SessionChecked46,
+ *   SessionEnvelope, SessionInput, SessionResult } from '../contracts/session.generated.js'
+ */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 
 /**
@@ -167,6 +171,19 @@ export const readSessionInput = (value) => {
   if (value.format !== 'gbdraw-session') throw formatInvalid();
   return /** @type {SessionEnvelope} */ (value); // `format` and `version` were checked above
 };
+
+// The band of a checked Session (`SessionChecked`, describe_session_admission()).
+// TypeScript does not narrow a version's literal union by `>=`, so these four
+// are the version tests that narrow it; each starts at its band's generated
+// threshold (tests/web/session-authority.test.mjs compares them with the bands).
+/** @param {SessionChecked} document @returns {document is SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46} */
+export const isCanonicalBand = (document) => document.version >= CANONICAL_SESSION_MIN_VERSION;
+/** @param {SessionChecked} document @returns {document is SessionChecked39 | SessionChecked40 | SessionChecked46} */
+export const isArtifactBand = (document) => document.version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION;
+/** @param {SessionChecked} document @returns {document is SessionChecked40 | SessionChecked46} */
+export const isAuthorityBand = (document) => document.version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
+/** @param {SessionChecked} document @returns {document is SessionChecked46} */
+export const isModeScopedBand = (document) => document.version >= MODE_SCOPED_SESSION_VERSION;
 
 const adoptedCurrentDocuments = new WeakSet();
 const adoptedCanonicalOwners = new WeakSet();

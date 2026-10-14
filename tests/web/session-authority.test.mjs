@@ -5,6 +5,10 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const {
   SESSION_TOP_LEVEL_AUTHORITY,
+  isArtifactBand,
+  isAuthorityBand,
+  isCanonicalBand,
+  isModeScopedBand,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
@@ -515,5 +519,28 @@ assert.throws(() => validateSessionAuthorityInventory({
   for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47]) {
     const document = { format: 'gbdraw-session', version, anything: { unvalidated: true } };
     assert.equal(readSessionInput(document), document, `version ${version}`);
+  }
+}
+
+{
+  // K16: each band predicate narrows to the bands its type names, for every
+  // supported version, as the generated admission description places it.
+  const { SESSION_ADMISSION_DESCRIPTION } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/contracts/session-shape.generated.js')));
+  const { SUPPORTED_SESSION_VERSIONS } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/contracts/schema.generated.js')));
+  const predicates = [
+    [isCanonicalBand, ['SessionChecked31', 'SessionChecked39', 'SessionChecked40', 'SessionChecked46']],
+    [isArtifactBand, ['SessionChecked39', 'SessionChecked40', 'SessionChecked46']],
+    [isAuthorityBand, ['SessionChecked40', 'SessionChecked46']],
+    [isModeScopedBand, ['SessionChecked46']]
+  ];
+  const { bands } = SESSION_ADMISSION_DESCRIPTION;
+  assert.deepEqual(bands.flatMap(({ versions }) => versions), [...SUPPORTED_SESSION_VERSIONS].sort((a, b) => a - b));
+  assert.deepEqual(bands.map(({ root }) => root), ['SessionChecked27', ...predicates[0][1]]);
+  for (const version of SUPPORTED_SESSION_VERSIONS) {
+    const band = bands.find(({ versions }) => versions.includes(version));
+    assert.equal(band.minVersion, Math.min(...band.versions));
+    for (const [predicate, roots] of predicates) {
+      assert.equal(predicate({ format: 'gbdraw-session', version }), roots.includes(band.root), `${predicate.name} ${version}`);
+    }
   }
 }
