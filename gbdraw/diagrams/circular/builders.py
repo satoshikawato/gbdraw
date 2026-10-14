@@ -16,6 +16,7 @@ from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...features.factory import FeatureBuildResult
 from ...layout.circular import CircularRecordRenderContext
+from ...legend.table import LegendTable
 from ...configurators import (
     FeatureDrawingConfigurator,
     DepthConfigurator,
@@ -445,16 +446,14 @@ def add_labels_group_on_canvas(
 
 def add_legend_group_on_canvas(
     canvas: Drawing,
-    canvas_config: CircularCanvasConfigurator,
     legend_measurement: LegendMeasurement,
-    legend_table,
+    legend_table: LegendTable,
 ) -> Drawing:
     """
     Adds the legend group to the canvas.
 
     Parameters:
     canvas (Drawing): The SVG drawing canvas.
-    canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
     legend_measurement: Immutable measurement for the legend.
     legend_table: The legend table data.
 

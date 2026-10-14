@@ -2686,12 +2686,7 @@ def add_record_on_circular_canvas(
         and legend_measurement.local_bounds.height > 0.0
     ):
         legend_target_start = len(getattr(canvas, "elements", []))
-        canvas = add_legend_group_on_canvas(
-            canvas,
-            canvas_config,
-            legend_measurement,
-            legend_table,
-        )
+        canvas = add_legend_group_on_canvas(canvas, legend_measurement, legend_table)
         legend_target = next(
             (
                 element
