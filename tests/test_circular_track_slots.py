@@ -898,6 +898,7 @@ def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
         show_depth=False,
         show_gc=True,
         show_skew=True,
+        track_ids=tuple(canvas_config.track_ids.items()),
     )
 
     slots = circular_track_slots_for_preset("tuckin", context)
@@ -939,6 +940,7 @@ def test_blank_builtin_numeric_slots_keep_the_preset_anchors_of_the_default_stac
         show_depth=False,
         show_gc=True,
         show_skew=True,
+        track_ids=tuple(canvas_config.track_ids.items()),
     )
 
     plan = circular_track_slots_from_preset_order(
@@ -1023,6 +1025,7 @@ def test_custom_conservation_slot_keeps_auto_width_for_compression() -> None:
         show_depth=False,
         show_gc=True,
         show_skew=True,
+        track_ids=tuple(canvas_config.track_ids.items()),
     )
 
     plan = circular_track_slots_from_preset_order(

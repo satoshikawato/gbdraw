@@ -917,7 +917,6 @@ def test_feature_width_75_keeps_outer_labels_outside_local_feature_tracks() -> N
         dpi=int(cfg.canvas.dpi),
         length_param="short",
         track_ratio_factors=tuple(cfg.canvas.circular.track_ratio_factors["short"]),
-        track_ids=(),
     )
     default_anchor, default_arc_outer = circular_assemble_module._default_outer_label_arena(
         geometry=geometry,

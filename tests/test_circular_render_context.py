@@ -128,8 +128,6 @@ def test_circular_canvas_geometry_is_a_frozen_value_of_the_configurator() -> Non
         canvas.radius, canvas.track_ratio, canvas.dpi, canvas.length_param,
     )
     assert geometry.track_ratio_factors == tuple(canvas.track_ratio_factors)
-    assert geometry.track_id("gc_track") == canvas.track_ids.get("gc_track")
-    assert geometry.track_id("depth_track") is None
     assert hash(geometry) == hash(canvas.geometry())
     with pytest.raises(FrozenInstanceError):
         geometry.radius = 1.0  # type: ignore[misc]

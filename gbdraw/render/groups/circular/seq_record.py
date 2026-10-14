@@ -8,7 +8,6 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
 
 from ....canvas import CircularCanvasGeometry
-from ....auto_sizes import determine_length_parameter
 from ....features.factory import FeatureBuildResult
 from ....features.objects import FeatureObject
 from ....labels.circular_types import CircularLabel
@@ -46,8 +45,7 @@ class SeqRecordGroup:
         self.render_context = render_context
         cfg = render_context.profile.config
 
-        self.length_threshold = cfg.labels.length_threshold.circular
-        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
+        self.length_param = geometry.length_param
         self.font_family: str = cfg.objects.text.font_family
 
         self.show_labels = render_context.profile.labels_enabled
@@ -55,9 +53,8 @@ class SeqRecordGroup:
         self.label_stroke_width = cfg.labels.stroke_width.for_length_param(self.length_param)
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
         self.font_size = cfg.labels.font_size.for_length_param(self.length_param)
-        self.dpi = cfg.canvas.dpi
         self.strandedness = render_context.profile.strandedness
-        self.track_ratio_factors = cfg.canvas.circular.track_ratio_factors[self.length_param]
+        self.track_ratio_factors = geometry.track_ratio_factors
         self.track_ratio = geometry.track_ratio
         self.precalculated_labels: Sequence[CircularLabel] | None = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override

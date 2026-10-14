@@ -429,7 +429,7 @@ class DefinitionGroup:
                     text,
                     font_family,
                     font_size,
-                    self._cfg.canvas.dpi,
+                    self.geometry.dpi,
                     font_weight=font_weight,
                     font_style=font_style,
                 )

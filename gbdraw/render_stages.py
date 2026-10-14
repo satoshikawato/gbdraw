@@ -117,24 +117,24 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "legend_table": frozenset(),
     "legend_measurement": frozenset(),
     "legend_content": frozenset(),
-    # Circular: the title is a shared-common definition (its font, interval and the dpi).
-    "plot_title_content": frozenset({"canvas", "objects.definition", "objects.text"}),
+    # Circular: the title is a shared-common definition (its font and interval).
+    "plot_title_content": frozenset({"objects.definition", "objects.text"}),
     "composition_plan": frozenset(),
     "gc_content_content": _CIRCULAR_TRACK_SECTIONS,
     "gc_skew_content": _CIRCULAR_TRACK_SECTIONS,
     "depth_content": _CIRCULAR_TRACK_SECTIONS,
     "length_bar_content": frozenset(),
-    # Circular: the centre or edge definition reads its font, interval and the dpi.
-    "definition_content": frozenset({"canvas", "objects.definition", "objects.text"}),
+    # Circular: the centre or edge definition reads its font and interval.
+    "definition_content": frozenset({"objects.definition", "objects.text"}),
     "annotation_content": frozenset(),
     # Linear: the record group draws the axis, the ruler, features and labels.
     "record_content": frozenset(
         {"labels.stroke_color", "labels.stroke_width", "objects.axis", "objects.scale", "objects.text"}
     ),
-    # Circular: the record group sizes features and embedded labels.
+    # Circular: the record group sizes features and embedded labels (the label
+    # drawer reads the preset track factors).
     "circular_record_content": frozenset(
         {
-            "canvas",
             "canvas.circular",
             "labels.font_size",
             "labels.length_threshold",

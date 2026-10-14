@@ -2338,6 +2338,7 @@ def add_record_on_circular_canvas(
                 show_depth=show_depth_track,
                 show_gc=show_gc_track,
                 show_skew=show_skew_track,
+                track_ids=tuple(canvas_config.track_ids.items()),
                 dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
             ),
             axis_index=circular_track_axis_index,
@@ -2358,6 +2359,7 @@ def add_record_on_circular_canvas(
                 show_depth=show_depth_track,
                 show_gc=show_gc_track,
                 show_skew=show_skew_track,
+                track_ids=tuple(canvas_config.track_ids.items()),
                 dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
             ),
         )

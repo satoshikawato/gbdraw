@@ -52,7 +52,14 @@ class CircularPresetContext:
     show_depth: bool
     show_gc: bool
     show_skew: bool
+    # The canvas track ids of ``depth_track``, ``gc_track`` and ``skew_track``.
+    track_ids: tuple[tuple[str, int], ...]
     dinucleotide: str = "GC"
+
+    def track_id(self, name: str) -> int | None:
+        """The track id of ``depth_track``, ``gc_track`` or ``skew_track``; ``None`` when not drawn."""
+
+        return dict(self.track_ids).get(name)
 
 
 @dataclass(frozen=True)
@@ -124,7 +131,7 @@ def _numeric_slot(
         "gc_skew": "skew_track",
     }.get(slot_id)
     track_id = (
-        context.geometry.track_id(track_id_key)
+        context.track_id(track_id_key)
         if track_id_key is not None
         else None
     )

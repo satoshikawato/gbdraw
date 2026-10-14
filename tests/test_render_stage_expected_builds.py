@@ -238,9 +238,6 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     # The Circular plot title is a shared-common definition: it reads the
     # definition section (section granularity; it draws in its own font size).
     "definition_font_size": frozenset({"definition_content", "plot_title_content"}),
-    # The Circular definition and title read the canvas section, which holds
-    # the overlap tolerance (section granularity).
-    "feature_overlap_tolerance_bp": frozenset({"definition_content", "plot_title_content"}),
     # Circular label placement reads the features section, which holds the
     # line strokes (section granularity); the placed labels do not change.
     **dict.fromkeys(("line_stroke_color", "line_stroke_width"), frozenset({"circular_labels"})),
@@ -406,3 +403,16 @@ def test_a_p1_or_p2_option_builds_only_the_stages_of_its_content(
     slow = request.node.get_closest_marker("slow") is not None
     failures = lost_hits(case_id, tables, tmp_path / case_id, include_slow=slow, part=part)
     assert not failures, "\n".join(failures)
+
+
+def test_a_gc_toggle_rebuilds_neither_the_circular_definition_nor_the_title(tables: Path, tmp_path: Path) -> None:
+    """The definition and the title take the canvas geometry, not the canvas switches."""
+
+    case = CASES["C1"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    assert harness.warm(placeholders.expand(case, case.base)).error is None
+    [(option, variant)] = matrix_variants(case, option_ids=["gc"], first_variant_only=True)
+    outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
+    assert outcome.error is None
+    assert not {"definition_content", "plot_title_content"} & set(outcome.stages.builds)
