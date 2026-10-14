@@ -176,6 +176,16 @@ test('OV-633: the other Result set\'s ui and editor edits are read with rows', a
   await saved();
 });
 
+test('A20: a Result set whose Results Load cannot compose is dropped with its row before the dialog (E-OD16)', async () => {
+  const malformed = '<svg xmlns="http://www.w3.org/2000/svg"><g></svg>';
+  // The shown set: its Results and the members that name them; the settings load.
+  let session = BASES.v44();
+  session.results[0].content = malformed;
+  assert.deepEqual(await load(session), ['session-part-dropped results']);
+  assert.equal(state.results.value.length, 0);
+  await saved();
+});
+
 test('OV-822: a configuration file\'s null LOSAT group loads with no row, and saves', async () => {
   assert.deepEqual(await load(BASES.g47L()), []);
   const config = structuredClone(BASES.g47L().modes.linear.config);

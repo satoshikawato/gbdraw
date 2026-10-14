@@ -53,6 +53,11 @@
    "code": "session-field-dropped",
    "path": "cliOptions",
    "finding": "OV-638, A7a: Python's open roots below Session 40 keep cliOptions unread; below Session 46 the Web lists it as left out."
+  },
+  {
+   "code": "session-part-dropped",
+   "path": "results",
+   "finding": "A20 (E-OD16): Python does not compose the saved SVG; the Web drops a Result set its composition transform cannot compose, with a row, before the dialog"
   }
  ],
  "bases": {
@@ -5303,6 +5308,97 @@
     "cache-entry-dropped@losatCache.entries[24]",
     "cache-entry-dropped@losatDerivedCache.entries[0]"
    ]
+  },
+  {
+   "id": "a20-result-malformed-svg-44",
+   "finding": "A20 (E-OD16): a Result whose SVG the composition transform cannot compose",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/content",
+     "value": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g></svg>"
+    }
+   ],
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "a20-result-script-44",
+   "finding": "A20 (E-OD16): a Result whose SVG holds only a script, which sanitation removes",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/content",
+     "value": "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"
+    }
+   ],
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "a20-result-malformed-svg-46",
+   "finding": "A20 (E-OD16): a Result whose SVG the composition transform cannot compose",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/content",
+     "value": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g></svg>"
+    }
+   ],
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "e-od16-feature-identity-notice-44",
+   "finding": "E-OD16: a feature identity notice that names no Result (derived run metadata, dropped with no row)",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/runMetadata/featureIdentityNotices",
+     "value": [
+      {
+       "recordKey": "r",
+       "biologicalFeatureId": "f",
+       "status": "absent",
+       "kinds": [
+        "placement"
+       ],
+       "resultIndex": 99
+      }
+     ]
+    }
+   ],
+   "python": "accept",
+   "web": "loaded"
+  },
+  {
+   "id": "e-od16-comparison-warnings-46",
+   "finding": "E-OD16: comparison warnings that are no list (derived run metadata, dropped with no row)",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/runMetadata/comparisonWarnings",
+     "value": {
+      "bogus": 1
+     }
+    }
+   ],
+   "python": "accept",
+   "web": "loaded"
   }
  ]
 }

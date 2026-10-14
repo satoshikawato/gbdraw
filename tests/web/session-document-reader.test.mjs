@@ -141,3 +141,70 @@ test('a committed Result set is read as far as it can be restored before the dia
     assert.throws(() => validateSessionAuthorityInventory(document, document.version));
   }
 });
+
+test('run notices that do not match their Results are dropped before the dialog with no row; Save refuses them (E-OD16)', () => {
+  const base = fixture(V44_CIRCULAR);
+  const read = (document) => {
+    const repairs = [];
+    const value = readSessionAuthorityParts(document, document.version, {}, repairs);
+    return { value, rows: repairs.map(({ code, path }) => `${code}@${path}`) };
+  };
+  const notice = { recordKey: 'r', biologicalFeatureId: 'f', status: 'absent', kinds: ['placement'], resultIndex: 99 };
+  for (const [field, value] of [['featureIdentityNotices', [notice]], ['comparisonWarnings', {}], ['annotationWarnings', 'x']]) {
+    const stale = structuredClone(base);
+    stale.runMetadata = { ...stale.runMetadata, [field]: value };
+    // Derived run metadata: the next Generate reports it again.
+    const kept = read(stale);
+    assert.deepEqual(kept.rows, [], field);
+    assert.equal(Object.hasOwn(kept.value.runMetadata, field), false, field);
+    assert.equal(kept.value.results.length, base.results.length, field);
+    assert.doesNotThrow(() => validateSessionAuthorityInventory(kept.value, kept.value.version, {}, { load: true }), field);
+    // Save refuses it (E-OD02).
+    assert.throws(() => validateSessionAuthorityInventory(stale, stale.version), field);
+  }
+  // The other mode's set: its stale notices are dropped and the set is kept.
+  const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+  const circular = gallery('HmmtDNA_basic_circular.gbdraw-session.json');
+  const linear = gallery('lambda_basic_linear.gbdraw-session.json');
+  const other = {
+    renderRequest: linear.renderRequest, results: linear.results,
+    editorState: { featureCatalog: linear.editorState.featureCatalog, alignmentResetReceipt: null,
+      legend: { originalOrder: [], originalColors: {} }, originalSvgStroke: { color: null, width: null } },
+    ui: { selectedResultIndex: 0 }, runMetadata: { ...linear.runMetadata, featureIdentityNotices: [notice], comparisonWarnings: {} }
+  };
+  const both = { ...circular, otherModeResult: other };
+  const kept = read(both);
+  assert.deepEqual(kept.rows.filter((row) => row.includes('otherModeResult')), []);
+  assert.ok(kept.value.otherModeResult);
+  assert.equal(Object.hasOwn(kept.value.otherModeResult.runMetadata, 'featureIdentityNotices'), false);
+  assert.equal(Object.hasOwn(kept.value.otherModeResult.runMetadata, 'comparisonWarnings'), false);
+});
+
+test('a Result set Load\'s composition transform could not compose is read again without its Results (A20, E-OD16)', () => {
+  const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+  const circular = gallery('HmmtDNA_basic_circular.gbdraw-session.json');
+  const linear = gallery('lambda_basic_linear.gbdraw-session.json');
+  const other = {
+    renderRequest: linear.renderRequest, results: linear.results,
+    editorState: { featureCatalog: linear.editorState.featureCatalog, alignmentResetReceipt: null,
+      legend: { originalOrder: [], originalColors: {} }, originalSvgStroke: { color: null, width: null } },
+    ui: { selectedResultIndex: 0 }, runMetadata: linear.runMetadata
+  };
+  const both = { ...circular, otherModeResult: other };
+  const read = (uncomposed) => {
+    const repairs = [];
+    const value = readSessionAuthorityParts(both, both.version, {}, repairs, uncomposed);
+    return { value, rows: repairs.map(({ code, path }) => `${code}@${path}`) };
+  };
+  assert.deepEqual(read([]).rows, []);
+  // The shown set: its Results and the members that name them.
+  const shown = read(['']);
+  assert.deepEqual(shown.rows, ['session-part-dropped@results']);
+  assert.deepEqual([shown.value.results, shown.value.editorState.featureCatalog, Object.hasOwn(shown.value, 'runMetadata')], [[], null, false]);
+  assert.ok(shown.value.otherModeResult);
+  // The other mode's set needs a Result: it is dropped as a part.
+  const dropped = read(['otherModeResult.']);
+  assert.deepEqual(dropped.rows, ['session-part-dropped@otherModeResult']);
+  assert.equal(Object.hasOwn(dropped.value, 'otherModeResult'), false);
+  assert.equal(dropped.value.results.length, circular.results.length);
+});

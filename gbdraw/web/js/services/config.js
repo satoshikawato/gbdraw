@@ -290,7 +290,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionChecked, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
-/** @import { StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
+/** @import { ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
 
@@ -2147,8 +2147,9 @@ const readSettingsOnlyMode = (data, repairs) => {
 /**
  * @param {SessionChecked} sessionData The document `readSessionDocument` read.
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
+ * @param {readonly ResultSetPath[]} uncomposedSets The sets whose Results the composition transform could not compose.
  */
-const preflightSessionImport = async (sessionData, repairs) => {
+const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
   const sourceSessionVersion = sessionData.version;
   // A Session before 47 stored the Legend edits under the shown caption; every
   // reader below reads them by row key (PD-OI-061 revision 5). An edit a later
@@ -2179,7 +2180,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
     throw SESSION_FIELDS_ERROR();
   }
   const rawData = await readSessionResetReceipts(
-    readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs), repairs
+    readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs, uncomposedSets), repairs
   );
   const currentSession = isAuthorityBand(rawData);
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
@@ -5197,13 +5198,31 @@ const exportSessionDocument = async (
  */
 
 /**
+ * A Result set of a Session 40+ whose Results the composition transform
+ * cannot compose (A20): Load reads the file again with that set's Results
+ * dropped and listed (`readSessionAuthorityParts`, E-OD16). It never leaves
+ * `importSessionDocument`.
+ */
+class UncomposedResultSet extends Error {
+  /** @param {ResultSetPath} at @param {unknown} cause */
+  constructor(at, cause) {
+    super('RESULT_UNCOMPOSED', { cause });
+    this.name = 'UncomposedResultSet';
+    this.at = at;
+  }
+}
+
+/**
  * @param {{ target: { files: ArrayLike<File>, value?: string } }} e
  * @param {Record<string, any>} [options] The options of `importSession` with
  * `isCurrent` and `signal`; `transformLegacyResultSvg` is the composition
  * root's `LegacyResultSvgTransform` port, and `confirmSessionFonts` its
- * `SessionFontConfirmation` port.
+ * `SessionFontConfirmation` port; `uncomposedSets` (Load's own) names the
+ * sets a first reading found it cannot compose.
  */
 const importSessionDocument = async (e, options = {}) => {
+  /** @type {readonly ResultSetPath[]} */
+  const uncomposedSets = options.uncomposedSets ?? [];
   const file = e.target.files[0];
   if (!file) return { status: 'skipped' };
   recordSessionLifecycleEvent('sessionSelection');
@@ -5260,7 +5279,7 @@ const importSessionDocument = async (e, options = {}) => {
     const storedDocument = /** @type {SessionEnvelope} */ (data);
     const document = readSessionDocument(data);
     repairs.push(...document.repairs);
-    const preflight = await preflightSessionImport(document.value, repairs);
+    const preflight = await preflightSessionImport(document.value, repairs, uncomposedSets);
     // Preflight read the receipts against the requests Load read (RK-2).
     data = preflight.data;
     recordSessionLifecycleEvent('current-session-preflight-end');
@@ -5434,13 +5453,19 @@ const importSessionDocument = async (e, options = {}) => {
     // A Result of `mode`; `composition` is the legacy composition of the
     // committed set (null for the other set, which has none).
     // A Result's set is the top-level one (`results`) or the other mode's.
+    // A Result of a Session 40+ it cannot compose drops its set's Results (A20).
     /** @param {'circular' | 'linear'} mode @param {LegacyResultSvgData['composition']} composition */
     const loadedResultTransform = (mode, composition) => (/** @type {SVGSVGElement} */ svg) => {
-      const legendGroupsChanged = composition ? normalizeLegacyLegendEntryGroups(svg) : false;
-      const legacyResultChanged = transformLegacyResultSvg(svg, {
-        composition, mode, repairs, path: mode === committedDraftMode ? 'results' : 'otherModeResult.results'
-      });
-      return legendGroupsChanged || legacyResultChanged;
+      /** @type {ResultSetPath} */
+      const at = mode === committedDraftMode ? '' : 'otherModeResult.';
+      try {
+        const legendGroupsChanged = composition ? normalizeLegacyLegendEntryGroups(svg) : false;
+        const legacyResultChanged = transformLegacyResultSvg(svg, { composition, mode, repairs, path: `${at}results` });
+        return legendGroupsChanged || legacyResultChanged;
+      } catch (error) {
+        if (currentSchemaSession && !uncomposedSets.includes(at)) throw new UncomposedResultSet(at, error);
+        throw error;
+      }
     };
     /** @param {'circular' | 'linear'} mode @param {LegacyResultSvgData['composition']} composition @returns {LegacyResultNormalization | null} */
     const loadedResultNormalization = (mode, composition) => (transformLegacyResultSvg
@@ -6233,6 +6258,10 @@ const importSessionDocument = async (e, options = {}) => {
     };
   } catch (err) {
     if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };
+    // Nothing is committed before the dialog: read the file again without the set (A20).
+    if (err instanceof UncomposedResultSet && !commitStarted) {
+      return importSessionDocument(e, { ...options, uncomposedSets: [...uncomposedSets, err.at] });
+    }
     // The inner operation names the cause; a failure without one is the Load's.
     const caught = normalizeCaughtError(err, { stage: 'request-validation' });
     const error = caught.operation === 'unknown' ? normalizeCaughtError(caught, { operation: 'session-load' }) : caught;

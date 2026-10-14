@@ -1063,6 +1063,11 @@ const refuseFirstFault = ([fault]) => {
 };
 
 /**
+ * Where a committed Result set is in a Session: the top level or the other
+ * mode's set (the prefix of its paths).
+ * @typedef {'' | 'otherModeResult.'} ResultSetPath
+ */
+/**
  * Load: a committed Result set as far as it can be restored (A7b, A9, A19,
  * A20). Results that cannot be read are dropped with the members that name
  * them (positional: rule 6); an absent editor state reads as an empty one; a
@@ -1070,7 +1075,7 @@ const refuseFirstFault = ([fault]) => {
  * dropped, and the Results stay without one (`feature-recovery-failed`).
  * @param {SessionInput} set
  * @param {readonly ResultSetFault[]} faults Of `set` (`committedResultSetFaults`).
- * @param {string} at The set's path prefix (`''` or `otherModeResult.`).
+ * @param {ResultSetPath} at
  * @param {LoadRepair[]} repairs Collects the rows.
  * @returns {SessionInput}
  */
@@ -1114,7 +1119,7 @@ const validateCommittedResultSet = (set, version, storedSchema = storedRequestSc
 /**
  * What the other mode's Result set holds that it cannot be restored with:
  * `set` and `request` faults come first; `set` faults of its committed Result
- * set follow (`committedResultSetFaults`). Annotation warnings are read by
+ * set follow (`committedResultSetFaults`). Run notices are read by
  * `readSessionAuthorityParts`.
  * @param {SessionInput} sessionData
  * @param {number | string} version
@@ -1167,9 +1172,7 @@ const otherModeResultFaults = (sessionData, version, storedSchemas) => {
 const validateOtherModeResult = (sessionData, version, storedSchemas) => {
   refuseFirstFault(otherModeResultFaults(sessionData, version, storedSchemas));
   // The check above proved the set an object.
-  const other = /** @type {SessionInput} */ (sessionData.otherModeResult);
-  validateAnnotationWarnings(/** @type {UnvalidatedFields<'annotationWarnings'>} */ (other.runMetadata)?.annotationWarnings, storedResults(other));
-  validateRunNotices(other);
+  validateRunNotices(/** @type {SessionInput} */ (sessionData.otherModeResult));
 };
 
 /**
@@ -1179,34 +1182,49 @@ const validateOtherModeResult = (sessionData, version, storedSchemas) => {
 const storedResults = (set) => /** @type {{ readonly [index: number]: UnvalidatedFields<'name'> } | null | undefined} */ (set.results);
 
 /**
- * The feature identity notices and comparison warnings of a Result set's run
- * metadata: Save and Load refuse ones that do not match its Results.
+ * The run notices of a Result set's run metadata, each with the check
+ * Generate and Save apply to it against the set's Results. They are derived
+ * run metadata (annotation warnings, feature identity notices, comparison
+ * warnings): the next Generate reports them again, and the figure needs none.
+ * @type {Readonly<Record<'annotationWarnings' | 'featureIdentityNotices' | 'comparisonWarnings', (value: unknown, set: SessionInput) => unknown>>}
+ */
+const RUN_NOTICE_CHECKS = Object.freeze({
+  annotationWarnings: (value, set) => validateAnnotationWarnings(value, storedResults(set)),
+  featureIdentityNotices: (value, set) => validateFeatureIdentityNotices(value, set.results),
+  comparisonWarnings: (value, set) => validateComparisonWarnings(value, storedResults(set))
+});
+const RUN_NOTICE_FIELDS = /** @type {(keyof typeof RUN_NOTICE_CHECKS)[]} */ (Object.keys(RUN_NOTICE_CHECKS));
+
+/**
+ * Save: refuses run notices that do not match the set's Results.
  * @param {SessionInput} set A Session or the other mode's Result set.
  */
 const validateRunNotices = (set) => {
-  const runMetadata = /** @type {UnvalidatedFields<'featureIdentityNotices' | 'comparisonWarnings'>} */ (set.runMetadata);
-  validateFeatureIdentityNotices(runMetadata?.featureIdentityNotices, set.results);
-  validateComparisonWarnings(runMetadata?.comparisonWarnings, storedResults(set));
+  const runMetadata = /** @type {UnvalidatedFields<keyof typeof RUN_NOTICE_CHECKS>} */ (set.runMetadata);
+  RUN_NOTICE_FIELDS.forEach((field) => RUN_NOTICE_CHECKS[field](runMetadata?.[field], set));
 };
 
 /**
- * `runMetadata` without annotation warnings that do not match `results`:
- * Load drops them with no row, as the next Generate derives them again
- * (OV-638, J2); Generate and Save refuse them.
+ * Load: `runMetadata` without the run notices that do not match `results`,
+ * dropped with no row (OV-638, J2, E-OD16); Generate and Save refuse them.
  * @template {SessionInput} T
  * @param {T} set A Session or the other mode's Result set.
  * @returns {T}
  */
-const withReadAnnotationWarnings = (set) => {
+const withReadRunNotices = (set) => {
   const runMetadata = set.runMetadata;
   if (!isPlainObject(runMetadata)) return set;
-  try {
-    validateAnnotationWarnings(runMetadata.annotationWarnings, storedResults(set));
-    return set;
-  } catch {
-    // `validateAnnotationWarnings` is pure: it throws only for warnings that do not hold.
-  }
-  const { annotationWarnings: _dropped, ...kept } = runMetadata;
+  const stale = RUN_NOTICE_FIELDS.filter((field) => {
+    try {
+      RUN_NOTICE_CHECKS[field](runMetadata[field], set);
+      return false;
+    } catch {
+      // Each check is pure: it throws only for notices that do not hold.
+      return true;
+    }
+  });
+  if (stale.length === 0) return set;
+  const kept = Object.fromEntries(Object.entries(runMetadata).filter(([field]) => !(/** @type {string[]} */ (stale)).includes(field)));
   return /** @type {T} */ ({ ...set, runMetadata: kept });
 };
 
@@ -1217,23 +1235,29 @@ const withReadAnnotationWarnings = (set) => {
  * before the dialog (E-OD02). The other mode's set is dropped whole when it
  * cannot be restored: without its request (`other-result-set-dropped`, A7g),
  * or with a fault of its own (`session-part-dropped`).
+ * A set whose Results Load's composition transform could not compose (A20,
+ * `uncomposedSets`: its path prefix) has a `results` fault: Load reads the
+ * file again without them (E-OD16).
  * @template {SessionInput} T
  * @param {T} sessionData
  * @param {number} version
  * @param {StoredRequestSchemas} storedSchemas
  * @param {LoadRepair[]} repairs Collects the rows.
+ * @param {readonly ResultSetPath[]} [uncomposedSets]
  * @returns {T}
  */
-export const readSessionAuthorityParts = (sessionData, version, storedSchemas, repairs) => {
+export const readSessionAuthorityParts = (sessionData, version, storedSchemas, repairs, uncomposedSets = []) => {
   if (version < CANONICAL_SESSION_MIN_VERSION) return sessionData;
+  /** @param {ResultSetPath} at @returns {ResultSetFault[]} */
+  const uncomposed = (at) => (uncomposedSets.includes(at) ? [{ kind: 'results', message: 'RESULT_UNCOMPOSED' }] : []);
   /** @type {SessionInput} */
   let data = sessionData;
   if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
-    data = readCommittedResultSet(data, committedResultSetFaults(data, version,
-      storedSchemas.renderRequest ?? storedRequestSchema(data)), '', repairs);
+    data = readCommittedResultSet(data, [...committedResultSetFaults(data, version,
+      storedSchemas.renderRequest ?? storedRequestSchema(data)), ...uncomposed('')], '', repairs);
   }
   if (Object.hasOwn(data, 'otherModeResult')) {
-    const faults = otherModeResultFaults(data, version, storedSchemas);
+    const faults = [...otherModeResultFaults(data, version, storedSchemas), ...uncomposed('otherModeResult.')];
     const { otherModeResult: other, ...rest } = data;
     if (faults.some(({ kind }) => kind === 'request')) {
       const mode = /** @type {UnvalidatedFields<'renderRequest', UnvalidatedFields<'mode'>>} */ (other)?.renderRequest?.mode;
@@ -1249,12 +1273,11 @@ export const readSessionAuthorityParts = (sessionData, version, storedSchemas, r
       // `otherModeResultFaults` found no `set` fault: the set is an object.
       // Without `set` and `request` faults, the rest are the set's own (`committedResultSetFaults`).
       const setFaults = /** @type {ResultSetFault[]} */ (faults.filter(({ kind }) => kind !== 'set' && kind !== 'request'));
-      const kept = withReadAnnotationWarnings(readCommittedResultSet(/** @type {SessionInput} */ (other), setFaults, 'otherModeResult.', repairs));
-      validateRunNotices(kept);
+      const kept = withReadRunNotices(readCommittedResultSet(/** @type {SessionInput} */ (other), setFaults, 'otherModeResult.', repairs));
       data = { ...data, otherModeResult: kept };
     }
   }
-  return /** @type {T} */ (withReadAnnotationWarnings(data));
+  return /** @type {T} */ (withReadRunNotices(data));
 };
 
 // Session 46 keeps each mode's draft in `modes` (registry fields only) and
@@ -1393,14 +1416,9 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
     }
   }
   if (!load && Object.hasOwn(sessionData, 'otherModeResult')) validateOtherModeResult(sessionData, version, storedSchemas);
-  const runMetadata = /** @type {UnvalidatedFields<'annotationWarnings' | 'featureIdentityNotices' | 'comparisonWarnings'>} */ (
-    sessionData.runMetadata
-  );
-  // A Session 31-39 reaches these checks with `results` unvalidated: they read it by index only.
-  const results = /** @type {UnvalidatedFields<string, UnvalidatedFields<'name'>>} */ (sessionData.results);
-  validateAnnotationWarnings(runMetadata?.annotationWarnings, results);
-  validateFeatureIdentityNotices(runMetadata?.featureIdentityNotices, results);
-  validateComparisonWarnings(runMetadata?.comparisonWarnings, results);
+  // Load read the run notices (`readSessionAuthorityParts`). A Session 31-39
+  // reaches these checks with `results` unvalidated: they read it by index only.
+  if (!load) validateRunNotices(sessionData);
   if (isSettingsOnlySessionDocument(sessionData)) validateSettingsOnlyDocument(sessionData, { load });
 };
 
