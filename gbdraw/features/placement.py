@@ -68,10 +68,10 @@ class FeaturePlacementTarget:
                 "Placement kind must be main or lane; Auto is override absence."
             )
 
-    def validate_mode(self, mode: str) -> None:
-        # A tuple, not the mapping: a mode that is not text (an array from a
-        # Session file) is refused here and never hashed.
-        if mode not in tuple(_LANE_SIDES):
+    def validate_mode(self, mode: object) -> None:
+        # A mode that is not text (an array or null from a Session file) is
+        # refused here and never hashed.
+        if not isinstance(mode, str) or mode not in _LANE_SIDES:
             raise ValidationError("Placement mode must be circular or linear.")
         if self.kind == "lane" and self.side not in _LANE_SIDES[mode]:
             raise ValidationError(

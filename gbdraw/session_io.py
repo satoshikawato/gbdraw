@@ -96,6 +96,13 @@ CURRENT_FEATURE_CATALOG_SCHEMA = 5
 FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
     44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
 }
+# The fields of a record display draft row (Session 41+), the two that Session
+# 44 added, and the fields of its anchor intent.
+RECORD_DISPLAY_DRAFT_FIELDS = frozenset({"sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate"})
+TYPED_RECORD_DISPLAY_DRAFT_FIELDS = frozenset({"reverseComplementOverride", "anchorIntent"})
+RECORD_ANCHOR_INTENT_FIELDS = frozenset(
+    {"schema", "recordKey", "biologicalFeatureId", "placement", "anchor", "offsetBp", "orientForward"}
+)
 # The field sets below are the keys of the Session document's declaration
 # (gbdraw.session_contract).
 # Every top-level key a Session of a supported version may hold.
@@ -834,7 +841,7 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
 def _validate_display_placement_draft_config(
     config: Mapping[str, Any],
     *,
-    mode: str,
+    mode: object,
     scoped: bool,
     current: bool,
 ) -> None:
@@ -850,13 +857,11 @@ def _validate_display_placement_draft_config(
     drafts = config.get("recordDisplayDrafts", [])
     if not isinstance(drafts, list):
         raise ValidationError("config.recordDisplayDrafts must be an array.")
-    expected_fields = {
-        "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
-    }
+    expected_fields = set(RECORD_DISPLAY_DRAFT_FIELDS)
     if scoped:
         expected_fields.add("scope")
     if current:
-        expected_fields |= {"reverseComplementOverride", "anchorIntent"}
+        expected_fields |= TYPED_RECORD_DISPLAY_DRAFT_FIELDS
     keys = set()
     for row in drafts:
         if not isinstance(row, Mapping) or set(row) != expected_fields:
@@ -876,14 +881,10 @@ def _validate_display_placement_draft_config(
                 )
             intent = row["anchorIntent"]
             if intent is not None:
-                intent_fields = {
-                    "schema", "recordKey", "biologicalFeatureId", "placement",
-                    "anchor", "offsetBp", "orientForward",
-                }
                 offset = intent.get("offsetBp") if isinstance(intent, Mapping) else None
                 if (
                     not isinstance(intent, Mapping)
-                    or set(intent) != intent_fields
+                    or set(intent) != RECORD_ANCHOR_INTENT_FIELDS
                     or intent.get("schema") != 1
                     or isinstance(intent.get("schema"), bool)
                     or not isinstance(intent.get("recordKey"), str)
