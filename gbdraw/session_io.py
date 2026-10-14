@@ -52,6 +52,7 @@ from .session_contract import (
     SessionRunMetadata,
     keys_of,
 )
+from .tracks.circular import _LEGACY_SPACING_PARAM
 from .web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     LOSAT_EXECUTION_FIELDS,
@@ -5889,7 +5890,7 @@ def _migrate_legacy_circular_slot_cli_value(value: str) -> str:
         if key in {"strict", "compress", "reserve"}:
             continue
         if key == "spacing":
-            migrated.append(f"__gbdraw_legacy_spacing={raw_value.strip()}")
+            migrated.append(f"{_LEGACY_SPACING_PARAM}={raw_value.strip()}")
         else:
             migrated.append(part)
     return head if not migrated else f"{head}@{','.join(migrated)}"
@@ -6255,7 +6256,7 @@ def _migrate_legacy_circular_track_table(table_path: Path) -> None:
         values = values[: len(header)]
         spacing = values[spacing_index].strip()
         if spacing:
-            legacy_param = f"__gbdraw_legacy_spacing={spacing}"
+            legacy_param = f"{_LEGACY_SPACING_PARAM}={spacing}"
             existing_params = values[params_index].strip()
             values[params_index] = (
                 f"{existing_params},{legacy_param}"

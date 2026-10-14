@@ -83,6 +83,7 @@ from gbdraw.linear_comparison import (
 )
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.tracks.circular import (
+    _LEGACY_SPACING_PARAM,
     _InternalCircularTrackSlot,
     _internal_circular_track_slot,
     _normalize_renderer as _circular_renderer_name,
@@ -270,6 +271,10 @@ _LEGACY_SPARSE_FEATURE_TYPES = (
     "misc_RNA",
     "repeat_region",
 )
+# The feature shapes a schema 1-2 request left unset.
+_LEGACY_SPARSE_FEATURE_SHAPES = {"repeat_region": "rectangle"}
+# Schemas 1-2 values of the Circular multi-record size mode.
+_LEGACY_SIZE_MODE_RENAMES = {"sqrt": "auto"}
 _LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
     "circular": {
         "canvas.show_gc": True,
@@ -1646,8 +1651,8 @@ def _decode_circular_layout(
             "renderRequest.layout.multiRecordPositions must be a string array or null."
         )
     size_mode = layout["multiRecordSizeMode"]
-    if schema in {1, 2} and size_mode == "sqrt":
-        size_mode = "auto"
+    if schema in {1, 2} and isinstance(size_mode, str):
+        size_mode = _LEGACY_SIZE_MODE_RENAMES.get(size_mode, size_mode)
     result = CircularMultiRecordOptions(
         multi_record_size_mode=size_mode,
         multi_record_min_radius_ratio=layout["multiRecordMinRadiusRatio"],
@@ -1928,7 +1933,8 @@ def _decode_diagram_options(
         )
     if schema in {1, 2}:
         feature_shapes = dict(decoded.get("feature_shapes") or {})
-        feature_shapes.setdefault("repeat_region", "rectangle")
+        for feature_type, shape in _LEGACY_SPARSE_FEATURE_SHAPES.items():
+            feature_shapes.setdefault(feature_type, shape)
         decoded["feature_shapes"] = feature_shapes
     if schema in {1, 2}:
         _restore_legacy_sparse_defaults(decoded, mode=mode)
@@ -3582,7 +3588,7 @@ def _decode_track_slots(
         }
         if mode == "circular" and schema in {1, 2}:
             params = dict(kwargs.get("params") or {})
-            private_spacing = params.pop("__gbdraw_legacy_spacing", None)
+            private_spacing = params.pop(_LEGACY_SPACING_PARAM, None)
             if private_spacing is not None:
                 if legacy_spacing is not None:
                     raise CanonicalRequestDecodingError(
@@ -3633,7 +3639,7 @@ def _migrate_legacy_circular_track_slot_spec(spec: str) -> str:
             continue
         if key == "spacing":
             migrated.append(
-                f"__gbdraw_legacy_spacing={raw_value.strip()}"
+                f"{_LEGACY_SPACING_PARAM}={raw_value.strip()}"
             )
         else:
             migrated.append(part)
@@ -4985,6 +4991,10 @@ def describe_legacy_request_tables() -> dict[str, Any]:
             for name, value in _LEGACY_SPARSE_COMPARISON_DEFAULTS.items()
         },
         "featureTypes": list(_LEGACY_SPARSE_FEATURE_TYPES),
+        "featureShapes": dict(_LEGACY_SPARSE_FEATURE_SHAPES),
+        "multiRecordSizeModeRenames": dict(_LEGACY_SIZE_MODE_RENAMES),
+        # The slot parameter the decoder reads a slot spacing from (A8, N3).
+        "privateSpacingParam": _LEGACY_SPACING_PARAM,
         "configOverrides": {
             mode: dict(overrides)
             for mode, overrides in _LEGACY_SPARSE_CONFIG_OVERRIDES.items()

@@ -79,6 +79,9 @@ _OBSOLETE_GEOMETRY_KEYS = {
 }
 
 _OBSOLETE_SPACING_KEYS = {"gap", "gap_after"}
+# The slot parameter that carries a schema 1-2 slot spacing from the request
+# decoder to the slot parser (legacy transport only).
+_LEGACY_SPACING_PARAM = "__gbdraw_legacy_spacing"
 _OBSOLETE_CAMEL_KEYS = {
     "gapafter",
     "innerradius",
@@ -322,7 +325,7 @@ def parse_circular_track_slot(
                             "'spacing' is no longer supported; use inner_gap_px and outer_gap_px"
                         )
                     legacy_spacing = ScalarSpec.parse(value)
-                elif key == "__gbdraw_legacy_spacing":
+                elif key == _LEGACY_SPACING_PARAM:
                     if not _allow_legacy_transport:
                         raise ValueError(
                             "private legacy spacing transport is not accepted by fresh track slots"
@@ -415,7 +418,7 @@ def parse_circular_track_slots(
             params = {str(key): value for key, value in dict(item.params or {}).items()}
             legacy_spacing: ScalarSpec | None = None
             if _allow_legacy_transport:
-                legacy_spacing_raw = params.pop("__gbdraw_legacy_spacing", None)
+                legacy_spacing_raw = params.pop(_LEGACY_SPACING_PARAM, None)
                 if legacy_spacing_raw is not None:
                     legacy_spacing = (
                         legacy_spacing_raw

@@ -80,7 +80,9 @@ const liftSparseDefaults = (options, mode) => {
   }
   if (isUnset(options.selectedFeaturesSet)) options.selectedFeaturesSet = [...LEGACY_REQUEST_TABLES.featureTypes];
   const shapes = isObject(options.featureShapes) ? options.featureShapes : {};
-  if (isUnset(shapes.repeat_region)) shapes.repeat_region = 'rectangle';
+  for (const [type, shape] of Object.entries(LEGACY_REQUEST_TABLES.featureShapes)) {
+    if (isUnset(shapes[type])) shapes[type] = shape;
+  }
   options.featureShapes = shapes;
   if (!isUnset(options.config)) return;
   const explicit = options.configOverrides ?? {};
@@ -189,7 +191,7 @@ const legacyPixel = (value) => {
   }
 };
 
-const PRIVATE_SPACING = '__gbdraw_legacy_spacing';
+const PRIVATE_SPACING = LEGACY_REQUEST_TABLES.privateSpacingParam;
 // A slot's legacy spacing, in both forms: its `spacing`, else the private
 // spacing parameter Python's decoder read (N2, N3).
 const LEGACY_SPACING_KEYS = ['spacing', PRIVATE_SPACING];
@@ -431,9 +433,9 @@ export const liftLegacyRenderRequest = (value, path = 'renderRequest') => {
   liftFullConfig(options, mode, optionsAt, repairs);
   if (mode === 'circular') {
     liftCircularSlots(options, optionsAt, repairs);
-    if (isObject(request.layout) && Object.hasOwn(request.layout, 'multiRecordSizeMode')
-      && foldedText(request.layout.multiRecordSizeMode) === 'sqrt') {
-      request.layout.multiRecordSizeMode = 'auto';
+    if (isObject(request.layout) && Object.hasOwn(request.layout, 'multiRecordSizeMode')) {
+      request.layout.multiRecordSizeMode = renamedToken(
+        request.layout.multiRecordSizeMode, LEGACY_REQUEST_TABLES.multiRecordSizeModeRenames);
     }
   } else if (request.schema === 1) {
     // Schema 1 had no Linear layout; the Web ignored a stored one (OV-793).

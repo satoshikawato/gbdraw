@@ -174,6 +174,13 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
     alignmentLength: 0
   }),
   featureTypes: Object.freeze(['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'repeat_region']),
+  featureShapes: Object.freeze({
+    repeat_region: 'rectangle'
+  }),
+  multiRecordSizeModeRenames: Object.freeze({
+    sqrt: 'auto'
+  }),
+  privateSpacingParam: '__gbdraw_legacy_spacing',
   configOverrides: Object.freeze({
     circular: Object.freeze({
       "canvas.show_gc": true,
