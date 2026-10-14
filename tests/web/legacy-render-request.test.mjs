@@ -96,7 +96,7 @@ test('each arm case of the shared vector lifts to its expected values and rows',
   assert.ok(vectors.cases.length >= 30, String(vectors.cases.length));
   for (const vectorCase of vectors.cases) {
     if (vectorCase.expect.refused) {
-      // A field of a later schema: refused as the base refused it (D-OD13 F3).
+      // A form no writer stored: refused as the base refused it (D-OD13 F3, D-OD16 F2).
       assert.throws(() => liftLegacyRenderRequest(caseRequest(vectors, vectorCase)), vectorCase.expect.refused, vectorCase.id);
       continue;
     }

@@ -378,18 +378,20 @@ const liftComparisons = (request) => {
 };
 
 /**
- * A field of a later schema in a schema 1 or 2 request: no writer stored one,
- * and Python's decoder refuses it, as the Web did (D-OD13 F3).
+ * A form no schema 1 or 2 writer stored, which Python's decoder refuses, as
+ * the Web did: a field of a later schema (D-OD13 F3), or an output without
+ * the prefix these schemas require (D-OD16 F2).
  * @param {JsonObject} request
  * @param {JsonObject} options
  */
-const refuseLaterSchemaFields = (request, options) => {
+const refuseUnwrittenForms = (request, options) => {
   if (Array.isArray(options.featureOverrides)) {
     throw diagnosticError('INPUT_INVALID', { field: 'featureOverrides', reason: 'SESSION_FORMAT' });
   }
   const layout = isObject(request.layout) ? request.layout : {};
   const records = Array.isArray(request.records) ? request.records : [];
-  if (Object.hasOwn(options, 'featurePlacements')
+  if ((isObject(options.output) && !Object.hasOwn(options.output, 'outputPrefix'))
+    || Object.hasOwn(options, 'featurePlacements')
     || records.some((/** @type {unknown} */ record) => isObject(record) && Object.hasOwn(record, 'display'))
     || (request.mode === 'linear' && (Object.hasOwn(layout, 'recordTranslations') || Object.hasOwn(layout, 'similarityAlignment')))) {
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
@@ -401,8 +403,8 @@ const refuseLaterSchemaFields = (request, options) => {
  * means the same; any other value unchanged. The repairs list what the
  * schema-5 request cannot carry or reads with another meaning (B17,
  * OV-798, D-OD10); a lossless lift has none. A value the reader refuses (not
- * an object, an unknown mode) is left to the reader; a field of a later
- * schema is refused here (D-OD13 F3).
+ * an object, an unknown mode) is left to the reader; a form no writer
+ * stored is refused here (D-OD13 F3, D-OD16 F2).
  * @template T
  * @param {T} value a stored `renderRequest` (parsed JSON)
  * @param {string} [path] its path in the file, which the rows name
@@ -413,7 +415,7 @@ export const liftLegacyRenderRequest = (value, path = 'renderRequest') => {
     || (value.mode !== 'circular' && value.mode !== 'linear') || !isObject(value.diagramOptions)) {
     return { value, repairs: [] };
   }
-  refuseLaterSchemaFields(value, value.diagramOptions);
+  refuseUnwrittenForms(value, value.diagramOptions);
   /** @type {LoadRepair[]} */
   const repairs = [];
   const mode = value.mode;

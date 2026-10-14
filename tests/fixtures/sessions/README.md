@@ -35,8 +35,9 @@ committed (33, 2) fixtures are listed by reference (`fixtureReferences`). Its
 `cases` are forms the corpus does not hold, written by hand: a corpus request
 with edits, what the lift writes and lists, and whether Python decodes both
 alike, the finding of a deliberate difference, or that Python refuses both;
-a case may instead expect the lift to refuse a field of a later schema. Its SHA-256 is
-`e93aa270c42543cd80a23be76ab581cfa643aa0129e4f9d68a7e61d7b3a35859`.
+a case may instead expect the lift to refuse a form no writer stored (a
+field of a later schema, or an output without `outputPrefix`). Its SHA-256 is
+`e0aa2c6e0fa29580418b1e94e8f74ed96aa03e77fb94664e1c5956143cc38c18`.
 `legacy-request-load.expected.json` records what the Web Load and Save Session
 do with the six full legacy fixtures (`tests/web/legacy-request-sessions.test.mjs`).
 

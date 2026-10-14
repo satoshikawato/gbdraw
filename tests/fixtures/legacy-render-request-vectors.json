@@ -1,5 +1,5 @@
 {
- "description": "Request schemas 1 and 2 (Sessions 31-33), read by the Web lift (gbdraw/web/js/services/legacy-render-request.js) and Python's decoder (gbdraw/session_request_codec.py). `requests`: every distinct schema 1/2 renderRequest stored in a Gallery Session of first-parent main history, as stored, with every commit/path/blob that holds it; sha256 is the SHA-256 of JSON.stringify(renderRequest). `fixtureReferences`: the committed (33, 2) Session fixtures. `cases`: forms the corpus does not hold, each a corpus request with `edits` (set or delete at a key path), the lift's expected `values`, `absent` paths and repair rows, and `python`: equal: true when Python decodes the edited request and its lift to the same request, the finding and reason of a deliberate difference, or refused: true and the reason when Python refuses both (the lift leaves the form to the reader). A case whose `expect` holds `refused` (code and context) is a field of a later schema, which the lift refuses as the base Web did and Python refuses too (D-OD13 F3). Provenance: tests/fixtures/sessions/README.md.",
+ "description": "Request schemas 1 and 2 (Sessions 31-33), read by the Web lift (gbdraw/web/js/services/legacy-render-request.js) and Python's decoder (gbdraw/session_request_codec.py). `requests`: every distinct schema 1/2 renderRequest stored in a Gallery Session of first-parent main history, as stored, with every commit/path/blob that holds it; sha256 is the SHA-256 of JSON.stringify(renderRequest). `fixtureReferences`: the committed (33, 2) Session fixtures. `cases`: forms the corpus does not hold, each a corpus request with `edits` (set or delete at a key path), the lift's expected `values`, `absent` paths and repair rows, and `python`: equal: true when Python decodes the edited request and its lift to the same request, the finding and reason of a deliberate difference, or refused: true and the reason when Python refuses both (the lift leaves the form to the reader). A case whose `expect` holds `refused` (code and context) is a form no writer stored (a field of a later schema, D-OD13 F3; an output without `outputPrefix`, D-OD16 F2), which the lift refuses as the base Web did and Python refuses too. Provenance: tests/fixtures/sessions/README.md.",
  "requests": [
   {
    "id": "BGC0000708-BGC0000713@10d3a3d2",
@@ -21695,6 +21695,92 @@
    "python": {
     "refused": true,
     "reason": "a field of a later schema in a schema 1/2 request: no writer stored it; both runtimes refuse it, as the base Web did (D-OD13 F3)"
+   }
+  },
+  {
+   "id": "missing-output-prefix",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "output",
+      "outputPrefix"
+     ],
+     "delete": true
+    }
+   ],
+   "expect": {
+    "refused": {
+     "code": "INPUT_INVALID",
+     "context": {
+      "field": "schema",
+      "reason": "SESSION_FORMAT"
+     }
+    }
+   },
+   "python": {
+    "refused": true,
+    "reason": "schemas 1 and 2 require outputPrefix: no writer omitted it; Python refuses the request, as the base and dev Web did (D-OD16 F2)"
+   }
+  },
+  {
+   "id": "missing-output-prefix-schema-1",
+   "base": "lambda_basic_linear@10d3a3d2",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "output",
+      "outputPrefix"
+     ],
+     "delete": true
+    }
+   ],
+   "expect": {
+    "refused": {
+     "code": "INPUT_INVALID",
+     "context": {
+      "field": "schema",
+      "reason": "SESSION_FORMAT"
+     }
+    }
+   },
+   "python": {
+    "refused": true,
+    "reason": "schemas 1 and 2 require outputPrefix: no writer omitted it; Python refuses the request, as the base and dev Web did (D-OD16 F2)"
+   }
+  },
+  {
+   "id": "generated-protein-comparison-without-pairs-schema-2",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "comparisons",
+      0,
+      "pairs"
+     ],
+     "delete": true
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "comparisons",
+       0,
+       "pairs"
+      ],
+      []
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": false,
+    "finding": "OV-795",
+    "reason": "no writer stored it; dev loads it (the comparison waits for a decision), so the lift fills pairs: [] as at schema 1, where gating the fill would drop the comparison with a row; Python refuses the stored request (D-OD16 N1)"
    }
   }
  ]
