@@ -438,7 +438,10 @@ The Gate applies these rules:
   `gbdraw/web/`) counts as production as well. The expansion goes to its own
   authority-only pull request, which is Review REQUIRED ("registered
   design-rule allowlists expanded") and names the rule and the reason for the
-  new entry.
+  new entry. A new twin row in `tools/twins.json` (R9) cannot follow its twin,
+  because the twin guard fails a twin without a row, so it goes in first with
+  `"pending": true`, and the runtime pull request that adds the twin removes
+  `pending`.
 - A malformed registry fails closed and is Review REQUIRED.
 
 Adding a test case to a guard test is neither an expansion nor a contraction

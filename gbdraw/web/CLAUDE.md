@@ -401,7 +401,13 @@ when its retirement condition is met or one side is deleted. Adding a row,
 or adding an owner to a row (a further copy of a registered twin), is an
 authority-only change. Removing or renaming an owner, or editing a row's
 reason, retirement condition, or a vector that is not part of its id, is
-not; a `vector:` row's vector is part of its id.
+not; a `vector:` row's vector is part of its id. A new `vector:` or
+`function:` row goes in before its twin, in that authority-only pull request,
+with `"pending": true`: the guard does not require a pending row's twin to be
+detected or its owners and vector to exist. The pull request that adds the
+twin removes `pending`, which is not an authority-only change; a pending row
+whose twin is detected fails the guard, and a pending row whose twin is
+abandoned is removed.
 
 Guards: `tests/test_comparison_tables.py` (`test_outfmt_table_columns_have_one_reader`
 scans the Python and Web JavaScript sources for a second mapping onto
@@ -411,8 +417,8 @@ scans the Python and Web JavaScript sources for a second mapping onto
 `tests/web/twin-registry.test.mjs` (the detector `twin.unregistered.v1` in
 `tools/web-twin-detectors.mjs` finds a JavaScript test and a Python test that
 read the same vector file, and a watch-list function name defined both in
-`gbdraw/` Python and in `js/services/`; each such twin has a row, and every
-row's owners and vector exist).
+`gbdraw/` Python and in `js/services/`; each such twin has a row that is not
+pending, and the owners and vector of every row that is not pending exist).
 
 ### R10: A watcher does not repair state
 
