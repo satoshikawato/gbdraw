@@ -144,7 +144,7 @@ export const latestShardArtifacts = (artifacts) => {
 // tests/ci/functional-shards.json; `casesPerFile` and `testDir` come from listing the
 // functional suite.
 export const summarizeFunctional = ({ reports, shardsFile, casesPerFile, testDir }) => {
-  const shardTestMinutes = (report) => sum(measureMinutes([report], testDir).values());
+  const shardTestMinutes = (report) => sum([...measureMinutes([report], testDir).values()]);
   const shards = reports
     .map(({ shard, report }) => ({
       shard,
