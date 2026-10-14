@@ -200,7 +200,7 @@ def validate_web_config_overrides_json(
     config_json: object,
     overrides_json: object,
     managed_paths_json: object,
-    source: object = "storedRequest",
+    source: object,
 ) -> str:
     """JSON boundary used by the existing diagram-Worker helper channel.
 
@@ -210,7 +210,7 @@ def validate_web_config_overrides_json(
 
     try:
         if source not in _CONFIG_CHECK_SOURCES:
-            raise ValidationError("Unknown configuration check.")
+            raise ValidationError("Unknown configuration check.", diagnostic={"code": "HELPER_PROTOCOL"})
         config = json.loads(str(config_json))
         overrides = json.loads(str(overrides_json))
         managed_paths = json.loads(str(managed_paths_json))

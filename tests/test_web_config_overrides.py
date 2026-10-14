@@ -135,6 +135,7 @@ def test_json_boundary_returns_validated_overlay() -> None:
         "null",
         json.dumps({"objects.blast_match.curve_tension": 0.25}),
         "[]",
+        "storedRequest",
     ))
 
     assert result == {
@@ -148,6 +149,7 @@ def test_json_boundary_returns_actionable_safe_rejection() -> None:
         "null",
         json.dumps({"objects.gc_content.unknown": "biological secret"}),
         "[]",
+        "storedRequest",
     ))
 
     assert result["error"] == {
@@ -216,7 +218,7 @@ def test_stored_full_config_with_conflicting_label_values_is_refused():
     legacy = _legacy_label_config()
     legacy["canvas"]["show_labels"] = False
     legacy["canvas"]["circular"]["show_labels"] = True
-    result = json.loads(validate_web_config_overrides_json("circular", json.dumps(legacy), "null", "[]"))
+    result = json.loads(validate_web_config_overrides_json("circular", json.dumps(legacy), "null", "[]", "storedRequest"))
     # The decoder's label-conflict check refuses it; its error names no field.
     assert result["error"] == {
         "code": "VALIDATION_UNCLASSIFIED", "operation": "validateConfigOverrides", "stage": "helper", "context": {},
@@ -261,8 +263,15 @@ def test_a_draft_check_reads_no_flat_override_name(flat, managed):
     }
     with pytest.raises(ValidationError, match="Unknown config override path"):
         validate_and_project_web_config_overrides(mode="circular", overrides=flat, managed_paths=managed)
-    stored = json.loads(validate_web_config_overrides_json("circular", "null", json.dumps({"gc_stroke_color": "red"}), "[]"))
+    stored = json.loads(validate_web_config_overrides_json(
+        "circular", "null", json.dumps({"gc_stroke_color": "red"}), "[]", "storedRequest"))
     assert stored == {"overrides": {"objects.gc_content.stroke_color": "red"}}
+
+
+def test_json_boundary_requires_its_check():
+    # `source` has no default at either end (D-OD16 N2): a call without it is a programming error.
+    with pytest.raises(TypeError):
+        validate_web_config_overrides_json("circular", "null", "{}", "[]")
 
 
 @pytest.mark.parametrize("source", [True, False, "", "stored", None])
