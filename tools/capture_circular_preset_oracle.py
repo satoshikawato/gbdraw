@@ -127,6 +127,7 @@ def capture_case(
         show_depth=visibility["show_depth"],
         show_gc=visibility["show_gc"],
         show_skew=visibility["show_skew"],
+        track_ids=tuple(canvas_config.track_ids.items()),
         dinucleotide="GC",
     )
     radial_plan = circular_radial_plan_for_preset(preset, context)
