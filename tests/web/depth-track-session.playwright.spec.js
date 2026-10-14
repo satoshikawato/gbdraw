@@ -15,6 +15,7 @@ const {
   reveal,
   waitForAppShell,
   expectSessionLoadedWithoutWarnings,
+  answerLoadRepairs,
 } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -1966,6 +1967,11 @@ test('a Session legend position outside its mode loads as the mode default and g
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(session))
   });
+  // The file is lossy on purpose: Load lists the position and the one it uses (BA-D25).
+  await answerLoadRepairs(page, [
+    'Legend: the position "Upper_Left" (modes.linear.ui.layoutPreferences.legend) is not one of its mode\'s positions;'
+      + ' bottom is used.'
+  ], 'load', { timeout: 180000 });
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
   await expect.soft(await reveal(page.locator('#legend-position'))).toHaveValue('bottom');

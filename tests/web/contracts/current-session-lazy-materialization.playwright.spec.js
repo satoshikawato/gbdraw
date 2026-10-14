@@ -6,6 +6,7 @@ const { gunzipSync } = require('node:zlib');
 const {
   CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
+  expectNoLoadRepairDialog,
   getDiagramWorkerActivity,
   openApp
 } = require('../helpers/app-lifecycle.cjs');
@@ -1629,6 +1630,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
     'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
   );
   await input.setInputFiles(frozenV39Session);
+  await expectNoLoadRepairDialog(page);
   await page.waitForFunction(
     () => window.__GBDRAW_LAZY_SESSION_PROBE__?.historyLoaded === true,
     null,

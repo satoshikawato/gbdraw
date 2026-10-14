@@ -818,9 +818,21 @@ const assertSingleWorkerRun = async (page) => {
   return activity;
 };
 
+// A Load of a file that loses nothing ends without the Load repair dialog
+// (BA-D25). It waits until the Load ends (its notice or its error) or the
+// dialog opens, and fails with the dialog's lines when it opened.
+const expectNoLoadRepairDialog = async (page, { timeout = 180_000 } = {}) => {
+  const prompt = page.locator('[data-choice-prompt]');
+  await page.waitForFunction(() => document.querySelector('[data-choice-prompt]') || window.__GBDRAW_APP__?.errorLog
+    || /Session loaded/.test(document.querySelector('[data-app-notice]')?.textContent || ''), null, { timeout });
+  expect(await prompt.locator('li').allTextContents(), 'the Load listed repairs').toEqual([]);
+  await expect(prompt).toHaveCount(0);
+};
+
 // A Session Load succeeded with no warning: the notice says "Session loaded"
 // and lists nothing (each warning of a Load is one list item of the notice).
 const expectSessionLoadedWithoutWarnings = async (page, { timeout = 120_000 } = {}) => {
+  await expectNoLoadRepairDialog(page, { timeout });
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout });
   await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
 };
@@ -878,6 +890,7 @@ const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', 
 
 module.exports = {
   answerChoicePrompt,
+  expectNoLoadRepairDialog,
   expectSessionLoadedWithoutWarnings,
   answerLoadRepairs,
   CURRENT_FEATURE_CATALOG_SCHEMA,

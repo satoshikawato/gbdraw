@@ -3,7 +3,7 @@
 // a current defect; the PR that fixes the audit ID removes the mark.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { generateAndWaitForResult, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, evaluateWithRetainedPromise, expectNoLoadRepairDialog, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 const {
   BATCH_FIXTURE,
   HMMT,
@@ -364,6 +364,7 @@ for (const [version, fixture] of [
   await openFresh(page);
   await page.locator('input[accept^=".json,"]')
     .setInputFiles(fixture);
+  await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await page.waitForFunction(() => window.__GBDRAW_APP__.sessionSaveAvailable, null, { timeout: 180_000 });
   await settle(page);
