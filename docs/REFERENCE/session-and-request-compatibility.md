@@ -94,10 +94,11 @@ the features they name:
 - A CLI re-save and `upgrade_session_document()` read the sources again the
   same way. When a source cannot be read, they use the saved feature metadata,
   without the Web app's fallback to the features of the saved SVG.
-- An edit that names no feature is dropped, and the Web app reports how many.
+- An edit that names no feature is dropped, and the Web app lists how many
+  before it loads the Session.
 - An older Feature visibility edit that hid every feature with its hash (each
   copy of a duplicated record) now applies to the edited feature only; the Web
-  app reports how many.
+  app lists how many before it loads the Session.
 - Each moved edit goes to the slice of the mode of the Session's diagram. A
   Feature placement draft of a Session 41–44 goes to the slice of its lane
   side's mode. A Main placement, which reached requests of both modes, goes to
@@ -121,8 +122,8 @@ the features they name:
     color and label override tables of the request.
   - A value whose features have its own hash as source hash, on a record drawn
     without a crop or reverse complement, stays as saved.
-  - A value that names features of several source hashes is kept, and the Web
-    app and the CLI report how many. So is a color rule of a record drawn
+  - A value that names features of several source hashes is kept; the Web
+    app lists how many before it loads, and the CLI reports how many. So is a color rule of a record drawn
     cropped or reverse-complemented that the CLI cannot read: the Session that
     `--session_output` writes for a `--session` replay does not read the
     sources of a Session 31–39 again, and no CLI path reads those of a Session
@@ -143,7 +144,7 @@ the drawn copy, not of the original source record.
 
 In a Session of any version, the Web app reads a Legend entry color with the
 [Default colors](input-formats-and-tsv-schemas.md#styling-tables) forms. An
-entry whose color is outside them is dropped, and the Load notice names it.
+entry whose color is outside them is dropped, and the Load dialog names it.
 
 Legend names are numbered when the legend is drawn, by the rule under
 [Feature presentation](palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation),
@@ -170,9 +171,50 @@ mirror the top-level fields; its request names resources in the top-level
 `resources` table. It needs a top-level request of the other mode and at least
 one Result, so a settings-only Session cannot hold it.
 
-Session versions 34–38 and 45 and request schemas 3–4 were development-only
-and are rejected. Do not change a version number, resource hash, or runtime binding by
-hand; changing metadata does not migrate its content.
+## Loading a file that cannot be fully restored
+
+The Web app reads a Session or an older configuration file as far as it can.
+When it would drop a value, replace it with a default, or read it with another
+meaning, it first shows one **Load this file?** dialog, before any setting,
+Result, input file, History entry or screen changes. The dialog lists each such
+value with its place in the file, for example
+`modes.circular.config.adv.depth_tracks[1]`: settings their reader cannot use,
+Legend positions outside the diagram mode, dropped Legend entries and edits,
+per-feature edits and `hash=` values as listed above, joined or dropped table
+rows, Depth series and Depth rows without a Depth file, a pending palette that
+Instant Preview drops, edits of similarity groups the saved Result does not
+have, and feature information or comparison match sequences that cannot be
+restored. It shows at most 12 lines, the last one with the number of the rest,
+and says that Save Session afterwards writes the current format.
+
+- **Load** loads the file. **Cancel** changes nothing. The file itself is
+  never changed.
+- No dialog opens for a reading that keeps the meaning (an older format,
+  capitals, outer spaces, an alias), for a dropped cache entry that the next
+  comparison computes again, or for a Session 46 Legend edit that a later edit
+  of the same row overwrote. A file that loads without a loss, such as every
+  Gallery Session, opens none.
+- The **Replace the current work?** question, asked when there is unsaved
+  work, still comes first, before you choose the file. The notice of `hash=` annotation targets moved to
+  the feature they name, the notice of a loaded configuration file, and the
+  **Comparisons** card notices still follow the load.
+
+The Web app refuses these files and shows an error instead:
+
+- A file that is not JSON, including a broken gzip file and text that is not
+  UTF-8.
+- A file that is neither a gbdraw Session nor a configuration file, including
+  the development-only Sessions 34–38, 43 and 45 and request schemas 3 and 4.
+- A Session of version 26 or older (gbdraw 0.11.0 or older, or gbdraw.app
+  before 0.12.0). The error says that an older gbdraw saved it.
+- A Session version or request schema newer than this reader.
+- A file larger than 200 MB, or larger than 512 MB after decompression.
+- A file opened in a browser without gzip decompression or module Workers.
+- A file with an unsafe name (`__proto__`, `constructor`, `prototype`).
+- A file of which nothing can be restored.
+
+Do not change a version number, resource hash, or runtime binding by hand;
+changing metadata does not migrate its content.
 
 ## What a session preserves
 

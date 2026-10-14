@@ -275,6 +275,21 @@ write-up of a release.
   and its Generate shows "An input value is invalid". A record display
   selector with non-ASCII digits is refused, as the web app already did
   (OV-324, OV-528, OV-596, OV-611, OV-631, OV-632, OV-651, OV-653).
+- Changed (web app): a Session or configuration file that Load cannot fully
+  restore now opens one **Load this file?** dialog before anything changes. It
+  lists each value Load would drop, replace with a default, or read
+  differently, with its place in the file (up to 12 lines), and says that Save
+  Session afterwards writes the current format. **Load** loads the file;
+  **Cancel** leaves the settings, Results, input files, History and screen as
+  they were. Dropped feature edits, narrowed Feature visibility edits, `hash=`
+  values that could not be renamed, joined or dropped table rows and Legend
+  entries with a color the app does not accept, which notices reported after
+  the load, are listed in this dialog instead. The notice of `hash=`
+  annotation targets moved to the feature they name, and the notice of a
+  loaded configuration file, still follow the load. A file that loads without
+  a loss, such as every Gallery Session, opens no dialog. A Session older than
+  version 27 (gbdraw 0.11.0 or older, or gbdraw.app before 0.12.0) is still
+  refused, and the error now says so (OV-710, OV-712, OV-719).
 - Fixed: the records of one multi-record File were named differently in
   **Record Layout**, **Selected pairs** and the **BLAST TSV missing** dialog
   (one by its definition, the next by its accession); each now shows the File's
