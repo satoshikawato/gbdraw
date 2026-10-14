@@ -201,13 +201,18 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     # Linear: the comparison rows; Circular: the conservation rings.
     **dict.fromkeys(
         ("evalue", "bitscore", "alignment_length"),
-        frozenset({"comparison_rows", "comparison_content", "conservation_tracks", "conservation_content"}),
+        frozenset(
+            {"comparison_rows", "comparison_content", "conservation_sources", "conservation_tracks",
+             "conservation_content"}
+        ),
     ),
+    # The reference only normalizes the loaded sources again.
     "conservation_reference": frozenset({"conservation_tracks", "conservation_content"}),
     # A ring's slot carries its label, and the labels and the record content
     # take the radial layout that holds the slots (measured on C3).
     "conservation_labels": frozenset(
-        {"conservation_tracks", "conservation_content", "circular_labels", "circular_record_content"}
+        {"conservation_sources", "conservation_tracks", "conservation_content", "circular_labels",
+         "circular_record_content"}
     ),
     **dict.fromkeys(
         (

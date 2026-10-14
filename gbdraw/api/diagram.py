@@ -565,7 +565,7 @@ def _load_conservation_result(
     conservation_colors: Sequence[str] | None,
     thresholds: ComparisonThresholds,
 ) -> ConservationLoadResult | None:
-    """The filtered conservation sources, from the ``conservation_tracks`` stage.
+    """The filtered conservation sources, from the ``conservation_sources`` stage.
 
     Files are read outside the stage, so a staged file is keyed by its
     resource identity, never by its path.
@@ -574,7 +574,7 @@ def _load_conservation_result(
     if not _has_conservation_inputs(conservation_blast_files, conservation_dataframes):
         return None
     return render_stage(
-        "conservation_tracks",
+        "conservation_sources",
         load_conservation_sources,
         blast_config=thresholds,
         conservation_files=read_conservation_inputs(conservation_blast_files),
