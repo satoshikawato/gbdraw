@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional, Sequence, cas
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite import Drawing
+from svgwrite.base import BaseElement
 
 from gbdraw.analysis.collinearity import (
     CollinearityAnchorMode,
@@ -185,7 +186,7 @@ from gbdraw.layout.composition import (
     TitlePlacement,
     plan_composition,
 )
-from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
+from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_between_adjacent_rows
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
@@ -213,6 +214,7 @@ from gbdraw.render.composition import (
 )
 from gbdraw.render.group_content import (
     CANVAS_SCOPE,
+    ContentGroup,
     GroupContent,
     GroupKey,
     GroupKind,
@@ -1155,6 +1157,104 @@ def _uniquify_copied_subtrees_ids(
                     rewritten = f"#{renamed.get(rewritten[1:], rewritten[1:])}"
                 if rewritten != value:
                     attribs[name] = rewritten
+
+
+# One placed top-level group of a record drawing: its content and its attributes in document order.
+PlacedRecordContent = tuple[GroupContent, tuple[tuple[str, object], ...]]
+
+
+@dataclass(frozen=True)
+class MergedCircularRecord:
+    """Result of the ``record_merge`` stage: one record's ``record_<i>`` group content.
+
+    ``used_ids`` holds the ids of this record and of every earlier one; the next
+    record's merge takes this result, so its ids depend on all earlier records.
+    """
+
+    content: GroupContent
+    used_ids: frozenset[str]
+
+
+def placed_record_contents(
+    drawing: Drawing,
+) -> tuple[tuple[PlacedRecordContent, ...], tuple[tuple[int, int], ...]]:
+    """The placed contents of a single-record Circular drawing and where each of its definitions comes from.
+
+    A definition's position is (index of the placed content, index in its definitions).
+    """
+
+    placed: list[PlacedRecordContent] = []
+    definitions: list[object] = []
+    for element in drawing.elements:
+        if _is_defs_element(element):
+            definitions.extend(getattr(element, "elements", ()) or ())
+            continue
+        if not isinstance(element, ContentGroup):
+            raise RuntimeError(f"a Circular record drawing holds a group that is not a content: {element!r}")
+        placed.append((element.content, tuple(element.attribs.items())))
+    owners = {
+        id(definition): (content_index, definition_index)
+        for content_index, (content, _attributes) in enumerate(placed)
+        for definition_index, definition in enumerate(content.definitions)
+    }
+    try:
+        positions = tuple(owners[id(definition)] for definition in definitions)
+    except KeyError as error:
+        raise RuntimeError("a Circular record drawing holds a definition that no content holds") from error
+    return tuple(placed), positions
+
+
+def merge_circular_record(
+    placed: tuple[PlacedRecordContent, ...],
+    definition_positions: tuple[tuple[int, int], ...],
+    *,
+    record_index: int,
+    record_id: str,
+    bind_record_identity: bool,
+    previous: MergedCircularRecord | None,
+) -> MergedCircularRecord:
+    """The ``record_merge`` stage: copy one record's groups into its ``record_<i>`` group.
+
+    The copies drop the single-record composition roles, suffix the fixed
+    top-level ids, and rename ids that an earlier record (``previous``) or this
+    one already uses, with the references to them. The stored contents are not
+    changed: their children are deep copies (perf-0140 D-07 keeps the copy).
+    """
+
+    used_ids = set(previous.used_ids) if previous is not None else set()
+    used_ids.add(f"record_{record_index}")
+    copied_definitions: list[BaseElement] = [
+        copy.deepcopy(placed[content_index][0].definitions[definition_index])
+        for content_index, definition_index in definition_positions
+    ]
+    copied_elements: list[Group] = []
+    for content, attributes in placed:
+        group = Group(debug=False)
+        if content.parameter is not None:
+            group._parameter = content.parameter
+        group.attribs = dict(attributes)
+        group.elements = list(content.children)
+        copied = copy.deepcopy(group)
+        _strip_nested_composition_roles(copied)
+        _suffix_fixed_top_level_group_id(copied, record_index)
+        copied_elements.append(copied)
+    for definition in copied_definitions:
+        _strip_nested_composition_roles(definition)
+    _uniquify_copied_subtrees_ids(
+        (*copied_definitions, *copied_elements),
+        record_index=record_index,
+        used_ids=used_ids,
+        bind_record_identity=bind_record_identity,
+    )
+    record_group = Group(id=f"record_{record_index}")
+    record_group.attribs["data-gbdraw-record-id"] = record_id
+    record_group.attribs["data-gbdraw-record-index"] = str(record_index)
+    for copied in copied_elements:
+        record_group.add(copied)
+    return MergedCircularRecord(
+        content=GroupContent.of(record_group, tuple(copied_definitions)),
+        used_ids=frozenset(used_ids),
+    )
 
 
 def _is_defs_element(element: object) -> bool:
@@ -3290,56 +3390,36 @@ def assemble_circular_diagram_from_records(
         debug=False,
     )
     attach_legend_row_facts(merged_canvas, legend_row_facts)
-    used_ids: set[str] = set()
     record_targets: list[Group] = []
     grid_overlay_obstacles: list[Aabb] = []
+    bind_record_identity = len(records) > 1 and (
+        len({record.id for record in records}) != len(records)
+        or bool(
+            _record_transforms
+            and any(transform.start_coordinate is not None for transform in _record_transforms)
+        )
+    )
+    merged_record: MergedCircularRecord | None = None
 
     for record_index, result in enumerate(record_results):
-        record_group = Group(id=f"record_{record_index}")
-        record_group.attribs["data-gbdraw-record-id"] = str(records[record_index].id)
-        record_group.attribs["data-gbdraw-record-index"] = str(record_index)
+        placed, definition_positions = placed_record_contents(result.drawing)
+        merged_record = render_stage(
+            "record_merge",
+            merge_circular_record,
+            placed,
+            definition_positions,
+            record_index=record_index,
+            record_id=str(records[record_index].id),
+            bind_record_identity=bind_record_identity,
+            previous=merged_record,
+        )
+        record_group = place_content(
+            merged_canvas,
+            merged_record.content,
+            GroupKey(record_key_at(records[record_index], record_index), GroupKind.RECORD),
+        )
         record_dx, record_dy = grid_layout.translations[record_index]
         record_group.translate(record_dx, record_dy)
-        used_ids.add(f"record_{record_index}")
-
-        copied_definitions: list[object] = []
-        copied_elements: list[object] = []
-        for element in result.drawing.elements:
-            copied = copy.deepcopy(element)
-            if _is_defs_element(element):
-                copied_definitions.extend(
-                    list(getattr(copied, "elements", ()) or ())
-                )
-                continue
-            _strip_nested_composition_roles(copied)
-            _suffix_fixed_top_level_group_id(copied, record_index)
-            copied_elements.append(copied)
-
-        for definition in copied_definitions:
-            _strip_nested_composition_roles(definition)
-
-        _uniquify_copied_subtrees_ids(
-            (*copied_definitions, *copied_elements),
-            record_index=record_index,
-            used_ids=used_ids,
-            bind_record_identity=(
-                len(records) > 1
-                and (
-                    len({record.id for record in records}) != len(records)
-                    or bool(
-                        _record_transforms
-                        and any(
-                            transform.start_coordinate is not None
-                            for transform in _record_transforms
-                        )
-                    )
-                )
-            ),
-        )
-        for definition in copied_definitions:
-            merged_canvas.defs.add(definition)
-        for copied in copied_elements:
-            record_group.add(copied)
         merged_canvas.add(record_group)
         record_targets.append(record_group)
         grid_overlay_obstacles.extend(

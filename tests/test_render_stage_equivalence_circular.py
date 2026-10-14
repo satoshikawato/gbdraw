@@ -131,6 +131,7 @@ def test_declarations_have_no_undeclared_read_or_uncacheable_stage(
         ("C1", ("annotation_table",)),
         ("C1", ("plot_title_position", "annotation_table")),
         ("C3", ("plot_title_position",)),
+        ("C2", ()),
     ],
 )
 def test_the_circular_catalog_item_of_the_contents_equals_the_catalog_of_the_svg(
@@ -142,7 +143,8 @@ def test_the_circular_catalog_item_of_the_contents_equals_the_catalog_of_the_svg
     """When every top-level group is a content (the plot title too), a cache
     transaction reads the Circular catalog from the contents; without one it
     reads the SVG. Both give the same reply (annotations on C1 with and
-    without its title; depth, conservation and an overlay legend on C3)."""
+    without its title; depth, conservation and an overlay legend on C3; the
+    merged records of the Multi-Record Canvas on C2)."""
 
     case = CASES[case_id]
     variants = {option: variant for option, variant in matrix_variants(case, option_ids=option_ids)}
