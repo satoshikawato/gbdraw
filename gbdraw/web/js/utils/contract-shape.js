@@ -63,8 +63,12 @@ const kindViolation = (value, kind, path) => {
   return { path, reason: 'wrong-kind' };
 };
 
-/** @param {unknown} value @returns {value is Readonly<Record<string, unknown>>} */
-const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+/**
+ * A JSON object: not null and not an array.
+ * @param {unknown} value
+ * @returns {value is Readonly<Record<string, unknown>>}
+ */
+export const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
  * Where a parsed JSON `value` leaves `shape`, in order. `types` holds the named
