@@ -5038,7 +5038,6 @@ def prepare_label_list(
             continue
         else:
             feature_label_text = candidate.text
-            label_entry = dict()
             longest_segment_start = int(candidate.segment_start_bp)
             longest_segment_end = int(candidate.segment_end_bp)
             longeset_segment_middle = float(candidate.segment_middle_bp)
@@ -5060,8 +5059,6 @@ def prepare_label_list(
                 feature_inner_radius = float(lane.inner_px)
                 feature_center_radius = float(lane.center_px)
                 feature_outer_radius = float(lane.outer_px)
-            # Store track_id in label entry for embedded label drawing
-            label_entry["track_id"] = track_id
             bbox_width_px = candidate.width_px
             bbox_height_px = candidate.height_px
             label_middle = longeset_segment_middle
@@ -5106,40 +5103,19 @@ def prepare_label_list(
                     feature_anchor_y = feature_outer_radius * math.sin(
                         math.radians(360.0 * (label_middle / total_length) - 90)
                     )
-                if outer_arena is not None:
-                    # Use the inner edge of the arena as the "anchor" radius for leader lines.
-                    anchor_radius = float(outer_arena[0])
-                    middle_radius = anchor_radius
-                    if lane_clearance:
-                        middle_radius = max(
-                            float(middle_radius),
-                            float(
-                                feature_outer_radius
-                                + effective_anchor_clearance_px
-                                + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
-                            ),
-                        )
-                        label_entry["min_outer_start_radius_px"] = float(
+                # With an arena, its inner edge is the "anchor" radius for leader lines.
+                middle_radius = (
+                    float(outer_arena[0]) if outer_arena is not None else radius_factor * radius
+                )
+                if lane_clearance:
+                    middle_radius = max(
+                        float(middle_radius),
+                        float(
                             feature_outer_radius
-                            + effective_text_clearance_px
+                            + effective_anchor_clearance_px
                             + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
-                        )
-                else:
-                    middle_radius = radius_factor * radius
-                    if lane_clearance:
-                        middle_radius = max(
-                            float(middle_radius),
-                            float(
-                                feature_outer_radius
-                                + effective_anchor_clearance_px
-                                + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
-                            ),
-                        )
-                        label_entry["min_outer_start_radius_px"] = float(
-                            feature_outer_radius
-                            + effective_text_clearance_px
-                            + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
-                        )
+                        ),
+                    )
                 middle_x = middle_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
                 middle_y = middle_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
             else:
@@ -5154,19 +5130,6 @@ def prepare_label_list(
                     )
                 middle_x = (inner_radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
                 middle_y = (inner_radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
-                if lane_clearance:
-                    label_entry["max_inner_start_radius_px"] = max(
-                        0.0,
-                        feature_inner_radius
-                        - effective_text_clearance_px
-                        - OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX,
-                    )
-                    label_entry["max_inner_middle_radius_px"] = max(
-                        0.0,
-                        feature_inner_radius
-                        - effective_anchor_clearance_px
-                        - OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX,
-                    )
             is_embedded = _is_label_embedded_in_segment(
                 label_start,
                 label_end,
@@ -5178,39 +5141,60 @@ def prepare_label_list(
                 is_embedded = False
             elif label_rendering == "embedded_only" and not is_embedded:
                 continue
-            label_entry["label_text"] = feature_label_text
             feature_id = feature_ids[stable_id]
-            label_entry["feature_id"] = (
-                instance_svg_id(feature_id, feature_object.source_feature_index)
-                if feature_id and feature_id_counts[feature_id] > 1
-                else feature_id
-            )
-            label_entry["stable_id"] = str(stable_id)
-            label_entry["input_order"] = int(input_order)
-            label_entry["preferred_middle"] = float(label_middle)
-            label_entry["preferred_angle_deg"] = (
-                360.0 * (float(label_middle) / float(total_length))
-            ) % 360.0
-            label_entry["middle"] = label_middle
-            label_entry["start"] = label_start
-            label_entry["end"] = label_end
-            label_entry["middle_x"] = middle_x
-            label_entry["middle_y"] = middle_y
-            label_entry["feature_middle_x"] = feature_middle_x
-            label_entry["feature_middle_y"] = feature_middle_y
-            label_entry["feature_anchor_x"] = feature_anchor_x
-            label_entry["feature_anchor_y"] = feature_anchor_y
-            label_entry["feature_inner_radius_px"] = feature_inner_radius
-            label_entry["feature_center_radius_px"] = feature_center_radius
-            label_entry["feature_outer_radius_px"] = feature_outer_radius
-            label_entry["track_preset"] = track_type
-            label_entry["feature_lane_direction"] = lane_direction
-            label_entry["width_px"] = bbox_width_px
-            label_entry["height_px"] = bbox_height_px
-            label_entry["strand"] = coordinate_strand
-            label_entry["is_embedded"] = is_embedded
-            label_entry["font_size"] = font_size
-            label_entry["font_family"] = font_family
+            label_entry = {
+                "track_id": track_id,
+                "label_text": feature_label_text,
+                "feature_id": (
+                    instance_svg_id(feature_id, feature_object.source_feature_index)
+                    if feature_id and feature_id_counts[feature_id] > 1
+                    else feature_id
+                ),
+                "stable_id": str(stable_id),
+                "input_order": int(input_order),
+                "preferred_middle": float(label_middle),
+                "preferred_angle_deg": (360.0 * (float(label_middle) / float(total_length))) % 360.0,
+                "middle": label_middle,
+                "start": label_start,
+                "end": label_end,
+                "middle_x": middle_x,
+                "middle_y": middle_y,
+                "feature_middle_x": feature_middle_x,
+                "feature_middle_y": feature_middle_y,
+                "feature_anchor_x": feature_anchor_x,
+                "feature_anchor_y": feature_anchor_y,
+                "feature_inner_radius_px": feature_inner_radius,
+                "feature_center_radius_px": feature_center_radius,
+                "feature_outer_radius_px": feature_outer_radius,
+                "track_preset": track_type,
+                "feature_lane_direction": lane_direction,
+                "width_px": bbox_width_px,
+                "height_px": bbox_height_px,
+                "strand": coordinate_strand,
+                "is_embedded": is_embedded,
+                "font_size": font_size,
+                "font_family": font_family,
+            }
+            # Feature clearance of a displaced lane, for the external label stages.
+            if lane_clearance and is_outer_label:
+                label_entry["min_outer_start_radius_px"] = float(
+                    feature_outer_radius
+                    + effective_text_clearance_px
+                    + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
+                )
+            elif lane_clearance:
+                label_entry["max_inner_start_radius_px"] = max(
+                    0.0,
+                    feature_inner_radius
+                    - effective_text_clearance_px
+                    - OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX,
+                )
+                label_entry["max_inner_middle_radius_px"] = max(
+                    0.0,
+                    feature_inner_radius
+                    - effective_anchor_clearance_px
+                    - OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX,
+                )
 
             if is_embedded:
                 embedded_labels.append(label_entry)
