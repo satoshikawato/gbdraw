@@ -121,9 +121,11 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
-from ...render.drawers.circular.annotations import draw_circular_annotation_track
+from ...render.drawers.circular.annotations import circular_annotation_track_content
+from ...render.group_content import GroupKey, GroupKind, place_content
+from ...layout.linear_multi_record import record_key_at
 from ...render.composition import apply_composition_plan
-from ...svg.ids import stable_svg_id, track_slot_svg_id
+from ...svg.ids import track_slot_svg_id
 from .positioning import _parse_svg_number as _svg_number, center_group_on_canvas
 from ...tracks.circular import tick_sides_for_tick_label_layout
 from ...tracks.parsing import slot_dinucleotide
@@ -195,90 +197,6 @@ class CircularAssemblyResult:
     composition_plan: CompositionPlan
     # The drawn external labels: their fit by kind and a probe for the fit search (None without them).
     label_layout: CircularLabelLayout | None = None
-
-
-def _mark_circular_track_slot_group(
-    canvas: Drawing,
-    *,
-    source_group_id: str,
-    group_id: str,
-    slot_id: str,
-    renderer: str,
-) -> Drawing:
-    """Namespace a newly added slot group and its renderer-owned child IDs."""
-
-    for element in reversed(getattr(canvas, "elements", [])):
-        attribs = getattr(element, "attribs", None)
-        if isinstance(attribs, dict) and str(attribs.get("id", "")) == source_group_id:
-            subtree: list[Any] = []
-
-            def collect(node: Any) -> None:
-                subtree.append(node)
-                for child in getattr(node, "elements", []) or []:
-                    collect(child)
-
-            collect(element)
-            id_map: dict[str, str] = {}
-            for child_index, child in enumerate(subtree):
-                child_attribs = getattr(child, "attribs", None)
-                if not isinstance(child_attribs, dict):
-                    continue
-                old_id = str(child_attribs.get("id", ""))
-                if not old_id:
-                    continue
-                new_id = (
-                    group_id
-                    if child is element
-                    else stable_svg_id(
-                        "track_slot_child",
-                        group_id,
-                        old_id,
-                        child_index,
-                    )
-                )
-                child_attribs["id"] = new_id
-                id_map[old_id] = new_id
-
-            for child in subtree:
-                child_attribs = getattr(child, "attribs", None)
-                if not isinstance(child_attribs, dict):
-                    continue
-                for name, value in tuple(child_attribs.items()):
-                    if not isinstance(value, str):
-                        continue
-                    updated = value
-                    for old_id, new_id in id_map.items():
-                        updated = updated.replace(
-                            f"url(#{old_id})",
-                            f"url(#{new_id})",
-                        )
-                        if updated == f"#{old_id}":
-                            updated = f"#{new_id}"
-                    if updated != value:
-                        child_attribs[name] = updated
-
-            attribs["data-gbdraw-slot-id"] = slot_id
-            attribs["data-gbdraw-slot-renderer"] = renderer
-            break
-    return canvas
-
-
-def _tag_circular_track_slot_group(
-    canvas: Drawing,
-    *,
-    source_group_id: str,
-    slot_id: str,
-    renderer: str,
-) -> Drawing:
-    """Attach semantic slot metadata without changing legacy default IDs."""
-
-    for element in reversed(getattr(canvas, "elements", [])):
-        attribs = getattr(element, "attribs", None)
-        if isinstance(attribs, dict) and str(attribs.get("id", "")) == source_group_id:
-            attribs["data-gbdraw-slot-id"] = str(slot_id)
-            attribs["data-gbdraw-slot-renderer"] = str(renderer)
-            break
-    return canvas
 
 
 def plan_circular_annotation_slots(
@@ -1562,6 +1480,7 @@ def _draw_resolved_circular_slot(
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack] | None = None,
     annotation_record_index: int = 0,
     record_transform: RecordDisplayTransform | None = None,
+    record_key: str,
 ) -> Drawing:
     """Draw one resolved circular slot."""
     cfg = render_context.profile.config
@@ -1578,8 +1497,9 @@ def _draw_resolved_circular_slot(
         if annotation_layout is None:
             return canvas
         params = annotation_track_params_from_mapping(resolved_slot.params)
-        group = draw_circular_annotation_track(
-            canvas,
+        content = render_stage(
+            "annotation_content",
+            circular_annotation_track_content,
             annotation_layout,
             record_id=str(gb_record.id),
             record_index=annotation_record_index,
@@ -1602,8 +1522,8 @@ def _draw_resolved_circular_slot(
                 str(resolved_slot.id) if use_slot_group_id else None
             ),
         )
-        group = center_group_on_canvas(group, canvas_config)
-        canvas.add(group)
+        group = place_content(canvas, content, GroupKey(record_key, GroupKind.ANNOTATIONS, str(resolved_slot.id)))
+        canvas.add(center_group_on_canvas(group, canvas_config))
         return canvas
 
     if renderer == "features":
@@ -1623,9 +1543,13 @@ def _draw_resolved_circular_slot(
                 float(canvas_config.radius) * float(canvas_config.track_ratio),
             )
         feature_kwargs: dict[str, Any] = {
+            "group_key": GroupKey(record_key, GroupKind.FEATURES, str(resolved_slot.id)),
             "feature_layers": feature_layers,
             "render_context": render_context,
-            "precalculated_labels": precalculated_labels,
+            # The record group draws the embedded labels; the legend shift moves only external ones.
+            "precalculated_labels": tuple(
+                label for label in precalculated_labels or () if label.get("is_embedded")
+            ),
             "feature_track_ratio_factor_override": ratio_override,
         }
         if annotation_record_index:
@@ -1679,6 +1603,7 @@ def _draw_resolved_circular_slot(
         ).strip().lower()
         if label_side != "none" or tick_side != "none":
             tick_group_kwargs: dict[str, Any] = {
+                "group_key": GroupKey(record_key, GroupKind.TICKS, str(resolved_slot.id)),
                 "radius_override": float(anchor_radius_px),
             }
             if use_slot_tick_options or tick_layout is not None:
@@ -1736,12 +1661,22 @@ def _draw_resolved_circular_slot(
             logger.warning("Skipping circular depth slot '%s' because depth data are unavailable.", resolved_slot.id)
             return canvas
         depth_kwargs: dict[str, Any] = {
+            "group_key": GroupKey(record_key, GroupKind.DEPTH, str(resolved_slot.id)),
             "track_width_override": float(resolved_slot.draw_width_px),
             "norm_factor_override": norm_factor_override,
         }
         if use_slot_group_id:
-            depth_kwargs["group_id"] = depth_group_id
-        canvas = add_depth_group_on_canvas(
+            depth_kwargs.update(
+                group_id=depth_group_id,
+                slot_group_id=track_slot_svg_id(
+                    resolved_slot.id,
+                    renderer=renderer,
+                    slot_index=int(resolved_slot.slot_index),
+                ),
+                slot_id=str(resolved_slot.id),
+                slot_renderer=renderer,
+            )
+        return add_depth_group_on_canvas(
             canvas,
             gb_record,
             selected_depth_df,
@@ -1750,19 +1685,6 @@ def _draw_resolved_circular_slot(
             **depth_kwargs,
             record_transform=record_transform,
         )
-        if use_slot_group_id:
-            canvas = _mark_circular_track_slot_group(
-                canvas,
-                source_group_id=depth_group_id,
-                group_id=track_slot_svg_id(
-                    resolved_slot.id,
-                    renderer=renderer,
-                    slot_index=int(resolved_slot.slot_index),
-                ),
-                slot_id=str(resolved_slot.id),
-                renderer=renderer,
-            )
-        return canvas
 
     if renderer == "sequence_conservation":
         track_index = int(resolved_slot.params.get("track_index", 0) or 0)
@@ -1818,17 +1740,25 @@ def _draw_resolved_circular_slot(
             )
             return canvas
         gc_kwargs: dict[str, Any] = {
+            "group_key": GroupKey(record_key, GroupKind.GC_CONTENT, str(resolved_slot.id)),
             "track_width_override": float(resolved_slot.draw_width_px),
             "norm_factor_override": norm_factor_override,
+            "slot_id": str(resolved_slot.id),
+            "slot_renderer": renderer,
         }
         if use_slot_group_id:
             gc_kwargs["group_id"] = str(resolved_slot.id)
+            gc_kwargs["slot_group_id"] = track_slot_svg_id(
+                resolved_slot.id,
+                renderer=renderer,
+                slot_index=int(resolved_slot.slot_index),
+            )
         slot_gc_config = _slot_gc_config_with_axis_font_size(
             gc_config,
             nt,
             gc_content_tick_font_size_override,
         )
-        canvas = add_gc_content_group_on_canvas(
+        return add_gc_content_group_on_canvas(
             canvas,
             gb_record,
             slot_df,
@@ -1837,26 +1767,6 @@ def _draw_resolved_circular_slot(
             **gc_kwargs,
             record_transform=record_transform,
         )
-        if use_slot_group_id:
-            canvas = _mark_circular_track_slot_group(
-                canvas,
-                source_group_id=str(gc_kwargs["group_id"]),
-                group_id=track_slot_svg_id(
-                    resolved_slot.id,
-                    renderer=renderer,
-                    slot_index=int(resolved_slot.slot_index),
-                ),
-                slot_id=str(resolved_slot.id),
-                renderer=renderer,
-            )
-        else:
-            canvas = _tag_circular_track_slot_group(
-                canvas,
-                source_group_id="gc_content",
-                slot_id=str(resolved_slot.id),
-                renderer=renderer,
-            )
-        return canvas
 
     if renderer == "dinucleotide_skew":
         slot_df = _slot_dataframe_for_nt(
@@ -1873,12 +1783,20 @@ def _draw_resolved_circular_slot(
             )
             return canvas
         skew_kwargs: dict[str, Any] = {
+            "group_key": GroupKey(record_key, GroupKind.GC_SKEW, str(resolved_slot.id)),
             "track_width_override": float(resolved_slot.draw_width_px),
             "norm_factor_override": norm_factor_override,
+            "slot_id": str(resolved_slot.id),
+            "slot_renderer": renderer,
         }
         if use_slot_group_id:
             skew_kwargs["group_id"] = str(resolved_slot.id)
-        canvas = add_gc_skew_group_on_canvas(
+            skew_kwargs["slot_group_id"] = track_slot_svg_id(
+                resolved_slot.id,
+                renderer=renderer,
+                slot_index=int(resolved_slot.slot_index),
+            )
+        return add_gc_skew_group_on_canvas(
             canvas,
             gb_record,
             slot_df,
@@ -1887,26 +1805,6 @@ def _draw_resolved_circular_slot(
             **skew_kwargs,
             record_transform=record_transform,
         )
-        if use_slot_group_id:
-            canvas = _mark_circular_track_slot_group(
-                canvas,
-                source_group_id=str(skew_kwargs["group_id"]),
-                group_id=track_slot_svg_id(
-                    resolved_slot.id,
-                    renderer=renderer,
-                    slot_index=int(resolved_slot.slot_index),
-                ),
-                slot_id=str(resolved_slot.id),
-                renderer=renderer,
-            )
-        else:
-            canvas = _tag_circular_track_slot_group(
-                canvas,
-                source_group_id="skew",
-                slot_id=str(resolved_slot.id),
-                renderer=renderer,
-            )
-        return canvas
 
     logger.warning("Skipping unsupported circular track slot renderer '%s'.", renderer)
     return canvas
@@ -2395,6 +2293,7 @@ def add_record_on_circular_canvas(
     Drawing: The updated SVG drawing with all record-related groups added.
     """
     primary_target_start = len(getattr(canvas, "elements", []))
+    record_key = str(record_key_at(gb_record, annotation_record_index))
     profile = canvas_config.profile
     cfg = profile.config
     depth_tracks_by_index = (
@@ -2753,11 +2652,7 @@ def add_record_on_circular_canvas(
         radial_layout=radial_layout,
     )
 
-    canvas = add_axis_group_on_canvas(
-        canvas,
-        canvas_config,
-        radius_override=None,
-    )
+    canvas = add_axis_group_on_canvas(canvas, canvas_config, group_key=GroupKey(record_key, GroupKind.AXIS))
 
     if show_external_labels:
         labels_group_kwargs: dict[str, Any] = {
@@ -2819,6 +2714,7 @@ def add_record_on_circular_canvas(
             annotation_track_layouts=annotation_track_layouts,
             annotation_record_index=annotation_record_index,
             record_transform=record_transform,
+            record_key=record_key,
         )
 
     if show_external_labels:

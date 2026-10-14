@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 
-from svgwrite import Drawing
-from gbdraw.svg.elements import Group, Path, Text
+from svgwrite.base import BaseElement
+
+from gbdraw.svg.elements import ClipPath, Group, Path, Text
 
 from gbdraw.annotations import (
     AnnotationTrackParams,
@@ -15,7 +16,8 @@ from gbdraw.annotations import (
     is_auto_feature_underlay,
 )
 from gbdraw.render.drawers.linear.annotations import annotation_dom_id
-from gbdraw.render.patterns import ensure_hatch_pattern
+from gbdraw.render.group_content import GroupContent
+from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
 
 
@@ -52,8 +54,7 @@ def _safe_segments(start: int, end: int, total_length: int):
     return ((float(start), float(end)),)
 
 
-def draw_circular_annotation_track(
-    drawing: Drawing,
+def circular_annotation_track_content(
     track: ResolvedAnnotationTrack,
     *,
     record_id: str,
@@ -66,9 +67,16 @@ def draw_circular_annotation_track(
     params: AnnotationTrackParams,
     dom_group_id: str | None = None,
     semantic_slot_id: str | None = None,
-) -> Group:
+) -> GroupContent:
+    """Build an annotation track around the circle centre (render stage ``annotation_content``).
+
+    The hatch patterns the marks use, in order of first use, and the clip path
+    of a clipped track are the content's definitions.
+    """
+
     group_id = dom_group_id or f"gbdraw-annotation-track-{track.slot_id}-{record_index + 1}"
     group = Group(id=group_id)
+    definitions: dict[str, BaseElement] = {}
     if semantic_slot_id:
         group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
         group.attribs["data-gbdraw-slot-renderer"] = "annotations"
@@ -119,7 +127,9 @@ def draw_circular_annotation_track(
             for start, end in _safe_segments(raw_start, raw_end, record_length):
                 part_index += 1
                 if annotation.mark in {"band", "highlight"}:
-                    fill = ensure_hatch_pattern(drawing, style.hatch) if style.hatch else (
+                    if style.hatch:
+                        definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
+                    fill = hatch_pattern_paint(style.hatch) if style.hatch else (
                         style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
                     )
                     path = Path(
@@ -206,6 +216,7 @@ def draw_circular_annotation_track(
                 text.rotate(rotation, center=(x, y))
             item_group.add(text)
         group.add(item_group)
+    clip_paths: list[BaseElement] = []
     if track.clipped:
         group.attribs["data-gbdraw-annotation-clipped"] = "true"
         clip_id = (
@@ -223,11 +234,11 @@ def draw_circular_annotation_track(
             )
         )
         ring.attribs["clip-rule"] = "evenodd"
-        clip_path = drawing.clipPath(id=clip_id)
+        clip_path = ClipPath(id=clip_id)
         clip_path.add(ring)
-        drawing.defs.add(clip_path)
+        clip_paths.append(clip_path)
         group.attribs["clip-path"] = f"url(#{clip_id})"
-    return group
+    return GroupContent.of(group, (*definitions.values(), *clip_paths))
 
 
-__all__ = ["draw_circular_annotation_track"]
+__all__ = ["circular_annotation_track_content"]

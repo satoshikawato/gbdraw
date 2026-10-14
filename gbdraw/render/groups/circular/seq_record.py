@@ -2,7 +2,7 @@
 # coding: utf-8
 
 from collections import Counter
-from typing import Optional, Dict
+from typing import Dict, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
@@ -31,7 +31,7 @@ class SeqRecordGroup:
         feature_config: FeatureDrawingConfigurator,
         feature_layers: FeatureBuildResult,
         render_context: CircularRecordRenderContext,
-        precalculated_labels: Optional[list[CircularLabel]] = None,
+        precalculated_labels: Sequence[CircularLabel] | None = None,
         feature_track_ratio_factor_override: float | None = None,
         feature_anchor_radius_px: float | None = None,
         record_index: int = 0,
@@ -59,7 +59,7 @@ class SeqRecordGroup:
         self.strandedness = render_context.profile.strandedness
         self.track_ratio_factors = cfg.canvas.circular.track_ratio_factors[self.length_param]
         self.track_ratio = geometry.track_ratio
-        self.precalculated_labels: Optional[list[CircularLabel]] = precalculated_labels
+        self.precalculated_labels: Sequence[CircularLabel] | None = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
         self.feature_anchor_radius_px = feature_anchor_radius_px
         self.record_index = int(record_index)

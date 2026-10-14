@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Callable, Literal, ParamSpec
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -37,6 +37,15 @@ from ...render.groups.circular import (
     SeqRecordGroup,
     TickGroup,
 )
+from ...render.group_content import (
+    BuildsGroup,
+    GroupContent,
+    GroupKey,
+    build_group_content,
+    place_content,
+)
+from ...render_stages import render_stage
+from ...svg.ids import stable_svg_id
 from .positioning import (
     center_group_on_canvas,
     place_definition_group_on_canvas,
@@ -48,6 +57,88 @@ from gbdraw.layout.record_coordinates import RecordDisplayTransform
 if TYPE_CHECKING:
     from gbdraw.api.requests import RecordPresentation
 
+P = ParamSpec("P")
+
+
+def _namespace_slot_group(group: Group, slot_group_id: str) -> None:
+    """Give a slot group its slot DOM id and namespace its renderer-owned child IDs."""
+
+    subtree: list[Group] = []
+
+    def collect(node: Group) -> None:
+        subtree.append(node)
+        for child in getattr(node, "elements", []) or []:
+            collect(child)
+
+    collect(group)
+    id_map: dict[str, str] = {}
+    for child_index, child in enumerate(subtree):
+        child_attribs = getattr(child, "attribs", None)
+        if not isinstance(child_attribs, dict):
+            continue
+        old_id = str(child_attribs.get("id", ""))
+        if not old_id:
+            continue
+        new_id = (
+            slot_group_id
+            if child is group
+            else stable_svg_id("track_slot_child", slot_group_id, old_id, child_index)
+        )
+        child_attribs["id"] = new_id
+        id_map[old_id] = new_id
+
+    for child in subtree:
+        child_attribs = getattr(child, "attribs", None)
+        if not isinstance(child_attribs, dict):
+            continue
+        for name, value in tuple(child_attribs.items()):
+            if not isinstance(value, str):
+                continue
+            updated = value
+            for old_id, new_id in id_map.items():
+                updated = updated.replace(f"url(#{old_id})", f"url(#{new_id})")
+                if updated == f"#{old_id}":
+                    updated = f"#{new_id}"
+            if updated != value:
+                child_attribs[name] = updated
+
+
+def slot_group_content(
+    slot_group_id: str | None,
+    group_class: Callable[P, BuildsGroup],
+    /,
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> GroupContent:
+    """A render-stage function: build one track group and give it its slot IDs.
+
+    With ``slot_group_id`` the group and its child IDs are namespaced inside
+    the stage, before the content is kept, so a stored content is never
+    changed afterwards.
+    """
+
+    group = group_class(*args, **kwargs).get_group()
+    if slot_group_id is not None:
+        _namespace_slot_group(group, slot_group_id)
+    return GroupContent.of(group)
+
+
+def _add_track_content(
+    canvas: Drawing,
+    content: GroupContent,
+    canvas_config: CircularCanvasConfigurator,
+    group_key: GroupKey,
+    *,
+    slot_id: str | None,
+    slot_renderer: str | None,
+) -> Drawing:
+    group = center_group_on_canvas(place_content(canvas, content, group_key), canvas_config)
+    if slot_id is not None and slot_renderer is not None:
+        group.attribs["data-gbdraw-slot-id"] = str(slot_id)
+        group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
+    canvas.add(group)
+    return canvas
+
 def add_depth_group_on_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
@@ -55,14 +146,17 @@ def add_depth_group_on_canvas(
     canvas_config: CircularCanvasConfigurator,
     depth_config: DepthConfigurator,
     *,
+    group_key: GroupKey,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
     group_id: str | None = None,
     axis_group_id: str | None = None,
+    slot_group_id: str | None = None,
+    slot_id: str | None = None,
+    slot_renderer: str | None = None,
     record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds the depth coverage group to the canvas."""
-    cfg = canvas_config.profile.config
     depth_track_width = (
         float(track_width_override)
         if track_width_override is not None
@@ -73,7 +167,11 @@ def add_depth_group_on_canvas(
             factors=canvas_config.track_ratio_factors,
         )
     )
-    depth_group: Group = DepthGroup(
+    content = render_stage(
+        "depth_content",
+        slot_group_content,
+        slot_group_id,
+        DepthGroup,
         gb_record,
         depth_df,
         canvas_config.radius,
@@ -83,12 +181,12 @@ def add_depth_group_on_canvas(
         norm_factor_override=norm_factor_override,
         group_id=group_id,
         axis_group_id=axis_group_id,
-        cfg=cfg,
+        cfg=canvas_config.profile.config,
         record_transform=record_transform,
-    ).get_group()
-    depth_group = center_group_on_canvas(depth_group, canvas_config)
-    canvas.add(depth_group)
-    return canvas
+    )
+    return _add_track_content(
+        canvas, content, canvas_config, group_key, slot_id=slot_id, slot_renderer=slot_renderer
+    )
 
 
 def add_conservation_group_on_canvas(
@@ -135,23 +233,20 @@ def add_gc_skew_group_on_canvas(
     canvas_config: CircularCanvasConfigurator,
     skew_config: GcSkewConfigurator,
     *,
+    group_key: GroupKey,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
     group_id: str | None = None,
+    slot_group_id: str | None = None,
+    slot_id: str | None = None,
+    slot_renderer: str | None = None,
     record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
-    """
-    Adds the GC skew group to the canvas.
+    """Adds the GC skew group to the canvas.
 
-    Parameters:
-    canvas (Drawing): The SVG drawing canvas.
-    gb_record (SeqRecord): The GenBank record.
-    gc_df (DataFrame): DataFrame containing GC content and skew information.
-    canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    Returns:
-    Drawing: The updated SVG drawing with the GC skew group added.
+    With ``slot_group_id`` the group takes its slot DOM ids; ``slot_id`` and
+    ``slot_renderer`` tag the placed group.
     """
-    cfg = canvas_config.profile.config
     skew_track_width = (
         float(track_width_override)
         if track_width_override is not None
@@ -162,7 +257,11 @@ def add_gc_skew_group_on_canvas(
             factors=canvas_config.track_ratio_factors,
         )
     )
-    gc_skew_group: Group = GcSkewGroup(
+    content = render_stage(
+        "gc_skew_content",
+        slot_group_content,
+        slot_group_id,
+        GcSkewGroup,
         gb_record,
         gc_df,
         canvas_config.radius,
@@ -171,12 +270,12 @@ def add_gc_skew_group_on_canvas(
         canvas_config.track_ids["skew_track"],
         norm_factor_override=norm_factor_override,
         group_id=group_id,
-        cfg=cfg,
+        cfg=canvas_config.profile.config,
         record_transform=record_transform,
-    ).get_group()
-    gc_skew_group = center_group_on_canvas(gc_skew_group, canvas_config)
-    canvas.add(gc_skew_group)
-    return canvas
+    )
+    return _add_track_content(
+        canvas, content, canvas_config, group_key, slot_id=slot_id, slot_renderer=slot_renderer
+    )
 
 
 def add_gc_content_group_on_canvas(
@@ -186,24 +285,20 @@ def add_gc_content_group_on_canvas(
     canvas_config: CircularCanvasConfigurator,
     gc_config: GcContentConfigurator,
     *,
+    group_key: GroupKey,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
     group_id: str | None = None,
+    slot_group_id: str | None = None,
+    slot_id: str | None = None,
+    slot_renderer: str | None = None,
     record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
-    """
-    Adds the GC content group to the canvas.
+    """Adds the GC content group to the canvas.
 
-    Parameters:
-    canvas (Drawing): The SVG drawing canvas.
-    gb_record (SeqRecord): The GenBank record.
-    gc_df (DataFrame): DataFrame containing GC content and skew information.
-    canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    gc_config (GcContentConfigurator): Configuration for the GC content representation.
-    Returns:
-    Drawing: The updated SVG drawing with the GC content group added.
+    With ``slot_group_id`` the group takes its slot DOM ids; ``slot_id`` and
+    ``slot_renderer`` tag the placed group.
     """
-    cfg = canvas_config.profile.config
     gc_content_track_width = (
         float(track_width_override)
         if track_width_override is not None
@@ -214,7 +309,11 @@ def add_gc_content_group_on_canvas(
             factors=canvas_config.track_ratio_factors,
         )
     )
-    gc_content_group: Group = GcContentGroup(
+    content = render_stage(
+        "gc_content_content",
+        slot_group_content,
+        slot_group_id,
+        GcContentGroup,
         gb_record,
         gc_df,
         canvas_config.radius,
@@ -223,12 +322,12 @@ def add_gc_content_group_on_canvas(
         canvas_config.track_ids["gc_track"],
         norm_factor_override=norm_factor_override,
         group_id=group_id,
-        cfg=cfg,
+        cfg=canvas_config.profile.config,
         record_transform=record_transform,
-    ).get_group()
-    gc_content_group = center_group_on_canvas(gc_content_group, canvas_config)
-    canvas.add(gc_content_group)
-    return canvas
+    )
+    return _add_track_content(
+        canvas, content, canvas_config, group_key, slot_id=slot_id, slot_renderer=slot_renderer
+    )
 
 
 def add_record_definition_group_on_canvas(
@@ -293,9 +392,10 @@ def add_record_group_on_canvas(
     canvas_config: CircularCanvasConfigurator,
     feature_config: FeatureDrawingConfigurator,
     *,
+    group_key: GroupKey,
     feature_layers: FeatureBuildResult,
     render_context: CircularRecordRenderContext,
-    precalculated_labels: list[CircularLabel] | None = None,
+    precalculated_labels: tuple[CircularLabel, ...] = (),
     feature_track_ratio_factor_override: float | None = None,
     feature_anchor_radius_px: float | None = None,
     record_index: int = 0,
@@ -303,19 +403,11 @@ def add_record_group_on_canvas(
     slot_id: str | None = None,
     feature_dom_namespace: str | None = None,
 ) -> Drawing:
-    """
-    Adds the record group to the canvas.
-
-    Parameters:
-    canvas (Drawing): The SVG drawing canvas.
-    record (SeqRecord): The GenBank record.
-    canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    feature_config (FeatureDrawingConfigurator): Configuration for feature drawing.
-    Returns:
-    Drawing: The updated SVG drawing with the record group added.
-    """
-    # Unpack parameters
-    record_group: Group = SeqRecordGroup(
+    """Adds the record group (features and embedded labels) to the canvas."""
+    content = render_stage(
+        "record_content",
+        build_group_content,
+        SeqRecordGroup,
         gb_record=record,
         geometry=canvas_config.geometry(),
         feature_config=feature_config,
@@ -328,38 +420,26 @@ def add_record_group_on_canvas(
         group_id=group_id,
         slot_id=slot_id,
         feature_dom_namespace=feature_dom_namespace,
-    ).get_group()
-    # Calculate start and end points for the 60-degree arc
-
-    record_group = center_group_on_canvas(record_group, canvas_config)
-    canvas.add(record_group)
-
-    return canvas
+    )
+    return _add_track_content(canvas, content, canvas_config, group_key, slot_id=None, slot_renderer=None)
 
 
 def add_axis_group_on_canvas(
     canvas: Drawing,
     canvas_config: CircularCanvasConfigurator,
     *,
-    radius_override: float | None = None,
+    group_key: GroupKey,
 ) -> Drawing:
-    """
-    Adds the axis group to the canvas.
-
-    Parameters:
-    canvas (Drawing): The SVG drawing canvas.
-    canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    Returns:
-    Drawing: The updated SVG drawing with the axis group added.
-    """
-    axis_group: Group = AxisGroup(
-        float(radius_override) if radius_override is not None else canvas_config.radius,
+    """Adds the axis circle at the canvas radius."""
+    content = render_stage(
+        "axis_content",
+        build_group_content,
+        AxisGroup,
+        canvas_config.radius,
         canvas_config.geometry(),
         cfg=canvas_config.profile.config,
-    ).get_group()
-    axis_group = center_group_on_canvas(axis_group, canvas_config)
-    canvas.add(axis_group)
-    return canvas
+    )
+    return _add_track_content(canvas, content, canvas_config, group_key, slot_id=None, slot_renderer=None)
 
 
 def add_tick_group_on_canvas(
@@ -367,6 +447,7 @@ def add_tick_group_on_canvas(
     gb_record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
     *,
+    group_key: GroupKey,
     radius_override: float | None = None,
     label_side: str = "legacy",
     tick_side: str = "legacy",
@@ -376,17 +457,11 @@ def add_tick_group_on_canvas(
     slot_id: str | None = None,
     record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
-    """
-    Adds the tick group to the canvas.
-
-    Parameters:
-    canvas (Drawing): The SVG drawing canvas.
-    gb_record (SeqRecord): The GenBank record.
-    canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    Returns:
-    Drawing: The updated SVG drawing with the tick group added.
-    """
-    tick_group: Group = TickGroup(
+    """Adds the tick group to the canvas."""
+    content = render_stage(
+        "ticks_content",
+        build_group_content,
+        TickGroup,
         gb_record,
         canvas_config.geometry(),
         profile=canvas_config.profile,
@@ -398,10 +473,8 @@ def add_tick_group_on_canvas(
         group_id=group_id,
         slot_id=slot_id,
         record_transform=record_transform,
-    ).get_group()
-    tick_group = center_group_on_canvas(tick_group, canvas_config)
-    canvas.add(tick_group)
-    return canvas
+    )
+    return _add_track_content(canvas, content, canvas_config, group_key, slot_id=None, slot_renderer=None)
 
 
 def add_labels_group_on_canvas(

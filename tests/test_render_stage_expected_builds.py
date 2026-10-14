@@ -127,8 +127,11 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     **dict.fromkeys(("plot_title", "plot_title_font_size"), _TITLE),
 }
 
-# The options a Linear record content (axis, ruler, features, labels) reads.
+# The options a record content reads: Linear axis, ruler, features and labels;
+# Circular features and embedded labels, which sit on the radial layout that the
+# centre definition reserve moves.
 _RECORD_CONTENT_OPTIONS = (
+    "keep_full_definition_with_plot_title",
     "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_color", "axis_stroke_width",
     "line_stroke_color", "line_stroke_width", "feature_height", "feature_overlap_tolerance_bp", "feature_override_table",
     "feature_placement_table", "feature_visibility_table", "label_table", "label_whitelist", "label_blacklist",
@@ -150,6 +153,8 @@ _CIRCULAR_LABEL_OPTIONS = (
 # The group contents an option changes, besides the stages above.
 CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     "annotation_table": frozenset({"annotation_content"}),
+    # The Circular axis circle.
+    **dict.fromkeys(("axis_stroke_color", "axis_stroke_width"), frozenset({"axis_content"})),
     # The ribbons: their geometry and style, and the rows the thresholds keep.
     **dict.fromkeys(
         ("align_center", "align_center (rows)", "pairwise_match_style", "comparison_height"),
@@ -169,7 +174,8 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
             "scale_interval", "scale_style", "scale_stroke_color", "scale_stroke_width", "scale_font_size",
             "ruler_label_font_size", "ruler_label_color", "hide_scale",
         ),
-        frozenset({"length_bar_content"}),
+        # Linear: the length bar; Circular: the tick ring.
+        frozenset({"length_bar_content", "ticks_content"}),
     ),
     **dict.fromkeys(
         (

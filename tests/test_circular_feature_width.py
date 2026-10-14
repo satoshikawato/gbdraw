@@ -339,8 +339,8 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
 
     captured: dict[str, Any] = {}
 
-    def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
-        captured["axis_radius"] = radius_override
+    def fake_add_axis_group_on_canvas(canvas, canvas_config, **_kwargs):
+        captured["axis_radius"] = _kwargs.get("radius_override")
         return _add_mock_primary_group(canvas)
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
@@ -424,8 +424,8 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
     base_radius = float(cfg.canvas.circular.radius)
     captured: dict[str, Any] = {}
 
-    def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
-        captured["axis_radius"] = radius_override
+    def fake_add_axis_group_on_canvas(canvas, canvas_config, **_kwargs):
+        captured["axis_radius"] = _kwargs.get("radius_override")
         return _add_mock_primary_group(canvas)
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
@@ -1026,8 +1026,8 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
 
     captured: dict[str, Any] = {}
 
-    def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
-        captured["axis"] = radius_override
+    def fake_add_axis_group_on_canvas(canvas, canvas_config, **_kwargs):
+        captured["axis"] = _kwargs.get("radius_override")
         return _add_mock_primary_group(canvas)
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
@@ -1529,8 +1529,8 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
         )
         captured: dict[str, Any] = {}
 
-        def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
-            captured["axis"] = radius_override
+        def fake_add_axis_group_on_canvas(canvas, canvas_config, **_kwargs):
+            captured["axis"] = _kwargs.get("radius_override")
             return _add_mock_primary_group(canvas)
 
         def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):

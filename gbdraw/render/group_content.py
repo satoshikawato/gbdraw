@@ -14,6 +14,7 @@ the placed groups of a drawing in document order.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
@@ -181,6 +182,16 @@ class ContentGroup(Group):
         self.content = content
         self.key = key
 
+    def __deepcopy__(self, memo: dict[int, object]) -> Group:
+        """A deep copy is a plain group: its children are copies, not the content's."""
+
+        copied = Group.__new__(Group)
+        memo[id(self)] = copied
+        for name, value in self.__dict__.items():
+            if name not in ("content", "key"):
+                copied.__dict__[name] = copy.deepcopy(value, memo)
+        return copied
+
     def holds_content_children(self) -> bool:
         """Whether the children are still exactly the content's children."""
 
@@ -190,12 +201,14 @@ class ContentGroup(Group):
         )
 
 
-class _BuildsGroup(Protocol):
+class BuildsGroup(Protocol):
+    """A group class instance: it built its group in ``__init__``."""
+
     def get_group(self) -> Group: ...
 
 
 def build_group_content(
-    group_class: Callable[P, _BuildsGroup],
+    group_class: Callable[P, BuildsGroup],
     /,
     *args: P.args,
     **kwargs: P.kwargs,
@@ -275,6 +288,7 @@ def group_manifest(drawing: Drawing) -> tuple[RenderedGroup, ...]:
 
 
 __all__ = [
+    "BuildsGroup",
     "CANVAS_SCOPE",
     "ContentGroup",
     "DefinitionMeasurement",

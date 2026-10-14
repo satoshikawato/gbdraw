@@ -112,15 +112,16 @@ class LinearLayoutPlan:
         raise KeyError(record_key)
 
 
+def record_key_at(record: SeqRecord, index: int) -> RecordKey:
+    """The key a request gave ``record``, or its position (``record-<n>``)."""
+
+    return RecordKey(str(record.annotations.get("gbdraw_record_key") or f"record-{index + 1}"))
+
+
 def stable_record_keys(records: Sequence[SeqRecord]) -> tuple[RecordKey, ...]:
     """Return deterministic opaque keys without relying on unique record IDs."""
 
-    keys = tuple(
-        RecordKey(
-            str(record.annotations.get("gbdraw_record_key") or f"record-{index + 1}")
-        )
-        for index, record in enumerate(records)
-    )
+    keys = tuple(record_key_at(record, index) for index, record in enumerate(records))
     if len(set(keys)) != len(keys):
         raise ValidationError("Linear record keys must be unique.")
     return keys
@@ -394,5 +395,6 @@ __all__ = [
     "parse_record_row_position",
     "resolve_record_row_positions",
     "solve_linear_layout",
+    "record_key_at",
     "stable_record_keys",
 ]

@@ -38,7 +38,7 @@ from gbdraw.render.group_content import (
     group_manifest,
     place_content,
 )
-from gbdraw.render.patterns import ensure_hatch_pattern
+from gbdraw.render.patterns import hatch_pattern
 from gbdraw.svg.elements import ClipPath, Group, Rect, Text
 from gbdraw.svg.elements import Path as SvgPath
 from gbdraw.render.export import has_cairosvg
@@ -269,11 +269,6 @@ def _built_group(group_id: str, *, children: int = 2) -> Group:
     return group
 
 
-def _hatch_definition(drawing: Drawing, hatch: HatchStyle) -> object:
-    ensure_hatch_pattern(drawing, hatch)
-    return drawing.defs.elements[-1]
-
-
 def _clip_path(clip_id: str) -> ClipPath:
     clip = ClipPath(id=clip_id)
     clip.add(Rect(insert=(0, 0), size=(10, 5)))
@@ -283,8 +278,7 @@ def _clip_path(clip_id: str) -> ClipPath:
 def _drawing() -> tuple[Drawing, list[ContentGroup]]:
     """Contents with children, an empty content (F13), a plain empty group, defs."""
 
-    scratch = Drawing(debug=False)
-    hatch = _hatch_definition(scratch, HatchStyle(angle=45, spacing=4, color="#000", width=1))
+    hatch = hatch_pattern(HatchStyle(angle=45, spacing=4, color="#000", width=1))
     drawing = Drawing(debug=False, size=("100px", "50px"))
     drawing.add(Group(id="plain_empty"))
     contents = (

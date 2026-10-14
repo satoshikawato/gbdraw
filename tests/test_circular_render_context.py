@@ -135,3 +135,33 @@ def test_circular_canvas_geometry_is_a_frozen_value_of_the_configurator() -> Non
         geometry.radius = 1.0  # type: ignore[misc]
     canvas.radius += 10.0
     assert canvas.geometry().radius == geometry.radius + 10.0
+
+
+def test_circular_track_groups_are_placed_contents_with_their_slot_ids_inside() -> None:
+    """Axis, features, ticks, GC, skew and annotation groups are contents of render stages (PR 4).
+
+    A slot group's DOM ids are given inside its stage, so the stored content
+    already holds them and the placed group only adds its position and slot tags.
+    """
+
+    from pathlib import Path
+
+    from Bio import SeqIO
+
+    from gbdraw.api.diagram import assemble_circular_diagram_from_record
+    from gbdraw.render.group_content import ContentGroup, GroupKind, group_manifest
+
+    record = SeqIO.read(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk", "genbank")
+    drawing = assemble_circular_diagram_from_record(
+        record,
+        cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
+        circular_track_slots=["features:features", "ticks:ticks", "gc_content:dinucleotide_content", "gc_skew:dinucleotide_skew"],
+    )
+    kinds = {entry.key.kind for entry in group_manifest(drawing)}
+    assert {GroupKind.AXIS, GroupKind.FEATURES, GroupKind.TICKS, GroupKind.GC_CONTENT, GroupKind.GC_SKEW} <= kinds
+    for element in drawing.elements:
+        if isinstance(element, ContentGroup) and element.key.kind in {GroupKind.GC_CONTENT, GroupKind.GC_SKEW}:
+            # The slot DOM id (not the slot id) is already the stored content's id.
+            assert element.content.attributes["id"] == element.attribs["id"] != element.key.slot
+            assert element.attribs["data-gbdraw-slot-id"] == element.key.slot
+            assert "data-gbdraw-slot-id" not in element.content.attributes

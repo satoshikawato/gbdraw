@@ -77,6 +77,8 @@ RenderStageName = Literal[
     "feature_dom_index",
     "circular_labels",
     "circular_radial_labels",
+    "axis_content",
+    "ticks_content",
 ]
 
 # The sections of GbdrawConfig each stage reads (design 2.2). A section is a
@@ -95,6 +97,9 @@ _CIRCULAR_LABEL_SECTIONS = frozenset(
         "objects.text",
     }
 )
+# Circular track groups size themselves from the length threshold and the
+# preset track table.
+_CIRCULAR_TRACK_SECTIONS = frozenset({"canvas.circular", "labels.length_threshold"})
 RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "color_rules": frozenset(),
     "default_colors": frozenset(),
@@ -108,14 +113,19 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "legend_content": frozenset(),
     "plot_title_content": frozenset(),
     "composition_plan": frozenset(),
-    "gc_content_content": frozenset(),
-    "gc_skew_content": frozenset(),
-    "depth_content": frozenset(),
+    "gc_content_content": _CIRCULAR_TRACK_SECTIONS,
+    "gc_skew_content": _CIRCULAR_TRACK_SECTIONS,
+    "depth_content": _CIRCULAR_TRACK_SECTIONS,
     "length_bar_content": frozenset(),
     "definition_content": frozenset(),
     "annotation_content": frozenset(),
     "record_content": frozenset(
         {
+            # Circular: the record group sizes features and embedded labels.
+            "canvas",
+            "canvas.circular",
+            "labels.font_size",
+            "labels.length_threshold",
             "labels.stroke_color",
             "labels.stroke_width",
             "objects.axis",
@@ -139,6 +149,8 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     # and tick sections; horizontal labels never do.
     "circular_labels": _CIRCULAR_LABEL_SECTIONS,
     "circular_radial_labels": _CIRCULAR_LABEL_SECTIONS | {"objects.axis", "objects.scale", "objects.ticks"},
+    "axis_content": frozenset({"objects.axis"}),
+    "ticks_content": _CIRCULAR_TRACK_SECTIONS | {"objects.scale", "objects.text", "objects.ticks"},
 }
 
 _TOP_SECTIONS = ("canvas", "labels", "objects")
