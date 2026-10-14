@@ -6,6 +6,7 @@ import {
   positiveNumberOrNull, textChoice, trueUnlessFalse, truthy
 } from '../utils/field-reading.js';
 import { loadRepair } from '../utils/load-repairs.js';
+import { DECIMAL_NUMBER_PATTERN } from '../utils/optional-positive-number.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { PAIRWISE_MATCH_STYLES } from './current-option-values.js';
 import { readDefinitionLineStyles } from './definition-line-style-state.js';
@@ -738,7 +739,8 @@ const NUMBER_OR_ITS_TEXT_FIELDS = Object.freeze(['adv.min_bitscore', 'adv.identi
 const kindOf = (value, at) => {
   if (Array.isArray(value)) return 'list';
   if (TEXT_OR_NUMBER_FIELDS.includes(at) && (typeof value === 'string' || typeof value === 'number')) return 'text or number';
-  if (NUMBER_OR_ITS_TEXT_FIELDS.includes(at) && (typeof value === 'number' || (typeof value === 'string' && Number.isFinite(Number(value))))) return 'number';
+  if (NUMBER_OR_ITS_TEXT_FIELDS.includes(at) && (typeof value === 'number'
+    || (typeof value === 'string' && (value.trim() === '' || DECIMAL_NUMBER_PATTERN.test(value.trim()))))) return 'number';
   return typeof value;
 };
 /** Stored maps whose keys the user names, merged with their own keys. @type {readonly string[]} */
@@ -780,7 +782,9 @@ export const mergeStoredSettings = (target, source, at = '') => {
       target[key] = sourceValue;
       return [];
     }
-    return sourceValue === '' ? [] : [{ at: keyAt, stored: sourceValue, used: targetValue, kept: true }];
+    // A blank over a number is a cleared number input: the target keeps its
+    // value, as an unset value does; any other value of another kind is listed.
+    return sourceValue === '' && typeof targetValue === 'number' ? [] : [{ at: keyAt, stored: sourceValue, used: targetValue, kept: true }];
   });
 };
 

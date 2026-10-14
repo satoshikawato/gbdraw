@@ -983,11 +983,13 @@ test('a value the app writes into a setting of another kind loads with no row, i
     const [container, key] = place(state.drawings[mode], at);
     return container[key] === null ? '' : container[key];
   });
-  // A cleared field whose value is a number keeps it, unless a comparison
-  // filter (a blank filter is its default, R7); any other value loads as stored.
-  const filters = ['adv.evalue', 'adv.min_bitscore', 'adv.identity', 'adv.alignment_length'];
-  const expected = (before) => WRITTEN_VALUES.map(([at, value], index) => (
-    value === '' && typeof before[index] === 'number' && !filters.includes(at) ? before[index] : value));
+  // Every value loads as stored, but a cleared number field keeps the value
+  // the drawing has (here its default), so a written blank that reads as the
+  // value before counts as blank.
+  const expected = () => WRITTEN_VALUES.map(([, value]) => value);
+  /** @param {unknown[]} values @param {unknown[]} defaults */
+  const blanked = (values, defaults) => values.map((value, index) => (
+    WRITTEN_VALUES[index][1] === '' && value === defaults[index] ? '' : value));
   const base = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
   assert.deepEqual(await load(base), ['ok', []]);
   const before = Object.fromEntries(['circular', 'linear'].map((mode) => [mode, valuesOf(mode)]));
@@ -999,7 +1001,12 @@ test('a value the app writes into a setting of another kind loads with no row, i
     }
   }
   assert.deepEqual(await load(session), ['ok', []]);
-  for (const mode of ['circular', 'linear']) assert.deepEqual(valuesOf(mode), expected(before[mode]), mode);
+  /** The places whose value differs from the written one. @param {unknown[]} values */
+  const differing = (values) => WRITTEN_VALUES.flatMap(([at, value], index) => (values[index] === value ? [] : [`${at}=${JSON.stringify(values[index])}`]));
+  for (const mode of ['circular', 'linear']) {
+    const values = blanked(valuesOf(mode), before[mode]);
+    assert.deepEqual(values, expected(), `${mode}: ${differing(values).join(', ')}`);
+  }
   // A configuration file is applied over the shown drawing.
   assert.deepEqual(await load(base), ['ok', []]);
   const shown = state.mode.value;
@@ -1009,7 +1016,16 @@ test('a value the app writes into a setting of another kind loads with no row, i
     container[key] = value;
   }
   assert.deepEqual(await load(configFile), ['legacy', []]);
-  assert.deepEqual(valuesOf(shown), expected(before[shown]));
+  assert.deepEqual(blanked(valuesOf(shown), before[shown]), expected());
+  // A blank is no value of a check box or a list: it is listed and not used.
+  for (const file of [{ form: { suppress_gc: '' }, adv: { gc_content_show_axis: '', depth_tracks: '' } }]) {
+    const [status, rows] = await load(file);
+    assert.deepEqual([status, rows.length], ['legacy', 3], rows.join('\n'));
+  }
+  const blankSession = structuredClone(base);
+  blankSession.modes.circular.config.form.suppress_gc = '';
+  const [blankStatus, blankRows] = await load(blankSession);
+  assert.deepEqual([blankStatus, blankRows.length], ['ok', 1], blankRows.join('\n'));
   // A text that is no number is not of a number filter's kind, so its row
   // says the drawing keeps its value; the e-value input holds text, so any text loads.
   const drawing = state.drawings[shown];
