@@ -138,7 +138,7 @@ test('a legend position outside its mode is listed at Load (OV-652)', async () =
 // differently must be named by a row, unless the apply ignores it for a
 // reason listed below, and a file Load refuses is refused before anything
 // changes, so before the dialog (BA-OD96). The Session is one the current Web writes, with an entry in
-// each list and two Depth series (r3 S1).
+// each list and two Depth series.
 const savedSession = async (title) => {
   const result = await exportSession(title, { askChoice: async () => 'download' });
   assert.equal(result?.status, 'saved', JSON.stringify(result));
@@ -154,7 +154,7 @@ const valueAt = (value, parts) => parts.reduce((current, part) => (current == nu
 /**
  * A value of another kind, an unknown value of the same kind, a number and a
  * boolean for an unset leaf, and a valid number other than the stored one (a
- * fraction stays a fraction, an integer an integer; r4 N1).
+ * fraction stays a fraction, an integer an integer).
  */
 const MUTATIONS = {
   otherKind: (value) => (value === null ? 'x-mut' : Array.isArray(value) || typeof value === 'object' ? 5
@@ -175,7 +175,7 @@ const UNLISTED_LEAVES = [
   // The committed mode's request sets a layout slot that is no object.
   [/^modes\.circular\.ui\.layoutPreferences$/, 'the request\'s layout wins'],
   // The track slot model's normalizers do not report what they replace yet
-  // (residual: the slot readers return what they lose, PR-E); the stack's
+  // (until the slot readers return what they lose); the stack's
   // axis index is read with its slots.
   [/^modes\.\w+\.config\.adv\.(circular|linear)_track_slots(\[\d+\]\.|_axis_index$)/, 'track slot leaves'],
   // A record row that names no record of the Session names nothing the
@@ -193,7 +193,7 @@ const otherModeValue = (path) => {
   return Boolean(row) && row.modes !== 'both' && row.modes !== mode;
 };
 // The editor state is read before the dialog by its own readers, which do not
-// report every value they replace yet (PR-E): a leaf saved as that reading
+// report every value they replace yet: a leaf saved as that reading
 // gives it is theirs; a leaf the apply changes further is not.
 const readBeforeTheDialog = (session, parts, saved) => {
   const [, mode, part, ...rest] = parts;
@@ -306,7 +306,7 @@ test('no apply step after the dialog drops or changes a stored value of a config
   assert.deepEqual({ refusedAfterTheCommit, silent }, { refusedAfterTheCommit: [], silent: [] });
 });
 
-// r1's silent cases: a qualifier priority rule, a form text of another kind,
+// Values Load changed without a row: a qualifier priority rule, a form text of another kind,
 // and an annotation mark and lane are read after the dialog with the readers
 // that list them before it (BA-OD87).
 test('a priority rule, a form value of another kind and an annotation mark or lane are listed before the Load (G2, BA-OD87)', async () => {
@@ -678,10 +678,10 @@ test('a legacy configuration lists a setting its reader cannot restore (B48)', a
   ]);
 });
 
-// BA-OD96, r3 S5: the configuration fields Load refuses (a retired field
+// BA-OD96: the configuration fields Load refuses (a retired field
 // name, a value no current option names) are refused before the dialog, for
 // a Session slice and for a legacy configuration that is lossy otherwise, and
-// nothing changes. r3's case: a Session 39's configuration as a legacy file
+// nothing changes. One case is a Session 39's configuration as a legacy file
 // (its track stacks are current, so its retired names are not renamed).
 const REFUSED_CONFIG_FIELDS = [
   { adv: { linear_show_accession: true } }, { adv: { depth_tick_interval: 5 } },
@@ -690,7 +690,7 @@ const REFUSED_CONFIG_FIELDS = [
   // A default feature type's shape the merge installs (text or null) that names no shape.
   { adv: { feature_shapes: { CDS: 'bogus' } } }, { adv: { feature_shapes: { CDS: null } } },
   { adv: { arrow_head_length_ratio: -1 } }, { adv: { arrow_shaft_width_ratio: 2 } },
-  // r4 S1: the stored Linear label visibilities the merge copies (text or null).
+  // The stored Linear label visibilities the merge copies (text or null).
   { adv: { linear_accession_visibility: 'bogus' } }, { adv: { linear_accession_visibility: null } }
 ];
 // A Session 46 with `fields` in its Circular drawing's settings.
@@ -702,7 +702,7 @@ const sessionWith = ({ form = {}, adv = {}, losat }) => {
   if (losat) config.losat = { ...config.losat, blastp: { ...config.losat?.blastp, ...losat.blastp } };
   return session;
 };
-// r4 S1: a configuration file with current track stacks, which no older
+// A configuration file with current track stacks, which no older
 // reading renames or checks first (a Session 46 drawing's settings), made
 // lossy by an unknown GC content mode.
 const currentLegacyWith = ({ form = {}, adv = {}, losat }) => {
@@ -807,7 +807,7 @@ test('a configuration file with a shape or Linear visibility that is no text, or
   }
 });
 
-// r4 S1, BA-OD99 (b): in a configuration file, a color rule or a whitelist
+// BA-OD99 (b): in a configuration file, a color rule or a whitelist
 // entry that is no object is dropped and listed before the dialog, and the
 // apply reads the lists with the same readers, so nothing is refused after
 // [Load]. A Session refuses such an entry before the dialog, as before.
@@ -844,13 +844,30 @@ test('a configuration file drops and lists a rule or whitelist entry that is no 
 // its row says so, never "its default is used". A Session resets the drawing
 // first, so there the default is used, and its row says that.
 test('a configuration file group or list Load does not use keeps the drawing\'s value, and its row says so', async () => {
-  const first = { form: { plot_title: 'Mine', legend: 'left' }, adv: { label_font_size: 21 },
+  const first = { form: { plot_title: 'Mine', legend: 'left' },
+    adv: { label_font_size: 21, arrow_shaft_width_ratio: 0.5, arrow_head_length_ratio: 0.3 },
+    losat: { blastp: { collinearInferOrthogroups: true, collinearMinAnchors: 4,
+      hitLimitsByMode: { pairwise: { candidateLimit: 7, orthogroupMemberMaxHits: 3 } } } },
+    circularConservation: { subject_gencode: 11, ring_width: 12 },
     rules: [{ feat: 'CDS', qual: 'product', val: 'x', color: '#ff0000', cap: 'Mine' }], whitelist: [{ feat: 'CDS', qual: 'gene', key: 'abc' }] };
+  /** The values of the first file a kept group or list holds. */
+  const held = (drawing) => JSON.stringify([
+    drawing.form.plot_title, drawing.adv.label_font_size, drawing.adv.arrow_shaft_width_ratio, drawing.adv.arrow_head_length_ratio,
+    drawing.losat.blastp.collinearInferOrthogroups, drawing.losat.blastp.collinearMinAnchors, drawing.losat.blastp.hitLimitsByMode.pairwise,
+    drawing.circularConservation.subject_gencode, drawing.circularConservation.ring_width,
+    drawing.manualSpecificRules.length, drawing.manualWhitelist.length
+  ]);
+  const firstHeld = JSON.stringify(['Mine', 21, 0.5, 0.3, true, 4, { candidateLimit: 7, orthogroupMemberMaxHits: 3 }, 11, 12, 1, 1]);
   const kept = 'the drawing keeps its current value.';
   const cases = [
     [{ form: 5 }, `Settings: the value "5" (form) cannot be used; ${kept}`],
     [{ adv: 'x' }, `Settings: the value "x" (adv) cannot be used; ${kept}`],
+    [{ adv: 5 }, `Settings: the value "5" (adv) cannot be used; ${kept}`],
+    [{ adv: [] }, `Settings: the value "[]" (adv) cannot be used; ${kept}`],
     [{ losat: 5 }, `Settings: the value "5" (losat) cannot be used; ${kept}`],
+    [{ losat: 'x' }, `Settings: the value "x" (losat) cannot be used; ${kept}`],
+    [{ losat: { blastp: 5 } }, `Settings: the value "5" (losat.blastp) cannot be used; ${kept}`, 'linear'],
+    [{ losat: { blastp: [] } }, `Settings: the value "[]" (losat.blastp) cannot be used; ${kept}`, 'linear'],
     [{ circularConservation: 5 }, `Settings: the value "5" (circularConservation) cannot be used; ${kept}`],
     [{ rules: 'x' }, `Settings: the value "x" (rules) cannot be used; ${kept}`],
     [{ whitelist: 5 }, `Settings: the value "5" (whitelist) cannot be used; ${kept}`],
@@ -858,17 +875,21 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
     [{ form: { plot_title: {} } }, `Settings: the value of form.plot_title cannot be used; ${kept}`]
   ];
   const outcomes = [];
-  for (const [file] of cases) {
+  // `losat.blastp` is a Linear setting: a Circular drawing never draws it, so its row is Linear's.
+  const shownMode = state.mode.value;
+  for (const [file, , mode = shownMode] of cases) {
+    state.mode.value = mode;
     assert.equal((await importSession(input(first), { confirmLoadRepairs: async () => true })).status, 'legacy');
     const drawing = state.drawings[state.mode.value];
+    assert.equal(held(drawing), firstHeld);
     const shapes = JSON.stringify(drawing.adv.feature_shapes);
     const asked = [];
     const loaded = await importSession(input(file), { confirmLoadRepairs: async ({ items }) => { asked.push(...items); return true; } });
     outcomes.push([JSON.stringify(file), loaded.status, asked, loaded.repairs.map(({ effect }) => effect),
-      drawing.form.plot_title, drawing.adv.label_font_size, drawing.manualSpecificRules.length, drawing.manualWhitelist.length,
-      JSON.stringify(drawing.adv.feature_shapes) === shapes]);
+      held(drawing), JSON.stringify(drawing.adv.feature_shapes) === shapes]);
   }
-  assert.deepEqual(outcomes, cases.map(([file, line]) => [JSON.stringify(file), 'legacy', [line], ['kept'], 'Mine', 21, 1, 1, true]));
+  state.mode.value = shownMode;
+  assert.deepEqual(outcomes, cases.map(([file, line]) => [JSON.stringify(file), 'legacy', [line], ['kept'], firstHeld, true]));
   // A Session's drawing is reset first: the same values are its default.
   for (const [field, value] of [['feature_shapes', 5], ['plot_title', {}]]) {
     const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
@@ -877,6 +898,26 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
     assert.deepEqual([loaded.status, loaded.repairs.filter(({ path }) => path.endsWith(field)).map(({ effect }) => effect)],
       ['ok', ['defaulted']], field);
   }
+});
+
+// An arrow ratio stored as its text reads as its number: no row, and no
+// dialog, in a Session and in a configuration file. A ratio that is no number
+// is refused before the dialog.
+test('an arrow ratio stored as its text loads as its number with no row', async () => {
+  const ratios = { arrow_shaft_width_ratio: '0.5', arrow_head_length_ratio: '0.3' };
+  const noDialog = { confirmLoadRepairs: async () => assert.fail('a ratio read as its number asks nothing') };
+  const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  Object.assign(session.modes.circular.config.adv, ratios);
+  const fromSession = await importSession(input(session), noDialog);
+  assert.deepEqual([fromSession.status, fromSession.repairs?.length], ['ok', 0], JSON.stringify(fromSession.error));
+  const { adv } = state.drawings.circular;
+  assert.deepEqual([adv.arrow_shaft_width_ratio, adv.arrow_head_length_ratio], [0.5, 0.3]);
+  const fromFile = await importSession(input({ form: { plot_title: 'Ratios' }, adv: { arrow_shaft_width_ratio: '0.25' } }), noDialog);
+  assert.deepEqual([fromFile.status, fromFile.repairs?.length], ['legacy', 0], JSON.stringify(fromFile.error));
+  assert.equal(state.drawings[state.mode.value].adv.arrow_shaft_width_ratio, 0.25);
+  const snapshot = loadedState();
+  const refused = await importSession(input({ adv: { arrow_shaft_width_ratio: 'x' } }), noDialog);
+  assert.deepEqual([refused.status, loadedState() === snapshot], ['error', true]);
 });
 
 // The shape of a feature type the user added is a key the default
@@ -897,9 +938,9 @@ test('a feature shape of a feature type the user added survives Save and Load', 
   assert.equal(state.drawings.linear.adv.feature_shapes.gene, 'arrow');
 });
 
-// r3 N1: a similarity-group name that is no text (an object, a boolean) is
-// dropped and counted, not applied as its text; a number is its text. r3 N2:
-// the older `priorityRules` is read only when `qualifierPriorityRules` is
+// A similarity-group name that is no text (an object, a boolean) is
+// dropped and counted, not applied as its text; a number is its text. The
+// older `priorityRules` is read only when `qualifierPriorityRules` is
 // absent, as the apply reads it.
 test('a group name that is no text is dropped and listed; priorityRules is read only without qualifierPriorityRules', async () => {
   const { configFieldRepairs, defaultSettingsContainers, readStringMap } = await import('../../gbdraw/web/js/services/config-field-readers.js');
@@ -972,7 +1013,7 @@ test('a Depth row that names no series of its drawing is listed before the Load;
   assert.deepEqual(state.drawings.linear.adv.depth_tracks.map(({ label }) => label), ['Depth', 'Coverage B']);
 });
 
-// r1 S1, r2 S1, truth check S1 (BA-OD94): in either mode, Add Depth track
+// BA-OD94: in either mode, Add Depth track
 // adds a series without a Depth file, and clearing a Depth file keeps a row
 // with geometry on its series (`reconcileManagedDepthSlots`). The Session
 // Save writes both, and its Load asks nothing and keeps them as saved.

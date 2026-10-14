@@ -177,8 +177,7 @@ import {
 import {
   defaultFeatureRendering,
   normalizeFeatureRenderingMap,
-  normalizedArrowGeometryState,
-  normalizedPersistedArrowGeometryState
+  normalizedArrowGeometryState
 } from '../utils/feature-rendering.js';
 import {
   adoptCurrentSessionDocument,
@@ -2386,10 +2385,6 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   }
   // The stored settings' merge and readers (Load lists what they cannot restore first).
   installStoredSettings(drawing, data);
-  // The two Linear font sizes are copied as stored.
-  ['scale_font_size', 'ruler_label_font_size'].forEach((field) => {
-    if (isPlainObject(data.adv) && Object.hasOwn(data.adv, field)) drawing.adv[field] = cloneJsonData(data.adv[field]);
-  });
   replacePlainObject(drawing.unmanagedConfigOverrides, cloneJsonData(readPlainObject(data.unmanagedConfigOverrides).value));
   drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(data.recordDisplayDrafts || []));
   // Omitted: every record is drawn.
@@ -2435,7 +2430,6 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
   // `layoutPreferences` (state.js) whose setters normalize a merged value.
   // Writing the resolved value back would only pin an unset Circular
   // multi-record preference, so neither is rewritten here.
-  Object.assign(drawing.adv, normalizedPersistedArrowGeometryState(data.adv));
   drawing.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
     drawing.adv.multi_record_size_mode
   );

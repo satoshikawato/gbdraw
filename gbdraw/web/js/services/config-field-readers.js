@@ -20,7 +20,7 @@ import {
   readLinearTypographyLinked
 } from './session-active-config-contract.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
-import { FEATURE_RENDERING_VALUES } from '../utils/feature-rendering.js';
+import { FEATURE_RENDERING_VALUES, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
 import { LINEAR_LABEL_VISIBILITY_MODES } from './linear-label-visibility.js';
 
 /** @import { FieldLeaf, FieldReader, FieldReading } from '../utils/field-reading.js' */
@@ -340,7 +340,7 @@ export const readStringMap = (value) => {
   Object.entries(isPlainObject(value) ? value : {}).forEach(([key, text]) => {
     const name = String(key || '').trim();
     // An entry without a key, or whose value is no text (an object, a
-    // boolean; a number is its text), is dropped (r3 N1).
+    // boolean; a number is its text), is dropped and counted.
     if (!name || (text !== null && !keepsMeaning(text, String(text)))) {
       dropped += 1;
       return;
@@ -576,7 +576,7 @@ const VALUE_TABLES = Object.freeze([
     rows: [
       row('losatProgram', readLosatProgram),
       row('qualifierPriorityRules', readQualifierPriorityRules),
-      // The older name is read only without the current one (r3 N2).
+      // The older name is read only without the current one.
       {
         field: 'priorityRules',
         read: (value, container) => (Object.hasOwn(container, 'qualifierPriorityRules')
@@ -778,11 +778,17 @@ export const defaultSettingsContainers = (mode) => ({
   circularConservation: createDefaultCircularConservation()
 });
 /**
- * Fields copied as stored, whatever their kind (their merge losses are none):
- * `applyConfigData` copies the two Linear font sizes; the hit limits and the
- * inference flag are copied below.
+ * The `adv` fields copied as stored, whatever their kind, when the stored
+ * `adv` holds them: the two Linear font sizes, and the arrow ratios, which are
+ * then read as numbers (a ratio stored as its text reads as its number; one
+ * that is no number is refused before, `requireCurrentConfigFields`).
  */
-const RAW_FIELDS = Object.freeze(['adv.scale_font_size', 'adv.ruler_label_font_size', 'losat.blastp.collinearInferOrthogroups']);
+const RAW_ADV_FIELDS = Object.freeze(['scale_font_size', 'ruler_label_font_size', 'arrow_head_length_ratio', 'arrow_shaft_width_ratio']);
+/**
+ * Fields copied as stored, whatever their kind (their merge losses are none):
+ * the `RAW_ADV_FIELDS`, and the inference flag, copied with the hit limits below.
+ */
+const RAW_FIELDS = Object.freeze([...RAW_ADV_FIELDS.map((field) => `adv.${field}`), 'losat.blastp.collinearInferOrthogroups']);
 /** @param {unknown} value */
 const copied = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
@@ -810,7 +816,16 @@ export const installStoredSettings = (targets, config) => {
       : /** @type {Record<string, unknown>} */ (targets[/** @type {'form' | 'adv' | 'circularConservation'} */ (at)]);
     losses.push(...readRows(container, rows, at, containerAt(config, at)));
   });
-  if (config.losat) {
+  // A stored group the merge did not use (its row says the target keeps its
+  // value) gives no value below either.
+  /** @param {string} at */
+  const used = (at) => !losses.some((loss) => loss.kept && loss.at === at);
+  const storedAdv = used('adv') ? containerAt(config, 'adv') : null;
+  RAW_ADV_FIELDS.forEach((field) => {
+    if (storedAdv && Object.hasOwn(storedAdv, field)) targets.adv[field] = copied(storedAdv[field]);
+  });
+  Object.assign(targets.adv, normalizedPersistedArrowGeometryState(targets.adv));
+  if (config.losat && used('losat') && used('losat.blastp')) {
     // The hit limits of each mode over their defaults, as stored; the
     // inference flag as stored, else on for a collinear search.
     const blastp = containerAt(config, 'losat.blastp');
