@@ -277,15 +277,22 @@ write-up of a release.
   (OV-324, OV-528, OV-596, OV-611, OV-631, OV-632, OV-651, OV-653).
 - Changed (web app): a Session or configuration file that Load cannot fully
   restore now opens one **Load this file?** dialog before anything changes. It
-  lists the settings, Legend positions and edits, table rows, Depth rows,
-  feature edits and feature information Load drops, replaces with a default,
-  or reads differently (up to 12 lines): a setting with its place in the file
-  and the value used, a feature edit or feature information as a count or a
-  statement. It says that Save Session afterwards writes the current format.
-  Values that had no effect on the figure (a pending palette Instant Preview
-  drops, edits of similarity groups the Result does not have, a Depth series
-  without a Depth file) are dropped without a row, and other invalid content,
-  such as an unknown `adv` key or feature shape, is still refused. **Load** loads the file;
+  lists the settings, Legend positions of the layout preferences or a saved
+  Result, Legend entries and edits it re-keys, table rows, Depth rows that
+  name a Depth series their drawing does not have, feature edits and feature
+  information Load drops, replaces with a default, or reads differently (up
+  to 12 lines): a setting with its place in the file and the value used, a
+  feature edit or feature information as a count or a statement. It says that
+  Save Session afterwards writes the current format. Values that had no
+  effect on the figure (a pending palette Instant Preview drops, edits of
+  similarity groups the Result does not have) are dropped without a row. A
+  Depth series without a Depth file, and its Depth rows, load as saved, as
+  the app keeps them when a Depth file is removed (OV-755). Some other old or
+  invalid values are still changed without a row or kept as stored (for
+  example a track stack row's values or a Legend color edit the app does not
+  accept), and other invalid content, such as an unknown `adv` key, feature
+  shape or option value, is still refused, now before anything is asked or
+  changed. **Load** loads the file;
   **Cancel** leaves the settings, Results, input files, History and screen as
   they were. Dropped feature edits, narrowed Feature visibility edits, `hash=`
   values that could not be renamed, joined or dropped table rows and Legend
@@ -296,6 +303,8 @@ write-up of a release.
   a loss, such as every Gallery Session, opens no dialog. A Session older than
   version 27 (gbdraw 0.11.0 or older, or gbdraw.app before 0.12.0) is still
   refused, and the error now says so (OV-710, OV-712, OV-719).
+- Fixed (web app): the shape set for a feature type added to the feature list
+  was dropped when its Session was loaded again; Load now keeps it.
 - Fixed: the records of one multi-record File were named differently in
   **Record Layout**, **Selected pairs** and the **BLAST TSV missing** dialog
   (one by its definition, the next by its accession); each now shows the File's

@@ -836,8 +836,8 @@ const expectedActiveIntent = {
   }
 };
 
-// The draft's off Depth row names series 99, which has no Depth file: Load
-// lists that it unbinds the row (B45) and installs the rest as saved.
+// The draft's off Depth row names series 99, which its drawing does not have:
+// Load lists that it unbinds the row (B45) and installs the rest as saved.
 const activeIntentDialogs = [];
 const activeIntentImport = await importPayload(activeIntentSession, {
   confirmLoadRepairs: async ({ items }) => { activeIntentDialogs.push(items); return true; }
@@ -848,8 +848,8 @@ assert.equal(
   activeIntentImport.error?.message || 'active-intent session import failed'
 );
 assert.deepEqual(activeIntentDialogs, [[
-  'Track stack: the Depth row "disabled-draft" (modes.circular.config.adv.circular_track_slots) shows a Depth series that'
-    + ' has no Depth file; the row is turned off and no longer names that series.'
+  'Track stack: the Depth row "disabled-draft" (modes.circular.config.adv.circular_track_slots) names a Depth series its'
+    + ' drawing does not have; the row is turned off and no longer names that series.'
 ]]);
 const afterSessionLoadIntent = compactActiveIntentSnapshot();
 const immediatelyBeforeGenerateIntent = compactActiveIntentSnapshot();

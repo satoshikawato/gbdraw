@@ -724,7 +724,7 @@ test('a Depth row that names no series of its drawing is listed before the Load;
   const { loaded, items } = await loadAnswering(depthEdits(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'), 'circular'));
   assert.deepEqual(items, [
     ...['lost_on', 'lost_named'].map((id) => `Track stack: the Depth row "${id}" (modes.circular.config.adv.circular_track_slots)`
-      + ' names a Depth series its drawing does not have; the row is turned off.')
+      + ' names a Depth series its drawing does not have; the row is turned off and no longer names that series.')
   ]);
   assert.deepEqual(codes(loaded), ['depth-row-disabled', 'depth-row-disabled']);
   const { adv } = state.drawings.circular;
@@ -824,8 +824,11 @@ test('a History restore reads stored settings as before and asks nothing', async
 // a repair there is a producer bug. Two fixtures are lossy on purpose. Node
 // supplies no diagram Worker: a Session older than 40 reads its features again
 // through it, so eight fixtures list that recovery here (and only because the
-// Worker is missing: each asks for it); the browser specs load them without a
-// row (OV-751). Five fixtures need a Worker service to load at all.
+// Worker is missing: each asks for it). The browser specs load them (OV-751):
+// gui-audit-20260930-inputs and live-generate-parity assert no dialog for
+// seven; session-loading-feedback answers the one table row of
+// whitelist-tab-keyword.v39. Five fixtures need a Worker service to load at
+// all; feature-identity-overrides and gui-audit-20260930-comparisons load them.
 const LOSSY_FIXTURES = {
   'feature-edits-circular-copies.v44.gbdraw-session.json.gz': ['feature-visibility-narrowed'],
   'whitelist-tab-keyword.v39.gbdraw-session.json.gz': ['table-row-joined']

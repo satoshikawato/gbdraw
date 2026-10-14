@@ -181,12 +181,14 @@ with a default, or read with another meaning:
 - settings their reader cannot use, named by their place in the file and the
   value used, for example `modes.circular.config.adv.depth_tracks[0].height`.
   A label, file name, ID or other free text is named by its place only;
-- Legend positions outside the diagram mode, with the position used;
-- dropped Legend entries and edits;
+- Legend positions outside the diagram mode in the saved layout preferences
+  or a saved Result, with the position used;
+- Legend entries with a color the app does not accept or that repeat an
+  earlier entry, and Legend edits that a later edit or a renamed row replaces;
 - per-feature edits and `hash=` values as listed above;
 - joined or dropped table rows;
-- Depth rows of the drawing's track stack that show a Depth series without a
-  Depth file;
+- Depth rows of the drawing's track stack that name a Depth series the drawing
+  does not have; they are turned off and no longer name it;
 - feature information or comparison match sequences that cannot be restored.
 
 Rows of per-feature edits, Feature visibility edits, `hash=` values, feature
@@ -196,9 +198,11 @@ table and its lines.
 
 The dialog shows at most 12 lines, the last one with the number of the rest,
 and says that Save Session afterwards writes the current format. It lists the
-readings named here. Other old or invalid values are still changed or refused
-as before; for example, a track stack row's values are normalized without a
-row.
+readings named here. Other old or invalid values are still changed without a
+row, kept as stored, or refused, as before: for example, a track stack row's
+values and a Legend color edit the app does not accept are changed without a
+row, an unknown text value such as a track type is kept, and a configuration
+file's Legend position outside its mode reads as the mode's default.
 
 - **Load** loads the file. **Cancel** changes nothing. The file itself is
   never changed.
@@ -208,9 +212,11 @@ row.
   comparison computes again, a Session 46 Legend edit that a later edit of the
   same row overwrote, a pending palette that Instant Preview drops, a name or
   description edit of a similarity group the saved Result does not have, a
-  Depth series without a Depth file, a setting of the other diagram mode, view
-  state such as zoom, or a value another stored value replaces. A file that
-  loads without a loss, such as every Gallery Session, opens none.
+  setting of the other diagram mode, view state such as zoom, or a value
+  another stored value replaces. A file that loads without a loss, such as
+  every Gallery Session, opens none.
+- A Depth series without a Depth file, and the Depth rows of such a series,
+  load as saved, as the app keeps them when you remove a Depth file.
 - The **Replace the current work?** question, asked when there is unsaved
   work, still comes first, before you choose the file. The notice of `hash=` annotation targets moved to
   the feature they name, the notice of a loaded configuration file, and the
@@ -226,13 +232,17 @@ The Web app refuses these files and shows an error instead:
   before 0.12.0). The error says that an older gbdraw saved it.
 - A Session version or request schema newer than this reader.
 - A file larger than 200 MB, or larger than 512 MB after decompression.
-- A file opened in a browser without gzip decompression or module Workers.
+- A gzip file opened in a browser without gzip decompression, or any file in
+  a browser without module Workers. A browser feature or Worker that fails
+  during the Load also stops it with an error.
 - A file with an unsafe name (`__proto__`, `constructor`, `prototype`).
 - A file whose content does not read as its version: for example an unknown
-  key in a drawing's `adv`, a feature shape the app does not know, a missing
-  or unknown resource, a track stack that does not read, or a saved Result
-  that does not pass its checks. The dialog does not list these; Load refuses
-  them as it did before.
+  key in a drawing's `adv`, a retired setting name in a Session, a Linear
+  track layout, label placement or Circular multi-record size mode the app
+  does not know, a feature shape the app does not know, an arrow ratio out of
+  range, a missing or unknown resource, a track stack that does not read, or a
+  saved Result that does not pass its checks. Load refuses these before it
+  asks anything or changes anything, as it refused them before.
 
 Do not change a version number, resource hash, or runtime binding by hand;
 changing metadata does not migrate its content.

@@ -162,7 +162,8 @@ const WORDING = {
     `Palette: the palette "${label ?? ''}" (${path}) waits to be applied, but Instant Preview is on, which applies a palette at once;`
     + ' it was dropped.')),
   'depth-row-disabled': (repairs) => repairs.map(({ path, label }) => (
-    `Track stack: the Depth row "${label ?? ''}" (${path}) names a Depth series its drawing does not have; the row is turned off.`)),
+    `Track stack: the Depth row "${label ?? ''}" (${path}) names a Depth series its drawing does not have;`
+    + ' the row is turned off and no longer names that series.')),
   'legend-position-defaulted': (repairs) => valueLines(repairs, ({ path, stored, used }) => (
     `Legend: the position "${stored}" (${path}) is not one of its mode's positions; `
     + `${used === undefined ? 'it is not used' : `${used} is used`}.`)),
