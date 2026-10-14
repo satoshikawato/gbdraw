@@ -23,12 +23,15 @@ import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
+import { readVectors } from './helpers/legacy-request-vectors.mjs';
+
 const SESSIONS = new URL('../fixtures/sessions/', import.meta.url);
 const EXPECTED = new URL('legacy-request-load.expected.json', SESSIONS);
 const PROBE = fileURLToPath(new URL('helpers/load-oracle-probe.mjs', import.meta.url));
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 const gunzipped = (name) => gunzipSync(readFileSync(new URL(name, SESSIONS)));
-const corpus = JSON.parse(gunzipped('legacy-render-requests.vectors.json.gz'));
+// The corpus of the shared vector.
+const corpus = readVectors(new URL('../fixtures/legacy-render-request-vectors.json', import.meta.url));
 
 // The full Session fixtures copied from `main` history (README.md): the
 // Session, its request schema, and where the corpus holds its request.

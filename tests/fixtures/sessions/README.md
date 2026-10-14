@@ -23,13 +23,19 @@ is the version 32 Circular Gallery Session from first-parent `main` commit
 decompressed SHA-256 is
 `e565f29c358a0c372d967a29a2c58654c87417fa120800a90a05f6e1528b3429`.
 
-`legacy-render-requests.vectors.json.gz` holds every distinct request schema 1
-and 2 `renderRequest` stored in a Gallery Session of first-parent `main`
-history (23 requests in 47 Session blobs, from `10d3a3d2` to the last schema-2
-writer before `17e2c9de`), as stored, each with the commit, path, blob and
-Session version of every place that holds it; the four committed (33, 2)
-fixtures are listed by reference. Its decompressed SHA-256 is
-`b0907b352e11a0d95a4f34965299dcb094b317a48ab365625dd27d5819c8eed2`.
+`../legacy-render-request-vectors.json` is the shared vector of the Web lift
+of request schemas 1 and 2 and Python's decoder
+(`tests/web/legacy-render-request.test.mjs`,
+`tests/test_legacy_render_request_lift.py`). Its `requests` are every distinct
+request schema 1 and 2 `renderRequest` stored in a Gallery Session of
+first-parent `main` history (23 requests in 47 Session blobs, from `10d3a3d2`
+to the last schema-2 writer before `17e2c9de`), as stored, each with the
+commit, path, blob and Session version of every place that holds it; the four
+committed (33, 2) fixtures are listed by reference (`fixtureReferences`). Its
+`cases` are forms the corpus does not hold, written by hand: a corpus request
+with edits, what the lift writes and lists, and whether Python decodes both
+alike or the finding of a deliberate difference. Its SHA-256 is
+`cb0f9fe48f2cd1e3c0a026f9a4b579a81c9e5655cb409ff8a35e0ad62536401d`.
 `legacy-request-load.expected.json` records what the Web Load and Save Session
 do with the six full legacy fixtures (`tests/web/legacy-request-sessions.test.mjs`).
 

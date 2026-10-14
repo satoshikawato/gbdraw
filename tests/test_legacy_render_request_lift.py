@@ -1,19 +1,20 @@
 """The Web lift of a schema 1 or 2 render request against Python's decoder.
 
 `liftLegacyRenderRequest` (gbdraw/web/js/services/legacy-render-request.js)
-writes each stored schema 1-2 request of the corpus as a schema-5 request.
-Python decodes the stored request and its lift to the same diagram request
-(PR-D). Resource tables are stubbed by their names: the corpus holds the
-requests, not their resources.
+writes a stored schema 1-2 request as a schema-5 request. The shared vector
+`tests/fixtures/legacy-render-request-vectors.json` holds every stored request
+of the corpus and the arm cases the corpus does not exercise. Python decodes a
+stored request and its lift to the same diagram request, unless the case
+names the finding of a deliberate difference (PR-D). Resource tables are
+stubbed by their names: the vector holds the requests, not their resources.
 """
 
 from __future__ import annotations
 
-import gzip
 import json
 import shutil
 import subprocess
-from dataclasses import replace
+from dataclasses import fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -22,20 +23,13 @@ import pytest
 
 import gbdraw.session_request_codec as codec
 from gbdraw.analysis.protein_colinearity import OrthogroupResult
+from gbdraw.tracks import CircularTrackSlot
 from gbdraw.tracks.circular import parse_circular_track_slot
 
 ROOT = Path(__file__).parents[1]
-CORPUS = ROOT / "tests/fixtures/sessions/legacy-render-requests.vectors.json.gz"
-LIFT_CORPUS = """
-import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
-const { liftLegacyRenderRequest } = await import('./gbdraw/web/js/services/legacy-render-request.js');
-const corpus = JSON.parse(gunzipSync(readFileSync(process.argv[1])));
-process.stdout.write(JSON.stringify(corpus.requests.map(({ id, renderRequest }) => {
-  const { value, repairs } = liftLegacyRenderRequest(renderRequest);
-  return { id, value, repairs };
-})));
-"""
+VECTORS = ROOT / "tests/fixtures/legacy-render-request-vectors.json"
+# Writes each corpus request and case input with its lift (one JS applier of the case edits).
+LIFTS = ROOT / "tests/web/helpers/legacy-request-vectors.mjs"
 
 
 def _resource_ids(value: Any, found: set[str]) -> set[str]:
@@ -50,49 +44,87 @@ def _resource_ids(value: Any, found: set[str]) -> set[str]:
     return found
 
 
-def _reading(request: Any) -> Any:
+def _table_name(table: Any) -> str:
+    return str(table["resource"].iloc[0])
+
+
+def _slot_reading(slot: Any) -> Any:
+    """A Circular slot as the renderer reads its gaps, in pixels.
+
+    The schema-5 decoder keeps a string slot as text, which the renderer
+    parses with the strict parser. A legacy spacing in pixels (or of 0) fills
+    the gaps a slot leaves unset (`radial_layout.py`, `legacy_spacing.resolve`),
+    so it reads as those gaps; a factor of the axis radius stays (OV-798).
+    """
+
+    if isinstance(slot, str):
+        slot = parse_circular_track_slot(slot)
+    spacing = getattr(slot, "legacy_spacing", None)
+    fill = None
+    if spacing is not None and (
+        spacing.unit == "px" or spacing.value == 0
+        or (slot.inner_gap_px is not None and slot.outer_gap_px is not None)
+    ):
+        fill, spacing = spacing.value, None
+    gaps = {
+        name: None if gap is None else float(gap)
+        for name, gap in (
+            ("inner_gap_px", slot.inner_gap_px if slot.inner_gap_px is not None else fill),
+            ("outer_gap_px", slot.outer_gap_px if slot.outer_gap_px is not None else fill),
+        )
+    }
+    if spacing is None and not getattr(slot, "auto_compress", False) and getattr(slot, "preferred_anchor_radius", None) is None:
+        return CircularTrackSlot(**{item.name: getattr(slot, item.name) for item in fields(CircularTrackSlot)} | gaps)
+    return replace(slot, legacy_spacing=spacing, **gaps) if hasattr(slot, "legacy_spacing") else replace(slot, **gaps)
+
+
+def _reading(request: Any) -> str:
     """The decoded request in the one form both schemas can mean.
 
-    A schema-1 protein table is drawn between records n and n + 1, as the
-    explicit indices of a later schema say; a string Circular slot is parsed
-    when the diagram is drawn, as the strict parser reads it.
+    Schema 1 stored comparison tables by position, which the renderer draws
+    between records n and n + 1 (`record_planning.py`: protein tables by
+    `index, index + 1`, BLAST files as adjacent pairs); later schemas store the
+    indices. Both read as sorted (query, subject, table) triples. Circular
+    slots read as the renderer reads their gaps (`_slot_reading`).
     """
+
     options = request.options
-    changes: dict[str, Any] = {}
-    tables = getattr(options, "protein_comparisons", None)
-    if tables is not None and getattr(options, "linear_comparisons", None) is None:
-        changes["protein_comparisons"] = None
-        changes["linear_comparisons"] = tuple(
-            codec.LinearComparison(index, index + 1, table) for index, table in enumerate(tables)
-        )
+    comparisons = sorted(
+        [
+            (item.query_record_index, item.subject_record_index, _table_name(item.matches))
+            for item in getattr(options, "linear_comparisons", None) or ()
+        ]
+        + [(index, index + 1, Path(path).stem) for index, path in enumerate(getattr(options, "blast_files", None) or ())]
+        + [
+            (index, index + 1, _table_name(table))
+            for index, table in enumerate(getattr(options, "protein_comparisons", None) or ())
+        ]
+    )
+    changes: dict[str, Any] = {
+        name: None for name in ("linear_comparisons", "blast_files", "protein_comparisons") if hasattr(options, name)
+    }
     tracks = getattr(options, "tracks", None)
     slots = getattr(tracks, "circular_track_slots", None)
     if slots:
-        changes["tracks"] = replace(
-            tracks,
-            circular_track_slots=tuple(
-                parse_circular_track_slot(slot) if isinstance(slot, str) else slot for slot in slots
-            ),
-        )
-    return replace(request, options=replace(options, **changes))
+        changes["tracks"] = replace(tracks, circular_track_slots=tuple(_slot_reading(slot) for slot in slots))
+    return repr((replace(request, options=replace(options, **changes)), comparisons))
 
 
 @pytest.mark.browser
-def test_each_corpus_request_decodes_as_its_lift(
+def test_each_vector_request_decodes_as_its_lift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not available")
     lifts = json.loads(
-        subprocess.run(
-            [node, "--input-type=module", "-e", LIFT_CORPUS, str(CORPUS)],
-            check=True, capture_output=True, text=True, cwd=ROOT,
-        ).stdout
+        subprocess.run([node, str(LIFTS), str(VECTORS)], check=True, capture_output=True, text=True, cwd=ROOT).stdout
     )
+    table = lambda file_path, **_: pandas.DataFrame({"resource": [Path(file_path).stem]})  # noqa: E731
+    monkeypatch.setattr(codec, "_read_canonical_table", table)
     monkeypatch.setattr(
-        codec, "_read_canonical_table",
-        lambda file_path, **_: pandas.DataFrame({"resource": [Path(file_path).name]}),
+        codec, "read_comparison_table",
+        lambda handle, *, label: pandas.DataFrame({"resource": [label.split("'")[1]]}),
     )
     monkeypatch.setattr(
         codec, "_read_typed_json_resource",
@@ -109,12 +141,25 @@ def test_each_corpus_request_decodes_as_its_lift(
             path = tmp_path / f"{resource_id}.txt"
             path.write_text("")
             resources[resource_id] = str(path)
-        return repr(_reading(codec.decode_canonical_request(
-            request, resource_paths=resources, output_directory=tmp_path / "output"
-        )))
+        try:
+            return _reading(codec.decode_canonical_request(
+                request, resource_paths=resources, output_directory=tmp_path / "output"
+            ))
+        except codec.CanonicalRequestCodecError as exc:
+            return f"refused: {exc}"
 
-    corpus = json.loads(gzip.decompress(CORPUS.read_bytes()))
-    assert [lift["id"] for lift in lifts] == [request["id"] for request in corpus["requests"]]
-    for stored, lift in zip(corpus["requests"], lifts):
-        assert (lift["value"]["schema"], lift["repairs"]) == (5, []), stored["id"]
-        assert decoded(lift["value"]) == decoded(stored["renderRequest"]), stored["id"]
+    vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
+    assert [lift["id"] for lift in lifts["requests"]] == [request["id"] for request in vectors["requests"]]
+    for lift in lifts["requests"]:
+        assert (lift["value"]["schema"], lift["repairs"]) == (5, []), lift["id"]
+        assert decoded(lift["value"]) == decoded(lift["input"]), lift["id"]
+    assert [lift["id"] for lift in lifts["cases"]] == [case["id"] for case in vectors["cases"]]
+    for case, lift in zip(vectors["cases"], lifts["cases"]):
+        stored, lifted = decoded(lift["input"]), decoded(lift["value"])
+        assert not lifted.startswith("refused"), (case["id"], lifted)
+        if case["python"]["equal"]:
+            assert lifted == stored, case["id"]
+        else:
+            # A deliberate difference names its finding; it must still differ.
+            assert case["python"]["finding"] and case["python"]["reason"], case["id"]
+            assert lifted != stored, case["id"]

@@ -198,10 +198,14 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
     })
   }),
   configOverridePaths: Object.freeze({
-    label_placement: Object.freeze(['labels.linear.placement']),
+    linear_axis_stroke_color: Object.freeze(['objects.axis.linear.stroke_color']),
+    show_gc: Object.freeze(['canvas.show_gc']),
+    show_skew: Object.freeze(['canvas.show_skew']),
     linear_track_layout: Object.freeze(['canvas.linear.track_layout']),
-    comparison_height: Object.freeze(['canvas.linear.comparison_height'])
+    comparison_height: Object.freeze(['canvas.linear.comparison_height']),
+    label_placement: Object.freeze(['labels.linear.placement'])
   }),
+  comparisonHeightDefault: 60,
   diagramOptionRenames: Object.freeze({
     featureTable: 'featureVisibilityTable',
     featureTableFile: 'featureVisibilityTableFile'

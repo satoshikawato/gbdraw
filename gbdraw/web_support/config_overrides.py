@@ -16,7 +16,11 @@ from gbdraw.config.modify import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.labels.filtering import DERIVED_LABEL_FILTERING_KEYS
-from gbdraw.session_request_codec import migrate_legacy_full_config, with_automatic_scale_interval
+from gbdraw.session_request_codec import (
+    migrate_flat_config_overrides,
+    migrate_legacy_full_config,
+    with_automatic_scale_interval,
+)
 from gbdraw.web_support.error_adapter import serialize_web_error
 
 
@@ -81,6 +85,9 @@ def validate_and_project_web_config_overrides(
         config = migrate_legacy_full_config(config, mode=mode, path="diagramOptions.config")
     if overrides is not None and not isinstance(overrides, Mapping):
         raise ValidationError("diagramOptions.configOverrides must be an object or null.")
+    # ... and its flat (persisted) override names as the decoder reads them (OV-799).
+    if overrides is not None:
+        overrides = migrate_flat_config_overrides(overrides, mode=mode, path="diagramOptions.configOverrides")
     if managed_paths is None:
         managed_paths = []
     if not isinstance(managed_paths, list) or not all(

@@ -1376,6 +1376,35 @@ test('a History restore reads a blank as the reader\'s default, other values as 
 // Worker is missing: each asks for it). The browser specs load them (OV-751):
 // gui-audit-20260930-inputs and live-generate-parity assert no dialog for
 // seven; session-loading-feedback answers the one table row of
+// Request schemas 1 and 2 (PR-D): an invalid Linear comparison height of the
+// stored full config is replaced by its default and listed (B17, F1), on the
+// direct read of a schema-1 Session and on the Gallery promotion of a schema-2
+// one; a flat override name loads as the decoder reads it (OV-799).
+test('a schema 1/2 request lists an invalid comparison height of its full config and loads (B17)', async () => {
+  for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz']) {
+    const session = fixture(name);
+    session.renderRequest.diagramOptions.config.canvas.linear.comparison_height = 0;
+    const dialogs = [];
+    const loaded = await importSession(input(session), {
+      transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; }
+    });
+    assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
+    assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'setting-replaced').map(({ path, effect, stored }) => [path, effect, stored]),
+      [['renderRequest.diagramOptions.config.canvas.linear.comparison_height', 'defaulted', '0']], name);
+    assert.ok(dialogs.flat().some((line) => line.includes('comparison_height') && line.includes('its default is used')), name);
+    assert.equal(state.drawings.linear.adv.comparison_height, 60, name);
+  }
+});
+
+test('a flat configuration override name of a schema-1 request loads as the decoder reads it (OV-799)', async () => {
+  const session = fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz');
+  delete session.renderRequest.diagramOptions.config;
+  session.renderRequest.diagramOptions.configOverrides = { show_gc: false };
+  const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.equal(state.drawings.circular.form.suppress_gc, true);
+});
+
 // whitelist-tab-keyword.v39. Five fixtures need a Worker service to load at
 // all; feature-identity-overrides and gui-audit-20260930-comparisons load them.
 const LOSSY_FIXTURES = {

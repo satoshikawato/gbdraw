@@ -216,4 +216,29 @@ def test_stored_full_config_with_conflicting_label_values_is_refused():
     legacy["canvas"]["show_labels"] = False
     legacy["canvas"]["circular"]["show_labels"] = True
     result = json.loads(validate_web_config_overrides_json("circular", json.dumps(legacy), "null", "[]"))
-    assert result["error"]["operation"] == "validateConfigOverrides"
+    # The decoder's label-conflict check refuses it; its error names no field.
+    assert result["error"] == {
+        "code": "VALIDATION_UNCLASSIFIED", "operation": "validateConfigOverrides", "stage": "helper", "context": {},
+    }
+    with pytest.raises(ValidationError, match="diagramOptions.config.canvas contains conflicting Circular label values"):
+        validate_and_project_web_config_overrides(mode="circular", config=legacy, managed_paths=[])
+
+
+@pytest.mark.parametrize(
+    ("mode", "flat", "canonical"),
+    [
+        ("circular", {"show_gc": False}, {"canvas.show_gc": False}),
+        ("linear", {"linear_axis_stroke_color": "black"}, {"objects.axis.linear.stroke_color": "black"}),
+        ("circular", {"gc_content_percent_border_width": 2}, {"objects.gc_content.percent_border_width": 2}),
+    ],
+)
+def test_flat_override_names_are_read_as_the_request_decoder_reads_them(mode, flat, canonical):
+    # The Load check reads persisted flat override names with the decoder's
+    # migration (OV-799), as decode_canonical_request does at every schema.
+    assert validate_and_project_web_config_overrides(mode=mode, overrides=flat, managed_paths=[]) == (
+        validate_and_project_web_config_overrides(mode=mode, overrides=canonical, managed_paths=[])
+    )
+    with pytest.raises(ValidationError, match="cannot contain both"):
+        validate_and_project_web_config_overrides(
+            mode=mode, overrides={**flat, **{path: "other" for path in canonical}}, managed_paths=[],
+        )

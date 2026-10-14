@@ -63,6 +63,7 @@ from gbdraw.analysis.protein_colinearity import (
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
@@ -2020,16 +2021,20 @@ def _decode_config_overrides(
                 f"{path} contains retired value {retired!r}; schema {schema} "
                 "requires canonical config overrides."
             )
-    return _migrate_flat_config_overrides(overrides, mode=mode, path=path)
+    return migrate_flat_config_overrides(overrides, mode=mode, path=path)
 
 
-def _migrate_flat_config_overrides(
+def migrate_flat_config_overrides(
     overrides: Mapping[str, Any],
     *,
     mode: Literal["circular", "linear"],
     path: str,
 ) -> dict[str, Any]:
-    """Project persisted flat aliases onto schema-derived dotted leaves."""
+    """Project persisted flat aliases onto schema-derived dotted leaves.
+
+    The decoder reads the overrides of every stored request with it, and so
+    does the Web Load check of a stored request (OV-799).
+    """
 
     legacy_label_paths = {
         "canvas.show_labels",
@@ -4973,6 +4978,7 @@ def describe_legacy_request_tables() -> dict[str, Any]:
         for key, _owner, name in _PROTEIN_SETTINGS_WIRE
         if name == "collinear_max_paralog_links_per_orthogroup"
     )
+    sparse_paths = {path for overrides in _LEGACY_SPARSE_CONFIG_OVERRIDES.values() for path in overrides}
     return {
         "comparisonDefaults": {
             _option_wire_key(name): value
@@ -4988,12 +4994,20 @@ def describe_legacy_request_tables() -> dict[str, Any]:
             name: dict(values)
             for name, values in _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES.items()
         },
-        # The canonical paths of the flat names the lift reads by value: the
-        # Linear values above and a comparison height (B17, Web only).
+        # The canonical paths of the flat names the lift reads: the Linear
+        # values above, a comparison height (B17, Web only), and the flat
+        # names of the sparse config defaults (a default yields to them).
         "configOverridePaths": {
-            name: list(_LEGACY_FLAT_CONFIG_OVERRIDE_PATHS[name])
-            for name in (*_LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES, "comparison_height")
+            name: list(paths)
+            for name, paths in _LEGACY_FLAT_CONFIG_OVERRIDE_PATHS.items()
+            if name in (*_LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES, "comparison_height")
+            or sparse_paths.intersection(paths)
         },
+        # What replaces an invalid comparison height of a stored full config
+        # (B17): the packaged default.
+        "comparisonHeightDefault": load_config_toml("gbdraw.data", "config.toml")["canvas"]["linear"][
+            "comparison_height"
+        ],
         "diagramOptionRenames": dict(_LEGACY_FEATURE_VISIBILITY_RENAMES),
         "collinearityStandardParameters": [
             _camel(item.name) for item in fields(_LegacyStandardCollinearityPayload)
@@ -5448,6 +5462,7 @@ __all__ = [
     "describe_legacy_request_tables",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
+    "migrate_flat_config_overrides",
     "migrate_legacy_full_config",
     "with_automatic_scale_interval",
 ]
