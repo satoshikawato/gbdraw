@@ -9,6 +9,7 @@ yields room around its repaired defects, under the same rules.
 from __future__ import annotations
 
 import copy
+import functools
 import json
 import math
 import warnings
@@ -33,6 +34,59 @@ def _fixture(name: str) -> tuple[list[dict], int, tuple[Aabb, ...]]:
 
     data = json.loads((FIXTURES / f"{name}.json").read_text())
     return data["labels"], int(data["total_length"]), tuple(Aabb(*box) for box in data["definition_text"])
+
+
+# Each fixture's repair (and yield) runs once per test process; tests read copies, so none can change a shared
+# result. ``_Repair`` is taken at import, before any test replaces it.
+_REPAIR = repair_module._Repair
+
+
+@functools.cache
+def _shared_search(name: str) -> repair_module._Repair:
+    labels, total_length, definition = _fixture(name)
+    search = _REPAIR(labels, total_length, definition)
+    assert search.run()
+    return search
+
+
+def _searched(name: str) -> repair_module._Repair:
+    """A copy of the fixture's search state right after the repair's own ``run`` (before the yield)."""
+
+    return copy.deepcopy(_shared_search(name))
+
+
+def _resume_after_repair(monkeypatch: pytest.MonkeyPatch, name: str) -> list[repair_module._Repair]:
+    """``repair_circular_labels`` on this fixture starts the yield from a copy of the repaired search state.
+
+    The entry point still counts the defects, checks the repaired layout and calls ``make_room``; only the
+    repair's search, already run by ``_shared_search``, is not repeated. Returns the search states handed out.
+    """
+
+    handed: list[repair_module._Repair] = []
+
+    def resumed(labels: list[dict], total_length: int, definition: tuple[Aabb, ...]) -> repair_module._Repair:
+        search = _searched(name)
+        assert list(labels) == search.original and total_length == search.total_length
+        search.run = lambda: True
+        handed.append(search)
+        return search
+
+    monkeypatch.setattr(repair_module, "_Repair", resumed)
+    return handed
+
+
+@functools.cache
+def _shared_result(name: str) -> list[dict] | None:
+    labels, total_length, definition = _fixture(name)
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        _resume_after_repair(monkeypatch, name)
+        return repair_circular_labels(labels, total_length, definition_text=definition)
+
+
+def _result(name: str) -> list[dict] | None:
+    """A copy of ``repair_circular_labels`` on the fixture: the repair, then the yield."""
+
+    return copy.deepcopy(_shared_result(name))
 
 
 def _draw(tmp_path: Path, args: list[str]) -> Path:
@@ -74,18 +128,24 @@ def _assert_order_kept(before: list[dict], after: list[dict]) -> None:
 # ---- failing-first cases (the study's fixtures) ------------------------------
 
 
+LAMBDA_14 = [
+    "--gbk", str(TEST_INPUTS / "NC_001416.gb"), "--separate_strands", "--track_type", "tuckin",
+    "--labels", "out", "--legend", "right", "--label_font_size", "14",
+]
+
+
+@pytest.fixture(scope="module")
+def lambda_14_svg(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Lambda at 14 pt, drawn once for the module (``_draw`` turns a leader-crossing warning into an error)."""
+
+    return _draw(tmp_path_factory.mktemp("lambda_14"), LAMBDA_14)
+
+
 @pytest.mark.circular
-def test_lambda_crossings_are_repaired_by_an_elbow_staircase(tmp_path: Path) -> None:
+def test_lambda_crossings_are_repaired_by_an_elbow_staircase(lambda_14_svg: Path) -> None:
     """Lambda at 14 pt: 2 crossing leader pairs; three elbows move 0.5 to 1.5 px and it draws without a warning."""
 
-    svg = _draw(
-        tmp_path,
-        [
-            "--gbk", str(TEST_INPUTS / "NC_001416.gb"), "--separate_strands", "--track_type", "tuckin",
-            "--labels", "out", "--legend", "right", "--label_font_size", "14",
-        ],
-    )
-    assert svg.is_file()
+    assert lambda_14_svg.is_file()
 
 
 @pytest.mark.circular
@@ -148,7 +208,7 @@ def test_n4_crossings_at_defaults_are_repaired() -> None:
     labels, total_length, definition = _fixture("o_n4_default")
     assert defect_count(labels, total_length, definition) == 55
 
-    repaired = repair_circular_labels(labels, total_length, definition_text=definition)
+    repaired = _result("o_n4_default")
 
     assert repaired is not None
     assert defect_count(repaired, total_length, definition) == 0
@@ -163,7 +223,7 @@ def test_repairs_stay_within_their_bounds(name: str) -> None:
     """Text moves at most 24 px, an elbow 12 px; a label keeps its half and never comes inside its own elbow circle."""
 
     labels, total_length, definition = _fixture(name)
-    repaired = repair_circular_labels(labels, total_length, definition_text=definition)
+    repaired = _result(name)
     assert repaired is not None
     for old, new in zip(labels, repaired):
         if old.get("is_embedded"):
@@ -247,21 +307,24 @@ def test_records_with_more_defects_than_the_cap_are_left_alone(monkeypatch: pyte
 
 
 def test_the_repair_is_deterministic() -> None:
-    labels, total_length, definition = _fixture("o_n4_default")
+    """Two independent runs of the repair and its yield give the same labels.
+
+    Plasmid NZ_AP024092.1 at 14 pt is the cheapest fixture whose repair yields (more than 10 labels move).
+    """
+
+    labels, total_length, definition = _fixture("o_plasmid37_f14")
     first = repair_circular_labels(labels, total_length, definition_text=definition)
     second = repair_circular_labels(labels, total_length, definition_text=definition)
-    assert first is not None
+    assert first is not None and _moved(_repaired_only("o_plasmid37_f14")[1], first)
     assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
+    # The other tests read the shared result, which starts the yield from a copy of the repaired search state.
+    assert json.dumps(first, sort_keys=True) == json.dumps(_result("o_plasmid37_f14"), sort_keys=True)
 
 
 @pytest.mark.circular
-def test_the_same_run_draws_the_same_bytes(tmp_path: Path) -> None:
-    args = [
-        "--gbk", str(TEST_INPUTS / "NC_001416.gb"), "--separate_strands", "--track_type", "tuckin",
-        "--labels", "out", "--legend", "right", "--label_font_size", "14",
-    ]
-    first = _draw(tmp_path / "a", args).read_bytes()
-    second = _draw(tmp_path / "b", args).read_bytes()
+def test_the_same_run_draws_the_same_bytes(tmp_path: Path, lambda_14_svg: Path) -> None:
+    first = lambda_14_svg.read_bytes()
+    second = _draw(tmp_path, LAMBDA_14).read_bytes()
     assert first == second
 
 
@@ -304,9 +367,7 @@ def _repaired_only(name: str) -> tuple[list[dict], list[dict], int, tuple[Aabb, 
     """(engine labels, the repair's own result before the yield, record length, definition text)."""
 
     labels, total_length, definition = _fixture(name)
-    search = repair_module._Repair(labels, total_length, definition)
-    assert search.run()
-    return labels, [label.copy() for label in search.labels], total_length, definition
+    return labels, copy.deepcopy(_shared_search(name).labels), total_length, definition
 
 
 def _through_pairs(labels: list[dict], total_length: int) -> set[tuple[int, int]]:
@@ -315,7 +376,7 @@ def _through_pairs(labels: list[dict], total_length: int) -> set[tuple[int, int]
     Indices, not texts: a record can repeat a text ("hypothetical protein"), and the repair keeps the label order.
     """
 
-    search = repair_module._Repair(labels, total_length, ())
+    search = _REPAIR(labels, total_length, ())
     return set(search._current_through(search.external))
 
 
@@ -337,14 +398,13 @@ def test_the_labels_around_repaired_defects_yield_room(name: str) -> None:
     """The window (the original defects' labels and up to 12 neighbours on their side) moves; the record still fits."""
 
     labels, repaired, total_length, definition = _repaired_only(name)
-    yielded = repair_circular_labels(labels, total_length, definition_text=definition)
+    yielded = _result(name)
 
     assert yielded is not None
     assert defect_count(yielded, total_length, definition) == 0
     moved = _moved(repaired, yielded)
     assert len(moved) >= 10
-    search = repair_module._Repair(labels, total_length, definition)
-    search.run()
+    search = _searched(name)
     window = {index for run in search._window_runs(max(repair_module.YIELD_WINDOWS)) for index in run}
     assert set(moved) <= window
     _assert_order_kept(labels, yielded)
@@ -352,8 +412,8 @@ def test_the_labels_around_repaired_defects_yield_room(name: str) -> None:
 
 @pytest.mark.parametrize("name", ["o_plasmid37_f14", "o_lambda_f14", "o_n4_default"])
 def test_the_yield_never_draws_a_new_leader_through_another_labels_text(name: str) -> None:
-    labels, repaired, total_length, definition = _repaired_only(name)
-    yielded = repair_circular_labels(labels, total_length, definition_text=definition)
+    _labels, repaired, total_length, _definition = _repaired_only(name)
+    yielded = _result(name)
 
     assert yielded is not None
     assert _through_pairs(yielded, total_length) <= _through_pairs(repaired, total_length)
@@ -365,9 +425,7 @@ def test_a_lift_that_trades_one_leader_through_text_for_another_is_refused() -> 
     The yield compares pairs, so every such lift of the lambda 14 pt window is refused.
     """
 
-    labels, _repaired, total_length, definition = _repaired_only("o_lambda_f14")
-    search = repair_module._Repair(labels, total_length, definition)
-    assert search.run()
+    search = _searched("o_lambda_f14")
     runs = search._window_runs(max(repair_module.YIELD_WINDOWS))
     search.window = frozenset(index for run in runs for index in run)
     traded = 0
@@ -446,6 +504,7 @@ def test_a_yield_move_that_hands_another_label_a_new_leader_through_text_is_undo
         return applied
 
     monkeypatch.setattr(repair_module._Repair, "_apply_yield", recording)
+    _resume_after_repair(monkeypatch, "o_n4_default")
     yielded = repair_circular_labels(labels, total_length, definition_text=definition)
 
     assert undone and all(undone)  # at least one undo, each back to the layout before the move
@@ -472,15 +531,19 @@ def test_a_yield_that_keeps_a_new_leader_through_text_is_rejected_at_the_end(mon
         self._refresh()
         return True
 
-    search = repair_module._Repair(labels, total_length, definition)
-    assert search.run()
-    allowed = search._current_through(search.external)
+    make_room = repair_module._Repair.make_room
+    made_room: list[bool] = []
+    repaired_search = _searched("o_n4_default")
+    allowed = repaired_search._current_through(repaired_search.external)
     monkeypatch.setattr(repair_module._Repair, "_apply_yield", keeping)
+    monkeypatch.setattr(repair_module._Repair, "make_room", lambda self: made_room.append(make_room(self)) or made_room[-1])
+    handed = _resume_after_repair(monkeypatch, "o_n4_default")
 
-    assert search.make_room() is False
-    assert kept and search._current_through(search.external) - allowed
-    kept.clear()
     result = repair_circular_labels(labels, total_length, definition_text=definition)
+
+    (search,) = handed
+    assert made_room == [False]
+    assert kept and search._current_through(search.external) - allowed
     assert json.dumps(result, sort_keys=True) == json.dumps(repaired, sort_keys=True)
 
 
