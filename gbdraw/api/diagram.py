@@ -1357,7 +1357,7 @@ def _circular_plot_title_content(
         gb_record=gb_record,
     )
     return render_stage(
-        "plot_title_content",
+        "circular_plot_title_content",
         build_group_content,
         DefinitionGroup,
         definition_record_facts(gb_record, gc_percent=False),

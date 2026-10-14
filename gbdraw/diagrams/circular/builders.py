@@ -362,7 +362,7 @@ def add_record_definition_group_on_canvas(
     Drawing: The updated SVG drawing with the record definition group added.
     """
     content = render_stage(
-        "definition_content",
+        "circular_definition_content",
         build_group_content,
         DefinitionGroup,
         gb_record,

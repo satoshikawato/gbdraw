@@ -56,12 +56,14 @@ RenderStageName = Literal[
     "legend_measurement",
     "legend_content",
     "plot_title_content",
+    "circular_plot_title_content",
     "composition_plan",
     "gc_content_content",
     "gc_skew_content",
     "depth_content",
     "length_bar_content",
     "definition_content",
+    "circular_definition_content",
     "annotation_content",
     "record_content",
     "circular_record_content",
@@ -117,15 +119,17 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "legend_table": frozenset(),
     "legend_measurement": frozenset(),
     "legend_content": frozenset(),
-    # Circular: the title is a shared-common definition (its font and interval).
-    "plot_title_content": frozenset({"objects.definition", "objects.text"}),
+    "plot_title_content": frozenset(),
+    # The Circular title is a shared-common definition (its font and interval).
+    "circular_plot_title_content": frozenset({"objects.definition", "objects.text"}),
     "composition_plan": frozenset(),
     "gc_content_content": _CIRCULAR_TRACK_SECTIONS,
     "gc_skew_content": _CIRCULAR_TRACK_SECTIONS,
     "depth_content": _CIRCULAR_TRACK_SECTIONS,
     "length_bar_content": frozenset(),
-    # Circular: the centre or edge definition reads its font and interval.
-    "definition_content": frozenset({"objects.definition", "objects.text"}),
+    "definition_content": frozenset(),
+    # The Circular centre or edge definition reads its font and interval.
+    "circular_definition_content": frozenset({"objects.definition", "objects.text"}),
     "annotation_content": frozenset(),
     # Linear: the record group draws the axis, the ruler, features and labels.
     "record_content": frozenset(

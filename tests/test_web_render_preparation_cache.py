@@ -286,7 +286,7 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
     # A title change builds its own content and the composition plan, nothing else.
     assert {
         name for name in _metrics(render_only_diagnostics) if name.startswith("renderStageBuild:")
-    } == {"renderStageBuild:plot_title_content", "renderStageBuild:composition_plan"}
+    } == {"renderStageBuild:circular_plot_title_content", "renderStageBuild:composition_plan"}
     assert render_only["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
 
 
@@ -368,7 +368,7 @@ def test_a_multi_record_circular_title_change_reuses_the_merged_records(tmp_path
     assert retitled_metrics["renderStageHit:catalog_item"] == 1
     assert retitled_metrics.get("featureCatalogSvgParseCount", 0) == 0
     assert {name for name in retitled_metrics if name.startswith("renderStageBuild:")} == {
-        "renderStageBuild:plot_title_content",
+        "renderStageBuild:circular_plot_title_content",
         "renderStageBuild:composition_plan",
     }
     assert retitled["results"] != cold["results"]

@@ -80,7 +80,7 @@ P1_P2_OPTIONS: Mapping[str, frozenset[str]] = {
 
 _LEGEND = frozenset({"legend_table", "legend_measurement", "legend_content"})
 _LEGEND_LAYOUT = frozenset({"legend_measurement", "legend_content"})
-_TITLE = frozenset({"plot_title_content"})
+_TITLE = frozenset({"plot_title_content", "circular_plot_title_content"})
 _FEATURE_PLACEMENT = frozenset({"feature_layers", "feature_dom_index"})
 _LABEL_FILTER = _FEATURE_PLACEMENT | {"label_filter_maps"}
 _FEATURE_EDIT = _FEATURE_PLACEMENT | _LEGEND | {"catalog_normalization", "interactive_context"}
@@ -184,7 +184,7 @@ _RECORD_MERGE_INPUTS = frozenset(
     {
         "axis_content", "circular_record_content", "ticks_content", "gc_content_content", "gc_skew_content",
         "depth_content", "conservation_content", "annotation_content", "label_leaders_content", "label_text_content",
-        "definition_content",
+        "circular_definition_content",
     }
 )
 
@@ -234,10 +234,13 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     ),
     # The Circular definition reads the definition section, which holds the
     # plot title font size (the shared-common profile draws the title in it).
-    "plot_title_font_size": frozenset({"definition_content"}),
-    # The Circular plot title is a shared-common definition: it reads the
-    # definition section (section granularity; it draws in its own font size).
-    "definition_font_size": frozenset({"definition_content", "plot_title_content"}),
+    "plot_title_font_size": frozenset({"circular_definition_content"}),
+    # Linear: the definition; Circular: the definition and the plot title, a
+    # shared-common definition that reads the definition section (section
+    # granularity; it draws in its own font size).
+    "definition_font_size": frozenset(
+        {"definition_content", "circular_definition_content", "circular_plot_title_content"}
+    ),
     # Circular label placement reads the features section, which holds the
     # line strokes (section granularity); the placed labels do not change.
     **dict.fromkeys(("line_stroke_color", "line_stroke_width"), frozenset({"circular_labels"})),
@@ -245,7 +248,7 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     # short beside a plot title.
     **dict.fromkeys(
         ("species (no plot title)", "strain (no plot title)", "keep_full_definition_with_plot_title"),
-        frozenset({"definition_content"}),
+        frozenset({"circular_definition_content"}),
     ),
 }
 
@@ -274,14 +277,14 @@ _BOUNDS_STAGES = (
     | _DEPTH_DATA
     | {
         "record_content", "circular_record_content", "gc_content_content", "gc_skew_content",
-        "annotation_content", "definition_content",
+        "annotation_content", "definition_content", "circular_definition_content",
         "length_bar_content", "comparison_content",
         # Circular: the placed labels are obstacles of the composition.
         "circular_labels",
     }
 )
 # The options the composition request reads without a stage: the placements. (The
-# Circular definition text it reads is the `definition_content` bounds.)
+# Circular definition text it reads is the `circular_definition_content` bounds.)
 _COMPOSITION_INPUTS = frozenset({"legend", "plot_title_position"})
 # Options that reshape a mark inside the box its content measures. With a paint
 # option (its ID ends in ``_color``) they move no bound, so the plan must be a hit.
@@ -415,4 +418,4 @@ def test_a_gc_toggle_rebuilds_neither_the_circular_definition_nor_the_title(tabl
     [(option, variant)] = matrix_variants(case, option_ids=["gc"], first_variant_only=True)
     outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
     assert outcome.error is None
-    assert not {"definition_content", "plot_title_content"} & set(outcome.stages.builds)
+    assert not {"circular_definition_content", "circular_plot_title_content"} & set(outcome.stages.builds)
