@@ -415,6 +415,7 @@ const normalizeFeatureVisibilityRulesForSession = (rules) => (
 // A Session before manual rules had their own field stored the editor's
 // per-feature rows among the rules (`featureVisibilityRules`); its rows keyed
 // by rendered ID join the other rendered-ID edits for migration.
+/** @param {Record<string, unknown>} [features] A stored feature-edit draft. @returns {Record<string, unknown>} */
 const splitLegacyFeatureVisibilityRules = (features = {}) => {
   if (Array.isArray(features.featureVisibilityManualRules) || !Array.isArray(features.featureVisibilityRules)) {
     return features;
@@ -515,12 +516,20 @@ const multiRecordPositionsFromCliInvocation = (cliInvocation) => {
   return positions;
 };
 
+/**
+ * @param {Record<string, unknown>} config A restored draft; its `adv` is written.
+ * @param {{ args?: unknown } | null | undefined} cliInvocation
+ */
 const hydrateMissingMultiRecordPositionsFromCliInvocation = (config, cliInvocation) => {
-  if (!isPlainObject(config) || !isPlainObject(config.form) || config.form.multi_record_canvas !== true) {
+  // The cast: `isPlainObject(config.form)` in the same expression.
+  if (!isPlainObject(config) || !isPlainObject(config.form)
+    || /** @type {{ multi_record_canvas?: unknown }} */ (config.form).multi_record_canvas !== true) {
     return;
   }
 
-  const adv = isPlainObject(config.adv) ? config.adv : {};
+  // The cast: `isPlainObject(config.adv)` in the same expression.
+  /** @type {Record<string, unknown>} */
+  const adv = isPlainObject(config.adv) ? /** @type {Record<string, unknown>} */ (config.adv) : {};
   if (Array.isArray(adv.multi_record_positions)) return;
 
   const positions = multiRecordPositionsFromCliInvocation(cliInvocation);
@@ -558,12 +567,17 @@ const buildSessionFilename = (title) => {
 };
 
 // Load reads a stored configuration's older Linear visibility (every caller is a Load path).
+/** @template T @param {T} configData @returns {T} */
 const withCurrentLinearLabelVisibility = (configData) => {
-  if (!isPlainObject(configData) || !isPlainObject(configData.adv)) return configData;
-  return {
-    ...configData,
-    adv: migrateLegacyLinearLabelVisibility(configData.adv, { load: true })
-  };
+  if (!isPlainObject(configData)) return configData;
+  // The cast: `isPlainObject(configData)` above.
+  const config = /** @type {Record<string, unknown>} */ (configData);
+  if (!isPlainObject(config.adv)) return configData;
+  // The same draft with its `adv` read again (the casts: `isPlainObject` above).
+  return /** @type {T} */ ({
+    ...config,
+    adv: migrateLegacyLinearLabelVisibility(/** @type {Record<string, unknown>} */ (config.adv), { load: true })
+  });
 };
 
 /**
@@ -1368,13 +1382,16 @@ const normalizeSessionData = (data, repairs) => {
   };
 };
 
+/** @template T @param {T} configData @param {boolean} legacy @returns {T} */
 const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
   if (!legacy || !isPlainObject(configData)) return configData;
-  const adv = isPlainObject(configData.adv) ? configData.adv : null;
+  // The casts: `isPlainObject` in the same expression or above.
+  const config = /** @type {Record<string, unknown>} */ (configData);
+  const adv = isPlainObject(config.adv) ? /** @type {Record<string, unknown>} */ (config.adv) : null;
   if (!adv) return configData;
   const features = Array.isArray(adv.features) ? adv.features : null;
   if (features && !features.includes('repeat_region')) return configData;
-  const featureShapes = isPlainObject(adv.feature_shapes) ? adv.feature_shapes : {};
+  const featureShapes = isPlainObject(adv.feature_shapes) ? /** @type {Record<string, unknown>} */ (adv.feature_shapes) : {};
   if (Object.prototype.hasOwnProperty.call(featureShapes, 'repeat_region')) return configData;
   return {
     ...configData,
@@ -1385,13 +1402,18 @@ const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
   };
 };
 
-/** @param {'losatCache' | 'losatDerivedCache'} field @returns {unknown[] | null} null: no entry list can be read */
+/**
+ * @param {SessionInput} data
+ * @param {'losatCache' | 'losatDerivedCache'} field
+ * @returns {unknown[] | null} null: no entry list can be read
+ */
 const sessionArtifactEntries = (data, field) => {
   const container = data[field];
   if (container === undefined || container === null) return [];
   if (!isPlainObject(container)) return null;
   const entries = Object.prototype.hasOwnProperty.call(container, 'entries')
-    ? container.entries
+    // The cast: `isPlainObject(container)` above.
+    ? /** @type {{ entries?: unknown }} */ (container).entries
     : [];
   return Array.isArray(entries) ? entries : null;
 };
@@ -1421,6 +1443,7 @@ const EMPTY_PROTEIN_IDENTITY_MANIFEST = Object.freeze({ schema: 2, proteinSets: 
  * be read (`manifest`), checked as the empty manifest, so the protein entries
  * that need it are faults too. One step per raw entry (Load yields to the page).
  * @typedef {{ containers: Set<'losatCache' | 'losatDerivedCache'>, raw: Set<number>, derived: Set<number>, manifest: boolean }} LosatArtifactFaults
+ * @param {SessionInput} data
  * @param {number} sourceSessionVersion
  * @returns {Generator<void, LosatArtifactFaults>}
  */
@@ -1474,7 +1497,7 @@ function* sessionLosatArtifactSteps(data, sourceSessionVersion) {
 /** @param {LosatArtifactFaults} faults */
 const holdsLosatArtifactFault = (faults) => faults.manifest || faults.containers.size > 0 || faults.raw.size > 0 || faults.derived.size > 0;
 
-/** Save: a Session's LOSAT caches hold no fault. @param {number} sourceSessionVersion */
+/** Save: a Session's LOSAT caches hold no fault. @param {SessionInput} data @param {number} sourceSessionVersion */
 export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
   const steps = sessionLosatArtifactSteps(data, sourceSessionVersion);
   let step = steps.next();
@@ -1559,22 +1582,29 @@ export const buildSessionLegacyArtifacts = ({
 // The Web writers of Sessions 27–33 saved every schema-4 Circular slot row with
 // `spacing: null`. With Custom Track Slots off that null is lossless and is
 // dropped; the reader table lists any other obsolete slot field (OV-758).
+/** @template T @param {T} configData A stored draft. @returns {T} */
 const withoutLegacyNullCircularSlotSpacing = (configData) => {
-  const adv = configData?.adv;
-  if (!isPlainObject(adv) || adv.circular_track_slots_enabled
+  const stored = /** @type {UnvalidatedFields<'adv'>} */ (configData)?.adv;
+  if (!isPlainObject(stored)) return configData;
+  // The casts: `isPlainObject(stored)` above, so `configData` is an object too.
+  const adv = /** @type {Record<string, unknown>} */ (stored);
+  if (adv.circular_track_slots_enabled
     || adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
     || !Array.isArray(adv.circular_track_slots)) return configData;
-  return {
-    ...configData,
+  return /** @type {T} */ ({
+    .../** @type {Record<string, unknown>} */ (configData),
     adv: {
       ...adv,
-      circular_track_slots: adv.circular_track_slots.map((slot) => {
-        if (!isPlainObject(slot) || slot.spacing !== null) return slot;
-        const { spacing: _spacing, ...current } = slot;
+      circular_track_slots: adv.circular_track_slots.map((/** @type {unknown} */ slot) => {
+        if (!isPlainObject(slot)) return slot;
+        // The cast: `isPlainObject(slot)` above.
+        const row = /** @type {Record<string, unknown>} */ (slot);
+        if (row.spacing !== null) return slot;
+        const { spacing: _spacing, ...current } = row;
         return current;
       })
     }
-  };
+  });
 };
 
 
@@ -4614,6 +4644,10 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
 
 };
 
+/**
+ * @param {unknown} [resultsData] Results: committed ones, or imported name/content pairs.
+ * @param {{ selectedResultIndex?: unknown }} [ui]
+ */
 export const applyResultsData = (resultsData = [], ui = {}) => {
   state.failedGeneratePreservedResult.value = false;
   if (Array.isArray(resultsData)) {
@@ -4641,10 +4675,9 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
 
   const resultCount = state.results.value.length;
   if (resultCount > 0) {
-    const desiredIndex =
-      Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
-        ? ui.selectedResultIndex
-        : 0;
+    const stored = ui.selectedResultIndex;
+    // `typeof` adds nothing to `Number.isInteger`; it narrows `stored`.
+    const desiredIndex = typeof stored === 'number' && Number.isInteger(stored) && stored >= 0 ? stored : 0;
     state.selectedResultIndex.value = Math.min(desiredIndex, resultCount - 1);
   } else {
     state.selectedResultIndex.value = 0;
@@ -5359,7 +5392,8 @@ const importSessionDocument = async (e, options = {}) => {
       ? /** @type {string} */ (canonicalProjection?.inputType) : readSessionInputType(ui[field]).value);
     const inputTypes = { cInputType: inputTypeOf('cInputType'), lInputType: inputTypeOf('lInputType') };
     const candidateFiles = {
-      files: {}, linearSeqs: [], circularRecordList: { value: [] },
+      // `applyFiles` fills the file slots.
+      files: /** @type {Record<string, unknown>} */ ({}), linearSeqs: [], circularRecordList: { value: [] },
       circularRecordDiscovery: {}, linearReorderNotice: { value: '' },
       cInputType: { value: inputTypes.cInputType },
       // Read as the drawing reads them (a list of another kind failed the Load).
@@ -5610,8 +5644,10 @@ const importSessionDocument = async (e, options = {}) => {
       try {
         legacyFeatureRecoveryPlan = await buildSessionFeatureRecoveryPlan(/** @type {any} */ ({
           snapshot: legacyFeatureSnapshot,
+          // After `splitLegacyFeatureVisibilityRules`, a rule list is the manual
+          // rules or none (a value of another kind serialized as no rule).
           featureVisibilityTsv: serializeFeatureVisibilityRules(
-            features.featureVisibilityManualRules || features.featureVisibilityRules || []
+            Array.isArray(features.featureVisibilityManualRules) ? features.featureVisibilityManualRules : []
           )
         }));
       } catch (error) {
