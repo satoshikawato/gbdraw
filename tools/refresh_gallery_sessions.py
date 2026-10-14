@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import TYPE_CHECKING, Any
@@ -1108,7 +1108,9 @@ def _materialize_one_record_sources(session: dict[str, Any]) -> int:
 
     The Web writes ``all`` for a Linear file without selector or region; the CLI
     replay materializes each record it draws as ``exactly_one``, and
-    ``finalize`` compares the two (OV-376). Returns the number of records changed.
+    ``finalize`` compares the two (OV-376). It reads the prepared request, which
+    the Web reader has promoted: a request schema 1-5 stores no cardinality.
+    Returns the number of records changed.
     """
 
     from io import StringIO
@@ -1205,27 +1207,40 @@ def _canonicalize_recorded_cli_invocation(
     output after the Gallery id, and records inputs by file name.
     """
 
+    def canonicalize(session: dict[str, Any]) -> int:
+        invocation = session.get("cliInvocation")
+        if not isinstance(invocation, dict) or not isinstance(invocation.get("args"), list):
+            return 0
+        args, bindings = canonicalize_cli_invocation(
+            [str(arg) for arg in invocation["args"]],
+            [
+                SessionFileBinding(**binding)
+                for binding in invocation.get("fileBindings") or []
+            ],
+            mode=mode,
+        )
+        invocation["args"] = _publishable_recorded_args(
+            args,
+            bindings,
+            gallery_id=gallery_id,
+            declared_command=declared_command,
+        )
+        invocation["fileBindings"] = [dataclasses.asdict(binding) for binding in bindings]
+        return 1
+
+    _edit_staged_session(session_path, canonicalize)
+
+
+def _edit_staged_session(
+    session_path: Path, edit: Callable[[dict[str, Any]], int]
+) -> None:
+    """Rewrite a staged Session file in its own encoding when ``edit`` changes it."""
+
     payload = session_path.read_bytes()
     compressed = payload[:2] == b"\x1f\x8b"
     session = json.loads(gzip.decompress(payload) if compressed else payload)
-    invocation = session.get("cliInvocation")
-    if not isinstance(invocation, dict) or not isinstance(invocation.get("args"), list):
+    if not edit(session):
         return
-    args, bindings = canonicalize_cli_invocation(
-        [str(arg) for arg in invocation["args"]],
-        [
-            SessionFileBinding(**binding)
-            for binding in invocation.get("fileBindings") or []
-        ],
-        mode=mode,
-    )
-    invocation["args"] = _publishable_recorded_args(
-        args,
-        bindings,
-        gallery_id=gallery_id,
-        declared_command=declared_command,
-    )
-    invocation["fileBindings"] = [dataclasses.asdict(binding) for binding in bindings]
     text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     session_path.write_bytes(
         gzip.compress(text, compresslevel=6, mtime=0) if compressed else text
@@ -1393,7 +1408,7 @@ def _refresh_one_session(
         # `finalize` keeps, so it is set on the input, before `prepare`.
         if _canonicalize_orthogroup_resources(session) + _set_output_prefix(
             session, gallery_id
-        ) + _resolve_default_colors(session) + _materialize_one_record_sources(session):
+        ) + _resolve_default_colors(session):
             publication_input_path = (
                 staging_root / f"canonicalized-{session_path.name}"
             )
@@ -1412,6 +1427,7 @@ def _refresh_one_session(
             gallery_id=gallery_id,
             declared_command=declared_command,
         )
+        _edit_staged_session(prepared_path, _materialize_one_record_sources)
         if not _is_test_input_session(session_path):
             _store_resolved_protein_comparisons(prepared_path)
         subprocess.run(
