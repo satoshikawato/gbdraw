@@ -309,14 +309,14 @@ def _repaired_only(name: str) -> tuple[list[dict], list[dict], int, tuple[Aabb, 
     return labels, [label.copy() for label in search.labels], total_length, definition
 
 
-def _through_pairs(labels: list[dict], total_length: int) -> set[tuple[str, str]]:
-    """(leader of, text of) by label text: the repair's own font-box test, over the whole record."""
+def _through_pairs(labels: list[dict], total_length: int) -> set[tuple[int, int]]:
+    """(leader of, text of) by label index: the repair's own font-box test, over the whole record.
+
+    Indices, not texts: a record can repeat a text ("hypothetical protein"), and the repair keeps the label order.
+    """
 
     search = repair_module._Repair(labels, total_length, ())
-    return {
-        (labels[leader]["label_text"], labels[text]["label_text"])
-        for leader, text in search._current_through(search.external)
-    }
+    return set(search._current_through(search.external))
 
 
 def _moved(first: list[dict], second: list[dict]) -> list[int]:
@@ -371,6 +371,7 @@ def test_a_lift_that_trades_one_leader_through_text_for_another_is_refused() -> 
     runs = search._window_runs(max(repair_module.YIELD_WINDOWS))
     search.window = frozenset(index for run in runs for index in run)
     traded = 0
+    otherwise_valid = 0
     for run in runs:
         for split in range(1, len(run)):
             for yielders, crowd in ((run[max(0, split - 4) : split], run[split : split + 8]), (run[split : split + 4], run[max(0, split - 8) : split][::-1])):
@@ -386,8 +387,15 @@ def test_a_lift_that_trades_one_leader_through_text_for_another_is_refused() -> 
                     after = search._through(probe, geometry)
                     if after - before and len(after) <= len(before):
                         traded += 1
+                        otherwise_valid += (
+                            all(search._within_bounds(index, label) for index, label in moved.items())
+                            and search._order_kept(moved)
+                            and search._row_gaps_kept(moved)
+                            and not search._local(geometry) - search._current_local(list(moved))
+                        )
                         assert search._try_yield(moved) is None
     assert traded > 0
+    assert otherwise_valid > 0  # the through-pair test alone refuses these lifts
 
 
 def test_a_yield_that_ends_with_a_defect_keeps_the_repaired_layout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -418,6 +426,61 @@ def test_a_yield_that_ends_with_a_new_leader_through_text_keeps_the_repaired_lay
     result = repair_circular_labels(labels, total_length, definition_text=definition)
 
     assert result is not None
+    assert json.dumps(result, sort_keys=True) == json.dumps(repaired, sort_keys=True)
+
+
+def test_a_yield_move_that_hands_another_label_a_new_leader_through_text_is_undone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """N4: a moved label can change the leader end the engine gives an unmoved label; that move is undone."""
+
+    labels, repaired, total_length, definition = _repaired_only("o_n4_default")
+    apply_yield = repair_module._Repair._apply_yield
+    undone: list[bool] = []
+
+    def recording(self: repair_module._Repair, moved: dict, allowed: frozenset) -> bool:
+        before = json.dumps(self.labels, sort_keys=True)
+        applied = apply_yield(self, moved, allowed)
+        if not applied:
+            undone.append(json.dumps(self.labels, sort_keys=True) == before)
+        return applied
+
+    monkeypatch.setattr(repair_module._Repair, "_apply_yield", recording)
+    yielded = repair_circular_labels(labels, total_length, definition_text=definition)
+
+    assert undone and all(undone)  # at least one undo, each back to the layout before the move
+    assert yielded is not None
+    assert defect_count(yielded, total_length, definition) == 0
+    assert _through_pairs(yielded, total_length) <= _through_pairs(repaired, total_length)
+
+
+def test_a_yield_that_keeps_a_new_leader_through_text_is_rejected_at_the_end(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``make_room`` itself checks the record's pairs: here the first move the undo refuses is kept, then nothing moves."""
+
+    labels, repaired, total_length, definition = _repaired_only("o_n4_default")
+    apply_yield = repair_module._Repair._apply_yield
+    kept: list[dict] = []
+
+    def keeping(self: repair_module._Repair, moved: dict, allowed: frozenset) -> bool:
+        if kept:
+            return False
+        if apply_yield(self, moved, allowed):
+            return True
+        kept.append(moved)
+        for index, label in moved.items():
+            self.labels[index] = label
+        self._refresh()
+        return True
+
+    search = repair_module._Repair(labels, total_length, definition)
+    assert search.run()
+    allowed = search._current_through(search.external)
+    monkeypatch.setattr(repair_module._Repair, "_apply_yield", keeping)
+
+    assert search.make_room() is False
+    assert kept and search._current_through(search.external) - allowed
+    kept.clear()
+    result = repair_circular_labels(labels, total_length, definition_text=definition)
     assert json.dumps(result, sort_keys=True) == json.dumps(repaired, sort_keys=True)
 
 
