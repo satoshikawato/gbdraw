@@ -320,3 +320,43 @@ test('a saved comparison entry that is neither resource-backed nor a generated c
     assert.ok(dialogs.flat().some((line) => line.includes('files.linearCanonicalComparisons')));
   }
 });
+
+// G3 on the request path: every stored Session the app ships or pins (the
+// Gallery and the Session fixtures) loads with no row about its stored
+// request and commits it at the current schema (schema 1 as stored until its
+// reader, PR-D). A row here is a defect of the input's producer.
+/** Inputs this Node harness cannot load, by name, with the reason. */
+const HARNESS_CANNOT_LOAD = new Map([
+  // Their Load extracts the features again, which needs the Pyodide Worker (WORKER_INIT here).
+  ['feature-edits-circular.v33.gbdraw-session.json.gz', 'feature extraction Worker'],
+  ['feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz', 'feature extraction Worker'],
+  ['hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', 'feature extraction Worker'],
+  // Their comparison tables are converted to the display frame by a Worker
+  // (`convertMainSessionComparisonFrames`; OV-775, C-OD19 F2).
+  ['q-frame-main-web-losatn.v42.gbdraw-session.json.gz', 'comparison conversion Worker'],
+  ['q-frame-main-web-upload.v42.gbdraw-session.json.gz', 'comparison conversion Worker']
+]);
+const REQUEST_ROW_CODES = new Set(['request-dropped', 'other-result-set-dropped', 'request-part-dropped', 'request-reference-dropped']);
+const requestRow = ({ code, path }) => REQUEST_ROW_CODES.has(code) || /^(otherModeResult\.)?renderRequest\b/.test(path);
+
+test('every Gallery Session and Session fixture loads with no stored-request row and commits the current schema (G3)', { timeout: 600000 }, async () => {
+  const { readdirSync } = await import('node:fs');
+  const findings = {};
+  let loaded = 0;
+  for (const folder of ['gbdraw/web/gallery/sessions/', 'tests/fixtures/sessions/']) {
+    for (const name of readdirSync(new URL(folder, REPO)).filter((file) => /\.json(\.gz)?$/.test(file)).sort()) {
+      const session = read(folder + name);
+      if (session?.format !== 'gbdraw-session' || HARNESS_CANNOT_LOAD.has(name)) continue;
+      const stored = session.renderRequest?.schema ?? null;
+      const { result } = await load(session);
+      const committed = result.status === 'ok' || result.status === 'legacy'
+        ? getCommittedCanonicalSession()?.renderRequest?.schema ?? null : 'not loaded';
+      const expected = stored === null ? null : stored === 1 ? 1 : 9;
+      const rows = (result.repairs || []).filter(requestRow).map(({ code, path }) => `${code} ${path}`);
+      if (rows.length || committed !== expected) findings[folder + name] = { status: result.status, rows, committed, expected };
+      loaded += 1;
+    }
+  }
+  assert.deepEqual(findings, {});
+  assert.ok(loaded >= 50, String(loaded));
+});
