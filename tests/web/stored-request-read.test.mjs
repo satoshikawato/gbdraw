@@ -176,6 +176,48 @@ test('an unreadable conservation ring drops its column from every ring list, so 
   assert.deepEqual(rows(result), [{ code: 'setting-entries-dropped', path: 'renderRequest.diagramOptions.conservationBlastFiles' }]);
 });
 
+test('a managed conservation slot keeps its ring when a ring column is dropped (B16)', () => {
+  // Python binds a slot to the ring whose index is its source_index: the slot
+  // of the dropped ring goes, a later one is renumbered (its stored type kept),
+  // and the axis boundary follows the slots before it.
+  const session = gallery('HmmtDNA_basic_circular');
+  const ref = (resourceId) => ({ resourceId, representation: 'file' });
+  const slot = (id, renderer, params = {}) => ({
+    kind: 'circularTrackSlot', id, renderer, enabled: true, side: 'inside', radius: null, width: null, z: 0,
+    params, innerGapPx: null, outerGapPx: null
+  });
+  const ring = (label, sourceIndex, trackIndex) => slot(`ring-${label}`, 'sequence_conservation', {
+    managed: 'conservation', source_index: sourceIndex, track_index: trackIndex, label, color: '#000000'
+  });
+  const request = clone(session.renderRequest);
+  Object.assign(request.diagramOptions, {
+    conservationBlastFiles: [ref('ring-a'), null, ref('ring-c')],
+    conservationLabels: ['A', 'B', 'C'],
+    conservationColors: ['#111111', '#222222', '#333333'],
+    conservationFastaFiles: [null, null, null]
+  });
+  request.diagramOptions.tracks = {
+    ...request.diagramOptions.tracks,
+    circularTrackSlots: [slot('features', 'features'), ring('A', '0', '1'), ring('B', '1', '2'), ring('C', 2, 3), slot('ticks', 'ticks')],
+    circularTrackAxisIndex: 4
+  };
+  const stored = clone(request);
+  const result = readStoredRenderRequest(request, {
+    ...contextOf(session), resourceIds: new Set([...Object.keys(session.resources), 'ring-a', 'ring-c'])
+  });
+  const { tracks } = result.value.diagramOptions;
+  assert.deepEqual(tracks.circularTrackSlots, [
+    slot('features', 'features'), ring('A', '0', '1'), ring('C', 1, 2), slot('ticks', 'ticks')
+  ]);
+  assert.equal(tracks.circularTrackAxisIndex, 3);
+  assert.deepEqual(result.value.diagramOptions.conservationLabels, ['A', 'C']);
+  assert.deepEqual(rows(result), [
+    { code: 'setting-entries-dropped', path: 'renderRequest.diagramOptions.conservationBlastFiles' },
+    { code: 'setting-entries-dropped', path: 'renderRequest.diagramOptions.tracks.circularTrackSlots' }
+  ]);
+  assert.deepEqual(request, stored, 'the stored request is not changed');
+});
+
 test('a setting of the other diagram type is read at its default without a row (〔出さないもの〕)', () => {
   const result = readRequest(gallery('lambda_basic_linear'), (request) => {
     request.diagramOptions.species = 'Escherichia phage';

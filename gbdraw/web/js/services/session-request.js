@@ -6105,9 +6105,10 @@ const storedRequestPolicy = (request, mode, resourceIds, holdComparisons) => {
  * no effect on the figure and gets none (〔出さないもの〕).
  * @param {readonly ContractRepair<StoredReferenceReason>[]} rows
  * @param {ReadonlySet<string>} otherOptionKeys
+ * @param {readonly string[]} droppedSlots The slots of dropped rings (B16), by their stored place.
  * @returns {LoadRepair[]}
  */
-const storedRequestRepairs = (rows, otherOptionKeys) => {
+const storedRequestRepairs = (rows, otherOptionKeys, droppedSlots) => {
   /** @type {Map<string, number>} */
   const droppedEntries = new Map();
   /** @type {LoadRepair[]} */
@@ -6132,10 +6133,92 @@ const storedRequestRepairs = (rows, otherOptionKeys) => {
       }));
     }
   });
+  droppedSlots.forEach((slot) => {
+    const list = slot.replace(/\[\d+\]$/, '');
+    droppedEntries.set(list, (droppedEntries.get(list) ?? 0) + 1);
+  });
   droppedEntries.forEach((count, path) => {
     repairs.push(loadRepair({ code: 'setting-entries-dropped', path, effect: 'dropped', count }));
   });
   return repairs;
+};
+
+/** The element places of the ring columns: a rule-5 row there drops a column. */
+const RING_COLUMN_ELEMENTS = new Set(CONSERVATION_RING_COLUMNS.map((pattern) => `${pattern}[*]`));
+/**
+ * A slot parameter as Python's `int()` reads it, or null.
+ * @param {unknown} value
+ */
+const slotIndexParam = (value) => (
+  typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value)
+    : typeof value === 'string' && /^\s*[+-]?\d+\s*$/.test(value) ? Number(value) : null);
+
+/**
+ * Keeps each managed conservation slot on its ring when the repair dropped
+ * ring columns (B16). Python binds a `sequence_conservation` slot to the ring
+ * whose index is its `source_index` (`gbdraw/api/diagram.py`), so the slot of
+ * a dropped ring is left out and a later slot's `source_index` and
+ * `track_index` go down by the rings dropped before it, in their stored type;
+ * the axis boundary goes down by the slots left out before it. Copies what it
+ * changes: the repaired request may share the stored objects.
+ * @param {Record<string, unknown>} request The repaired Circular request.
+ * @param {readonly ContractRepair<StoredReferenceReason>[]} rows
+ * @param {string} path
+ * @returns {{ request: Record<string, unknown>, droppedSlots: string[] }}
+ */
+const keepConservationSlotsOnTheirRings = (request, rows, path) => {
+  const droppedRings = rows.filter((row) => row.rule === 5 && RING_COLUMN_ELEMENTS.has(row.pattern))
+    .map((row) => Number(/\[(\d+)\]$/.exec(row.path)?.[1]));
+  const options = request.diagramOptions;
+  const tracks = isPlainObject(options) ? options.tracks : null;
+  const slots = isPlainObject(tracks) ? tracks.circularTrackSlots : null;
+  if (!droppedRings.length || !isPlainObject(options) || !isPlainObject(tracks) || !Array.isArray(slots)) {
+    return { request, droppedSlots: [] };
+  }
+  /** @param {number} index */
+  const droppedBefore = (index) => new Set(droppedRings.filter((ring) => ring < index)).size;
+  /** @param {unknown} stored @param {number} lower */
+  const lowered = (stored, lower) => {
+    const index = slotIndexParam(stored);
+    return index === null ? stored : typeof stored === 'number' ? index - lower : String(index - lower);
+  };
+  /** @type {string[]} */
+  const droppedSlots = [];
+  /** @type {unknown[]} */
+  const kept = [];
+  let axis = tracks.circularTrackAxisIndex;
+  slots.forEach((/** @type {unknown} */ slot, index) => {
+    const ringSlot = isPlainObject(slot) && slot.renderer === 'sequence_conservation' ? slot : null;
+    const params = ringSlot && isPlainObject(ringSlot.params) ? ringSlot.params : null;
+    const ring = params ? slotIndexParam(params.source_index) : null;
+    if (!ringSlot || !params || ring === null || !droppedBefore(ring + 1)) {
+      kept.push(slot);
+    } else if (droppedRings.includes(ring)) {
+      droppedSlots.push(`${path}.diagramOptions.tracks.circularTrackSlots[${index}]`);
+      if (typeof axis === 'number' && index < axis) axis -= 1;
+    } else {
+      const lower = droppedBefore(ring);
+      kept.push({
+        ...ringSlot,
+        params: {
+          ...params,
+          source_index: lowered(params.source_index, lower),
+          ...(Object.hasOwn(params, 'track_index') ? { track_index: lowered(params.track_index, lower) } : {})
+        }
+      });
+    }
+  });
+  if (kept.length === slots.length && kept.every((slot, index) => slot === slots[index])) return { request, droppedSlots };
+  return {
+    request: {
+      ...request,
+      diagramOptions: {
+        ...options,
+        tracks: { ...tracks, circularTrackSlots: kept, ...(Object.hasOwn(tracks, 'circularTrackAxisIndex') ? { circularTrackAxisIndex: axis } : {}) }
+      }
+    },
+    droppedSlots
+  };
 };
 
 /**
@@ -6189,10 +6272,16 @@ export const readStoredRenderRequest = (value, context) => {
   } catch {
     return { kind: 'request-dropped', path: `${path}.layout`, reason: 'unknown-record' };
   }
+  const rebound = keepConservationSlotsOnTheirRings(
+    /** @type {Record<string, unknown>} */ (repaired.value), repaired.rows, path
+  );
   // The leaf returns the stored object itself when nothing changed (RK-3).
   return {
-    value: /** @type {CanonicalRenderRequest} */ (repaired.value),
-    repairs: [...repairs, ...storedRequestRepairs(repaired.rows, STORED_REQUEST_PLACES[mode].otherOptionKeys)]
+    value: /** @type {CanonicalRenderRequest} */ (/** @type {unknown} */ (rebound.request)),
+    repairs: [
+      ...repairs,
+      ...storedRequestRepairs(repaired.rows, STORED_REQUEST_PLACES[mode].otherOptionKeys, rebound.droppedSlots)
+    ]
   };
 };
 
