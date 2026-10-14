@@ -230,7 +230,9 @@ configuration file drops a key it does not know.
   the app keeps when you remove a Depth file (a row with its own size or
   position).
 - The **Replace the current work?** question, asked when there is unsaved
-  work, still comes first, before you choose the file. The notice of `hash=` annotation targets moved to
+  work, still comes first, before you choose the file. The question about a
+  Session font that is not available (see [Fonts](#fonts)) comes after
+  this dialog, so **Cancel** here loads no font either. The notice of `hash=` annotation targets moved to
   the feature they name, the notice of a loaded configuration file, and the
   **Comparisons** card notices still follow the load.
 

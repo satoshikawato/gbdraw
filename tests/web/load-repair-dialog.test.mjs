@@ -1175,3 +1175,29 @@ test('every Gallery Session and Session fixture loads without a repair (G3)', as
   }
   globalThis.Worker = ImportWorker;
 });
+
+// A Session whose font this page cannot draw also asks the Font question
+// (PD-OI-098) before it loads; it comes after the repair list, so [Cancel]
+// there loads no font file either, and [Cancel] in the font question still
+// loads nothing.
+test('the font question of a lossy Session comes after the repair dialog', async () => {
+  await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+  const session = await savedSession('fonts');
+  session.modes.circular.config.adv.font_family = null;
+  session.modes.linear.config.adv.font_family = "'Missing Probe Font'";
+  session.modes.linear.config.adv.linear_label_spacing = -5;
+  /** @param {boolean} loadRepairs @param {boolean} loadFont */
+  const answered = async (loadRepairs, loadFont) => {
+    const asked = [];
+    const loaded = await importSession(input(session), {
+      confirmLoadRepairs: async () => { asked.push('repairs'); return loadRepairs; },
+      confirmSessionFonts: async (fonts) => { asked.push(['fonts', fonts]); return loadFont; }
+    });
+    return { status: loaded.status, asked };
+  };
+  const fonts = ['fonts', [null, "'Missing Probe Font'"]];
+  assert.deepEqual(await answered(false, true), { status: 'canceled', asked: ['repairs'] });
+  assert.deepEqual(await answered(true, false), { status: 'canceled', asked: ['repairs', fonts] });
+  assert.deepEqual(await answered(true, true), { status: 'ok', asked: ['repairs', fonts] });
+  assert.equal(state.drawings.linear.adv.font_family, "'Missing Probe Font'");
+});
