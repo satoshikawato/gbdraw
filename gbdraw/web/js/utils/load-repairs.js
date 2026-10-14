@@ -16,6 +16,7 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  *   | 'request-reference-dropped'
  *   | 'setting-replaced'
  *   | 'setting-entries-dropped'
+ *   | 'file-entry-dropped'
  *   | 'pending-palette-dropped'
  *   | 'depth-row-disabled'
  *   | 'orthogroup-edit-dropped'
@@ -167,6 +168,8 @@ const WORDING = {
     }[effect]}.`)),
   'setting-entries-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
     `Settings: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
+  'file-entry-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
+    `Input files: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
   'pending-palette-dropped': (repairs) => repairs.map(({ path, label }) => (
     `Palette: the palette "${label ?? ''}" (${path}) waits to be applied, but Instant Preview is on, which applies a palette at once;`
     + ' it was dropped.')),

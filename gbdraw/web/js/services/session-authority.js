@@ -3,7 +3,7 @@ import { validateAnnotationWarnings } from './session-feature-metadata.js';
 import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateWebFileBindings } from './session-resource-backing.js';
-import { requireActiveConfigContainers, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
+import { SESSION_INPUT_TYPES, requireActiveConfigContainers, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { canonicalFeatureOverrides, validateFeatureIdentityNotices } from './feature-placement.js';
@@ -789,11 +789,12 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
   }
   if (Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
     validateCurrentComparisonAuthority(sessionData, { load });
-    for (const field of ['cInputType', 'lInputType']) {
+    // Load reads an input type of no type as GenBank, with a row (`readSessionInputType`, OV-594).
+    for (const field of load ? [] : ['cInputType', 'lInputType']) {
       if (
         Object.prototype.hasOwnProperty.call(sessionData.ui || {}, field)
         // The own-property check passed, so `ui` is an object that holds `field`.
-        && !(/** @type {readonly unknown[]} */ (['gb', 'gff'])).includes(/** @type {Record<string, unknown>} */ (sessionData.ui)[field])
+        && !(/** @type {readonly unknown[]} */ (SESSION_INPUT_TYPES)).includes(/** @type {Record<string, unknown>} */ (sessionData.ui)[field])
       ) {
         throw new Error(`Session ui.${field} must be gb or gff when present.`);
       }

@@ -145,6 +145,19 @@ export const holdsCliWriterConfig = (session) => [40, 41].includes(session?.vers
   && Object.keys(session.config).every((key) => CLI_WRITER_CONFIG_DOMAINS.has(key));
 /** The configuration domains a draft stores, with the compatibility field `colorsAreOverrides`. */
 export const STORED_CONFIG_DOMAINS = Object.freeze([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
+/** The input types of a Session's `ui.cInputType` and `ui.lInputType` (Save refuses another; Load reads it, OV-594). */
+export const SESSION_INPUT_TYPES = Object.freeze(['gb', 'gff']);
+/** The PNG DPI the export uses unless the user picks another. */
+export const DEFAULT_PNG_DPI = 300;
+/** The PNG DPI choices the DPI menu lists; Load reads a stored DPI among them (OV-595). */
+export const PNG_DPI_CHOICES = Object.freeze([
+  { value: '72', label: '72 (Web)' },
+  { value: '96', label: '96 (Screen)' },
+  { value: '150', label: '150 (Draft)' },
+  { value: '300', label: '300 (Print)' },
+  { value: '600', label: '600 (High)' }
+]);
+
 /**
  * Stored settings a gbdraw writer wrote and later retired or moved (E-OD03):
  * Load reads them where they moved, or drops them, with no dialog row (TB19,

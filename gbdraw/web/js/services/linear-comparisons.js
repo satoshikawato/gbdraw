@@ -224,6 +224,10 @@ const normalizeEdge = (source, index, collect) => {
       collect({ at: `.edges[${index}].${field}`, stored: source[field], used: normalized[field] });
     }
   });
+  // A field an edge does not have is not read (E-OD03, E-OD12).
+  Object.keys(source).filter((field) => !Object.hasOwn(normalized, field)).forEach((field) => {
+    collect({ at: `.edges[${index}].${field}`, stored: source[field], used: undefined });
+  });
   return normalized;
 };
 

@@ -187,6 +187,18 @@ const CSS_NUMBER = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?`;
 const CSS_NUMBER_OR_PERCENT = new RegExp(`^${CSS_NUMBER}%?$`);
 const CSS_HUE = new RegExp(`^${CSS_NUMBER}(?:deg|grad|rad|turn)?$`, 'i');
 /**
+ * A committed paint read with the Default colors domain (D-41): '' when it is
+ * unset, its color, or null when it names no color. The live projection
+ * refuses such a paint, and Load drops it before (RL-D): one predicate.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export const readCommittedPaint = (value) => {
+  const raw = String(value ?? '').trim();
+  return raw ? normalizeDefaultColor(raw) : '';
+};
+
+/**
  * @param {unknown} colorValue
  * @returns {string | null}
  */

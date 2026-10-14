@@ -35,7 +35,7 @@ import {
   resolveLinearTrackAxisIndex
 } from './linear-track-slot-model.js';
 import { depthFileSlotsFromValue, fitDepthStateToSources, padDepthFileSlots } from './depth-track-state.js';
-import { isUnsetValue } from '../utils/field-reading.js';
+import { isUnsetValue, truthy } from '../utils/field-reading.js';
 import {
   decodeDepthText,
   isEncodedDepthFileEntry
@@ -46,7 +46,7 @@ import {
   readLinearRecordRows, readFeaturePanelTab, readList, readLosatProgram, readPaletteColors, readPlainObject,
   readColorRules, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
   featurePlacementsReader, readFeatureOverrides, readPalette, recordsOffReader, sessionUiFieldRepairs, sliceFieldRepairs, unreadFieldRepairs, valueRepairs,
-  LOSAT_EXECUTION_ROWS
+  LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields, readSessionInputType, readSimilarityAlignment
 } from './config-field-readers.js';
 import { drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
@@ -557,11 +557,12 @@ const buildSessionFilename = (title) => {
   return `${safe}.gbdraw-session.json.gz`;
 };
 
+// Load reads a stored configuration's older Linear visibility (every caller is a Load path).
 const withCurrentLinearLabelVisibility = (configData) => {
   if (!isPlainObject(configData) || !isPlainObject(configData.adv)) return configData;
   return {
     ...configData,
-    adv: migrateLegacyLinearLabelVisibility(configData.adv)
+    adv: migrateLegacyLinearLabelVisibility(configData.adv, { load: true })
   };
 };
 
@@ -1597,6 +1598,10 @@ const readLegacyConfigPayload = (data, drawing, mode) => {
     form: drawing.form, adv: drawing.adv, losat: drawing.losat, circularConservation: drawing.circularConservation
   });
   repairs.push(...configFieldRepairs(installed, migrated, '', { mode, current: true }));
+  // The Legend position of the drawing's mode, read as a Session slice's is.
+  if (isPlainObject(migrated.form)) {
+    repairs.push(...readLegendPositionOfMode(/** @type {Record<string, unknown>} */ (migrated.form).legend, mode, 'form.legend').repairs);
+  }
   return { value: mode === 'linear' ? withBoundLinearRecordsOff(migrated, state.linearSeqs) : migrated, repairs };
 };
 
@@ -1914,6 +1919,23 @@ const readRebuiltGalleryRequest = (data, repairs) => {
   return read.value === data.renderRequest ? data : { ...data, renderRequest: read.value };
 };
 
+/**
+ * K19: a settings-only Session 46's shown mode, read before its checks read
+ * that mode's slice: a mode of no mode is Circular, with a row.
+ * @template {Record<string, unknown>} T
+ * @param {T} data @param {LoadRepair[]} repairs
+ * @returns {T}
+ */
+const readSettingsOnlyMode = (data, repairs) => {
+  const envelope = /** @type {SessionEnvelope} */ (/** @type {unknown} */ (data));
+  // isPlainObject is not a type predicate.
+  const ui = isPlainObject(data.ui) ? /** @type {Record<string, unknown>} */ (data.ui) : null;
+  if (!ui || envelope.version < MODE_SCOPED_SESSION_VERSION || !isSettingsOnlySessionDocument(envelope)
+    || !readSessionUiMode(ui.mode).lost) return data;
+  repairs.push(...sessionUiFieldRepairs({ mode: ui.mode }, 'ui'));
+  return { ...data, ui: { ...ui, mode: readSessionUiMode(ui.mode).value } };
+};
+
 /** @param {LoadRepair[]} repairs Collects what Load cannot restore. */
 const preflightSessionImport = async (sessionData, repairs) => {
   const sourceSessionVersion = readSessionInput(sessionData).version;
@@ -1934,7 +1956,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
     }));
   });
   const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs);
-  const rawData = requestRead.data;
+  const rawData = readSettingsOnlyMode(requestRead.data, repairs);
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
@@ -2395,14 +2417,14 @@ const buildLoadedArtifactSlot = (set, {
   const features = featureStateFromCatalog(featureCatalog, { mode });
   const editorState = normalizeEditorStateData(
     isPlainObject(set.editorState) ? /** @type {Record<string, any>} */ (set.editorState) : {},
-    { featureCatalog }
+    { featureCatalog, ...(repairs ? { repairs, path: 'otherModeResult.editorState' } : {}) }
   );
   // The set's generated inventory and colors under the keys its rows have after Load (F2).
   const keptLegend = rekeyLegendRecords(editorState.legend, savedEdits?.legendRekeys ?? new Map());
   const ui = isPlainObject(set.ui) ? /** @type {Record<string, any>} */ (set.ui) : {};
   const runMetadata = isPlainObject(set.runMetadata) ? /** @type {Record<string, any>} */ (set.runMetadata) : {};
   const generatedLegend = readLegendPositionOfMode(ui.generatedLegendPosition, mode, 'otherModeResult.ui.generatedLegendPosition');
-  repairs?.push(...generatedLegend.repairs);
+  repairs?.push(...generatedLegend.repairs, ...sessionUiFieldRepairs(ui, 'otherModeResult.ui'));
   return createArtifactSlot({
     mode,
     values: {
@@ -2422,12 +2444,10 @@ const buildLoadedArtifactSlot = (set, {
       comparisonWarnings: cloneJsonData(runMetadata.comparisonWarnings || []),
       generatedLegendPosition: generatedLegend.value,
       generatedMode: mode,
-      generatedMultiRecordCanvas: Boolean(ui.generatedMultiRecordCanvas),
-      generatedCircularPlotTitlePosition: hasStoredLayoutValue(ui.generatedCircularPlotTitlePosition)
-        ? normalizeCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition)
-        : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition),
+      generatedMultiRecordCanvas: truthy(ui.generatedMultiRecordCanvas).value,
+      generatedCircularPlotTitlePosition: readGeneratedCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition, ui).value,
       appliedPaletteName: String(ui.appliedPaletteName || 'default'),
-      appliedPaletteColors: cloneColors(ui.appliedPaletteColors),
+      appliedPaletteColors: cloneColors(readPaletteColors(ui.appliedPaletteColors).value),
       similarityAlignmentResetReceipt: editorState.alignmentResetReceipt ?? null,
       originalLegendColors: keptLegend.originalColors,
       originalSvgStroke: editorState.originalSvgStroke
@@ -2562,16 +2582,10 @@ const applyStoredConfigData = (drawing, data, { resolveTrackPlacements = true, a
   // config step carries neither and leaves them alone (OV-383).
   const ownsAlignment = applyAlignment && drawing === state.drawings.linear;
   if (state.linearRecordTranslations && ownsAlignment) {
-    state.linearRecordTranslations.value = cloneJsonData(
-      Array.isArray(linearLayout?.recordTranslations)
-        ? linearLayout.recordTranslations
-        : []
-    );
+    state.linearRecordTranslations.value = cloneJsonData(readList(linearLayout?.recordTranslations).value);
   }
   if (state.similarityAlignmentPlan && ownsAlignment) {
-    state.similarityAlignmentPlan.value = linearLayout?.similarityAlignment
-      ? cloneJsonData(linearLayout.similarityAlignment)
-      : null;
+    state.similarityAlignmentPlan.value = cloneJsonData(readSimilarityAlignment(linearLayout?.similarityAlignment).value);
   }
   replaceLinearComparisonPlan(
     drawing.linearComparisonPlan,
@@ -3668,17 +3682,37 @@ export const canonicalRenderArtifactOwner = Object.freeze({
 });
 
 /**
+ * A single file slot's stored value: the first entry `deserializeFile` reads.
+ * The other entries of a list, and an entry it cannot read, are dropped and
+ * listed at `path` (OV-655, TB23, E-OD07); an entry that holds nothing is no row.
+ * @param {unknown} stored
+ * @param {string} path
+ * @param {LoadRepair[] | null} repairs
+ * @returns {FileLike | null}
+ */
+const readFileSlot = (stored, path, repairs) => {
+  const entries = Array.isArray(stored) ? stored : [stored];
+  const files = entries.map((entry) => (Array.isArray(entry) ? null : deserializeFile(entry)));
+  const kept = files.findIndex(Boolean);
+  const dropped = entries.filter((entry, index) => index !== kept && entry != null
+    && !(isPlainObject(entry) && Object.keys(entry).length === 0) && !(Array.isArray(entry) && entry.length === 0)).length;
+  if (dropped && repairs) repairs.push(loadRepair({ code: 'file-entry-dropped', path, effect: 'dropped', count: dropped }));
+  return kept < 0 ? null : /** @type {FileLike} */ (files[kept]);
+};
+
+/**
  * `targetDrawing` holds the Linear record layout and comparison plan that the
  * Files reconcile: a drawing, or the Load candidate.
  * @param {Record<string, any> | null} filesData
  * @param {{
  *   adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState?: Record<string, any>,
  *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'>,
- *   repairs?: LoadRepair[] | null
- * }} options `repairs`: Load lists what it drops from the saved inputs.
+ *   repairs?: LoadRepair[] | null, at?: string
+ * }} options `repairs`: Load lists what it drops from the saved inputs, at
+ *   `at`, where the inputs are in the file (`files`, `webFiles.bindings`).
  */
 const applyFiles = (filesData, {
-  adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state, targetDrawing, repairs = null
+  adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state, targetDrawing, repairs = null, at = 'files'
 }) => {
   targetState.matchSequenceRegistry?.reset?.();
   targetState.circularRecordList.value = [];
@@ -3716,9 +3750,12 @@ const applyFiles = (filesData, {
     return { collapsedLinearSeqs: false };
   }
 
-  targetState.files.c_gb = deserializeFile(filesData.c_gb);
-  targetState.files.c_gff = deserializeFile(filesData.c_gff);
-  targetState.files.c_fasta = deserializeFile(filesData.c_fasta);
+  /** @param {string} slot */
+  const fileSlot = (slot) => readFileSlot(filesData[slot], `${at}.${slot}`, repairs);
+  targetState.files.c_gb = fileSlot('c_gb');
+  targetState.files.c_gff = fileSlot('c_gff');
+  targetState.files.c_fasta = fileSlot('c_fasta');
+  // A Depth slot holds a list.
   targetState.files.c_depth = deserializeFile(filesData.c_depth);
   targetState.files.c_conservation_blasts = Array.isArray(filesData.c_conservation_blasts)
     ? filesData.c_conservation_blasts.map((entry) => deserializeFile(entry)).filter(Boolean)
@@ -3736,11 +3773,11 @@ const applyFiles = (filesData, {
     filesData.linearCanonicalComparisons,
     { adoptCanonicalPayloads, repairs }
   );
-  targetState.files.d_color = deserializeFile(filesData.d_color);
-  targetState.files.t_color = deserializeFile(filesData.t_color);
-  targetState.files.blacklist = deserializeFile(filesData.blacklist);
-  targetState.files.whitelist = deserializeFile(filesData.whitelist);
-  targetState.files.qualifier_priority = deserializeFile(filesData.qualifier_priority);
+  targetState.files.d_color = fileSlot('d_color');
+  targetState.files.t_color = fileSlot('t_color');
+  targetState.files.blacklist = fileSlot('blacklist');
+  targetState.files.whitelist = fileSlot('whitelist');
+  targetState.files.qualifier_priority = fileSlot('qualifier_priority');
 
   const canonicalCircularRecords = Array.isArray(filesData.circularRecords)
     ? filesData.circularRecords
@@ -3776,23 +3813,20 @@ const applyFiles = (filesData, {
   }
 
   if (Array.isArray(filesData.linearSeqs)) {
-    const loadedLinearSeqs = filesData.linearSeqs.map((seq) => ({
-      uid: seq.uid,
-      gb: deserializeFile(seq.gb),
-      gff: deserializeFile(seq.gff),
-      fasta: deserializeFile(seq.fasta),
-      depth: deserializeFile(seq.depth),
-      losat_gencode: seq.losat_gencode ?? 1,
-      definition: seq.definition ?? '',
-      record_subtitle: seq.record_subtitle ?? '',
-      file_definition: seq.file_definition ?? '',
-      file_subtitle: seq.file_subtitle ?? '',
-      inferred_definition: seq.inferred_definition ?? '',
-      region_record_id: seq.region_record_id ?? '',
-      region_start: seq.region_start ?? null,
-      region_end: seq.region_end ?? null,
-      region_reverse: !!seq.region_reverse
-    }));
+    const loadedLinearSeqs = filesData.linearSeqs.map((seq, index) => {
+      const seqAt = `${at}.linearSeqs[${index}]`;
+      // The genetic code, crop and texts, read once (OV-568).
+      const read = readLinearSeqFields(seq, seqAt);
+      repairs?.push(...read.repairs);
+      return {
+        uid: seq.uid,
+        gb: readFileSlot(seq.gb, `${seqAt}.gb`, repairs),
+        gff: readFileSlot(seq.gff, `${seqAt}.gff`, repairs),
+        fasta: readFileSlot(seq.fasta, `${seqAt}.fasta`, repairs),
+        depth: deserializeFile(seq.depth),
+        ...read.value
+      };
+    });
     const normalized = normalizeLinearSeqList(loadedLinearSeqs);
     const collapsed = resolveRecordInputs ? collapseEmptyLinearSeqList(loadedLinearSeqs) : loadedLinearSeqs;
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
@@ -4501,14 +4535,14 @@ export const applyFeatureStateData = (drawing, features = {}) => {
  */
 const applyDrawingFeatureData = (drawing, features = {}) => {
   // The readers Load lists what they cannot restore with (`sliceFieldRepairs`).
-  replacePlainObject(drawing.featureColorOverrides, cloneJsonObject(readPlainObject(features.featureColorOverrides).value));
+  replacePlainObject(drawing.featureColorOverrides, cloneJsonObject(readFeatureColorEdits(features.featureColorOverrides).value));
   drawing.featureVisibilityManualRules.splice(
     0,
     drawing.featureVisibilityManualRules.length,
     ...normalizeFeatureVisibilityRulesForSession(readList(features.featureVisibilityManualRules).value)
   );
   replacePlainObject(drawing.featureOverrides, featureOverridesForState(features.featureOverrides));
-  drawing.canonicalLabelOverrideRows.value = cloneJsonData(readList(features.labelOverrideRows).value);
+  drawing.canonicalLabelOverrideRows.value = cloneJsonData(readLabelOverrideRows(features.labelOverrideRows).value);
   replacePlainObject(drawing.labelTextBulkOverrides, readStringMap(features.labelTextBulkOverrides).value);
 };
 
@@ -5131,12 +5165,21 @@ const importSessionDocument = async (e, options = {}) => {
       : restoredConfig);
     const linearDraftConfig = draftConfigOf('linear');
     const circularDraftConfig = draftConfigOf('circular');
-    const candidateInputType = (candidateMode === 'linear'
-      ? ui.lInputType : ui.cInputType) || canonicalProjection?.inputType || 'gb';
+    // Each mode's input type (OV-594): the stored one, else its request's
+    // (which wins without a row over a stored value of no type), else GenBank.
+    // (A settings-only Session's projection holds its own `ui` type.)
+    const requestInputField = !settingsOnly && canonicalProjection?.inputType
+      ? (canonicalProjection.mode === 'linear' ? 'lInputType' : 'cInputType') : null;
+    /** @param {'cInputType' | 'lInputType'} field */
+    const requestInputTypeWins = (field) => field === requestInputField && readSessionInputType(ui[field]).lost;
+    /** @param {'cInputType' | 'lInputType'} field @returns {string} */
+    const inputTypeOf = (field) => (field === requestInputField && (isUnsetValue(ui[field]) || requestInputTypeWins(field))
+      ? /** @type {string} */ (canonicalProjection?.inputType) : readSessionInputType(ui[field]).value);
+    const inputTypes = { cInputType: inputTypeOf('cInputType'), lInputType: inputTypeOf('lInputType') };
     const candidateFiles = {
       files: {}, linearSeqs: [], circularRecordList: { value: [] },
       circularRecordDiscovery: {}, linearReorderNotice: { value: '' },
-      cInputType: { value: candidateMode === 'circular' ? candidateInputType : (ui.cInputType || 'gb') },
+      cInputType: { value: inputTypes.cInputType },
       // Read as the drawing reads them (a list of another kind failed the Load).
       linearRecordRows: readLinearRecordRows(linearDraftConfig?.linearRecordLayout?.rows).value,
       linearComparisonPlan: normalizeLinearComparisonPlan(linearDraftConfig?.linearComparisonPlan)
@@ -5146,7 +5189,7 @@ const importSessionDocument = async (e, options = {}) => {
       canonicalSession ? projectionResult.restoredFiles : data.files,
       {
         adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly,
-        targetState: candidateFiles, targetDrawing: candidateFiles, repairs
+        targetState: candidateFiles, targetDrawing: candidateFiles, repairs, at: canonicalSession ? 'webFiles.bindings' : 'files'
       }
     );
     recordSessionLifecycleEvent('session-candidate-files-end');
@@ -5201,7 +5244,7 @@ const importSessionDocument = async (e, options = {}) => {
       olderSession: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
       settingsOnly,
       cInputType: candidateFiles.cInputType.value,
-      lInputType: candidateMode === 'linear' ? candidateInputType : (ui.lInputType || 'gb'),
+      lInputType: inputTypes.lInputType,
       files: candidateFiles.files,
       linearSeqs: candidateFiles.linearSeqs,
       circularConservation: circularDraftConfig?.circularConservation || {}
@@ -5363,7 +5406,7 @@ const importSessionDocument = async (e, options = {}) => {
     let legacyFeatureRecoveryPlan = null;
     const legacyFeatureSnapshot = {
       mode: candidateMode, cInputType: candidateFiles.cInputType.value,
-      lInputType: candidateInputType, files: candidateFiles.files,
+      lInputType: inputTypes.lInputType, files: candidateFiles.files,
       linearSeqs: candidateFiles.linearSeqs, results: committedImportedResults,
       selectedResultIndex: ui.selectedResultIndex || 0,
       featureState: features, editorState: restoredEditorState
@@ -5596,7 +5639,7 @@ const importSessionDocument = async (e, options = {}) => {
       repairs.push(...configFieldRepairs(installedSettings[mode], installedConfig,
         modeScopedSession ? `modes.${mode}.config` : 'config', { stored: modeSlices[mode].config, mode }));
       repairs.push(...unreadFieldRepairs(modeScopedSession ? modeSlices[mode].config : flatDraft,
-        modeScopedSession ? `modes.${mode}.config` : 'config', mode));
+        modeScopedSession ? `modes.${mode}.config` : 'config', mode, { slice: modeScopedSession }));
       // (A Session 27-44 keeps them in its `ui` and `features`.)
       repairs.push(...sliceFieldRepairs(modeSlices[mode], modeScopedSession ? `modes.${mode}` : '', mode));
       // A saved unmanaged override is checked against its own drawing's mode (PD-OI-009, OV-106).
@@ -5626,7 +5669,12 @@ const importSessionDocument = async (e, options = {}) => {
     const draftInstantPreview = (appUi !== ui && typeof appUi.paletteInstantPreviewEnabled === 'boolean')
       || SLICE_MODES.some((mode) => typeof modeConfigs[mode].paletteInstantPreviewEnabled === 'boolean');
     repairs.push(
-      ...sessionUiFieldRepairs(draftInstantPreview ? { ...ui, paletteInstantPreviewEnabled: undefined } : ui, 'ui'),
+      ...sessionUiFieldRepairs({
+        ...ui,
+        ...(draftInstantPreview ? { paletteInstantPreviewEnabled: undefined } : {}),
+        // The request's input type wins over a stored one of no type.
+        ...Object.fromEntries(/** @type {const} */ (['cInputType', 'lInputType']).filter(requestInputTypeWins).map((field) => [field, undefined]))
+      }, 'ui'),
       ...losatExecutionRepairs(appUi.losatExecution, modeScopedSession ? 'ui.losatExecution' : 'config.losat'),
       ...valueRepairs(readRichFeaturePopup, appUi.richFeaturePopup, modeScopedSession ? 'ui.richFeaturePopup' : 'config.adv.rich_feature_popup')
     );
@@ -5765,16 +5813,9 @@ const importSessionDocument = async (e, options = {}) => {
       ? projectionResult.documentMetadata.title
       : (typeof data.title === 'string' ? data.title : '');
     if (ui.mode) state.mode.value = ui.mode;
-    if (canonicalProjection) {
-      if (canonicalProjection.mode === 'circular') {
-        state.cInputType.value = canonicalProjection.inputType;
-      } else {
-        state.lInputType.value = canonicalProjection.inputType;
-      }
-    }
-    if (ui.cInputType) state.cInputType.value = ui.cInputType;
-    if (ui.lInputType) state.lInputType.value = ui.lInputType;
-    if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
+    state.cInputType.value = inputTypes.cInputType;
+    state.lInputType.value = inputTypes.lInputType;
+    state.downloadDpi.value = readDownloadDpi(ui.downloadDpi).value;
     // Suppressed mode watchers observe only the complete admitted document.
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
     // A Session 27-44 draft's boolean Instant Preview wins over its `ui` (plan 4.2).

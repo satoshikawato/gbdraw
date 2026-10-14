@@ -174,6 +174,7 @@ import {
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
+import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner
@@ -3657,17 +3658,9 @@ const applyWebFileBindings = (
       fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta, resolveBinding, bindings.schema),
       depth: webBindingValueAsLegacyFile(resources, sequence?.depth, resolveBinding, bindings.schema),
       blast: webBindingValueAsLegacyFile(resources, sequence?.blast, resolveBinding, bindings.schema),
-      losat_gencode: integerSettingOr(sequence?.losat_gencode, 1, 1),
       losat_filename: String(sequence?.losat_filename || ''),
-      definition: String(sequence?.definition || ''),
-      record_subtitle: String(sequence?.record_subtitle || ''),
-      file_definition: String(sequence?.file_definition || ''),
-      file_subtitle: String(sequence?.file_subtitle || ''),
-      inferred_definition: String(sequence?.inferred_definition || ''),
-      region_record_id: String(sequence?.region_record_id || ''),
-      region_start: sequence?.region_start ?? null,
-      region_end: sequence?.region_end ?? null,
-      region_reverse: Boolean(sequence?.region_reverse)
+      // As stored: the Files read them once, with a row for what they cannot restore (OV-568).
+      ...Object.fromEntries(LINEAR_SEQ_READ_FIELDS.map((field) => [field, sequence?.[field]]))
     }));
   }
   if (Array.isArray(bindings.linearComparisons)) {

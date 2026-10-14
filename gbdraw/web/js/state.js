@@ -37,6 +37,7 @@ import { createImportedComparisonIntentState } from './services/imported-compari
 import { drawnLinearSequences } from './services/record-draw-selection.js';
 import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
 import {
+  DEFAULT_PNG_DPI,
   createDefaultAdv,
   createDefaultCircularConservation,
   createDefaultForm,
@@ -263,7 +264,7 @@ export const createDefaultLabelFilterState = () => ({
 export const createDefaultEditorDraftState = () => ({
   selectedSpecificPreset: '',
   specificRulePresetLoading: false,
-  downloadDpi: 300,
+  downloadDpi: DEFAULT_PNG_DPI,
   featurePanelTab: 'colors',
   newColorFeat: 'gene',
   newColorVal: '#d3d3d3',

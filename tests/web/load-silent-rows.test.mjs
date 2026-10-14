@@ -1,0 +1,196 @@
+// E1b (PR-E): a value Load changed without a row, kept invalid, or refused is
+// read before the dialog with a row (D1b section 1, E1a residuals); the loaded
+// state saves (a Session 27-39 is saved only after Generate, so it is loaded only).
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
+import { File } from 'node:buffer';
+import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { installFakeSvgDom } from './fake-svg-dom.mjs';
+
+globalThis.window = {
+  Vue: {
+    ref: (value) => ({ value }), reactive: (value) => value,
+    computed: (getter) => ({ get value() { return getter(); } }),
+    nextTick: async () => {}
+  },
+  DOMPurify: { sanitize: (value) => value }
+};
+globalThis.document = { createElement: () => ({ click: () => {} }) };
+installFakeSvgDom();
+globalThis.File = File;
+globalThis.alert = () => {};
+installSessionImportWorker();
+
+const REPO = new URL('../../', import.meta.url);
+const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
+import json, sys
+from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
+p = json.load(sys.stdin)
+print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
+    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
+`], { input: JSON.stringify(payload), encoding: 'utf8', cwd: fileURLToPath(REPO) })) }));
+const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
+const { state } = await import('../../gbdraw/web/js/state.js');
+
+const fixture = (name) => {
+  const bytes = readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url));
+  return JSON.parse(name.endsWith('.gz') ? gunzipSync(bytes) : bytes);
+};
+const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+const VECTORS = JSON.parse(readFileSync(new URL('../fixtures/session_admission_vectors.json', import.meta.url), 'utf8'));
+const input = (value) => ({
+  target: { files: [new File([JSON.stringify(value)], 'session.json', { type: 'application/json' })], value: 'selected' }
+});
+const BASES = {
+  v30: () => fixture('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'),
+  v44: () => fixture('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'),
+  v44L: () => fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'),
+  so46: () => structuredClone(VECTORS.bases['settings-only-46'].document),
+  g47L: () => gallery('lambda_basic_linear.gbdraw-session.json'),
+  // tests/utils/two_mode_session.py: a Circular Session 46 with a Linear `otherModeResult`.
+  twoMode: () => JSON.parse(execFileSync('python', ['-c',
+    'import json; from tests.utils.two_mode_session import two_mode_session; print(json.dumps(two_mode_session()))'
+  ], { encoding: 'utf8', cwd: fileURLToPath(REPO), maxBuffer: 1 << 30 }))
+};
+const set = (value, path, leaf) => {
+  const parts = path.split('.');
+  const container = parts.slice(0, -1).reduce((current, part) => current[part], value);
+  container[parts.at(-1)] = leaf;
+  return value;
+};
+const load = async (file) => {
+  const loaded = await importSession(input(file), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.ok(['ok', 'legacy'].includes(loaded.status), JSON.stringify(loaded.error));
+  return loaded.repairs.map(({ code, path }) => `${code} ${path}`);
+};
+const saved = async () => {
+  const result = await exportSession('E1b', { askChoice: async () => 'download' });
+  assert.equal(result?.status, 'saved', JSON.stringify(result?.error ?? result));
+  return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+};
+const LINEAR_SEQ = 'webFiles.bindings.linearSeqs.0';
+
+// [base, the edited path, the stored value, the rows, a check of the loaded state]
+const CASES = [
+  // OV-568: a Linear card's crop and genetic code, read once by the Files reader.
+  ['so46', `${LINEAR_SEQ}.region_start`, 'abc', ['setting-replaced webFiles.bindings.linearSeqs[0].region_start'],
+    () => assert.equal(state.linearSeqs[0].region_start, null)],
+  ['so46', `${LINEAR_SEQ}.region_end`, [1], ['setting-replaced webFiles.bindings.linearSeqs[0].region_end'],
+    () => assert.equal(state.linearSeqs[0].region_end, null)],
+  ['so46', `${LINEAR_SEQ}.losat_gencode`, 'x', ['setting-replaced webFiles.bindings.linearSeqs[0].losat_gencode'],
+    () => assert.equal(state.linearSeqs[0].losat_gencode, 1)],
+  // An orientation that is no boolean is not used (D1b: changed, U false), its text included.
+  ['so46', `${LINEAR_SEQ}.region_reverse`, 'true', ['setting-replaced webFiles.bindings.linearSeqs[0].region_reverse'],
+    () => assert.equal(state.linearSeqs[0].region_reverse, false)],
+  ['so46', `${LINEAR_SEQ}.definition`, 5, ['setting-replaced webFiles.bindings.linearSeqs[0].definition'],
+    () => assert.equal(state.linearSeqs[0].definition, '')],
+  ['v30', 'files.linearSeqs.0.losat_gencode', 0, ['setting-replaced files.linearSeqs[0].losat_gencode']],
+  // OV-595: the PNG DPI is one of the choices the DPI menu lists.
+  ['g47L', 'ui.downloadDpi', 'abc', ['setting-replaced ui.downloadDpi'], () => assert.equal(Number(state.downloadDpi.value), 300)],
+  ['g47L', 'ui.downloadDpi', '600', [], () => assert.equal(Number(state.downloadDpi.value), 600)],
+  // OV-594: an input type of no kind; the request's own type wins without a row.
+  ['g47L', 'ui.cInputType', 5, ['setting-replaced ui.cInputType'], () => assert.equal(state.cInputType.value, 'gb')],
+  ['g47L', 'ui.lInputType', 5, [], () => assert.equal(state.lInputType.value, 'gb')],
+  ['v44', 'ui.cInputType', 'fasta', [], () => assert.equal(state.cInputType.value, 'gb')],
+  // K19: a settings-only Session's mode of no mode (the request's mode wins in a full one).
+  ['so46', 'ui.mode', 'zigzag', ['setting-replaced ui.mode'], () => assert.equal(state.mode.value, 'circular')],
+  ['g47L', 'ui.mode', 'zigzag', [], () => assert.equal(state.mode.value, 'linear')],
+  // RL-D: a drawing's feature color edits and label rows read per entry.
+  ['g47L', 'modes.linear.features.featureColorOverrides', { a: 5, b: 'notacolor', c: { color: '#ff0000', caption: 'x' } },
+    ['setting-entries-dropped modes.linear.features.featureColorOverrides'],
+    () => assert.deepEqual(state.drawings.linear.featureColorOverrides, { c: { color: '#ff0000', caption: 'x' } })],
+  ['g47L', 'modes.linear.features.labelOverrideRows', [5, 'x', { recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: 'x', labelText: 'y' }],
+    ['setting-entries-dropped modes.linear.features.labelOverrideRows'],
+    () => assert.equal(state.drawings.linear.canonicalLabelOverrideRows.value.length, 1)],
+  // OV-578: the alignment plan and record translations of a settings-only file.
+  ['so46', 'modes.linear.config.linearRecordLayout.similarityAlignment', 'junk',
+    ['setting-replaced modes.linear.config.linearRecordLayout.similarityAlignment'], () => assert.equal(state.similarityAlignmentPlan.value, null)],
+  ['so46', 'modes.linear.config.linearRecordLayout.recordTranslations', 'nope',
+    ['setting-replaced modes.linear.config.linearRecordLayout.recordTranslations'], () => assert.deepEqual(state.linearRecordTranslations.value, [])],
+  // E1a residuals: LOSAT execution settings are no slice field of a Session 46 (E-OD03).
+  ['g47L', 'modes.linear.config.losat.executionMode', 'serial', ['setting-replaced modes.linear.config.losat.executionMode'],
+    () => assert.equal(state.losatExecution.executionMode, 'auto')],
+  // An older Linear visibility that is no boolean is dropped with a row on every path.
+  ['v30', 'config.adv.linear_show_accession', 'yes', ['setting-replaced config.adv.linear_show_accession'],
+    () => assert.equal(state.drawings.linear.adv.linear_accession_visibility, 'show')],
+  ['v44', 'config.adv.linear_show_length', 'yes', ['setting-replaced config.adv.linear_show_length']],
+  // Unknown fields of a qualifier priority row, an annotation set and a comparison edge (E-OD03, E-OD12).
+  ['v44', 'config.qualifierPriorityRules', [{ feat: 'CDS', order: 'product', zzz: 1 }], ['setting-replaced config.qualifierPriorityRules[0].zzz']],
+  ['v44', 'config.annotationSets', [{ id: 'a', annotations: [], zzz: 1 }], ['setting-replaced config.annotationSets[0].zzz']],
+  // The two Linear font sizes are read as settings (a positive number or unset).
+  ['g47L', 'modes.linear.config.adv.scale_font_size', 'big', ['setting-replaced modes.linear.config.adv.scale_font_size'],
+    () => assert.equal(state.drawings.linear.adv.scale_font_size, null)],
+  ['g47L', 'modes.linear.config.adv.ruler_label_font_size', '14', [], () => assert.equal(Number(state.drawings.linear.adv.ruler_label_font_size), 14)],
+  // A7i at a Session 46: recordsOff of another kind, an entry of no key, an unbound uid.
+  ['g47L', 'modes.linear.config.recordsOff', 'x', ['setting-replaced modes.linear.config.recordsOff']],
+  ['so46', 'modes.linear.config.recordsOff', [5], ['setting-entries-dropped modes.linear.config.recordsOff']],
+  ['so46', 'modes.linear.config.recordsOff', ['unbound'], [], () => assert.deepEqual([...state.drawings.linear.recordsOff], [])],
+  // OV-822: a null over a settings group merges nothing (E-OD06), and the group keeps its defaults.
+  ['g47L', 'modes.linear.config.losat.blastp', null, [], () => assert.equal(typeof state.drawings.linear.losat.blastp, 'object')],
+  ['so46', 'modes.circular.config.losat.blastp', null, []]
+];
+
+for (const [base, path, value, rows, check] of CASES) {
+  test(`E1b: ${base} ${path} = ${JSON.stringify(value)} loads with ${rows.length ? rows.join(', ') : 'no row'}`, async () => {
+    assert.deepEqual(await load(set(BASES[base](), path, value)), rows);
+    check?.();
+    if (base !== 'v30') await saved();
+  });
+}
+
+test('E1b: an unknown field of a stored comparison edge is dropped with a row (E-OD12)', async () => {
+  const session = BASES.g47L();
+  session.modes.linear.config.linearComparisonPlan.edges = [{
+    id: 'e1', queryUid: 'a', subjectUid: 'b', included: false, fileActive: false, losatFilenameActive: false,
+    source: 'losat', losatFilename: '', zzz: 1
+  }];
+  assert.deepEqual(await load(session), ['setting-replaced modes.linear.config.linearComparisonPlan.edges[0].zzz']);
+  assert.equal(Object.hasOwn(state.drawings.linear.linearComparisonPlan.edges[0], 'zzz'), false);
+  await saved();
+});
+
+test('OV-655, TB23: a single file slot keeps the first file it reads and lists the rest and a malformed entry', async () => {
+  let session = BASES.v30();
+  const first = session.files.linearSeqs[0].gb;
+  session.files.linearSeqs[0].gb = [first, { ...first, name: 'second.gbk' }];
+  assert.deepEqual(await load(session), ['file-entry-dropped files.linearSeqs[0].gb']);
+  assert.equal(state.linearSeqs[0].gb?.name, first.name);
+  session = BASES.v30();
+  session.files.linearSeqs[1].gb = { bogus: 1 };
+  assert.deepEqual(await load(session), ['file-entry-dropped files.linearSeqs[1].gb']);
+});
+
+test('OV-633: the other Result set\'s ui and editor edits are read with rows', async () => {
+  const session = BASES.twoMode();
+  session.otherModeResult.ui.appliedPaletteColors = { CDS: 5, gene: '#00ff00' };
+  session.otherModeResult.ui.generatedMultiRecordCanvas = 'yes';
+  assert.deepEqual(await load(session), [
+    'setting-replaced otherModeResult.ui.generatedMultiRecordCanvas',
+    'setting-entries-dropped otherModeResult.ui.appliedPaletteColors'
+  ]);
+  await saved();
+});
+
+test('OV-822: a configuration file\'s null LOSAT group loads with no row, and saves', async () => {
+  assert.deepEqual(await load(BASES.g47L()), []);
+  const config = structuredClone(BASES.g47L().modes.linear.config);
+  config.losat = { blastp: null };
+  state.mode.value = 'linear';
+  assert.deepEqual(await load(config), []);
+  assert.equal(typeof state.drawings.linear.losat.blastp, 'object');
+  await saved();
+});
+
+test('A configuration file: a Legend position outside its mode is listed (receipt residual)', async () => {
+  const session = BASES.g47L();
+  await load(session);
+  const config = structuredClone(session.modes.linear.config);
+  config.form.legend = 'upper_right';
+  assert.deepEqual(await load(config), ['legend-position-defaulted form.legend']);
+  await saved();
+});

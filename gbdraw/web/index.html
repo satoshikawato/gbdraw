@@ -5804,11 +5804,7 @@
                         <div class="flex items-center gap-2 bg-white px-3 py-1 rounded border border-slate-300">
                             <span class="text-sm font-bold text-slate-700">DPI</span>
                             <select v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
-                                <option value="72">72 (Web)</option>
-                                <option value="96">96 (Screen)</option>
-                                <option value="150">150 (Draft)</option>
-                                <option value="300">300 (Print)</option>
-                                <option value="600">600 (High)</option>
+                                <option v-for="choice in pngDpiChoices" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
                             </select>
                         </div>
                         <button type="button" aria-label="SVG" @click="downloadSVG" aria-describedby="session-export-help" class="btn btn-secondary px-3 py-1 text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple" aria-hidden="true"></i> SVG</button>

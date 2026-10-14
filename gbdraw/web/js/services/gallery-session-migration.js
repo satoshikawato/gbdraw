@@ -292,7 +292,7 @@ const migratePersistedGalleryConfig = (config) => {
   return {
     ...migratedNames,
     form,
-    adv: migrateLegacyLinearLabelVisibility(adv)
+    adv: migrateLegacyLinearLabelVisibility(adv, { load: true })
   };
 };
 

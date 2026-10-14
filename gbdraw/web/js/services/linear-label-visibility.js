@@ -56,7 +56,7 @@ const LEGACY_VISIBILITY_FIELDS = Object.freeze([
 /**
  * The older boolean fields read as the current visibility (`show`, `hide`)
  * where the current field is not stored; with it, the older one is dropped.
- * A value that is no boolean keeps its older name (not read).
+ * A value that is no boolean keeps its older name (not read; Load lists it).
  * @param {Record<string, unknown>} source
  * @returns {Record<string, unknown>}
  */
@@ -64,12 +64,9 @@ export const renameLegacyLinearLabelVisibility = (source) => {
   if (!LEGACY_VISIBILITY_FIELDS.some(([, legacyKey]) => hasOwn(source, legacyKey))) return source;
   const migrated = { ...source };
   for (const [currentKey, legacyKey] of LEGACY_VISIBILITY_FIELDS) {
-    if (!hasOwn(migrated, legacyKey)) continue;
-    if (hasOwn(migrated, currentKey)) delete migrated[legacyKey];
-    else if (typeof migrated[legacyKey] === 'boolean') {
-      migrated[currentKey] = migrated[legacyKey] ? 'show' : 'hide';
-      delete migrated[legacyKey];
-    }
+    if (!hasOwn(migrated, legacyKey) || typeof migrated[legacyKey] !== 'boolean') continue;
+    if (!hasOwn(migrated, currentKey)) migrated[currentKey] = migrated[legacyKey] ? 'show' : 'hide';
+    delete migrated[legacyKey];
   }
   return migrated;
 };
@@ -78,15 +75,18 @@ export const renameLegacyLinearLabelVisibility = (source) => {
  * A Session 27-39 or older configuration's visibility: the older boolean
  * fields renamed, and Show where neither is stored. A stored current value is
  * kept as stored (the settings' readers read it, and Save requires one of the
- * modes).
+ * modes). An older value that is no boolean refuses the file, except on Load
+ * (`load`), which keeps it under its older name for the settings' readers to
+ * list as not read, and shows the field.
  * @param {Record<string, unknown>} [source]
+ * @param {{ load?: boolean }} [options]
  * @returns {Record<string, unknown>}
  */
-export const migrateLegacyLinearLabelVisibility = (source = {}) => {
+export const migrateLegacyLinearLabelVisibility = (source = {}, { load = false } = {}) => {
   if (!source || typeof source !== 'object' || Array.isArray(source)) return source;
   const migrated = { ...renameLegacyLinearLabelVisibility(source) };
   for (const [currentKey, legacyKey, label] of LEGACY_VISIBILITY_FIELDS) {
-    if (hasOwn(migrated, legacyKey)) throw new Error(`${label} legacy value must be a boolean.`);
+    if (hasOwn(migrated, legacyKey) && !load) throw new Error(`${label} legacy value must be a boolean.`);
     if (!hasOwn(migrated, currentKey)) migrated[currentKey] = 'show';
   }
   return migrated;

@@ -168,8 +168,9 @@ const MUTATIONS = {
 const UNLISTED_LEAVES = [
   // View state (BA-OD84 (3)).
   [/^ui\.(zoom|canvasPan|selectedResultIndex)$|^modes\.\w+\.ui\.selectedFeatureRecordIdx$/, 'view state'],
-  // The committed request's mode is the shown mode.
-  [/^ui\.mode$/, 'the request\'s mode wins'],
+  // The committed request's mode is the shown mode, and its input type wins
+  // over a stored one of no type (D1b OV-594; the fixture's request is Circular).
+  [/^ui\.(mode|cInputType)$/, 'the request\'s mode and input type win'],
   // The pending palette's colors apply only with a pending palette.
   [/^modes\.\w+\.ui\.pendingPaletteColors$/, 'no pending palette'],
   // The committed mode's request sets a layout slot that is no object.

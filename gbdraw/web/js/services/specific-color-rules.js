@@ -109,6 +109,15 @@ export const savedSpecificRules = (rules) => rules.map((rule) => {
   const read = savedRuleCaption(caption, rule.color);
   return read === caption ? rule : { ...rule, cap: read };
 });
+/**
+ * The color of a per-feature color edit: an edit object's `color`, or an
+ * older bare color.
+ * @param {unknown} edit
+ * @returns {unknown}
+ */
+export const featureColorEditColor = (edit) => (
+  edit && typeof edit === 'object' && Object.hasOwn(edit, 'color') ? /** @type {{ color?: unknown }} */ (edit).color : edit
+);
 // Per-feature color edits as a saved Session is read: an older build wrote a
 // rule's rewritten caption into the edits of the features the rule colored,
 // so an edit's caption is read as its rule's is, by the edit's own color.

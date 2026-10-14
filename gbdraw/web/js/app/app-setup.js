@@ -33,7 +33,7 @@ import { drawnBlockStroke, drawsPythonLegendRow, legendEntryKey, legendStructure
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
-import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
+import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
@@ -7347,6 +7347,7 @@ export const createAppSetup = () => {
     getDefinitionLineStyleSwatchValue,
     isDefinitionLineStyleMuted,
     downloadDpi,
+    pngDpiChoices: PNG_DPI_CHOICES,
     runAnalysis,
     generateFromError,
     cancelGeneration,

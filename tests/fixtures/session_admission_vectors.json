@@ -22,6 +22,16 @@
    "code": "setting-entries-dropped",
    "path": "config.recordDisplayDrafts",
    "finding": "OV-639 (BA-D19), OV-634: a Session 40 display draft whose selector is not text; Python checks drafts from Session 41"
+  },
+  {
+   "code": "setting-replaced",
+   "path": "ui.cInputType",
+   "finding": "OV-594 (BA-D13, BA-D25 c): Python does not read the app input type; the Web reads a type outside gb and gff as GenBank, with a row when no committed request names the type."
+  },
+  {
+   "code": "setting-replaced",
+   "path": "ui.lInputType",
+   "finding": "OV-594 (BA-D13, BA-D25 c): Python does not read the app input type; the Web reads a type outside gb and gff as GenBank, with a row when no committed request names the type."
   }
  ],
  "bases": {
@@ -1048,8 +1058,10 @@
    "python": "refuse",
    "note": "A shown mode that is no diagram mode.",
    "pythonMessage": "requires an active Web configuration and mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "setting-replaced@ui.mode"
+   ]
   },
   {
    "id": "ov592-losat-cache-entries-object",
@@ -1731,10 +1743,11 @@
     }
    ],
    "python": "accept",
-   "web": "refused",
+   "web": "repaired",
    "note": "ui.cInputType outside gb and gff.",
-   "difference": "Python does not read ui.cInputType; the Web requires gb or gff from Session 40. Expected today; the Owner decides (B6).",
-   "webClass": "interim"
+   "webRepairs": [
+    "setting-replaced@ui.cInputType"
+   ]
   },
   {
    "id": "ov594-linear-input-type-fasta",
@@ -1748,10 +1761,11 @@
     }
    ],
    "python": "accept",
-   "web": "refused",
+   "web": "repaired",
    "note": "ui.lInputType outside gb and gff.",
-   "difference": "Python does not read ui.lInputType; the Web requires gb or gff from Session 40. Expected today; the Owner decides (B6).",
-   "webClass": "interim"
+   "webRepairs": [
+    "setting-replaced@ui.lInputType"
+   ]
   },
   {
    "id": "c4-losat-cache-entry",

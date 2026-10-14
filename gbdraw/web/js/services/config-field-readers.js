@@ -1,7 +1,8 @@
 // @ts-check
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
-import { resolveColorToHex } from '../utils/color-utils.js';
+import { readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
+import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
 import {
   changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, nonNegativeNumberOrNull, numberOr, onlyTrue,
   positiveNumberOrNull, textChoice, trueUnlessFalse, truthy
@@ -23,8 +24,8 @@ import {
 } from './losat-normalization.js';
 import { normalizeOrthogroupDormantOverrides } from './orthogroup-feature-metadata.js';
 import {
-  DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, RETIRED_STORED_FIELDS, STORED_CONFIG_DOMAINS, STORED_ROW_FIELDS, createDefaultAdv,
-  createDefaultCircularConservation, createDefaultForm, createDefaultLosat,
+  DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, DEFAULT_PNG_DPI, PNG_DPI_CHOICES, RETIRED_STORED_FIELDS, SESSION_INPUT_TYPES, STORED_CONFIG_DOMAINS,
+  STORED_ROW_FIELDS, createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat,
   createDefaultLosatpHitLimits, readLinearTypographyLinked
 } from './session-active-config-contract.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
@@ -36,6 +37,8 @@ import {
   DEFAULT_FEATURE_RENDERINGS, FEATURE_RENDERING_VALUES, readPersistedArrowHeadLengthRatio, readPersistedArrowShaftWidthRatio
 } from '../utils/feature-rendering.js';
 import { LINEAR_LABEL_VISIBILITY_MODES } from './linear-label-visibility.js';
+import { featureColorEditColor } from './specific-color-rules.js';
+import { isLabelOverrideRow } from './label-override-table.js';
 
 /** @import { FieldLeaf, FieldReader, FieldReading } from '../utils/field-reading.js' */
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
@@ -192,6 +195,58 @@ export const readConservationSeries = (value) => {
 };
 
 /**
+ * A crop endpoint of a Linear card: a whole number from 1 (its text reads as
+ * it), else unset (OV-568).
+ * @type {FieldReader<number | null>}
+ */
+const readRegionEndpoint = (value) => {
+  const classified = classifyOptionalNumber(value);
+  if (classified.status === 'auto') return { value: null, lost: false };
+  return classified.status === 'valid' && isPositiveInteger(classified.value)
+    ? { value: classified.value, lost: false } : { value: null, lost: true };
+};
+/**
+ * A Linear card's orientation: a boolean; any other value is not used, and
+ * the card is drawn as stored (OV-568).
+ * @type {FieldReader<boolean>}
+ */
+const readRegionReverse = (value) => (typeof value === 'boolean'
+  ? { value, lost: false } : { value: false, lost: !isUnsetValue(value) });
+/** A Linear card's text: text, else none (OV-568). @type {FieldReader<string>} */
+const readCardText = (value) => (typeof value === 'string' ? { value, lost: false } : { value: '', lost: !isUnsetValue(value) });
+/** A Linear card's genetic code, crop and texts. @type {readonly FieldRow[]} */
+const LINEAR_SEQ_ROWS = Object.freeze([
+  row('losat_gencode', readGencode),
+  row('region_start', readRegionEndpoint),
+  row('region_end', readRegionEndpoint),
+  row('region_reverse', readRegionReverse),
+  ...['definition', 'record_subtitle', 'file_definition', 'file_subtitle', 'inferred_definition', 'region_record_id']
+    .map((field) => row(field, readCardText))
+]);
+/** The Linear card fields the Files read (`readLinearSeqFields`); a binding copies them as stored. */
+export const LINEAR_SEQ_READ_FIELDS = Object.freeze(LINEAR_SEQ_ROWS.map(({ field }) => field));
+/**
+ * A Linear card's genetic code, crop and texts as the Files read them
+ * (`files.linearSeqs[i]` of a Session 27-30, `webFiles.bindings.linearSeqs[i]`
+ * after), with the rows of what they cannot restore at `path` (OV-568).
+ * @typedef {{ losat_gencode: number, region_start: number | null, region_end: number | null, region_reverse: boolean,
+ *   definition: string, record_subtitle: string, file_definition: string, file_subtitle: string,
+ *   inferred_definition: string, region_record_id: string }} LinearSeqFields
+ * @param {Record<string, unknown>} seq
+ * @param {string} path
+ * @returns {{ value: LinearSeqFields, repairs: LoadRepair[] }}
+ */
+export const readLinearSeqFields = (seq, path) => {
+  /** @type {Record<string, unknown>} */
+  const read = { ...seq };
+  const losses = readRows(read, LINEAR_SEQ_ROWS, '', seq);
+  return {
+    value: /** @type {LinearSeqFields} */ (Object.fromEntries(LINEAR_SEQ_READ_FIELDS.map((field) => [field, read[field]]))),
+    repairs: lossRepairs(losses, path, seq)
+  };
+};
+
+/**
  * @typedef {{ uid: string, row: number, canonicalCardinality?: 'exactly_one', canonicalRow?: number,
  *   canonicalColumn?: number }} LinearRecordRowEntry
  */
@@ -241,14 +296,19 @@ export const readLinearRecordRows = (value) => {
 export const readQualifierPriorityRules = (value) => {
   /** @type {QualifierPriorityRule[]} */
   const rules = [];
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
   let dropped = 0;
-  (Array.isArray(value) ? value : []).forEach((rule) => {
+  (Array.isArray(value) ? value : []).forEach((rule, index) => {
     const feat = isPlainObject(rule) ? String(rule.feat ?? '').trim() : '';
     const order = isPlainObject(rule) ? String(rule.order ?? '').trim() : '';
     if (!feat || !order) {
       dropped += 1;
       return;
     }
+    // A field no gbdraw writer wrote is not read (E-OD03).
+    Object.keys(/** @type {Record<string, unknown>} */ (rule)).filter((field) => field !== 'feat' && field !== 'order')
+      .forEach((field) => leaves.push({ at: `[${index}].${field}`, stored: /** @type {Record<string, unknown>} */ (rule)[field], used: undefined }));
     const existing = rules.find((entry) => entry.feat === feat);
     if (existing) {
       existing.order = order;
@@ -257,7 +317,7 @@ export const readQualifierPriorityRules = (value) => {
       rules.push({ feat, order });
     }
   });
-  return listReading(rules, value, dropped, []);
+  return listReading(rules, value, dropped, leaves);
 };
 
 /**
@@ -442,6 +502,8 @@ const ADV_ROWS = Object.freeze([
   row('multi_record_positions', readMultiRecordPositions),
   row('feature_overlap_tolerance_bp', numberOr((numeric) => Number.isSafeInteger(numeric) && numeric >= 0, DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP)),
   row('plot_title_font_size', positiveNumberOrNull),
+  row('scale_font_size', positiveNumberOrNull),
+  row('ruler_label_font_size', positiveNumberOrNull),
   row('keep_full_definition_with_plot_title', onlyTrue),
   row('depth_color', (value) => ({ value: resolveColorToHex(String(value || '#4A90E2')), lost: false })),
   row('depth_normalize', onlyTrue),
@@ -576,6 +638,8 @@ export const DEFAULT_LINEAR_RECORD_GAP_PX = /** @type {number} */ (
 export const draftLinearRecordGap = (value) => (isUnsetValue(value) ? DEFAULT_LINEAR_RECORD_GAP_PX : value);
 /** A blank or absent gap reads as the default, as `draftLinearRecordGap` gives it. @type {FieldReader<number>} */
 export const readLinearRecordGap = numberOr(isNonNegative, DEFAULT_LINEAR_RECORD_GAP_PX);
+/** The Linear alignment plan: an object, else unset (OV-578). @type {FieldReader<Record<string, unknown> | null>} */
+export const readSimilarityAlignment = (value) => (isPlainObject(value) ? { value, lost: false } : { value: null, lost: !isUnsetValue(value) });
 export const readImportedComparisonAction = exactChoice(Object.values(IMPORTED_COMPARISON_ACTIONS), null);
 const readLosatProgramText = exactChoice(['blastn', 'tblastx', 'blastp'], 'blastn');
 /** The label filter, read without case. */
@@ -702,7 +766,9 @@ const VALUE_TABLES = Object.freeze([
     rows: [
       row('enabled', readLinearRecordLayoutEnabled),
       row('recordGap', readLinearRecordGap),
-      row('rows', readLinearRecordRows)
+      row('rows', readLinearRecordRows),
+      row('similarityAlignment', readSimilarityAlignment),
+      row('recordTranslations', readList)
     ]
   },
   { at: 'importedComparisonResolution', rows: [row('action', readImportedComparisonAction)] },
@@ -757,15 +823,31 @@ export const readGeneratedCircularPlotTitlePosition = (value, ui) => {
  * that is no object is not read (`null`: the drawing's colors are used).
  * @type {FieldReader<Record<string, string> | null>}
  */
-export const readPaletteColors = (value) => (isPlainObject(value)
-  ? {
-      value: Object.fromEntries(Object.entries(value).map(([key, color]) => [key, resolveColorToHex(String(color || '').trim())])),
-      lost: false
-    }
-  : { value: null, lost: !isUnsetValue(value) });
+export const readPaletteColors = (value) => {
+  if (!isPlainObject(value)) return { value: null, lost: !isUnsetValue(value) };
+  // A color that names no color is dropped (OV-633).
+  const entries = Object.entries(value).filter(([, color]) => readCommittedPaint(color) !== null);
+  const dropped = Object.keys(value).length - entries.length;
+  return {
+    value: Object.fromEntries(entries.map(([key, color]) => [key, resolveColorToHex(String(color || '').trim())])),
+    lost: dropped > 0, ...(dropped ? { dropped } : {})
+  };
+};
 /** Shown unless `false`. @type {FieldReader<boolean>} */
 export const readRichFeaturePopup = trueUnlessFalse;
 export const readSessionUiMode = exactChoice(['circular', 'linear'], 'circular');
+/** An input type, else GenBank (OV-594). */
+export const readSessionInputType = exactChoice(SESSION_INPUT_TYPES, 'gb');
+/**
+ * The PNG DPI: one of the choices the DPI menu lists, kept as stored, else
+ * the default (OV-595).
+ * @type {FieldReader<unknown>}
+ */
+export const readDownloadDpi = (value) => {
+  if (isUnsetValue(value)) return { value: DEFAULT_PNG_DPI, lost: false };
+  const known = PNG_DPI_CHOICES.some((choice) => typeof value !== 'object' && choice.value === String(value).trim());
+  return known ? { value: typeof value === 'number' ? value : String(value).trim(), lost: false } : { value: DEFAULT_PNG_DPI, lost: true };
+};
 export const readFeaturePanelTab = exactChoice(['colors', 'labels'], 'colors');
 /** A Session's app `ui`. @type {readonly FieldTable[]} */
 const SESSION_UI_TABLE = Object.freeze([
@@ -777,6 +859,9 @@ const SESSION_UI_TABLE = Object.freeze([
       row('autoLabelReflow', truthy),
       row('paletteInstantPreviewEnabled', truthy),
       row('generatedMultiRecordCanvas', truthy),
+      row('cInputType', readSessionInputType),
+      row('lInputType', readSessionInputType),
+      row('downloadDpi', readDownloadDpi),
       { field: 'circularPlotTitlePosition', read: (value, ui) => (storedText(ui.generatedCircularPlotTitlePosition)
         ? { value, lost: false } : readCircularPlotTitlePosition(value)) },
       { field: 'generatedCircularPlotTitlePosition', read: readGeneratedCircularPlotTitlePosition },
@@ -801,6 +886,14 @@ export const readCanvasPadding = (value) => {
   const notObject = !isPlainObject(value) && !isUnsetValue(value);
   return { value: padding, lost: notObject || leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
 };
+/** Per-feature color edits: an edit whose paint names no color is dropped (RL-D). */
+export const readFeatureColorEdits = draftRows((_key, edit) => readCommittedPaint(featureColorEditColor(edit)) !== null);
+/** The label table rows the table serializes (RL-D). @type {FieldReader<unknown[]>} */
+export const readLabelOverrideRows = (value) => {
+  const entries = Array.isArray(value) ? value : [];
+  const rows = entries.filter(isLabelOverrideRow);
+  return listReading(rows, value, entries.length - rows.length, []);
+};
 /** A drawing's `ui` and its feature edits (a Session 46 slice). @type {readonly FieldTable[]} */
 const SLICE_TABLES = Object.freeze([
   {
@@ -813,10 +906,10 @@ const SLICE_TABLES = Object.freeze([
   {
     at: 'features',
     rows: [
-      row('featureColorOverrides', readPlainObject),
+      row('featureColorOverrides', readFeatureColorEdits),
       row('featureOverrides', readFeatureOverrides),
       row('featureVisibilityManualRules', readList),
-      row('labelOverrideRows', readList),
+      row('labelOverrideRows', readLabelOverrideRows),
       row('labelTextBulkOverrides', readStringMap)
     ]
   }
@@ -927,12 +1020,12 @@ const UNSAFE_KEYS = Object.freeze(['__proto__', 'constructor', 'prototype']);
  * not used, except in a map of `FREE_KEY_MAPS`, where it is copied; it is
  * returned as a loss unless a gbdraw writer wrote it and later retired or
  * moved it (`RETIRED_STORED_FIELDS`, E-OD03; TB19, TB32). An object merges
- * into an object; a list replaces a list; a value of `target`'s kind, or
- * `null` on either side, is copied. An empty text of another kind over a
- * number (a cleared number input) is the field's value in `defaults`, without
- * a loss: a blank is the default (R7, OV-827). Any other value of another kind
- * (a list for an object included) is not used; it is returned as a loss at
- * `at`, and `target` keeps its value.
+ * into an object, and `null` over an object merges nothing; a list replaces
+ * a list; a value of `target`'s kind, or `null` on either side, is copied. An
+ * empty text of another kind over a number (a cleared number input) is the
+ * field's value in `defaults`, without a loss: a blank is the default (R7,
+ * OV-827). Any other value of another kind (a list for an object included) is
+ * not used; it is returned as a loss at `at`, and `target` keeps its value.
  * @param {Record<string, unknown>} target
  * @param {unknown} source
  * @param {string} at
@@ -953,7 +1046,8 @@ const mergeStoredSettings = (target, source, at, defaults) => {
     const targetValue = target[key];
     const sourceValue = stored[key];
     const fresh = defaults && Object.hasOwn(defaults, key) ? defaults[key] : undefined;
-    if (isPlainObject(targetValue) && isPlainObject(sourceValue)) {
+    // A null over a settings group holds nothing and merges nothing (OV-822, E-OD06).
+    if (isPlainObject(targetValue) && (isPlainObject(sourceValue) || sourceValue === null)) {
       return mergeStoredSettings(targetValue, sourceValue, keyAt, isPlainObject(fresh) ? fresh : null);
     }
     if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
@@ -987,17 +1081,14 @@ export const defaultSettingsContainers = (mode) => ({
   form: createDefaultForm(), adv: createDefaultAdv(mode), losat: createDefaultLosat(),
   circularConservation: createDefaultCircularConservation()
 });
-/** The `adv` fields copied as stored, whatever their kind, when the stored `adv` holds them: the two Linear font sizes. */
-const RAW_ADV_FIELDS = Object.freeze(['scale_font_size', 'ruler_label_font_size']);
 /**
- * Fields read as stored, whatever their kind (their merge losses are none):
- * the `RAW_ADV_FIELDS`; the arrow ratios, read below (a ratio stored as its
- * text reads as its number; one out of range is its default, with a row);
- * and the inference flag, read with the hit limits below.
+ * Fields read from the stored value after the merge (their merge losses are
+ * none): the arrow ratios (a ratio stored as its text reads as its number; one
+ * out of range is its default, with a row), and the inference flag, read with
+ * the hit limits below.
  */
 const RAW_FIELDS = Object.freeze([
-  ...RAW_ADV_FIELDS.map((field) => `adv.${field}`), 'adv.arrow_head_length_ratio', 'adv.arrow_shaft_width_ratio',
-  'losat.blastp.collinearInferOrthogroups'
+  'adv.arrow_head_length_ratio', 'adv.arrow_shaft_width_ratio', 'losat.blastp.collinearInferOrthogroups'
 ]);
 /** @param {unknown} value */
 const copied = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
@@ -1037,12 +1128,10 @@ export const installStoredSettings = (targets, stored, mode) => {
   // value) gives no value below either.
   /** @param {string} at */
   const used = (at) => !losses.some((loss) => loss.kept && loss.at === at);
-  const storedAdv = used('adv') ? containerAt(config, 'adv') : null;
-  Object.assign(targets.adv, Object.fromEntries(RAW_ADV_FIELDS
-    .filter((field) => storedAdv && Object.hasOwn(storedAdv, field)).map((field) => [field, copied(storedAdv?.[field])])));
   // The arrow ratios the stored `adv` holds, else their defaults (an older
   // file draws the arrow it was drawn with); an `adv` not used keeps the target's.
   if (used('adv')) {
+    const storedAdv = containerAt(config, 'adv');
     /** @type {[string, (value: unknown) => FieldReading<number | null>][]} */ ([
       ['arrow_head_length_ratio', readPersistedArrowHeadLengthRatio], ['arrow_shaft_width_ratio', readPersistedArrowShaftWidthRatio]
     ]).forEach(([field, read]) => {
@@ -1196,13 +1285,18 @@ export const configFieldRepairs = (targets, config, path, { stored = config, mod
  * @param {unknown} stored The stored draft (a slice's, or a Session 27-44's).
  * @param {string} path
  * @param {'circular' | 'linear'} mode
+ * @param {{ slice?: boolean }} [options] `slice`: a Session 46 slice, whose
+ *   `losat` holds no LOSAT execution setting (the app `ui` does; E-OD03).
  * @returns {LoadRepair[]}
  */
-export const unreadFieldRepairs = (stored, path, mode) => {
+export const unreadFieldRepairs = (stored, path, mode, { slice = false } = {}) => {
   if (!isPlainObject(stored)) return [];
   const config = migratePersistedWebStateFieldNames(stored);
   const targets = defaultSettingsContainers(mode);
+  const storedLosat = slice && isPlainObject(config.losat) ? config.losat : {};
   const losses = [
+    ...MODE_SCOPED_SETTINGS.losatExecutionFields.filter((/** @type {string} */ field) => Object.hasOwn(storedLosat, field))
+      .map((/** @type {string} */ field) => ({ at: `losat.${field}`, stored: storedLosat[field], used: undefined })),
     ...MERGED_CONTAINERS.flatMap((at) => {
       const stored = config[at];
       if (!isPlainObject(stored)) return isUnsetValue(stored) ? [] : [{ at, stored, used: {} }];
