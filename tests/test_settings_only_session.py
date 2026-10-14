@@ -54,6 +54,9 @@ def test_settings_only_auxiliary_resource_materializes(settings, tmp_path):
     ('source', 'biological sources'),
     ('result', 'editorState.featureCatalog'),
     ('provenance', 'committed render artifacts'),
+    # OV-780: a `ui` that is not an object names no mode; it was an AttributeError.
+    ('ui_null', 'active Web configuration and mode'),
+    ('ui_list', 'active Web configuration and mode'),
 ])
 def test_settings_only_rejects_inconsistent_documents(settings, damage, reason):
     document = copy.deepcopy(settings)
@@ -79,6 +82,8 @@ def test_settings_only_rejects_inconsistent_documents(settings, damage, reason):
         document['results'] = [{'name': 'old.svg', 'content': '<svg/>'}]
     elif damage == 'provenance':
         document['cliInvocation'] = {}
+    elif damage in {'ui_null', 'ui_list'}:
+        document['ui'] = [] if damage == 'ui_list' else None
     with pytest.raises(SessionError, match=reason):
         load_session_document(document)
 

@@ -822,9 +822,10 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
     config = session.get("config", {})
     if not isinstance(config, Mapping):
         return
+    ui = session.get("ui")
     _validate_display_placement_draft_config(
         config,
-        mode=(session.get("renderRequest") or {}).get("mode") or session.get("ui", {}).get("mode"),
+        mode=(session.get("renderRequest") or {}).get("mode") or (ui.get("mode") if isinstance(ui, Mapping) else None),
         scoped=True,
         current=session.get("version", 0) >= TYPED_DRAFT_SESSION_MIN_VERSION,
     )
