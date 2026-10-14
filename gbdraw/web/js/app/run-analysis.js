@@ -758,10 +758,10 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `files.linearCanonicalComparisons`.
  *   The caller's value is untyped (`files` is a Vue reactive object), so this is not checked there; a hand-edited
  *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
- * @param options.committedSession The committed Session (`CommittedCanonicalSession` in services/config.js), left
- *   untyped: its request may be a stored one whose leaves no reader has checked (`StoredRenderRequest`), and the reads
- *   below use them as they are (a null record throws). The true type needs checks that change that result, so the
- *   member stays an implicit `any` until Load promotes the stored request.
+ * @param options.committedSession The committed Session (`CommittedCanonicalSession` in services/session-request.js),
+ *   left untyped: its request may be a stored one whose leaves no reader has checked (`StoredRenderRequest`), and the
+ *   reads below use them as they are (a null record throws). The true type needs checks that change that result, so
+ *   the member stays an implicit `any` until Load promotes the stored request.
  * @param {LinearSeq[]} options.sequences
  * @param {ResolvedProteinReuseActive} options.active
  */

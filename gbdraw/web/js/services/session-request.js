@@ -358,7 +358,7 @@ export { CANONICAL_REQUEST_SCHEMA };
 /**
  * @import {
  *   CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalCircularDiagramOptions,
- *   CanonicalFileRef, CanonicalRecord, CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan, CanonicalTableRef
+ *   CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalRecord, CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan, CanonicalTableRef
  * } from '../contracts/request.generated.js'
  */
 /**
@@ -5936,8 +5936,21 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
  *   (receipt 〔今までの知らせ〕), so they are not dropped.
  */
 /**
- * A schema-1 request, returned as stored until its reader (PR-D) lifts it.
- * @typedef {Record<string, unknown> & { schema: 1 }} StoredSchema1Request
+ * A request of schema 1 or 2, which `readStoredRenderRequest` returns as
+ * stored until its reader (PR-D) lifts it; Load commits it so unless the
+ * Gallery migration rebuilt it. No reader has checked its leaves.
+ * @typedef {Readonly<Record<string, unknown>> & { schema: 1 | 2 }} StoredRenderRequest
+ */
+/**
+ * The committed Session: the request that drew the shown Result, with its
+ * resources and Web file bindings. Generate and the automatic rerender commit
+ * the schema 9 request they built; Load commits the request
+ * `readStoredRenderRequest` read (schema 9, or a stored schema 1 or 2); History
+ * and the Load rollback put a captured one back. `schema` tells the two apart.
+ * @typedef {object} CommittedCanonicalSession
+ * @property {CanonicalRenderRequest | StoredRenderRequest} renderRequest
+ * @property {Readonly<Record<string, unknown>>} resources
+ * @property {Readonly<Record<string, unknown>>} webFiles
  */
 /**
  * A stored request that cannot be read at all (K22): its Session loads as
@@ -6110,7 +6123,7 @@ const storedRequestRepairs = (rows, otherOptionKeys) => {
  * cannot be read at its root is a dropped request (K22).
  * @param {unknown} value
  * @param {StoredRequestContext} context
- * @returns {Repaired<CanonicalRenderRequest | StoredSchema1Request | Record<string, unknown>> | StoredRequestDropped}
+ * @returns {Repaired<CanonicalRenderRequest | StoredRenderRequest> | StoredRequestDropped}
  */
 export const readStoredRenderRequest = (value, context) => {
   const { path } = context;
@@ -6118,7 +6131,8 @@ export const readStoredRenderRequest = (value, context) => {
   if (!SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET.has(/** @type {number} */ (value.schema))) {
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
   }
-  if (value.schema === 1 || value.schema === 2) return { value, repairs: [] };
+  // The test above is the type: an object whose `schema` is 1 or 2.
+  if (value.schema === 1 || value.schema === 2) return { value: /** @type {StoredRenderRequest} */ (value), repairs: [] };
   // The promotion walks the records and comparisons; lists of another kind
   // leave nothing to read, as the repair would find at the root.
   if (!Array.isArray(value.records) || (Object.hasOwn(value, 'comparisons') && !Array.isArray(value.comparisons))) {
@@ -6191,7 +6205,41 @@ const materializedRecordSelector = (selector) => {
   return { kind: 'recordIndex', index: Number(match[1]) - 1 };
 };
 
-/** @param {unknown} mode The mode of the committed request, compared as it is. */
+/**
+ * A member of a record collection that a feature rotation targets: the
+ * committed row of one source record (`targetForFeature`, record display),
+ * which `materializeCanonicalRecordCollection` checks.
+ * @typedef {object} RecordTransformTargetMember
+ * @property {unknown} [canonicalRecordKey]
+ * @property {unknown} [recordKey]
+ * @property {unknown} [selector]
+ * @property {unknown} [recordLength]
+ * @property {unknown} [committedDisplay]
+ * @property {unknown} [committedReverseComplement]
+ */
+/**
+ * The record a feature rotation targets, as the record display's
+ * `targetForFeature` port gives it. Its fields are unchecked:
+ * `validateRecordTransformTarget` checks them against the committed request.
+ * @typedef {object} RecordTransformTarget
+ * @property {unknown} [scope]
+ * @property {unknown} [recordKey]
+ * @property {unknown} [canonicalRecordKey]
+ * @property {unknown} [source]
+ * @property {unknown} [effectiveCircular]
+ * @property {unknown} [cropped]
+ * @property {unknown} [recordLength]
+ * @property {readonly (RecordTransformTargetMember | null | undefined)[]} [members]
+ */
+/**
+ * The transform a feature rotation resolved, before it is checked.
+ * @typedef {{ recordLength: unknown, startCoordinate: number | null, reverseComplement: boolean | null }} RecordTransformInput
+ */
+/**
+ * @param {RecordTransformTarget} target
+ * @param {RecordTransformInput} transform
+ * @param {unknown} mode The mode of the committed request, compared as it is.
+ */
 const validateRecordTransformTarget = (target, transform, mode) => {
   if (!target || target.scope !== mode || typeof target.recordKey !== 'string'
     || !target.recordKey || typeof target.canonicalRecordKey !== 'string'
@@ -6209,14 +6257,19 @@ const validateRecordTransformTarget = (target, transform, mode) => {
     || Number(transform?.recordLength) !== recordLength) {
     throw new Error('The target record length changed after the feature popup opened.');
   }
-  if (!Number.isSafeInteger(transform?.startCoordinate)
-    || transform.startCoordinate < 1 || transform.startCoordinate > recordLength
+  const startCoordinate = transform?.startCoordinate;
+  if (startCoordinate === null || !Number.isSafeInteger(startCoordinate)
+    || startCoordinate < 1 || startCoordinate > recordLength
     || typeof transform?.reverseComplement !== 'boolean') {
     throw new Error('Resolved record transform is invalid for the target record.');
   }
 };
 
-/** @param {number} recordIndex */
+/**
+ * @param {CanonicalRecord} record
+ * @param {RecordTransformTarget} target
+ * @param {number} recordIndex
+ */
 const materializeCanonicalRecordCollection = (record, target, recordIndex) => {
   const members = Array.isArray(target.members) ? target.members : [];
   const identities = new Set();
@@ -6267,7 +6320,7 @@ const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) =>
       if (Number.isInteger(index) && index > recordIndex) shifted[field] = index + expansion;
     }
     if (Array.isArray(shifted?.pairs)) {
-      shifted.pairs = shifted.pairs.map((pair) => {
+      shifted.pairs = shifted.pairs.map((/** @type {Record<string, unknown>} */ pair) => {
         const next = { ...pair };
         for (const field of ['queryRecordIndex', 'subjectRecordIndex']) {
           const index = Number(next[field]);
@@ -6280,21 +6333,29 @@ const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) =>
   })
 );
 
-const requireCurrentCommittedRequest = (committed, request) => {
-  if (!isCurrentRequestSchema(request)
+/**
+ * The committed request, when it is of the current schema (a committed object's
+ * `schema` is 9 exactly when `isCurrentRequestSchema` holds).
+ * @param {CommittedCanonicalSession | null | undefined} committed
+ * @returns {CanonicalRenderRequest}
+ */
+const requireCurrentCommittedRequest = (committed) => {
+  const request = committed?.renderRequest;
+  if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
     || !['circular', 'linear'].includes(request.mode)
     || !committed?.resources || typeof committed.resources !== 'object') {
     throw new Error('A current committed canonical Session is required.');
   }
+  return request;
 };
 
 /**
  * Clone the last committed canonical Session and overlay one record transform.
  * No live form state participates in this projection.
+ * @param {{ committed: CommittedCanonicalSession | null, target: RecordTransformTarget, transform: RecordTransformInput }} input
  */
 export const projectCommittedRecordTransform = ({ committed, target, transform }) => {
-  const request = committed?.renderRequest;
-  requireCurrentCommittedRequest(committed, request);
+  const request = requireCurrentCommittedRequest(committed);
   validateRecordTransformTarget(target, transform, request.mode);
   const matchingIndexes = request.records
     .map((record, index) => ({ record, index }))
@@ -6416,7 +6477,7 @@ export const projectCommittedEditorIntent = ({
   drawing
 }) => {
   const request = committed?.renderRequest;
-  requireCurrentCommittedRequest(committed, request);
+  requireCurrentCommittedRequest(committed);
   const candidate = {
     ...committed,
     renderRequest: cloneCanonicalJsonValue(request),
@@ -6462,21 +6523,30 @@ export const projectCommittedEditorIntent = ({
   return candidate;
 };
 
-/** Project only alignment-owned fields of the last committed canonical artifact. */
+/**
+ * Project only alignment-owned fields of the last committed canonical artifact.
+ * @param {{
+ *   committed: CommittedCanonicalSession | null, plan: unknown, translations: unknown,
+ *   orientations: readonly { recordKey: string, reverseComplement: boolean }[]
+ * }} input The plan and translations are cloned as they are.
+ */
 export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations }) => {
-  if (!isCurrentRequestSchema(committed?.renderRequest)
-    || committed.renderRequest.mode !== 'linear' || !committed.resources) {
+  const committedRequest = committed?.renderRequest;
+  if (!committedRequest || committedRequest.schema !== CANONICAL_REQUEST_SCHEMA
+    || committedRequest.mode !== 'linear' || !committed?.resources) {
     throw new Error('Alignment requires a committed canonical Linear artifact.');
   }
-  const canonical = { ...committed, renderRequest: cloneCanonicalJsonValue(committed.renderRequest) };
-  const request = canonical.renderRequest;
+  /** @type {CanonicalLinearRenderRequest} */
+  const request = cloneCanonicalJsonValue(committedRequest);
+  const canonical = { ...committed, renderRequest: request };
   const keys = request.records.map(({ recordKey }) => recordKey);
   const byKey = new Map((orientations || []).map((entry) => [entry.recordKey, entry.reverseComplement]));
   if (byKey.size !== keys.length || orientations.length !== keys.length
     || keys.some(key => typeof byKey.get(key) !== 'boolean')) {
     throw new Error('Alignment orientation coverage changed.');
   }
-  request.records.forEach(record => writeCanonicalRecordReverseComplement(record, byKey.get(record.recordKey)));
+  // The test above gave every record key a boolean.
+  request.records.forEach(record => writeCanonicalRecordReverseComplement(record, /** @type {boolean} */ (byKey.get(record.recordKey))));
   request.layout = { recordGapPx: 24, multiRecordPositions: null, ...request.layout,
     similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
     recordTranslations: cloneCanonicalJsonValue(translations) };

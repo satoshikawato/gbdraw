@@ -275,6 +275,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { SettingsContainers } from './config-field-readers.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CommittedCanonicalSession } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
@@ -774,22 +775,6 @@ const normalizeStringArray = (source) => {
 let lastSessionFilename = null;
 /** @type {Record<string, any> | null} */
 let preservedCliOptions = null;
-/**
- * A request Load commits as the Session stored it: schema 1, which its reader
- * (PR-D) lifts; every other stored request is read to schema 9 at Load
- * (`readStoredRenderRequest`).
- * @typedef {Readonly<Record<string, unknown>>} StoredRenderRequest
- */
-/**
- * The committed Session: the request that drew the shown Result, with its
- * resources and Web file bindings. Generate and the automatic rerender commit
- * the schema 9 request they built; Load commits the request the Session
- * stored; History and the Load rollback put a captured one back.
- * @typedef {object} CommittedCanonicalSession
- * @property {CanonicalRenderRequest | StoredRenderRequest} renderRequest
- * @property {Readonly<Record<string, unknown>>} resources
- * @property {Readonly<Record<string, unknown>>} webFiles
- */
 // The variable keeps its earlier type: `applyResultsData` passes the request's
 // `diagramOptions.selectedFeaturesSet` on as feature types without a check,
 // which the true type refuses (stage 1d).
@@ -3554,7 +3539,9 @@ export const adoptCanonicalRenderArtifacts = (
   }
 };
 
-/** @returns {CommittedCanonicalSession['renderRequest'] | null} */
+// The port's readers take a stored request (schema 1 or 2) as an object of
+// unchecked leaves, so the return type leaves out its `schema` literal.
+/** @returns {CanonicalRenderRequest | Readonly<Record<string, unknown>> | null} */
 export const getCommittedCanonicalRenderRequest = () => {
   void committedCanonicalRevision.value;
   return committedCanonicalSession?.renderRequest || null;
