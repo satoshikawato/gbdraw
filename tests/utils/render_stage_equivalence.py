@@ -1179,8 +1179,11 @@ def random_walk(
 # that at a load average of 8-10; C2 on its ``--resolve_overlaps`` base, six
 # renders at once, T/logs/pr4/c2-variants-2a74.log). A step renders twice:
 # warm and cold in a chain, or the variant and the base again in the
-# expected-builds test.
-RENDER_SECONDS: Mapping[str, float] = {"C1": 0.5, "C2": 6.0, "C3": 1.3, "L1": 0.2, "L2": 1.3, "L3": 1.4}
+# expected-builds test. L2 and L3 doubled after the label fit (#1053) slowed
+# Linear renders: L2-full-1of4 took 100 s at a load average of 5 against an
+# estimate of 118 s, and timed out (300 s) at a load average of 6-25
+# (T/logs/pr4/chunk-L2-1of4-incr-pr4.log).
+RENDER_SECONDS: Mapping[str, float] = {"C1": 0.5, "C2": 6.0, "C3": 1.3, "L1": 0.2, "L2": 2.6, "L3": 2.8}
 # Cold renders far above their case: the slower label settings. A heavy step
 # counts three cold renders; the third is a margin for machine load, which can
 # slow a long render by 25-70 % (a warm render is no slower than a cold one).
