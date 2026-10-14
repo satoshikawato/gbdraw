@@ -194,7 +194,11 @@ with a default, or read with another meaning:
 Rows of per-feature edits, Feature visibility edits, `hash=` values, feature
 information and comparison match sequences give a count or a statement, not a
 place in the file. Legend entry rows name the entry, and table rows name the
-table and its lines.
+table and its lines. A Session of version 44 or older keeps a setting that
+both diagram modes read in one place, so such a setting it cannot use is one
+row (`config.adv.label_rendering`); a Session of version 46 or later keeps each
+mode's settings in its own place, and each place is a row
+(`modes.circular.config.adv.label_rendering`, `modes.linear.config.adv.label_rendering`).
 
 The dialog shows at most 12 lines, the last one with the number of the rest,
 and says that Save Session afterwards writes the current format. It lists the

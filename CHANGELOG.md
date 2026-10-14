@@ -282,8 +282,9 @@ write-up of a release.
   name a Depth series their drawing does not have, feature edits and feature
   information Load drops, replaces with a default, or reads differently (up
   to 12 lines): a setting with its place in the file and the value used, a
-  feature edit or feature information as a count or a statement. It says that
-  Save Session afterwards writes the current format. Values that had no
+  feature edit or feature information as a count or a statement. A setting
+  that a Session of version 44 or older stores once for both diagram modes is
+  one row. It says that Save Session afterwards writes the current format. Values that had no
   effect on the figure (a pending palette Instant Preview drops, edits of
   similarity groups the Result does not have) are dropped without a row. A
   Depth series without a Depth file loads as saved, and so does a Depth row
