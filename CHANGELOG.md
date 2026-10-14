@@ -1991,6 +1991,10 @@ Retired names and their replacements are listed under
   bytes are unchanged. The internal record annotations `gbdraw_record_label` and
   `gbdraw_record_subtitle` are no longer written; labels come from the request.
   `gbdraw.io.comparisons.load_comparisons` is removed (#1059).
+- Performance (web app): a Generate after a small change on a Circular Result also reuses
+  the record features, labels and group contents, the Multi-Record merge and the feature
+  catalog item. A title change on a large Multi-Record Session drops from about 1.4 s to
+  about 0.1 s warm (native Python). SVG, PNG, and PDF bytes are unchanged (#1070).
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
