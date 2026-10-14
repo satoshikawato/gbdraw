@@ -73,7 +73,7 @@ CURRENT_SESSION_VERSION = 47
 # ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
 # version 47 keys a slice's Legend color and stroke edits by the row key
 # (``originalCaption``) instead of the shown caption (PD-OI-061 revision 5)
-# and adds each slice's ``adv.font_family`` (PD-OI-097).
+# and adds each slice's ``adv.font_family`` (PD-OI-098).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
 ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47

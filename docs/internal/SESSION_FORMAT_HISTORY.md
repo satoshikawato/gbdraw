@@ -22,7 +22,7 @@ shown name no longer identifies a row. A rename changes only the entry's
 unique by row key, not by caption.
 
 Session 47 also adds the diagram font of each mode slice,
-`modes.<mode>.config.adv.font_family` (the **Font** section, PD-OI-097): the
+`modes.<mode>.config.adv.font_family` (the **Font** section, PD-OI-098): the
 CSS `font-family` list a drawing's text uses, `null` for the default
 (Liberation Sans). A Session stores only the name, never the font file
 (D-02). A Session older than 47 has no such field; when its draft holds the

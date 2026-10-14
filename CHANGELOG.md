@@ -58,7 +58,7 @@ write-up of a release.
     later.
   - Fixes: OpenType CFF fonts are measured by their glyph outlines, and a font
     without a Windows Unicode cmap no longer stops measurement (OV-680..683;
-    PD-OI-092, PD-OI-093, PD-OI-097).
+    PD-OI-092, PD-OI-093, PD-OI-098).
 - Legend names (CLI, Python, web app): legend rows that share a name follow
   one rule, and no legend name carries a color ID. Rows with the same name and
   the same swatch (fill and line) are one row. When two or more rows with the
