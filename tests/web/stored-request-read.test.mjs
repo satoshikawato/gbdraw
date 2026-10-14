@@ -30,7 +30,7 @@ installSessionImportWorker();
 
 const REPO = new URL('../../', import.meta.url);
 const { importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
-const { readStoredRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+const { readStoredRenderRequest, readPublishedRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
 import json, sys
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
@@ -261,4 +261,37 @@ test('Save writes the request Load read: the legacy alignment keeps the feature 
   const session = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
   assert.equal(session.renderRequest.schema, 9);
   assert.equal(session.renderRequest.layout.similarityAlignment.reference.sourceFeatureIndex, 14);
+});
+
+test('an alignment plan that loses a record decision is left out as one part (vector 002)', () => {
+  const session = gallery('BGC0000708-BGC0000713');
+  const result = readRequest(session, (request) => { request.layout.similarityAlignment.records[0].recordKey = 'no-such-record'; });
+  assert.equal(result.value.layout.similarityAlignment, null);
+  assert.deepEqual(rows(result), [{ code: 'request-reference-dropped', path: 'renderRequest.layout.similarityAlignment' }]);
+});
+
+test('Gallery publication reads a stored request through the reader and refuses any repair (OV-771, PLAN 12.2)', () => {
+  const session = read('tests/fixtures/sessions/lambda_basic_linear.v40-schema5.json');
+  const context = { featureCatalog: null, legacyOrthogroupState: null, resourceIds: new Set(Object.keys(session.resources)) };
+  // A schema-5 Linear record without a selector reads all records, as Load reads it.
+  const published = readPublishedRenderRequest(session.renderRequest, context);
+  assert.equal(published.schema, 9);
+  assert.deepEqual(published.records.map(({ cardinality }) => cardinality), ['all']);
+  const repaired = clone(session.renderRequest);
+  repaired.records[0].bogus = true;
+  assert.throws(() => readPublishedRenderRequest(repaired, context),
+    (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS');
+});
+
+test('a saved comparison entry that is neither resource-backed nor a generated comparison is dropped with a row (OV-750)', async () => {
+  for (const value of [[null], ['x'], [{ kind: 'generatedProteinComparison' }]]) {
+    const session = read('tests/fixtures/sessions/cli-linear-protein.v30.gbdraw-session.json.gz');
+    session.files = { ...(session.files || {}), linearCanonicalComparisons: value };
+    const { result, dialogs } = await load(session);
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    assert.deepEqual(state.files.linearCanonicalComparisons, [], JSON.stringify(value));
+    assert.ok(result.repairs.some(({ code, path }) => code === 'setting-entries-dropped'
+      && path === 'files.linearCanonicalComparisons'), JSON.stringify(value));
+    assert.ok(dialogs.flat().some((line) => line.includes('files.linearCanonicalComparisons')));
+  }
 });

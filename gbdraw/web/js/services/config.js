@@ -2,6 +2,8 @@
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
 import { isCurrentRequestSchema } from '../utils/request-schema.js';
+import { shapeViolations } from '../utils/contract-shape.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import {
   state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList
 } from '../state.js';
@@ -3427,22 +3429,35 @@ export const serializeActiveRenderFiles = async (
   };
 };
 
+/** A generated comparison as the request describes it. */
+const GENERATED_COMPARISON_SHAPE = /** @type {const} */ ({ kind: 'ref', name: 'CanonicalGeneratedProteinComparison' });
 /**
+ * The saved comparisons of a draft. With `repairs` (Load), an entry that is
+ * neither resource-backed nor a generated comparison as the request describes
+ * it is dropped and listed (OV-750); Generate passes none.
  * @param {unknown} comparisons
- * @param {{ adoptCanonicalPayloads?: boolean }} [options]
+ * @param {{ adoptCanonicalPayloads?: boolean, repairs?: LoadRepair[] | null }} [options]
  */
 const deserializeCanonicalComparisons = (
   comparisons,
-  { adoptCanonicalPayloads = false } = {}
-) => (
-  Array.isArray(comparisons)
-    ? comparisons.map((comparison) => (
-        isResourceBackedCanonicalComparison(comparison)
-          ? mapResourceBackedCanonicalComparison(comparison, deserializeFile)
-          : adoptCanonicalPayloads ? comparison : cloneJsonData(comparison)
-      ))
-    : []
-);
+  { adoptCanonicalPayloads = false, repairs = null } = {}
+) => {
+  if (!Array.isArray(comparisons)) return [];
+  const read = repairs ? comparisons.filter((comparison) => isResourceBackedCanonicalComparison(comparison)
+    || shapeViolations(comparison, GENERATED_COMPARISON_SHAPE, CANONICAL_REQUEST_DESCRIPTION.types, '').length === 0)
+    : comparisons;
+  if (repairs && read.length < comparisons.length) {
+    repairs.push(loadRepair({
+      code: 'setting-entries-dropped', path: 'files.linearCanonicalComparisons', effect: 'dropped',
+      count: comparisons.length - read.length
+    }));
+  }
+  return read.map((comparison) => (
+    isResourceBackedCanonicalComparison(comparison)
+      ? mapResourceBackedCanonicalComparison(comparison, deserializeFile)
+      : adoptCanonicalPayloads ? comparison : cloneJsonData(comparison)
+  ));
+};
 
 export const adoptCanonicalRenderArtifacts = (
   canonical,
@@ -3582,11 +3597,12 @@ export const canonicalRenderArtifactOwner = Object.freeze({
  * @param {Record<string, any> | null} filesData
  * @param {{
  *   adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState?: Record<string, any>,
- *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'>
- * }} options
+ *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'>,
+ *   repairs?: LoadRepair[] | null
+ * }} options `repairs`: Load lists what it drops from the saved inputs.
  */
 const applyFiles = (filesData, {
-  adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state, targetDrawing
+  adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state, targetDrawing, repairs = null
 }) => {
   targetState.matchSequenceRegistry?.reset?.();
   targetState.circularRecordList.value = [];
@@ -3642,7 +3658,7 @@ const applyFiles = (filesData, {
     : [];
   targetState.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
     filesData.linearCanonicalComparisons,
-    { adoptCanonicalPayloads }
+    { adoptCanonicalPayloads, repairs }
   );
   targetState.files.d_color = deserializeFile(filesData.d_color);
   targetState.files.t_color = deserializeFile(filesData.t_color);
@@ -5063,7 +5079,7 @@ const importSessionDocument = async (e, options = {}) => {
       canonicalSession ? projectionResult.restoredFiles : data.files,
       {
         adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly,
-        targetState: candidateFiles, targetDrawing: candidateFiles
+        targetState: candidateFiles, targetDrawing: candidateFiles, repairs
       }
     );
     recordSessionLifecycleEvent('session-candidate-files-end');

@@ -248,34 +248,22 @@ const publishedSession = (session, config, layout, projection, features) => {
   return { ...published, ui, modes: { [mode]: { ...slice, ui: { ...(slice.ui || {}), layoutPreferences: clone(layout[mode]) } } } };
 };
 /**
- * @param {PublicationRequest} request
- * @param {GallerySessionPublicationOwners['promoteRequest']} promoteRequest
- * @param {{ featureCatalog?: FeatureCatalog | null, legacyOrthogroupState?: Record<string, unknown> | null }} [options]
+ * The Session's request read by the one reader with the Session's context
+ * (OV-771: a schema-5 record keeps the cardinality the reader's promotion gives it).
+ * @param {PublicationSession} session
+ * @param {GallerySessionPublicationOwners['readRequest']} readRequest
  */
-const publicationCanonicalRequest = (
-  request,
-  promoteRequest,
-  { featureCatalog = null, legacyOrthogroupState = null } = {}
-) => {
-  const current = promoteRequest(request, { featureCatalog, legacyOrthogroupState });
-  if (Number(request?.schema) === 5) {
-    current.records.forEach((/** @type {Record<string, unknown>} */ record) => { record.cardinality = 'exactly_one'; });
-  }
-  return current;
-};
+const publicationCanonicalRequest = (session, readRequest) => readRequest(session.renderRequest, {
+  featureCatalog: session.editorState?.featureCatalog || null,
+  legacyOrthogroupState: session.orthogroupState || null,
+  resourceIds: new Set(isObject(session.resources) ? Object.keys(session.resources) : [])
+});
 /**
  * @param {PublicationSession} session
  * @param {GallerySessionPublicationOwners} owners
  */
 const rebuildIntent = async (session, owners) => {
-  const renderRequest = publicationCanonicalRequest(
-    session.renderRequest,
-    owners.promoteRequest,
-    {
-      featureCatalog: session.editorState?.featureCatalog || null,
-      legacyOrthogroupState: session.orthogroupState || null
-    }
-  );
+  const renderRequest = publicationCanonicalRequest(session, owners.readRequest);
   // A read-only comparison (one the Web controls cannot represent) is rebuilt
   // as Generate's Inherit builds it (D-04, OV-268): Load projects the request
   // without it, the request draws no comparison of its own, and the committed
@@ -360,7 +348,9 @@ const mergeReplayResources = (prepared, replayed) => {
  * @property {(input: Record<string, any>) => { state: Record<string, any>, drawing: Record<string, any>, features: Record<string, unknown> }} buildRequestState
  *   The request inputs of a Session: project inputs and artifacts (`state`), settings and edits (`drawing`),
  *   and the drawing's per-feature edits as the draft stores them (`features`).
- * @property {(request: PublicationRequest, promotion?: Record<string, any>) => CanonicalRenderRequest} promoteRequest
+ * @property {(request: unknown, context: { featureCatalog: unknown, legacyOrthogroupState: unknown,
+ *   resourceIds: ReadonlySet<string> }) => CanonicalRenderRequest} readRequest The one reader of a stored
+ *   request (`readPublishedRenderRequest`), refusing any repair.
  * @property {(input: Record<string, any>) => PublicationProjection} projectRequest
  * @property {(input: Record<string, any>) => any} resolveComparisonPlan
  */
@@ -418,14 +408,7 @@ export const createGallerySessionPublication = (owners) => {
     // An older Session is promoted to the current request and kept as a flat
     // draft until `prepare` splits it into the Session's mode slice.
     if ([40, 41, 42, 44].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
-      renderRequest: publicationCanonicalRequest(
-        session.renderRequest,
-        owners.promoteRequest,
-        {
-          featureCatalog: session.editorState?.featureCatalog || null,
-          legacyOrthogroupState: session.orthogroupState || null
-        }
-      ) }));
+      renderRequest: publicationCanonicalRequest(session, owners.readRequest) }));
     if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44/${MODE_SCOPED_SESSION_VERSION}; received ${String(session?.version)}.`);
     return validateCurrent(promoteVisibilityState(owners.promoteSession(session)));
   };

@@ -6058,7 +6058,8 @@ const storedRequestPolicy = (request, mode, resourceIds, holdComparisons) => {
   const axisIndex = tracks[mode === 'linear' ? 'linearTrackAxisIndex' : 'circularTrackAxisIndex'];
   return {
     positionalArrays: [
-      'records', 'layout.multiRecordPositions', 'diagramOptions.depthTracks[*].source',
+      // An alignment plan decides every record: one decision lost loses the plan.
+      'records', 'layout.multiRecordPositions', 'diagramOptions.depthTracks[*].source', 'layout.similarityAlignment.records',
       ...(axisIndex === null || axisIndex === undefined ? [] : [`diagramOptions.tracks.${slotKey}`])
     ],
     partBoundary: (pattern) => STORED_REQUEST_PARTS.has(pattern),
@@ -6167,6 +6168,23 @@ export const readStoredRenderRequest = (value, context) => {
     value: /** @type {CanonicalRenderRequest} */ (repaired.value),
     repairs: [...repairs, ...storedRequestRepairs(repaired.rows, STORED_REQUEST_PLACES[mode].otherOptionKeys)]
   };
+};
+
+/**
+ * A stored request as Gallery publication reads it: through the one reader,
+ * refusing any repair (a published Session is written by the current writer,
+ * so a row is a defect of its source) and any request that does not read to
+ * the current schema. Returns a copy the caller may change.
+ * @param {unknown} request
+ * @param {Omit<StoredRequestContext, 'path' | 'holdComparisons'>} context
+ * @returns {CanonicalRenderRequest}
+ */
+export const readPublishedRenderRequest = (request, context) => {
+  const read = readStoredRenderRequest(request, { ...context, path: 'renderRequest' });
+  if ('kind' in read || read.repairs.length > 0 || !isCurrentRequestSchema(read.value)) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+  }
+  return /** @type {CanonicalRenderRequest} */ (cloneCanonicalJsonValue(read.value));
 };
 
 /**
@@ -6479,11 +6497,18 @@ export const projectCommittedSimilarityAlignment = ({ committed, plan, translati
   return canonical;
 };
 
-/** @param {{ [key: string]: JsonValue }} request A canonical request of schema 5 to 9, as stored or as written. */
-const normalizePublicationRequestAliases = (request) => {
-  const normalized = /** @type {readonly unknown[]} */ ([5, 6, 7, 8]).includes(request?.schema)
-    ? promoteCanonicalRenderRequestToCurrent(request)
-    : cloneCanonicalJsonValue(request);
+/**
+ * @param {{ [key: string]: JsonValue }} request A canonical request of schema 5 to 9, as stored or as written.
+ * @param {PublicationResources} resources
+ */
+const normalizePublicationRequestAliases = (request, resources) => {
+  // A request of schema 5 to 8 is read by the one reader (no context: a legacy
+  // alignment target refuses); any other is compared as written, with its aliases.
+  const normalized = /** @type {Record<string, any>} */ (!/** @type {readonly unknown[]} */ ([5, 6, 7, 8]).includes(request?.schema)
+    ? cloneCanonicalJsonValue(request)
+    : readPublishedRenderRequest(request, {
+        featureCatalog: null, legacyOrthogroupState: null, resourceIds: new Set(Object.keys(resources || {}))
+      }));
   for (const comparison of normalized.comparisons || []) {
     if (comparison.kind === 'generatedProteinComparison' && comparison.settings) {
       comparison.settings.collinearInferOrthogroups = resolvePipelineCollinearInference(
@@ -6514,7 +6539,7 @@ const normalizePublicationRequestAliases = (request) => {
  */
 const publicationRequestIdentity = async (request, resources, normalize, resourceIdentities) => {
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Canonical request equivalence requires a renderRequest object.');
-  const normalizedRequest = normalizePublicationRequestAliases(request);
+  const normalizedRequest = normalizePublicationRequestAliases(request, resources);
   const conservation = normalizedRequest.diagramOptions?.conservationBlastFiles;
   /** @type {PublicationContext} */
   const context = { bindings: [], normalize, resourceIdentities,
