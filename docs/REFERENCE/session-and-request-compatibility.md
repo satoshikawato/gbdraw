@@ -242,14 +242,17 @@ The Web app refuses these files and shows an error instead:
   key in a Session drawing's `adv`, a retired setting name in a Session, a
   Linear track layout, label placement, Linear Accession or Length /
   Coordinates visibility or Circular multi-record size mode the app does not
-  know, a feature shape the app does not know, an arrow ratio out of
+  know, a shape the app does not know for a feature type of the default
+  feature list, an arrow ratio out of
   range, a missing or unknown resource, a track stack that does not read, or a
   saved Result that does not pass its checks. Load refuses these before it
-  asks anything or changes anything. They were refused before too, apart from
-  three values in a configuration file, which loaded with the value replaced
-  or dropped: a feature shape that is not text, an unknown shape of a feature
-  type the defaults lack, and a Linear Accession or Length / Coordinates
-  visibility that is not text.
+  asks anything or changes anything, as it refused them before. It does not
+  refuse a file it loaded before: a feature shape or Linear Accession or
+  Length / Coordinates visibility that is not text keeps the drawing's value,
+  and a shape the app does not know for another feature type is dropped; the
+  dialog lists each. A configuration file with older track stacks and a
+  Session older than version 44 still refuse a visibility that is not text,
+  as before.
 
 Do not change a version number, resource hash, or runtime binding by hand;
 changing metadata does not migrate its content.

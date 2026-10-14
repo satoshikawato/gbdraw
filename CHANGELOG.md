@@ -293,10 +293,12 @@ write-up of a release.
   a Legend color edit the app does not accept), and a configuration file
   drops a key it does not know without a row. Other invalid content, such as
   an unknown `adv` key in a Session, an unknown feature shape or option value,
-  is still refused, now before anything is asked or changed; a configuration
-  file whose feature shape or Linear Accession or Length / Coordinates
-  visibility is not text, or that names an unknown shape for a feature type
-  the defaults lack, loaded before and is now refused too. In a configuration
+  is still refused, now before anything is asked or changed. No file that
+  loaded before is refused: a feature shape or Linear Accession or Length /
+  Coordinates visibility that is not text keeps the drawing's value, and an
+  unknown shape for a feature type the defaults lack is dropped, each with a
+  row (a Session of version 44 or later with such a visibility, refused
+  before, now loads the same way). In a configuration
   file, a color rule or label whitelist entry that is not an object, which
   made the Load fail, is now dropped and listed, and a label filter mode or
   feature overlap tolerance the app does not accept, which made Save Session
