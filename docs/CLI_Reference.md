@@ -596,13 +596,17 @@ GC-content and Depth axes and ticks are unaffected. User-explicit
 remains visible and causes a warning when combined with `--hide_scale`; omit or
 disable that slot to hide the scale.
 
-If Circular outer labels would overlap, `gbdraw circular` draws nothing, prints
-settings that fit (`--outer_label_x_radius_offset`,
-`--outer_label_y_radius_offset`, `--label_font_size`, or
-`--circular_label_spacing`), and exits with status 1. If only their leader
-lines cross, it draws the figure, prints the same settings as a warning, and
-exits with status 0. See [Circular outer labels that do not
-fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#circular-outer-labels-that-do-not-fit).
+Small label defects of horizontal Circular labels, up to 100 per record
+(overlaps, crossing leader lines, and inner labels over the definition text),
+are first repaired by moving outer and inner labels slightly.
+If labels would still overlap, or radial labels need more room than the circular
+tracks leave, `gbdraw circular` draws nothing, prints settings that fit (such
+as `--outer_label_y_radius_offset`, `--label_font_size`, `--labels out`,
+`--label_placement radial`, or `--resolve_overlaps`), and exits with status 1. If only leader lines
+cross or labels cover the definition text, it draws the figure, prints the same
+settings as a warning, and exits with status 0. `gbdraw linear` stops the same
+way if its labels overlap. See [Labels that do not
+fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 
 For fresh Circular input, output names are derived from record IDs when
 `--output` is omitted. An ID used this way must be one filename component of

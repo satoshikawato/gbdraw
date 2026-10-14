@@ -1125,6 +1125,7 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.featureIdentityNotices, null)
       ),
       comparisonWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.comparisonWarnings, null)),
+      labelFitReports: artifactOwnedValue(getGeneratedArtifactRef(state.labelFitReports, null)),
       specificRules: (drawing.manualSpecificRules || []).map((/** @type {Record<string, unknown>} */ rule) => ({ ...rule })),
       fileLegendCaptions: new Set(drawing.fileLegendCaptions?.value || []),
       trackSlotResolvedGeometry: artifactOwnedValue(
@@ -1216,6 +1217,7 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
     setGeneratedArtifactRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
     setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
+    setGeneratedArtifactRef(state.labelFitReports, ownerSet.labelFitReports || []);
     if (drawing.manualSpecificRules && ownerSet.specificRules) {
       drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...ownerSet.specificRules.map((/** @type {Record<string, unknown>} */ rule) => ({ ...rule })));
     }
@@ -1362,6 +1364,7 @@ export const createHistorySnapshotService = ({
       'annotationWarnings',
       'featureIdentityNotices',
       'comparisonWarnings',
+      'labelFitReports',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
       'legacyProteinDerivedEvidence',

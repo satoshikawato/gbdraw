@@ -67,7 +67,8 @@ export const keepResultNames = (response, names) => {
     metadata.legendRows,
     metadata.trackSlotGeometry?.records,
     metadata.annotationWarnings,
-    metadata.comparisonWarnings
+    metadata.comparisonWarnings,
+    metadata.labelFitReports
   ].forEach((rows) => {
     if (!Array.isArray(rows)) return;
     rows.forEach((row) => {

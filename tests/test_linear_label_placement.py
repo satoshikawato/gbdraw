@@ -31,9 +31,11 @@ from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
+from gbdraw.layout.spatial import candidate_aabb_pairs
 from gbdraw.labels.linear import (
     _find_lowest_available_track_indexed,
     _insert_external_label_index,
+    _linear_label_aabb,
     _rotated_label_rects_intersect,
     calculate_label_bounds,
     find_lowest_available_track,
@@ -802,6 +804,27 @@ def test_linear_above_feature_shifted_labels_get_leader_lines() -> None:
         assert float(label["leader_start_x"]) == pytest.approx(float(label["feature_anchor_x"]))
         assert float(label["leader_end_x"]) == pytest.approx(float(label["feature_anchor_x"]))
         assert abs(float(label["leader_end_y"]) - float(label["leader_start_y"])) > 0.0
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("label_rotation", (0.0, 45.0))
+def test_linear_above_feature_resolves_overlaps_above_300_labels(label_rotation: float) -> None:
+    """OV-695: a record with more than 300 above-feature labels gets the same overlap fix."""
+    labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        label_rotation=label_rotation,
+        separate_strands=True,
+        input_filename="AP027078.gb",
+    )
+    assert len(labels) > 300
+
+    overlapping = [
+        (left, right)
+        for left, right in candidate_aabb_pairs([_linear_label_aabb(label) for label in labels], bucket_size=64.0)
+        if _rotated_label_rects_intersect(labels[left], labels[right])
+    ]
+    assert overlapping == []
+    assert any(label.get("leader_line") for label in labels)
 
 
 @pytest.mark.linear

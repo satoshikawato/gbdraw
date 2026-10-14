@@ -1,5 +1,5 @@
 // @ts-check
-const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys', 'convertMainSessionComparisonFrame',
+const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
   'promoteLegacyLosatpCache', 'readComparisonSequence', 'readFeatureOverrideTable', 'resolveLegacyProteinReferences',
@@ -177,8 +177,9 @@ const DEFINITIONS = Object.freeze({
   ANNOTATION_TARGET: ['The region annotation target is invalid.', ['edit-annotation', 'retry']],
   TRACK_INVALID: ['The track settings are invalid.', ['edit-track', 'retry']],
   TRACK_LAYOUT: ['A circular track does not fit.', ['edit-track', 'retry']],
-  // Circular outer labels overlap or their leaders cross; nothing new was drawn (LP-D43).
-  LABEL_LAYOUT: ['Circular outer labels do not fit.', ['edit-input', 'retry'], 'Move the outer labels outward, use a smaller label font, or reduce the label spacing.'],
+  // Labels of any kind overlap, or radial labels lack room; nothing new was drawn (LP-D43,
+  // SCOPE-ALL-LABELS). Generate opens the fixes Python found.
+  LABEL_LAYOUT: ['Labels do not fit.', ['edit-input', 'retry'], 'Generate again to choose a fix, or change the label settings.'],
   FEATURE_PLACEMENT: ['A Feature placement uses a lane that the current feature track does not have.', ['edit-track', 'retry']],
   FEATURE_IDENTITY: ['A feature edit does not identify a record of the current inputs. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   // The same request fails the same way until the setting or the mode changes.
@@ -266,8 +267,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [placementIndex]
  * @property {number} [queryRecordIndex]
  * @property {number} [subjectRecordIndex]
- * @property {number} [overlapPairs]
- * @property {number} [crossingPairs]
+ * @property {string} [labelFitCounts] Python's sentence of the label fit counts, shown as sent.
  */
 
 /**
@@ -541,8 +541,12 @@ const contextFor = (value) => {
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
-  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex' | 'overlapPairs' | 'crossingPairs'>} */ ([
-    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex', 'overlapPairs', 'crossingPairs'
+  // Python words the label fit counts (gbdraw/labels/fit.py): one line of printable text, shown as sent.
+  if (typeof value.labelFitCounts === 'string' && value.labelFitCounts.length <= 80 && /^[\x20-\x7e]+$/.test(value.labelFitCounts)) {
+    context.labelFitCounts = value.labelFitCounts;
+  }
+  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex'>} */ ([
+    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex'
   ])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
@@ -607,9 +611,7 @@ export const normalizeUserFacingError = (value, {
   const position = result.context.position !== undefined ? ` At character ${result.context.position + 1}.` : '';
   const columns = result.context.columnCount !== undefined ? ` Required columns: ${result.context.columnCount}.` : '';
   const count = result.context.recordCount !== undefined ? ` Loaded records: ${result.context.recordCount}.` : '';
-  const { overlapPairs, crossingPairs } = result.context;
-  const labelFit = overlapPairs !== undefined && crossingPairs !== undefined
-    ? ` Overlapping label pairs: ${overlapPairs}. Crossing leader pairs: ${crossingPairs}.` : '';
+  const labelFit = result.context.labelFitCounts ? ` ${result.context.labelFitCounts}` : '';
   const exception = result.context.exceptionType ? ` Python exception: ${result.context.exceptionType}.` : '';
   const schemaGuidance = result.code === 'INPUT_INVALID' && result.context.field === 'schema'
     ? ' Load a supported Session file or recreate it with the current writer.' : '';

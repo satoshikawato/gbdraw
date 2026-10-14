@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Mapping
 
 if TYPE_CHECKING:
-    from gbdraw.labels.fit import LabelFitReport
+    from gbdraw.labels.fit import LabelFitReport, LabelFitRows
 
 
 class GbdrawError(Exception):
@@ -44,6 +44,14 @@ class ValidationError(GbdrawError):
     """Raised when user input or data fails validation."""
 
 
+class LabelLayoutError(ValidationError):
+    """A label setting the engine cannot draw (radial labels that find no room).
+
+    The label fit counts it as a setting that does not fit; any other error of
+    an assembly is not about labels and is raised.
+    """
+
+
 class ComparisonIdentityError(ValueError, GbdrawError):
     """Comparison endpoints conflict; remains catchable as ValueError.
 
@@ -69,26 +77,33 @@ class ExportError(GbdrawError):
 
 def _label_fit_diagnostic(report: LabelFitReport) -> dict[str, object]:
     # The code alone names the failure; the shared CANNOT_FIT reason carries track wording.
-    return {
-        "code": "LABEL_LAYOUT",
-        "overlapPairs": report.overlap_pairs,
-        "crossingPairs": report.crossing_pairs,
-    }
+    from gbdraw.labels.fit import label_fit_error_counts
+
+    return {"code": "LABEL_LAYOUT", "labelFitCounts": label_fit_error_counts(report)}
 
 
 class LabelsDoNotFitError(GbdrawError):
-    """Labels would overlap, so nothing was drawn.
+    """Labels would overlap, or radial labels have no room, so nothing was drawn.
 
-    ``report`` names the failing records and the settings that fit.
+    ``report`` names the failing records and the settings that fit;
+    ``row_search``, when given, computes a row the report left
+    ``not_computed``.
     """
 
-    def __init__(self, message: str, *, report: LabelFitReport) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        report: LabelFitReport,
+        row_search: LabelFitRows | None = None,
+    ) -> None:
         super().__init__(message, diagnostic=_label_fit_diagnostic(report))
         self.report = report
+        self.row_search = row_search
 
 
 class LabelLeadersCrossWarning(UserWarning):
-    """Label leaders cross; the figure was drawn anyway.
+    """Label leaders cross or labels cover the definition text; the figure was drawn anyway.
 
     ``report`` names the records and the settings that remove the crossings.
     """

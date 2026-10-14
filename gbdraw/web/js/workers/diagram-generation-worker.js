@@ -565,6 +565,15 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       jsonArgument(payload.features, []), jsonArgument(payload.rules, []), String(payload.kind || 'color')
     ])
   },
+  // One row of the label fit dialog for a figure drawn with crossing leaders:
+  // Python searches it on the figure it kept (OD-F14); nothing here places labels.
+  [DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW]: {
+    keys: ['rowToken', 'kind'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'compute_label_fit_row_json', [
+      String(payload.rowToken || ''), String(payload.kind || '')
+    ])
+  },
   [DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT]: {
     keys: ['filename'],
     fileRoles: [],

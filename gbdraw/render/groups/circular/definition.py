@@ -21,7 +21,7 @@ from ....core.text import (
     calculate_svg_bbox_dimensions,
     parse_mixed_content_text,
 )
-from ....layout.spatial import Aabb
+from ....layout.spatial import Aabb, union_aabbs
 from ....svg.ids import definition_group_svg_id
 from ...drawers.circular.definition import DefinitionDrawer
 
@@ -246,7 +246,9 @@ class DefinitionGroup:
         self.calculate_coordinates()
         self.find_organism_name()
         self.add_circular_definitions()
-        self.local_bounds = self._measure_local_bounds()
+        # Painted text bounds in group-local coordinates: one box per text line, and their union.
+        self.line_bounds = self._measure_line_bounds()
+        self.local_bounds = union_aabbs(self.line_bounds) or Aabb(0.0, 0.0, 0.0, 0.0)
 
     def calculate_coordinates(self) -> None:
         self.end_x_1: float = (self.radius) * math.cos(math.radians(360.0 * 0 - 90))
@@ -358,13 +360,9 @@ class DefinitionGroup:
             species_line_parts=species_line_parts,
         )
 
-    def _measure_local_bounds(self) -> Aabb:
-        """Return authoritative painted text bounds in group-local coordinates."""
-        min_x: float | None = None
-        min_y: float | None = None
-        max_x: float | None = None
-        max_y: float | None = None
-
+    def _measure_line_bounds(self) -> tuple[Aabb, ...]:
+        """Return authoritative painted bounds of each text line in group-local coordinates."""
+        line_bounds: list[Aabb] = []
         for element in getattr(self.definition_group, "elements", ()):
             attribs = getattr(element, "attribs", None)
             if not isinstance(attribs, dict):
@@ -430,14 +428,8 @@ class DefinitionGroup:
                 top = y - height
                 bottom = y
 
-            min_x = left if min_x is None else min(min_x, left)
-            min_y = top if min_y is None else min(min_y, top)
-            max_x = right if max_x is None else max(max_x, right)
-            max_y = bottom if max_y is None else max(max_y, bottom)
-
-        if min_x is None or min_y is None or max_x is None or max_y is None:
-            return Aabb(0.0, 0.0, 0.0, 0.0)
-        return Aabb(min_x, min_y, max_x, max_y)
+            line_bounds.append(Aabb(left, top, right, bottom))
+        return tuple(line_bounds)
 
     def get_group(self) -> Group:
         return self.definition_group

@@ -143,7 +143,7 @@ from ...layout.scalar_axis import (
     format_percent_tick,
     scalar_axis_tick_values,
 )
-from ...labels.linear import calculate_label_bounds
+from ...labels.linear import LINEAR_LABEL_FIT_ATTR, calculate_label_bounds, linear_label_fit
 from ...tracks import (
     LinearTrackSlot,
     ScalarSpec,
@@ -2787,6 +2787,10 @@ def assemble_linear_diagram(
         canvas_config=canvas_config,
         profile=profile,
     )
+    # The API checks the drawn labels and offers the rows (LP-D48, LP-D52).
+    label_fit = linear_label_fit(
+        [(str(record.id), labels) for record, labels in zip(records, all_labels)], label_font_size
+    )
 
     total_records = len(records)
     for count, record in enumerate(records, start=1):
@@ -3258,6 +3262,7 @@ def assemble_linear_diagram(
     setattr(canvas, "_gbdraw_linear_source_content_bounds", source_primary_bounds)
     setattr(canvas, "_gbdraw_linear_composition_plan", composition_plan)
     setattr(canvas, "_gbdraw_comparison_record_id_warnings", comparison_record_id_warnings)
+    setattr(canvas, LINEAR_LABEL_FIT_ATTR, label_fit)
 
     return canvas
 

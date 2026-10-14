@@ -15,11 +15,12 @@ from gbdraw.api.request_render import (
     _capture_request_render_diagnostics,
     render_request,
 )
+from gbdraw.api.requests import DiagramRequest, LinearDiagramRequest
 from gbdraw.api.prepared import (
     PreparedBiologicalInputCache,
     PreparedResourceIdentity,
 )
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.io.colors import rule_captions_as_written
 from gbdraw.web_support.error_adapter import WebErrorAttributes, web_error_stage
 from gbdraw.legend.row_facts import collect_legend_row_facts
@@ -34,6 +35,15 @@ from gbdraw.web_support.feature_catalog import (
     build_feature_catalog,
     build_feature_catalog_item,
 )
+from gbdraw.web_support.label_fit import LabelFitMode, LabelFitRowSearches, label_fit_report_payload
+
+# OD-F14: Generate on the Web draws crossing label leaders with their counts
+# only; the dialog computes the rows when the user asks for them.
+WEB_LABEL_FIT_WARN_SEARCH_SECONDS = 0.0
+
+
+def _label_fit_mode_of(request: DiagramRequest) -> LabelFitMode:
+    return "linear" if isinstance(request, LinearDiagramRequest) else "circular"
 
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -96,6 +106,7 @@ def render_canonical_web_request(
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
     _diagnostics: MutableMapping[str, Any] | None = None,
+    _label_fit_searches: LabelFitRowSearches | None = None,
 ) -> dict[str, Any]:
     """Decode and render one browser request without a CLI translation layer."""
 
@@ -106,6 +117,7 @@ def render_canonical_web_request(
         _diagnostics=_diagnostics,
         _prepared_input_cache=None,
         _resource_identities=None,
+        _label_fit_searches=_label_fit_searches,
     )
 
 
@@ -117,6 +129,7 @@ def _render_canonical_web_request_with_prepared_inputs(
     _diagnostics: MutableMapping[str, Any] | None,
     _prepared_input_cache: PreparedBiologicalInputCache | None,
     _resource_identities: Mapping[str, PreparedResourceIdentity] | None,
+    _label_fit_searches: LabelFitRowSearches | None,
 ) -> dict[str, Any]:
     def render() -> dict[str, Any]:
         # The request's color table is the app's rule list, not a saved file.
@@ -126,6 +139,7 @@ def _render_canonical_web_request_with_prepared_inputs(
                 resource_paths=resource_paths,
                 output_directory=output_directory,
                 diagnostics=_diagnostics,
+                label_fit_searches=_label_fit_searches,
             )
 
     if _prepared_input_cache is None:
@@ -155,6 +169,7 @@ def _render_canonical_web_request(
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
     diagnostics: MutableMapping[str, Any] | None,
+    label_fit_searches: LabelFitRowSearches | None,
 ) -> dict[str, Any]:
 
     if not isinstance(payload, Mapping):
@@ -170,7 +185,17 @@ def _render_canonical_web_request(
             output_directory=output_root,
         )
     with _web_render_diagnostic_phase(diagnostics, "renderRequest"):
-        rendered = render_request(request, include_feature_catalog=True)
+        try:
+            rendered = render_request(
+                request,
+                include_feature_catalog=True,
+                label_fit_warn_search_seconds=WEB_LABEL_FIT_WARN_SEARCH_SECONDS,
+            )
+        except LabelsDoNotFitError as error:
+            # Nothing was drawn: keep the failure for the rows its bounded search did not reach.
+            if label_fit_searches is not None:
+                label_fit_searches.retain_failure(_label_fit_mode_of(request), error)
+            raise
     items: tuple[RequestRenderResult, ...]
     if isinstance(rendered, CircularBatchRenderResult):
         items = rendered.items
@@ -273,6 +298,23 @@ def _render_canonical_web_request(
         for result_index, item in enumerate(items)
         if item.linear_metadata is not None
         for warning in item.linear_metadata.comparison_warnings
+    ]
+    # Crossing label leaders drawn anyway: the counts, and a token that names
+    # the figure whose rows the dialog computes later (OD-F14).
+    row_tokens = (
+        label_fit_searches.retain(rendered.mode, [item.drawing for item in items])
+        if label_fit_searches is not None
+        else [None] * len(items)
+    )
+    metadata["labelFitReports"] = [
+        {
+            "resultIndex": result_index,
+            "resultName": results[result_index]["name"],
+            "report": label_fit_report_payload(report, rendered.mode),
+            "rowToken": row_tokens[result_index],
+        }
+        for result_index, item in enumerate(items)
+        if (report := item.label_fit_report) is not None
     ]
     return {
         "results": results,
@@ -391,6 +433,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
     _diagnostics: MutableMapping[str, Any] | None = None,
     _prepared_input_cache: PreparedBiologicalInputCache | None = None,
     _resource_identities: Mapping[str, Mapping[str, Any]] | None = None,
+    _label_fit_searches: LabelFitRowSearches | None = None,
 ) -> dict[str, Any]:
     if not isinstance(resource_paths, Mapping):
         raise ValidationError("The staged Web render resource map must be an object.")
@@ -453,6 +496,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
             _diagnostics=_diagnostics,
             _prepared_input_cache=_prepared_input_cache,
             _resource_identities=validated_identities,
+            _label_fit_searches=_label_fit_searches,
         )
     except BaseException as exc:
         render_error = exc

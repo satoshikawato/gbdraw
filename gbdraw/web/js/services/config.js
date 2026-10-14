@@ -97,6 +97,7 @@ import {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest,
   canonicalLinearRecordLayout,
+  draftFieldsForConfigValues,
   featureEditsOverProjection,
   legacyTableRowsNotice,
   legendColorDropNotice,
@@ -2493,6 +2494,45 @@ const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) =
   }));
 };
 
+// The draft fields a label fit row may write: the fields of the config paths
+// `gbdraw/labels/fit.py` names for the rows (the label settings and the
+// feature overlap switch of "separate overlapping features", LP-D52), never a
+// feature-slot input (R10).
+/** @type {Readonly<Record<string, (adv: Record<string, unknown>, value: number | string | boolean) => void>>} */
+const LABEL_FIT_ADV_WRITERS = Object.freeze({
+  outer_label_x_offset: (adv, value) => { adv.outer_label_x_offset = value; },
+  outer_label_y_offset: (adv, value) => { adv.outer_label_y_offset = value; },
+  label_font_size: (adv, value) => { adv.label_font_size = value; },
+  circular_label_spacing: (adv, value) => { adv.circular_label_spacing = value; },
+  circular_label_placement: (adv, value) => { adv.circular_label_placement = value; },
+  resolve_overlaps: (adv, value) => { adv.resolve_overlaps = value; }
+});
+/** @type {Readonly<Record<string, (form: Record<string, unknown>, value: string) => void>>} */
+const LABEL_FIT_FORM_WRITERS = Object.freeze({
+  labels_mode: (form, value) => { form.labels_mode = value; }
+});
+
+// Settings a label fit row gives by config path (LP-D43) go into the drawing's
+// draft through the request mapping, so the next Generate sends exactly them.
+// A path the mode does not manage, or one that is not a label setting, is an
+// UNKNOWN_CONFIG_PATH error and writes nothing.
+/**
+ * @param {DrawingState} drawing
+ * @param {Readonly<Record<string, number | string | boolean>>} values
+ * @param {'circular' | 'linear'} mode
+ */
+export const applyLabelFitValues = (drawing, values, mode) => {
+  const fields = draftFieldsForConfigValues(values, mode, drawing.adv);
+  const form = Object.entries(fields.form);
+  const adv = Object.entries(fields.adv);
+  if (!form.every(([field]) => Object.hasOwn(LABEL_FIT_FORM_WRITERS, field))
+    || !adv.every(([field]) => Object.hasOwn(LABEL_FIT_ADV_WRITERS, field))) {
+    throw diagnosticError('INPUT_INVALID', { field: 'configOverrides', reason: 'UNKNOWN_CONFIG_PATH' });
+  }
+  form.forEach(([field, value]) => LABEL_FIT_FORM_WRITERS[field](drawing.form, value));
+  adv.forEach(([field, value]) => LABEL_FIT_ADV_WRITERS[field](drawing.adv, value));
+};
+
 // Captured or stored settings (History Undo and Redo, the failed Session Load
 // rollback, a settings-only Session) pass `resolveTrackPlacements: false`: the
 // track stacks are installed as given, so unset slot sides, lane directions,
@@ -4522,6 +4562,7 @@ const resetSessionBaseline = () => {
   state.featureIdentityNotices.value = [];
   state.featureEditRemovalCount.value = 0;
   state.comparisonWarnings.value = [];
+  state.labelFitReports.value = [];
   applyFiles(null, { targetDrawing: state.drawings.linear });
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -6037,6 +6078,8 @@ const importSessionDocument = async (e, options = {}) => {
     state.comparisonWarnings.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.comparisonWarnings || []
     );
+    // A Session does not save the label fit report: a loaded Result has no notice.
+    state.labelFitReports.value = [];
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );

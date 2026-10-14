@@ -41,6 +41,7 @@ from .models import (
 from .resolve import (
     annotation_midpoint,
     merge_annotation_segments,
+    read_annotation_options,
     resolve_annotation_set,
     resolve_annotations,
 )
@@ -79,6 +80,7 @@ __all__ = [
     "merge_annotation_segments",
     "merge_feature_underlays",
     "parse_feature_selector",
+    "read_annotation_options",
     "read_annotation_table",
     "resolve_annotation_set",
     "resolve_annotations",

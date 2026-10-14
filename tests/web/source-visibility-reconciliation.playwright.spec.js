@@ -4,7 +4,7 @@ const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { load, generate, switchMode, popup, closeEditor, download, snapshot } = require('./helpers/mode-transition.cjs');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const tobacco = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
@@ -171,6 +171,8 @@ test('repeated generation of an unchanged source preserves hidden duplicate feat
     const text = file.buffer.toString('utf8');
     const entry = text.match(/     rRNA\s[^]*?(?=\n     \S|\nORIGIN)/)[0];
     await upload(page, { ...file, buffer: Buffer.from(text.replace(entry, `${entry}\n${entry}`)) });
+    // The duplicated rRNA labels overlap and would stop the Generate; separate the features.
+    await (await reveal(page.getByRole('checkbox', { name: 'Resolve Overlaps', exact: true, includeHidden: true }))).check();
     await generate(page);
     const id = await hide(page);
     const key = await identityOf(page, id);

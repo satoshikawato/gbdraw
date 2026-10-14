@@ -322,14 +322,22 @@ from the command line, Python, and a Session; the web app draws and saves it
 but cannot edit it yet. See
 [Region annotations](./CLI_Reference.md#region-annotations).
 
-Circular outer labels that would overlap are no longer drawn. The command line
-exits with an error and Python raises `LabelsDoNotFitError`; the message lists
-settings that fit, such as a larger outer-label offset or a smaller font. Leader
-lines that cross without overlapping labels are drawn as before, with the same
-settings as a warning. With 50 or more outer labels, `--circular_label_spacing`
-now also sets the gap between the packed rows when those rows fit. See [Circular
-outer labels that do not
-fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#circular-outer-labels-that-do-not-fit).
+Small label defects of horizontal Circular labels, up to 100 per record, are
+now repaired by moving outer and inner labels slightly: overlapping labels,
+crossing leader lines, and inner labels over the definition text in the centre.
+A record is changed only when the repair clears all of them.
+Labels that would still overlap are no longer drawn: Circular outer, inner, and
+embedded labels in either placement, and Linear labels. The command line exits
+with an error and Python raises `LabelsDoNotFitError`; the message lists
+settings that fit, such as a larger outer-label offset, a smaller font, all
+labels outside, radial labels, or `--resolve_overlaps` for labels on features
+drawn on top of each other. Radial labels that need more room than the
+circular tracks leave stop the same way instead of being drawn with crossing
+leaders or failing with a track error. Leader lines that cross, and labels over
+the definition text in the centre, are drawn as before with the same settings as
+a warning. With 50 or more outer labels, `--circular_label_spacing` now also
+sets the gap between the packed rows when those rows fit. See [Labels that do
+not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 
 `gbdraw render --session FILE` draws the diagrams saved in a Session;
 `--list_drawings` lists them and `--drawing ID` picks one. In Python,
@@ -452,8 +460,9 @@ internal function `gbdraw.render.export.save_figure` now warns with
    shows GC content and GC skew by default, Linear hides them, and new repeat
    regions are drawn behind other features. Set these explicitly when the
    earlier look matters.
-   A Circular figure whose outer labels overlapped in 0.13 now stops with an
-   error; rerun it with one of the settings the message lists.
+   A figure whose labels overlapped in 0.13 now has those labels moved
+   slightly or stops with an error; rerun it with one of the settings the
+   message lists.
 4. Keep a copy of an old Session before you open it and save it again in
    0.14.0. Let gbdraw update the file; do not edit version numbers or resource
    IDs by hand. A Circular slot whose spacing an earlier release stored as a

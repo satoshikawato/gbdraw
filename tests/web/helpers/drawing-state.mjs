@@ -34,7 +34,7 @@ export const DRAWING_KEYS = Object.freeze([...DRAWING_DRAFT_KEYS, ...DRAWING_EDI
 // generated Legend inventory and colors, and the user's offsets on the Result.
 export const ARTIFACT_KEYS = Object.freeze([
   'results', 'selectedResultIndex', 'lastRunInfo', 'trackSlotResolvedGeometry', 'annotationWarnings',
-  'featureIdentityNotices', 'featureEditRemovalCount', 'comparisonWarnings', 'pairwiseMatchFactors',
+  'featureIdentityNotices', 'featureEditRemovalCount', 'comparisonWarnings', 'labelFitReports', 'pairwiseMatchFactors',
   'orthogroups', 'collinearGroups', 'featureOrthogroupIndex', 'similarityAlignmentPlan',
   'similarityAlignmentResetReceipt', 'linearRecordTranslations', 'legacySimilarityAlignment',
   'appliedPaletteName', 'appliedPaletteColors', 'extractedFeatures', 'biologicalFeatures', 'featureCatalog',

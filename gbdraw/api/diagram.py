@@ -14,6 +14,7 @@ import copy
 import logging
 import math
 import re
+import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -44,6 +45,7 @@ from gbdraw.analysis.conservation import (
     ConservationTrack,
     load_conservation_sources,
     normalize_conservation_reference,
+    read_conservation_inputs,
     normalize_conservation_tracks_for_record,
 )
 from gbdraw.analysis.depth import depth_df as build_depth_df
@@ -54,6 +56,7 @@ from gbdraw.analysis.depth_tracks import (
     depth_track_count,
     depth_track_data_count,
     depth_track_indices,
+    depth_track_inputs,
     index_depth_track_row,
     normalize_depth_tracks,
     representative_depth_tracks,
@@ -76,12 +79,17 @@ from gbdraw.analysis.protein_colinearity import (
     normalize_orthogroup_membership_mode,
 )
 from gbdraw.analysis.skew import skew_df
-from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
+from gbdraw.annotations import (
+    ResolvedAnnotationBundle,
+    read_annotation_options,
+    resolve_annotations,
+)
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.options import (
     AnnotationOptions,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
+    ColorOptions,
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
@@ -129,7 +137,7 @@ from gbdraw.diagrams.circular.assemble import (
 )
 from gbdraw.diagrams.circular.positioning import _parse_svg_number
 from gbdraw.diagrams.linear import assemble_linear_diagram
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import LabelLayoutError, LabelsDoNotFitError, ValidationError
 from gbdraw.features.colors import build_default_color_map, build_specific_color_rules
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
 from gbdraw.features.visibility import (
@@ -145,9 +153,9 @@ from gbdraw.io.colors import (
 )
 from gbdraw.labels.circular_fit import (
     CircularLabelFitSearch,
-    CircularLabelVerification,
-    CircularOuterLabelLayout,
+    CircularLabelLayout,
     check_circular_label_fit,
+    circular_label_outcome,
 )
 from gbdraw.labels.filtering import (
     DERIVED_LABEL_FILTERING_KEYS,
@@ -155,7 +163,20 @@ from gbdraw.labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )
-from gbdraw.labels.fit import LabelFitReport, LabelFitRow, LabelFitRowKind
+from gbdraw.labels.fit import (
+    FITS,
+    WARN_SEARCH_SECONDS,
+    LabelFitReport,
+    LabelFitRow,
+    LabelFitRowKind,
+    LabelFitValue,
+    LabelFitVerification,
+)
+from gbdraw.labels.linear import (
+    LINEAR_LABEL_FIT_ATTR,
+    LinearLabelFit,
+    check_linear_label_fit,
+)
 from gbdraw.layout.composition import (
     CompositionItem,
     CompositionRequest,
@@ -212,7 +233,7 @@ from gbdraw.tracks.parsing import slot_dinucleotide
 from .prepared import ResolvedFeatureInputs
 
 if TYPE_CHECKING:
-    from gbdraw.analysis.conservation import ConservationSearchResult
+    from gbdraw.analysis.conservation import ConservationInput
     from gbdraw.api.requests import RecordPresentation
 
 
@@ -518,7 +539,7 @@ def _build_circular_dinucleotide_skew_dataframes(
 
 
 def _has_conservation_inputs(
-    conservation_blast_files: Sequence[str | ConservationSearchResult] | None,
+    conservation_blast_files: Sequence[ConservationInput] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
 ) -> bool:
     return bool(conservation_blast_files or conservation_dataframes)
@@ -548,7 +569,7 @@ def _build_conservation_blast_config(
 def _load_conservation_result(
     records: Sequence[SeqRecord],
     *,
-    conservation_blast_files: Sequence[str | ConservationSearchResult] | None,
+    conservation_blast_files: Sequence[ConservationInput] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
     conservation_labels: Sequence[str] | None,
     conservation_colors: Sequence[str] | None,
@@ -1512,6 +1533,45 @@ def _resolve_feature_render_inputs(
     )
 
 
+def _feature_inputs_read_once(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+    *,
+    load_comparison_colors: bool,
+    resolved_inputs: ResolvedFeatureInputs | None,
+) -> ResolvedFeatureInputs:
+    """Read a builder's color and visibility files once, for every assembly."""
+
+    colors = options.colors or ColorOptions()
+    return _resolve_feature_render_inputs(
+        color_table=colors.color_table,
+        color_table_file=colors.color_table_file,
+        default_colors=colors.default_colors,
+        default_colors_palette=colors.default_colors_palette,
+        default_colors_file=colors.default_colors_file,
+        feature_visibility_table=options.feature_visibility_table,
+        feature_visibility_table_file=options.feature_visibility_table_file,
+        load_comparison_colors=load_comparison_colors,
+        resolved_inputs=resolved_inputs,
+    )
+
+
+def _linear_has_comparisons(
+    *,
+    blast_files: Sequence[str] | None,
+    linear_comparisons: Sequence[LinearComparison] | None,
+    protein_comparisons: Sequence[DataFrame] | None,
+    collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None,
+    losat_search: LosatSearchOptions | None,
+) -> bool:
+    return bool(
+        blast_files
+        or linear_comparisons
+        or protein_comparisons
+        or collinearity_blocks
+        or losatp_analysis_mode(losat_search) != "none"
+    )
+
+
 def _web_safe_cache_filename(name: object, fallback: str = "losat") -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name or "")).strip("_")
     return cleaned or fallback
@@ -1917,12 +1977,12 @@ def assemble_linear_diagram_from_records(
         )
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
-    has_comparisons = bool(
-        blast_files
-        or linear_comparisons
-        or protein_comparisons
-        or collinearity_blocks
-        or normalized_protein_blastp_mode != "none"
+    has_comparisons = _linear_has_comparisons(
+        blast_files=blast_files,
+        linear_comparisons=linear_comparisons,
+        protein_comparisons=protein_comparisons,
+        collinearity_blocks=collinearity_blocks,
+        losat_search=losat_search,
     )
     resolved_feature_inputs = _resolve_feature_render_inputs(
         color_table=color_table,
@@ -2246,7 +2306,7 @@ def assemble_circular_diagram_from_record(
     gb_record: SeqRecord,
     *,
     cfg: GbdrawConfig,
-    conservation_blast_files: Sequence[str | ConservationSearchResult] | None = None,
+    conservation_blast_files: Sequence[ConservationInput] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
     conservation_labels: Sequence[str] | None = None,
@@ -2686,7 +2746,7 @@ def assemble_circular_diagram_from_record(
         title_bounds=title_bounds,
         title_placement=title_placement,
     )
-    _attach_circular_label_layouts(result.drawing, [result.outer_label_layout])
+    _attach_circular_label_layouts(result.drawing, [result.label_layout])
     return result.drawing
 
 
@@ -2694,7 +2754,7 @@ def assemble_circular_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
     cfg: GbdrawConfig,
-    conservation_blast_files: Sequence[str | ConservationSearchResult] | None = None,
+    conservation_blast_files: Sequence[ConservationInput] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
     conservation_labels: Sequence[str] | None = None,
@@ -3369,7 +3429,7 @@ def assemble_circular_diagram_from_records(
     )
 
     _attach_circular_label_layouts(
-        merged_canvas, [result.outer_label_layout for result in record_results]
+        merged_canvas, [result.label_layout for result in record_results]
     )
     if track_slot_geometry_records:
         setattr(
@@ -3392,7 +3452,7 @@ _LABEL_FIT_ATTR = "_gbdraw_label_fit"
 
 def _attach_circular_label_layouts(
     drawing: Drawing,
-    layouts: Sequence[CircularOuterLabelLayout | None],
+    layouts: Sequence[CircularLabelLayout | None],
 ) -> None:
     setattr(
         drawing,
@@ -3401,9 +3461,9 @@ def _attach_circular_label_layouts(
     )
 
 
-def _circular_label_layouts(drawing: Drawing) -> tuple[CircularOuterLabelLayout, ...]:
+def _circular_label_layouts(drawing: Drawing) -> tuple[CircularLabelLayout, ...]:
     layouts = getattr(drawing, _CIRCULAR_LABEL_LAYOUTS_ATTR, ())
-    return tuple(layout for layout in layouts if isinstance(layout, CircularOuterLabelLayout))
+    return tuple(layout for layout in layouts if isinstance(layout, CircularLabelLayout))
 
 
 def _drawing_size(drawing: Drawing) -> tuple[float, float]:
@@ -3413,23 +3473,42 @@ def _drawing_size(drawing: Drawing) -> tuple[float, float]:
     )
 
 
-def _checked_circular_drawing(assemble: Callable[[Mapping[str, float]], Drawing]) -> Drawing:
-    """Assemble a Circular figure and apply the outer-label fit check to it.
+def _checked_circular_drawing(
+    assemble: Callable[[Mapping[str, LabelFitValue]], Drawing],
+    *,
+    warn_search_seconds: float,
+) -> Drawing:
+    """Assemble a Circular figure and apply the label fit check to it.
 
-    Overlapping labels raise ``LabelsDoNotFitError``; crossing leaders alone
-    keep the drawing, warn, and attach the report and its search to it.
+    Overlapping labels (or radial labels without room) raise
+    ``LabelsDoNotFitError``; crossing leaders or labels over the definition
+    text alone keep the drawing, warn, and attach the report and its search
+    (rows searched for ``warn_search_seconds``).
     """
 
+    started = time.monotonic()
     drawing = assemble({})
+    assembly_seconds = time.monotonic() - started
 
-    def verify(overrides: Mapping[str, float]) -> CircularLabelVerification:
-        verified = assemble(overrides)
-        return CircularLabelVerification(
-            fits=all(layout.fit.fits for layout in _circular_label_layouts(verified)),
+    def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
+        try:
+            verified = assemble(overrides)
+        except LabelLayoutError as error:
+            # A label setting the engine cannot draw does not fit; any other error is raised.
+            return LabelFitVerification(outcome="stop", canvas_size=None, reason=str(error))
+        layouts = _circular_label_layouts(verified)
+        return LabelFitVerification(
+            outcome=circular_label_outcome(layouts),
             canvas_size=_drawing_size(verified),
+            fit=sum((layout.fit for layout in layouts), FITS),
         )
 
-    checked = check_circular_label_fit(_circular_label_layouts(drawing), verify)
+    checked = check_circular_label_fit(
+        _circular_label_layouts(drawing),
+        verify,
+        assembly_seconds=assembly_seconds,
+        warn_search_seconds=warn_search_seconds,
+    )
     if checked is not None:
         setattr(drawing, _LABEL_FIT_ATTR, checked)
     return drawing
@@ -3449,15 +3528,22 @@ def label_fit_report(drawing: Drawing) -> LabelFitReport | None:
     return checked[0] if checked is not None else None
 
 
-def label_fit_row(drawing: Drawing, kind: LabelFitRowKind) -> LabelFitRow | None:
-    """Compute one row of a drawn figure's report without a time limit.
+def label_fit_row(
+    source: Drawing | LabelsDoNotFitError, kind: LabelFitRowKind, *, deadline: float | None = None
+) -> LabelFitRow | None:
+    """Compute one row of a report, until a ``time.monotonic()`` ``deadline`` if given.
 
-    Rows that the bounded search did not reach are ``not_computed`` in the
-    report; this returns the computed row (rows found earlier cost nothing).
+    ``source`` is a figure drawn with a report or the error of a figure that
+    was not drawn. Rows that the bounded search did not reach are
+    ``not_computed`` in the report; this returns the computed row (rows found
+    earlier cost nothing), or ``not_computed`` again when ``deadline`` came
+    first.
     """
 
-    checked = _label_fit(drawing)
-    return checked[1].row(kind) if checked is not None else None
+    if isinstance(source, LabelsDoNotFitError):
+        return source.row_search.row(kind, deadline=deadline) if source.row_search is not None else None
+    checked = _label_fit(source)
+    return checked[1].row(kind, deadline=deadline) if checked is not None else None
 
 
 def _circular_builder_options(
@@ -3491,29 +3577,50 @@ def build_circular_diagram(
     _record_transform: RecordDisplayTransform | None = None,
     _record_presentation: RecordPresentation | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
+    _label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> Drawing:
     """Build a circular diagram using mode-specific typed options."""
 
     options = _circular_builder_options(options)
     depth_table, depth_file = _resolve_single_circular_depth_options(options)
-    colors = options.colors
     output = options.output
     tracks = options.tracks
 
     cfg = _resolve_diagram_options_config(options)
+    # Read every file once: the label fit rows reassemble the figure, on the
+    # Web after its staged files are deleted (OV-720, OV-732).
+    conservation_inputs = read_conservation_inputs(
+        options.conservation_search_results or options.conservation_blast_files
+    )
+    feature_inputs = _feature_inputs_read_once(
+        options, load_comparison_colors=False, resolved_inputs=_resolved_feature_inputs
+    )
+    annotations = read_annotation_options(options.annotations, mode="circular")
+    depth_tracks = (
+        None
+        if _precomputed_depth_track_specs is not None
+        else depth_track_inputs(
+            normalize_depth_tracks(
+                [gb_record],
+                depth_tracks=options.depth_tracks,
+                depth_table=depth_table,
+                depth_file=depth_file,
+                depth_track_tables=options.depth_track_tables,
+                depth_track_files=options.depth_track_files,
+                depth_track_labels=options.depth_track_labels,
+                depth_track_colors=options.depth_track_colors,
+                depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+                depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+                depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
+            )
+        )
+    )
 
-    def assemble(overrides: Mapping[str, float]) -> Drawing:
+    def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
         return assemble_circular_diagram_from_record(
             gb_record,
             cfg=with_config_overrides(cfg, overrides),
-            color_table=colors.color_table if colors else None,
-            color_table_file=colors.color_table_file if colors else None,
-            default_colors=colors.default_colors if colors else None,
-            default_colors_palette=colors.default_colors_palette if colors else "default",
-            default_colors_file=colors.default_colors_file if colors else None,
             selected_features_set=options.selected_features_set,
-            feature_visibility_table=options.feature_visibility_table,
-            feature_visibility_table_file=options.feature_visibility_table_file,
             feature_shapes=options.feature_shapes,
             output_prefix="out",
             legend=output.legend if output else "right",
@@ -3522,19 +3629,8 @@ def build_circular_diagram(
             step=options.step,
             depth_window=options.depth_window,
             depth_step=options.depth_step,
-            depth_tracks=options.depth_tracks,
-            depth_table=depth_table,
-            depth_file=depth_file,
-            depth_track_tables=options.depth_track_tables,
-            depth_track_files=options.depth_track_files,
-            depth_track_labels=options.depth_track_labels,
-            depth_track_colors=options.depth_track_colors,
-            depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
-            depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
-            depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
-            conservation_blast_files=(
-                options.conservation_search_results or options.conservation_blast_files
-            ),
+            depth_tracks=depth_tracks,
+            conservation_blast_files=conservation_inputs,
             conservation_dataframes=options.conservation_dataframes,
             conservation_reference=options.conservation_reference,
             conservation_labels=options.conservation_labels,
@@ -3559,17 +3655,19 @@ def build_circular_diagram(
             center_reserved_radius=tracks.center_reserved_radius if tracks else None,
             circular_track_slots=tracks.circular_track_slots if tracks else None,
             circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
-            annotation_options=options.annotations,
+            annotation_options=annotations,
             _resolved_annotations=_resolved_annotations,
             _precomputed_depth_track_specs=_precomputed_depth_track_specs,
             _precomputed_depth_track_count=_precomputed_depth_track_count,
-            _resolved_feature_inputs=_resolved_feature_inputs,
+            _resolved_feature_inputs=feature_inputs,
             _resolved_record_features=_resolved_record_features,
             _record_transform=_record_transform,
             _record_presentation=_record_presentation,
         )
 
-    return _checked_circular_drawing(assemble)
+    return _checked_circular_drawing(
+        assemble, warn_search_seconds=_label_fit_warn_search_seconds
+    )
 
 
 def _build_linear_diagram(
@@ -3591,88 +3689,134 @@ def _build_linear_diagram(
     """Build a linear diagram using mode-specific typed options."""
 
     options = _linear_builder_options(options)
-    colors = options.colors
     output = options.output
     tracks = options.tracks
     cfg = _resolve_diagram_options_config(options)
     normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(
         str(options.collinearity_anchor_mode)
     )
-
-    return assemble_linear_diagram_from_records(
-        records,
-        cfg=cfg,
-        blast_files=options.blast_files,
-        linear_comparisons=options.linear_comparisons,
-        layout=layout,
-        protein_comparisons=options.protein_comparisons,
-        orthogroups=options.orthogroups,
-        losat_search=options.losat_search,
-        pairwise_match_style=options.pairwise_match_style,
-        collinearity_blocks=options.collinearity_blocks,
-        collinearity_params=options.collinearity_params,
-        collinearity_unit_mode=options.collinearity_unit_mode,
-        collinearity_anchor_mode=normalized_collinearity_anchor_mode,
-        collinearity_search_scope=options.collinearity_search_scope,
-        collinearity_color_mode=options.collinearity_color_mode,
-        losatp_cache=losatp_cache,
-        protein_extraction=protein_extraction,
-        orthogroup_membership_mode=options.orthogroup_membership_mode,
-        collinear_infer_orthogroups=options.collinear_infer_orthogroups,
-        collinear_max_paralog_links_per_orthogroup=options.collinear_max_paralog_links_per_orthogroup,
-        similarity_alignment=similarity_alignment,
-        color_table=colors.color_table if colors else None,
-        color_table_file=colors.color_table_file if colors else None,
-        default_colors=colors.default_colors if colors else None,
-        default_colors_palette=colors.default_colors_palette if colors else "default",
-        default_colors_file=colors.default_colors_file if colors else None,
-        selected_features_set=options.selected_features_set,
-        feature_visibility_table=options.feature_visibility_table,
-        feature_visibility_table_file=options.feature_visibility_table_file,
-        feature_shapes=options.feature_shapes,
-        output_prefix="out",
-        legend=output.legend if output else "right",
-        dinucleotide=options.dinucleotide,
-        window=options.window,
-        step=options.step,
-        depth_window=options.depth_window,
-        depth_step=options.depth_step,
-        depth_tracks=options.depth_tracks,
-        depth_table=options.depth_table,
-        depth_file=options.depth_file,
-        depth_tables=options.depth_tables,
-        depth_files=options.depth_files,
-        depth_track_tables=options.depth_track_tables,
-        depth_track_files=options.depth_track_files,
-        depth_track_labels=options.depth_track_labels,
-        depth_track_colors=options.depth_track_colors,
-        depth_track_heights=options.depth_track_heights,
-        depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
-        depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
-        depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
-        linear_track_slots=tracks.linear_track_slots if tracks else None,
-        linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
-        annotation_options=options.annotations,
-        _resolved_annotations=_resolved_annotations,
-        plot_title=options.plot_title,
-        plot_title_position=(
-            output.plot_title_position
-            if output and output.plot_title_position is not None
-            else "bottom"
+    # Read every file once: the label fit row reassembles the figure (OV-732).
+    feature_inputs = _feature_inputs_read_once(
+        options,
+        load_comparison_colors=_linear_has_comparisons(
+            blast_files=options.blast_files,
+            linear_comparisons=options.linear_comparisons,
+            protein_comparisons=options.protein_comparisons,
+            collinearity_blocks=options.collinearity_blocks,
+            losat_search=options.losat_search,
         ),
-        plot_title_font_size=options.plot_title_font_size,
-        # The builder options resolved omitted thresholds from the mode profile.
-        evalue=cast(float, options.evalue),
-        bitscore=cast(float, options.bitscore),
-        identity=cast(float, options.identity),
-        alignment_length=cast(int, options.alignment_length),
-        _resolved_feature_inputs=_resolved_feature_inputs,
-        _resolved_record_features=_resolved_record_features,
-        _record_transforms=_record_transforms,
-        _record_presentations=_record_presentations,
-        _alignment_anchor_centers=_alignment_anchor_centers,
-        _return_build_result=_return_build_result,
+        resolved_inputs=_resolved_feature_inputs,
     )
+    annotations = read_annotation_options(options.annotations, mode="linear")
+    depth_tracks = depth_track_inputs(
+        normalize_depth_tracks(
+            records,
+            depth_tracks=options.depth_tracks,
+            depth_table=options.depth_table,
+            depth_file=options.depth_file,
+            depth_tables=options.depth_tables,
+            depth_files=options.depth_files,
+            depth_track_tables=options.depth_track_tables,
+            depth_track_files=options.depth_track_files,
+            depth_track_labels=options.depth_track_labels,
+            depth_track_colors=options.depth_track_colors,
+            depth_track_heights=options.depth_track_heights,
+            depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
+        )
+    )
+
+    def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing | LinearDiagramBuildResult:
+        return assemble_linear_diagram_from_records(
+            records,
+            cfg=with_config_overrides(cfg, overrides),
+            blast_files=options.blast_files,
+            linear_comparisons=options.linear_comparisons,
+            layout=layout,
+            protein_comparisons=options.protein_comparisons,
+            orthogroups=options.orthogroups,
+            losat_search=options.losat_search,
+            pairwise_match_style=options.pairwise_match_style,
+            collinearity_blocks=options.collinearity_blocks,
+            collinearity_params=options.collinearity_params,
+            collinearity_unit_mode=options.collinearity_unit_mode,
+            collinearity_anchor_mode=normalized_collinearity_anchor_mode,
+            collinearity_search_scope=options.collinearity_search_scope,
+            collinearity_color_mode=options.collinearity_color_mode,
+            losatp_cache=losatp_cache,
+            protein_extraction=protein_extraction,
+            orthogroup_membership_mode=options.orthogroup_membership_mode,
+            collinear_infer_orthogroups=options.collinear_infer_orthogroups,
+            collinear_max_paralog_links_per_orthogroup=options.collinear_max_paralog_links_per_orthogroup,
+            similarity_alignment=similarity_alignment,
+            selected_features_set=options.selected_features_set,
+            feature_shapes=options.feature_shapes,
+            output_prefix="out",
+            legend=output.legend if output else "right",
+            dinucleotide=options.dinucleotide,
+            window=options.window,
+            step=options.step,
+            depth_window=options.depth_window,
+            depth_step=options.depth_step,
+            depth_tracks=depth_tracks,
+            linear_track_slots=tracks.linear_track_slots if tracks else None,
+            linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
+            annotation_options=annotations,
+            _resolved_annotations=_resolved_annotations,
+            plot_title=options.plot_title,
+            plot_title_position=(
+                output.plot_title_position
+                if output and output.plot_title_position is not None
+                else "bottom"
+            ),
+            plot_title_font_size=options.plot_title_font_size,
+            # The builder options resolved omitted thresholds from the mode profile.
+            evalue=cast(float, options.evalue),
+            bitscore=cast(float, options.bitscore),
+            identity=cast(float, options.identity),
+            alignment_length=cast(int, options.alignment_length),
+            _resolved_feature_inputs=feature_inputs,
+            _resolved_record_features=_resolved_record_features,
+            _record_transforms=_record_transforms,
+            _record_presentations=_record_presentations,
+            _alignment_anchor_centers=_alignment_anchor_centers,
+            _return_build_result=_return_build_result,
+        )
+
+    return _checked_linear_build(assemble, features_separated=bool(cfg.canvas.resolve_overlaps))
+
+
+def _linear_drawing(result: Drawing | LinearDiagramBuildResult) -> Drawing:
+    return result.drawing if isinstance(result, LinearDiagramBuildResult) else result
+
+
+def _linear_label_fit(drawing: Drawing) -> LinearLabelFit:
+    label_fit = getattr(drawing, LINEAR_LABEL_FIT_ATTR, None)
+    return label_fit if isinstance(label_fit, LinearLabelFit) else LinearLabelFit()
+
+
+def _checked_linear_build(
+    assemble: Callable[[Mapping[str, LabelFitValue]], Drawing | LinearDiagramBuildResult],
+    *,
+    features_separated: bool,
+) -> Drawing | LinearDiagramBuildResult:
+    """Assemble a Linear figure and apply the label fit check to it."""
+
+    result = assemble({})
+
+    def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
+        try:
+            verified = _linear_drawing(assemble(overrides))
+        except LabelLayoutError as error:
+            return LabelFitVerification(outcome="stop", canvas_size=None, reason=str(error))
+        label_fit = _linear_label_fit(verified)
+        return LabelFitVerification(label_fit.outcome, _drawing_size(verified), label_fit.fit)
+
+    check_linear_label_fit(
+        _linear_label_fit(_linear_drawing(result)), verify, features_separated=features_separated
+    )
+    return result
 
 
 def build_linear_diagram(
@@ -3756,6 +3900,7 @@ def build_circular_multi_diagram(
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _record_presentations: Sequence[RecordPresentation] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
+    _label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> Drawing:
     """Build a circular grid using mode-specific typed options."""
 
@@ -3765,40 +3910,21 @@ def build_circular_multi_diagram(
             "layout must be CircularMultiRecordOptions or None."
         )
     layout = layout or CircularMultiRecordOptions()
-    colors = options.colors
     output = options.output
     tracks = options.tracks
     cfg = _resolve_diagram_options_config(options)
-
-    def assemble(overrides: Mapping[str, float]) -> Drawing:
-        return assemble_circular_diagram_from_records(
+    # Read every file once: the label fit rows reassemble the figure, on the
+    # Web after its staged files are deleted (OV-720, OV-732).
+    conservation_inputs = read_conservation_inputs(
+        options.conservation_search_results or options.conservation_blast_files
+    )
+    feature_inputs = _feature_inputs_read_once(
+        options, load_comparison_colors=False, resolved_inputs=_resolved_feature_inputs
+    )
+    annotations = read_annotation_options(options.annotations, mode="circular")
+    depth_tracks = depth_track_inputs(
+        normalize_depth_tracks(
             records,
-            cfg=with_config_overrides(cfg, overrides),
-            conservation_blast_files=(
-                options.conservation_search_results or options.conservation_blast_files
-            ),
-            conservation_dataframes=options.conservation_dataframes,
-            conservation_reference=options.conservation_reference,
-            conservation_labels=options.conservation_labels,
-            conservation_colors=options.conservation_colors,
-            conservation_ring_width=options.conservation_ring_width,
-            conservation_ring_gap=options.conservation_ring_gap,
-            color_table=colors.color_table if colors else None,
-            color_table_file=colors.color_table_file if colors else None,
-            default_colors=colors.default_colors if colors else None,
-            default_colors_palette=colors.default_colors_palette if colors else "default",
-            default_colors_file=colors.default_colors_file if colors else None,
-            selected_features_set=options.selected_features_set,
-            feature_visibility_table=options.feature_visibility_table,
-            feature_visibility_table_file=options.feature_visibility_table_file,
-            feature_shapes=options.feature_shapes,
-            output_prefix="out",
-            legend=output.legend if output else "right",
-            dinucleotide=options.dinucleotide,
-            window=options.window,
-            step=options.step,
-            depth_window=options.depth_window,
-            depth_step=options.depth_step,
             depth_tracks=options.depth_tracks,
             depth_table=options.depth_table,
             depth_file=options.depth_file,
@@ -3811,6 +3937,30 @@ def build_circular_multi_diagram(
             depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
             depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
             depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
+        )
+    )
+
+    def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
+        return assemble_circular_diagram_from_records(
+            records,
+            cfg=with_config_overrides(cfg, overrides),
+            conservation_blast_files=conservation_inputs,
+            conservation_dataframes=options.conservation_dataframes,
+            conservation_reference=options.conservation_reference,
+            conservation_labels=options.conservation_labels,
+            conservation_colors=options.conservation_colors,
+            conservation_ring_width=options.conservation_ring_width,
+            conservation_ring_gap=options.conservation_ring_gap,
+            selected_features_set=options.selected_features_set,
+            feature_shapes=options.feature_shapes,
+            output_prefix="out",
+            legend=output.legend if output else "right",
+            dinucleotide=options.dinucleotide,
+            window=options.window,
+            step=options.step,
+            depth_window=options.depth_window,
+            depth_step=options.depth_step,
+            depth_tracks=depth_tracks,
             species=options.species,
             strain=options.strain,
             plot_title=options.plot_title,
@@ -3829,20 +3979,22 @@ def build_circular_multi_diagram(
             multi_record_positions=layout.multi_record_positions,
             circular_track_slots=tracks.circular_track_slots if tracks else None,
             circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
-            annotation_options=options.annotations,
+            annotation_options=annotations,
             _resolved_annotations=_resolved_annotations,
             # The builder options resolved omitted thresholds from the mode profile.
             evalue=cast(float, options.evalue),
             bitscore=cast(float, options.bitscore),
             identity=cast(float, options.identity),
             alignment_length=cast(int, options.alignment_length),
-            _resolved_feature_inputs=_resolved_feature_inputs,
+            _resolved_feature_inputs=feature_inputs,
             _resolved_record_features=_resolved_record_features,
             _record_transforms=_record_transforms,
             _record_presentations=_record_presentations,
         )
 
-    return _checked_circular_drawing(assemble)
+    return _checked_circular_drawing(
+        assemble, warn_search_seconds=_label_fit_warn_search_seconds
+    )
 
 
 __all__ = [

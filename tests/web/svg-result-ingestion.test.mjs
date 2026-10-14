@@ -1265,7 +1265,7 @@ test('Load records Python\'s paint on a Session 44 Result saved without records'
   resetPaint(svg);
   const python = paint();
   assert.equal(python.f38ba7c3f, '#54bcf8 gray 2.0', 'the stroke of the blocks no edit reached');
-  ['f841fb8a8', 'f2f7a48cf__instance_4_4b227777d4dd1fc6', 'f2f7a48cf__instance_5_ef2d127de37b942b', 'CDS']
+  ['f841fb8a8', 'f970830ef__instance_4_4b227777d4dd1fc6', 'f970830ef__instance_5_ef2d127de37b942b', 'CDS']
     .forEach((name) => assert.equal(python[name], saved[name], `${name} has no edit`));
   assert.equal(python.repeat_region, '#d3d3d3 gray 2.0');
 });

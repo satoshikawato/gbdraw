@@ -59,7 +59,8 @@ export const dialogFocus = {
 // described by the text that `labelledby` and `describedby` name. Escape and a
 // backdrop click emit `cancel`, which a use binds to its Cancel handler; a use
 // binds Tab to `trapDialogFocus`. While `busy` (a choice still applying), its
-// controls are disabled and it says so (D-12). Focus stays in it: the panel
+// controls are disabled and it says so (D-12), or says `busyStatus` when a use
+// is busy with something else (the label fit dialog finishing a row, LP-D60). Focus stays in it: the panel
 // takes focus before the controls are disabled, so Escape still reaches the
 // dialog, and the first enabled control gets it back if the dialog stays open.
 export const ChoiceDialog = {
@@ -67,7 +68,8 @@ export const ChoiceDialog = {
   props: {
     labelledby: { type: String, required: true },
     describedby: { type: String, default: null },
-    busy: { type: Boolean, default: false }
+    busy: { type: Boolean, default: false },
+    busyStatus: { type: String, default: null }
   },
   emits: ['cancel'],
   /** @param {{ busy: boolean }} props */

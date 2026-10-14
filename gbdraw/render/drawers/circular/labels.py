@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import math
-from typing import Literal, Tuple
+from typing import Tuple
 
 from gbdraw.svg.elements import Path, Text, TextPath
 
@@ -13,6 +13,7 @@ from ....layout.common import calculate_cds_ratio
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
 from ....core.text import calculate_bbox_dimensions
+from ....labels.circular_leaders import TextAnchor, TextBaseline, horizontal_label_alignment
 from ...label_binding import bind_label_part
 
 
@@ -29,40 +30,8 @@ class LabelDrawer:
         tick: float,
         start_x: float,
         is_inner: bool = False,
-    ) -> Tuple[Literal["middle", "start", "end"], Literal["text-after-edge", "middle", "hanging"]]:
-        angle = (360.0 * (tick / total_len)) % 360
-
-        anchor_value: Literal["middle", "start", "end"]
-        baseline_value: Literal["text-after-edge", "middle", "hanging"]
-        if start_x > 0:
-            anchor_value = "end" if is_inner else "start"
-        else:
-            anchor_value = "start" if is_inner else "end"
-
-        if is_inner:
-            if 0 <= angle < 10:
-                baseline_value = "hanging"
-            elif 10 <= angle < 170:
-                baseline_value = "middle"
-            elif 170 <= angle < 190:
-                baseline_value = "middle"
-            elif 190 <= angle < 350:
-                baseline_value = "middle"
-            else:
-                baseline_value = "hanging"
-        else:
-            if 0 <= angle < 10:
-                baseline_value = "text-after-edge"
-            elif 10 <= angle < 170:
-                baseline_value = "middle"
-            elif 170 <= angle < 190:
-                baseline_value = "hanging"
-            elif 190 <= angle < 350:
-                baseline_value = "middle"
-            else:
-                baseline_value = "text-after-edge"
-
-        return anchor_value, baseline_value
+    ) -> Tuple[TextAnchor, TextBaseline]:
+        return horizontal_label_alignment(total_len, tick, start_x, is_inner=is_inner)
 
     def embed_label(
         self,

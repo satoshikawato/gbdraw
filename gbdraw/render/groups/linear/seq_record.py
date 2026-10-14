@@ -12,7 +12,7 @@ from ....canvas.linear import LinearCanvasGeometry
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.linear.labels import LabelDrawer
-from ....labels.linear import prepare_label_list_linear
+from ....labels.linear import linear_leader_polyline, prepare_label_list_linear
 from ....config.models.render_profiles import LinearRenderProfile
 from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayout
 from ....features.factory import FeatureBuildResult
@@ -297,28 +297,11 @@ class SeqRecordGroup:
                     )
                 label = {**label, "feature_id": feature_id}
                 bound_labels.append(label)
-                if label.get("leader_line"):
+                leader = linear_leader_polyline(label)
+                if leader:
                     line_path = Line(
-                        start=(label["leader_start_x"], label["leader_start_y"]),
-                        end=(label["leader_end_x"], label["leader_end_y"]),
-                        stroke=self.label_stroke_color,
-                        stroke_width=self.label_stroke_width,
-                    )
-                    bind_label_part(line_path, feature_id)
-                    feature_group.add(line_path)
-                elif not label["is_embedded"]:
-                    label_middle_y = float(label["middle_y"])
-                    feature_middle_y = float(label["feature_middle_y"])
-                    label_height = float(label["height_px"])
-                    if label_middle_y >= feature_middle_y:
-                        # Label is below the feature track, so connect to its upper edge.
-                        label_edge_y = label_middle_y - (0.45 * label_height)
-                    else:
-                        # Label is above the feature track, so connect to its lower edge.
-                        label_edge_y = label_middle_y + (0.45 * label_height)
-                    line_path = Line(
-                        start=(label["middle"], label["feature_middle_y"]),
-                        end=(label["middle"], label_edge_y),
+                        start=leader[0],
+                        end=leader[1],
                         stroke=self.label_stroke_color,
                         stroke_width=self.label_stroke_width,
                     )

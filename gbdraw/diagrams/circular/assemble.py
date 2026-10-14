@@ -59,15 +59,16 @@ from ...features.factory import FeatureBuildResult, create_feature_layers
 from ...labels.circular import (
     CircularLabelProbeStopped,
     assign_leader_start_points,
-    circular_label_fit,
+    circular_label_fits,
     circular_label_font_size,
     minimum_bbox_gap_px,
     prepare_label_list,
     x_overlap,
     y_overlap,
 )
-from ...labels.circular_fit import CircularOuterLabelLayout
-from ...labels.fit import LabelFit
+from ...labels.circular_fit import CircularLabelLayout
+from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
+from ...labels.fit import FITS, LabelFit, LabelFitValue, LabelKind
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.circular import (
@@ -172,7 +173,7 @@ class _CircularPlotAssembly:
     primary_targets: tuple[Group, ...]
     legend_target: Group | None
     track_slot_geometry: Mapping[str, Any]
-    outer_label_layout: CircularOuterLabelLayout | None
+    label_layout: CircularLabelLayout | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,8 +191,8 @@ class CircularAssemblyResult:
     title_target: Group | None
     track_slot_geometry: Mapping[str, Any]
     composition_plan: CompositionPlan
-    # Horizontal outer labels: their fit and a probe for the fit search (None without them).
-    outer_label_layout: CircularOuterLabelLayout | None = None
+    # The drawn external labels: their fit by kind and a probe for the fit search (None without them).
+    label_layout: CircularLabelLayout | None = None
 
 
 def _mark_circular_track_slot_group(
@@ -1941,42 +1942,69 @@ def _default_outer_label_arena(
 
 
 
-def _horizontal_outer_label_layout(
+def _record_label_layout(
     gb_record: SeqRecord,
     profile: CircularRenderProfile,
     drawn_labels: Sequence[dict[str, Any]],
     place_labels: Callable[..., list[dict[str, Any]]],
-) -> CircularOuterLabelLayout | None:
-    """The drawn horizontal outer labels' fit and a probe that places them with other settings."""
+    *,
+    definition_text: Sequence[Aabb],
+    radial_refused: bool,
+) -> CircularLabelLayout | None:
+    """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings."""
 
     total_length = len(gb_record.seq)
-    outer_label_count = sum(
-        1 for label in drawn_labels if not label.get("is_embedded") and not label.get("is_inner")
-    )
-    if profile.label_placement != "horizontal" or outer_label_count == 0:
+    label_counts: dict[LabelKind, int] = {}
+    for label in drawn_labels:
+        kind: LabelKind = (
+            "circular_embedded"
+            if label.get("is_embedded")
+            else "circular_inner"
+            if label.get("is_inner")
+            else "circular_outer"
+        )
+        label_counts[kind] = label_counts.get(kind, 0) + 1
+    if not label_counts:
         return None
     cfg = profile.config
+    horizontal = profile.label_placement == "horizontal"
 
-    def probe(overrides: Mapping[str, float]) -> LabelFit:
+    def probe(overrides: Mapping[str, LabelFitValue]) -> LabelFit:
         probe_profile = replace(profile, config=with_config_overrides(cfg, overrides))
         try:
             labels = place_labels(probe_profile, probe=True)
         except CircularLabelProbeStopped as stopped:
             # The dense candidate already overlaps; crossings are not counted.
             return LabelFit(overlap_pairs=stopped.overlap_pairs, crossing_pairs=0)
-        return circular_label_fit(labels, total_length)
+        return circular_label_fits(labels, total_length).get("circular_outer", FITS)
 
     outer_offsets = cfg.labels.unified_adjustment.outer_labels
-    return CircularOuterLabelLayout(
+    return CircularLabelLayout(
         record_id=str(gb_record.id),
-        outer_label_count=outer_label_count,
+        placement="horizontal" if horizontal else "radial",
         font_size=circular_label_font_size(cfg, total_length),
+        label_counts=label_counts,
+        kind_fits=circular_label_fits(drawn_labels, total_length, definition_text=definition_text),
         x_radius_offset=float(outer_offsets.x_radius_offset),
         y_radius_offset=float(outer_offsets.y_radius_offset),
         label_spacing=float(cfg.labels.spacing.circular),
-        fit=circular_label_fit(list(drawn_labels), total_length),
-        probe=probe,
+        refused=radial_refused,
+        features_separated=bool(profile.resolve_overlaps),
+        probe=probe if horizontal and label_counts.get("circular_outer") else None,
     )
+
+
+def _centre_definition_text(definition: DefinitionGroup) -> tuple[Aabb, ...]:
+    """The painted lines of a centred definition in the coordinates of the record's labels.
+
+    ``place_definition_group_on_canvas`` centres the lines' union on the
+    record's centre, the origin of the label coordinates.
+    """
+
+    bounds = definition.local_bounds
+    dx = -0.5 * (bounds.min_x + bounds.max_x)
+    dy = -0.5 * (bounds.min_y + bounds.max_y)
+    return tuple(box.translated(dx, dy) for box in definition.line_bounds)
 
 
 def add_record_on_circular_canvas(
@@ -2265,6 +2293,29 @@ def add_record_on_circular_canvas(
     precalculated_labels: list[dict[str, Any]] | None = None
     # Text measurements per label font size, shared by the drawn placement and fit probes.
     label_candidate_caches: dict[float, dict[str, object]] = {}
+    # LP-D49 DEF-WARN and the LP-D57 repair: labels over the centre definition text (not a plot title).
+    definition_text: tuple[Aabb, ...] = (
+        _centre_definition_text(
+            DefinitionGroup(
+                gb_record,
+                canvas_config,
+                cfg=canvas_config.profile.config,
+                species=species,
+                strain=strain,
+                plot_title=plot_title,
+                definition_profile=definition_profile,
+                record_index=int(annotation_record_index),
+                record_count=int(definition_record_count),
+                record_transform=record_transform,
+                species_line_count=species_line_count,
+                record_presentation=record_presentation,
+            )
+        )
+        if show_external_labels
+        and str(definition_position) == "center"
+        and str(definition_profile) != "shared_common"
+        else ()
+    )
 
     def place_labels(label_profile: CircularRenderProfile, *, probe: bool = False) -> list[dict[str, Any]]:
         """Place this record's labels with the current geometry (read at call time)."""
@@ -2294,9 +2345,12 @@ def add_record_on_circular_canvas(
             _candidate_cache=label_candidate_caches.setdefault(font_size, {}),
             record_transform=record_transform,
             probe=probe,
+            definition_text=definition_text,
             label_filtering=label_filtering,
         )
 
+    # Radial labels that collide once the canvas stops growing are refused (OV-694, RADIAL-JOIN).
+    radial_refused = False
     if show_external_labels and precomputed_feature_dict is not None:
         precalculated_labels = place_labels(profile)
         if profile.label_placement == "radial":
@@ -2312,29 +2366,19 @@ def add_record_on_circular_canvas(
                     ),
                     default=0.0,
                 )
-                if required_growth <= 1e-3:
+                if required_growth <= RADIAL_GROWTH_TOLERANCE_PX:
                     break
-                if previous_growth is not None and required_growth >= previous_growth - 1e-3:
+                if (
+                    previous_growth is not None
+                    and required_growth >= previous_growth - RADIAL_GROWTH_TOLERANCE_PX
+                ):
                     stagnant_passes += 1
                 else:
                     stagnant_passes = 0
                 if stagnant_passes >= 2:
-                    fixed_inside_slots = [
-                        slot
-                        for slot in radial_layout.slots
-                        if slot.side == "inside" and (slot.explicit_anchor or slot.explicit_width)
-                    ]
-                    slot_context = ", ".join(slot.id for slot in fixed_inside_slots) or "center/feature interval"
-                    raise ValidationError(
-                        "radial inner labels cannot fit the fixed circular geometry: "
-                        f"slot={slot_context}, required_additional_px={required_growth:.3f}",
-                        # The Track row is the first fixed inside row, to move or unpin.
-                        diagnostic={
-                            "code": "TRACK_LAYOUT",
-                            "reason": "CANNOT_FIT",
-                            **({"slotIndex": int(fixed_inside_slots[0].slot_index)} if fixed_inside_slots else {}),
-                        },
-                    )
+                    # Growing the canvas no longer makes room (LP-D49 RADIAL-JOIN).
+                    radial_refused = True
+                    break
                 previous_growth = required_growth
 
                 if not preflight_tracks_frozen:
@@ -2455,6 +2499,11 @@ def add_record_on_circular_canvas(
                     else None
                 )
                 precalculated_labels = place_labels(profile)
+            radial_refused = radial_refused or any(
+                any(label.get("layout_collision_counts", ()))
+                for label in precalculated_labels
+                if not label.get("is_embedded")
+            )
 
             gc_content_tick_font_size_override = _gc_content_matches_depth_axis_font_size(
                 gc_config=gc_config,
@@ -2524,13 +2573,6 @@ def add_record_on_circular_canvas(
                 depth_config=depth_config,
                 overlay_obstacles=overlay_obstacles,
             )
-
-    outer_label_layout = _horizontal_outer_label_layout(
-        gb_record,
-        profile,
-        precalculated_labels or [],
-        place_labels,
-    )
 
     render_context = CircularRecordRenderContext(
         profile=profile,
@@ -2649,6 +2691,15 @@ def add_record_on_circular_canvas(
         ),
         None,
     )
+    # The check counts the labels as drawn: after the legend shift and the last leader pass.
+    label_layout = _record_label_layout(
+        gb_record,
+        profile,
+        precalculated_labels or [],
+        place_labels,
+        definition_text=definition_text,
+        radial_refused=radial_refused,
+    )
     source_content_bounds = _collect_circular_primary_bounds(
         radial_layout=radial_layout,
         canvas_config=canvas_config,
@@ -2711,7 +2762,7 @@ def add_record_on_circular_canvas(
         primary_targets=primary_targets,
         legend_target=legend_target,
         track_slot_geometry=track_slot_geometry,
-        outer_label_layout=outer_label_layout,
+        label_layout=label_layout,
     )
 
 
@@ -2804,7 +2855,7 @@ def _compose_circular_plot(
         title_target=title_target,
         track_slot_geometry=plot.track_slot_geometry,
         composition_plan=plan,
-        outer_label_layout=plot.outer_label_layout,
+        label_layout=plot.label_layout,
     )
     setattr(plot.drawing, "_gbdraw_circular_assembly_result", result)
     return result

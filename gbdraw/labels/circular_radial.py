@@ -6,21 +6,24 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
-from ..exceptions import ValidationError
-from ..layout.spatial import Aabb, AabbIndex, candidate_aabb_pairs
+from ..exceptions import LabelLayoutError, ValidationError
+from ..layout.spatial import Aabb, AabbIndex
 from ..layout.text_geometry import (
     OrientedTextBox,
-    oriented_boxes_intersect,
     oriented_text_box,
     segment_intersects_polygon,
 )
 from .circular_leaders import leader_crossing_count, leader_segments
+from .fit import overlapping_pairs
 from .circular_types import CircularLabelLayoutResult
 
 _TAU = 2.0 * math.pi
 _ANGLE_EPSILON = 1e-9
 _RADIAL_CLEARANCE_PX = 4.0
 _CONVERGENCE_LIMIT = 256
+# Radius growth at or below this is none: the assembly stops growing the
+# canvas, and an inner side waits for growth only above it (OV-694).
+RADIAL_GROWTH_TOLERANCE_PX = 1e-3
 
 
 def _normalize_readable_rotation(rotation_deg: float) -> float:
@@ -166,7 +169,7 @@ def _pack_angles(
             break
         start_angle += closing_overflow
     else:  # pragma: no cover - arithmetic guard for non-finite input
-        raise ValidationError("radial label cyclic relaxation did not converge")
+        raise LabelLayoutError("radial label cyclic relaxation did not converge")
 
     if balance:
         # The clockwise sweep can cross leaders from different feature radii.
@@ -183,7 +186,7 @@ def _pack_angles(
                 break
             end_angle -= overflow
         else:
-            raise ValidationError("radial label cyclic relaxation did not converge")
+            raise LabelLayoutError("radial label cyclic relaxation did not converge")
         placed = [(first + second) / 2.0 for first, second in zip(placed, backward, strict=True)]
 
     return [angle % _TAU for angle in placed]
@@ -264,13 +267,10 @@ def _box_for_label(label: Mapping[str, Any], padding_px: float = 0.0) -> Oriente
 
 def _text_collision_pairs(labels: Sequence[Mapping[str, Any]], spacing_px: float) -> list[tuple[int, int]]:
     padding = 0.5 * max(0.0, float(spacing_px))
-    boxes = [_box_for_label(label, padding_px=padding) for label in labels]
-    aabbs = [Aabb(box.aabb[0], box.aabb[1], box.aabb[2], box.aabb[3]) for box in boxes]
-    return [
-        (left, right)
-        for left, right in sorted(candidate_aabb_pairs(aabbs, bucket_size=max(16.0, 4.0 * padding)))
-        if oriented_boxes_intersect(boxes[left], boxes[right], touching=False)
-    ]
+    return overlapping_pairs(
+        [(_box_for_label(label, padding_px=padding).corners,) for label in labels],
+        touching=False,
+    )
 
 
 def _segment_aabb(segment: tuple[tuple[float, float], tuple[float, float]]) -> Aabb:
@@ -378,7 +378,7 @@ def _place_side(
         if not balance and (leader_text_collisions or leader_crossings):
             balance = True
             continue
-        awaiting_inner_preflight = is_inner and required_growth > 1e-6
+        awaiting_inner_preflight = is_inner and required_growth > RADIAL_GROWTH_TOLERANCE_PX
         if not collisions and (
             awaiting_inner_preflight
             or (not leader_text_collisions and not leader_crossings and not order_violations)
@@ -399,7 +399,7 @@ def _place_side(
         collision_radius += radial_deficit
         if is_inner:
             required_growth += radial_deficit
-    raise ValidationError(
+    raise LabelLayoutError(
         "radial label packing did not converge after deterministic radius expansion; "
         f"side={'inner' if is_inner else 'outer'}, labels={len(ordered)}"
     )
@@ -441,7 +441,9 @@ def place_radial_labels(
     leader_text_collisions = _leader_text_collision_count(labels)
     leader_crossings = leader_crossing_count(labels)
     order_violations = _order_violation_count(outer) + _order_violation_count(inner)
-    result = CircularLabelLayoutResult(
+    # The assembly grows the canvas while growth is required and refuses a layout
+    # that still collides once it stops (LP-D49 ``RADIAL-JOIN``).
+    return CircularLabelLayoutResult(
         labels=tuple(labels),
         content_bounds=_content_bounds(labels),
         required_radius_growth_px=max(outer_growth, inner_growth),
@@ -450,13 +452,6 @@ def place_radial_labels(
         leader_crossing_count=leader_crossings,
         order_violation_count=order_violations,
     )
-    if not result.collision_free and result.required_radius_growth_px <= 1e-6:
-        raise ValidationError(
-            "radial label layout retained collisions after radius convergence: "
-            f"text={text_collisions}, leader_text={leader_text_collisions}, "
-            f"leader_crossing={leader_crossings}, order={order_violations}"
-        )
-    return result
 
 
-__all__ = ["place_radial_labels", "radial_text_orientation"]
+__all__ = ["RADIAL_GROWTH_TOLERANCE_PX", "place_radial_labels", "radial_text_orientation"]
