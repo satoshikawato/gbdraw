@@ -3,7 +3,8 @@
 // Web each implement. A twin is allowed only with a row in tools/twins.json
 // that names its owners, the vector that pins the two to each other, and the
 // condition under which one side is deleted. The registry only shrinks: a new
-// row is an authority change.
+// row is an authority change, made before its twin exists with `pending`
+// (gbdraw/web/CLAUDE.md R9); the change that adds the twin removes `pending`.
 //
 // `twin.unregistered.v1` observes two kinds of twin in source text; nothing is
 // executed:
@@ -51,10 +52,11 @@ export const TWIN_REGISTRY_PATH = 'tools/twins.json';
  * @property {string} reason
  * @property {string} retireWhen
  * @property {string} source
+ * @property {true} [pending] A `vector:` or `function:` row added before its twin.
  */
 /**
  * @typedef {object} TwinRegistryCheck
- * @property {string[]} errors Malformed registry entries.
+ * @property {string[]} errors Malformed registry entries, and pending rows whose twin is detected.
  * @property {string[]} unregistered Detected twins without a row.
  * @property {string[]} stale Rows of a detected kind that the detector no longer reports.
  */
@@ -176,8 +178,9 @@ const isPathList = (value) => Array.isArray(value) && value.length > 0 && value.
 
 /**
  * Compares the registry with the detected twins: every detected twin has a
- * row and every `vector:` or `function:` row is detected. `constant:` and
- * `concern:` rows record twins the detector does not see.
+ * row and every `vector:` or `function:` row is detected, except a pending
+ * row, which is detected only once its twin is added and then loses `pending`.
+ * `constant:` and `concern:` rows record twins the detector does not see.
  * @param {unknown} registry the parsed tools/twins.json
  * @param {readonly DetectedTwin[]} detected
  * @returns {TwinRegistryCheck}
@@ -193,6 +196,8 @@ export const checkTwinRegistry = (registry, detected) => {
   if (!entries) errors.push(`${TWIN_REGISTRY_PATH}: twins must be an array`);
   /** @type {Set<string>} */
   const ids = new Set();
+  /** @type {Set<string>} */
+  const pendingIds = new Set();
   (entries || []).forEach((entry, index) => {
     const location = `${TWIN_REGISTRY_PATH}: twins[${index}]`;
     const row = /** @type {Partial<Record<keyof TwinRow, unknown>>} */ (entry && typeof entry === 'object' ? entry : {});
@@ -209,11 +214,16 @@ export const checkTwinRegistry = (registry, detected) => {
     if (row.vector !== null && !(typeof row.vector === 'string' && /^tests\/fixtures\/[^/]+\.json$/.test(row.vector))) {
       errors.push(`${location}.vector: expected tests/fixtures/<name>.json or null`);
     }
+    if (row.pending === undefined) return;
+    if (row.pending === true && typeof row.id === 'string' && DETECTED_ROW_ID.test(row.id)) pendingIds.add(row.id);
+    else errors.push(`${location}.pending: expected true on a vector: or function: row, or no pending`);
   });
   const detectedIds = new Set(detected.map(({ id }) => id));
+  errors.push(...[...pendingIds].filter((id) => detectedIds.has(id)).sort()
+    .map((id) => `${TWIN_REGISTRY_PATH}: ${id}: the twin is detected; remove pending`));
   return {
     errors,
     unregistered: [...detectedIds].filter((id) => !ids.has(id)).sort(),
-    stale: [...ids].filter((id) => DETECTED_ROW_ID.test(id) && !detectedIds.has(id)).sort()
+    stale: [...ids].filter((id) => DETECTED_ROW_ID.test(id) && !detectedIds.has(id) && !pendingIds.has(id)).sort()
   };
 };

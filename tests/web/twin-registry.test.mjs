@@ -3,7 +3,8 @@
 // logic that Python and the Web each implement, and `twin.unregistered.v1`
 // (tools/web-twin-detectors.mjs) finds the twins it can see in source text.
 // The registry and the detector agree exactly: a new twin needs a new row, and
-// a row whose twin is gone leaves the registry with it.
+// a row whose twin is gone leaves the registry with it. A new row goes in
+// before its twin as pending, and the change that adds the twin removes it.
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -32,12 +33,13 @@ const withFiles = (map, added) => new Map([...map, ...Object.entries(added)]);
 test(`${TWIN_DETECTOR_ID} reports exactly the registered twins`, () => {
   const check = checkTwinRegistry(REGISTRY, detectTwins(SOURCES));
   assert.deepEqual(check.errors, []);
-  assert.deepEqual(check.unregistered, [], 'a twin without a row in tools/twins.json: delete one side, or add the row in an authority-only pull request');
+  assert.deepEqual(check.unregistered, [], 'a twin without a row in tools/twins.json: delete one side, or add the row with "pending": true in an authority-only pull request first');
   assert.deepEqual(check.stale, [], 'a row whose twin the detector no longer finds: remove the row');
 });
 
-test('every owner and vector a twin row names exists', () => {
-  const rows = /** @type {{ twins: { id: string, pythonOwner: string[], jsOwner: string[], vector: string | null }[] }} */ (REGISTRY).twins;
+test('every owner and vector a twin row that is not pending names exists', () => {
+  const rows = /** @type {{ twins: { id: string, pythonOwner: string[], jsOwner: string[], vector: string | null, pending?: true }[] }} */ (REGISTRY).twins
+    .filter(({ pending }) => pending !== true);
   const missing = rows.flatMap(({ id, pythonOwner, jsOwner, vector }) => [...pythonOwner, ...jsOwner, ...(vector ? [vector] : [])]
     .map((owner) => owner.replace(/:[^/]*$/, ''))
     .filter((path) => !existsSync(join(REPOSITORY_ROOT, path)))
@@ -66,6 +68,35 @@ test('a twin the registry does not list fails, and so does a row without its twi
   assert.ok(first, 'the registry has a detected row');
   const gone = checkTwinRegistry(REGISTRY, detectTwins(SOURCES).filter(({ id }) => id !== first.id));
   assert.deepEqual(gone.stale, [first.id]);
+});
+
+test('a pending row waits for its twin, and keeps pending only until the twin is detected', () => {
+  const pendingRow = {
+    id: 'function:migrateExtraTwin',
+    concern: 'c',
+    pythonOwner: ['gbdraw/extra_twin.py'],
+    jsOwner: ['gbdraw/web/js/services/extra-twin.js'],
+    vector: null,
+    reason: 'r',
+    retireWhen: 'w',
+    source: 's',
+    pending: true
+  };
+  const registry = { schemaVersion: 1, twins: [pendingRow] };
+  assert.deepEqual(checkTwinRegistry(registry, []), { errors: [], unregistered: [], stale: [] });
+  const twin = { id: pendingRow.id, python: ['gbdraw/extra_twin.py:migrate_extra_twin'], javascript: ['gbdraw/web/js/services/extra-twin.js:migrateExtraTwin'] };
+  assert.deepEqual(checkTwinRegistry(registry, [twin]).errors, [
+    'tools/twins.json: function:migrateExtraTwin: the twin is detected; remove pending'
+  ]);
+  const { pending: _pending, ...added } = pendingRow;
+  assert.deepEqual(checkTwinRegistry({ schemaVersion: 1, twins: [added] }, [twin]), { errors: [], unregistered: [], stale: [] });
+  assert.deepEqual(checkTwinRegistry({
+    schemaVersion: 1,
+    twins: [{ ...pendingRow, pending: false }, { ...pendingRow, id: 'constant:extra', pending: true }]
+  }, []).errors, [
+    'tools/twins.json: twins[0].pending: expected true on a vector: or function: row, or no pending',
+    'tools/twins.json: twins[1].pending: expected true on a vector: or function: row, or no pending'
+  ]);
 });
 
 test('the detector reads names, not comments, and compares Python and JavaScript spellings', () => {
