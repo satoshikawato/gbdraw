@@ -35,6 +35,7 @@ import {
   LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, clampLinearTrackAxisIndex, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
 } from './linear-track-slot-model.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
 import { readRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
 import { isFeatureOverrideDraftRow, isFeaturePlacementDraftRow } from './feature-placement.js';
@@ -1386,21 +1387,29 @@ export const unreadFieldRepairs = (stored, path, mode, { slice = false } = {}) =
       const target = /** @type {Record<string, unknown>} */ (targets[/** @type {keyof SettingsContainers} */ (at)]);
       return mergeStoredSettings(target, stored, at, null).filter(({ used }) => used === undefined);
     }),
-    ...unknownDomainLosses(config),
+    ...unknownDomainLosses(config, slice ? SLICE_READ_DOMAINS : READ_DOMAINS),
     // A domain the reading replaces whole (one of another kind).
     ...readValueTables([...VALUE_TABLES, ...DRAWING_TABLES[mode]], config).filter(({ at, dropped }) => !dropped && !/[.[]/.test(at))
   ];
   return lossRepairs(losses, path, stored, { mode, root: 'config' });
 };
 
+const RETIRED_DOMAINS = RETIRED_STORED_FIELDS.filter((at) => !at.includes('.'));
 /** The configuration domains Load reads. @type {ReadonlySet<string>} */
-const READ_DOMAINS = new Set([...STORED_CONFIG_DOMAINS, ...RETIRED_STORED_FIELDS.filter((at) => !at.includes('.'))]);
+const READ_DOMAINS = new Set([...STORED_CONFIG_DOMAINS, ...RETIRED_DOMAINS]);
+/**
+ * The domains Load reads from a Session 46 slice: the registry's (a flat
+ * draft's `modeProfiles` or `cliOptions` is no slice field).
+ * @type {ReadonlySet<string>}
+ */
+const SLICE_READ_DOMAINS = new Set([...MODE_SLICE_CONTAINERS.config, ...RETIRED_DOMAINS]);
 /**
  * A domain no gbdraw writer wrote is not read (TB19).
  * @param {Record<string, unknown>} config
+ * @param {ReadonlySet<string>} [read]
  * @returns {SettingLoss[]}
  */
-const unknownDomainLosses = (config) => Object.keys(config).filter((domain) => !READ_DOMAINS.has(domain))
+const unknownDomainLosses = (config, read = READ_DOMAINS) => Object.keys(config).filter((domain) => !read.has(domain))
   .map((domain) => ({ at: domain, stored: config[domain], used: undefined }));
 
 /**

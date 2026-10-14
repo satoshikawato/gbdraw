@@ -165,9 +165,13 @@ test('Session 45 and a Session 46 with a retired field or a non-registry slice f
   const retiredLegend = structuredClone(saved);
   retiredLegend.editorState.legend = { ...retiredLegend.editorState.legend, entries: [] };
   await rejected(retiredLegend, 'editorState.legend.entries');
+  // A field no slice holds (a flat draft's `modeProfiles`) is dropped with a row (E-OD03).
   const unknownSliceField = structuredClone(saved);
-  unknownSliceField.modes.linear.config.modeProfiles = {};
-  await rejected(unknownSliceField, 'modes.linear.config.modeProfiles');
+  unknownSliceField.modes.linear.config.modeProfiles = { activeMode: 'linear' };
+  const unknownSliceOutcome = await load(unknownSliceField);
+  assert.equal(unknownSliceOutcome.status, 'ok', JSON.stringify(unknownSliceOutcome.error));
+  assert.deepEqual(unknownSliceOutcome.repairs.map(({ code, path }) => `${code}@${path}`),
+    ['setting-replaced@modes.linear.config.modeProfiles']);
   const thirdMode = structuredClone(saved);
   thirdMode.modes.radial = {};
   await rejected(thirdMode, 'modes.radial');
@@ -335,7 +339,9 @@ test('Session Load clears the label fit notice of the Result shown before', asyn
 });
 
 // Record selection D-05: each slice keeps the keys of its OFF records; an
-// omitted list draws every record, and a malformed or unbound key is rejected.
+// omitted list draws every record. Load drops a key that names no record of
+// its drawing without a row (BA-OD88, E-OD13), reads a repeat once, and lists
+// a list of the wrong shape.
 test('a slice keeps its OFF records, and omission draws every record (record-selection D-05)', async () => {
   resetDrawings();
   state.mode.value = 'circular';
@@ -366,18 +372,23 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   assert.equal('recordsOff' in allOn.modes.linear.config, false);
   assert.equal('recordsOff' in allOn.modes.circular.config, false);
 
-  const rejected = async (mutate, label, code = 'INPUT_INVALID') => {
+  const loaded = async (mutate, label, { linear, circular, rows = [] }) => {
     const session = structuredClone(saved);
     mutate(session.modes);
     const result = await load(session);
-    assert.equal(result.status, 'error', label);
-    if (code) assert.equal(result.error?.code, code, label);
+    assert.equal(result.status, 'ok', label);
+    assert.deepEqual(result.repairs.map(({ code, path }) => `${code}@${path}`), rows, label);
+    assert.deepEqual([...state.drawings.linear.recordsOff], linear, label);
+    assert.deepEqual([...state.drawings.circular.recordsOff], circular, label);
   };
-  await rejected((modes) => { modes.linear.config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid');
-  await rejected((modes) => { modes.linear.config.recordsOff = [uid, uid]; }, 'duplicate key');
-  await rejected((modes) => { modes.circular.config.recordsOff = ['contig_2']; }, 'Circular key is not #N');
-  // Review F8: a list of the wrong shape fails with the code Python gives it.
-  await rejected((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list');
+  await loaded((modes) => { modes.linear.config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid',
+    { linear: [], circular: ['#2'] });
+  await loaded((modes) => { modes.linear.config.recordsOff = [uid, uid]; }, 'duplicate key', { linear: [uid], circular: ['#2'] });
+  await loaded((modes) => { modes.circular.config.recordsOff = ['contig_2']; }, 'Circular key is not #N',
+    { linear: [uid], circular: [] });
+  // Review F8: a list of the wrong shape is listed; every record is drawn.
+  await loaded((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list',
+    { linear: [uid], circular: [], rows: ['setting-replaced@modes.circular.config.recordsOff'] });
 });
 
 // Review #992 finding 1: a Session without a slice of a mode (a Gallery

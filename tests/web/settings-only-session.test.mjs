@@ -8,6 +8,8 @@ import { buildSessionResources } from '../../gbdraw/web/js/services/session-reso
 import { adoptCurrentSessionResources } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { projectSettingsOnlySession } from '../../gbdraw/web/js/services/session-request.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
+import { unreadFieldRepairs } from '../../gbdraw/web/js/services/config-field-readers.js';
+import { createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 
 const settings = JSON.parse(gunzipSync(await readFile(new URL('../fixtures/sessions/settings-only.v42.json.gz', import.meta.url))));
 const full = JSON.parse(await readFile(new URL('../fixtures/sessions/single.v41-bindings1.json', import.meta.url)));
@@ -75,7 +77,6 @@ const invalid = [
   ['dangling binding', d => { d.webFiles.bindings.whitelist = { resourceId: 'absent', name: 'list.tsv', type: '', lastModified: 0 }; }, /Missing canonical resource/],
   ['unbound resource', d => { d.resources = full.resources; }, /unbound resource/],
   ['malformed config', d => { d.config.form = []; }, /active form/],
-  ['unknown config', d => { d.config.adv.unsupportedSetting = true; }, /unknown.*field/],
   ['binding schema', d => { d.webFiles.bindings.schema = 99; }, /binding schema/],
   ['saved Result', d => { d.results = [{ name: 'old.svg', content: '<svg/>' }]; }, /feature catalog/],
   ['committed provenance', d => { d.cliInvocation = {}; }, /committed render artifacts/],
@@ -89,6 +90,18 @@ for (const [name, mutate, error] of invalid) {
     assert.throws(() => adoptCurrentSessionDocument(document, 42), error);
   });
 }
+
+// E1a (E-OD02): Load reads an unknown setting of a settings-only Session with a
+// row before the dialog; Save's check of the configuration it writes still refuses it.
+test('settings-only Load lists an unknown setting, which Save refuses', () => {
+  const document = structuredClone(settings);
+  document.config.adv.unsupportedSetting = true;
+  assert.equal(adoptCurrentSessionDocument(structuredClone(document), 42).canonical, null);
+  assert.deepEqual(unreadFieldRepairs(document.config, 'config', 'circular').map(({ code, path }) => `${code}@${path}`),
+    ['setting-replaced@config.adv.unsupportedSetting']);
+  const written = { form: createDefaultForm(), adv: { ...createDefaultAdv('circular'), unsupportedSetting: true } };
+  assert.throws(() => validateCurrentWriterActiveConfig({ mode: 'circular', storedConfig: written }), /unknown.*field/);
+});
 
 test('released schema-1 and schema-2 full documents retain admission', () => {
   validateSessionAuthorityInventory(full, 41);
