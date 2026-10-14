@@ -404,8 +404,9 @@ for (const fixture of [
 });
 
 // OV-790, H2 (PR-D): a Session 31 stores a schema-1 request. Load lifts it
-// without the Load dialog and commits the current schema, so a live edit
-// draws before any Generate, and Save then writes the current request schema.
+// without the Load dialog and commits the current schema (read right after
+// Load, before the live edit commits its own request), so a live edit draws
+// before any Generate, and Save then writes the current request schema.
 test('a v31 schema-1 Session takes a live edit and Save before Generate', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
@@ -414,6 +415,10 @@ test('a v31 schema-1 Session takes a live edit and Save before Generate', async 
   await expectNoLoadRepairDialog(page);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
   await settle(page);
+  expect(await page.evaluate(async () => {
+    const { getCommittedCanonicalSession } = await import('/gbdraw/web/js/services/config.js');
+    return getCommittedCanonicalSession()?.renderRequest?.schema ?? null;
+  })).toBe(CURRENT_REQUEST_SCHEMA);
   // The live edit: the forced rerender a label visibility edit asks for.
   await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
