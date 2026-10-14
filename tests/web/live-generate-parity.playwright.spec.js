@@ -8,9 +8,9 @@
 // live-generate-parity-legend.playwright.spec.js, the track-data and mode cases
 // in live-generate-parity-track-data.playwright.spec.js, and the steps they all
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
-const { test, expect } = require('@playwright/test');
+const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows, switchMode } = require('./helpers/mode-transition.cjs');
@@ -1516,4 +1516,46 @@ test('Popup label text that does not fit, Embedded Only (circular, one Result)',
   await generate(page);
   await popupEdit(page, 'FL1', { labelText: LONG_LABEL });
   await expectLiveEqualsGenerate(page, { label: 'popup label text that does not fit' });
+});
+
+// CD-05: a case reuses the warm page only when the restore brought it back to
+// its fresh boot. The restore takes back inputs, settings and edits; what it
+// cannot take back (a page global here) gives the next case a fresh page.
+test.describe('the warm app page', () => {
+  test.describe.configure({ mode: 'serial' });
+  const warmPage = () => test.info().annotations.find(({ type }) => type === WARM_APP_PAGE)?.description;
+  const freshBootView = (page) => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const app = window.__GBDRAW_APP__;
+    return {
+      mode: app.mode,
+      results: app.results.length,
+      linearSources: state.linearSeqs.filter((seq) => seq.gb || seq.gff || seq.fasta).length,
+      showLabelsLinear: state.drawings.linear.form.show_labels_linear,
+      undo: window.__GBDRAW_HISTORY__.getUndoCount(),
+      leftByCase: window.leftByCase ?? null
+    };
+  });
+
+  test('a case leaves a Linear Result, a setting and a popup edit', async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await popupEdit(page, 'FL1', { fill: '#123456' });
+    expect((await freshBootView(page)).results).toBe(1);
+  });
+
+  test('the next case reuses the page at its fresh boot', async ({ page }) => {
+    expect(warmPage()).toBe('reused');
+    await openFresh(page);
+    expect(await freshBootView(page)).toEqual({
+      mode: 'circular', results: 0, linearSources: 0, showLabelsLinear: 'none', undo: 0, leftByCase: null
+    });
+    await page.evaluate(() => { window.leftByCase = true; });
+  });
+
+  test('a case after one that left a page global gets a fresh page', async ({ page }) => {
+    expect(warmPage()).toBe('fresh: page.globals.leftByCase: "<missing>" -> "boolean"');
+    await openFresh(page);
+    expect((await freshBootView(page)).leftByCase).toBe(null);
+  });
 });

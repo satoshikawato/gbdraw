@@ -4,9 +4,9 @@
 // (OV-65), a decoration moved on one mode's Result (OV-104), and the track
 // toggles of the mode not shown. The matrix of edit kinds is in
 // live-generate-parity.playwright.spec.js.
-const { test, expect } = require('@playwright/test');
+const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { reveal } = require('./helpers/app-lifecycle.cjs');
+const { reveal, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const {

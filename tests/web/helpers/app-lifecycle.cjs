@@ -1,6 +1,6 @@
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
-const { expect } = require('@playwright/test');
+const { expect, test: baseTest } = require('@playwright/test');
 
 // The current canonical request schema, Session version and feature catalog
 // schema, from the constants generated from their Python owners.
@@ -13,8 +13,11 @@ const CURRENT_SESSION_VERSION = generatedConstant('SESSION_VERSION');
 const CURRENT_FEATURE_CATALOG_SCHEMA = generatedConstant('FEATURE_CATALOG_SCHEMA');
 
 const DEFAULT_APP_TIMEOUT_MS = 180_000;
+const DEFAULT_APP_PATH = '/gbdraw/web/index.html';
 const pageDiagnostics = new WeakMap();
 const workerTrackingPages = new WeakSet();
+// The pages of `warmAppTest` (below): page -> { contextOptions, baseline, ready }.
+const warmPages = new WeakMap();
 
 const compactJson = (value, maxLength = 6_000) => {
   let rendered;
@@ -270,7 +273,7 @@ const assertAppShellReady = async (
 const openApp = async (
   page,
   {
-    path = '/gbdraw/web/index.html',
+    path = DEFAULT_APP_PATH,
     waitForPalette = true,
     timeout = DEFAULT_APP_TIMEOUT_MS,
     checkErrors = true
@@ -278,9 +281,17 @@ const openApp = async (
 ) => {
   installPageErrorCollection(page);
   await installDiagramWorkerTracking(page);
+  // A warm page that `warmAppTest` restored is the app as it booted.
+  const warm = warmPages.get(page);
+  const freshBootPath = path === DEFAULT_APP_PATH && waitForPalette;
+  const restored = Boolean(warm?.ready) && freshBootPath;
+  if (warm) warm.ready = false;
+  if (restored) return assertAppShellReady(page, { waitForPalette, checkErrors });
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette, timeout });
-  return assertAppShellReady(page, { waitForPalette, checkErrors });
+  const diagnostics = await assertAppShellReady(page, { waitForPalette, checkErrors });
+  if (warm) warm.baseline = freshBootPath ? await readWarmBaseline(page) : null;
+  return diagnostics;
 };
 
 // A loaded Session shows the Linear File cards that hold a file folded to
@@ -351,6 +362,25 @@ const evaluateWithRetainedPromise = async (page, callback, argument) => {
   } finally {
     // Best-effort cleanup must not replace the operation's own failure.
     if (!page.isClosed()) await page.evaluate(key => { delete window[key]; }, key).catch(() => {});
+  }
+};
+
+// No Generate, label reflow, automatic rerender, rule matching, Session import,
+// or History step is running, over two frames in a row.
+const settleLive = async (page, { timeout = 120_000 } = {}) => {
+  const idle = () => {
+    const app = window.__GBDRAW_APP__;
+    const history = window.__GBDRAW_HISTORY__;
+    return !app.processing && !app.labelReflowProcessing && !app.sessionImportPending
+      && !app.ruleMatchingPending && !history?.capturing?.value && !history?.restoring?.value
+      && !history?.mutationPending?.();
+  };
+  for (let stableFrames = 0; stableFrames < 2;) {
+    await page.waitForFunction(idle, null, { timeout });
+    await page.evaluate(() => new Promise((resolve) => (
+      requestAnimationFrame(() => requestAnimationFrame(resolve))
+    )));
+    stableFrames = await page.evaluate(idle) ? stableFrames + 1 : 0;
   }
 };
 
@@ -479,11 +509,13 @@ const generateAndWaitForResult = async (
 // unrelated toggle) must leave user-owned state unchanged. The snapshot follows
 // the audit harness: config, UI and editor state plus the user-owned feature,
 // label, and group maps; the feature catalog, bulk feature tables, and preview
-// navigation are excluded.
-const snapshotUserOwnedState = (page) => page.evaluate(async () => {
+// navigation are excluded. `mode` reads that mode's drawing instead of the
+// shown one.
+const snapshotUserOwnedState = (page, { mode = null } = {}) => page.evaluate(async (requestedMode) => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const config = await import('/gbdraw/web/js/services/config.js');
-  const drawing = state.activeDrawing();
+  const drawingMode = requestedMode || state.mode.value;
+  const drawing = state.drawings[drawingMode];
   const editor = config.buildEditorStateData(drawing);
   delete editor.featureCatalog;
   const features = config.buildFeatureStateData(drawing);
@@ -496,7 +528,7 @@ const snapshotUserOwnedState = (page) => page.evaluate(async () => {
   const ui = config.buildUiStateData(drawing, { includePreviewNavigation: false });
   // A drawing reads and saves only its own mode's layout slot (state.js,
   // `modes.<mode>.ui.layoutPreferences`); the other mode's slot is never read.
-  ui.layoutPreferences = ui.layoutPreferences?.[state.mode.value];
+  ui.layoutPreferences = ui.layoutPreferences?.[drawingMode];
   const history = window.__GBDRAW_HISTORY__;
   return JSON.parse(JSON.stringify({
     state: {
@@ -509,7 +541,7 @@ const snapshotUserOwnedState = (page) => page.evaluate(async () => {
     },
     history: { undo: history?.getUndoCount?.() ?? null, redo: history?.getRedoCount?.() ?? null }
   }));
-});
+}, mode);
 
 const diffUserOwnedState = (before, after, path = '', changes = []) => {
   if (JSON.stringify(before) === JSON.stringify(after)) return changes;
@@ -556,6 +588,202 @@ const expectNoSilentStateChange = (observation, { label, allowedPaths = [], allo
   expect(unexpected, `${label} silently changed user-owned state:\n${compactJson(unexpected)}`).toEqual([]);
   return unexpected;
 };
+
+// The warm app page (CD-05, CI cost 2026-10-14). Booting the app and the
+// diagram Worker's Python runtime is most of a short browser case. A spec that
+// takes its `test` from `warmAppTest` keeps one app page per Playwright
+// worker. Before each case the `page` fixture returns that page to the state a
+// fresh boot shows and compares it with what the page held right after it
+// booted; a difference, or a restore that fails, gives the case a fresh
+// context instead. On a restored page `openApp` does not navigate. Each case
+// stays its own test, and its `warm-app-page` annotation says whether it
+// reused the page or why it did not. The restore keeps the diagram Worker with
+// its Python runtime and resource caches: every upload is a new resource
+// identity, so the next Generate evicts the earlier entries, as it does when a
+// user replaces a file.
+const WARM_APP_PAGE = 'warm-app-page';
+const WARM_RESTORE_TIMEOUT_MS = 60_000;
+// History keeps at most 30 steps (services/history.js); a restore that undoes
+// more found a step that does not leave.
+const WARM_RESTORE_MAX_UNDO = 40;
+// A Generate writes these globals on every run (gbdraw/web/js/app/run-analysis.js);
+// a page that has not generated has none. A global missing here costs speed,
+// not correctness: every case after a Generate falls back, naming the global.
+const GENERATE_GLOBALS = ['__GBDRAW_LAST_LOSAT_TELEMETRY__', '_origPairwiseMin', '_origPairwiseMax'];
+
+// What the restore compares: both drawings' user-owned state, the inputs and
+// Results, and what a case can leave in the page outside the app.
+const readWarmFacts = async (page) => ({
+  url: page.url(),
+  viewport: page.viewportSize(),
+  circular: (await snapshotUserOwnedState(page, { mode: 'circular' })),
+  linear: (await snapshotUserOwnedState(page, { mode: 'linear' })),
+  page: await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const app = window.__GBDRAW_APP__;
+    const describe = (value) => {
+      if (value instanceof Blob) return `${value.name || 'Blob'} (${value.size} bytes)`;
+      if (Array.isArray(value)) return value.map(describe);
+      if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, describe(item)]));
+      }
+      return value ?? null;
+    };
+    return {
+      results: app.results.length,
+      extractedFeatures: app.extractedFeatures.length,
+      error: app.errorLog?.code ?? null,
+      notice: document.querySelector('[data-app-notice]')?.textContent.trim() || '',
+      choicePrompt: Boolean(document.querySelector('[data-choice-prompt]')),
+      zoom: app.zoom,
+      pan: { ...app.canvasPan },
+      inputs: describe(state.files),
+      linearSources: state.linearSeqs.map(({ gb, gff, fasta, depth }) => describe({ gb, gff, fasta, depth })),
+      openSections: [...document.querySelectorAll('details[open] > summary')].map((summary) => summary.textContent.trim()),
+      globals: Object.fromEntries(Object.keys(window).sort().map((key) => [key, typeof window[key]])),
+      testHooks: Object.entries(window.__GBDRAW_TEST_HOOKS__ || {}).map(([name, hook]) => `${name}: ${hook}`).sort(),
+      storage: [Object.entries(localStorage).sort(), Object.entries(sessionStorage).sort()]
+    };
+  })
+});
+
+// The fresh boot: the facts above, and the values the restore writes back.
+const readWarmBaseline = async (page) => ({
+  facts: await readWarmFacts(page),
+  restorePoint: await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const config = await import('/gbdraw/web/js/services/config.js');
+    return JSON.parse(JSON.stringify({
+      drawings: Object.fromEntries(['circular', 'linear'].map((mode) => [mode, {
+        config: config.buildConfigData(state.drawings[mode]),
+        ui: config.buildUiStateData(state.drawings[mode], { includePreviewNavigation: false })
+      }])),
+      // The test-owned lists an init script starts (`__AUDIT_LIFECYCLE__`).
+      testLists: Object.fromEntries(Object.keys(window)
+        .filter((key) => key.startsWith('__') && Array.isArray(window[key]))
+        .map((key) => [key, window[key]])),
+      storage: [{ ...localStorage }, { ...sessionStorage }]
+    }));
+  })
+});
+
+const returnToFreshBoot = async (page, { facts, restorePoint }) => {
+  if (page.url() !== facts.url) return [`the case left the app for ${page.url()}`];
+  // A focused field holds an open History step; leaving it commits the step.
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await settleLive(page, { timeout: WARM_RESTORE_TIMEOUT_MS });
+  // History takes back the inputs, Results and edits its steps recorded.
+  for (let undone = 0; undone < WARM_RESTORE_MAX_UNDO; undone += 1) {
+    const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    if (steps === 0) break;
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+    await settleLive(page);
+    if (await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()) >= steps) break;
+  }
+  // What a case set outside History: Linear sources set through their setter,
+  // drafts and settings (Reset Settings), and the settings of both drawings as
+  // the boot read them. The UI part follows the Multi-Record Canvas watcher,
+  // which writes layout defaults when the reset turns the canvas back on.
+  await evaluateWithRetainedPromise(page, async (drawings) => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const config = await import('/gbdraw/web/js/services/config.js');
+    const app = window.__GBDRAW_APP__;
+    for (let index = state.linearSeqs.length - 1; index >= 0; index -= 1) {
+      for (const field of ['gb', 'gff', 'fasta']) {
+        if (state.linearSeqs[index]?.[field]) await app.setLinearSeqPrimaryFile(index, field, null);
+      }
+    }
+    await app.resetSettings();
+    for (const [mode, { config: settings }] of Object.entries(drawings)) {
+      config.applyConfigData(state.drawings[mode], settings, { resolveTrackPlacements: false });
+    }
+    await window.Vue.nextTick();
+    for (const [mode, { ui }] of Object.entries(drawings)) {
+      config.applyUiStateData(state.drawings[mode], ui, { restorePreviewNavigation: false });
+    }
+  }, restorePoint.drawings);
+  await settleLive(page);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.captureBaseline('Initial state'));
+  await settleLive(page);
+  // What a case can leave in the page outside the app.
+  await page.evaluate(({ testLists, storage, generateGlobals, openSections }) => {
+    generateGlobals.forEach((key) => { delete window[key]; });
+    Object.entries(testLists).forEach(([key, items]) => {
+      if (Array.isArray(window[key])) window[key].splice(0, window[key].length, ...items);
+    });
+    [localStorage, sessionStorage].forEach((area, index) => {
+      area.clear();
+      Object.entries(storage[index]).forEach(([key, value]) => area.setItem(key, value));
+    });
+    document.querySelectorAll('details[open]').forEach((section) => {
+      const summary = section.querySelector(':scope > summary');
+      if (!openSections.includes(summary?.textContent.trim())) section.open = false;
+    });
+  }, { ...restorePoint, generateGlobals: GENERATE_GLOBALS, openSections: facts.page.openSections });
+  await page.removeAllListeners('dialog');
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  const diagnostics = installPageErrorCollection(page);
+  diagnostics.pageErrors.length = 0;
+  diagnostics.consoleErrors.length = 0;
+  const brief = (value) => {
+    const text = JSON.stringify(value) ?? String(value);
+    return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+  };
+  return diffUserOwnedState(facts, await readWarmFacts(page)).map(({ path, before, after }) => (
+    `${path}: ${brief(before)} -> ${brief(after)}`
+  ));
+};
+
+// The reasons the page cannot serve the next case; none when it can.
+const restoreWarmPage = async (page, contextOptions) => {
+  const warm = warmPages.get(page);
+  if (page.isClosed()) return ['the page closed'];
+  if (!warm?.baseline) return ['the case did not open the app'];
+  if (warm.contextOptions !== contextOptions) return ['the context options changed'];
+  let timer = null;
+  try {
+    return await Promise.race([
+      returnToFreshBoot(page, warm.baseline),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve([`the restore took over ${WARM_RESTORE_TIMEOUT_MS / 1000} s`]), WARM_RESTORE_TIMEOUT_MS);
+      })
+    ]);
+  } catch (error) {
+    return [`the restore failed: ${String(error?.message || error).split('\n')[0]}`];
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const warmAppTest = baseTest.extend({
+  warmAppSlot: [async ({}, use) => {
+    const slot = { page: null };
+    await use(slot);
+    if (slot.page && !slot.page.isClosed()) await slot.page.context().close();
+  }, { scope: 'worker' }],
+  // The project's context options, as the built-in `context` fixture combines them.
+  page: async ({
+    warmAppSlot, browser, baseURL, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch
+  }, use, testInfo) => {
+    const options = { baseURL, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch };
+    const contextOptions = JSON.stringify(options);
+    let page = warmAppSlot.page;
+    const reasons = page ? await restoreWarmPage(page, contextOptions) : ['the worker had no app page yet'];
+    if (reasons.length) {
+      if (page && !page.isClosed()) await page.context().close().catch(() => {});
+      page = await (await browser.newContext(options)).newPage();
+      warmPages.set(page, { contextOptions, baseline: null, ready: false });
+    } else {
+      warmPages.get(page).ready = true;
+    }
+    warmAppSlot.page = page;
+    testInfo.annotations.push({
+      type: WARM_APP_PAGE,
+      description: reasons.length ? `fresh: ${reasons.join('; ')}` : 'reused'
+    });
+    await use(page);
+  }
+});
 
 const assertWorkerReuseAcrossHelperAndRender = async (page) => {
   const diagnostics = await getLifecycleDiagnostics(page);
@@ -659,6 +887,9 @@ module.exports = {
   openApp,
   reveal,
   routeCrossOriginIsolated,
+  settleLive,
   snapshotUserOwnedState,
-  waitForAppShell
+  waitForAppShell,
+  WARM_APP_PAGE,
+  warmAppTest
 };
