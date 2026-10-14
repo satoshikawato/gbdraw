@@ -286,13 +286,22 @@ write-up of a release.
   Save Session afterwards writes the current format. Values that had no
   effect on the figure (a pending palette Instant Preview drops, edits of
   similarity groups the Result does not have) are dropped without a row. A
-  Depth series without a Depth file, and its Depth rows, load as saved, as
-  the app keeps them when a Depth file is removed (OV-755). Some other old or
-  invalid values are still changed without a row or kept as stored (for
-  example a track stack row's values or a Legend color edit the app does not
-  accept), and other invalid content, such as an unknown `adv` key, feature
-  shape or option value, is still refused, now before anything is asked or
-  changed. **Load** loads the file;
+  Depth series without a Depth file loads as saved, and so does a Depth row
+  the app keeps when a Depth file is removed (a row with its own size or
+  position) (OV-755). Some other old or invalid values are still changed
+  without a row or kept as stored (for example a track stack row's values or
+  a Legend color edit the app does not accept), and a configuration file
+  drops a key it does not know without a row. Other invalid content, such as
+  an unknown `adv` key in a Session, an unknown feature shape or option value,
+  is still refused, now before anything is asked or changed; a configuration
+  file whose feature shape or Linear Accession or Length / Coordinates
+  visibility is not text, or that names an unknown shape for a feature type
+  the defaults lack, loaded before and is now refused too. In a configuration
+  file, a color rule or label whitelist entry that is not an object, which
+  made the Load fail, is now dropped and listed, and a label filter mode or
+  feature overlap tolerance the app does not accept, which made Save Session
+  fail after the Load, is now listed and set to its default. **Load** loads
+  the file;
   **Cancel** leaves the settings, Results, input files, History and screen as
   they were. Dropped feature edits, narrowed Feature visibility edits, `hash=`
   values that could not be renamed, joined or dropped table rows and Legend

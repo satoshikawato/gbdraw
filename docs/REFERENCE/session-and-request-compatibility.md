@@ -201,8 +201,9 @@ and says that Save Session afterwards writes the current format. It lists the
 readings named here. Other old or invalid values are still changed without a
 row, kept as stored, or refused, as before: for example, a track stack row's
 values and a Legend color edit the app does not accept are changed without a
-row, an unknown text value such as a track type is kept, and a configuration
-file's Legend position outside its mode reads as the mode's default.
+row, an unknown text value such as a track type is kept, a configuration
+file's Legend position outside its mode reads as the mode's default, and a
+configuration file drops a key it does not know.
 
 - **Load** loads the file. **Cancel** changes nothing. The file itself is
   never changed.
@@ -215,8 +216,9 @@ file's Legend position outside its mode reads as the mode's default.
   setting of the other diagram mode, view state such as zoom, or a value
   another stored value replaces. A file that loads without a loss, such as
   every Gallery Session, opens none.
-- A Depth series without a Depth file, and the Depth rows of such a series,
-  load as saved, as the app keeps them when you remove a Depth file.
+- A Depth series without a Depth file loads as saved, and so does a Depth row
+  the app keeps when you remove a Depth file (a row with its own size or
+  position).
 - The **Replace the current work?** question, asked when there is unsaved
   work, still comes first, before you choose the file. The notice of `hash=` annotation targets moved to
   the feature they name, the notice of a loaded configuration file, and the
@@ -237,12 +239,17 @@ The Web app refuses these files and shows an error instead:
   during the Load also stops it with an error.
 - A file with an unsafe name (`__proto__`, `constructor`, `prototype`).
 - A file whose content does not read as its version: for example an unknown
-  key in a drawing's `adv`, a retired setting name in a Session, a Linear
-  track layout, label placement or Circular multi-record size mode the app
-  does not know, a feature shape the app does not know, an arrow ratio out of
+  key in a Session drawing's `adv`, a retired setting name in a Session, a
+  Linear track layout, label placement, Linear Accession or Length /
+  Coordinates visibility or Circular multi-record size mode the app does not
+  know, a feature shape the app does not know, an arrow ratio out of
   range, a missing or unknown resource, a track stack that does not read, or a
   saved Result that does not pass its checks. Load refuses these before it
-  asks anything or changes anything, as it refused them before.
+  asks anything or changes anything. They were refused before too, apart from
+  three values in a configuration file, which loaded with the value replaced
+  or dropped: a feature shape that is not text, an unknown shape of a feature
+  type the defaults lack, and a Linear Accession or Length / Coordinates
+  visibility that is not text.
 
 Do not change a version number, resource hash, or runtime binding by hand;
 changing metadata does not migrate its content.
