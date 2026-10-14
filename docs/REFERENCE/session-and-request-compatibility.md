@@ -246,7 +246,8 @@ instead of refused, and each repair is a row in the dialog:
 - an unknown setting is dropped;
 - an invalid value is reset to its default or left unset;
 - an unreadable entry of a list is dropped;
-- a part that cannot be read is left out, with the settings inside it;
+- a part that cannot be read is left out with the settings inside it, or
+  replaced by its default when it has one;
 - a reference to a file or record the Session does not hold is left out.
 
 When the saved diagram's settings cannot be read at all, or are missing, in a

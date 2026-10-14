@@ -161,7 +161,13 @@ const firstReason = (found) => found[0].reason;
  * @returns {ContractShape | null}
  */
 const unionOption = (value, shape, at, context) => {
-  const counts = shape.options.map((option) => shapeViolations(value, option, context.types, at.path).length);
+  // A missing field the option gives a default is read as that default (rule 3), not a violation.
+  const counts = shape.options.map((option) => {
+    const resolved = resolve(option, context.types);
+    const defaults = resolved.kind === 'object' ? resolved.defaults ?? {} : {};
+    return shapeViolations(value, option, context.types, at.path).filter(({ path, reason }) => (
+      reason !== 'missing-key' || !Object.hasOwn(defaults, path.slice(at.path.length + 1)))).length;
+  });
   const fitting = counts.indexOf(0);
   if (fitting >= 0) return shape.options[fitting];
   const field = context.policy.discriminator?.(at.pattern) ?? null;

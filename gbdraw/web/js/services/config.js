@@ -1836,7 +1836,8 @@ const readRebuiltGalleryRequest = (data, repairs) => {
     resourceIds: new Set(isPlainObject(data.resources) ? Object.keys(/** @type {object} */ (data.resources)) : []),
     path: 'renderRequest'
   });
-  if ('kind' in read) return data;
+  // The migration rebuilt a request the reader cannot read: nothing is committed unread.
+  if ('kind' in read) throw SESSION_FIELDS_ERROR();
   repairs.push(...read.repairs);
   return read.value === data.renderRequest ? data : { ...data, renderRequest: read.value };
 };

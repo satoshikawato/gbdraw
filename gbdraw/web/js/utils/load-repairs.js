@@ -153,8 +153,9 @@ const WORDING = {
     + ' the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.')),
   'other-result-set-dropped': (repairs) => repairs.map(({ path, label }) => (
     `Saved ${label ?? 'other'} diagram: its settings (${path}) could not be read; that diagram and its Results are left out.`)),
-  'request-part-dropped': (repairs) => repairs.map(({ path, label }) => (
-    `Settings: ${label ?? 'a part'} (${path}) could not be read and was left out, with the settings inside it.`)),
+  'request-part-dropped': (repairs) => repairs.map(({ path, label, effect }) => (
+    `Settings: ${label ?? 'a part'} (${path}) could not be read${effect === 'defaulted'
+      ? '; its default is used.' : ' and was left out, with the settings inside it.'}`)),
   'request-reference-dropped': (repairs) => repairs.map(({ path, label }) => (
     `Settings: ${path} names a file or record this Session does not hold; ${label ?? 'it'} is left out.`)),
   // Free text is named by its place only (a changed one, such as an ID made

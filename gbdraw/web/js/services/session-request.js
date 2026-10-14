@@ -6122,8 +6122,9 @@ const storedRequestRepairs = (rows, otherOptionKeys, droppedSlots) => {
     } else if (row.rule === 6) {
       repairs.push(loadRepair({ code: 'request-part-dropped', path: row.path, effect: row.effect }));
     } else if (row.rule === 2 || row.rule === 5) {
-      // One row per list: an element's path without its index, a key's object.
-      const list = row.rule === 5 ? row.path.replace(/\[\d+\]$/, '') : row.path;
+      // One row per list or object: an element's path without its index, an
+      // unknown key's path without the key.
+      const list = row.path.replace(row.rule === 5 ? /\[\d+\]$/ : /\.[^.[\]]+$/, '');
       droppedEntries.set(list, (droppedEntries.get(list) ?? 0) + 1);
     } else {
       const used = row.used;
@@ -6269,7 +6270,10 @@ export const readStoredRenderRequest = (value, context) => {
   // Generate run; a layout it refuses leaves no request to draw (C-OD20).
   try {
     canonicalLinearRecordLayout(/** @type {Record<string, unknown>} */ (repaired.value));
-  } catch {
+  } catch (error) {
+    // The owner refuses a layout with a plain `Error` and no code; anything
+    // else (a TypeError, a typed error) is a defect and is not read as a refusal.
+    if (!(error instanceof Error) || Object.getPrototypeOf(error) !== Error.prototype || Object.hasOwn(error, 'code')) throw error;
     return { kind: 'request-dropped', path: `${path}.layout`, reason: 'unknown-record' };
   }
   const rebound = keepConservationSlotsOnTheirRings(

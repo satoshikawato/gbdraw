@@ -31,6 +31,7 @@ installSessionImportWorker();
 const REPO = new URL('../../', import.meta.url);
 const { importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
 const { readStoredRenderRequest, readPublishedRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
 import json, sys
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
@@ -135,6 +136,35 @@ test('a wrong value in a required field that takes null is read as null, not as 
   expected.colors.defaultColorsFile = null;
   assert.deepEqual(result.value.diagramOptions, expected);
   assert.deepEqual(rows(result), [{ code: 'request-part-dropped', path: 'renderRequest.diagramOptions.colors.defaultColorsFile' }]);
+  // The wording follows the effect: a part replaced by its default says so (N1).
+  assert.deepEqual(describeLoadRepairs(result.repairs).items, [
+    'Settings: a part (renderRequest.diagramOptions.colors.defaultColorsFile) could not be read; its default is used.'
+  ]);
+});
+
+test('a Linear layout that omits fields with a default is read as a Linear layout, not as the empty one', () => {
+  const result = readRequest(gallery('lambda_basic_linear'), (request) => { request.layout = { recordGapPx: 10 }; });
+  assert.deepEqual(result.value.layout, { recordGapPx: 10, multiRecordPositions: null, recordTranslations: [], similarityAlignment: null });
+  // Each missing field is listed with its default, as anywhere in a request.
+  assert.deepEqual(rows(result), ['multiRecordPositions', 'recordTranslations', 'similarityAlignment']
+    .map((key) => ({ code: 'setting-replaced', path: `renderRequest.layout.${key}` })));
+});
+
+test('the reader turns only the layout owner\'s refusal into a dropped request; a programming error there is thrown (N2)', () => {
+  const session = gallery('lambda_basic_linear');
+  const request = clone(session.renderRequest);
+  request.layout = { recordGapPx: 10 };
+  const [record] = request.records;
+  const key = record.recordKey;
+  // A defect inside the layout owner, reached through the one read only it makes.
+  Object.defineProperty(record, 'recordKey', {
+    enumerable: true,
+    get: () => {
+      if (new Error().stack.includes('canonicalLinearRecordLayout')) throw new TypeError('defect in the layout owner');
+      return key;
+    }
+  });
+  assert.throws(() => readStoredRenderRequest(request, contextOf(session)), TypeError);
 });
 
 test('a comparison, pair or track axis that names nothing the Session holds is left out with a row (B14, OV-772)', () => {
@@ -274,11 +304,12 @@ test('the other diagram\'s request is read at Load: its repairs are listed, and 
     'import json; from tests.utils.two_mode_session import two_mode_session; print(json.dumps(two_mode_session()))'
   ], { encoding: 'utf8', cwd: fileURLToPath(REPO), maxBuffer: 1 << 30 }));
   const listed = twoMode();
-  listed.otherModeResult.renderRequest.records[0].bogus = true;
+  // Unknown keys are counted under their object, one row per object (S7).
+  Object.assign(listed.otherModeResult.renderRequest.records[0], { bogus: true, extra: 1 });
   const first = await load(listed);
   assert.equal(first.result.status, 'ok', JSON.stringify(first.result.error));
   assert.deepEqual(first.dialogs.flat(), [
-    'Settings: 1 entry of otherModeResult.renderRequest.records[0].bogus could not be read and was dropped.'
+    'Settings: 2 entries of otherModeResult.renderRequest.records[0] could not be read and were dropped.'
   ]);
   const dropped = twoMode();
   dropped.otherModeResult.renderRequest.records = [];
@@ -470,4 +501,80 @@ test('every Gallery Session and Session fixture loads with no stored-request row
   }
   assert.deepEqual(findings, {});
   assert.ok(loaded >= 50, String(loaded));
+});
+
+// G2 on the request path (S6): each leaf of a stored request is given a value
+// of another kind and an unknown value of its kind, the file is loaded, and the
+// committed request may differ from the stored one only where a row names. A
+// setting of the other diagram type is read at the one value its type holds,
+// without a row (〔出さないもの〕); no mutation is a described spelling.
+const { CANONICAL_REQUEST_DESCRIPTION } = await import('../../gbdraw/web/js/contracts/request-shape.generated.js');
+const requestType = (name) => {
+  const shape = CANONICAL_REQUEST_DESCRIPTION.types[name];
+  return shape.kind === 'ref' ? requestType(shape.name) : shape;
+};
+/** The one value a place of `mode`'s request holds, if its type holds one. */
+const onlyValue = (mode, parts) => {
+  let shape = requestType(mode === 'linear' ? 'CanonicalLinearRenderRequest' : 'CanonicalCircularRenderRequest');
+  for (const part of parts) {
+    const next = shape.kind === 'object' ? shape.fields[part] : shape.kind === 'array' ? shape.items
+      : shape.kind === 'record' ? shape.values : undefined;
+    if (!next) return undefined;
+    shape = next.kind === 'ref' ? requestType(next.name) : next;
+  }
+  if (shape.kind === 'null') return { value: null };
+  if (shape.kind === 'tuple' && shape.items.length === 0) return { value: [] };
+  return shape.kind === 'literal' && shape.values.length === 1 ? { value: shape.values[0] } : undefined;
+};
+const REQUEST_MUTATIONS = {
+  otherKind: (value) => (value === null ? 'x-mut' : typeof value === 'object' || typeof value === 'string' ? 5 : 'x-mut'),
+  sameKind: (value) => (typeof value === 'string' ? 'x-mut' : typeof value === 'number' ? -7.5 : undefined)
+};
+const placesOf = (value, parts = []) => [
+  ...(parts.length ? [parts] : []),
+  ...(value && typeof value === 'object' ? Object.entries(value).flatMap(([key, child]) => (
+    placesOf(child, [...parts, Array.isArray(value) ? Number(key) : key]))) : [])
+];
+const differences = (stored, committed, parts = []) => {
+  if (JSON.stringify(stored) === JSON.stringify(committed)) return [];
+  if (stored && committed && typeof stored === 'object' && typeof committed === 'object'
+    && Array.isArray(stored) === Array.isArray(committed)) {
+    return [...new Set([...Object.keys(stored), ...Object.keys(committed)])].flatMap((key) => differences(
+      stored[key], committed[key], [...parts, Array.isArray(stored) ? Number(key) : key]
+    ));
+  }
+  return [parts];
+};
+const placeName = (parts) => ['renderRequest', ...parts].map((part) => (typeof part === 'number' ? `[${part}]` : `.${part}`)).join('').slice(1);
+const namedBy = (path, repairs) => repairs.some((repair) => repair.path === path || path.startsWith(`${repair.path}.`)
+  || path.startsWith(`${repair.path}[`) || repair.path.startsWith(`${path}.`) || repair.path.startsWith(`${path}[`));
+
+test('Load commits a stored request that differs from the stored one only where a row names (G2, S6)', async () => {
+  const silent = [];
+  let checked = 0;
+  for (const name of ['lambda_basic_linear', 'HmmtDNA_basic_circular']) {
+    const session = gallery(name);
+    const { mode } = session.renderRequest;
+    for (const parts of placesOf(session.renderRequest)) {
+      for (const [kind, mutate] of Object.entries(REQUEST_MUTATIONS)) {
+        const value = mutate(parts.reduce((current, part) => current[part], session.renderRequest));
+        if (value === undefined) continue;
+        const file = clone(session);
+        const owner = parts.slice(0, -1).reduce((current, part) => current[part], file.renderRequest);
+        owner[parts.at(-1)] = value;
+        const { result } = await load(file);
+        if (result.status !== 'ok') continue;
+        checked += 1;
+        const committed = getCommittedCanonicalSession()?.renderRequest ?? null;
+        for (const place of differences(file.renderRequest, committed)) {
+          const only = onlyValue(mode, place);
+          if (namedBy(placeName(place), result.repairs)) continue;
+          if (only && JSON.stringify(place.reduce((current, part) => current?.[part], committed)) === JSON.stringify(only.value)) continue;
+          silent.push(`${name} ${kind} ${placeName(parts)} = ${JSON.stringify(value)}: ${placeName(place)}`);
+        }
+      }
+    }
+  }
+  assert.ok(checked > 200, String(checked));
+  assert.deepEqual(silent, [], String(checked));
 });
