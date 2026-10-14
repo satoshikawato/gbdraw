@@ -720,19 +720,27 @@ const readRows = (container, rows, at, stored = container) => rows.flatMap(({ fi
 });
 
 /**
- * The fields whose writer stores a number or its text: the comparison filters
- * (the e-value input is text; `resolveComparisonThresholds` reads both).
+ * The comparison filters, whose writers store a number or its text
+ * (`resolveComparisonThresholds` reads both): the e-value input is text, so any
+ * text or number is its kind; the other filters are number inputs, so a number,
+ * a text that reads as one, or a blank is theirs.
  * @type {readonly string[]}
  */
-const NUMBER_OR_TEXT_FIELDS = Object.freeze(['adv.evalue', 'adv.min_bitscore', 'adv.identity', 'adv.alignment_length']);
+const TEXT_OR_NUMBER_FIELDS = Object.freeze(['adv.evalue']);
+/** @type {readonly string[]} */
+const NUMBER_OR_ITS_TEXT_FIELDS = Object.freeze(['adv.min_bitscore', 'adv.identity', 'adv.alignment_length']);
 /**
- * A list, an object, or the `typeof` of anything else; a number and a text
- * are one kind in a field of `NUMBER_OR_TEXT_FIELDS`.
+ * A list, an object, or the `typeof` of anything else, but the kinds the
+ * comparison filters hold count as one.
  * @param {unknown} value
  * @param {string} at
  */
-const kindOf = (value, at) => (Array.isArray(value) ? 'list'
-  : NUMBER_OR_TEXT_FIELDS.includes(at) && typeof value === 'string' ? 'number' : typeof value);
+const kindOf = (value, at) => {
+  if (Array.isArray(value)) return 'list';
+  if (TEXT_OR_NUMBER_FIELDS.includes(at) && (typeof value === 'string' || typeof value === 'number')) return 'text or number';
+  if (NUMBER_OR_ITS_TEXT_FIELDS.includes(at) && (typeof value === 'number' || (typeof value === 'string' && Number.isFinite(Number(value))))) return 'number';
+  return typeof value;
+};
 /** Stored maps whose keys the user names, merged with their own keys. @type {readonly string[]} */
 const FREE_KEY_MAPS = Object.freeze(['adv.feature_shapes']);
 /** @type {readonly string[]} */

@@ -1010,6 +1010,13 @@ test('a value the app writes into a setting of another kind loads with no row, i
   }
   assert.deepEqual(await load(configFile), ['legacy', []]);
   assert.deepEqual(valuesOf(shown), expected(before[shown]));
+  // A text that is no number is not of a number filter's kind, so its row
+  // says the drawing keeps its value; the e-value input holds text, so any text loads.
+  const drawing = state.drawings[shown];
+  const kept = drawing.adv.min_bitscore;
+  const [status, rows] = await load({ adv: { min_bitscore: 'abc', evalue: 'abc' } });
+  assert.deepEqual([status, rows.length, rows[0]?.startsWith('Settings: the value "abc" (adv.min_bitscore) cannot be used;')], ['legacy', 1, true], rows.join('\n'));
+  assert.deepEqual([drawing.adv.min_bitscore, drawing.adv.evalue], [kept, 'abc']);
 });
 
 // The shape of a feature type the user added is a key the default
