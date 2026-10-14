@@ -236,6 +236,35 @@ configuration file drops a key it does not know.
   the feature they name, the notice of a loaded configuration file, and the
   **Comparisons** card notices still follow the load.
 
+### Saved diagram settings that cannot be read
+
+Load reads the saved diagram's settings (the stored render request of request
+schemas 5–9 and the other diagram mode's saved result) through one reader and
+checks them against the request description. What it cannot use is repaired
+instead of refused, and each repair is a row in the dialog:
+
+- an unknown setting is dropped;
+- an invalid value is reset to its default or left unset;
+- an unreadable entry of a list is dropped;
+- a part that cannot be read is left out, with the settings inside it;
+- a reference to a file or record the Session does not hold is left out.
+
+When the saved diagram's settings cannot be read at all, or are missing, in a
+Session of version 42, 44, 46 or 47, the file loads as settings only. A row
+says that the saved Results, the GenBank, GFF and FASTA inputs, the feature
+list and the caches are left out. When the settings of the other diagram
+mode's saved result cannot be read, that diagram and its Results are left out,
+with a row. A Session of version 31–41 whose saved settings cannot be read is
+still refused.
+
+The five comparison settings (unit, anchor, search scope, color and
+membership) read the same spellings in the web app and in Python. Eight
+search-scope spellings that only the web app accepted (`adjacent_pairs`,
+`adjacent_pair`, `neighbor_pairs`, `neighboring_pairs`, `all_records`,
+`all_pairs`, `all_record_pairs`, `global`) are no longer read: a saved value
+that holds one is listed, and the default is used. A file that holds `top1` or
+`legacy` now loads.
+
 The Web app refuses these files and shows an error instead:
 
 - A file that is not JSON, including a broken gzip file and text that is not
