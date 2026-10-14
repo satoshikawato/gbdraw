@@ -8,7 +8,7 @@ from typing import Any, Iterator
 import pytest
 
 from gbdraw import session_contract, session_drawings, session_io
-from gbdraw.contract_shapes import typed_dict_shape
+from gbdraw.contract_shapes import typed_dict_shape, violations
 from gbdraw.exceptions import ValidationError
 from gbdraw.session import build_session_document, upgrade_session_document
 from gbdraw.session_contract import describe_session_document, keys_of
@@ -16,7 +16,7 @@ from gbdraw.session_io import CURRENT_SESSION_VERSION, SESSION_FORMAT, validate_
 from gbdraw.session_request_codec import describe_canonical_request
 from gbdraw.web_support.mode_scoped_settings import DIAGRAM_MODES, MODE_SCOPED_SETTINGS
 from tests.test_canonical_request_shape import _request
-from tests.utils.contract_shape_check import REPO_ROOT, load_json, stored_json_files, violations
+from tests.utils.contract_shape_check import REPO_ROOT, load_json, stored_json_files
 from tests.utils.two_mode_session import two_mode_session
 
 DESCRIPTION = describe_session_document()
