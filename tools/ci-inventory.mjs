@@ -32,6 +32,7 @@ const REBALANCE_RATIO = 1.2;
 const TOP = 15;
 // Requests kept for the artifact, issue, and comment calls once the job lists stop.
 const RATE_RESERVE = 100;
+const PARALLEL_REQUESTS = 8;
 const DATA_BLOCK = /<!-- ci-inventory-data (\{.*?\}) -->/s;
 
 const sum = (values) => values.reduce((total, value) => total + value, 0);
@@ -318,9 +319,10 @@ const listRuns = async (client, since, until) => {
 const listJobs = async (client, runs) => {
   const jobsByRun = new Map();
   const ordered = [...runs].sort((a, b) => Number(b.path === TESTS_WORKFLOW) - Number(a.path === TESTS_WORKFLOW));
-  for (const run of ordered) {
-    if (client.remaining() <= RATE_RESERVE) break;
-    jobsByRun.set(run.id, await client.pages(`/actions/runs/${run.id}/jobs?filter=all`, 'jobs'));
+  for (let start = 0; start < ordered.length && client.remaining() > RATE_RESERVE; start += PARALLEL_REQUESTS) {
+    const batch = ordered.slice(start, start + PARALLEL_REQUESTS);
+    const lists = await Promise.all(batch.map((run) => client.pages(`/actions/runs/${run.id}/jobs?filter=all`, 'jobs')));
+    batch.forEach((run, index) => jobsByRun.set(run.id, lists[index]));
   }
   return jobsByRun;
 };
