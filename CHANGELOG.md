@@ -305,10 +305,13 @@ write-up of a release.
   made the Load fail, is now dropped and listed, and a label filter mode or
   feature overlap tolerance the app does not accept, which made Save Session
   fail after the Load, is now listed and set to its default. A configuration
-  file loads over the current drawing: a settings group or list it cannot
-  use (such as `"form": 5`, or `rules` that is not a list) is not used, and
-  its row says that the drawing keeps its current value. **Load** loads
-  the file;
+  file loads over the current drawing: a settings group (`form`, `adv`,
+  `losat` or `circularConservation`) that is not an object, a value of
+  another kind inside one, and `rules` or `whitelist` that is not a list
+  (such as `"form": 5`) are not used, and the drawing keeps its value, which
+  the row names or says the drawing keeps; the arrow ratios, like the other
+  settings, keep the drawing's value when the file does not hold them (they
+  took their default before). **Load** loads the file;
   **Cancel** leaves the settings, Results, input files, History and screen as
   they were. Dropped feature edits, narrowed Feature visibility edits, `hash=`
   values that could not be renamed, joined or dropped table rows and Legend

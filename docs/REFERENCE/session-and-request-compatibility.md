@@ -181,9 +181,11 @@ with a default, not use, or read with another meaning:
 - settings their reader cannot use, named by their place in the file and the
   value used, for example `modes.circular.config.adv.depth_tracks[0].height`.
   A label, file name, ID or other free text is named by its place only. A
-  configuration file loads over the current drawing, so a settings group or
-  list it cannot use (such as `"form": 5`, or `rules` that is not a list) is
-  not used, and its row says that the drawing keeps its current value;
+  configuration file loads over the current drawing, so a settings group
+  (`form`, `adv`, `losat` or `circularConservation`) that is not an object, a
+  value of another kind inside one, and `rules` or `whitelist` that is not a
+  list (such as `"form": 5`) are not used: the drawing keeps its value, and
+  the row names that value or says that the drawing keeps its current value;
 - Legend positions outside the diagram mode in the saved layout preferences
   or a saved Result, with the position used;
 - Legend entries with a color the app does not accept or that repeat an

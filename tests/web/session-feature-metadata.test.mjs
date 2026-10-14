@@ -873,7 +873,7 @@ for (const invalidRecordIndex of [
   assert.equal(plan.recoveredFeatureState, undefined);
 }
 
-// OV-751 (r3 S4): two features that differ only by their record share one
+// OV-751: two features that differ only by their record share one
 // hash. When the drawn element carries no record (an older Linear SVG with
 // bare IDs, or a Circular figure), both agree with it; neither is aligned and
 // the Load lists its feature edits, as it did before OV-751.
@@ -911,7 +911,7 @@ for (const invalidRecordIndex of [
   assert.equal(circularPlan.recoveredFeatureState, undefined);
 }
 
-// OV-751 (r4 F1): two features of one record that share a hash (a 0.13.0
+// OV-751: two features of one record that share a hash (a 0.13.0
 // Linear Session such as hash-color-rule-linear-rc.v30, whose SVG draws both
 // under one ID) both agree with that element. They differ by no record, so
 // both stay aligned, as before OV-751.

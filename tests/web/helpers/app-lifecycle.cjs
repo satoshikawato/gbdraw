@@ -818,7 +818,7 @@ const assertSingleWorkerRun = async (page) => {
   return activity;
 };
 
-// What a Load that ended or asked shows: no dialog lines, no error (r3 S3).
+// What a Load that ended or asked shows: no dialog lines, no error.
 const expectNoRepairsOrError = async (page) => {
   const prompt = page.locator('[data-choice-prompt]');
   expect(await prompt.locator('li').allTextContents(), 'the Load listed repairs').toEqual([]);
@@ -831,8 +831,8 @@ const expectNoRepairsOrError = async (page) => {
 
 // A Load of a file that loses nothing ends without the Load repair dialog
 // (BA-D25). Called right after the file is chosen, it waits until the new
-// Load has started, so a notice of an earlier Load does not end the wait
-// (r3 S3), then until the Load ends or the dialog opens. It fails with the
+// Load has started, so a notice of an earlier Load does not end the wait,
+// then until the Load ends or the dialog opens. It fails with the
 // dialog's lines when the dialog opened, and with the error when the Load
 // failed.
 const expectNoLoadRepairDialog = async (page, { timeout = 180_000 } = {}) => {

@@ -389,7 +389,7 @@ for (const [version, fixture] of [
 });
 
 // The Sessions below 40 whose features the diagram Worker reads again and
-// that no other spec loads (r3 S2): each loads without the Load dialog.
+// that no other spec loads: each loads without the Load dialog.
 for (const fixture of [
   'cli-linear-protein.v30', 'conservation-fasta.v39', 'precomputed-ring-unlabelled-cli.v30', 'scale-interval-negative-linear-cli.v30'
 ]) test(`a ${fixture} Session loads without the Load dialog`, async ({ page }) => {

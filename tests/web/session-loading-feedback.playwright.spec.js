@@ -426,7 +426,7 @@ test('Load Session asks before it replaces work changed since the last Save or L
   await confirm.getByRole('button', { name: 'Load Session', exact: true }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles(baselineSession);
-  // The page shows the first Load's notice: wait for this Load to start (r3 S3).
+  // The page shows the first Load's notice: wait for this Load to start.
   await expectNoLoadRepairDialog(page);
   await expectSessionLoadedWithoutWarnings(page);
   await expect.poll(undoCount).toBe(0);
