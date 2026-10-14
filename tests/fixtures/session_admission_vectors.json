@@ -1521,10 +1521,10 @@
      ]
     }
    ],
-   "python": "accept",
+   "python": "refuse",
+   "pythonMessage": "Record display drafts require a source UID and exact selector.",
    "web": "refuse",
-   "note": "A selector with a digit outside 0-9.",
-   "difference": "Python's \\d matches every Unicode decimal digit; the Web's matches 0-9. Open (OV-611)."
+   "note": "A selector with a digit outside 0-9: both read #N with the digits 0-9 only (BA-D18)."
   },
   {
    "id": "ov636-resources-null",

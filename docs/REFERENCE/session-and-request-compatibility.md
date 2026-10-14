@@ -17,6 +17,30 @@ and keep the saved preview until the next Generate. Schema 9 adds
 [Feature identity overrides](typed-requests.md#feature-identity-overrides));
 a schema-8 request reads as one without overrides.
 
+The Python reader (`gbdraw ... --session` and the Python API) checks a
+schema-9 request against `describe_canonical_request()`: it refuses a key
+outside it, such as an older writer's `depthTrack*` input, and a value of
+another kind, such as `true` or `false` where a number belongs. At every
+request schema it refuses `conservationTableFile` and `comparisonTableFile`
+(a table is stored as a resource); anything but text (or `null` where a
+field is optional) at an annotation id, label, legend label, selector key or
+value, fill,
+`generatedProteinComparison.mode`, `conservationReference` or
+`pairwiseMatchStyle`; and anything but `true` or `false` at `wrapsOrigin` or
+hatch `cross`. From schema 9 it also refuses another case, outer spaces or
+`""` in these three names, and the five comparison mode settings
+(`collinearityUnitMode`, `collinearityAnchorMode`, `collinearitySearchScope`,
+`collinearityColorMode`, `orthogroupMembershipMode`) hold one of their names;
+older schemas also read another case, outer spaces, `-` for `_`, an alias, or
+`""`. An annotation `lane`, `start` or `end` may hold a fraction, which reads
+as its integer part. Writers store a track slot's `renderer` and `side` as
+names, and the reader still reads another spelling. For a form listed here
+that earlier versions read, the reader's message names the refused path. The
+Web app still loads a Session that holds such a form; until the Web repairs it
+at Load, Generate and any re-render of the stored request (label reflow,
+alignment, record transform) show "An input value is invalid"
+(`INPUT_INVALID`, field `schema`).
+
 Sessions 46 and 47 keep the Web app's settings and edits of each diagram mode in its
 own slice, `modes.circular` and `modes.linear`:
 

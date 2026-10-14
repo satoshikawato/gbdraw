@@ -1,0 +1,462 @@
+{
+ "description": [
+  "Shared vectors of the structural checker of a gbdraw.contract_shapes description:",
+  "Python's gbdraw.contract_shapes.violations (tests/test_contract_shape_vectors.py) and,",
+  "with stage 1d PR-C, the Web's twin. Each vector checks value against shape, with the",
+  "named shapes of types, from the root path \"value\"; violations lists \"<path>: <reason>\"",
+  "in order. A reason never repeats the value. Only values JSON.parse and Python's json",
+  "read alike are listed (1.0 is an integer to JSON.parse and a float to Python)."
+ ],
+ "types": {
+  "Point": {
+   "kind": "object",
+   "fields": {
+    "x": {
+     "kind": "integer"
+    },
+    "y": {
+     "kind": "integer"
+    }
+   },
+   "optional": [],
+   "open": false
+  }
+ },
+ "vectors": [
+  {
+   "id": "closed-object-unknown-field",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "value": {
+    "a": 1
+   },
+   "violations": [
+    "value.a: unknown field"
+   ]
+  },
+  {
+   "id": "open-object-other-field",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": true
+   },
+   "value": {
+    "a": 1
+   },
+   "violations": []
+  },
+  {
+   "id": "required-field-absent",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "integer"
+     }
+    },
+    "optional": [],
+    "open": false
+   },
+   "value": {},
+   "violations": [
+    "value.a: required field is absent"
+   ]
+  },
+  {
+   "id": "optional-field-absent",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "integer"
+     }
+    },
+    "optional": [
+     "a"
+    ],
+    "open": false
+   },
+   "value": {},
+   "violations": []
+  },
+  {
+   "id": "field-of-another-kind",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "integer"
+     }
+    },
+    "optional": [],
+    "open": true
+   },
+   "value": {
+    "a": "x",
+    "b": 1
+   },
+   "violations": [
+    "value.a: expected integer"
+   ]
+  },
+  {
+   "id": "boolean-is-not-integer",
+   "shape": {
+    "kind": "integer"
+   },
+   "value": true,
+   "violations": [
+    "value: expected integer"
+   ]
+  },
+  {
+   "id": "fraction-is-not-integer",
+   "shape": {
+    "kind": "integer"
+   },
+   "value": 0.5,
+   "violations": [
+    "value: expected integer"
+   ]
+  },
+  {
+   "id": "integer-is-number",
+   "shape": {
+    "kind": "number"
+   },
+   "value": 7,
+   "violations": []
+  },
+  {
+   "id": "boolean-is-not-number",
+   "shape": {
+    "kind": "number"
+   },
+   "value": false,
+   "violations": [
+    "value: expected number"
+   ]
+  },
+  {
+   "id": "null-is-not-string",
+   "shape": {
+    "kind": "string"
+   },
+   "value": null,
+   "violations": [
+    "value: expected string"
+   ]
+  },
+  {
+   "id": "integer-is-not-boolean",
+   "shape": {
+    "kind": "boolean"
+   },
+   "value": 0,
+   "violations": [
+    "value: expected boolean"
+   ]
+  },
+  {
+   "id": "literal-of-another-kind",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     true
+    ]
+   },
+   "value": 1,
+   "violations": [
+    "value: expected one of [true]"
+   ]
+  },
+  {
+   "id": "literal-text-is-not-the-number",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     1,
+     "a"
+    ]
+   },
+   "value": "1",
+   "violations": [
+    "value: expected one of [1,\"a\"]"
+   ]
+  },
+  {
+   "id": "literal-null",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     null
+    ]
+   },
+   "value": null,
+   "violations": []
+  },
+  {
+   "id": "array-item-of-another-kind",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "integer"
+    }
+   },
+   "value": [
+    1,
+    "a"
+   ],
+   "violations": [
+    "value[1]: expected integer"
+   ]
+  },
+  {
+   "id": "object-is-not-an-array",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "integer"
+    }
+   },
+   "value": {},
+   "violations": [
+    "value: expected an array"
+   ]
+  },
+  {
+   "id": "tuple-length",
+   "shape": {
+    "kind": "tuple",
+    "items": [
+     {
+      "kind": "integer"
+     },
+     {
+      "kind": "string"
+     }
+    ]
+   },
+   "value": [
+    1
+   ],
+   "violations": [
+    "value: expected 2 items"
+   ]
+  },
+  {
+   "id": "tuple-item",
+   "shape": {
+    "kind": "tuple",
+    "items": [
+     {
+      "kind": "integer"
+     },
+     {
+      "kind": "string"
+     }
+    ]
+   },
+   "value": [
+    1,
+    2
+   ],
+   "violations": [
+    "value[1]: expected string"
+   ]
+  },
+  {
+   "id": "empty-tuple",
+   "shape": {
+    "kind": "tuple",
+    "items": []
+   },
+   "value": [],
+   "violations": []
+  },
+  {
+   "id": "record-value",
+   "shape": {
+    "kind": "record",
+    "values": {
+     "kind": "string"
+    }
+   },
+   "value": {
+    "k": 1,
+    "l": "x"
+   },
+   "violations": [
+    "value.k: expected string"
+   ]
+  },
+  {
+   "id": "array-is-not-an-object",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "value": [],
+   "violations": [
+    "value: expected an object"
+   ]
+  },
+  {
+   "id": "null-is-not-a-record",
+   "shape": {
+    "kind": "record",
+    "values": {
+     "kind": "string"
+    }
+   },
+   "value": null,
+   "violations": [
+    "value: expected an object"
+   ]
+  },
+  {
+   "id": "nullable-null",
+   "shape": {
+    "kind": "union",
+    "options": [
+     {
+      "kind": "string"
+     },
+     {
+      "kind": "null"
+     }
+    ]
+   },
+   "value": null,
+   "violations": []
+  },
+  {
+   "id": "union-reports-the-closest-option",
+   "shape": {
+    "kind": "union",
+    "options": [
+     {
+      "kind": "object",
+      "fields": {
+       "kind": {
+        "kind": "literal",
+        "values": [
+         "a"
+        ]
+       },
+       "x": {
+        "kind": "string"
+       }
+      },
+      "optional": [],
+      "open": false
+     },
+     {
+      "kind": "object",
+      "fields": {
+       "kind": {
+        "kind": "literal",
+        "values": [
+         "b"
+        ]
+       }
+      },
+      "optional": [],
+      "open": false
+     }
+    ]
+   },
+   "value": {
+    "kind": "a",
+    "x": 1
+   },
+   "violations": [
+    "value.x: expected string"
+   ]
+  },
+  {
+   "id": "union-reports-the-first-of-equals",
+   "shape": {
+    "kind": "union",
+    "options": [
+     {
+      "kind": "string"
+     },
+     {
+      "kind": "integer"
+     }
+    ]
+   },
+   "value": 0.5,
+   "violations": [
+    "value: expected string"
+   ]
+  },
+  {
+   "id": "ref",
+   "shape": {
+    "kind": "ref",
+    "name": "Point"
+   },
+   "value": {
+    "x": 1,
+    "y": "2"
+   },
+   "violations": [
+    "value.y: expected integer"
+   ]
+  },
+  {
+   "id": "nested-path",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "array",
+      "items": {
+       "kind": "ref",
+       "name": "Point"
+      }
+     }
+    },
+    "optional": [],
+    "open": false
+   },
+   "value": {
+    "a": [
+     {
+      "x": 1,
+      "y": 2
+     },
+     {
+      "x": 1
+     }
+    ]
+   },
+   "violations": [
+    "value.a[1].y: required field is absent"
+   ]
+  },
+  {
+   "id": "unknown-accepts-anything",
+   "shape": {
+    "kind": "unknown"
+   },
+   "value": {
+    "any": [
+     1,
+     null
+    ]
+   },
+   "violations": []
+  }
+ ]
+}

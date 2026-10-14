@@ -17,17 +17,22 @@ from gbdraw.api.options import (
     CircularRequestTrackOptions,
     LinearDiagramOptions,
     LinearRequestTrackOptions,
+    LosatSearchOptions,
 )
-from gbdraw.contract_shapes import INTEGER, STRING, array, literal, nullable, obj, record
+from gbdraw.contract_shapes import violations
 from gbdraw.api.requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     InMemoryRecordSource,
     LinearDiagramRequest,
     RecordInput,
+    RenderOutputRequest,
 )
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
+    SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
     CanonicalRequestCodecError,
+    CanonicalRequestDecodingError,
     CanonicalRequestEncodingError,
     _SHARED_OPTION_WRONG_MODE_DEFAULTS,
     _option_wire_key,
@@ -36,8 +41,9 @@ from gbdraw.session_request_codec import (
     encode_canonical_request,
 )
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+from gbdraw.web_support.error_adapter import serialize_web_error
 from tests import test_session_request_codec as codec_tests
-from tests.utils.contract_shape_check import load_json, stored_json_files, violations
+from tests.utils.contract_shape_check import load_json, stored_json_files
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DESCRIPTION = describe_canonical_request()
@@ -224,22 +230,12 @@ def _smallest_request(mode: str, tmp_path: Path) -> Encoded:
 
 # Where one change cannot show that the decoder and the description agree, and why.
 # An entry with positions differs only there and agrees at every other position.
-_COERCED = "accepted", "the typed constructor reads null as a value (str, bool, a default); no writer writes null"
 _TOGETHER = "refused", "a decision's status, rationale and anchor are checked together; none encoded is skipped"
 _REFERENCE = (
     "refused", "the plan's reference must equal the anchor of its reference record",
     ("linear:layout.similarityAlignment.reference",),
 )
 _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]] = {
-    "CanonicalAnnotationSet.id = null": _COERCED,
-    "CanonicalRegionAnnotation.id = null": _COERCED,
-    "CanonicalRegionAnnotation.label = null": _COERCED,
-    "CanonicalCoordinateSpan.wrapsOrigin = null": _COERCED,
-    "CanonicalFeatureSelector.value = null": _COERCED,
-    "CanonicalHatchStyle.cross = null": _COERCED,
-    "CanonicalGeneratedProteinComparison.mode = null": _COERCED,
-    "CanonicalCircularDiagramOptions.conservationReference = null": _COERCED,
-    "CanonicalLinearDiagramOptions.pairwiseMatchStyle = null": _COERCED,
     "CanonicalAlignmentRecordDecision.anchor = null": _TOGETHER,
     "CanonicalAlignmentRecordDecision.status = 'skipped'": _TOGETHER,
     "CanonicalAlignmentRecordDecision.rationale = 'skipped_by_user'": _TOGETHER,
@@ -276,9 +272,9 @@ _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]
 # - A legend position: the Web writer writes the text its state holds, which a
 #   stored Session can set to any text (OV-652); it narrows once the Web writes
 #   only a position of the mode's set.
-# - A slot's renderer and side: the encoder writes them as its caller gave
-#   them, and the track planner reads other spellings of a name
-#   (_SLOT_SPELLINGS, OV-653).
+# - A slot's renderer and side: the track planner reads other spellings of a
+#   name, and the Session writer of request schemas 5 to 9 stored a caller's
+#   spelling until the encoder wrote the name (_SLOT_SPELLINGS, OV-653).
 # - The five comparison mode settings: the decoder reads other spellings of a
 #   name (OV-651) and the Web's Session Load does not check them; they narrow
 #   with the Load check of stage 1d PR-C.
@@ -302,7 +298,10 @@ _NAMES_TYPED_STRING: tuple[str, ...] = (
 _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalAlignmentAnchorIdentity.recordKey": ("another string",),
     "CanonicalAlignmentRecordDecision.recordKey": ("another string",),
+    "CanonicalCircularDepthTrack.largeTickInterval": ("zero", "a negative number"),
+    "CanonicalCircularDepthTrack.smallTickInterval": ("zero", "a negative number"),
     "CanonicalCircularDepthTrack.source": ("an array",),
+    "CanonicalCircularDepthTrack.tickFontSize": ("zero", "a negative number"),
     "CanonicalCircularDiagramOptions.depthTracks": ("an array",),
     "CanonicalCircularDiagramOptions.dinucleotide": ("another string",),
     "CanonicalCircularFeaturePlacement.placement[lane].level": ("another integer",),
@@ -310,13 +309,20 @@ _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalCircularRenderRequest.output": ("an array",),
     "CanonicalCircularRenderRequest.records": ("an array",),
     "CanonicalCollinearityResultComparison.resourceId": ("another string",),
+    # 0.5 is below 1; a fraction from 1 reads as its integer part (_FRACTIONS).
+    "CanonicalCoordinateSpan.end": ("a fraction",),
+    "CanonicalCoordinateSpan.start": ("a fraction",),
     "CanonicalFeatureSpan.selectors": ("an array",),
     "CanonicalFileRef.resourceId": ("another string",),
     "CanonicalGenbankRecordSource.resourceId": ("another string",),
     "CanonicalGffFastaRecordSource.fastaResourceId": ("another string",),
     "CanonicalGffFastaRecordSource.gffResourceId": ("another string",),
     "CanonicalHatchStyle.color": ("another string",),
+    "CanonicalLinearDepthTrack.height": ("zero", "a negative number"),
+    "CanonicalLinearDepthTrack.largeTickInterval": ("zero", "a negative number"),
+    "CanonicalLinearDepthTrack.smallTickInterval": ("zero", "a negative number"),
     "CanonicalLinearDepthTrack.source": ("an array",),
+    "CanonicalLinearDepthTrack.tickFontSize": ("zero", "a negative number"),
     "CanonicalLinearDiagramOptions.depthTracks": ("an array",),
     "CanonicalLinearDiagramOptions.dinucleotide": ("another string",),
     "CanonicalLinearFeaturePlacement.placement[lane].level": ("another integer",),
@@ -337,25 +343,6 @@ _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalSimilarityAlignmentPlan.records": ("an array",),
     "CanonicalTableRef.resourceId": ("another string",),
 }
-# The decoder takes a value of a kind the description refuses, at every
-# position: the typed constructor converts it (str, int, bool) or reads an
-# empty array as no value. No writer writes it; the type is narrower than
-# Python there (OV-528, OV-596).
-_CONVERTED: dict[str, tuple[str, ...]] = {
-    "CanonicalAnnotationSet.id": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalAnnotationSet.legendLabel": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalCircularDiagramOptions.conservationReference": ("an array",),
-    "CanonicalCoordinateSpan.wrapsOrigin": ("an array",),
-    "CanonicalFeatureSelector.key": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalFeatureSelector.value": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalGeneratedProteinComparison.mode": ("an array",),
-    "CanonicalHatchStyle.cross": ("a fraction", "a null item", "an array", "another integer", "another string"),
-    "CanonicalRegionAnnotation.id": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalRegionAnnotation.label": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalRegionAnnotation.lane": ("a fraction",),
-    "CanonicalRegionAnnotation.legendLabel": ("a fraction", "a null item", "an array", "another integer"),
-    "CanonicalRegionAnnotationStyle.fill": ("an array",),
-}
 _EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
     **{
         change: (entry[0], list(entry[2]) if len(entry) == 3 else None)
@@ -366,7 +353,6 @@ _EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
         for verdict, table in (
             ("refused", {field: ("another string",) for field in _NAMES_TYPED_STRING}),
             ("refused", _VALUE_CHECKED),
-            ("accepted", _CONVERTED),
         )
         for field, values in table.items()
         for value in values
@@ -375,6 +361,15 @@ _EXPECTED_DIFFERENCES: dict[str, tuple[str, list[str] | None]] = {
 
 
 _UNNAMED = "valueTheDescriptionDoesNotName"
+# Numbers of the right kind outside the range the decoder checks: the
+# description types a depth track's height (Linear only; a Circular one holds
+# null), tick intervals and tick font size ``number``, and Python owns
+# "greater than 0" (U7, BA-OD73).
+_OUT_OF_RANGE: dict[str, tuple[tuple[str, object], ...]] = {
+    f"Canonical{mode}DepthTrack.{key}": (("zero", 0), ("a negative number", -1))
+    for mode, keys in (("Circular", ()), ("Linear", ("height",)))
+    for key in (*keys, "largeTickInterval", "smallTickInterval", "tickFontSize")
+}
 
 
 def _other_values(held: object) -> list[tuple[str, object]]:
@@ -446,7 +441,7 @@ def _differences(
                 ]
                 changes += [
                     (f"{label}.{key} = {name}", _problems(value, field) == [], (key, value))
-                    for name, value in _other_values(holder.get(key))
+                    for name, value in [*_other_values(holder.get(key)), *_OUT_OF_RANGE.get(f"{label}.{key}", ())]
                 ]
             for change, allowed, arguments in changes:
                 unchanged = len(arguments) == 2 and arguments[0] in holder and holder[arguments[0]] == arguments[1]
@@ -479,42 +474,47 @@ def test_the_decoder_agrees_with_the_description_at_every_position(
     assert {label for label, _shape in OBJECTS} - reached == set()
 
 
-# A slot is written as its caller built it (_encode_track_slot), and the track
-# planner reads these spellings of a renderer and of a side. So a request the
-# encoder wrote can hold one, and the description cannot name the values of
-# either field while that is so (_NAMES_TYPED_STRING, OV-653).
-_SLOT_SPELLINGS: dict[str, tuple[Any, Any, tuple[tuple[str, str, str], ...]]] = {
+# A slot built with another spelling of a renderer or a side, and the names
+# the track planner reads it as (a renderer alias is the name it stands for).
+_SLOT_SPELLINGS: dict[str, tuple[Any, Any, tuple[tuple[str, tuple[str, str], tuple[str, str]], ...]]] = {
     "circular": (CircularTrackSlot, CircularRequestTrackOptions, (
-        ("features", "Features", " OUTSIDE "), ("gc_content", "gc_content", "INSIDE"),
+        ("features", ("Features", "features"), (" OUTSIDE ", "outside")),
+        ("gc_content", ("gc_content", "dinucleotide_content"), ("INSIDE", "inside")),
     )),
     "linear": (LinearTrackSlot, LinearRequestTrackOptions, (
-        ("features", " FEATURES ", "Above"), ("gc_content", "GC_CONTENT", "BELOW"),
+        ("features", (" FEATURES ", "features"), ("Above", "above")),
+        ("gc_content", ("GC_CONTENT", "dinucleotide_content"), ("BELOW", "below")),
     )),
 }
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
-def test_the_encoder_writes_a_slot_renderer_and_side_in_the_spelling_it_was_given(
-    mode: str, tmp_path: Path
-) -> None:
+def test_the_encoder_writes_the_name_of_a_slot_renderer_and_side(mode: str, tmp_path: Path) -> None:
+    """A Python caller's spelling is written as the name (OV-653, BA-D23)."""
+
     slot_type, tracks_type, spellings = _SLOT_SPELLINGS[mode]
-    tracks = tracks_type(**{
-        f"{mode}_track_slots": tuple(
-            slot_type(id=slot_id, renderer=renderer, side=side) for slot_id, renderer, side in spellings
-        ),
-        f"{mode}_track_axis_index": 1,
-    })
-    payload, resources = _encoded(_request(mode, tracks=tracks), tmp_path)
+
+    def tracks(index: int) -> Any:
+        return tracks_type(**{
+            f"{mode}_track_slots": tuple(
+                slot_type(id=slot_id, renderer=renderer[index], side=side[index])
+                for slot_id, renderer, side in spellings
+            ),
+            f"{mode}_track_axis_index": 1,
+        })
+
+    payload, resources = _encoded(_request(mode, tracks=tracks(0)), tmp_path)
     written = payload["diagramOptions"]["tracks"][f"{mode}TrackSlots"]
-    assert [(slot["id"], slot["renderer"], slot["side"]) for slot in written] == list(spellings)
+    assert [(slot["id"], slot["renderer"], slot["side"]) for slot in written] == [
+        (slot_id, renderer[1], side[1]) for slot_id, renderer, side in spellings
+    ]
     assert _problems(payload, ROOT) == []
     decoded = decode_canonical_request(payload, resource_paths=resources, output_directory=tmp_path / "output")
-    assert decoded.options.tracks == tracks
+    assert decoded.options.tracks == tracks(1)
 
 
 # The decoder reads these keys and no writer writes them: the depth inputs of
-# older writers (the writer stores every depth input as depthTracks), and a
-# comparison table path, which the encoder refuses (a file is a resource).
+# older writers (the writer stores every depth input as depthTracks).
 _DEPTH_INPUTS_OF_OLDER_WRITERS = {
     "depthFile", "depthFiles", "depthTable", "depthTables", "depthTrackColors", "depthTrackFiles",
     "depthTrackLabels", "depthTrackLargeTickIntervals", "depthTrackSmallTickIntervals",
@@ -526,13 +526,19 @@ _DECODER_ONLY_OPTIONS = {
 }
 
 
+@pytest.mark.parametrize("schema", [8, CANONICAL_REQUEST_SCHEMA])
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_the_description_names_every_option_key_a_writer_can_write(
-    mode: str, tmp_path: Path
+    mode: str, schema: int, tmp_path: Path
 ) -> None:
+    """At the current schema the decoder reads the described option keys only;
+    an older schema also reads the depth inputs of older writers."""
+
     table_path, older_depth_inputs = _DECODER_ONLY_OPTIONS[mode]
     described = TYPES[f"Canonical{mode.capitalize()}DiagramOptions"]["fields"]
-    payload, resources = _smallest_request(mode, tmp_path)
+    encoded = encode_canonical_request(_request(mode))
+    payload = codec_tests._payload_for_schema(encoded, schema)
+    resources = codec_tests._materialize_resources(encoded, tmp_path / "resources")
 
     # A shared option of the other mode is a key only at its default.
     defaults = {
@@ -549,17 +555,76 @@ def test_the_description_names_every_option_key_a_writer_can_write(
                     output_directory=tmp_path / "output",
                 )
             except CanonicalRequestCodecError as error:
-                if "Unknown field" in str(error):
+                if "unknown field" in str(error).lower() and key in str(error):
                     continue
             return True
         return False
 
     candidates = {_option_wire_key(item.name) for item in fields(_REQUEST_TYPES[mode][1])}
-    decoder_keys = {key for key in candidates | set(defaults) | set(described) if decoder_names(key)}
-    assert set(described) <= decoder_keys
-    assert decoder_keys - set(described) == older_depth_inputs | {_option_wire_key(table_path)}
+    if schema == CANONICAL_REQUEST_SCHEMA:
+        assert {key for key in described if not decoder_names(key)} == set()
+        # Any other key is refused, by the decoder or as outside the description.
+        for key in (candidates | set(defaults)) - set(described):
+            with pytest.raises(CanonicalRequestCodecError):
+                decode_canonical_request(
+                    _with(payload, ("diagramOptions",), key, None),
+                    resource_paths=resources,
+                    output_directory=tmp_path / "output",
+                )
+    else:
+        decoder_keys = {key for key in candidates | set(defaults) | set(described) if decoder_names(key)}
+        assert set(described) - decoder_keys == {"featureOverrides"}
+        assert decoder_keys - set(described) == older_depth_inputs
     with pytest.raises(CanonicalRequestEncodingError, match="comparison table"):
         encode_canonical_request(_request(mode, **{table_path: "table.tsv"}))
+
+
+def test_the_encoder_refuses_a_comparison_table_path_in_a_circular_batch() -> None:
+    request = CircularBatchRequest(
+        records=(RecordInput(source=InMemoryRecordSource(_record())),),
+        options=CircularDiagramOptions(conservation_table_file="table.tsv"),
+        outputs=(RenderOutputRequest(),),
+    )
+    with pytest.raises(CanonicalRequestEncodingError, match="Circular comparison table"):
+        encode_canonical_request(request)
+
+
+SCHEMAS = sorted(SUPPORTED_CANONICAL_REQUEST_SCHEMAS)
+
+
+def _decode_at(schema: int, request: Any, tmp_path: Path, change: Any = None) -> Any:
+    """Decode ``request`` as a payload of ``schema``, after ``change`` edits the payload."""
+
+    encoded = encode_canonical_request(request)
+    payload = codec_tests._payload_for_schema(encoded, schema)
+    if schema == 1:
+        # Schema 1 stored no record pairs of a protein comparison.
+        for comparison in payload["comparisons"]:
+            comparison.pop("pairs", None)
+    if change is not None:
+        change(payload)
+    return decode_canonical_request(
+        payload,
+        resource_paths=codec_tests._materialize_resources(encoded, tmp_path / f"resources-{schema}"),
+        output_directory=tmp_path / "output",
+    )
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_the_decoder_refuses_a_comparison_table_path_at_every_schema(
+    mode: str, schema: int, tmp_path: Path
+) -> None:
+    """No writer wrote a table path: the Web never, the encoder refuses it (OV-324)."""
+
+    key = _option_wire_key(_DECODER_ONLY_OPTIONS[mode][0])
+    _decode_at(schema, _request(mode), tmp_path)
+
+    def add_path(payload: dict[str, Any]) -> None:
+        payload["diagramOptions"][key] = "table.tsv"
+
+    with pytest.raises(CanonicalRequestDecodingError, match=key):
+        _decode_at(schema, _request(mode), tmp_path, add_path)
 
 
 def test_every_described_field_is_held_by_a_request_or_named_by_the_decoder(
@@ -612,22 +677,197 @@ def test_requests_stored_in_current_sessions_match_the_description() -> None:
     assert modes.count("circular") >= 4 and modes.count("linear") >= 4
 
 
+def _annotated_request(mode: str) -> Any:
+    """A request whose annotations hold each annotation field the decoder converted (OV-528, OV-596)."""
+
+    from gbdraw.annotations import (
+        AnnotationOptions, AnnotationSet, CoordinateSpan, FeatureSelector, FeatureSpan, HatchStyle,
+        RegionAnnotation, RegionAnnotationStyle,
+    )
+    from gbdraw.io.record_select import parse_record_selector
+
+    annotations = AnnotationOptions(sets=(AnnotationSet("review", (
+        RegionAnnotation(
+            "coordinates", CoordinateSpan(parse_record_selector("#1"), 2, 20), label="Review", lane=1,
+            style=RegionAnnotationStyle(fill="#88aaff", hatch=HatchStyle(cross=True)), legend_label="Reviewed",
+        ),
+        RegionAnnotation(
+            "features", FeatureSpan(parse_record_selector("#1"), (FeatureSelector("dnaA", "gene"),)),
+        ),
+    ), legend_label="Review regions"),))
+    options: dict[str, object] = {"annotations": annotations}
+    if mode == "linear":
+        options["losat_search"] = LosatSearchOptions(program="losatp", losatp_mode="collinear")
+    return _request(mode, **options)
+
+
+_SET = ("diagramOptions", "annotations", "sets", 0)
+_COORDINATES = (*_SET, "annotations", 0)
+_FEATURES = (*_SET, "annotations", 1)
+_TEXT_FORMS = (("null", None), ("a fraction", 0.5), ("an integer", 7), ("an array", []), ("a null item", [None]))
+_OPTIONAL_TEXT_FORMS = _TEXT_FORMS[1:]
+# Each field and the forms of another kind the decoder converted at every
+# schema (the test tables _COERCED and _CONVERTED before stage 1d PR-B); no
+# writer wrote any of them (stage1d/audit.md section 3).
+_UNWRITTEN_FORMS: dict[tuple[str, tuple[str | int, ...], str], tuple[tuple[str, object], ...]] = {
+    ("linear", _SET, "id"): _TEXT_FORMS,
+    ("linear", _SET, "legendLabel"): _OPTIONAL_TEXT_FORMS,
+    ("linear", _COORDINATES, "id"): _TEXT_FORMS,
+    ("linear", _COORDINATES, "label"): _TEXT_FORMS,
+    ("linear", _COORDINATES, "legendLabel"): _OPTIONAL_TEXT_FORMS,
+    ("linear", (*_COORDINATES, "target"), "wrapsOrigin"): (("null", None), ("an array", []), ("an integer", 0)),
+    ("linear", (*_FEATURES, "target", "selectors", 0), "key"): _OPTIONAL_TEXT_FORMS,
+    ("linear", (*_FEATURES, "target", "selectors", 0), "value"): _TEXT_FORMS,
+    ("linear", (*_COORDINATES, "style", "hatch"), "cross"): (*_TEXT_FORMS, ("a string", "true")),
+    ("linear", (*_COORDINATES, "style"), "fill"): (("an array", []),),
+    ("linear", ("comparisons", 0), "mode"): (("null", None), ("an array", [])),
+    ("linear", ("diagramOptions",), "pairwiseMatchStyle"): (("null", None),),
+    ("circular", ("diagramOptions",), "conservationReference"): (("null", None), ("an array", [])),
+}
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
 @pytest.mark.parametrize(
-    ("value", "shape", "expected"),
+    ("mode", "path", "key", "name", "value"),
     [
-        ({"a": 1}, obj({}), ["renderRequest.a: unknown field"]),
-        ({"a": 1}, obj({}, open=True), []),
-        ({}, obj({"a": INTEGER}), ["renderRequest.a: required field is absent"]),
-        ({"a": "x", "b": 1}, obj({"a": INTEGER}, open=True), ["renderRequest.a: 'x' is not integer"]),
-        ({}, obj({"a": INTEGER}, optional=["a"]), []),
-        (True, INTEGER, ["renderRequest: True is not integer"]),
-        (1, literal(True), ["renderRequest: 1 is not one of [True]"]),
-        ([1, "a"], array(INTEGER), ["renderRequest[1]: 'a' is not integer"]),
-        (None, nullable(STRING), []),
-        ({"k": 1}, record(STRING), ["renderRequest.k: 1 is not string"]),
+        (mode, path, key, name, value)
+        for (mode, path, key), forms in _UNWRITTEN_FORMS.items()
+        for name, value in forms
     ],
 )
-def test_the_structural_checker_reports_each_kind_of_violation(
-    value: object, shape: dict[str, Any], expected: list[str]
+def test_the_decoder_refuses_a_value_of_another_kind_at_every_schema(
+    mode: str, path: tuple[str | int, ...], key: str, name: str, value: object, schema: int, tmp_path: Path
 ) -> None:
-    assert _problems(value, shape) == expected
+    request = _annotated_request(mode)
+    _decode_at(schema, request, tmp_path)
+
+    def change(payload: dict[str, Any]) -> None:
+        holder: Any = payload
+        for step in path:
+            holder = holder[step]
+        holder[key] = value
+
+    with pytest.raises(CanonicalRequestDecodingError, match=key):
+        _decode_at(schema, request, tmp_path, change)
+
+
+def _set_at(path: tuple[str | int, ...], key: str, value: object) -> Any:
+    def change(payload: dict[str, Any]) -> None:
+        holder: Any = payload
+        for step in path:
+            holder = holder[step]
+        holder[key] = value
+
+    return change
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+@pytest.mark.parametrize(
+    ("path", "key", "value"),
+    [
+        ((*_COORDINATES, "target"), "wrapsOrigin", 0),
+        (_COORDINATES, "legendLabel", 7),
+        (("diagramOptions",), "comparisonTableFile", "table.tsv"),
+    ],
+)
+def test_the_web_reports_a_refused_request_value_as_an_invalid_input(
+    path: tuple[str | int, ...], key: str, value: object, schema: int, tmp_path: Path
+) -> None:
+    """The Web shows each refusal as INPUT_INVALID, not as an unclassified error (R6)."""
+
+    with pytest.raises(CanonicalRequestDecodingError, match=key) as refused:
+        _decode_at(schema, _annotated_request("linear"), tmp_path, _set_at(path, key, value))
+    shown = serialize_web_error(refused.value, operation="generate", stage="request-validation")
+    assert (shown["code"], shown["context"]) == ("INPUT_INVALID", {"field": "schema", "reason": "FIELDS"})
+
+
+# The Web's Lane, Start and End number inputs write fractions at every schema
+# (OV-630, BA-OD74); Python reads the integer part.
+_FRACTIONS: tuple[tuple[tuple[str | int, ...], str, float, int], ...] = (
+    (_COORDINATES, "lane", 0.5, 0),
+    ((*_COORDINATES, "target"), "start", 2.5, 2),
+    ((*_COORDINATES, "target"), "end", 20.5, 20),
+)
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+@pytest.mark.parametrize(("path", "key", "fraction", "integer"), _FRACTIONS)
+def test_a_fraction_at_an_annotation_number_reads_as_its_integer_part_at_every_schema(
+    path: tuple[str | int, ...], key: str, fraction: float, integer: int, schema: int, tmp_path: Path
+) -> None:
+    def change(payload: dict[str, Any]) -> None:
+        holder: Any = payload
+        for step in path:
+            holder = holder[step]
+        holder[key] = fraction
+
+    annotation = _decode_at(schema, _annotated_request("linear"), tmp_path, change).options.annotations.sets[0].annotations[0]
+    assert {"lane": annotation.lane, **vars(annotation.target)}[key] == integer
+
+
+def test_the_encoder_writes_a_boolean_where_a_coordinate_span_wraps_the_origin(tmp_path: Path) -> None:
+    """A caller that gives wraps_origin another kind still gets a boolean (OV-632)."""
+
+    from gbdraw.annotations import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation
+
+    written = []
+    for wraps, start, end in ((None, 10, 30), (1, 30, 10), ([], 10, 30), ("yes", 30, 10)):
+        span = CoordinateSpan(None, start, end, wraps_origin=wraps)
+        annotations = AnnotationOptions(sets=(AnnotationSet("s", (RegionAnnotation("a", span),)),))
+        payload, resources = _encoded(_request("linear", annotations=annotations), tmp_path / str(len(written)))
+        written.append(payload["diagramOptions"]["annotations"]["sets"][0]["annotations"][0]["target"]["wrapsOrigin"])
+        decode_canonical_request(payload, resource_paths=resources, output_directory=tmp_path / "output")
+    assert written == [False, True, False, True]
+
+
+# Another spelling of a comparison setting and the name the normalizers read
+# it as. Python stores a setting normalized, and the Web writes the name from
+# schema 6 (OV-651).
+_SETTING_SPELLINGS: dict[str, tuple[tuple[str, str], ...]] = {
+    "collinearityUnitMode": ((" LOCUS ", "locus"), ("", "auto")),
+    "collinearityAnchorMode": (("Reciprocal-Best", "rbh"), ("top_n", "all"), ("", "rbh")),
+    "collinearitySearchScope": (("ALL", "all"), ("", "adjacent")),
+    "collinearityColorMode": (("identity", "average_identity"), ("Orientation-Identity", "orientation_identity")),
+    "orthogroupMembershipMode": (("rbh", "anchor_core_v1"), ("family_merge", "anchor_core_v1"), ("", "anchor_core_v1")),
+}
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+@pytest.mark.parametrize(
+    ("key", "spelling", "name"),
+    [(key, spelling, name) for key, found in _SETTING_SPELLINGS.items() for spelling, name in found],
+)
+def test_a_comparison_setting_holds_its_name_from_schema_9(
+    key: str, spelling: str, name: str, schema: int, tmp_path: Path
+) -> None:
+    """Older schemas keep reading a spelling; schema 9 reads the name only."""
+
+    request = _request("linear", losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear"))
+
+    def spell(payload: dict[str, Any]) -> None:
+        payload["comparisons"][0]["settings"][key] = spelling
+
+    if schema >= 9:
+        with pytest.raises(CanonicalRequestDecodingError, match=key):
+            _decode_at(schema, request, tmp_path, spell)
+        return
+    decoded = _decode_at(schema, request, tmp_path, spell)
+    assert encode_canonical_request(decoded).payload["comparisons"][0]["settings"][key] == name
+
+
+@pytest.mark.parametrize("schema", SCHEMAS)
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_current_request_outside_its_description_is_refused(mode: str, schema: int, tmp_path: Path) -> None:
+    """The decoder reads a depth input of older writers, which schema 9 writers never wrote (K11)."""
+
+    def older_depth_input(payload: dict[str, Any]) -> None:
+        payload["diagramOptions"]["depthTrackColors"] = None
+
+    if schema < CANONICAL_REQUEST_SCHEMA:
+        _decode_at(schema, _request(mode), tmp_path, older_depth_input)
+        return
+    with pytest.raises(
+        CanonicalRequestDecodingError,
+        match=r"does not match its description: renderRequest\.diagramOptions\.depthTrackColors: unknown field",
+    ):
+        _decode_at(schema, _request(mode), tmp_path, older_depth_input)
