@@ -894,6 +894,7 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
     [{ losat: 'x' }, `Settings: the value "x" (losat) cannot be used; ${kept}`],
     [{ losat: { blastp: 5 } }, `Settings: the value "5" (losat.blastp) cannot be used; ${kept}`, 'linear'],
     [{ losat: { blastp: [] } }, `Settings: the value "[]" (losat.blastp) cannot be used; ${kept}`, 'linear'],
+    [{ losat: { blastp: { collinearInferOrthogroups: true, hitLimitsByMode: 5 } } }, `Settings: the value "5" (losat.blastp.hitLimitsByMode) cannot be used; ${kept}`, 'linear'],
     [{ circularConservation: 5 }, `Settings: the value "5" (circularConservation) cannot be used; ${kept}`],
     [{ rules: 'x' }, `Settings: the value "x" (rules) cannot be used; ${kept}`],
     [{ whitelist: 5 }, `Settings: the value "5" (whitelist) cannot be used; ${kept}`],

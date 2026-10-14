@@ -828,12 +828,14 @@ export const installStoredSettings = (targets, config) => {
   // file draws the arrow it was drawn with); an `adv` not used keeps the target's.
   Object.assign(targets.adv, normalizedPersistedArrowGeometryState(used('adv') ? storedAdv : targets.adv));
   if (config.losat && used('losat') && used('losat.blastp')) {
-    // The hit limits of each mode over their defaults, as stored; the
-    // inference flag as stored, else on for a collinear search.
+    // The hit limits of each mode over their defaults, as stored, unless
+    // they are not used; the inference flag as stored, else on for a collinear search.
     const blastp = containerAt(config, 'losat.blastp');
     const limits = blastp?.hitLimitsByMode;
     targets.losat.blastp.collinearInferOrthogroups = blastp?.collinearInferOrthogroups ?? (targets.losat.blastp.mode === 'collinear');
-    targets.losat.blastp.hitLimitsByMode = { ...createDefaultLosatpHitLimits(), ...(isPlainObject(limits) ? copied(limits) : {}) };
+    if (used('losat.blastp.hitLimitsByMode')) {
+      targets.losat.blastp.hitLimitsByMode = { ...createDefaultLosatpHitLimits(), ...(isPlainObject(limits) ? copied(limits) : {}) };
+    }
   }
   return losses;
 };

@@ -183,8 +183,9 @@ with a default, not use, or read with another meaning:
   A label, file name, ID or other free text is named by its place only. A
   configuration file loads over the current drawing, so a settings group
   (`form`, `adv`, `losat` or `circularConservation`) that is not an object, a
-  value of another kind inside one, and `rules` or `whitelist` that is not a
-  list (such as `"form": 5`) are not used: the drawing keeps its value, and
+  value of another kind inside one (except the values kept as stored, below),
+  and `rules` or `whitelist` that is not a list (such as `"form": 5`) are not
+  used: the drawing keeps its value, and
   the row names that value or says that the drawing keeps its current value;
 - Legend positions outside the diagram mode in the saved layout preferences
   or a saved Result, with the position used;

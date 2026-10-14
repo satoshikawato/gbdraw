@@ -307,8 +307,9 @@ write-up of a release.
   fail after the Load, is now listed and set to its default. A configuration
   file loads over the current drawing: a settings group (`form`, `adv`,
   `losat` or `circularConservation`) that is not an object, a value of
-  another kind inside one, and `rules` or `whitelist` that is not a list
-  (such as `"form": 5`) are not used, and the drawing keeps its value, which
+  another kind inside one (except the values kept as stored, above), and
+  `rules` or `whitelist` that is not a list (such as `"form": 5`) are not
+  used, and the drawing keeps its value, which
   the row names or says the drawing keeps. **Load** loads the file;
   **Cancel** leaves the settings, Results, input files, History and screen as
   they were. Dropped feature edits, narrowed Feature visibility edits, `hash=`
