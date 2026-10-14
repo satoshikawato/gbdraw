@@ -33,6 +33,7 @@ import {
   resolveLinearTrackAxisIndex
 } from './linear-track-slot-model.js';
 import { depthFileSlotsFromValue, fitDepthStateToSources, padDepthFileSlots } from './depth-track-state.js';
+import { isUnsetValue } from '../utils/field-reading.js';
 import {
   decodeDepthText,
   isEncodedDepthFileEntry
@@ -3863,8 +3864,9 @@ const applyFiles = (filesData, {
 
 // What the Depth fit of a loaded drawing drops (B45), read before the commit
 // from the settings `applyModeSliceData` installs and the candidate's Depth
-// files: the series and rows of the values the file holds. Only the drawing's
-// own mode's stack is listed; the drawing never draws the other.
+// files: the series and rows of the values the file holds. A row the fit
+// turns off is listed when it was on or the file names its series; only the
+// drawing's own mode's stack is listed, as the drawing never draws the other.
 /**
  * @param {'circular' | 'linear'} mode
  * @param {Record<string, unknown>} config The drawing's draft, as Load installs it.
@@ -3892,13 +3894,19 @@ const depthFitRepairs = (mode, config, storedAdv, { at, resolveTrackPlacements, 
     linearRows
   });
   const ownStack = mode === 'linear' ? 'linear_track_slots' : 'circular_track_slots';
+  const storedRows = Array.isArray(stored[ownStack]) ? /** @type {unknown[]} */ (stored[ownStack]) : [];
+  /** @param {string} id Whether the file's row `id` names its series. */
+  const namesSeries = (id) => storedRows.some((row) => {
+    // The cast: an object (isPlainObject), whose fields are unchecked.
+    const saved = /** @type {{ id?: unknown, params?: { track_index?: unknown } }} */ (isPlainObject(row) ? row : {});
+    return String(saved.id || '') === id && isPlainObject(saved.params) && !isUnsetValue(saved.params?.track_index);
+  });
   return [
     ...(Object.hasOwn(stored, 'depth_tracks') ? fit.droppedSeries.map(({ index, label }) => loadRepair({
       code: 'depth-series-dropped', path: `${at}.depth_tracks[${index}]`, effect: 'dropped', label
     })) : []),
-    ...(Object.hasOwn(stored, ownStack) ? fit.disabledRows.filter(({ list }) => list === mode).map(({ id }) => loadRepair({
-      code: 'depth-row-disabled', path: `${at}.${ownStack}`, effect: 'changed', label: id
-    })) : [])
+    ...(Object.hasOwn(stored, ownStack) ? fit.disabledRows.filter(({ list, id, enabled }) => list === mode && (enabled || namesSeries(id)))
+      .map(({ id }) => loadRepair({ code: 'depth-row-disabled', path: `${at}.${ownStack}`, effect: 'changed', label: id })) : [])
   ];
 };
 

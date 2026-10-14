@@ -26,6 +26,9 @@ await copyModule('gbdraw/web/js/services/feature-utils.js', 'services/feature-ut
 await copyModule('gbdraw/web/js/services/feature-sequence-fasta.js', 'services/feature-sequence-fasta.js');
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
 await copyModule('gbdraw/web/js/utils/field-reading.js', 'utils/field-reading.js');
+// depth-track-state.js reads a Depth series color by name.
+await copyModule('gbdraw/web/js/utils/color-utils.js', 'utils/color-utils.js');
+await copyModule('gbdraw/web/js/utils/named-colors.js', 'utils/named-colors.js');
 await copyModule('gbdraw/web/js/services/record-source-coordinates.js', 'services/record-source-coordinates.js');
 await copyModule('gbdraw/web/js/app/feature-search/search-core.js', 'app/feature-search/search-core.js');
 await copyModule(

@@ -760,8 +760,9 @@ export const depthSeriesLegendCaptions = ({ depthTracks, slots } = {}) => {
  *   are padded to; 0 leaves them as saved.
  * @property {{ index: number, label: string }[]} droppedSeries The saved series
  *   no series keeps, whose settings differ from those of a new series there.
- * @property {{ list: 'circular' | 'linear', id: string }[]} disabledRows The
- *   manual Depth rows the fit turns off (a row turned off before is not).
+ * @property {{ list: 'circular' | 'linear', id: string, enabled: boolean }[]} disabledRows
+ *   The manual Depth rows the fit turns off and unbinds, and whether each was
+ *   on (a row the fit marked before is not).
  */
 
 /**
@@ -823,7 +824,7 @@ export const fitDepthStateToSources = ({ mode, adv, circularFiles, linearRows })
     syncDepthSlotLabels({ slots: fitted, depthTracks, activeCount });
     const disabled = slots
       .filter((slot) => isUnsourcedDepthSlot(slot, activeCount) && !isDefaultManagedDepthSlot(slot) && !slot.depth_binding_error)
-      .map((slot) => ({ list, id: String(slot.id || '') }));
+      .map((slot) => ({ list, id: String(slot.id || ''), enabled: slot.enabled !== false }));
     return { fitted, disabled };
   };
   const circular = fitStack('circular', circularSlots, circularDepthCount);

@@ -210,7 +210,13 @@ test('a lossy Session asks before it loads: Cancel changes nothing, Load loads i
   }));
   const shownBefore = await visible();
   const lossy = join(repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz');
-  const repairLines = ['Label whitelist: line 1 had extra cells, joined into the last column with one space.'];
+  // The browser cannot align this Session 39's recovered feature information
+  // with its saved diagram, on dev too (OV-751): the dialog lists it (B50).
+  const repairLines = [
+    'Label whitelist: line 1 had extra cells, joined into the last column with one space.',
+    'Features: the feature information of the saved diagram could not be restored from this file; the SVG preview stays,'
+      + ' and the next Generate restores it.'
+  ];
   await page.locator(sessionInputSelector).setInputFiles(lossy);
   await answerLoadRepairs(page, repairLines, 'cancel');
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);

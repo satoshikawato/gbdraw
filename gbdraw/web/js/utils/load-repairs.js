@@ -156,7 +156,8 @@ const WORDING = {
   'depth-series-dropped': (repairs) => repairs.map(({ path, label }) => (
     `Depth: the series "${label ?? ''}" (${path}) has no Depth file; its settings were dropped.`)),
   'depth-row-disabled': (repairs) => repairs.map(({ path, label }) => (
-    `Track stack: the Depth row "${label ?? ''}" (${path}) shows a Depth series that has no Depth file; it was turned off.`)),
+    `Track stack: the Depth row "${label ?? ''}" (${path}) shows a Depth series that has no Depth file; the row is turned off`
+    + ' and no longer names that series.')),
   'legend-position-defaulted': (repairs) => valueLines(repairs, ({ path, stored, used }) => (
     `Legend: the position "${stored}" (${path}) is not one of its mode's positions; `
     + `${used === undefined ? 'it is not used' : `${used} is used`}.`)),

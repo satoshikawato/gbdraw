@@ -535,12 +535,12 @@ const withoutStoredLayoutPreferences = () => {
   legacyLayoutFields.forEach((field) => delete payload.ui[field]);
   return payload;
 };
-const importPayload = async (payload) => importSession({
+const importPayload = async (payload, options = {}) => importSession({
   target: {
     files: [new Blob([JSON.stringify(payload)], { type: 'application/json' })],
     value: 'selected'
   }
-});
+}, options);
 
 // A Session 46 slice that kept the diagram font as a preserved override
 // (PD-OI-009, before the Font setting) loads it into the setting, so no
@@ -836,12 +836,21 @@ const expectedActiveIntent = {
   }
 };
 
-const activeIntentImport = await importPayload(activeIntentSession);
+// The draft's off Depth row names series 99, which has no Depth file: Load
+// lists that it unbinds the row (B45) and installs the rest as saved.
+const activeIntentDialogs = [];
+const activeIntentImport = await importPayload(activeIntentSession, {
+  confirmLoadRepairs: async ({ items }) => { activeIntentDialogs.push(items); return true; }
+});
 assert.equal(
   activeIntentImport.status,
   'ok',
   activeIntentImport.error?.message || 'active-intent session import failed'
 );
+assert.deepEqual(activeIntentDialogs, [[
+  'Track stack: the Depth row "disabled-draft" (modes.circular.config.adv.circular_track_slots) shows a Depth series that'
+    + ' has no Depth file; the row is turned off and no longer names that series.'
+]]);
 const afterSessionLoadIntent = compactActiveIntentSnapshot();
 const immediatelyBeforeGenerateIntent = compactActiveIntentSnapshot();
 const activeFiles = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
