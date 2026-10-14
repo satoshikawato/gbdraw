@@ -148,9 +148,14 @@ def _rows_left(value: object, shape: dict[str, Any], owner: str, field: str) -> 
     return {(owner, field)} if shape_violations(value, shape, ADMISSION_TYPES, "") else set()
 
 
+def _holds_nothing(value: object) -> bool:
+    return value is None or value == [] or value == {}
+
+
 def test_every_row_of_the_admission_description_has_a_vector() -> None:
-    """PLAN 9.3: each check the description makes is one both runtimes refuse
-    in at least one vector (K13: none refuses a file the Web loads)."""
+    """PLAN 9.3: each check the description makes is one Python refuses and
+    the Web refuses or repairs in at least one vector (K13: none refuses a
+    file the Web loads unchanged)."""
 
     left: dict[Row, list[str]] = {}
     for vector in VECTORS:
@@ -159,8 +164,14 @@ def test_every_row_of_the_admission_description_has_a_vector() -> None:
         root = BAND_ROOT.get(version) if isinstance(version, int) else None
         root = root or BAND_ROOT[_base(vector["base"])["version"]]
         for row in _rows_left(document, {"kind": "ref", "name": root}, root, ""):
+            assert vector["python"] == "refuse", (row, vector["id"])
+            if vector["web"] == "loaded":
+                # Rule 1 (E-OD06): a value that holds nothing at an optional field is dropped with no row.
+                assert row[1] in ADMISSION_TYPES[row[0]]["optional"] and all(
+                    edit["op"] == "set" and _holds_nothing(edit["value"]) for edit in vector["edits"]
+                ), (row, vector["id"])
+                continue
             left.setdefault(row, []).append(vector["id"])
-            assert vector["python"] == "refuse" and vector["web"] == "refused", (row, vector["id"])
     rows = _description_rows()
     assert set(left) <= rows
     assert {row for row in rows - set(left) if row[0] not in ROWS_WITHOUT_A_VECTOR} == set()

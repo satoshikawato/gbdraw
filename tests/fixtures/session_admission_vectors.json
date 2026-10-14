@@ -13,9 +13,17 @@
   "only repairs of webOnlyRepairs ({code, path, finding}: what the Web repairs and Python",
   "does not read).",
   "A vector whose id starts with row- takes its base out of one row of",
-  "describe_session_admission(); every row has one."
+  "describe_session_admission(); every row has one that Python refuses and the Web refuses",
+  "or repairs. A vector the Web loads with no row may leave a row only with a value that",
+  "holds nothing (null, [], {}) at an optional field (rule 1, E-OD06)."
  ],
- "webOnlyRepairs": [],
+ "webOnlyRepairs": [
+  {
+   "code": "setting-entries-dropped",
+   "path": "config.recordDisplayDrafts",
+   "finding": "OV-639 (BA-D19), OV-634: a Session 40 display draft whose selector is not text; Python checks drafts from Session 41"
+  }
+ ],
  "bases": {
   "settings-only-46": {
    "document": {
@@ -1158,10 +1166,9 @@
     }
    ],
    "python": "refuse",
-   "note": "The whole Load refused it before this fixture (the admission validator alone did not).",
+   "note": "The whole Load refused it before this fixture (the admission validator alone did not). The Web reads a repeat as one key, with no row (lossless).",
    "pythonMessage": "recordsOff must list distinct record keys of its mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov593-circular-records-off-malformed",
@@ -1177,10 +1184,9 @@
     }
    ],
    "python": "refuse",
-   "note": "A Circular key is a source selector #N.",
+   "note": "A Circular key is a source selector #N. It turned no record off: the Web drops it with no row (receipt: a value that had no effect).",
    "pythonMessage": "recordsOff must list distinct record keys of its mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov593-circular-records-off-zero",
@@ -1196,10 +1202,9 @@
     }
    ],
    "python": "refuse",
-   "note": "#0 is no selector.",
+   "note": "#0 is no selector. It turned no record off: the Web drops it with no row (receipt: a value that had no effect).",
    "pythonMessage": "recordsOff must list distinct record keys of its mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov593-circular-records-off-padded",
@@ -1217,8 +1222,10 @@
    "python": "refuse",
    "note": "A key is stored trimmed.",
    "pythonMessage": "recordsOff must list distinct record keys of its mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordsOff"
+   ]
   },
   {
    "id": "ov593-circular-records-off-number",
@@ -1236,8 +1243,10 @@
    "python": "refuse",
    "note": "A key is a string.",
    "pythonMessage": "recordsOff must list distinct record keys of its mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordsOff"
+   ]
   },
   {
    "id": "ov593-circular-records-off-string",
@@ -1253,8 +1262,10 @@
    "python": "refuse",
    "note": "recordsOff is a list.",
    "pythonMessage": "recordsOff must list distinct record keys of its mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.recordsOff"
+   ]
   },
   {
    "id": "ov593-circular-records-off",
@@ -1288,10 +1299,9 @@
     }
    ],
    "python": "refuse",
-   "note": "A Linear key is a bound record card uid.",
+   "note": "A Linear key is a bound record card uid. The Web drops an unbound uid with no row (it turned nothing off; E1a D10).",
    "pythonMessage": "recordsOff must list distinct record keys of its mode",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "loaded"
   },
   {
    "id": "ov593-linear-records-off",
@@ -1361,8 +1371,10 @@
    "python": "refuse",
    "note": "The selector is a string.",
    "pythonMessage": "require a source UID and exact selector",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov575-linear-display-draft-selector-array",
@@ -1390,8 +1402,10 @@
    "python": "refuse",
    "note": "The same rule in the Linear slice.",
    "pythonMessage": "require a source UID and exact selector",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@modes.linear.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov575-display-draft-selector-number",
@@ -1417,8 +1431,10 @@
    "python": "refuse",
    "note": "A number is no selector.",
    "pythonMessage": "require a source UID and exact selector",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov575-session-44-display-draft",
@@ -1473,8 +1489,10 @@
    "python": "refuse",
    "note": "The same rule in the flat draft of a Session 41-44.",
    "pythonMessage": "require a source UID and exact selector",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov575-session-40-display-draft",
@@ -1527,8 +1545,11 @@
     }
    ],
    "python": "accept",
-   "web": "loaded",
-   "note": "Python checks display drafts from Session 41; a Session 40 keeps the verdict it had."
+   "web": "repaired",
+   "note": "Python checks display drafts from Session 41. The Web drops the row with an array selector (BA-D19), listed.",
+   "webRepairs": [
+    "setting-entries-dropped@config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov634-session-40-display-draft-selector-number",
@@ -1553,10 +1574,11 @@
     }
    ],
    "python": "accept",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "A number as the selector of a Session 40 row.",
-   "difference": "Python does not check a Session 40 display draft; the Web matches its selector against #N, which a number fails. Unchanged by OV-575. Open (OV-634)."
+   "web": "repaired",
+   "note": "A number as the selector of a Session 40 row: the Web drops the row, listed (BA-D25 c); Python does not check a Session 40 draft.",
+   "webRepairs": [
+    "setting-entries-dropped@config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov611-display-draft-selector-unicode-digit",
@@ -1581,9 +1603,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Record display drafts require a source UID and exact selector.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "A selector with a digit outside 0-9: both read #N with the digits 0-9 only (BA-D18)."
+   "web": "repaired",
+   "note": "A selector with a digit outside 0-9: both read #N with the digits 0-9 only (BA-D18).",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov636-resources-null",
@@ -1599,8 +1623,10 @@
    "python": "refuse",
    "note": "resources is null while a Web file binding names a resource.",
    "pythonMessage": "requires a canonical resources object",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "request-dropped@renderRequest"
+   ]
   },
   {
    "id": "ov636-resources-array",
@@ -1616,8 +1642,10 @@
    "python": "refuse",
    "note": "The same for a resources that is no object.",
    "pythonMessage": "requires a canonical resources object",
-   "web": "refused",
-   "webClass": "interim"
+   "web": "repaired",
+   "webRepairs": [
+    "request-dropped@renderRequest"
+   ]
   },
   {
    "id": "ov566-linear-row-null",
@@ -1687,9 +1715,9 @@
    ],
    "python": "accept",
    "web": "refused",
-   "webClass": "interim",
    "note": "An unknown top-level key in a Session 31-39.",
-   "difference": "Python checks the top-level keys from Session 40, the Web from Session 31. Expected today; the Owner decides (B6)."
+   "difference": "Python checks the top-level keys from Session 40, the Web from Session 31. Expected today; the Owner decides (B6).",
+   "webClass": "interim"
   },
   {
    "id": "ov594-circular-input-type-fasta",
@@ -1704,9 +1732,9 @@
    ],
    "python": "accept",
    "web": "refused",
-   "webClass": "interim",
    "note": "ui.cInputType outside gb and gff.",
-   "difference": "Python does not read ui.cInputType; the Web requires gb or gff from Session 40. Expected today; the Owner decides (B6)."
+   "difference": "Python does not read ui.cInputType; the Web requires gb or gff from Session 40. Expected today; the Owner decides (B6).",
+   "webClass": "interim"
   },
   {
    "id": "ov594-linear-input-type-fasta",
@@ -1721,9 +1749,9 @@
    ],
    "python": "accept",
    "web": "refused",
-   "webClass": "interim",
    "note": "ui.lInputType outside gb and gff.",
-   "difference": "Python does not read ui.lInputType; the Web requires gb or gff from Session 40. Expected today; the Owner decides (B6)."
+   "difference": "Python does not read ui.lInputType; the Web requires gb or gff from Session 40. Expected today; the Owner decides (B6).",
+   "webClass": "interim"
   },
   {
    "id": "c4-losat-cache-entry",
@@ -1804,8 +1832,8 @@
    "python": "refuse",
    "pythonMessage": "requires an active Web configuration and mode",
    "web": "refused",
-   "webClass": "interim",
-   "note": "A settings-only Session 41-44 whose ui is not an object names no mode; Python raised AttributeError before OV-780."
+   "note": "A settings-only Session 41-44 whose ui is not an object names no mode; Python raised AttributeError before OV-780.",
+   "webClass": "interim"
   },
   {
    "id": "ov780-settings-only-42-ui-array",
@@ -1821,8 +1849,8 @@
    "python": "refuse",
    "pythonMessage": "requires an active Web configuration and mode",
    "web": "refused",
-   "webClass": "interim",
-   "note": "A settings-only Session 41-44 whose ui is not an object names no mode; Python raised AttributeError before OV-780."
+   "note": "A settings-only Session 41-44 whose ui is not an object names no mode; Python raised AttributeError before OV-780.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedfeatureoverridedraftrow-unknown-key",
@@ -1851,9 +1879,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid feature override draft fields.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedFeatureOverrideDraftRow.*."
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.*.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
   },
   {
    "id": "row-checkedfeatureoverridedraftrow-biologicalfeatureid",
@@ -1882,9 +1912,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "biological_feature_id must be a non-empty identity without NUL.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedFeatureOverrideDraftRow.biologicalFeatureId."
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.biologicalFeatureId.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
   },
   {
    "id": "row-checkedfeatureoverridedraftrow-featurevisibility",
@@ -1912,9 +1944,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid feature override draft fields.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedFeatureOverrideDraftRow.featureVisibility."
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.featureVisibility.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
   },
   {
    "id": "row-checkedfeatureoverridedraftrow-labelsourcetext",
@@ -1943,9 +1977,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Feature override labelSourceText must be text or null.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedFeatureOverrideDraftRow.labelSourceText."
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.labelSourceText.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
   },
   {
    "id": "row-checkedfeatureoverridedraftrow-labeltext",
@@ -1973,9 +2009,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid feature override draft fields.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedFeatureOverrideDraftRow.labelText."
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.labelText.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
   },
   {
    "id": "row-checkedfeatureoverridedraftrow-labelvisibility",
@@ -2003,9 +2041,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid feature override draft fields.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedFeatureOverrideDraftRow.labelVisibility."
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.labelVisibility.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
   },
   {
    "id": "row-checkedfeatureoverridedraftrow-recordkey",
@@ -2034,9 +2074,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "record_key must be a non-empty identity without NUL.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedFeatureOverrideDraftRow.recordKey."
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.recordKey.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
   },
   {
    "id": "row-checkedlosatcacheentry-kind",
@@ -2052,8 +2094,8 @@
    "python": "refuse",
    "pythonMessage": "Invalid current LOSAT cache entry at losatCache.entries[0].",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedLosatCacheEntry.kind."
+   "note": "Admission row CheckedLosatCacheEntry.kind.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedlosatcacheentry-text",
@@ -2069,8 +2111,8 @@
    "python": "refuse",
    "pythonMessage": "Invalid current LOSAT cache entry at losatCache.entries[0].",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedLosatCacheEntry.text."
+   "note": "Admission row CheckedLosatCacheEntry.text.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedlosatderivedcacheentry-key",
@@ -2086,8 +2128,8 @@
    "python": "refuse",
    "pythonMessage": "Invalid current derived LOSATP cache entry at losatDerivedCache.entries[0].",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedLosatDerivedCacheEntry.key."
+   "note": "Admission row CheckedLosatDerivedCacheEntry.key.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedlosatderivedcacheentry-kind",
@@ -2103,8 +2145,8 @@
    "python": "refuse",
    "pythonMessage": "Invalid current derived LOSATP cache entry at losatDerivedCache.entries[0].",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedLosatDerivedCacheEntry.kind."
+   "note": "Admission row CheckedLosatDerivedCacheEntry.kind.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedlosatderivedcacheentry-payload",
@@ -2120,8 +2162,8 @@
    "python": "refuse",
    "pythonMessage": "Invalid current derived LOSATP cache entry at losatDerivedCache.entries[0].",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedLosatDerivedCacheEntry.payload."
+   "note": "Admission row CheckedLosatDerivedCacheEntry.payload.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedrecordanchorintent-unknown-key",
@@ -2159,9 +2201,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display anchor intent.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordAnchorIntent.*."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.*.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecordanchorintent-anchor",
@@ -2199,9 +2243,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display anchor intent.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordAnchorIntent.anchor."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.anchor.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecordanchorintent-biologicalfeatureid",
@@ -2239,9 +2285,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display anchor intent.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordAnchorIntent.biologicalFeatureId."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.biologicalFeatureId.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecordanchorintent-offsetbp",
@@ -2279,9 +2327,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display anchor intent.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordAnchorIntent.offsetBp."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.offsetBp.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecordanchorintent-orientforward",
@@ -2319,9 +2369,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display anchor intent.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordAnchorIntent.orientForward."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.orientForward.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecordanchorintent-placement",
@@ -2359,9 +2411,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display anchor intent.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordAnchorIntent.placement."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.placement.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecordanchorintent-recordkey",
@@ -2399,9 +2453,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display anchor intent.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordAnchorIntent.recordKey."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.recordKey.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecordanchorintent-schema",
@@ -2439,9 +2495,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display anchor intent.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordAnchorIntent.schema."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.schema.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecorddisplaydraft-unknown-key",
@@ -2479,9 +2537,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display draft fields.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordDisplayDraft.*."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.*.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecorddisplaydraft-anchorintent",
@@ -2519,9 +2579,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display anchor intent.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordDisplayDraft.anchorIntent."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.anchorIntent.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecorddisplaydraft-recordid",
@@ -2559,9 +2621,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Record display drafts require a source UID and exact selector.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordDisplayDraft.recordId."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.recordId.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecorddisplaydraft-reversecomplementoverride",
@@ -2599,9 +2663,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Record display reverse override must be a boolean or null.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordDisplayDraft.reverseComplementOverride."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.reverseComplementOverride.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecorddisplaydraft-sourceuid",
@@ -2639,9 +2705,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Record display drafts require a source UID and exact selector.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordDisplayDraft.sourceUid."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.sourceUid.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecorddisplaydraft-startcoordinate",
@@ -2678,9 +2746,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display draft fields.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordDisplayDraft.startCoordinate."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.startCoordinate.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedrecorddisplaydraft-topologyoverride",
@@ -2717,9 +2787,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Invalid record display draft fields.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedRecordDisplayDraft.topologyOverride."
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.topologyOverride.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "row-checkedsessioneditorstate-featurecatalog",
@@ -2734,8 +2806,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 40 requires editorState.featureCatalog.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionEditorState.featureCatalog."
+   "note": "Admission row CheckedSessionEditorState.featureCatalog.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodeslice-unknown-key",
@@ -2751,8 +2823,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular cannot contain keyNoWriterWrites.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSlice.*."
+   "note": "Admission row CheckedSessionModeSlice.*.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodeslice-config",
@@ -2768,8 +2840,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSlice.config."
+   "note": "Admission row CheckedSessionModeSlice.config.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodeslice-editorstate",
@@ -2785,8 +2857,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSlice.editorState."
+   "note": "Admission row CheckedSessionModeSlice.editorState.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodeslice-features",
@@ -2802,8 +2874,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.features must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSlice.features."
+   "note": "Admission row CheckedSessionModeSlice.features.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodeslice-ui",
@@ -2819,8 +2891,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.ui must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSlice.ui."
+   "note": "Admission row CheckedSessionModeSlice.ui.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodesliceconfig-unknown-key",
@@ -2835,9 +2907,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config cannot contain keyNoWriterWrites.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceConfig.*."
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.*.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodesliceconfig-adv",
@@ -2853,12 +2927,31 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config.adv must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceConfig.adv."
+   "note": "Admission row CheckedSessionModeSliceConfig.adv.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodesliceconfig-featureplacementoverrides",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/featurePlacementOverrides",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "config.featurePlacementOverrides must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.featurePlacementOverrides.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.featurePlacementOverrides"
+   ]
+  },
+  {
+   "id": "null-modes-circular-config-featureplacementoverrides",
+   "finding": "E-OD06",
    "base": "settings-only-46",
    "edits": [
     {
@@ -2869,9 +2962,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "config.featurePlacementOverrides must be an object.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceConfig.featurePlacementOverrides."
+   "web": "loaded",
+   "note": "A null holds nothing: the Web drops it with no row (rule 1, E-OD06); Python refuses it (CheckedSessionModeSliceConfig.featurePlacementOverrides)."
   },
   {
    "id": "row-checkedsessionmodesliceconfig-form",
@@ -2887,12 +2979,31 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config.form must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceConfig.form."
+   "note": "Admission row CheckedSessionModeSliceConfig.form.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodesliceconfig-losat",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/losat",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.losat must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.losat.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.losat"
+   ]
+  },
+  {
+   "id": "null-modes-circular-config-losat",
+   "finding": "E-OD06",
    "base": "settings-only-46",
    "edits": [
     {
@@ -2903,13 +3014,31 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config.losat must be an object.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceConfig.losat."
+   "web": "loaded",
+   "note": "A null holds nothing: the Web drops it with no row (rule 1, E-OD06); Python refuses it (CheckedSessionModeSliceConfig.losat)."
   },
   {
    "id": "row-checkedsessionmodesliceconfig-recorddisplaydrafts",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "config.recordDisplayDrafts must be an array.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.recordDisplayDrafts.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "null-modes-circular-config-recorddisplaydrafts",
+   "finding": "E-OD06",
    "base": "settings-only-46",
    "edits": [
     {
@@ -2920,9 +3049,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "config.recordDisplayDrafts must be an array.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceConfig.recordDisplayDrafts."
+   "web": "loaded",
+   "note": "A null holds nothing: the Web drops it with no row (rule 1, E-OD06); Python refuses it (CheckedSessionModeSliceConfig.recordDisplayDrafts)."
   },
   {
    "id": "row-checkedsessionmodesliceconfigadv-unknown-key",
@@ -2937,13 +3065,34 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config.adv cannot contain keyNoWriterWrites.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceConfigAdv.*."
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfigAdv.*.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.adv.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodesliceconfigadv-feature-overlap-tolerance-bp",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/adv/feature_overlap_tolerance_bp",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Feature overlap tolerance must be a non-negative integer.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfigAdv.feature_overlap_tolerance_bp.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.adv.feature_overlap_tolerance_bp"
+   ]
+  },
+  {
+   "id": "null-modes-circular-config-adv-feature-overlap-tolerance-bp",
+   "finding": "E-OD06",
    "base": "settings-only-46",
    "edits": [
     {
@@ -2954,9 +3103,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "Feature overlap tolerance must be a non-negative integer.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceConfigAdv.feature_overlap_tolerance_bp."
+   "web": "loaded",
+   "note": "A null holds nothing: the Web drops it with no row (rule 1, E-OD06); Python refuses it (CheckedSessionModeSliceConfigAdv.feature_overlap_tolerance_bp)."
   },
   {
    "id": "row-checkedsessionmodesliceconfigform-unknown-key",
@@ -2971,9 +3119,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config.form cannot contain keyNoWriterWrites.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceConfigForm.*."
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfigForm.*.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.form.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodesliceconfiglosat-unknown-key",
@@ -2988,9 +3138,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Session modes.circular.config.losat cannot contain keyNoWriterWrites.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceConfigLosat.*."
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfigLosat.*.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.losat.keyNoWriterWrites"
+   ]
   },
   {
    "id": "row-checkedsessionmodesliceeditorstate-unknown-key",
@@ -3006,8 +3158,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState cannot contain keyNoWriterWrites.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceEditorState.*."
+   "note": "Admission row CheckedSessionModeSliceEditorState.*.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodesliceeditorstate-featurestrokes",
@@ -3023,8 +3175,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState.featureStrokes must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceEditorState.featureStrokes."
+   "note": "Admission row CheckedSessionModeSliceEditorState.featureStrokes.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodesliceeditorstate-legend",
@@ -3040,8 +3192,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState.legend must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceEditorState.legend."
+   "note": "Admission row CheckedSessionModeSliceEditorState.legend.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodesliceeditorstatefeaturestrokes-unknown-key",
@@ -3057,8 +3209,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState.featureStrokes cannot contain keyNoWriterWrites.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceEditorStateFeatureStrokes.*."
+   "note": "Admission row CheckedSessionModeSliceEditorStateFeatureStrokes.*.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodesliceeditorstatelegend-unknown-key",
@@ -3074,8 +3226,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.editorState.legend cannot contain keyNoWriterWrites.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceEditorStateLegend.*."
+   "note": "Admission row CheckedSessionModeSliceEditorStateLegend.*.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodeslicefeatures-unknown-key",
@@ -3091,12 +3243,31 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.features cannot contain keyNoWriterWrites.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceFeatures.*."
+   "note": "Admission row CheckedSessionModeSliceFeatures.*.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodeslicefeatures-featureoverrides",
    "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "features.featureOverrides must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceFeatures.featureOverrides.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.features.featureOverrides"
+   ]
+  },
+  {
+   "id": "null-modes-circular-features-featureoverrides",
+   "finding": "E-OD06",
    "base": "settings-only-46",
    "edits": [
     {
@@ -3107,9 +3278,8 @@
    ],
    "python": "refuse",
    "pythonMessage": "features.featureOverrides must be an object.",
-   "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceFeatures.featureOverrides."
+   "web": "loaded",
+   "note": "A null holds nothing: the Web drops it with no row (rule 1, E-OD06); Python refuses it (CheckedSessionModeSliceFeatures.featureOverrides)."
   },
   {
    "id": "row-checkedsessionmodesliceui-unknown-key",
@@ -3125,8 +3295,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular.ui cannot contain keyNoWriterWrites.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModeSliceUi.*."
+   "note": "Admission row CheckedSessionModeSliceUi.*.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodes-unknown-key",
@@ -3142,8 +3312,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes holds a circular and a linear slice only.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModes.*."
+   "note": "Admission row CheckedSessionModes.*.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodes-circular",
@@ -3159,8 +3329,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.circular must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModes.circular."
+   "note": "Admission row CheckedSessionModes.circular.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionmodes-linear",
@@ -3176,8 +3346,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes.linear must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionModes.linear."
+   "note": "Admission row CheckedSessionModes.linear.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionresult-content",
@@ -3193,8 +3363,8 @@
    "python": "refuse",
    "pythonMessage": "Each current Session Result must be a named plain SVG.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionResult.content."
+   "note": "Admission row CheckedSessionResult.content.",
+   "webClass": "interim"
   },
   {
    "id": "row-checkedsessionresult-name",
@@ -3210,8 +3380,8 @@
    "python": "refuse",
    "pythonMessage": "Each current Session Result must be a named plain SVG.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row CheckedSessionResult.name."
+   "note": "Admission row CheckedSessionResult.name.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked27-format",
@@ -3227,8 +3397,8 @@
    "python": "refuse",
    "pythonMessage": "Not a gbdraw-session JSON file.",
    "web": "refused",
-   "webClass": "R2",
-   "note": "Admission row SessionChecked27.format."
+   "note": "Admission row SessionChecked27.format.",
+   "webClass": "R2"
   },
   {
    "id": "row-sessionchecked27-othermoderesult",
@@ -3244,8 +3414,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 30 cannot contain otherModeResult.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked27.otherModeResult."
+   "note": "Admission row SessionChecked27.otherModeResult.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked27-version",
@@ -3261,8 +3431,8 @@
    "python": "refuse",
    "pythonMessage": "Session version is required and must be an integer.",
    "web": "refused",
-   "webClass": "R2",
-   "note": "Admission row SessionChecked27.version."
+   "note": "Admission row SessionChecked27.version.",
+   "webClass": "R2"
   },
   {
    "id": "row-sessionchecked31-format",
@@ -3278,8 +3448,8 @@
    "python": "refuse",
    "pythonMessage": "Not a gbdraw-session JSON file.",
    "web": "refused",
-   "webClass": "R2",
-   "note": "Admission row SessionChecked31.format."
+   "note": "Admission row SessionChecked31.format.",
+   "webClass": "R2"
   },
   {
    "id": "row-sessionchecked31-othermoderesult",
@@ -3295,8 +3465,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 33 cannot contain otherModeResult.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked31.otherModeResult."
+   "note": "Admission row SessionChecked31.otherModeResult.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked31-renderrequest",
@@ -3311,8 +3481,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 33 requires a canonical renderRequest object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked31.renderRequest."
+   "note": "Admission row SessionChecked31.renderRequest.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked31-resources",
@@ -3328,8 +3498,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 33 requires a canonical resources object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked31.resources."
+   "note": "Admission row SessionChecked31.resources.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked31-version",
@@ -3345,8 +3515,8 @@
    "python": "refuse",
    "pythonMessage": "Session version is required and must be an integer.",
    "web": "refused",
-   "webClass": "R2",
-   "note": "Admission row SessionChecked31.version."
+   "note": "Admission row SessionChecked31.version.",
+   "webClass": "R2"
   },
   {
    "id": "row-sessionchecked39-format",
@@ -3362,8 +3532,8 @@
    "python": "refuse",
    "pythonMessage": "Not a gbdraw-session JSON file.",
    "web": "refused",
-   "webClass": "R2",
-   "note": "Admission row SessionChecked39.format."
+   "note": "Admission row SessionChecked39.format.",
+   "webClass": "R2"
   },
   {
    "id": "row-sessionchecked39-losatcache",
@@ -3379,8 +3549,8 @@
    "python": "refuse",
    "pythonMessage": "Session losatCache must be an object when present.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked39.losatCache."
+   "note": "Admission row SessionChecked39.losatCache.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked39-losatderivedcache",
@@ -3396,8 +3566,8 @@
    "python": "refuse",
    "pythonMessage": "Session losatDerivedCache must be an object when present.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked39.losatDerivedCache."
+   "note": "Admission row SessionChecked39.losatDerivedCache.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked39-othermoderesult",
@@ -3413,8 +3583,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 39 cannot contain otherModeResult.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked39.otherModeResult."
+   "note": "Admission row SessionChecked39.otherModeResult.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked39-proteinidentitymanifest",
@@ -3430,8 +3600,8 @@
    "python": "refuse",
    "pythonMessage": "Invalid proteinIdentityManifest schema-2 artifact.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked39.proteinIdentityManifest."
+   "note": "Admission row SessionChecked39.proteinIdentityManifest.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked39-renderrequest",
@@ -3446,8 +3616,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 39 requires a canonical renderRequest object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked39.renderRequest."
+   "note": "Admission row SessionChecked39.renderRequest.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked39-resources",
@@ -3463,8 +3633,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 39 requires a canonical resources object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked39.resources."
+   "note": "Admission row SessionChecked39.resources.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked39-version",
@@ -3480,8 +3650,8 @@
    "python": "refuse",
    "pythonMessage": "Session version is required and must be an integer.",
    "web": "refused",
-   "webClass": "R2",
-   "note": "Admission row SessionChecked39.version."
+   "note": "Admission row SessionChecked39.version.",
+   "webClass": "R2"
   },
   {
    "id": "row-sessionchecked40-unknown-key",
@@ -3497,8 +3667,8 @@
    "python": "refuse",
    "pythonMessage": "Session contains unclassified top-level field(s): keyNoWriterWrites.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked40.*."
+   "note": "Admission row SessionChecked40.*.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked40-editorstate",
@@ -3514,8 +3684,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked40.editorState."
+   "note": "Admission row SessionChecked40.editorState.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked40-features",
@@ -3531,8 +3701,8 @@
    "python": "refuse",
    "pythonMessage": "Session features must be an object when present.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked40.features."
+   "note": "Admission row SessionChecked40.features.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked40-format",
@@ -3548,8 +3718,8 @@
    "python": "refuse",
    "pythonMessage": "Not a gbdraw-session JSON file.",
    "web": "refused",
-   "webClass": "R2",
-   "note": "Admission row SessionChecked40.format."
+   "note": "Admission row SessionChecked40.format.",
+   "webClass": "R2"
   },
   {
    "id": "row-sessionchecked40-losatcache",
@@ -3565,8 +3735,8 @@
    "python": "refuse",
    "pythonMessage": "Session losatCache must be an object when present.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked40.losatCache."
+   "note": "Admission row SessionChecked40.losatCache.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked40-losatderivedcache",
@@ -3582,8 +3752,8 @@
    "python": "refuse",
    "pythonMessage": "Session losatDerivedCache must be an object when present.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked40.losatDerivedCache."
+   "note": "Admission row SessionChecked40.losatDerivedCache.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked40-orthogroupstate",
@@ -3599,8 +3769,8 @@
    "python": "refuse",
    "pythonMessage": "Session orthogroupState must be an object when present.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked40.orthogroupState."
+   "note": "Admission row SessionChecked40.orthogroupState.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked40-proteinidentitymanifest",
@@ -3616,8 +3786,8 @@
    "python": "refuse",
    "pythonMessage": "Invalid proteinIdentityManifest schema-2 artifact.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked40.proteinIdentityManifest."
+   "note": "Admission row SessionChecked40.proteinIdentityManifest.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked40-renderrequest",
@@ -3632,8 +3802,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 44 requires a canonical renderRequest object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked40.renderRequest."
+   "note": "Admission row SessionChecked40.renderRequest.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked40-results",
@@ -3649,8 +3819,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 40 requires a results array.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked40.results."
+   "note": "Admission row SessionChecked40.results.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked40-version",
@@ -3666,8 +3836,8 @@
    "python": "refuse",
    "pythonMessage": "Session version is required and must be an integer.",
    "web": "refused",
-   "webClass": "R2",
-   "note": "Admission row SessionChecked40.version."
+   "note": "Admission row SessionChecked40.version.",
+   "webClass": "R2"
   },
   {
    "id": "row-sessionchecked46-clioptions",
@@ -3683,8 +3853,8 @@
    "python": "refuse",
    "pythonMessage": "Session cliOptions must be an object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked46.cliOptions."
+   "note": "Admission row SessionChecked46.cliOptions.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked46-editorstate",
@@ -3700,8 +3870,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 40 requires editorState.featureCatalog.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked46.editorState."
+   "note": "Admission row SessionChecked46.editorState.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked46-format",
@@ -3717,8 +3887,8 @@
    "python": "refuse",
    "pythonMessage": "Not a gbdraw-session JSON file.",
    "web": "refused",
-   "webClass": "R2",
-   "note": "Admission row SessionChecked46.format."
+   "note": "Admission row SessionChecked46.format.",
+   "webClass": "R2"
   },
   {
    "id": "row-sessionchecked46-losatderivedcache",
@@ -3734,8 +3904,8 @@
    "python": "refuse",
    "pythonMessage": "Session losatDerivedCache must be an object when present.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked46.losatDerivedCache."
+   "note": "Admission row SessionChecked46.losatDerivedCache.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked46-modes",
@@ -3751,8 +3921,8 @@
    "python": "refuse",
    "pythonMessage": "Session modes holds a circular and a linear slice only.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked46.modes."
+   "note": "Admission row SessionChecked46.modes.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked46-orthogroupstate",
@@ -3768,8 +3938,8 @@
    "python": "refuse",
    "pythonMessage": "Session orthogroupState must be an object when present.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked46.orthogroupState."
+   "note": "Admission row SessionChecked46.orthogroupState.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked46-othermoderesult",
@@ -3785,8 +3955,8 @@
    "python": "refuse",
    "pythonMessage": "Session otherModeResult must contain only a committed Result set.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked46.otherModeResult."
+   "note": "Admission row SessionChecked46.otherModeResult.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked46-proteinidentitymanifest",
@@ -3802,8 +3972,8 @@
    "python": "refuse",
    "pythonMessage": "Invalid proteinIdentityManifest schema-2 artifact.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked46.proteinIdentityManifest."
+   "note": "Admission row SessionChecked46.proteinIdentityManifest.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked46-renderrequest",
@@ -3818,8 +3988,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 46 requires a canonical renderRequest object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked46.renderRequest."
+   "note": "Admission row SessionChecked46.renderRequest.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked46-resources",
@@ -3835,8 +4005,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 46 requires a canonical resources object.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked46.resources."
+   "note": "Admission row SessionChecked46.resources.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked46-results",
@@ -3852,8 +4022,8 @@
    "python": "refuse",
    "pythonMessage": "Session version 40 requires a results array.",
    "web": "refused",
-   "webClass": "interim",
-   "note": "Admission row SessionChecked46.results."
+   "note": "Admission row SessionChecked46.results.",
+   "webClass": "interim"
   },
   {
    "id": "row-sessionchecked46-version",
@@ -3869,8 +4039,8 @@
    "python": "refuse",
    "pythonMessage": "Session version is required and must be an integer.",
    "web": "refused",
-   "webClass": "R2",
-   "note": "Admission row SessionChecked46.version."
+   "note": "Admission row SessionChecked46.version.",
+   "webClass": "R2"
   }
  ]
 }
