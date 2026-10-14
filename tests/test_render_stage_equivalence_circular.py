@@ -127,7 +127,11 @@ def test_declarations_have_no_undeclared_read_or_uncacheable_stage(
 
 @pytest.mark.parametrize(
     ("case_id", "option_ids"),
-    [("C1", ("plot_title_position", "annotation_table")), ("C3", ("plot_title_position",))],
+    [
+        ("C1", ("annotation_table",)),
+        ("C1", ("plot_title_position", "annotation_table")),
+        ("C3", ("plot_title_position",)),
+    ],
 )
 def test_the_circular_catalog_item_of_the_contents_equals_the_catalog_of_the_svg(
     case_id: str,
@@ -135,10 +139,10 @@ def test_the_circular_catalog_item_of_the_contents_equals_the_catalog_of_the_svg
     placeholders: Placeholders,
     tmp_path: Path,
 ) -> None:
-    """When every top-level group is a content (no plot title here), a cache
+    """When every top-level group is a content (the plot title too), a cache
     transaction reads the Circular catalog from the contents; without one it
-    reads the SVG. Both give the same reply (annotations on C1; depth,
-    conservation and an overlay legend on C3)."""
+    reads the SVG. Both give the same reply (annotations on C1 with and
+    without its title; depth, conservation and an overlay legend on C3)."""
 
     case = CASES[case_id]
     variants = {option: variant for option, variant in matrix_variants(case, option_ids=option_ids)}

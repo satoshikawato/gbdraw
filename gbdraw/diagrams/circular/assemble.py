@@ -122,7 +122,7 @@ from ...annotations import (
 )
 from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.circular.annotations import circular_annotation_track_content
-from ...render.group_content import GroupKey, GroupKind, place_content
+from ...render.group_content import CANVAS_SCOPE, GroupContent, GroupKey, GroupKind, place_content
 from ...layout.linear_multi_record import record_key_at
 from ...render.composition import apply_composition_plan
 from ...svg.ids import track_slot_svg_id
@@ -2806,8 +2806,7 @@ def add_record_on_circular_canvas(
 def _compose_circular_plot(
     plot: _CircularPlotAssembly,
     *,
-    title_target: Group | None = None,
-    title_bounds: Aabb | None = None,
+    title_content: GroupContent | None = None,
     title_placement: TitlePlacement | str = TitlePlacement.NONE,
 ) -> CircularAssemblyResult:
     """Compose one fully measured Circular plot exactly once."""
@@ -2816,13 +2815,18 @@ def _compose_circular_plot(
         if isinstance(title_placement, TitlePlacement)
         else TitlePlacement(str(title_placement))
     )
-    if (title_target is None) != (title_bounds is None):
-        raise ValueError("title_target and title_bounds must either both exist or be absent")
-    if title_target is None and resolved_title_placement is not TitlePlacement.NONE:
-        raise ValueError("title placement requires a title target and bounds")
-    if title_target is not None and resolved_title_placement is TitlePlacement.NONE:
-        raise ValueError("title target requires a non-none title placement")
-    if title_target is not None and title_target not in getattr(plot.drawing, "elements", []):
+    title_bounds = title_content.local_bounds if title_content is not None else None
+    if title_content is not None and title_bounds is None:
+        raise ValueError("a title content needs its local bounds")
+    if title_content is None and resolved_title_placement is not TitlePlacement.NONE:
+        raise ValueError("title placement requires a title content")
+    if title_content is not None and resolved_title_placement is TitlePlacement.NONE:
+        raise ValueError("title content requires a non-none title placement")
+    title_target: Group | None = None
+    if title_content is not None:
+        title_target = place_content(
+            plot.drawing, title_content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE)
+        )
         plot.drawing.add(title_target)
 
     legend_placement = LegendPlacement(str(plot.canvas_config.legend_position))
@@ -3038,8 +3042,7 @@ def _assemble_circular_diagram_result(
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
     annotation_record_index: int = 0,
     definition_record_count: int = 1,
-    title_target: Group | None = None,
-    title_bounds: Aabb | None = None,
+    title_content: GroupContent | None = None,
     title_placement: TitlePlacement | str = TitlePlacement.NONE,
     record_transform: RecordDisplayTransform | None = None,
     record_presentation: RecordPresentation | None = None,
@@ -3151,8 +3154,7 @@ def _assemble_circular_diagram_result(
     )
     return _compose_circular_plot(
         plot,
-        title_target=title_target,
-        title_bounds=title_bounds,
+        title_content=title_content,
         title_placement=title_placement,
     )
 

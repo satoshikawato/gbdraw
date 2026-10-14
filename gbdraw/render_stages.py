@@ -115,7 +115,8 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "legend_table": frozenset(),
     "legend_measurement": frozenset(),
     "legend_content": frozenset(),
-    "plot_title_content": frozenset(),
+    # Circular: the title is a shared-common definition (its font, interval and the dpi).
+    "plot_title_content": frozenset({"canvas", "objects.definition", "objects.text"}),
     "composition_plan": frozenset(),
     "gc_content_content": _CIRCULAR_TRACK_SECTIONS,
     "gc_skew_content": _CIRCULAR_TRACK_SECTIONS,

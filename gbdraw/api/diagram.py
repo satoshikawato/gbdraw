@@ -211,8 +211,16 @@ from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
 )
-from gbdraw.render.group_content import CANVAS_SCOPE, GroupContent, GroupKey, GroupKind, place_content
+from gbdraw.render.group_content import (
+    CANVAS_SCOPE,
+    GroupContent,
+    GroupKey,
+    GroupKind,
+    build_group_content,
+    place_content,
+)
 from gbdraw.render.groups.circular import DefinitionGroup
+from gbdraw.render.groups.circular.definition import definition_record_facts
 from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
@@ -1229,7 +1237,7 @@ def _apply_circular_plot_title_font_size_override(
     )
 
 
-def _build_circular_plot_title_group(
+def _circular_plot_title_content(
     *,
     gb_record: SeqRecord,
     output_prefix: str,
@@ -1239,25 +1247,29 @@ def _build_circular_plot_title_group(
     strain: str | None,
     plot_title: str | None,
     record_presentation: RecordPresentation | None,
-) -> tuple[Group, Aabb]:
+) -> GroupContent:
+    """The plot title content, keyed by the record's facts (not the record) and the title geometry."""
+
     plot_title_canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix,
         profile=profile,
         legend="none",
         gb_record=gb_record,
     )
-    definition = DefinitionGroup(
-        gb_record=gb_record,
-        geometry=plot_title_canvas_config.geometry(),
+    return render_stage(
+        "plot_title_content",
+        build_group_content,
+        DefinitionGroup,
+        definition_record_facts(gb_record, gc_percent=False),
+        plot_title_canvas_config.geometry(),
+        cfg=cfg,
         species=species,
         strain=strain,
         plot_title=plot_title,
         definition_profile="shared_common",
         definition_group_id="plot_title",
-        cfg=cfg,
         record_presentation=record_presentation,
     )
-    return definition.get_group(), definition.local_bounds
 
 
 def _validate_multi_record_min_radius_ratio(value: float) -> float:
@@ -2672,11 +2684,10 @@ def assemble_circular_diagram_from_record(
         canvas_config=canvas_config,
     )
 
-    title_target: Group | None = None
-    title_bounds: Aabb | None = None
+    title_content: GroupContent | None = None
     title_placement = TitlePlacement.NONE
     if show_plot_title:
-        title_target, title_bounds = _build_circular_plot_title_group(
+        title_content = _circular_plot_title_content(
             gb_record=gb_record,
             output_prefix=output_prefix,
             cfg=cfg,
@@ -2721,8 +2732,7 @@ def assemble_circular_diagram_from_record(
         definition_profile=effective_definition_profile,
         definition_group_id=_definition_group_id,
         center_reserved_radius=center_reserved_radius,
-        title_target=title_target,
-        title_bounds=title_bounds,
+        title_content=title_content,
         title_placement=title_placement,
     )
     _attach_circular_label_layouts(result.drawing, [result.label_layout])
@@ -3160,11 +3170,10 @@ def assemble_circular_diagram_from_records(
     legend_target: Group | None = None
     legend_content: GroupContent | None = None
     legend_bounds: Aabb | None = None
-    plot_title_group: Group | None = None
-    plot_title_bounds: Aabb | None = None
+    plot_title_content: GroupContent | None = None
 
     if show_plot_title:
-        plot_title_group, plot_title_bounds = _build_circular_plot_title_group(
+        plot_title_content = _circular_plot_title_content(
             gb_record=records[0],
             output_prefix=output_prefix,
             cfg=cfg,
@@ -3338,7 +3347,13 @@ def assemble_circular_diagram_from_records(
             for obstacle in result.overlay_obstacles
         )
 
-    if plot_title_group is not None:
+    plot_title_group: Group | None = None
+    plot_title_bounds: Aabb | None = None
+    if plot_title_content is not None:
+        plot_title_group = place_content(
+            merged_canvas, plot_title_content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE)
+        )
+        plot_title_bounds = plot_title_content.local_bounds
         merged_canvas.add(plot_title_group)
     if legend_content is not None:
         legend_target = place_content(

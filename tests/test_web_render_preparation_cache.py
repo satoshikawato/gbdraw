@@ -256,7 +256,8 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
         assert metrics["resolvedRecordCacheHitCount"] == 1
         assert metrics["resolvedRecordBuildCount"] == 0
         # Every counter of these stages, so a build would show as a second key.
-        for stage in ("interactive_context", "catalog_normalization"):
+        # The catalog item is a hit, so the normalization it reads is not asked for.
+        for stage in ("interactive_context", "catalog_item"):
             assert {
                 name: count for name, count in metrics.items() if name.endswith(f":{stage}")
             } == {f"renderStageHit:{stage}": 1}
@@ -267,14 +268,19 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
     assert warm["results"] == cold["results"]
     assert warm["metadata"] == cold["metadata"]
     assert render_only["results"] != cold["results"]
-    # Circular groups have no contents until PR 4, so the catalog reads the
-    # SVG on every Generate and has no catalog item stage.
+    # Every top-level Circular group is a content (the plot title too), so the
+    # catalog item is reused and no Generate after the first reads the SVG.
+    assert _metrics(cold_diagnostics)["featureCatalogSvgParseCount"] == 1
     for diagnostics in (warm_diagnostics, render_only_diagnostics):
         metrics = _metrics(diagnostics)
-        assert metrics["featureCatalogSvgParseCount"] == 1
-        assert not [name for name in metrics if name.endswith(":catalog_item")]
-    assert float(render_only_diagnostics["timingsMs"]["drawing"]) > 0
-    assert float(render_only_diagnostics["timingsMs"]["svgWrite"]) > 0
+        assert metrics.get("featureCatalogSvgParseCount", 0) == 0
+        assert metrics.get("featureCatalogFullDomTraversalCount", 0) == 0
+    assert not [name for name in _metrics(warm_diagnostics) if name.startswith("renderStageBuild:")]
+    # A title change builds its own content and the composition plan, nothing else.
+    assert {
+        name for name in _metrics(render_only_diagnostics) if name.startswith("renderStageBuild:")
+    } == {"renderStageBuild:plot_title_content", "renderStageBuild:composition_plan"}
+    assert render_only["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
 
 
 def _linear_document(source: Path, *, title: str) -> dict[str, object]:
