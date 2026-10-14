@@ -613,6 +613,16 @@ def test_every_described_field_is_held_by_a_request_or_named_by_the_decoder(
     assert {name for name in described - held if "DiagramOptions." not in name} == set()
 
 
+# Defaults that a rule across records or the grouping can refuse: one record's
+# grid cell (every Circular record has one, or none) and a batch's output (one
+# per record).
+_DEFAULTS_DECIDED_BY_OTHER_PARTS = frozenset({
+    "CanonicalRecordPresentation.gridColumn",
+    "CanonicalRecordPresentation.gridRow",
+    "CanonicalCircularRenderRequest.output",
+})
+
+
 def test_a_described_default_decodes_as_the_absent_field(
     encoded_requests: dict[str, list[Encoded]], tmp_path: Path
 ) -> None:
@@ -627,7 +637,12 @@ def test_a_described_default_decodes_as_the_absent_field(
             for path, shape in _objects(payload, ROOT):
                 for key, default in shape.get("defaults", {}).items():
                     label = f"{LABELS[id(shape)]}.{key}"
-                    if label in exercised:
+                    # A required field's default is a value it takes in every
+                    # request (OV-777), except where another record or the
+                    # grouping decides it (_DEFAULTS_DECIDED_BY_OTHER_PARTS).
+                    if label in exercised and (
+                        key in shape["optional"] or label in _DEFAULTS_DECIDED_BY_OTHER_PARTS
+                    ):
                         continue
                     absent = deepcopy(payload)
                     target: Any = absent

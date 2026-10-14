@@ -5318,6 +5318,32 @@ def describe_canonical_request() -> dict[str, Any]:
             "output": _encode_output(RenderOutputRequest()),
         })))
     named("RenderRequest", union(*requests))
+    # A required field that holds null takes null where its stored value
+    # cannot be read: the encoder writes null for an unset value (OV-777).
+    # Null is no empty form where another value decides whether it may be
+    # null: a decision's anchor and the anchor's identity
+    # (AlignmentRecordDecision.__post_init__; the plan finds its reference by
+    # the identity), a slot list an axis index names
+    # (_validate_track_configuration), and the edits of a feature override
+    # (FeatureOverride: at least one edit).
+    null_decided_elsewhere = {
+        "CanonicalAlignmentRecordDecision": {"anchor"},
+        "CanonicalAlignmentAnchorIdentity": {"sourceFeatureIndex", "stableFeatureSvgId"},
+        "CanonicalCircularTrackOptions": {"circularTrackSlots"},
+        "CanonicalLinearTrackOptions": {"linearTrackSlots"},
+        "CanonicalFeatureOverride": {"featureVisibility", "labelText", "labelVisibility"},
+    }
+    for name, shape in types_.items():
+        if shape["kind"] == "object":
+            nullable_fields = {
+                key: None
+                for key, field in shape["fields"].items()
+                if key not in shape["optional"] and key not in null_decided_elsewhere.get(name, set())
+                and field != UNKNOWN and not shape_violations(None, field, types_, key)
+            }
+            shape_defaults = {**nullable_fields, **shape.get("defaults", {})}
+            if shape_defaults:
+                shape["defaults"] = dict(sorted(shape_defaults.items()))
     # Only a default that fits its field is described.
     for shape in types_.values():
         if shape["kind"] == "object" and "defaults" in shape:

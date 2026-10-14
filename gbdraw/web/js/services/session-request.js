@@ -5978,8 +5978,9 @@ const STORED_REQUEST_ROOTS = /** @type {const} */ ({ circular: 'CanonicalCircula
 /**
  * Per mode, from the description: the places a value of the other diagram
  * type is read as this one's (a placeholder that holds only null or no item,
- * and an option of the other type that this one holds at its default), and the
- * unions picked by their `kind`.
+ * and an option of the other type that this one holds at its default), the
+ * unions picked by their `kind`, and the places that have a default (a repair
+ * puts it there in place of a value it cannot read, so each is a part).
  * @param {string} rootType
  * @param {string} otherOptionsType
  */
@@ -5989,6 +5990,8 @@ const storedRequestPlaces = (rootType, otherOptionsType) => {
   const otherType = new Map();
   /** @type {Set<string>} */
   const tagged = new Set();
+  /** @type {Set<string>} */
+  const defaulted = new Set();
   const otherOptions = /** @type {import('../utils/contract-shape.js').ObjectShape} */ (types[otherOptionsType]);
   /** @param {ContractShape} shape @returns {ContractShape} */
   const resolve = (shape) => (shape.kind === 'ref' ? resolve(types[shape.name]) : shape);
@@ -6014,20 +6017,23 @@ const storedRequestPlaces = (rootType, otherOptionsType) => {
     else if (resolved.kind === 'tuple') resolved.items.forEach((item) => walk(item, `${pattern}[*]`, depth + 1));
     else if (resolved.kind === 'record') walk(resolved.values, `${pattern}.*`, depth + 1);
     else if (resolved.kind === 'object') {
-      Object.entries(resolved.fields).forEach(([key, field]) => walk(field, pattern ? `${pattern}.${key}` : key, depth + 1));
+      Object.entries(resolved.fields).forEach(([key, field]) => {
+        const place = pattern ? `${pattern}.${key}` : key;
+        if (resolved.defaults && Object.hasOwn(resolved.defaults, key)) defaulted.add(place);
+        walk(field, place, depth + 1);
+      });
     }
   };
   walk(types[rootType], '', 0);
-  return { otherType, tagged, otherOptionKeys: new Set(Object.keys(otherOptions.fields)) };
+  return { otherType, tagged, defaulted, otherOptionKeys: new Set(Object.keys(otherOptions.fields)) };
 };
 const STORED_REQUEST_PLACES = {
   circular: storedRequestPlaces(STORED_REQUEST_ROOTS.circular, 'CanonicalLinearDiagramOptions'),
   linear: storedRequestPlaces(STORED_REQUEST_ROOTS.linear, 'CanonicalCircularDiagramOptions')
 };
-/** The places a repair drops as one part (rule 6). */
+/** The places without a default that a repair drops as one part (rule 6); a place with one is a part too. */
 const STORED_REQUEST_PARTS = new Set([
-  'diagramOptions', 'diagramOptions.tracks', 'diagramOptions.annotations', 'layout.similarityAlignment',
-  'layout.recordTranslations', 'records[*].presentation', 'records[*].display', 'output'
+  'diagramOptions.tracks', 'diagramOptions.annotations', 'layout.recordTranslations', 'records[*].presentation'
 ]);
 /** The conservation ring columns, read by index together (B16). */
 const CONSERVATION_RING_COLUMNS = ['conservationBlastFiles', 'conservationLabels', 'conservationColors', 'conservationFastaFiles']
@@ -6062,7 +6068,7 @@ const storedRequestPolicy = (request, mode, resourceIds, holdComparisons) => {
       'records', 'layout.multiRecordPositions', 'diagramOptions.depthTracks[*].source', 'layout.similarityAlignment.records',
       ...(axisIndex === null || axisIndex === undefined ? [] : [`diagramOptions.tracks.${slotKey}`])
     ],
-    partBoundary: (pattern) => STORED_REQUEST_PARTS.has(pattern),
+    partBoundary: (pattern) => STORED_REQUEST_PARTS.has(pattern) || places.defaulted.has(pattern),
     parallelArrays: mode === 'circular' ? [CONSERVATION_RING_COLUMNS] : [],
     lossless: (pattern) => (places.otherType.has(pattern) ? { value: places.otherType.get(pattern) } : null),
     discriminator: (pattern) => (pattern === '' ? 'mode' : places.tagged.has(pattern) ? 'kind' : null),

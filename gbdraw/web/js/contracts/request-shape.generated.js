@@ -90,7 +90,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({isCircular: null, startCoordinate: null})
     }),
     CanonicalRecordPresentation: Object.freeze({
       kind: "object",
@@ -132,7 +133,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         reverseComplement: Object.freeze({kind: "boolean"})
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({selector: null})
     }),
     CanonicalRecord: Object.freeze({
       kind: "object",
@@ -156,7 +158,12 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       }),
       optional: Object.freeze([]),
       open: false,
-      defaults: Object.freeze({cardinality: "exactly_one", display: Object.freeze({isCircular: null, startCoordinate: null})})
+      defaults: Object.freeze({
+        cardinality: "exactly_one",
+        display: Object.freeze({isCircular: null, startCoordinate: null}),
+        region: null,
+        selector: null
+      })
     }),
     CanonicalRequestOutput: Object.freeze({
       kind: "object",
@@ -260,6 +267,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       defaults: Object.freeze({
         multiRecordColumnGapRatio: 0.1,
         multiRecordMinRadiusRatio: 0.55,
+        multiRecordPositions: null,
         multiRecordRowGapRatio: 0.05,
         multiRecordSizeMode: "auto"
       })
@@ -286,7 +294,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       }),
       optional: Object.freeze([]),
       open: false,
-      defaults: Object.freeze({recordGapPx: 24.0, similarityAlignment: null})
+      defaults: Object.freeze({multiRecordPositions: null, recordGapPx: 24.0, similarityAlignment: null})
     }),
     CanonicalColorOptions: Object.freeze({
       kind: "object",
@@ -310,7 +318,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({colorTable: null, colorTableFile: null, defaultColors: null, defaultColorsFile: null})
     }),
     CanonicalAnnotationColor: Object.freeze({
       kind: "union",
@@ -516,7 +525,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       }),
       optional: Object.freeze([]),
       open: false,
-      defaults: Object.freeze({fill: null, labelColor: "#202020", stroke: "#404040"})
+      defaults: Object.freeze({fill: null, hatch: null, labelColor: "#202020", labelFontSize: null, stroke: "#404040"})
     }),
     CanonicalFeatureSelector: Object.freeze({
       kind: "object",
@@ -528,7 +537,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({key: null})
     }),
     CanonicalCoordinateSpan: Object.freeze({
       kind: "object",
@@ -548,7 +558,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         outOfBounds: Object.freeze({kind: "literal", values: Object.freeze(["clip", "skip", "error"])})
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({record: null})
     }),
     CanonicalFeatureSpan: Object.freeze({
       kind: "object",
@@ -570,7 +581,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         circularPath: Object.freeze({kind: "literal", values: Object.freeze(["shortest", "forward", "reverse"])})
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({record: null})
     }),
     CanonicalFeatureIdentitySpan: Object.freeze({
       kind: "object",
@@ -616,7 +628,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         metadata: Object.freeze({kind: "record", values: Object.freeze({kind: "string"})})
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({lane: null, legendLabel: null, style: null})
     }),
     CanonicalAnnotationSet: Object.freeze({
       kind: "object",
@@ -630,7 +643,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({legendLabel: null})
     }),
     CanonicalAnnotationOptions: Object.freeze({
       kind: "object",
@@ -646,7 +660,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({table: null, tableFile: null})
     }),
     CanonicalScalarSpec: Object.freeze({
       kind: "object",
@@ -706,7 +721,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({innerGapPx: null, outerGapPx: null, radius: null, side: null, width: null})
     }),
     CanonicalLinearScalarSpec: Object.freeze({
       kind: "object",
@@ -762,7 +778,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         params: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})})
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({height: null, side: null, spacing: null})
     }),
     CanonicalFeatureOverride: Object.freeze({
       kind: "object",
@@ -836,7 +853,15 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({
+        color: null,
+        height: null,
+        label: null,
+        largeTickInterval: null,
+        smallTickInterval: null,
+        tickFontSize: null
+      })
     }),
     CanonicalCircularFeaturePlacement: Object.freeze({
       kind: "object",
@@ -899,7 +924,13 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         linearTrackAxisIndex: Object.freeze({kind: "null"})
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({
+        centerReservedRadius: null,
+        circularTrackAxisIndex: null,
+        linearTrackAxisIndex: null,
+        linearTrackSlots: null
+      })
     }),
     CanonicalCircularOutputOptions: Object.freeze({
       kind: "object",
@@ -914,7 +945,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({plotTitlePosition: null})
     }),
     CanonicalCircularDiagramOptions: Object.freeze({
       kind: "object",
@@ -1142,7 +1174,15 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({
+        color: null,
+        height: null,
+        label: null,
+        largeTickInterval: null,
+        smallTickInterval: null,
+        tickFontSize: null
+      })
     }),
     CanonicalLinearFeaturePlacement: Object.freeze({
       kind: "object",
@@ -1203,7 +1243,13 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({
+        centerReservedRadius: null,
+        circularTrackAxisIndex: null,
+        circularTrackSlots: null,
+        linearTrackAxisIndex: null
+      })
     }),
     CanonicalLinearOutputOptions: Object.freeze({
       kind: "object",
@@ -1218,7 +1264,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({plotTitlePosition: null})
     }),
     CanonicalLinearDiagramOptions: Object.freeze({
       kind: "object",
@@ -1482,7 +1529,15 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       }),
       optional: Object.freeze(["collinearInferOrthogroups"]),
       open: false,
-      defaults: Object.freeze({collinearInferOrthogroups: true})
+      defaults: Object.freeze({
+        collinearInferOrthogroups: true,
+        collinearityParams: null,
+        losatpBin: null,
+        losatpThreads: null,
+        ncbiBlastpBin: null,
+        orthogroupMemberMaxHits: null,
+        proteinBlastpCandidateLimit: null
+      })
     }),
     CanonicalNucleotideBlastComparison: Object.freeze({
       kind: "object",

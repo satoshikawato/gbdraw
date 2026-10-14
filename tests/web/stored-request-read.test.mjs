@@ -127,6 +127,16 @@ test('an annotation colour the decoder refuses takes its default; another spelli
   ]);
 });
 
+test('a wrong value in a required field that takes null is read as null, not as its whole part (OV-777)', () => {
+  const session = gallery('lambda_basic_linear');
+  const table = { resourceId: Object.keys(session.resources)[0], representation: 'canonicalTsv' };
+  const result = readRequest(session, (request) => { request.diagramOptions.colors.defaultColorsFile = table; });
+  const expected = clone(session.renderRequest.diagramOptions);
+  expected.colors.defaultColorsFile = null;
+  assert.deepEqual(result.value.diagramOptions, expected);
+  assert.deepEqual(rows(result), [{ code: 'request-part-dropped', path: 'renderRequest.diagramOptions.colors.defaultColorsFile' }]);
+});
+
 test('a comparison, pair or track axis that names nothing the Session holds is left out with a row (B14, OV-772)', () => {
   const session = gallery('BGC0000708-BGC0000713');
   const result = readRequest(session, (request) => {
@@ -138,9 +148,11 @@ test('a comparison, pair or track axis that names nothing the Session holds is l
     { code: 'request-reference-dropped', path: 'renderRequest.comparisons[0]' },
     { code: 'request-reference-dropped', path: 'renderRequest.comparisons[1]' }
   ]);
-  const axis = readRequest(gallery('lambda_basic_linear'), (request) => { request.diagramOptions.tracks.linearTrackAxisIndex = 3; });
-  assert.equal(axis.value.diagramOptions.tracks, undefined);
-  assert.deepEqual(rows(axis), [{ code: 'request-reference-dropped', path: 'renderRequest.diagramOptions.tracks' }]);
+  // An axis index takes null, its default, rather than dropping the tracks (OV-777).
+  const lambda = gallery('lambda_basic_linear');
+  const axis = readRequest(lambda, (request) => { request.diagramOptions.tracks.linearTrackAxisIndex = 3; });
+  assert.deepEqual(axis.value.diagramOptions.tracks, lambda.renderRequest.diagramOptions.tracks);
+  assert.deepEqual(rows(axis), [{ code: 'request-reference-dropped', path: 'renderRequest.diagramOptions.tracks.linearTrackAxisIndex' }]);
 });
 
 test('an unreadable conservation ring drops its column from every ring list, so no ring shifts (B16)', () => {
