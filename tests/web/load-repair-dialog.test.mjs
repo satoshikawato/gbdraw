@@ -151,13 +151,18 @@ const leafPaths = (value, parts = []) => [
 ];
 const dotted = (parts) => parts.map((part) => (typeof part === 'number' ? `[${part}]` : `.${part}`)).join('').slice(1);
 const valueAt = (value, parts) => parts.reduce((current, part) => (current == null ? undefined : current[part]), value);
-/** A value of another kind, an unknown value of the same kind, and a number and a boolean for an unset leaf. */
+/**
+ * A value of another kind, an unknown value of the same kind, a number and a
+ * boolean for an unset leaf, and a valid number other than the stored one (a
+ * fraction stays a fraction, an integer an integer; r4 N1).
+ */
 const MUTATIONS = {
   otherKind: (value) => (value === null ? 'x-mut' : Array.isArray(value) || typeof value === 'object' ? 5
     : typeof value === 'string' ? 5 : 'x-mut'),
   sameKind: (value) => (typeof value === 'string' ? 'x-mut' : typeof value === 'number' ? -7.5 : undefined),
   unsetNumber: (value) => (value === null ? -7.5 : undefined),
-  unsetBoolean: (value) => (value === null ? true : undefined)
+  unsetBoolean: (value) => (value === null ? true : undefined),
+  otherNumber: (value) => (typeof value !== 'number' ? undefined : value > 0 && value < 1 ? value / 2 : value * 2 + 1)
 };
 /** The stored values a Load sets aside without a row, with the reason. */
 const UNLISTED_LEAVES = [
