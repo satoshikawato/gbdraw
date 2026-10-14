@@ -138,13 +138,39 @@ const validateDescriptor = (resourceId, descriptor) => {
   };
 };
 
+/**
+ * A file binding after `validateWebFileBindings`: an object with no own `kind`
+ * or `components` that names a resource (schema 2 also proves the metadata).
+ * @typedef {Readonly<{ resourceId: unknown, kind?: undefined, components?: undefined, [field: string]: unknown }>} WebFileLeafBinding
+ */
+/**
+ * The schema 2 `c_gb` binding that reads two or more base64 resources as one file.
+ * @typedef {Readonly<{
+ *   kind: 'composite', name: string, type: string, lastModified: number,
+ *   components: Array<{ resourceId: string, name: string, type: string, lastModified: number }>
+ * }>} WebFileCompositeBinding
+ */
+/**
+ * A row of `linearSeqs` or of a comparison list: only its file slots are checked.
+ * @typedef {Readonly<Record<string, unknown>> | null | undefined} WebFileBindingRow
+ */
+/**
+ * `webFiles.bindings` after `validateWebFileBindings`. Each file slot holds null,
+ * a leaf, or a list of them (a JSON list has no `kind`); only `c_gb` may hold a composite.
+ * @typedef {Readonly<{
+ *   schema: 1 | 2,
+ *   c_gb?: WebFileCompositeBinding | WebFileLeafBinding | (ReadonlyArray<unknown> & { readonly kind?: undefined }) | null,
+ *   [field: string]: unknown
+ * }>} WebFileBindings
+ */
+
 // Binding grammar belongs beside the File backing; envelope/version and
 // comparison-plan authority remain with their existing owners.
 /**
  * @param {{ bindings?: unknown } | null | undefined} webFiles
  * @param {{ readonly [resourceId: string]: RawSessionResourceDescriptor | null | undefined } | null} [resources]
  *   The Session's `resources`, unvalidated: read by the id of each binding, and each entry read is checked.
- * @returns {Record<string, unknown> | undefined} the `webFiles.bindings` object, checked
+ * @returns {WebFileBindings | undefined} the `webFiles.bindings` object, checked
  */
 export const validateWebFileBindings = (webFiles, resources = {}) => {
   if (!webFiles || !Object.hasOwn(webFiles, 'bindings')) return undefined;
@@ -228,13 +254,14 @@ export const validateWebFileBindings = (webFiles, resources = {}) => {
     'schema', ...slots, 'c_conservation_blasts_source', 'linearSeqs', 'linearComparisons'
   ].includes(key))) throw new Error('Unknown Web binding inventory field.');
   slots.forEach(slot => value(bindings[slot], slot === 'c_gb'));
-  (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((/** @type {Record<string, unknown> | null | undefined} */ sequence) => {
+  (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((/** @type {WebFileBindingRow} */ sequence) => {
     ['gb', 'gff', 'fasta', 'depth', 'blast'].forEach(slot => value(sequence?.[slot]));
   });
   ['linearComparisons', 'linearCanonicalComparisons'].forEach(slot => {
     (Array.isArray(bindings[slot]) ? bindings[slot] : []).forEach(row => value(row?.file));
   });
-  return bindings;
+  // The checks above prove the schema and each file slot.
+  return /** @type {WebFileBindings} */ (bindings);
 };
 
 /**

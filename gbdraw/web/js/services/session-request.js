@@ -193,7 +193,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
-/** @import { FileLike, RawSessionResourceDescriptor, SessionResourceTable } from './session-resource-backing.js' */
+/** @import { FileLike, RawSessionResourceDescriptor, SessionResourceTable, WebFileBindingRow, WebFileBindings } from './session-resource-backing.js' */
 /** @import { CircularRequestRecordSetOptions } from './record-options.js' */
 /** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
@@ -3611,7 +3611,7 @@ const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = nul
 
 /**
  * @param {Record<string, any>} files
- * @param {Record<string, any> | null | undefined} webMetadata
+ * @param {{ readonly bindings?: WebFileBindings } | null | undefined} webMetadata `webFiles`, its bindings checked
  * @param {Record<string, any> | null | undefined} resources
  * @param {{
  *   resolveResourceFile?: ResourceFileResolver | null,
@@ -3663,7 +3663,7 @@ const applyWebFileBindings = (
     bindings.c_conservation_blasts_source === 'losat-cache' ? 'losat-cache' : null;
 
   if (Array.isArray(bindings.linearSeqs)) {
-    restored.linearSeqs = bindings.linearSeqs.map((sequence, index) => ({
+    restored.linearSeqs = bindings.linearSeqs.map((/** @type {WebFileBindingRow} */ sequence, /** @type {number} */ index) => ({
       uid: String(sequence?.uid || `canonical-seq-${index + 1}`),
       gb: webBindingValueAsLegacyFile(resources, sequence?.gb, resolveBinding, bindings.schema),
       gff: webBindingValueAsLegacyFile(resources, sequence?.gff, resolveBinding, bindings.schema),
@@ -3684,7 +3684,7 @@ const applyWebFileBindings = (
     }));
   }
   if (Array.isArray(bindings.linearComparisons)) {
-    restored.linearComparisons = bindings.linearComparisons.map((comparison, index) => ({
+    restored.linearComparisons = bindings.linearComparisons.map((/** @type {WebFileBindingRow} */ comparison, /** @type {number} */ index) => ({
       ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
       id: String(comparison?.id || `linear-comparison-restored-${index + 1}`),
       queryUid: String(comparison?.queryUid || ''),
@@ -3694,7 +3694,7 @@ const applyWebFileBindings = (
     }));
   }
   if (Array.isArray(bindings.linearCanonicalComparisons)) {
-    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((comparison) => ({
+    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((/** @type {WebFileBindingRow} */ comparison) => ({
       ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
       file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveBinding, bindings.schema)
     }));
@@ -4682,6 +4682,8 @@ export const projectCanonicalSessionRequest = ({
   let webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
     ? webFiles
     : {};
+  // The checked bindings; the CLI initialization below rebuilds them field by field.
+  /** @type {Readonly<Record<string, unknown>> | undefined} */
   let explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
   // A CLI sidecar has no saved Web draft. Its empty writer slots are initial
   // values, not a user's cleared inputs. Keep real original CLI bindings (in
