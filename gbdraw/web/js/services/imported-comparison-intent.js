@@ -536,7 +536,10 @@ const collectComparisonResourceIds = (value, target = new Set()) => {
 
 /**
  * @template {{ renderRequest?: SavedRenderRequest, resources: SavedResources }} C
- * @param {{ candidate: C, committed: { renderRequest?: SavedRenderRequest, resources?: SavedResources } | null | undefined }} drafts
+ * @param {{
+ *   candidate: C,
+ *   committed: { renderRequest?: SavedRenderRequest, resources?: Readonly<Record<string, unknown>> } | null | undefined
+ * }} drafts The committed Session's resources are read by id, and each entry read is checked.
  * @returns {C}
  */
 export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {

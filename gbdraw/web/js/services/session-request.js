@@ -1054,12 +1054,17 @@ const generatedResourceValues = new WeakMap();
 const canonicalTypedResourceBackings = new WeakMap();
 
 // The analysis helper supplies the bytes already emitted by the Python typed codec.
+/**
+ * @param {{ kind?: unknown, schema?: unknown } | null | undefined} value The decoded result, checked here.
+ * @param {RawSessionResourceDescriptor | null | undefined} descriptor Checked here.
+ */
 export const bindCanonicalTypedResource = (value, descriptor) => {
   const expectedKind = value?.kind === "result" ? "collinearity-result" : "orthogroup-result";
-  if (!value || value.schema !== 3 || !["result", "orthogroupResult"].includes(value.kind)
+  if (!value || value.schema !== 3 || !(/** @type {readonly unknown[]} */ (["result", "orthogroupResult"])).includes(value.kind)
     || descriptor?.kind !== expectedKind || descriptor.encoding !== "base64"
     || descriptor.type !== "application/json" || typeof descriptor.data !== "string"
-    || !Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
+    // `isSafeInteger` holds, so `size` is a number.
+    || !Number.isSafeInteger(descriptor.size) || /** @type {number} */ (descriptor.size) < 0) {
     throw new Error("Analysis canonical resource backing is invalid.");
   }
   canonicalTypedResourceBackings.set(value, descriptor);
@@ -2388,6 +2393,12 @@ const PLAN_ISSUE_REASONS = Object.freeze({
   'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'SELECTED_PAIRS_NEED_PAIRWISE'
 });
 
+/**
+ * @template {{ edges?: unknown, errors?: unknown, error?: unknown }} S
+ * @param {S | null | undefined} snapshot The Generate run's plan (`resolveLinearComparisonPlan`, or the
+ *   snapshot its caller passed), checked here.
+ * @returns {S}
+ */
 export const requireLinearComparisonPlanSnapshot = (snapshot) => {
   if (!snapshot || !Array.isArray(snapshot.edges)) {
     throw new Error('A resolved Linear comparison plan is required.');
@@ -3526,6 +3537,10 @@ const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings 
   return hints;
 };
 
+/**
+ * @param {StoredResources} resources
+ * @param {Readonly<Record<string, unknown>>} originalNameHints
+ */
 const resourcesWithOriginalNames = (resources, originalNameHints) => {
   const hints = originalNameHints && typeof originalNameHints === 'object' && !Array.isArray(originalNameHints)
     ? originalNameHints
@@ -3864,6 +3879,7 @@ const requireExactCanonicalFields = (value, required, fieldName) => {
 };
 
 /**
+ * @param {{ resourceId?: unknown, representation?: unknown } | null | undefined} ref Unchecked; checked here.
  * @param {StoredResources} resources
  * @param {string} fieldName
  * @param {ResourceFileResolver | null} [resolveResourceFile]
@@ -3878,7 +3894,7 @@ const canonicalDepthResourceFile = (
     throw new Error(`${fieldName} must be a canonical resource reference.`);
   }
   requireExactCanonicalFields(ref, ['resourceId', 'representation'], fieldName);
-  if (!['file', 'canonicalTsv'].includes(ref.representation)) {
+  if (!(/** @type {readonly unknown[]} */ (['file', 'canonicalTsv'])).includes(ref.representation)) {
     throw new Error(`${fieldName} has unsupported representation '${ref.representation}'.`);
   }
   if (typeof ref.resourceId !== 'string' || !ref.resourceId.trim()) {
@@ -4020,7 +4036,10 @@ const projectCanonicalDepthTracks = ({
   return { sourceRows, fileRows, tracks };
 };
 
-/** @param {StoredResources} resources */
+/**
+ * @param {StoredResources} resources
+ * @param {string} resourceId
+ */
 export const decodeCanonicalResourceText = (resources, resourceId) => {
   const entry = ownEntry(resources, resourceId);
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
@@ -4072,7 +4091,8 @@ export const readCanonicalResourceRecordCount = async (resources, resourceId, ki
  * @param {{ resourceId?: unknown } | null | undefined} ref
  */
 const resourceTextFromRef = (resources, ref) => (
-  ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
+  // A property key is the value's string form, so `String` reads the same entry.
+  ref?.resourceId ? decodeCanonicalResourceText(resources, String(ref.resourceId)) : null
 );
 
 // A table the Session stores is named in its failure: the user corrects the

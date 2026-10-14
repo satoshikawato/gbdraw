@@ -27,13 +27,13 @@ import { isCurrentRequestSchema } from '../utils/request-schema.js';
  * @typedef {{ path: string, name: string, kind: 'generated' | 'uploaded', slot: string, resourceId?: string }} RecipeFileMetadata
  * @typedef {(path: string) => string} FinalNameForPath The visible name allocated to a generated file's path.
  * @typedef {{ path: string, name: string, slot: string, data?: string | Uint8Array, buildData?: (finalNameForPath: FinalNameForPath) => string | Uint8Array }} RecipeGeneratedFile
- * @typedef {(resourceId: string, kind: string) => number | Promise<number>} ResourceRecordCounter
+ * @typedef {(resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>} ResourceRecordCounter
  * @typedef {{ source?: boolean, fallback?: string, slot?: string, nameHintSlot?: string }} RecipeResourcePathOptions
  * @typedef {object} RecipeFiles The files a recipe names, by visible name and resource.
  * @property {(resourceId: unknown, options?: RecipeResourcePathOptions) => string} resourcePath
  * @property {(nameRaw: unknown, data: string | ((finalNameForPath: FinalNameForPath) => string), slot: string | undefined) => string} generatedTextPath
  * @property {(path: string) => string} visibleName
- * @property {(resourceId: unknown, kind: string) => Promise<number>} resourceRecordCount
+ * @property {(resourceId: unknown, kind: 'genbank' | 'fasta') => Promise<number>} resourceRecordCount
  * @property {Map<string, RecipeFileMetadata>} fileMetadata
  * @property {RecipeGeneratedFile[]} generatedFiles
  * @typedef {{ schema: number, consumedPaths: Set<string>, metadataPaths: Set<string> }} RecipeCoverage The semantic fields of a request, by path.
@@ -463,7 +463,7 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
   const visibleName = (path) => fileMetadata.get(path)?.name || fallbackNameFromPath(path);
   /**
    * @param {unknown} resourceIdRaw
-   * @param {string} kind
+   * @param {'genbank' | 'fasta'} kind
    * @returns {Promise<number>}
    */
   const resourceRecordCount = async (resourceIdRaw, kind) => {

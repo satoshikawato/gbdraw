@@ -3448,6 +3448,11 @@ const deserializeCanonicalComparisons = (
   ));
 };
 
+/**
+ * @param {{ renderRequest?: unknown, resources?: unknown, webFiles?: unknown }} canonical A Generate candidate:
+ *   the request it built or projected, its resources and Web file bindings.
+ * @param {{ adoptOwnedRequest?: boolean }} [options]
+ */
 export const adoptCanonicalRenderArtifacts = (
   canonical,
   { adoptOwnedRequest = false } = {}
@@ -3566,6 +3571,7 @@ export const getCommittedLinearDefinitionVisibility = () => (
 // it names records by #index (Export Feature Edits TSV).
 /**
  * @param {string} resourceId
+ * @param {'genbank' | 'fasta'} kind
  */
 export const readCommittedResourceRecordCount = (resourceId, kind) => (
   readCanonicalResourceRecordCount(committedCanonicalSession?.resources, resourceId, kind)
