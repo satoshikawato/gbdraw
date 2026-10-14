@@ -80,6 +80,29 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node .ci-trusted-base/tools/ci-impact.mjs plan
 
+      # The dev push that merges this pull request with the same tree inherits the planned jobs
+      # that dev also runs (docs/internal/SELECTIVE_CI.md "Merged pull request inheritance").
+      - name: Record the tested tree and planned jobs
+        if: github.event_name == 'pull_request'
+        id: pr_record
+        env:
+          CI_IMPACT_PLAN_JSON: ${{ steps.pr_plan.outputs.plan }}
+        # Artifact name: ci-impact-pr-plan.<tested tree>, then .<job ID> for each planned job.
+        run: |
+          tree="$(git rev-parse "${GITHUB_SHA}^{tree}")"
+          jobs="$(node -e 'for (const job of JSON.parse(process.env.CI_IMPACT_PLAN_JSON).requiredJobs) process.stdout.write(`.${job}`)')"
+          echo "name=ci-impact-pr-plan.${tree}${jobs}" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$CI_IMPACT_PLAN_JSON" > "$RUNNER_TEMP/ci-impact-plan.json"
+
+      - name: Upload the tested tree and planned jobs
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pr_record.outputs.name }}
+          path: ${{ runner.temp }}/ci-impact-plan.json
+          overwrite: true
+          retention-days: 30
+
       - name: Build dev CI impact plan
         if: github.event_name != 'pull_request'
         id: dev_plan

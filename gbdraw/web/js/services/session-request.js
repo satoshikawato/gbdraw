@@ -717,6 +717,10 @@ const CIRCULAR_LABEL_SCOPES = Object.freeze({ none: 'none', out: 'outer', both: 
 // The Labels choice a committed Circular label scope shows; any other scope shows None.
 /** @type {Readonly<Record<string, string>>} */
 const CIRCULAR_LABEL_MODES = Object.freeze({ outer: 'out', both: 'both' });
+/** The Labels choice a Circular label scope shows. @param {unknown} scope */
+const circularLabelsMode = (scope) => (
+  Object.hasOwn(CIRCULAR_LABEL_MODES, String(scope)) ? CIRCULAR_LABEL_MODES[String(scope)] : 'none'
+);
 
 /**
  * @param {{ labels_mode?: unknown, show_labels_linear?: string }} form
@@ -824,6 +828,52 @@ export const managedConfigOverridePathsForMode = (mode) => {
     });
   }
   return Object.freeze([...paths].sort());
+};
+
+// The draft (`drawing.adv`) field of a flat config key whose name differs
+// from it; every other projected flat key is its own draft field.
+/** @type {Readonly<Record<string, string>>} */
+const DRAFT_FIELD_OF_FLAT_CONFIG_KEY = Object.freeze({
+  outer_label_x_radius_offset: 'outer_label_x_offset',
+  outer_label_y_radius_offset: 'outer_label_y_offset',
+  inner_label_x_radius_offset: 'inner_label_x_offset',
+  inner_label_y_radius_offset: 'inner_label_y_offset'
+});
+
+/**
+ * The draft fields that the request mapping projects to `values` (config
+ * paths and their values), as a label fit row writes them: the reverse of the
+ * request's config overrides. The label scope goes to the form's label mode;
+ * the rest to the drawing's `adv`. A path the mode does not manage, or one
+ * whose draft field the drawing does not hold, is an `UNKNOWN_CONFIG_PATH`
+ * error.
+ * @param {Readonly<Record<string, number | string | boolean>>} values
+ * @param {ModeProfileName} mode
+ * @param {Readonly<Record<string, unknown>>} adv The drawing's draft, whose fields the result names.
+ * @returns {{ form: Record<string, string>, adv: Record<string, number | string | boolean> }}
+ */
+export const draftFieldsForConfigValues = (values, mode, adv) => {
+  const managed = new Set(managedConfigOverridePathsForMode(mode));
+  const unknown = () => diagnosticError('INPUT_INVALID', { field: 'configOverrides', reason: 'UNKNOWN_CONFIG_PATH' });
+  if (Object.keys(values).some((path) => !managed.has(path))) throw unknown();
+  // A copy of the draft fields, not the drawing's own objects.
+  /** @type {Record<string, string>} */
+  const formFields = {};
+  /** @type {Record<string, number | string | boolean>} */
+  const advFields = {};
+  for (const [key, value] of Object.entries(projectCanonicalConfigOverrides(values, mode))) {
+    if (key === 'label_scope') {
+      if (typeof value !== 'string') throw unknown();
+      formFields[mode === 'circular' ? 'labels_mode' : 'show_labels_linear'] = mode === 'circular'
+        ? circularLabelsMode(value) : value;
+      continue;
+    }
+    const field = DRAFT_FIELD_OF_FLAT_CONFIG_KEY[key] || key;
+    if (!Object.hasOwn(adv, field) || !['number', 'string', 'boolean'].includes(typeof value)) throw unknown();
+    advFields[field] = value;
+  }
+  if (Object.keys(formFields).length + Object.keys(advFields).length === 0) throw unknown();
+  return { form: formFields, adv: advFields };
 };
 
 /** @param {string} semanticName */
@@ -5373,11 +5423,7 @@ export const projectCanonicalSessionRequest = ({
     show_skew: renderRequest.mode === 'linear' ? Boolean(overrides.show_skew) : false,
     show_depth: Boolean(overrides.show_depth),
     separate_strands: Boolean(overrides.strandedness),
-    labels_mode: renderRequest.mode === 'circular'
-      ? (Object.hasOwn(CIRCULAR_LABEL_MODES, String(overrides.label_scope))
-          ? CIRCULAR_LABEL_MODES[String(overrides.label_scope)]
-          : 'none')
-      : 'none',
+    labels_mode: renderRequest.mode === 'circular' ? circularLabelsMode(overrides.label_scope) : 'none',
     show_labels_linear: renderRequest.mode === 'linear'
       ? (overrides.label_scope || 'none')
       : 'none',
@@ -5519,18 +5565,9 @@ export const projectCanonicalSessionRequest = ({
     ruler_label_font_size: overrides.ruler_label_font_size ?? null,
     scale_interval: overrides.scale_interval ?? null,
     tick_label_font_size: overrides.tick_label_font_size ?? null,
-    outer_label_x_offset: renderRequest.mode === 'circular'
-      ? (overrides.outer_label_x_radius_offset ?? null)
-      : null,
-    outer_label_y_offset: renderRequest.mode === 'circular'
-      ? (overrides.outer_label_y_radius_offset ?? null)
-      : null,
-    inner_label_x_offset: renderRequest.mode === 'circular'
-      ? (overrides.inner_label_x_radius_offset ?? null)
-      : null,
-    inner_label_y_offset: renderRequest.mode === 'circular'
-      ? (overrides.inner_label_y_radius_offset ?? null)
-      : null,
+    ...Object.fromEntries(Object.entries(DRAFT_FIELD_OF_FLAT_CONFIG_KEY).map(([key, field]) => [
+      field, renderRequest.mode === 'circular' ? (overrides[key] ?? null) : null
+    ])),
     pairwise_match_style: overrides.pairwise_match_style || options.pairwiseMatchStyle || 'ribbon',
     circular_track_slots_enabled: renderRequest.mode === 'circular' && Array.isArray(tracks.circularTrackSlots),
     circular_track_slots_schema_version: 4,

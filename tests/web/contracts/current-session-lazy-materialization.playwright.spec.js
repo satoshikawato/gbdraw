@@ -1074,6 +1074,18 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     const mutationColor = currentColor === '#123456' ? '#654321' : '#123456';
     const editApplied = await app.setFeatureColorValue(editableFeature, mutationColor);
     const editedState = snapshotResultState();
+    // The Worker runs are counted once the edit's automatic rerender ends.
+    // Undo and Redo of the edit ask for the rerender again (rule-actions.js
+    // followRestoredRules), and a rerender still drawing when Undo reverts its
+    // edit runs again (OV-351), so a count taken after them depends on timing
+    // (OV-731).
+    const idle = () => !app.processing && !app.labelReflowProcessing && !app.ruleMatchingPending;
+    for (let idleFrames = 0; idleFrames < 2;) {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      idleFrames = idle() ? idleFrames + 1 : 0;
+    }
+    const runsAfterEdit = (window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__?.instances || [])
+      .reduce((total, instance) => total + (instance.runs?.length || 0), 0);
     const undoEdit = await history.undo();
     const afterUndoEdit = snapshotResultState();
     const undoGenerate = await history.undo();
@@ -1102,6 +1114,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
       undoCountAfterSecond,
       redoCountAfterSecond,
       generateProbe,
+      runsAfterEdit,
       mutationIsolation: {
         editApplied,
         editedState,
@@ -1208,7 +1221,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect(worker.helpers).toBeGreaterThanOrEqual(1);
   // Two Generates, and the automatic rerender of the color edit, which adds a
   // Legend row (OV-42, OV-43, #857).
-  expect(worker.runs).toBe(3);
+  expect(generated.runsAfterEdit).toBe(3);
   expect(worker.instances).toHaveLength(1);
   expect(worker.instances[0].terminated).toBe(false);
 });

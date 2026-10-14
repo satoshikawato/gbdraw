@@ -11,6 +11,7 @@ import {
 } from './check-promotion-readiness.mjs';
 import {
   IMPACT_PLAN_SCHEMA_VERSION,
+  PR_TREE_BASIS,
   carryForwardVerdicts,
   classifyChanges,
   classifyPath,
@@ -21,6 +22,7 @@ import {
   knownJobsFor,
   leafJobsFor,
   leafTestKind,
+  pullRequestEvidenceJobsFor,
   requiresFullCoverage,
   validateGateResults,
   validateImpactPlan
@@ -46,6 +48,13 @@ const EVIDENCE_CONTRACTS = Object.freeze({
     aggregateName: 'Gallery readiness / gate'
   })
 });
+const PULL_REQUEST_EVIDENCE_CONTRACT = Object.freeze({
+  workflowPath: '.github/workflows/test.yml',
+  aggregateName: 'PR / gate'
+});
+// The `CI impact plan` job of a pull request run uploads an artifact named
+// `<prefix><tested tree>` followed by `.<job ID>` for each planned job.
+export const PR_PLAN_RECORD_PREFIX = 'ci-impact-pr-plan.';
 
 const isPlainObject = (value) => value !== null
   && typeof value === 'object'
@@ -64,6 +73,11 @@ const boundedText = (value, limit = 300) => {
   const normalized = source.replace(/[\r\n\t]+/g, ' ').trim();
   return normalized.length <= limit ? normalized : `${normalized.slice(0, limit)}...`;
 };
+
+const evidenceFailure = (code, message, token) => Object.freeze({
+  code,
+  reason: token ? boundedText(message).replaceAll(token, '[REDACTED]') : boundedText(message)
+});
 
 const redact = (text, env) => {
   const token = typeof env.GITHUB_TOKEN === 'string' ? env.GITHUB_TOKEN : '';
@@ -435,6 +449,50 @@ const normalizeEvidence = (evidence, contract, expectedHeadSha) => {
   };
 };
 
+// SELECTIVE_CI.md "Merged pull request inheritance": a dev push of one merge commit whose tree
+// the merged pull request's green run tested inherits the jobs that run planned. Returns null
+// when the change cannot inherit pull request evidence, else the evidence or why it is missing.
+const mergedPullRequestEvidence = async ({ configuration, classification, token, runGitImpl, verifyWorkflowEvidenceImpl }) => {
+  const jobs = pullRequestEvidenceJobsFor(classification.capabilities);
+  if (configuration.profile !== 'dev' || !classification.valid || jobs.length === 0) return null;
+  const unavailable = (code, message) => Object.freeze({ evidenceFailure: evidenceFailure(code, message, token) });
+  const { repositoryRoot, changeBaseSha, changeHeadSha } = configuration;
+  const parents = gitText(runGitImpl, repositoryRoot, ['rev-list', '--parents', '-n', '1', changeHeadSha]);
+  const commits = parents?.status === 0 ? parents.text.trim().split(/\s+/) : [];
+  const tree = gitText(runGitImpl, repositoryRoot, ['rev-parse', `${changeHeadSha}^{tree}`]);
+  const treeSha = tree?.status === 0 ? tree.text.trim() : '';
+  if (commits.length !== 3 || commits[0] !== changeHeadSha || commits[1] !== changeBaseSha
+      || !isFullObjectId(commits[2]) || !isFullObjectId(treeSha)) {
+    return unavailable('NOT_A_PULL_REQUEST_MERGE', 'The push is not one merge commit on its parent.');
+  }
+  const recordPrefix = `${PR_PLAN_RECORD_PREFIX}${treeSha}.`;
+  let evidence;
+  try {
+    evidence = await verifyWorkflowEvidenceImpl({
+      repository: configuration.repository,
+      workflowPath: PULL_REQUEST_EVIDENCE_CONTRACT.workflowPath,
+      expectedEvent: 'pull_request',
+      expectedBranch: null,
+      expectedHeadSha: commits[2],
+      expectedAggregateName: PULL_REQUEST_EVIDENCE_CONTRACT.aggregateName,
+      recordPrefix,
+      token
+    });
+  } catch (error) {
+    if (!(error instanceof PromotionReadinessError)) throw error;
+    return unavailable(error.code, error.message);
+  }
+  if (!Array.isArray(evidence?.records) || evidence.records.length !== 1) {
+    return unavailable('TESTED_TREE_NOT_RECORDED', 'The pull request run did not record exactly one plan for this tree.');
+  }
+  const planned = evidence.records[0].slice(recordPrefix.length).split('.');
+  const missing = jobs.filter((job) => !planned.includes(job));
+  if (missing.length) {
+    return unavailable('PULL_REQUEST_JOBS_NOT_PLANNED', `The pull request plan did not run ${missing.join(', ')}.`);
+  }
+  return Object.freeze({ inheritedEvidence: normalizeEvidence(evidence, PULL_REQUEST_EVIDENCE_CONTRACT, commits[2]) });
+};
+
 export const buildImpactPlan = async ({
   configuration,
   token,
@@ -481,15 +539,21 @@ export const buildImpactPlan = async ({
     : null;
   if (!classification.valid || (!identicalTree && leafTests === null
       && requiresFullCoverage(configuration.profile, classification.capabilities))) {
+    const merged = await mergedPullRequestEvidence({
+      configuration, classification, token, runGitImpl, verifyWorkflowEvidenceImpl
+    });
+    const inheritedEvidence = merged?.inheritedEvidence ?? null;
     return Object.freeze({
       plan: createImpactPlan(planFields({
         configuration,
         classification,
-        decision: 'full',
-        basis: classification.valid ? 'FULL_CHANGE' : 'UNKNOWN_OR_INVALID_CHANGE',
-        inheritedEvidence: null
+        decision: inheritedEvidence ? 'selective' : 'full',
+        basis: inheritedEvidence ? PR_TREE_BASIS
+          : classification.valid ? 'FULL_CHANGE' : 'UNKNOWN_OR_INVALID_CHANGE',
+        inheritedEvidence
       })),
-      classification
+      classification,
+      evidenceFailure: merged?.evidenceFailure
     });
   }
 
@@ -535,12 +599,7 @@ export const buildImpactPlan = async ({
         inheritedEvidence: null
       })),
       classification,
-      evidenceFailure: Object.freeze({
-        code: error.code,
-        reason: token
-          ? boundedText(error.message).replaceAll(token, '[REDACTED]')
-          : boundedText(error.message)
-      })
+      evidenceFailure: evidenceFailure(error.code, error.message, token)
     });
   }
 

@@ -6,7 +6,7 @@ import io
 import logging
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, Literal, Sequence, cast
+from typing import TYPE_CHECKING, Iterable, Literal, Sequence, TypeAlias, cast
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -52,6 +52,47 @@ class ConservationSearchResult:
                 "ConservationSearchResult.text must be a string.",
                 diagnostic={"code": "INPUT_INVALID", "field": "conservation_search_results"},
             )
+
+
+@dataclass(frozen=True, eq=False)
+class ConservationTable:
+    """One conservation input read once: its parsed rows, or why it could not be read.
+
+    A figure assembled again with other settings (the label fit rows) filters
+    these rows instead of reading the file again (OV-720). ``name`` is the
+    file path or search result name that labels the source.
+    """
+
+    name: str
+    rows: DataFrame | None
+    reason: str | None = None
+
+
+ConservationInput: TypeAlias = str | ConservationSearchResult | ConservationTable
+
+
+def _input_name(source: ConservationInput) -> str:
+    return source.name if isinstance(source, (ConservationSearchResult, ConservationTable)) else str(source)
+
+
+def read_conservation_inputs(sources: Sequence[ConservationInput] | None) -> tuple[ConservationTable, ...]:
+    """Read every conservation input once, keeping its rows or the reason it was unreadable."""
+
+    return tuple(_read_conservation_input(source) for source in sources or ())
+
+
+def _read_conservation_input(source: ConservationInput) -> ConservationTable:
+    if isinstance(source, ConservationTable):
+        return source
+    try:
+        if isinstance(source, ConservationSearchResult):
+            # Resolved LOSAT rows take the file path's reader (byte-identical rings).
+            rows = read_comparison_table(io.StringIO(source.text), label=source.name)
+        else:
+            rows = read_comparison_table(source)
+    except ValidationError as exc:
+        return ConservationTable(_input_name(source), None, str(exc))
+    return ConservationTable(_input_name(source), rows)
 
 
 ConservationReferenceSide = Literal["query", "subject"]
@@ -139,13 +180,11 @@ def empty_normalized_conservation_hits() -> DataFrame:
     return DataFrame(columns=NORMALIZED_CONSERVATION_COLUMNS)
 
 
-def _default_label(source_index: int, path: "str | ConservationSearchResult | None") -> str:
+def _default_label(source_index: int, path: ConservationInput | None) -> str:
     """The file name without its last extension (D-03), as for a FASTA ring and in the Web."""
 
-    if isinstance(path, ConservationSearchResult):
-        path = path.name
-    if path:
-        basename = os.path.basename(str(path))
+    if path is not None and _input_name(path):
+        basename = os.path.basename(_input_name(path))
         if basename:
             return comparison_file_stem(basename).strip() or basename
     return f"Conservation {int(source_index) + 1}"
@@ -204,16 +243,14 @@ def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: BlastMatchC
 
 
 def _load_conservation_file(
-    path: "str | ConservationSearchResult",
+    path: ConservationInput,
     blast_config: BlastMatchConfigurator,
 ) -> tuple[DataFrame | None, str | None]:
+    table = _read_conservation_input(path)
+    if table.rows is None:
+        return None, table.reason
     try:
-        if isinstance(path, ConservationSearchResult):
-            # Resolved LOSAT rows take the file path's reader (byte-identical rings).
-            table = read_comparison_table(io.StringIO(path.text), label=path.name)
-        else:
-            table = read_comparison_table(path)
-        return _filter_normalized_dataframe(table, blast_config), None
+        return _filter_normalized_dataframe(table.rows, blast_config), None
     except ValidationError as exc:
         return None, str(exc)
 
@@ -221,7 +258,7 @@ def _load_conservation_file(
 def load_conservation_sources(
     *,
     blast_config: object,
-    conservation_files: "Sequence[str | ConservationSearchResult] | None" = None,
+    conservation_files: Sequence[ConservationInput] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     labels: Sequence[str] | None = None,
     colors: Sequence[str] | None = None,
@@ -261,7 +298,7 @@ def load_conservation_sources(
 
         if path is not None:
             frame, reason = _load_conservation_file(
-                path if isinstance(path, ConservationSearchResult) else str(path),
+                path if isinstance(path, (ConservationSearchResult, ConservationTable)) else str(path),
                 cast("BlastMatchConfigurator", blast_config),
             )
             if frame is not None:
@@ -298,7 +335,7 @@ def load_conservation_sources(
                     label=label,
                     color=color,
                     dataframe=merged.reset_index(drop=True),
-                    path=str(path) if path is not None else None,
+                    path=_input_name(path) if path is not None else None,
                 )
             )
             continue
@@ -309,7 +346,7 @@ def load_conservation_sources(
             label=label,
             color=color,
             dataframe=None,
-            path=str(path) if path is not None else None,
+            path=_input_name(path) if path is not None else None,
             skipped=True,
             skip_reason=reason,
         )
@@ -531,12 +568,14 @@ def normalize_conservation_tracks_for_record(
 
 
 __all__ = [
+    "ConservationInput",
     "ConservationLegendSource",
     "ConservationLoadResult",
     "ConservationSearchResult",
     "ConservationReferenceMode",
     "ConservationReferenceSide",
     "ConservationSource",
+    "ConservationTable",
     "ConservationTrack",
     "NORMALIZED_CONSERVATION_COLUMNS",
     "conservation_legend_sources",
@@ -546,5 +585,6 @@ __all__ = [
     "normalize_conservation_color",
     "normalize_conservation_reference",
     "normalize_conservation_tracks_for_record",
+    "read_conservation_inputs",
     "resolve_conservation_reference_side",
 ]

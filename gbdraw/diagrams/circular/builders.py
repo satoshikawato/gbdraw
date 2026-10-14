@@ -15,6 +15,7 @@ from svgwrite.container import Group
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...features.factory import FeatureBuildResult
+from ...labels.circular_types import CircularLabel
 from ...layout.circular import CircularRecordRenderContext
 from ...legend.table import LegendTable
 from ...configurators import (
@@ -294,7 +295,7 @@ def add_record_group_on_canvas(
     *,
     feature_layers: FeatureBuildResult,
     render_context: CircularRecordRenderContext,
-    precalculated_labels: list[dict] | None = None,
+    precalculated_labels: list[CircularLabel] | None = None,
     feature_track_ratio_factor_override: float | None = None,
     feature_anchor_radius_px: float | None = None,
     record_index: int = 0,
@@ -411,7 +412,7 @@ def add_labels_group_on_canvas(
     feature_layers: FeatureBuildResult,
     render_context: CircularRecordRenderContext,
     outer_arena: tuple[float, float] | None = None,
-    precalculated_labels: list[dict] | None = None,
+    precalculated_labels: list[CircularLabel] | None = None,
     feature_track_ratio_factor_override: float | None = None,
     feature_anchor_radius_px: float | None = None,
     phase: Literal["all", "leaders", "text"] = "all",

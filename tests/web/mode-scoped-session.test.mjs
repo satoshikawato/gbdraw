@@ -316,6 +316,19 @@ test('Load and Save keep a Linear row without a Depth file as depth null (OV-337
   assert.deepEqual(second.webFiles.bindings.linearSeqs.map((row) => row.depth), rows.map((row) => row.depth));
 });
 
+// A Session does not save the label fit report, so a loaded Result has no
+// "Leader lines cross" notice (PD-OI-097).
+test('Session Load clears the label fit notice of the Result shown before', async () => {
+  resetDrawings();
+  state.mode.value = 'circular';
+  const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
+  state.labelFitReports.value = [{ resultIndex: 0, resultName: 'fit.svg', rowToken: 'circular:1:0',
+    report: { drawn: true, notice: ['Leader lines cross (5 pairs).'] } }];
+  assert.equal((await load(gallery)).status, 'ok');
+  assert.ok(state.results.value.length > 0, 'the Session has a Result');
+  assert.deepEqual(state.labelFitReports.value, []);
+});
+
 // Record selection D-05: each slice keeps the keys of its OFF records; an
 // omitted list draws every record, and a malformed or unbound key is rejected.
 test('a slice keeps its OFF records, and omission draws every record (record-selection D-05)', async () => {

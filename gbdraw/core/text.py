@@ -3,6 +3,7 @@
 
 import functools
 import logging
+import math
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -556,6 +557,76 @@ def calculate_svg_bbox_dimensions(
 
 
 @dataclass(frozen=True)
+class TextInk:
+    """Where a text's letters are painted, in em, from the start of its advance on the alphabetic baseline.
+
+    ``left`` and ``right`` bound the ink horizontally, ``advance`` is the
+    width ``text-anchor`` aligns, and ``top`` and ``bottom`` bound the ink
+    vertically (positive above the baseline, as in the font).
+    """
+
+    left: float
+    right: float
+    advance: float
+    top: float
+    bottom: float
+
+
+def text_ink(
+    text: str,
+    font_family: str,
+    font_weight: FontWeight = "normal",
+    font_style: str | None = "normal",
+) -> Optional[TextInk]:
+    """The painted extent of ``text`` in the font ``font_family`` resolves to (the ink box, LP-D25).
+
+    Kerning and missing characters are measured as in ``get_text_bbox_size_pixels``;
+    None when the font cannot be read or nothing is painted.
+    """
+    face = resolve_font_face(font_family, font_weight, font_style)
+    return _face_text_ink(face, collapse_svg_white_space(str(text))) if face is not None else None
+
+
+@functools.lru_cache(maxsize=8192)
+def _face_text_ink(face: FontFace, text: str) -> Optional[TextInk]:
+    font = load_font(face)
+    if font is None or not text:
+        return None
+    units_per_em = float(font["head"].unitsPerEm)
+    cmap = _measured_cmap(font)
+    origin = 0.0
+    left = right = math.inf
+    top = bottom = 0.0
+    previous: Optional[str] = None
+    for char in text:
+        glyph_name = cmap.get(ord(char))
+        if previous is not None:
+            origin += _get_kerning_value(font, previous, glyph_name)
+        if glyph_name is None:
+            # A fallback font paints an em box (``_face_text_box``).
+            advance, ink_left, ink_right = units_per_em, 0.0, units_per_em
+            ink_top, ink_bottom = float(font["hhea"].ascent), float(font["hhea"].descent)
+        else:
+            advance, ink_left, ink_right, ink_top, ink_bottom = _glyph_facts(font, glyph_name)
+        if ink_right > ink_left or ink_top > ink_bottom:
+            left = min(left, origin + ink_left)
+            right = origin + ink_right if math.isinf(right) else max(right, origin + ink_right)
+            top = max(top, ink_top)
+            bottom = min(bottom, ink_bottom)
+        origin += advance
+        previous = glyph_name
+    if math.isinf(left):
+        return None
+    return TextInk(
+        left=left / units_per_em,
+        right=right / units_per_em,
+        advance=origin / units_per_em,
+        top=top / units_per_em,
+        bottom=bottom / units_per_em,
+    )
+
+
+@dataclass(frozen=True)
 class FontVerticalMetrics:
     """Vertical font metrics as fractions of the font size (em units)."""
 
@@ -689,6 +760,7 @@ def parse_mixed_content_text(input_text: str) -> List[Dict[str, Union[str, bool,
 __all__ = [
     "FontMetricsTable",
     "FontVerticalMetrics",
+    "TextInk",
     "calculate_bbox_dimensions",
     "calculate_svg_bbox_dimensions",
     "collapse_svg_white_space",
@@ -700,6 +772,7 @@ __all__ = [
     "get_text_bbox_size_pixels",
     "measurement_font_file",
     "parse_mixed_content_text",
+    "text_ink",
 ]
 
 

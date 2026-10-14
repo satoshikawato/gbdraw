@@ -72,6 +72,11 @@ const featureIdentityNotices = ref([]);
 // The edits the last source-replacing Generate removed (Q3 = A); a notice only.
 const featureEditRemovalCount = ref(0);
 const comparisonWarnings = ref([]);
+/** @import { ResultLabelFit } from './services/label-fit.js' */
+// Python's label fit report of each drawn Result with crossing label leaders
+// (LP-D46): the notice bar of the shown Result reads it. Artifact-owned like
+// comparisonWarnings; not saved in a Session.
+const labelFitReports = ref(/** @type {readonly ResultLabelFit[]} */ ([]));
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 // Analysis-scoped materialized nucleotide sources used by match span popups.
@@ -1116,6 +1121,7 @@ export const state = {
   featureIdentityNotices,
   featureEditRemovalCount,
   comparisonWarnings,
+  labelFitReports,
   pairwiseMatchFactors,
   matchSequenceRegistry,
   svgContent,
