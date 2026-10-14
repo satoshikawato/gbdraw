@@ -27,6 +27,7 @@ from tests.utils.render_stage_equivalence import (
     OptionSpec,
     Placeholders,
     Variant,
+    base_arguments,
     cost_chunks,
     error_rule_failures,
     matrix_variants,
@@ -133,10 +134,10 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
 # The options a Linear record content (axis, ruler, features, labels) reads.
 _RECORD_CONTENT_OPTIONS = (
     "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_color", "axis_stroke_width",
-    "line_stroke_width", "feature_height", "feature_overlap_tolerance_bp", "feature_override_table",
+    "line_stroke_color", "line_stroke_width", "feature_height", "feature_overlap_tolerance_bp", "feature_override_table",
     "feature_placement_table", "feature_visibility_table", "label_table", "label_whitelist", "label_blacklist",
     "qualifier_priority", "label_font_size", "label_placement", "label_rendering", "linear_label_spacing",
-    "show_labels", "separate_strands", "resolve_overlaps", "track_axis_gap", "track_layout",
+    "show_labels", "separate_strands", "resolve_overlaps", "track_axis_gap", "track_layout", "track_layout (rows)",
     # The axis ruler draws with the scale settings.
     "hide_scale", "scale_interval", "scale_style", "scale_stroke_color", "scale_stroke_width",
     "scale_font_size", "ruler_label_font_size", "ruler_label_color",
@@ -145,6 +146,12 @@ _RECORD_CONTENT_OPTIONS = (
 # The group contents an option changes, besides the stages above.
 CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     "annotation_table": frozenset({"annotation_content"}),
+    # The ribbons: their geometry and style, and the rows the thresholds keep.
+    **dict.fromkeys(
+        ("align_center", "align_center (rows)", "pairwise_match_style", "comparison_height"),
+        frozenset({"comparison_content"}),
+    ),
+    **dict.fromkeys(("evalue", "bitscore", "alignment_length"), frozenset({"comparison_rows", "comparison_content"})),
     **dict.fromkeys(
         (
             "gc_content_mode", "gc_content_min_percent", "gc_content_max_percent",
@@ -170,6 +177,9 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
 }
 
 
+# The ribbons take the feature DOM index and both whole record placements,
+# whose comparison extents these track contents set; they rebuild with them.
+_RIBBON_INPUTS = frozenset({"feature_dom_index", "gc_content_content", "depth_content", "annotation_content"})
 # The stages whose results the catalog item reads: it rebuilds when one of them does.
 _CATALOG_INPUTS = frozenset({"record_content", "annotation_content", "comparison_content", "interactive_context"})
 
@@ -181,6 +191,8 @@ def allowed_builds(option_id: str) -> frozenset[str]:
         | (frozenset({"record_content"}) if option_id in _RECORD_CONTENT_OPTIONS else frozenset())
         | _COMPOSITION
     )
+    if allowed & _RIBBON_INPUTS:
+        allowed |= {"comparison_content"}
     return allowed | ({"catalog_item"} if allowed & _CATALOG_INPUTS else frozenset())
 
 
@@ -201,6 +213,10 @@ def lost_hits(
 ) -> list[str]:
     """Render the base, then each P1/P2 variant in ``part`` and the base again.
 
+    An option with prerequisites (``OptionSpec.pre``) goes to its variant from
+    its own base, the case base with those prerequisites, so the step changes
+    the option alone.
+
     Name each stage built beyond the allowed set, each uncacheable stage call (it
     can never be a hit), and each failure of the error rule (``error_rule_failures``).
     """
@@ -214,7 +230,10 @@ def lost_hits(
     outcomes = []
     first = harness.warm(base)
     for option, variant in p1_p2_variants(case_id, include_slow=include_slow)[part]:
+        option_base = base_arguments(case, option, placeholders)
         try:
+            if option_base != base:
+                harness.warm(option_base)
             outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
         except SystemExit:
             continue  # the CLI refuses this variant on this case
