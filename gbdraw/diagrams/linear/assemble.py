@@ -643,22 +643,36 @@ def _content_bounds(content: GroupContent) -> Aabb:
     return content.local_bounds
 
 
-def _read_comparison_files(blast_files: Sequence[str] | None) -> tuple[DataFrame, ...]:
-    """Read each comparison file of the request.
+def _read_comparison_files(
+    blast_files: Sequence[str] | None,
+    thresholds: ComparisonThresholds,
+) -> tuple[DataFrame, ...]:
+    """Read each comparison file of the request and log the thresholds that will filter it.
 
     A file the request staged as a resource gives its table that resource's
     identity, so the ``comparison_rows`` stage that filters it can be reused.
+    This runs outside that stage, so every request logs what it reads.
     """
 
     # gbdraw.api imports this module, so its prepared-input owner is imported here.
     from gbdraw.api.prepared import register_prepared_resource_value
 
+    if not blast_files:
+        return ()
+    logger.info(
+        "INFO: BLAST output visualization settings: e-value threshold: {}; bitscore threshold: {}; "
+        "identity threshold: {}; alignment length threshold: {}".format(
+            thresholds.evalue, thresholds.bitscore, thresholds.identity, thresholds.alignment_length
+        )
+    )
+    logger.info("INFO: Loading comparison file(s)...")
     tables: list[DataFrame] = []
-    for comparison_file in blast_files or ():
+    for comparison_file in blast_files:
         logger.info("INFO: Loading {}".format(comparison_file))
         tables.append(
             register_prepared_resource_value(read_comparison_table(comparison_file), comparison_file)
         )
+    logger.info("INFO:             ... finished loading comparison file(s)")
     return tuple(tables)
 
 
@@ -1995,18 +2009,19 @@ def assemble_linear_diagram(
             dpi=int(cfg.canvas.dpi),
         )
 
+    comparison_thresholds = ComparisonThresholds(
+        evalue=blast_config.evalue,
+        bitscore=blast_config.bitscore,
+        identity=blast_config.identity,
+        alignment_length=blast_config.alignment_length,
+    )
     comparison_rows = render_stage(
         "comparison_rows",
         linear_comparison_rows,
-        _read_comparison_files(blast_files),
+        _read_comparison_files(blast_files, comparison_thresholds),
         protein_comparisons,
         tuple(linear_comparisons or ()),
-        ComparisonThresholds(
-            evalue=blast_config.evalue,
-            bitscore=blast_config.bitscore,
-            identity=blast_config.identity,
-            alignment_length=blast_config.alignment_length,
-        ),
+        comparison_thresholds,
         tuple(records),
         tuple(rows_by_record),
         bool(multi_record_enabled),
