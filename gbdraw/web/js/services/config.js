@@ -191,6 +191,7 @@ import {
   holdsSettingsOnlyContent,
   readSessionAuthorityParts,
   readSessionDocument,
+  readSessionInput,
   restoresNothing,
   settingsOnlySessionCandidate,
   validateSessionAuthorityInventory
@@ -1688,7 +1689,10 @@ const LEGACY_CONFIG_KEYS = new Set([
   'circularConservation'
 ]);
 
-/** @param {unknown} data A parsed file. */
+/**
+ * @param {unknown} data A parsed file.
+ * @returns {data is Record<string, unknown>}
+ */
 const isLegacyConfigPayload = (data) =>
   isPlainObject(data) &&
   !Object.prototype.hasOwnProperty.call(data, 'format') &&
@@ -5241,14 +5245,14 @@ const importSessionDocument = async (e, options = {}) => {
     const candidate = await importSessionFile(file, { signal: options.signal });
     if (!options.isCurrent()) return { status: 'canceled' };
     recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
-    let data = candidate.data;
-    await assertSafeObjectKeysForImport(data, 'Session');
-    if (isLegacyConfigPayload(data)) {
+    const parsed = candidate.data;
+    await assertSafeObjectKeysForImport(parsed, 'Session');
+    if (isLegacyConfigPayload(parsed)) {
       // A legacy configuration names no mode: it is the shown mode's settings.
       // It is read, confirmed and then applied as one step that a failure
       // rolls back (OV-710); its History is not restarted.
       const legacyMode = state.mode.value === 'linear' ? 'linear' : 'circular';
-      const legacyConfig = readLegacyConfigPayload(data, state.drawings[legacyMode], legacyMode);
+      const legacyConfig = readLegacyConfigPayload(parsed, state.drawings[legacyMode], legacyMode);
       const legacyRepairs = [...legacyConfig.repairs];
       const legacyOverrides = readPlainObject(legacyConfig.value.unmanagedConfigOverrides).value;
       if (Object.keys(legacyOverrides).length > 0) {
@@ -5276,12 +5280,13 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {LoadRepair[]} */
     const repairs = [];
     // The one read of the document (D1c 2.2): its band's description, repaired.
-    const storedDocument = /** @type {SessionEnvelope} */ (data);
-    const document = readSessionDocument(data);
+    // The document as the file holds it (R4 reads it), and as its band reads it.
+    const storedDocument = readSessionInput(parsed);
+    const document = readSessionDocument(storedDocument);
     repairs.push(...document.repairs);
     const preflight = await preflightSessionImport(document.value, repairs, uncomposedSets);
     // Preflight read the receipts against the requests Load read (RK-2).
-    data = preflight.data;
+    const { data } = preflight;
     recordSessionLifecycleEvent('current-session-preflight-end');
     const {
       sourceSessionVersion,
