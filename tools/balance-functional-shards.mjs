@@ -49,11 +49,16 @@ export const listFunctionalCases = () => {
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
   const report = JSON.parse(result.stdout);
   const testDir = path.relative(process.cwd(), report.config.rootDir).split(path.sep).join('/');
+  return { testDir, casesPerFile: casesPerFileOf([report], testDir) };
+};
+
+// The case count of each spec file in the given reports.
+export const casesPerFileOf = (reports, testDir) => {
   const casesPerFile = new Map();
-  for (const spec of specsOf(report, testDir)) {
+  for (const spec of reports.flatMap((report) => specsOf(report, testDir))) {
     casesPerFile.set(spec.file, (casesPerFile.get(spec.file) || 0) + spec.tests.length);
   }
-  return { testDir, casesPerFile };
+  return casesPerFile;
 };
 
 // Each green run reports a case once, retries included. A file's minutes are the

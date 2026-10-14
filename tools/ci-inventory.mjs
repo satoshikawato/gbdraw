@@ -9,7 +9,8 @@
 // tools/balance-functional-shards.mjs would write. It prints Markdown; with --post it
 // also adds the report as this week's comment on the open issue labelled
 // `ci-inventory` (creating the label and issue when missing). Week-over-week changes
-// come from the data block of the previous comment.
+// come from the data block of the workflow's own previous comment. Job lists are read
+// only for `Tests` and `Gallery publication`; other runs count by run duration.
 //
 // Reads GITHUB_TOKEN (or GH_TOKEN), GITHUB_REPOSITORY, GITHUB_API_URL, and
 // GITHUB_SERVER_URL. Run it from the repository root: it lists the functional cases
@@ -22,11 +23,17 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
-  SHARDS_FILE, WORKERS_PER_SHARD, listFunctionalCases, measureMinutes, planShards, specsOf
+  SHARDS_FILE, WORKERS_PER_SHARD, casesPerFileOf, listFunctionalCases, measureMinutes, planShards
 } from './balance-functional-shards.mjs';
 
-export const LABEL = 'ci-inventory';
-export const TESTS_WORKFLOW = '.github/workflows/test.yml';
+const LABEL = 'ci-inventory';
+// Only comments of the workflow's own token are reports; anyone can comment on the issue.
+const REPORT_AUTHOR = 'github-actions[bot]';
+const TESTS_WORKFLOW = '.github/workflows/test.yml';
+// Workflows whose job lists are read. The others count by run duration, which keeps a
+// normal week within the 1,000 requests an hour of a GITHUB_TOKEN.
+const JOB_LIST_WORKFLOWS = new Set([TESTS_WORKFLOW, '.github/workflows/gallery-publication.yml']);
+const RUN_DURATION = ' (run duration)';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const REBALANCE_RATIO = 1.2;
 const TOP = 15;
@@ -34,6 +41,8 @@ const TOP = 15;
 const RATE_RESERVE = 100;
 const PARALLEL_REQUESTS = 8;
 const DATA_BLOCK = /<!-- ci-inventory-data (\{.*?\}) -->/s;
+const WEEK = /^\d{4}-W\d{2}$/;
+const DATA_NUMBERS = ['cases', 'functionalTestMinutes', 'runnerMinutes', 'testJobs'];
 
 const sum = (values) => values.reduce((total, value) => total + value, 0);
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -60,8 +69,8 @@ const workflowLabel = (run) => (run.path?.startsWith('dynamic/') ? run.path.spli
 const jobLabel = (name) => name.replace(/ \(.*\)$/, '');
 
 // Runner-minutes and Tests timing of completed runs. `jobsByRun` maps a run id to its jobs
-// of every attempt; a run without a job list counts its own duration as one job named
-// after the workflow.
+// of every attempt; a run without a job list counts its own duration under its workflow
+// name marked "(run duration)", in both tables.
 export const summarizeRuns = ({ runs, jobsByRun }) => {
   const byWorkflow = new Map();
   const byJob = new Map();
@@ -77,8 +86,8 @@ export const summarizeRuns = ({ runs, jobsByRun }) => {
     if (!jobs) {
       runDurationOnly += 1;
       const minutes = minutesBetween(run.run_started_at, run.updated_at);
-      add(byWorkflow, workflow, minutes, 1);
-      add(byJob, workflowLabel(run), minutes);
+      add(byWorkflow, `${workflow}${RUN_DURATION}`, minutes, 1);
+      add(byJob, `${workflowLabel(run)}${RUN_DURATION}`, minutes);
       continue;
     }
     add(byWorkflow, workflow, 0, 1);
@@ -115,9 +124,25 @@ export const summarizeRuns = ({ runs, jobsByRun }) => {
   };
 };
 
+const SHARD_ARTIFACT = /^playwright-functional-shard-(\d+)-traces-\d+-(\d+)$/;
+
+// The shard artifacts of a run, one per shard: a re-run keeps the earlier attempt's
+// artifacts, so only the highest attempt of each shard counts.
+export const latestShardArtifacts = (artifacts) => {
+  const latest = new Map();
+  for (const artifact of artifacts) {
+    const match = artifact.name.match(SHARD_ARTIFACT);
+    if (!match || artifact.expired) continue;
+    const [shard, attempt] = [Number(match[1]), Number(match[2])];
+    if (!(latest.get(shard)?.attempt >= attempt)) latest.set(shard, { shard, attempt, artifact });
+  }
+  return [...latest.values()].sort((a, b) => a.shard - b.shard);
+};
+
 // The functional shards of one green run. `reports` are the shard reports with their
-// shard numbers; `shardsFile` is tests/ci/functional-shards.json; `casesPerFile` and
-// `testDir` come from listing the functional suite.
+// shard numbers (a shard without a report is listed as missing); `shardsFile` is
+// tests/ci/functional-shards.json; `casesPerFile` and `testDir` come from listing the
+// functional suite.
 export const summarizeFunctional = ({ reports, shardsFile, casesPerFile, testDir }) => {
   const shardTestMinutes = (report) => sum(measureMinutes([report], testDir).values());
   const shards = reports
@@ -128,24 +153,23 @@ export const summarizeFunctional = ({ reports, shardsFile, casesPerFile, testDir
     }))
     .sort((a, b) => a.shard - b.shard);
   const fileMinutes = measureMinutes(reports.map(({ report }) => report), testDir);
-  const casesRun = new Map();
-  for (const { report } of reports) {
-    for (const spec of specsOf(report, testDir)) {
-      casesRun.set(spec.file, (casesRun.get(spec.file) || 0) + spec.tests.length);
-    }
-  }
+  const casesRun = casesPerFileOf(reports.map(({ report }) => report), testDir);
   const plan = planShards({ casesPerFile, fileMinutes, shardCount: shardsFile.shards.length });
   const testMinutes = sum(shards.map((shard) => shard.testMinutes));
   const mean = testMinutes / (shards.length || 1);
   const slowest = Math.max(0, ...shards.map((shard) => shard.testMinutes));
   const unmeasured = [...casesPerFile.keys()].filter((file) => !(file in shardsFile.minutes)).sort();
+  // One rounded ratio decides the flag and is the number the report prints.
+  const slowestToMean = mean ? Math.round((slowest / mean) * 100) / 100 : 0;
   return {
     shards,
+    missingShards: shardsFile.shards.map((_, index) => index + 1)
+      .filter((number) => !shards.some((shard) => shard.shard === number)),
     cases: sum([...casesRun.values()]),
     testMinutes: round1(testMinutes),
-    slowestToMean: mean ? Math.round((slowest / mean) * 100) / 100 : 0,
+    slowestToMean,
     unmeasured,
-    rebalance: slowest > REBALANCE_RATIO * mean || unmeasured.length > 0,
+    rebalance: slowestToMean > REBALANCE_RATIO || unmeasured.length > 0,
     planChanges: JSON.stringify(plan.shards) !== JSON.stringify(shardsFile.shards),
     plannedTestMinutes: plan.shardMinutes,
     topSpecs: [...fileMinutes].map(([file, minutes]) => ({ file, cases: casesRun.get(file) || 0, minutes: round1(minutes) }))
@@ -160,14 +184,34 @@ export const countWorkflowJobs = (yaml) => {
   return body.split('\n').filter((line) => /^ {2}[A-Za-z0-9_-]+:\s*$/.test(line)).length;
 };
 
+// The numbers of a report's data block, or null unless every field has its type.
 export const readData = (body) => {
-  const match = body?.match(DATA_BLOCK);
+  const match = typeof body === 'string' ? body.match(DATA_BLOCK) : null;
   if (!match) return null;
+  let raw;
   try {
-    return JSON.parse(match[1]);
+    raw = JSON.parse(match[1]);
   } catch {
     return null;
   }
+  if (typeof raw?.week !== 'string' || !WEEK.test(raw.week)) return null;
+  const data = { week: raw.week };
+  for (const field of DATA_NUMBERS) {
+    if (typeof raw[field] !== 'number' || !Number.isFinite(raw[field])) return null;
+    data[field] = raw[field];
+  }
+  return data;
+};
+
+// This week's earlier report comment, to replace, and the previous week's numbers, from
+// the reports the workflow itself posted.
+export const priorReports = (comments, week) => {
+  const reports = comments
+    .filter((comment) => comment.user?.login === REPORT_AUTHOR)
+    .map((comment) => ({ comment, data: readData(comment.body) }))
+    .filter(({ data }) => data);
+  const thisWeek = reports.at(-1)?.data.week === week ? reports.at(-1).comment : null;
+  return { thisWeek, previous: (thisWeek ? reports.at(-2) : reports.at(-1))?.data ?? null };
 };
 
 const fmt = (value) => (value === null || value === undefined ? '-' : String(round1(value)));
@@ -183,7 +227,9 @@ const table = (header, rows) => [
 ].join('\n');
 
 // The weekly report as Markdown, ending with its data block.
-export const renderReport = ({ week, since, until, runs, functional, functionalRun, testJobs, previous, serverUrl, repository }) => {
+export const renderReport = ({
+  week, since, until, runs, partial = null, functional, functionalRun, testJobs, previous, serverUrl, repository
+}) => {
   const data = {
     week,
     cases: functional.cases,
@@ -205,6 +251,7 @@ export const renderReport = ({ week, since, until, runs, functional, functionalR
     '',
     `Window: ${since.toISOString().slice(0, 16)}Z to ${until.toISOString().slice(0, 16)}Z.`
       + ` What to do with a flagged report: docs/internal/SELECTIVE_CI.md, "Weekly CI inventory".`,
+    ...(partial ? ['', `**Partial report**: ${partial}`] : []),
     '',
     functional.rebalance
       ? `**Rebalance the functional shards**: ${reasons.join('; ')}.`
@@ -225,8 +272,8 @@ export const renderReport = ({ week, since, until, runs, functional, functionalR
     table(['Workflow [event]', 'Runs', 'Runner-minutes'],
       runs.byWorkflow.map((entry) => [entry.name, entry.runs, fmt(entry.minutes)])),
     '',
-    `${runs.runs} completed runs.`
-      + (runs.runDurationOnly ? ` ${runs.runDurationOnly} run(s) counted by run duration because the API request budget ran out.` : ''),
+    `${runs.runs} completed runs. Rows marked "(run duration)" count ${runs.runDurationOnly} whole run(s), not jobs:`
+      + ' job lists are read only for `Tests` and `Gallery publication`, and only while the API request budget lasts.',
     '',
     `### Runner-minutes by job (top ${TOP})`,
     '',
@@ -246,12 +293,14 @@ export const renderReport = ({ week, since, until, runs, functional, functionalR
     `Test-minutes add up case durations; a shard runs ${WORKERS_PER_SHARD} workers. `
       + (functional.planChanges
         ? 'The planned column is what `tools/balance-functional-shards.mjs` would assign from this run.'
-        : '`tools/balance-functional-shards.mjs` would keep the current plan.'),
+        : '`tools/balance-functional-shards.mjs` would keep the current plan.')
+      + (functional.missingShards.length
+        ? ` No functional report for shard ${functional.missingShards.join(', ')}; the totals leave it out.` : ''),
     '',
     table(['Shard', 'Test-minutes', 'Per worker', 'Reporter wall', 'Planned per worker'],
-      functional.shards.map((shard, index) => [
+      functional.shards.map((shard) => [
         shard.shard, fmt(shard.testMinutes), perWorker(shard.testMinutes), fmt(shard.wallMinutes),
-        perWorker(functional.plannedTestMinutes[index] ?? 0)
+        perWorker(functional.plannedTestMinutes[shard.shard - 1] ?? 0)
       ])),
     '',
     `### Spec files by test-minutes (top ${TOP})`,
@@ -268,7 +317,9 @@ export const renderReport = ({ week, since, until, runs, functional, functionalR
 
 const createClient = ({ token, apiUrl, repository }) => {
   let remaining = Infinity;
+  let requests = 0;
   const request = async (path, { method = 'GET', body } = {}) => {
+    requests += 1;
     const response = await fetch(path.startsWith('http') ? path : `${apiUrl}/repos/${repository}${path}`, {
       method,
       headers: {
@@ -287,7 +338,12 @@ const createClient = ({ token, apiUrl, repository }) => {
   const json = async (path, options) => {
     const response = await request(path, options);
     if (response.status === 404 && (!options || options.method === undefined)) return null;
-    if (!response.ok) throw new Error(`${options?.method || 'GET'} ${path}: ${response.status} ${await response.text()}`);
+    if (!response.ok) {
+      throw Object.assign(
+        new Error(`${options?.method || 'GET'} ${path}: ${response.status} ${await response.text()}`),
+        { status: response.status }
+      );
+    }
     return response.json();
   };
   // Pages until a short page; `key` names the list in each page, or null for a bare list.
@@ -300,56 +356,69 @@ const createClient = ({ token, apiUrl, repository }) => {
       if (list.length < 100) return items;
     }
   };
-  return { request, json, pages, remaining: () => remaining };
+  return { request, json, pages, remaining: () => remaining, requests: () => requests };
 };
 
-// The completed runs created in the window. A filtered run listing returns at most 1,000
-// runs, so the window is read one day at a time.
+// A rate-limit or permission refusal ends a listing early; the report says so.
+const refused = (error) => [403, 429].includes(error.status);
+
+// The completed runs created in the window, and why the listing stopped early, if it did.
+// A filtered run listing returns at most 1,000 runs, so the window is read a day at a time.
 const listRuns = async (client, since, until) => {
   const runs = [];
-  for (let start = since.getTime(); start < until.getTime(); start += DAY_MS) {
+  let partial = null;
+  for (let start = since.getTime(); start < until.getTime() && !partial; start += DAY_MS) {
     const end = Math.min(start + DAY_MS, until.getTime());
     const created = `${new Date(start).toISOString()}..${new Date(end - 1000).toISOString()}`;
-    runs.push(...await client.pages(`/actions/runs?status=completed&created=${encodeURIComponent(created)}`, 'workflow_runs'));
+    try {
+      runs.push(...await client.pages(`/actions/runs?status=completed&created=${encodeURIComponent(created)}`, 'workflow_runs'));
+    } catch (error) {
+      if (!refused(error)) throw error;
+      partial = `runs created from ${new Date(start).toISOString().slice(0, 16)}Z on are missing (HTTP ${error.status}).`;
+    }
   }
-  return [...new Map(runs.map((run) => [run.id, run])).values()];
+  return { runs: [...new Map(runs.map((run) => [run.id, run])).values()], partial };
 };
 
-// Job lists of every attempt, `Tests` runs first, until the request budget is spent.
+// Job lists of every attempt of `Tests` and `Gallery publication` runs, `Tests` first,
+// while the request budget lasts.
 const listJobs = async (client, runs) => {
   const jobsByRun = new Map();
-  const ordered = [...runs].sort((a, b) => Number(b.path === TESTS_WORKFLOW) - Number(a.path === TESTS_WORKFLOW));
+  const ordered = runs.filter((run) => JOB_LIST_WORKFLOWS.has(run.path))
+    .sort((a, b) => Number(b.path === TESTS_WORKFLOW) - Number(a.path === TESTS_WORKFLOW));
   for (let start = 0; start < ordered.length && client.remaining() > RATE_RESERVE; start += PARALLEL_REQUESTS) {
     const batch = ordered.slice(start, start + PARALLEL_REQUESTS);
-    const lists = await Promise.all(batch.map((run) => client.pages(`/actions/runs/${run.id}/jobs?filter=all`, 'jobs')));
+    let lists;
+    try {
+      lists = await Promise.all(batch.map((run) => client.pages(`/actions/runs/${run.id}/jobs?filter=all`, 'jobs')));
+    } catch (error) {
+      if (!refused(error)) throw error;
+      break;
+    }
     batch.forEach((run, index) => jobsByRun.set(run.id, lists[index]));
   }
   return jobsByRun;
 };
 
-const SHARD_ARTIFACT = /^playwright-functional-shard-(\d+)-/;
-
-// The latest green dev push `Tests` run that kept a functional report for every shard.
+// The latest green dev push `Tests` run that kept an artifact for every shard.
 const latestFunctionalRun = async (client, shardCount) => {
   const { workflow_runs: runs } = await client.json(
     `/actions/workflows/test.yml/runs?branch=dev&event=push&status=success&per_page=20`
   );
   for (const run of runs) {
-    const artifacts = (await client.pages(`/actions/runs/${run.id}/artifacts`, 'artifacts'))
-      .filter((artifact) => SHARD_ARTIFACT.test(artifact.name) && !artifact.expired);
-    if (new Set(artifacts.map((artifact) => artifact.name.match(SHARD_ARTIFACT)[1])).size === shardCount) {
-      return { run, artifacts };
-    }
+    const shards = latestShardArtifacts(await client.pages(`/actions/runs/${run.id}/artifacts`, 'artifacts'));
+    if (shards.length === shardCount) return { run, shards };
   }
-  throw new Error('no green dev Tests run in the last 20 kept every functional shard report');
+  throw new Error('no green dev Tests run in the last 20 kept every functional shard artifact');
 };
 
-// Downloads each shard artifact and reads its functional-report.json.
-const readShardReports = async (client, artifacts) => {
+// Downloads each shard artifact and reads its functional-report.json; an artifact
+// without one (a job that stopped before its report) is left out.
+const readShardReports = async (client, shards) => {
   const dir = mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(), 'ci-inventory-'));
   try {
     const reports = [];
-    for (const artifact of artifacts) {
+    for (const { shard, artifact } of shards) {
       const redirect = await client.request(artifact.archive_download_url);
       const location = redirect.headers.get('location');
       if (!location) throw new Error(`artifact ${artifact.name}: ${redirect.status}`);
@@ -358,8 +427,10 @@ const readShardReports = async (client, artifacts) => {
       const unzip = spawnSync('unzip', ['-p', archive, 'functional-report.json'], {
         encoding: 'utf8', maxBuffer: 256 * 1024 * 1024
       });
+      // unzip exits 11 when the archive has no such file.
+      if (unzip.status === 11) continue;
       if (unzip.status !== 0) throw new Error(`artifact ${artifact.name}: ${unzip.stderr}`);
-      reports.push({ shard: Number(artifact.name.match(SHARD_ARTIFACT)[1]), report: JSON.parse(unzip.stdout) });
+      reports.push({ shard, report: JSON.parse(unzip.stdout) });
     }
     return reports;
   } finally {
@@ -394,25 +465,25 @@ const main = async (argv) => {
 
   const shardsFile = JSON.parse(readFileSync(SHARDS_FILE, 'utf8'));
   const { testDir, casesPerFile } = listFunctionalCases();
-  const { run: functionalRun, artifacts } = await latestFunctionalRun(client, shardsFile.shards.length);
+  const { run: functionalRun, shards } = await latestFunctionalRun(client, shardsFile.shards.length);
   const functional = summarizeFunctional({
-    reports: await readShardReports(client, artifacts), shardsFile, casesPerFile, testDir
+    reports: await readShardReports(client, shards), shardsFile, casesPerFile, testDir
   });
-  const runs = await listRuns(client, since, until);
+  const { runs, partial } = await listRuns(client, since, until);
   const summary = summarizeRuns({ runs, jobsByRun: await listJobs(client, runs) });
 
   const issue = await findIssue(client);
-  const comments = issue ? (await client.pages(`/issues/${issue.number}/comments`, null))
-    .filter((comment) => readData(comment.body)) : [];
-  const thisWeek = comments.at(-1) && readData(comments.at(-1).body).week === week ? comments.at(-1) : null;
-  const previous = readData((thisWeek ? comments.at(-2) : comments.at(-1))?.body);
+  const { thisWeek, previous } = priorReports(
+    issue ? await client.pages(`/issues/${issue.number}/comments`, null) : [], week
+  );
 
   const markdown = renderReport({
-    week, since, until, runs: summary, functional, functionalRun,
+    week, since, until, runs: summary, partial, functional, functionalRun,
     testJobs: countWorkflowJobs(readFileSync(TESTS_WORKFLOW, 'utf8')),
     previous, serverUrl: process.env.GITHUB_SERVER_URL || 'https://github.com', repository
   });
   process.stdout.write(markdown);
+  console.error(`GitHub API requests: ${client.requests()}`);
   if (!post) return;
   const target = issue || await createIssue(client);
   // A second run in the same week replaces that week's comment.

@@ -419,9 +419,15 @@ the workflow reaches `main`. Its report covers the last 7 days:
 The report goes to the job summary and to one comment a week on the open issue
 labelled `ci-inventory`; the workflow creates the label and the issue when they
 are missing, and a second run in the same week replaces that week's comment.
-Each comment ends with a data block that the next week's run reads back. When
-the job lists of all runs would exceed the token's request budget, the
-remaining runs count by their own duration, and the report says how many.
+Each comment ends with a data block that the next week's run reads back; only
+the workflow's own comments (`github-actions[bot]`) count, and a block with a
+malformed field is ignored. The workflow's token is the first in this
+repository with `issues: write`. To stay within its 1,000 API requests an
+hour, the tool reads job lists only for `Tests` and `Gallery publication` runs;
+other runs, and any run left when the request budget runs low, count by their
+own duration in rows marked "(run duration)". When the API refuses the run
+listing (HTTP 403 or 429), the report covers the runs read so far and says it
+is partial.
 
 A report asks for a rebalance when the slowest shard has more than 1.2 times
 the mean test-minutes, or when a functional spec file has no recorded minutes
