@@ -765,12 +765,14 @@ def _overlay_legend_bounds_for_collision(
     """Return the composer's requested corner bounds before label adjustment."""
     if not placement.is_overlay:
         raise ValueError("collision bounds require an overlay legend placement")
-    plan = plan_composition(
+    plan = render_stage(
+        "composition_plan",
+        plan_composition,
         CompositionRequest(
             primary=CompositionItem("primary", primary_bounds),
             legend=CompositionItem("legend", legend_measurement.local_bounds),
             legend_placement=placement,
-        )
+        ),
     )
     primary = plan.placement_for("primary")
     legend = plan.placement_for("legend")
@@ -2709,6 +2711,7 @@ def add_record_on_circular_canvas(
         canvas_config,
         species,
         strain,
+        group_key=GroupKey(record_key, GroupKind.DEFINITION),
         **definition_kwargs,
         record_transform=record_transform,
         record_presentation=record_presentation,

@@ -34,19 +34,21 @@ from ...render.groups.circular import (
     GcContentGroup,
     GcSkewGroup,
     LabelsGroup,
-    LegendGroup,
     SeqRecordGroup,
     TickGroup,
 )
 from ...render.group_content import (
+    CANVAS_SCOPE,
     BuildsGroup,
     GroupContent,
     GroupKey,
+    GroupKind,
     build_group_content,
     place_content,
 )
 from ...render_stages import render_stage
 from ...svg.ids import stable_svg_id
+from ...render.groups.circular.legend import circular_legend_content
 from .positioning import (
     center_group_on_canvas,
     place_definition_group_on_canvas,
@@ -336,6 +338,7 @@ def add_record_definition_group_on_canvas(
     species: str | None,
     strain: str | None,
     *,
+    group_key: GroupKey,
     plot_title: str | None = None,
     definition_profile: str = "full",
     definition_position: str = "center",
@@ -358,11 +361,13 @@ def add_record_definition_group_on_canvas(
     Returns:
     Drawing: The updated SVG drawing with the record definition group added.
     """
-    cfg = canvas_config.profile.config
-    definition_builder = DefinitionGroup(
+    content = render_stage(
+        "definition_content",
+        build_group_content,
+        DefinitionGroup,
         gb_record,
         canvas_config.geometry(),
-        cfg=cfg,
+        cfg=canvas_config.profile.config,
         species=species,
         strain=strain,
         plot_title=plot_title,
@@ -374,8 +379,8 @@ def add_record_definition_group_on_canvas(
         species_line_count=species_line_count,
         record_presentation=record_presentation,
     )
-    definition_group: Group = definition_builder.get_group()
-    setattr(definition_group, "_gbdraw_local_bounds", definition_builder.local_bounds)
+    definition_group = place_content(canvas, content, group_key)
+    setattr(definition_group, "_gbdraw_local_bounds", content.local_bounds)
     definition_group = place_definition_group_on_canvas(
         definition_group,
         canvas_config,
@@ -522,10 +527,8 @@ def add_legend_group_on_canvas(
     Returns:
     Drawing: The updated SVG drawing with the legend group added.
     """
-    legend_group = LegendGroup(legend_measurement, legend_table).get_group()
-    setattr(legend_group, "_gbdraw_local_bounds", legend_measurement.local_bounds)
-    canvas.add(legend_group)
-
+    content = render_stage("legend_content", circular_legend_content, legend_measurement, legend_table)
+    canvas.add(place_content(canvas, content, GroupKey(CANVAS_SCOPE, GroupKind.LEGEND)))
     return canvas
 
 

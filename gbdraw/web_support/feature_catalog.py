@@ -2101,8 +2101,9 @@ def _reference_reconstructible_nucleotide_sequences(
 
 # The group kinds whose elements the catalog reads: features (record and axis
 # groups, with the record source span), comparison ribbons and annotations.
+# A Circular conservation ring carries the hits the catalog binds to features.
 _CATALOG_GROUP_KINDS = frozenset(
-    {GroupKind.AXIS, GroupKind.FEATURES, GroupKind.COMPARISON, GroupKind.ANNOTATIONS}
+    {GroupKind.AXIS, GroupKind.FEATURES, GroupKind.COMPARISON, GroupKind.ANNOTATIONS, GroupKind.CONSERVATION}
 )
 # The namespaces of an svgwrite root, so the contents parse as in the document.
 _CATALOG_CONTENTS_ROOT = (
@@ -2115,7 +2116,8 @@ def _catalog_contents(drawing: Drawing) -> tuple[GroupContent, ...] | None:
     """The contents whose elements the catalog reads, in document order.
 
     ``None`` when a top-level element other than ``defs`` is not a placed
-    content (Circular groups have none yet): the catalog then reads the SVG.
+    content (a Circular plot title, a Multi-Record Canvas): the catalog then
+    reads the SVG.
     """
 
     contents: list[GroupContent] = []

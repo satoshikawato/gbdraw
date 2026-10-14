@@ -197,6 +197,15 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
         ),
         frozenset({"definition_content"}),
     ),
+    # The Circular definition reads the definition section, which holds the
+    # plot title font size (the shared-common profile draws the title in it).
+    "plot_title_font_size": frozenset({"definition_content"}),
+    # The Circular definition draws the species and strain lines, in full or
+    # short beside a plot title.
+    **dict.fromkeys(
+        ("species (no plot title)", "strain (no plot title)", "keep_full_definition_with_plot_title"),
+        frozenset({"definition_content"}),
+    ),
 }
 
 

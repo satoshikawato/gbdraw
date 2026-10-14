@@ -43,6 +43,7 @@ from tests.utils.render_stage_equivalence import (
     random_walk,
     render_captured,
     run_chain,
+    state_arguments,
     synthetic_record,
     write_depth_table,
     write_genbank,
@@ -122,6 +123,31 @@ def test_declarations_have_no_undeclared_read_or_uncacheable_stage(
 ) -> None:
     failures = declaration_failures(chain)
     assert not failures, "\n".join(failures)
+
+
+@pytest.mark.parametrize(
+    ("case_id", "option_ids"),
+    [("C1", ("plot_title_position", "annotation_table")), ("C3", ("plot_title_position",))],
+)
+def test_the_circular_catalog_item_of_the_contents_equals_the_catalog_of_the_svg(
+    case_id: str,
+    option_ids: tuple[str, ...],
+    placeholders: Placeholders,
+    tmp_path: Path,
+) -> None:
+    """When every top-level group is a content (no plot title here), a cache
+    transaction reads the Circular catalog from the contents; without one it
+    reads the SVG. Both give the same reply (annotations on C1; depth,
+    conservation and an overlay legend on C3)."""
+
+    case = CASES[case_id]
+    variants = {option: variant for option, variant in matrix_variants(case, option_ids=option_ids)}
+    arguments = state_arguments(case, variants, placeholders)
+    harness = EquivalenceHarness("circular", tmp_path / "out")
+    cold = harness.cold(arguments)
+    assert cold.error is None
+    assert cold.stages.builds["catalog_item"] == 1
+    assert_same_outcome(harness.uncached(arguments), cold, f"{case_id} {option_ids} (uncached vs cold)")
 
 
 # Slow walks: short walks over many seeds, each well within the 300 s timeout.

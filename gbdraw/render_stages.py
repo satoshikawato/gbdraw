@@ -121,7 +121,8 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "gc_skew_content": _CIRCULAR_TRACK_SECTIONS,
     "depth_content": _CIRCULAR_TRACK_SECTIONS,
     "length_bar_content": frozenset(),
-    "definition_content": frozenset(),
+    # Circular: the centre or edge definition reads its font, interval and the dpi.
+    "definition_content": frozenset({"canvas", "objects.definition", "objects.text"}),
     "annotation_content": frozenset(),
     "record_content": frozenset(
         {
