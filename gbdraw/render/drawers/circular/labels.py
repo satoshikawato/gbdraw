@@ -14,6 +14,7 @@ from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
 from ....core.text import calculate_bbox_dimensions
 from ....labels.circular_leaders import TextAnchor, TextBaseline, horizontal_label_alignment
+from ....labels.circular_types import CircularLabel
 from ...label_binding import bind_label_part
 
 
@@ -36,7 +37,7 @@ class LabelDrawer:
     def embed_label(
         self,
         group,
-        label,
+        label: CircularLabel,
         radius,
         record_length,
         track_ratio,
@@ -159,7 +160,7 @@ class LabelDrawer:
         group.add(text_path)
         return group
 
-    def add_label_on_the_rim(self, group, label, radius, record_length):
+    def add_label_on_the_rim(self, group, label: CircularLabel, radius, record_length):
         if label.get("placement") == "radial":
             start_x = float(label.get("text_x", label["start_x"]))
             start_y = float(label.get("text_y", label["start_y"]))
@@ -200,7 +201,7 @@ class LabelDrawer:
 
     def draw(
         self,
-        label,
+        label: CircularLabel,
         group,
         record_length,
         radius,

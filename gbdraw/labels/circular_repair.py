@@ -50,6 +50,7 @@ from .circular import (
     normalize_angle_near_reference,
 )
 from .circular_leaders import arrival_contact, contact_end, label_ink_box
+from .circular_types import CircularLabel
 from .fit import LabelShape, covers_definition_text, polylines_cross, shapes_overlap
 
 # LP-D57: repair records with up to this many defects, within this many evaluations.
@@ -79,7 +80,7 @@ _EPS = 1e-9
 Side: TypeAlias = Literal["out", "in"]
 DefectKind: TypeAlias = Literal["overlap", "crossing", "definition"]
 Defect: TypeAlias = tuple[DefectKind, int, int]
-Moved: TypeAlias = dict[int, dict]
+Moved: TypeAlias = dict[int, CircularLabel]
 
 
 @dataclass(frozen=True)
@@ -109,11 +110,11 @@ def _clockwise(first: float, second: float) -> float:
 class _Repair:
     """The search state of one record: copies of its labels, never the caller's."""
 
-    def __init__(self, labels: Sequence[dict], total_length: int, definition_text: Sequence[Aabb]) -> None:
+    def __init__(self, labels: Sequence[CircularLabel], total_length: int, definition_text: Sequence[Aabb]) -> None:
         self.total_length = int(total_length)
         self.definition_text = tuple(definition_text)
-        self.labels = [dict(label) for label in labels]
-        self.original = [dict(label) for label in labels]
+        self.labels = [label.copy() for label in labels]
+        self.original = [label.copy() for label in labels]
         self.count = len(self.labels)
         self.movable = [not label.get("is_embedded") for label in self.labels]
         self.external = [index for index in range(self.count) if self.movable[index]]
@@ -163,10 +164,10 @@ class _Repair:
 
     # ---- geometry -------------------------------------------------------
     @staticmethod
-    def _elbow_radius(label: dict) -> float:
+    def _elbow_radius(label: CircularLabel) -> float:
         return math.hypot(float(label["middle_x"]), float(label["middle_y"]))
 
-    def _geometry_of(self, label: dict) -> _Geometry:
+    def _geometry_of(self, label: CircularLabel) -> _Geometry:
         shape = circular_label_shape(label, self.total_length)
         text = [point for part in shape.parts for point in part]
         if not shape.leader:
@@ -177,7 +178,7 @@ class _Repair:
         reach = union_aabbs((box, leader_box)) if box is not None and leader_box is not None else None
         return _Geometry(shape, box, leader_box, reach)
 
-    def _text_rect(self, label: dict) -> tuple[tuple[float, float, float, float], Aabb]:
+    def _text_rect(self, label: CircularLabel) -> tuple[tuple[float, float, float, float], Aabb]:
         rect = _label_bbox_rect(label, self.total_length, 0.0)
         return rect, Aabb(*rect)
 
@@ -273,7 +274,7 @@ class _Repair:
         return cached
 
     # ---- rules ------------------------------------------------------------
-    def _displacement(self, index: int, label: dict) -> tuple[float, float]:
+    def _displacement(self, index: int, label: CircularLabel) -> tuple[float, float]:
         original = self.original[index]
         text = math.hypot(
             float(label["start_x"]) - float(original["start_x"]), float(label["start_y"]) - float(original["start_y"])
@@ -315,7 +316,7 @@ class _Repair:
                     return False
         return True
 
-    def _within_bounds(self, index: int, label: dict) -> bool:
+    def _within_bounds(self, index: int, label: CircularLabel) -> bool:
         half = self.half[index]
         if half != 0 and _current_half_from_x(float(label["start_x"]), axis_eps_px=HEMISPHERE_AXIS_EPS_PX) != half:
             return False
@@ -336,7 +337,7 @@ class _Repair:
         return not elbow_moved or max_radius <= elbow_radius <= self.feature_radius[index] - 1.0
 
     # ---- moves --------------------------------------------------------------
-    def _finish(self, label: dict) -> dict:
+    def _finish(self, label: CircularLabel) -> CircularLabel:
         """Set the leader end of a moved label; a chosen contact follows the arrival rule."""
 
         box = label_ink_box(label, self.total_length) if "leader_contact" in label else None
@@ -349,8 +350,8 @@ class _Repair:
         label["leader_start_x"], label["leader_start_y"] = float(end[0]), float(end[1])
         return label
 
-    def _with_start(self, index: int, x: float, y: float) -> dict:
-        label = dict(self.labels[index])
+    def _with_start(self, index: int, x: float, y: float) -> CircularLabel:
+        label = self.labels[index].copy()
         label["start_x"] = float(x)
         label["start_y"] = float(y)
         target = float(
@@ -389,7 +390,7 @@ class _Repair:
         for index, delta in zip(run, deltas):
             if abs(delta) < 1e-12:
                 continue
-            label = dict(self.labels[index])
+            label = self.labels[index].copy()
             x, y = float(label["middle_x"]), float(label["middle_y"])
             radius = math.hypot(x, y)
             if radius <= _EPS:
@@ -436,7 +437,7 @@ class _Repair:
     def _contact(self, index: int) -> Moved:
         """The leader meets the point its arrival selects, unless the last piece then runs through its text."""
 
-        label = dict(self.labels[index])
+        label = self.labels[index].copy()
         box = label_ink_box(label, self.total_length)
         if box is None:
             return {}
@@ -576,7 +577,7 @@ def _clusters(defects: set[Defect]) -> list[set[int]]:
     return list(groups.values())
 
 
-def defect_count(labels: Sequence[dict], total_length: int, definition_text: Sequence[Aabb] = ()) -> int:
+def defect_count(labels: Sequence[CircularLabel], total_length: int, definition_text: Sequence[Aabb] = ()) -> int:
     """Overlapping pairs, crossing pairs and labels over the definition text of one record, as the fit check counts them."""
 
     fit = sum(circular_label_fits(labels, total_length, definition_text=definition_text).values(), FITS)
@@ -584,11 +585,11 @@ def defect_count(labels: Sequence[dict], total_length: int, definition_text: Seq
 
 
 def repair_circular_labels(
-    labels: Sequence[dict],
+    labels: Sequence[CircularLabel],
     total_length: int,
     *,
     definition_text: Sequence[Aabb] = (),
-) -> list[dict] | None:
+) -> list[CircularLabel] | None:
     """The record's labels with their slight defects repaired, or None to keep them as they are.
 
     ``labels`` are one record's drawn labels (embedded and horizontal

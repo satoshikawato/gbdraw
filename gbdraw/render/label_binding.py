@@ -6,7 +6,7 @@ LABEL_BINDING_SCHEMA_ATTRIBUTE = "data-gbdraw-label-binding-schema"
 LABEL_BINDING_SCHEMA = "1"
 
 
-def bind_label_part(element, feature_id: str, *, complete: bool = False):
+def bind_label_part(element, feature_id: str | None, *, complete: bool = False):
     """Bind one label text or leader segment to its rendered feature."""
 
     identity = str(feature_id or "").strip()

@@ -11,6 +11,7 @@ from ....canvas import CircularCanvasConfigurator
 from ....auto_sizes import determine_length_parameter
 from ....features.factory import FeatureBuildResult
 from ....features.objects import FeatureObject
+from ....labels.circular_types import CircularLabel
 from ....layout.circular import CircularRecordRenderContext
 from ....svg.ids import record_group_svg_id
 from ...drawers.circular.labels import LabelDrawer
@@ -30,7 +31,7 @@ class SeqRecordGroup:
         feature_config: FeatureDrawingConfigurator,
         feature_layers: FeatureBuildResult,
         render_context: CircularRecordRenderContext,
-        precalculated_labels: Optional[list[dict]] = None,
+        precalculated_labels: Optional[list[CircularLabel]] = None,
         feature_track_ratio_factor_override: float | None = None,
         feature_anchor_radius_px: float | None = None,
         record_index: int = 0,
@@ -58,7 +59,7 @@ class SeqRecordGroup:
         self.strandedness = render_context.profile.strandedness
         self.track_ratio_factors = cfg.canvas.circular.track_ratio_factors[self.length_param]
         self.track_ratio = self.canvas_config.track_ratio
-        self.precalculated_labels: Optional[list[dict]] = precalculated_labels
+        self.precalculated_labels: Optional[list[CircularLabel]] = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
         self.feature_anchor_radius_px = feature_anchor_radius_px
         self.record_index = int(record_index)

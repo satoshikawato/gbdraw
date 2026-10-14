@@ -68,6 +68,7 @@ from ...labels.circular import (
 )
 from ...labels.circular_fit import CircularLabelLayout
 from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
+from ...labels.circular_types import CircularLabel
 from ...labels.fit import FITS, LabelFit, LabelFitValue, LabelKind
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
@@ -535,19 +536,19 @@ def _unwrap_angle_near_reference(angle_rad: float, reference_rad: float) -> floa
     return angle_rad + (2.0 * math.pi) * round((reference_rad - angle_rad) / (2.0 * math.pi))
 
 
-def _label_target_unwrapped_angle(label: dict[str, Any], total_length: int) -> float:
+def _label_target_unwrapped_angle(label: CircularLabel, total_length: int) -> float:
     """Target label angle derived from genomic midpoint, in unwrapped radians."""
     return (2.0 * math.pi * (float(label["middle"]) / float(total_length))) - (0.5 * math.pi)
 
 
-def _label_unwrapped_angle(label: dict[str, Any], total_length: int) -> float:
+def _label_unwrapped_angle(label: CircularLabel, total_length: int) -> float:
     """Current label angle projected near its target branch."""
     current_angle = math.atan2(float(label["start_y"]), float(label["start_x"]))
     target_angle = _label_target_unwrapped_angle(label, total_length)
     return _unwrap_angle_near_reference(current_angle, target_angle)
 
 
-def _label_bbox_local(label: dict[str, Any], total_length: int, margin_px: float) -> tuple[float, float, float, float]:
+def _label_bbox_local(label: CircularLabel, total_length: int, margin_px: float) -> tuple[float, float, float, float]:
     """Approximate label bbox in local (centered) coordinates."""
     authoritative_aabb = label.get("aabb_local")
     if authoritative_aabb is not None and len(authoritative_aabb) == 4:
@@ -605,7 +606,7 @@ def _label_bbox_local(label: dict[str, Any], total_length: int, margin_px: float
 
 
 def _label_bbox_on_canvas(
-    label: dict[str, Any],
+    label: CircularLabel,
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
     margin_px: float,
@@ -621,7 +622,7 @@ def _label_bbox_on_canvas(
 
 
 def _move_label_text_anchor(
-    label: dict[str, Any],
+    label: CircularLabel,
     *,
     start_x: float,
     start_y: float,
@@ -634,11 +635,14 @@ def _move_label_text_anchor(
     label["start_x"] = float(start_x)
     label["start_y"] = float(start_y)
 
-    for x_key, y_key in (("text_x", "text_y"), ("leader_start_x", "leader_start_y")):
-        if x_key in label:
-            label[x_key] = float(label[x_key]) + dx
-        if y_key in label:
-            label[y_key] = float(label[y_key]) + dy
+    if "text_x" in label:
+        label["text_x"] = float(label["text_x"]) + dx
+    if "text_y" in label:
+        label["text_y"] = float(label["text_y"]) + dy
+    if "leader_start_x" in label:
+        label["leader_start_x"] = float(label["leader_start_x"]) + dx
+    if "leader_start_y" in label:
+        label["leader_start_y"] = float(label["leader_start_y"]) + dy
 
     authoritative_aabb = label.get("aabb_local")
     if authoritative_aabb is not None and len(authoritative_aabb) == 4:
@@ -657,7 +661,7 @@ def _move_label_text_anchor(
 
 
 def _external_label_bounds_on_canvas(
-    labels: list[dict[str, Any]],
+    labels: list[CircularLabel],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
     *,
@@ -689,13 +693,13 @@ def _external_label_bounds_on_canvas(
 
 
 def _external_label_paint_bounds_local(
-    label: Mapping[str, Any],
+    label: CircularLabel,
     total_length: int,
     *,
     leader_half_stroke_px: float,
 ) -> Aabb:
     """Return exact text plus leader paint bounds in circle-local coordinates."""
-    measured_label = dict(label)
+    measured_label = label.copy()
     if measured_label.get("aabb_local") is None:
         text_width, text_height = calculate_svg_bbox_dimensions(
             str(measured_label.get("label_text", "")),
@@ -739,7 +743,7 @@ def _external_label_paint_bounds_local(
 
 
 def _external_label_obstacles_on_canvas(
-    labels: Sequence[Mapping[str, Any]],
+    labels: Sequence[CircularLabel],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
 ) -> tuple[Aabb, ...]:
@@ -857,7 +861,7 @@ def _overlay_legend_bounds_for_collision(
 
 
 def _legend_collision_indices(
-    labels: list[dict[str, Any]],
+    labels: list[CircularLabel],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
     legend_bounds: Aabb,
@@ -876,7 +880,7 @@ def _legend_collision_indices(
 
 
 def _labels_collide_with_legend(
-    labels: list[dict[str, Any]],
+    labels: list[CircularLabel],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
     legend_bounds: Aabb,
@@ -906,7 +910,7 @@ def _legend_center_local(
 
 
 def _preferred_angular_shift_sign(
-    label: dict[str, Any],
+    label: CircularLabel,
     canvas_config: CircularCanvasConfigurator,
     legend_bounds: Aabb,
 ) -> int:
@@ -933,7 +937,7 @@ def _preferred_angular_shift_sign(
 
 
 def _expand_shift_block_to_preserve_order(
-    labels: list[dict[str, Any]],
+    labels: list[CircularLabel],
     total_length: int,
     side_indices: list[int],
     center_pos: int,
@@ -969,7 +973,7 @@ def _expand_shift_block_to_preserve_order(
 
 
 def _try_shift_labels_away_from_legend(
-    labels: list[dict[str, Any]],
+    labels: list[CircularLabel],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
     legend_bounds: Aabb,
@@ -1028,7 +1032,7 @@ def _try_shift_labels_away_from_legend(
                     block_indices = side_indices[block_left : block_right + 1]
 
                     candidate_positions: dict[int, tuple[float, float]] = {}
-                    candidate_labels: dict[int, dict[str, Any]] = {}
+                    candidate_labels: dict[int, CircularLabel] = {}
                     candidate_valid = True
 
                     for block_idx in block_indices:
@@ -1126,7 +1130,7 @@ def _try_shift_labels_away_from_legend(
 
 
 def _resolve_label_legend_collisions(
-    labels: list[dict[str, Any]],
+    labels: list[CircularLabel],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
     legend_bounds: Aabb,
@@ -1548,7 +1552,7 @@ def _draw_resolved_circular_slot(
     gc_content_tick_font_size_override: float | None = None,
     feature_layers: FeatureBuildResult,
     render_context: CircularRecordRenderContext,
-    precalculated_labels: list[dict] | None = None,
+    precalculated_labels: list[CircularLabel] | None = None,
     use_slot_group_id: bool = True,
     use_slot_tick_options: bool = True,
     use_feature_anchor_override: bool = True,
@@ -1945,8 +1949,8 @@ def _default_outer_label_arena(
 def _record_label_layout(
     gb_record: SeqRecord,
     profile: CircularRenderProfile,
-    drawn_labels: Sequence[dict[str, Any]],
-    place_labels: Callable[..., list[dict[str, Any]]],
+    drawn_labels: Sequence[CircularLabel],
+    place_labels: Callable[..., list[CircularLabel]],
     *,
     definition_text: Sequence[Aabb],
     radial_refused: bool,
@@ -2290,7 +2294,7 @@ def add_record_on_circular_canvas(
         if feature_width_override_requested:
             outer_arena = (default_anchor_px, default_arc_outer_px)
 
-    precalculated_labels: list[dict[str, Any]] | None = None
+    precalculated_labels: list[CircularLabel] | None = None
     # Text measurements per label font size, shared by the drawn placement and fit probes.
     label_candidate_caches: dict[float, dict[str, object]] = {}
     # LP-D49 DEF-WARN and the LP-D57 repair: labels over the centre definition text (not a plot title).
@@ -2317,7 +2321,7 @@ def add_record_on_circular_canvas(
         else ()
     )
 
-    def place_labels(label_profile: CircularRenderProfile, *, probe: bool = False) -> list[dict[str, Any]]:
+    def place_labels(label_profile: CircularRenderProfile, *, probe: bool = False) -> list[CircularLabel]:
         """Place this record's labels with the current geometry (read at call time)."""
 
         font_size = circular_label_font_size(label_profile.config, len(gb_record.seq))

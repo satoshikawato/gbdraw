@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal, TypeAlias
+from typing import Literal, TypeAlias
 
 from ..core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink
 from ..layout.spatial import Aabb
 from ..layout.text_geometry import Point
+from .circular_types import CircularLabel
 from .fit import polyline_crossing_count
 
 LeaderSegment: TypeAlias = tuple[Point, Point]
@@ -59,7 +60,7 @@ def horizontal_label_alignment(
     return anchor, "hanging" if 170 <= angle < 190 else "middle"
 
 
-def label_ink_box(label: Mapping[str, Any], total_length: int) -> Aabb | None:
+def label_ink_box(label: CircularLabel, total_length: int) -> Aabb | None:
     """The box of a horizontal label's painted letters, in record coordinates; None when it cannot be measured."""
 
     family = str(label.get("font_family", ""))
@@ -108,7 +109,7 @@ def _point(box: Aabb, contact: LeaderContact) -> Point:
     return (box.min_x + contact[0] * box.width, box.min_y + contact[1] * box.height)
 
 
-def arrival_contact(label: Mapping[str, Any], box: Aabb) -> LeaderContact:
+def arrival_contact(label: CircularLabel, box: Aabb) -> LeaderContact:
     """The LP-D23 point a leader meets, from where it arrives (LP-D55, LP-D56).
 
     An elbow beside the box: the corner on the feature's side when the elbow
@@ -140,7 +141,7 @@ def arrival_contact(label: Mapping[str, Any], box: Aabb) -> LeaderContact:
     return (near, 1.0 if elbow_y > middle_y else 0.0)
 
 
-def contact_end(label: Mapping[str, Any], box: Aabb, contact: LeaderContact) -> Point:
+def contact_end(label: CircularLabel, box: Aabb, contact: LeaderContact) -> Point:
     """Where a leader meeting ``contact`` of ``box`` ends: ``CONTACT_GAP_PX`` short of it, toward the elbow."""
 
     point_x, point_y = _point(box, contact)
@@ -152,7 +153,7 @@ def contact_end(label: Mapping[str, Any], box: Aabb, contact: LeaderContact) -> 
     return point_x + (elbow_x - point_x) * share, point_y + (elbow_y - point_y) * share
 
 
-def chosen_contact_end(label: Mapping[str, Any], total_length: int) -> Point | None:
+def chosen_contact_end(label: CircularLabel, total_length: int) -> Point | None:
     """The leader end of a label whose contact the repair chose, or None for the engine's own end."""
 
     contact = label.get("leader_contact")
@@ -164,7 +165,7 @@ def chosen_contact_end(label: Mapping[str, Any], total_length: int) -> Point | N
     return contact_end(label, box, (float(contact[0]), float(contact[1])))
 
 
-def leader_polyline(label: Mapping[str, Any]) -> tuple[Point, Point, Point]:
+def leader_polyline(label: CircularLabel) -> tuple[Point, Point, Point]:
     """Return the drawn leader polyline: feature anchor -> elbow -> label contact."""
 
     feature = (
@@ -179,14 +180,14 @@ def leader_polyline(label: Mapping[str, Any]) -> tuple[Point, Point, Point]:
     return (feature, elbow, contact)
 
 
-def leader_segments(label: Mapping[str, Any]) -> tuple[LeaderSegment, LeaderSegment]:
+def leader_segments(label: CircularLabel) -> tuple[LeaderSegment, LeaderSegment]:
     """Return the two segments of the drawn leader polyline."""
 
     feature, elbow, contact = leader_polyline(label)
     return ((feature, elbow), (elbow, contact))
 
 
-def leader_crossing_count(labels: Sequence[Mapping[str, Any]]) -> int:
+def leader_crossing_count(labels: Sequence[CircularLabel]) -> int:
     """Count label pairs whose leader polylines cross (touching does not count)."""
 
     return polyline_crossing_count([leader_polyline(label) for label in labels])
