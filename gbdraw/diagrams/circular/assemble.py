@@ -1702,7 +1702,9 @@ def _draw_resolved_circular_slot(
                 resolved_slot.id,
             )
             return canvas
-        conservation_kwargs: dict[str, Any] = {}
+        conservation_kwargs: dict[str, Any] = {
+            "group_key": GroupKey(record_key, GroupKind.CONSERVATION, str(resolved_slot.id)),
+        }
         if use_slot_group_id:
             conservation_kwargs["group_id"] = track_slot_svg_id(
                 resolved_slot.id,

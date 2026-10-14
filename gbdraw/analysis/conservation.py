@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, Literal, Sequence, TypeAlias, cast
+from typing import Iterable, Literal, Sequence, TypeAlias, cast
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -18,13 +19,11 @@ from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.io.comparison_sequences import comparison_file_stem
 from gbdraw.io.comparisons import (
     COMPARISON_COLUMNS,
+    ComparisonFilter,
     filter_comparison_dataframe,
     normalize_comparison_dataframe,
     read_comparison_table,
 )
-
-if TYPE_CHECKING:
-    from gbdraw.configurators import BlastMatchConfigurator
 
 logger = logging.getLogger(__name__)
 
@@ -82,14 +81,28 @@ def read_conservation_inputs(sources: Sequence[ConservationInput] | None) -> tup
 
 
 def _read_conservation_input(source: ConservationInput) -> ConservationTable:
+    """Read one input; a staged file gives its rows that resource's identity.
+
+    The identity lets the ``conservation_tracks`` render stage that filters
+    the rows be reused across requests; rows of a search result are keyed by
+    their text.
+    """
+
     if isinstance(source, ConservationTable):
         return source
+    # Deferred: gbdraw.api imports this module.
+    from gbdraw.api.prepared import register_prepared_resource_value, register_prepared_value_identity
+
     try:
         if isinstance(source, ConservationSearchResult):
             # Resolved LOSAT rows take the file path's reader (byte-identical rings).
             rows = read_comparison_table(io.StringIO(source.text), label=source.name)
+            register_prepared_value_identity(
+                rows,
+                ("conservation_search_result", source.name, hashlib.sha256(source.text.encode("utf-8")).hexdigest()),
+            )
         else:
-            rows = read_comparison_table(source)
+            rows = register_prepared_resource_value(read_comparison_table(source), source)
     except ValidationError as exc:
         return ConservationTable(_input_name(source), None, str(exc))
     return ConservationTable(_input_name(source), rows)
@@ -234,7 +247,7 @@ def conservation_track_gradient_colors(
     return tint_color(normalized_track_color), normalized_track_color
 
 
-def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: BlastMatchConfigurator) -> DataFrame:
+def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: ComparisonFilter) -> DataFrame:
     df = dataframe.copy()
     # Keep the original source-row identity through filtering and paint-order sorting.
     df["source_hit_index"] = range(len(df))
@@ -244,7 +257,7 @@ def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: BlastMatchC
 
 def _load_conservation_file(
     path: ConservationInput,
-    blast_config: BlastMatchConfigurator,
+    blast_config: ComparisonFilter,
 ) -> tuple[DataFrame | None, str | None]:
     table = _read_conservation_input(path)
     if table.rows is None:
@@ -257,7 +270,7 @@ def _load_conservation_file(
 
 def load_conservation_sources(
     *,
-    blast_config: object,
+    blast_config: ComparisonFilter,
     conservation_files: Sequence[ConservationInput] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     labels: Sequence[str] | None = None,
@@ -299,7 +312,7 @@ def load_conservation_sources(
         if path is not None:
             frame, reason = _load_conservation_file(
                 path if isinstance(path, (ConservationSearchResult, ConservationTable)) else str(path),
-                cast("BlastMatchConfigurator", blast_config),
+                blast_config,
             )
             if frame is not None:
                 valid_frames.append(frame)
@@ -312,7 +325,7 @@ def load_conservation_sources(
                 valid_frames.append(
                     _filter_normalized_dataframe(
                         normalize_comparison_dataframe(dataframes[source_index]),
-                        cast("BlastMatchConfigurator", blast_config),
+                        blast_config,
                     )
                 )
             except ValidationError as exc:

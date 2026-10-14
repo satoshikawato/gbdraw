@@ -14,6 +14,7 @@ from svgwrite.container import Group
 
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
+from ...analysis.conservation import ConservationTrack
 from ...features.factory import FeatureBuildResult
 from ...labels.circular_types import CircularLabel
 from ...layout.circular import CircularRecordRenderContext
@@ -192,9 +193,10 @@ def add_depth_group_on_canvas(
 def add_conservation_group_on_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
-    conservation_track,
+    conservation_track: ConservationTrack,
     canvas_config: CircularCanvasConfigurator,
     *,
+    group_key: GroupKey,
     inner_radius_px: float,
     outer_radius_px: float,
     min_identity: float,
@@ -204,25 +206,22 @@ def add_conservation_group_on_canvas(
     record_index: int = 0,
 ) -> Drawing:
     """Adds one circular conservation ring group to the canvas."""
-    cfg = canvas_config.profile.config
-    conservation_group: Group = ConservationGroup(
-        hits=conservation_track.hits,
+    content = render_stage(
+        "conservation_content",
+        build_group_content,
+        ConservationGroup,
+        track=conservation_track,
         total_length=len(gb_record.seq),
-        track_label=conservation_track.track_label,
-        track_color=conservation_track.track_color,
-        source_index=conservation_track.source_index,
-        track_index=conservation_track.track_index,
         inner_radius_px=inner_radius_px,
         outer_radius_px=outer_radius_px,
         min_identity=min_identity,
-        cfg=cfg,
+        cfg=canvas_config.profile.config,
         group_id=group_id,
         slot_id=slot_id,
         record_transform=record_transform,
         record_index=record_index,
-    ).get_group()
-    conservation_group = center_group_on_canvas(conservation_group, canvas_config)
-    canvas.add(conservation_group)
+    )
+    canvas.add(center_group_on_canvas(place_content(canvas, content, group_key), canvas_config))
     return canvas
 
 

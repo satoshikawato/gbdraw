@@ -42,6 +42,7 @@ from gbdraw.analysis.collinearity_units import CollinearityUnitMode
 from gbdraw.analysis.conservation import (
     conservation_legend_sources,
     ConservationLoadResult,
+    ConservationReferenceMode,
     ConservationTrack,
     load_conservation_sources,
     normalize_conservation_reference,
@@ -546,60 +547,50 @@ def _has_conservation_inputs(
     return bool(conservation_blast_files or conservation_dataframes)
 
 
-def _build_conservation_blast_config(
-    records: Sequence[SeqRecord],
-    *,
-    evalue: float,
-    bitscore: float,
-    identity: float,
-    alignment_length: int,
-    default_colors: DataFrame,
-    profile: CircularRenderProfile,
-) -> BlastMatchConfigurator:
-    return BlastMatchConfigurator(
-        evalue=float(evalue),
-        bitscore=float(bitscore),
-        identity=float(identity),
-        alignment_length=int(alignment_length),
-        sequence_length_dict=create_dict_for_sequence_lengths(records),
-        profile=profile,
-        default_colors_df=default_colors,
-    )
-
-
 def _load_conservation_result(
-    records: Sequence[SeqRecord],
     *,
     conservation_blast_files: Sequence[ConservationInput] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
     conservation_labels: Sequence[str] | None,
     conservation_colors: Sequence[str] | None,
-    evalue: float,
-    bitscore: float,
-    identity: float,
-    alignment_length: int,
-    default_colors: DataFrame,
-    profile: CircularRenderProfile,
+    thresholds: ComparisonThresholds,
 ) -> ConservationLoadResult | None:
+    """The filtered conservation sources, from the ``conservation_tracks`` stage.
+
+    Files are read outside the stage, so a staged file is keyed by its
+    resource identity, never by its path.
+    """
+
     if not _has_conservation_inputs(conservation_blast_files, conservation_dataframes):
         return None
-    if alignment_length < 0:
-        raise ValidationError("alignment_length must be >= 0")
-    blast_config = _build_conservation_blast_config(
-        records,
-        evalue=evalue,
-        bitscore=bitscore,
-        identity=identity,
-        alignment_length=alignment_length,
-        default_colors=default_colors,
-        profile=profile,
-    )
-    return load_conservation_sources(
-        blast_config=blast_config,
-        conservation_files=conservation_blast_files,
+    return render_stage(
+        "conservation_tracks",
+        load_conservation_sources,
+        blast_config=thresholds,
+        conservation_files=read_conservation_inputs(conservation_blast_files),
         conservation_dataframes=conservation_dataframes,
         labels=conservation_labels,
         colors=conservation_colors,
+    )
+
+
+def _conservation_tracks_for_record(
+    load_result: ConservationLoadResult | None,
+    records: Sequence[SeqRecord],
+    record: SeqRecord,
+    conservation_reference: ConservationReferenceMode,
+) -> tuple[ConservationTrack, ...]:
+    """The rings of one displayed record, from the ``conservation_tracks`` stage."""
+
+    if load_result is None:
+        return ()
+    return render_stage(
+        "conservation_tracks",
+        normalize_conservation_tracks_for_record,
+        load_result,
+        displayed_records=tuple(records),
+        record=record,
+        conservation_reference=conservation_reference,
     )
 
 
@@ -2523,27 +2514,14 @@ def assemble_circular_diagram_from_record(
         conservation_tracks = tuple(_precomputed_conservation_tracks)
     else:
         conservation_load_result = _load_conservation_result(
-            [gb_record],
             conservation_blast_files=conservation_blast_files,
             conservation_dataframes=conservation_dataframes,
             conservation_labels=conservation_labels,
             conservation_colors=conservation_colors,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-            default_colors=default_colors,
-            profile=profile,
+            thresholds=thresholds,
         )
-        conservation_tracks = (
-            normalize_conservation_tracks_for_record(
-                conservation_load_result,
-                displayed_records=[gb_record],
-                record=gb_record,
-                conservation_reference=conservation_mode,
-            )
-            if conservation_load_result is not None
-            else ()
+        conservation_tracks = _conservation_tracks_for_record(
+            conservation_load_result, [gb_record], gb_record, conservation_mode
         )
     if conservation_tracks:
         if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
@@ -2989,27 +2967,14 @@ def assemble_circular_diagram_from_records(
     )
     conservation_mode = normalize_conservation_reference(conservation_reference)
     conservation_load_result = _load_conservation_result(
-        records,
         conservation_blast_files=conservation_blast_files,
         conservation_dataframes=conservation_dataframes,
         conservation_labels=conservation_labels,
         conservation_colors=conservation_colors,
-        evalue=evalue,
-        bitscore=bitscore,
-        identity=identity,
-        alignment_length=alignment_length,
-        default_colors=default_colors,
-        profile=profile,
+        thresholds=thresholds,
     )
-    first_record_conservation_tracks = (
-        normalize_conservation_tracks_for_record(
-            conservation_load_result,
-            displayed_records=records,
-            record=records[0],
-            conservation_reference=conservation_mode,
-        )
-        if conservation_load_result is not None
-        else ()
+    first_record_conservation_tracks = _conservation_tracks_for_record(
+        conservation_load_result, records, records[0], conservation_mode
     )
     if first_record_conservation_tracks:
         if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
@@ -3106,15 +3071,8 @@ def assemble_circular_diagram_from_records(
             if record_id_counts[raw_record_id] > 1
             else None
         )
-        record_conservation_tracks = (
-            normalize_conservation_tracks_for_record(
-                conservation_load_result,
-                displayed_records=records,
-                record=record,
-                conservation_reference=conservation_mode,
-            )
-            if conservation_load_result is not None
-            else ()
+        record_conservation_tracks = _conservation_tracks_for_record(
+            conservation_load_result, records, record, conservation_mode
         )
         sub_canvas = assemble_circular_diagram_from_record(
             record,

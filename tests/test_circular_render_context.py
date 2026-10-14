@@ -165,3 +165,31 @@ def test_circular_track_groups_are_placed_contents_with_their_slot_ids_inside() 
             assert element.content.attributes["id"] == element.attribs["id"] != element.key.slot
             assert element.attribs["data-gbdraw-slot-id"] == element.key.slot
             assert "data-gbdraw-slot-id" not in element.content.attributes
+
+
+def test_circular_conservation_ring_is_a_placed_content_of_its_track() -> None:
+    """A conservation ring is the content of a render stage over its track (PR 4)."""
+
+    from pathlib import Path
+
+    from Bio import SeqIO
+
+    from gbdraw.api.diagram import assemble_circular_diagram_from_record
+    from gbdraw.render.group_content import ContentGroup, GroupKind
+
+    examples = Path(__file__).parent.parent / "examples"
+    record = SeqIO.read(examples / "MjeNMV.gb", "genbank")
+    drawing = assemble_circular_diagram_from_record(
+        record,
+        cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
+        conservation_blast_files=[str(examples / "MjeNMV.MelaMJNV.tblastx.out")],
+        conservation_labels=["MelaMJNV"],
+    )
+    rings = [
+        element
+        for element in drawing.elements
+        if isinstance(element, ContentGroup) and element.key.kind is GroupKind.CONSERVATION
+    ]
+    assert len(rings) == 1
+    assert rings[0].attribs["data-track-label"] == "MelaMJNV"
+    assert rings[0].holds_content_children()
