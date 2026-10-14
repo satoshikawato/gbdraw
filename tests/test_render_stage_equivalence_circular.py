@@ -55,10 +55,24 @@ pytestmark = pytest.mark.circular
 
 _BASE = ("--labels", "out", "--gc", "--skew", "-l", "right")
 
-# Chains: one variant per option on C1, named options on C2; the first variant of each.
-# C2-named takes about 20 s (a C2 render is about 6 s), so it runs with the universe.
+# Chains: named options on C1 and C2; the first variant of each. C1-fast keeps the
+# cheapest option of each stage a C1 P1/P2 option can rebuild (in universe order,
+# which the chain relies on); every other C1 option runs in the C1 full chunks under
+# ``--render-stage-universe``. C2-named takes about 20 s (a C2 render is about 6 s),
+# so it runs with the universe.
+_C1_FAST_OPTIONS = (
+    "window", "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_color",
+    "line_stroke_width", "definition_font_size", "plot_title", "plot_title_font_size",
+    "plot_title_position", "gc_content_mode", "gc_content_min_percent", "gc_content_tick_font_size", "show_gc_content_axis",
+    "show_gc_content_ticks",
+    "depth_track (add)", "legend", "legend_box_size", "legend_font_size", "separate_strands",
+    "resolve_overlaps", "feature_overlap_tolerance_bp", "label_rendering", "label_whitelist", "label_blacklist",
+    "qualifier_priority", "label_table",
+    "feature_visibility_table", "feature_override_table", "annotation_table", "scale_interval",
+    "hide_scale", "species (no plot title)", "keep_full_definition_with_plot_title",
+)
 _CHAINS = {
-    "C1-fast": ("C1", None),
+    "C1-fast": ("C1", _C1_FAST_OPTIONS),
     "C2-named": ("C2", ("label_table",)),
 }
 # The full universe of each case, in chunks within the time budget (``cost_chunks``).
