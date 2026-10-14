@@ -114,7 +114,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({gridColumn: null, gridRow: null, label: null, reverseComplement: false, subtitle: null})
     }),
     CanonicalRecordRegion: Object.freeze({
       kind: "object",
@@ -155,7 +156,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       }),
       optional: Object.freeze([]),
       open: false,
-      defaults: Object.freeze({display: Object.freeze({isCircular: null, startCoordinate: null})})
+      defaults: Object.freeze({cardinality: "exactly_one", display: Object.freeze({isCircular: null, startCoordinate: null})})
     }),
     CanonicalRequestOutput: Object.freeze({
       kind: "object",
@@ -255,7 +256,13 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         })
       }),
       optional: Object.freeze([]),
-      open: false
+      open: false,
+      defaults: Object.freeze({
+        multiRecordColumnGapRatio: 0.1,
+        multiRecordMinRadiusRatio: 0.55,
+        multiRecordRowGapRatio: 0.05,
+        multiRecordSizeMode: "auto"
+      })
     }),
     CanonicalLinearLayout: Object.freeze({
       kind: "object",

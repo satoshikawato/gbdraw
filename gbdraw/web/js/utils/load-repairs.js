@@ -10,7 +10,11 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  */
 /**
  * The rule of the producer that could not restore a value: one member per rule.
- * @typedef {'setting-replaced'
+ * @typedef {'request-dropped'
+ *   | 'other-result-set-dropped'
+ *   | 'request-part-dropped'
+ *   | 'request-reference-dropped'
+ *   | 'setting-replaced'
  *   | 'setting-entries-dropped'
  *   | 'pending-palette-dropped'
  *   | 'depth-row-disabled'
@@ -143,6 +147,16 @@ const tableLines = (repairs, describe) => [...new Set(repairs.map(({ path }) => 
  * @type {Readonly<Record<LoadRepairCode, (repairs: readonly LoadRepair[]) => string[]>>}
  */
 const WORDING = {
+  // A stored request (services/session-request.js `readStoredRenderRequest`).
+  'request-dropped': (repairs) => repairs.map(({ path }) => (
+    `Saved diagram: the settings of the saved diagram (${path}) could not be read. The file loads as settings only;`
+    + ' the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.')),
+  'other-result-set-dropped': (repairs) => repairs.map(({ path, label }) => (
+    `Saved ${label ?? 'other'} diagram: its settings (${path}) could not be read; that diagram and its Results are left out.`)),
+  'request-part-dropped': (repairs) => repairs.map(({ path, label }) => (
+    `Settings: ${label ?? 'a part'} (${path}) could not be read and was left out, with the settings inside it.`)),
+  'request-reference-dropped': (repairs) => repairs.map(({ path, label }) => (
+    `Settings: ${path} names a file or record this Session does not hold; ${label ?? 'it'} is left out.`)),
   // Free text is named by its place only (a changed one, such as an ID made
   // unique, names neither value); a value replaced by a list or an object
   // names no value used.

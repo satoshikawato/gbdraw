@@ -97,7 +97,8 @@ import {
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest,
   projectSettingsOnlySession,
-  readCanonicalResourceRecordCount
+  readCanonicalResourceRecordCount,
+  readStoredRenderRequest
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -189,6 +190,7 @@ import {
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
   readSessionInput,
+  settingsOnlySessionCandidate,
   validateSessionAuthorityInventory
 } from './session-authority.js';
 import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
@@ -290,8 +292,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // The Session document's types are generated from gbdraw/session_contract.py:
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
-/** @import { GbdrawSession, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
-/** @import { UnvalidatedFields } from './session-authority.js' */
+/** @import { GbdrawSession, SessionEnvelope, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
+/** @import { StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
 
@@ -1752,6 +1754,88 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
   });
 };
 
+/**
+ * The stored requests of a Session, read before anything adopts them: the
+ * top-level request and `otherModeResult.renderRequest` (OV-670). Returns a
+ * new data object when a request changed (the parsed file is never changed),
+ * the request schemas the file stored (RK-1), and whether the Session loads as
+ * settings only because its request cannot be read (K22, C-OD07): only a
+ * Session version that has a settings-only form (42, 44, 46, 47) does; an
+ * older one keeps its stored request, which the projection refuses as before.
+ * @template {object} T
+ * @param {T} rawData
+ * @param {LoadRepair[]} repairs
+ * @returns {{ data: T, storedSchemas: StoredRequestSchemas, settingsOnly: boolean }}
+ */
+const readSessionRequests = (rawData, repairs) => {
+  const top = /** @type {Record<string, unknown>} */ (rawData);
+  const other = isPlainObject(top.otherModeResult) ? /** @type {Record<string, unknown>} */ (top.otherModeResult) : null;
+  const storedSchemas = {
+    renderRequest: /** @type {UnvalidatedFields<'schema'>} */ (top.renderRequest)?.schema,
+    otherModeResult: /** @type {UnvalidatedFields<'schema'>} */ (other?.renderRequest)?.schema
+  };
+  if (!Object.hasOwn(top, 'renderRequest') || top.renderRequest === null) return { data: rawData, storedSchemas, settingsOnly: false };
+  const resourceIds = new Set(isPlainObject(top.resources) ? Object.keys(/** @type {object} */ (top.resources)) : []);
+  /** @param {Record<string, unknown>} set @param {string} path */
+  const read = (set, path) => readStoredRenderRequest(set.renderRequest, {
+    featureCatalog: /** @type {UnvalidatedFields<'featureCatalog'>} */ (set.editorState)?.featureCatalog ?? null,
+    legacyOrthogroupState: top.orthogroupState ?? null,
+    resourceIds,
+    path,
+    // A comparison Load keeps read-only or asks a decision about is shown
+    // after Load as before (receipt 〔今までの知らせ〕); the reader leaves it.
+    holdComparisons: classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
+      renderRequest: set.renderRequest, resources: top.resources
+    })).disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+  });
+  const topRead = read(top, 'renderRequest');
+  if ('kind' in topRead) {
+    const envelope = /** @type {SessionEnvelope} */ (rawData);
+    if (!isSettingsOnlySessionDocument({ ...envelope, renderRequest: null })) return { data: rawData, storedSchemas, settingsOnly: false };
+    repairs.push(loadRepair({ code: 'request-dropped', path: topRead.path, effect: 'dropped' }));
+    return { data: /** @type {T} */ (settingsOnlySessionCandidate(envelope)), storedSchemas, settingsOnly: true };
+  }
+  repairs.push(...topRead.repairs);
+  /** @type {Record<string, unknown>} */
+  let data = topRead.value === top.renderRequest ? top : { ...top, renderRequest: topRead.value };
+  if (other && Object.hasOwn(other, 'renderRequest')) {
+    const otherRead = read(other, 'otherModeResult.renderRequest');
+    if ('kind' in otherRead) {
+      const mode = /** @type {UnvalidatedFields<'mode'>} */ (other.renderRequest)?.mode;
+      repairs.push(loadRepair({
+        code: 'other-result-set-dropped', path: otherRead.path, effect: 'dropped',
+        ...(mode === 'circular' || mode === 'linear' ? { label: mode === 'circular' ? 'Circular' : 'Linear' } : {})
+      }));
+      const { otherModeResult: _dropped, ...rest } = data;
+      data = rest;
+    } else {
+      repairs.push(...otherRead.repairs);
+      if (otherRead.value !== other.renderRequest) data = { ...data, otherModeResult: { ...other, renderRequest: otherRead.value } };
+    }
+  }
+  return { data: /** @type {T} */ (data), storedSchemas, settingsOnly: false };
+};
+
+/**
+ * A schema-2 Gallery Session's request, rebuilt by its migration, read like
+ * any stored request: a row here is a defect of that migration.
+ * @template {{ renderRequest?: unknown, editorState?: unknown, orthogroupState?: unknown, resources?: unknown }} T
+ * @param {T} data
+ * @param {LoadRepair[]} repairs
+ * @returns {T}
+ */
+const readRebuiltGalleryRequest = (data, repairs) => {
+  const read = readStoredRenderRequest(data.renderRequest, {
+    featureCatalog: /** @type {UnvalidatedFields<'featureCatalog'>} */ (data.editorState)?.featureCatalog ?? null,
+    legacyOrthogroupState: data.orthogroupState ?? null,
+    resourceIds: new Set(isPlainObject(data.resources) ? Object.keys(/** @type {object} */ (data.resources)) : []),
+    path: 'renderRequest'
+  });
+  if ('kind' in read) return data;
+  repairs.push(...read.repairs);
+  return read.value === data.renderRequest ? data : { ...data, renderRequest: read.value };
+};
+
 /** @param {LoadRepair[]} repairs Collects what Load cannot restore. */
 const preflightSessionImport = async (sessionData, repairs) => {
   const sourceSessionVersion = readSessionInput(sessionData).version;
@@ -1771,7 +1855,8 @@ const preflightSessionImport = async (sessionData, repairs) => {
       used: outcome.rowKey
     }));
   });
-  const rawData = legendRead.session;
+  const requestRead = readSessionRequests(legendRead.session, repairs);
+  const rawData = requestRead.data;
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
@@ -1787,7 +1872,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
 
   if (currentSession) {
     recordSessionLifecycleEvent('session-authority-validation-start');
-    adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion);
+    adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion, requestRead.storedSchemas);
     recordSessionLifecycleEvent('session-authority-validation-end');
     recordSessionLifecycleEvent('feature-catalog-validation-start');
     validatedFeatureCatalog = await validateCurrentWriterFeatureCatalog(rawData, {
@@ -1814,7 +1899,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
       ? Object.fromEntries(Object.entries(rawData).filter(([key]) => key !== 'config'))
       : rawData;
   } else {
-    validateSessionAuthorityInventory(rawData, sourceSessionVersion);
+    validateSessionAuthorityInventory(rawData, sourceSessionVersion, requestRead.storedSchemas);
     normalizedData = normalizeSessionData(rawData, repairs);
     migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   }
@@ -1823,7 +1908,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
     sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
     Number(normalizedData.renderRequest?.schema) === 2
   )
-    ? promoteGallerySessionToCurrent(normalizedData)
+    ? readRebuiltGalleryRequest(promoteGallerySessionToCurrent(normalizedData), repairs)
     : normalizedData;
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
   await validateSessionLosatArtifactsForImport(promotedData, sourceSessionVersion);
@@ -1881,7 +1966,8 @@ const preflightSessionImport = async (sessionData, repairs) => {
       )
     : data.config;
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
-  const settingsOnly = isSettingsOnlySessionDocument(data);
+  // The settings-only decision of the request read is passed on explicitly (C-OD07).
+  const settingsOnly = requestRead.settingsOnly || isSettingsOnlySessionDocument(data);
   const canonicalProjection = settingsOnly
     ? projectSettingsOnlySession(data, currentResourceTable)
     : sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
@@ -2083,7 +2169,8 @@ const preflightSessionImport = async (sessionData, repairs) => {
     currentResourceTable,
     otherModeCatalog,
     comparisonClassification,
-    unmanagedConfigValidation
+    unmanagedConfigValidation,
+    settingsOnly
   };
 };
 
@@ -4891,6 +4978,8 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {LoadRepair[]} */
     const repairs = [];
     const preflight = await preflightSessionImport(data, repairs);
+    // The receipts are checked against the requests Load read (RK-2).
+    data = preflight.data;
     await validateSimilarityAlignmentResetReceipt(
       data.editorState?.alignmentResetReceipt,
       { renderRequest: data.renderRequest, resources: data.resources }
@@ -4902,7 +4991,6 @@ const importSessionDocument = async (e, options = {}) => {
       );
     }
     recordSessionLifecycleEvent('current-session-preflight-end');
-    data = preflight.data;
     const {
       sourceSessionVersion,
       canonicalProjection,
@@ -4912,7 +5000,8 @@ const importSessionDocument = async (e, options = {}) => {
       currentResourceTable,
       otherModeCatalog,
       comparisonClassification,
-      unmanagedConfigValidation
+      unmanagedConfigValidation,
+      settingsOnly
     } = preflight;
     if (restoredConfig && unmanagedConfigValidation) {
       restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(
@@ -4920,7 +5009,6 @@ const importSessionDocument = async (e, options = {}) => {
       );
     }
     const canonicalSession = projectionResult !== null;
-    const settingsOnly = isSettingsOnlySessionDocument(data);
     const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
     const committedMode = projectionResult?.renderState.mode;
     const savedCurrentWriterMode = sourceSessionVersion >= TYPED_DRAFT_SESSION_VERSION

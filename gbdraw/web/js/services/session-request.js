@@ -88,6 +88,9 @@ import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annota
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { loadRepair } from '../utils/load-repairs.js';
+import { repairByDescription } from '../utils/contract-repair.js';
+import { isPlainObject } from '../utils/contract-shape.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
@@ -182,7 +185,9 @@ import { isCanonicalResourceReferenceField } from './canonical-resource-referenc
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
 
-/** @import { LoadRepair } from '../utils/load-repairs.js' */
+/** @import { LoadRepair, Repaired } from '../utils/load-repairs.js' */
+/** @import { ContractRepair, RepairPolicy } from '../utils/contract-repair.js' */
+/** @import { ContractShape } from '../utils/contract-shape.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
@@ -5856,8 +5861,17 @@ const firstPublicationDiff = (expected, actual, path = '$') => {
   return null;
 };
 /**
+ * What a promotion of schemas 5 to 7 reads a legacy similarity alignment with.
+ * `unreadAlignment`, when given, receives an alignment that cannot be read,
+ * which is then left unset; without it the promotion throws.
+ * @typedef {object} RequestPromotion
+ * @property {Parameters<typeof materializeLegacySimilarityAlignment>[0]['featureCatalog']} [featureCatalog]
+ * @property {Parameters<typeof materializeLegacySimilarityAlignment>[0]['legacyOrthogroupState']} [legacyOrthogroupState]
+ * @property {(error: unknown) => void} [unreadAlignment]
+ */
+/**
  * @param {Record<string, any>} request A canonical request of schema 5 to 9.
- * @param {Record<string, any>} [promotion]
+ * @param {RequestPromotion} [promotion]
  * @returns {CanonicalRenderRequest}
  */
 export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) => {
@@ -5873,25 +5887,28 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
   return promoted;
 };
 
-const promoteRenderRequestToSchema8 = (
-  promoted,
-  { featureCatalog = null, legacyOrthogroupState = null }
-) => {
+/** @param {RequestPromotion} promotion */
+const promoteRenderRequestToSchema8 = (promoted, promotion) => {
+  const { featureCatalog = null, legacyOrthogroupState = null, unreadAlignment } = promotion;
   const sourceSchema = promoted.schema;
   const linearRows = promoted.mode === 'linear'
-    ? (promoted.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token) => {
+    ? (Array.isArray(promoted.layout?.multiRecordPositions) ? promoted.layout.multiRecordPositions : []).map((/** @type {unknown} */ token) => {
         const split = String(token).lastIndexOf('@');
         return Number(String(token).slice(split + 1)) || null;
       })
     : [];
   promoted.schema = 8;
+  // A malformed record is left to the repair that follows the promotion.
   (promoted.records || []).forEach((record, index) => {
+    if (!record || typeof record !== 'object') return;
     if (sourceSchema < 7) record.display = { isCircular: null, startCoordinate: null };
     if (sourceSchema === 5) record.cardinality = promoted.mode === 'linear' &&
       !record.selector && !record.region
       ? 'all'
       : 'exactly_one';
-    if (linearRows[index]) record.presentation.gridRow = linearRows[index];
+    if (linearRows[index] && record.presentation && typeof record.presentation === 'object') {
+      record.presentation.gridRow = linearRows[index];
+    }
   });
   if (sourceSchema < 7) {
     promoted.diagramOptions = { ...promoted.diagramOptions, featurePlacements: [] };
@@ -5901,15 +5918,23 @@ const promoteRenderRequestToSchema8 = (
       (comparison) => comparison?.kind === 'generatedProteinComparison'
     );
     const rawLegacy = generated?.settings?.alignOrthogroupFeature;
-    const similarityAlignment = rawLegacy === null || rawLegacy === undefined
-      ? null
-      : canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
-          target: rawLegacy,
-          records: promoted.records || [],
-          featureCatalog,
-          legacyOrthogroupState
-        }), (promoted.records || []).map((record) => record.recordKey),
-        'renderRequest.layout.similarityAlignment');
+    const readAlignment = () => canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
+      target: rawLegacy,
+      records: promoted.records || [],
+      featureCatalog,
+      legacyOrthogroupState
+    }), (promoted.records || []).map((record) => record.recordKey),
+    'renderRequest.layout.similarityAlignment');
+    /** @type {ReturnType<typeof canonicalSimilarityAlignment> | null} */
+    let similarityAlignment = null;
+    if (rawLegacy !== null && rawLegacy !== undefined) {
+      try {
+        similarityAlignment = readAlignment();
+      } catch (error) {
+        if (!unreadAlignment) throw error;
+        unreadAlignment(error);
+      }
+    }
     if (generated?.settings) delete generated.settings.alignOrthogroupFeature;
     const hadLayout = Object.keys(promoted.layout || {}).length > 0;
     if (hadLayout || similarityAlignment !== null) {
@@ -5929,6 +5954,223 @@ const promoteRenderRequestToSchema8 = (
     }
   }
   return promoted;
+};
+
+/**
+ * What a stored request is read with: the catalog and orthogroup state of its
+ * Result set (a legacy alignment of schemas 5 to 7 names their features), the
+ * resource ids of the Session, and where the request is in the file.
+ * @typedef {object} StoredRequestContext
+ * @property {unknown} featureCatalog
+ * @property {unknown} legacyOrthogroupState
+ * @property {ReadonlySet<string>} resourceIds
+ * @property {string} path
+ * @property {boolean} [holdComparisons] The request is kept as stored: the
+ *   Comparisons notice after Load (a saved comparison kept read-only, or one
+ *   that needs a decision) owns it.
+ */
+/**
+ * A schema-1 request, returned as stored until its reader (PR-D) lifts it.
+ * @typedef {Record<string, unknown> & { schema: 1 }} StoredSchema1Request
+ */
+/**
+ * A stored request that cannot be read at all (K22): its Session loads as
+ * settings only, or its Result set is left out.
+ * @typedef {{ kind: 'request-dropped', path: string, reason: string }} StoredRequestDropped
+ */
+/** @typedef {'unknown-resource' | 'unknown-record' | 'unknown-slot'} StoredReferenceReason */
+
+const STORED_REQUEST_ROOTS = /** @type {const} */ ({ circular: 'CanonicalCircularRenderRequest', linear: 'CanonicalLinearRenderRequest' });
+
+/**
+ * Per mode, from the description: the places a value of the other diagram
+ * type is read as this one's (a placeholder that holds only null, and an
+ * option of the other type that this one holds at its default), and the
+ * unions picked by their `kind`.
+ * @param {string} rootType
+ * @param {string} otherOptionsType
+ */
+const storedRequestPlaces = (rootType, otherOptionsType) => {
+  const { types } = CANONICAL_REQUEST_DESCRIPTION;
+  /** @type {Map<string, unknown>} */
+  const otherType = new Map();
+  /** @type {Set<string>} */
+  const tagged = new Set();
+  const otherOptions = /** @type {import('../utils/contract-shape.js').ObjectShape} */ (types[otherOptionsType]);
+  /** @param {ContractShape} shape @returns {ContractShape} */
+  const resolve = (shape) => (shape.kind === 'ref' ? resolve(types[shape.name]) : shape);
+  /**
+   * @param {ContractShape} shape @param {string} pattern @param {number} depth
+   * @param {boolean} [option] the shape is one option of the place's union
+   */
+  const walk = (shape, pattern, depth, option = false) => {
+    const resolved = resolve(shape);
+    if (depth > 40) return;
+    if (resolved.kind === 'null' && pattern && !option) otherType.set(pattern, null);
+    if (resolved.kind === 'literal' && resolved.values.length === 1 && /^diagramOptions\.[^.]+$/.test(pattern)) {
+      const other = otherOptions.fields[pattern.slice('diagramOptions.'.length)];
+      if (other && JSON.stringify(resolve(other)) !== JSON.stringify(resolved)) otherType.set(pattern, resolved.values[0]);
+    }
+    if (resolved.kind === 'union') {
+      const options = resolved.options.map(resolve);
+      if (options.every((option) => option.kind === 'object' && Object.hasOwn(option.fields, 'kind'))) tagged.add(pattern);
+      options.forEach((item) => walk(item, pattern, depth + 1, true));
+    } else if (resolved.kind === 'array') walk(resolved.items, `${pattern}[*]`, depth + 1);
+    else if (resolved.kind === 'tuple') resolved.items.forEach((item) => walk(item, `${pattern}[*]`, depth + 1));
+    else if (resolved.kind === 'record') walk(resolved.values, `${pattern}.*`, depth + 1);
+    else if (resolved.kind === 'object') {
+      Object.entries(resolved.fields).forEach(([key, field]) => walk(field, pattern ? `${pattern}.${key}` : key, depth + 1));
+    }
+  };
+  walk(types[rootType], '', 0);
+  return { otherType, tagged, otherOptionKeys: new Set(Object.keys(otherOptions.fields)) };
+};
+const STORED_REQUEST_PLACES = {
+  circular: storedRequestPlaces(STORED_REQUEST_ROOTS.circular, 'CanonicalLinearDiagramOptions'),
+  linear: storedRequestPlaces(STORED_REQUEST_ROOTS.linear, 'CanonicalCircularDiagramOptions')
+};
+/** The places a repair drops as one part (rule 6). */
+const STORED_REQUEST_PARTS = new Set([
+  'diagramOptions', 'diagramOptions.tracks', 'diagramOptions.annotations', 'layout.similarityAlignment',
+  'layout.recordTranslations', 'records[*].presentation', 'records[*].display', 'output'
+]);
+/** The conservation ring columns, read by index together (B16). */
+const CONSERVATION_RING_COLUMNS = ['conservationBlastFiles', 'conservationLabels', 'conservationColors', 'conservationFastaFiles']
+  .map((key) => `diagramOptions.${key}`);
+const RECORD_INDEX_PLACE = /^comparisons\[\*\](\.pairs\[\*\])?\.(query|subject)RecordIndex$/;
+const RECORD_KEY_PLACE = /^layout\.(recordTranslations\[\*\]|similarityAlignment\.(reference|records\[\*\](\.anchor)?))\.recordKey$/;
+
+/**
+ * The request policy of the repair leaf: what the description cannot say
+ * about a stored request of `mode`.
+ * @param {Readonly<Record<string, unknown>>} request The promoted request (schema 9 shape, unchecked).
+ * @param {'circular' | 'linear'} mode
+ * @param {ReadonlySet<string>} resourceIds
+ * @returns {RepairPolicy<StoredReferenceReason>}
+ */
+const storedRequestPolicy = (request, mode, resourceIds) => {
+  const places = STORED_REQUEST_PLACES[mode];
+  const records = Array.isArray(request.records) ? request.records : [];
+  const recordKeys = new Set(records.map((/** @type {unknown} */ record) => (isPlainObject(record) ? record.recordKey : undefined)));
+  const options = isPlainObject(request.diagramOptions) ? request.diagramOptions : {};
+  const tracks = isPlainObject(options.tracks) ? options.tracks : {};
+  const slotKey = mode === 'linear' ? 'linearTrackSlots' : 'circularTrackSlots';
+  const slots = Array.isArray(tracks[slotKey]) ? tracks[slotKey] : null;
+  // An axis index names a slot by position, so no slot is dropped alone then.
+  const axisIndex = tracks[mode === 'linear' ? 'linearTrackAxisIndex' : 'circularTrackAxisIndex'];
+  return {
+    positionalArrays: [
+      'records', 'layout.multiRecordPositions', 'diagramOptions.depthTracks[*].source',
+      ...(axisIndex === null || axisIndex === undefined ? [] : [`diagramOptions.tracks.${slotKey}`])
+    ],
+    partBoundary: (pattern) => STORED_REQUEST_PARTS.has(pattern),
+    parallelArrays: mode === 'circular' ? [CONSERVATION_RING_COLUMNS] : [],
+    lossless: (pattern) => (places.otherType.has(pattern) ? { value: places.otherType.get(pattern) } : null),
+    discriminator: (pattern) => (pattern === '' ? 'mode' : places.tagged.has(pattern) ? 'kind' : null),
+    reference: (pattern, value) => {
+      if (/(^|\.)(resourceId|gffResourceId|fastaResourceId)$/.test(pattern)) {
+        return typeof value === 'string' && !resourceIds.has(value) ? 'unknown-resource' : null;
+      }
+      if (RECORD_INDEX_PLACE.test(pattern)) {
+        return Number.isInteger(value) && Number(value) >= 0 && Number(value) < records.length ? null : 'unknown-record';
+      }
+      if (RECORD_KEY_PLACE.test(pattern)) return recordKeys.has(value) ? null : 'unknown-record';
+      if (pattern === 'diagramOptions.tracks.linearTrackAxisIndex' && value !== null) {
+        return slots && Number.isInteger(value) && Number(value) >= 0 && Number(value) < slots.length ? null : 'unknown-slot';
+      }
+      return null;
+    }
+  };
+};
+
+/**
+ * The Load rows of the leaf's rows. A setting of the other diagram type had
+ * no effect on the figure and gets none (〔出さないもの〕).
+ * @param {readonly ContractRepair<StoredReferenceReason>[]} rows
+ * @param {ReadonlySet<string>} otherOptionKeys
+ * @returns {LoadRepair[]}
+ */
+const storedRequestRepairs = (rows, otherOptionKeys) => {
+  /** @type {Map<string, number>} */
+  const droppedEntries = new Map();
+  /** @type {LoadRepair[]} */
+  const repairs = [];
+  rows.forEach((row) => {
+    const reference = row.reason === 'unknown-resource' || row.reason === 'unknown-record' || row.reason === 'unknown-slot';
+    if (row.rule === 2 && /^diagramOptions\.[^.]+$/.test(row.pattern)
+      && otherOptionKeys.has(row.pattern.slice('diagramOptions.'.length))) return;
+    if (reference) {
+      repairs.push(loadRepair({ code: 'request-reference-dropped', path: row.path, effect: row.effect }));
+    } else if (row.rule === 6) {
+      repairs.push(loadRepair({ code: 'request-part-dropped', path: row.path, effect: row.effect }));
+    } else if (row.rule === 2 || row.rule === 5) {
+      // One row per list: an element's path without its index, a key's object.
+      const list = row.rule === 5 ? row.path.replace(/\[\d+\]$/, '') : row.path;
+      droppedEntries.set(list, (droppedEntries.get(list) ?? 0) + 1);
+    } else {
+      const used = row.used;
+      repairs.push(loadRepair({
+        code: 'setting-replaced', path: row.path, effect: row.effect,
+        ...(typeof used === 'string' || typeof used === 'number' || typeof used === 'boolean' ? { used: String(used) } : {})
+      }));
+    }
+  });
+  droppedEntries.forEach((count, path) => {
+    repairs.push(loadRepair({ code: 'setting-entries-dropped', path, effect: 'dropped', count }));
+  });
+  return repairs;
+};
+
+/**
+ * The one reader of a stored render request: the only place in `js/` where an
+ * unchecked value becomes a `CanonicalRenderRequest`. A schema outside the
+ * supported set is refused as a Session-format error; schemas 1 and 2 are
+ * returned as stored (schema 2 is rebuilt by the Gallery migration, whose
+ * request is read again here); schemas 5 to 8 are promoted once, with the
+ * Load context; then the request is repaired against its description. What
+ * cannot be read at its root is a dropped request (K22).
+ * @param {unknown} value
+ * @param {StoredRequestContext} context
+ * @returns {Repaired<CanonicalRenderRequest | StoredSchema1Request | Record<string, unknown>> | StoredRequestDropped}
+ */
+export const readStoredRenderRequest = (value, context) => {
+  const { path } = context;
+  if (!isPlainObject(value)) return { kind: 'request-dropped', path, reason: 'wrong-kind' };
+  if (!SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET.has(/** @type {number} */ (value.schema))) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
+  }
+  if (value.schema === 1 || value.schema === 2) return { value, repairs: [] };
+  // The promotion walks the records and comparisons; lists of another kind
+  // leave nothing to read, as the repair would find at the root.
+  if (!Array.isArray(value.records) || (Object.hasOwn(value, 'comparisons') && !Array.isArray(value.comparisons))) {
+    return { kind: 'request-dropped', path, reason: 'wrong-kind' };
+  }
+  // The Comparisons notice after Load owns this request as before (receipt
+  // 〔今までの知らせ〕); it stays as stored until C2c-2 decides its reading.
+  if (context.holdComparisons) return { value, repairs: [] };
+  /** @type {LoadRepair[]} */
+  const repairs = [];
+  const promoted = value.schema === CANONICAL_REQUEST_SCHEMA ? value : promoteCanonicalRenderRequestToCurrent(value, {
+    // Read as the legacy alignment reader reads them; it checks what it uses.
+    featureCatalog: /** @type {RequestPromotion['featureCatalog']} */ (context.featureCatalog),
+    legacyOrthogroupState: /** @type {RequestPromotion['legacyOrthogroupState']} */ (context.legacyOrthogroupState),
+    unreadAlignment: () => repairs.push(loadRepair({
+      code: 'request-part-dropped', path: `${path}.layout.similarityAlignment`, effect: 'dropped'
+    }))
+  });
+  const mode = promoted.mode === 'linear' ? 'linear' : promoted.mode === 'circular' ? 'circular' : null;
+  if (mode === null) return { kind: 'request-dropped', path: `${path}.mode`, reason: 'not-in-set' };
+  const repaired = repairByDescription(
+    promoted, { type: STORED_REQUEST_ROOTS[mode], path }, CANONICAL_REQUEST_DESCRIPTION,
+    storedRequestPolicy(promoted, mode, context.resourceIds)
+  );
+  const root = repaired.rows.find((row) => row.pattern === '');
+  if (repaired.value === undefined || root) return { kind: 'request-dropped', path, reason: String(root?.reason ?? 'wrong-kind') };
+  // The leaf returns the stored object itself when nothing changed (RK-3).
+  return {
+    value: /** @type {CanonicalRenderRequest} */ (repaired.value),
+    repairs: [...repairs, ...storedRequestRepairs(repaired.rows, STORED_REQUEST_PLACES[mode].otherOptionKeys)]
+  };
 };
 
 /**

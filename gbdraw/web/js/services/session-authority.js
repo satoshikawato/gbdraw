@@ -402,6 +402,72 @@ export const isSettingsOnlySessionDocument = data => data != null && [42, 44, MO
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 /** @typedef {UnvalidatedFields<'entries', UnvalidatedFields<'length'>>} ArtifactCacheFields */
+/**
+ * The request schemas a file stored, read before Load promoted its requests:
+ * a check that depends on what the writer wrote reads them (RK-1).
+ * @typedef {{ renderRequest?: unknown, otherModeResult?: unknown }} StoredRequestSchemas
+ */
+
+/** The Web input inventory of a Session that binds no input. */
+const EMPTY_WEB_BINDINGS = Object.freeze({
+  schema: 2, c_gb: null, c_gff: null, c_fasta: null, c_depth: null, c_conservation_blasts: [],
+  c_conservation_blasts_source: null, c_conservation_fastas: [], c_conservation_sequence_sources: [], d_color: null,
+  t_color: null, blacklist: null, whitelist: null, qualifier_priority: null, linearSeqs: [], linearComparisons: []
+});
+
+/**
+ * The settings-only Session of a Session whose request cannot be read (K22):
+ * the request, the Results, the GenBank, GFF and FASTA inputs (and the
+ * conservation sequences), the feature list and the caches are dropped; the
+ * settings, the other bindings and the resources they name are kept. A new
+ * object; the parsed file is not changed.
+ * @param {SessionEnvelope} session
+ * @returns {SessionEnvelope}
+ */
+export const settingsOnlySessionCandidate = (session) => {
+  const candidate = JSON.parse(JSON.stringify(session));
+  const { otherModeResult: _other, cliInvocation: _cli, legacyArtifacts: _legacy, files: _files, ...kept } = candidate;
+  const editorState = { ...(isPlainObject(kept.editorState) ? kept.editorState : {}), featureCatalog: null };
+  delete editorState.alignmentResetReceipt;
+  /** @param {unknown} cache */
+  const emptyCache = (cache) => (isPlainObject(cache) ? { ...cache, entries: [] } : cache);
+  const stored = kept.webFiles?.bindings;
+  const bindings = { ...(isPlainObject(stored) && stored.schema === 2 ? stored : JSON.parse(JSON.stringify(EMPTY_WEB_BINDINGS))) };
+  Object.assign(bindings, { c_gb: null, c_gff: null, c_fasta: null, c_conservation_fastas: [], c_conservation_sequence_sources: [] });
+  if (bindings.c_conservation_blasts_source === 'losat-cache') {
+    Object.assign(bindings, { c_conservation_blasts_source: null, c_conservation_blasts: [] });
+  }
+  bindings.linearSeqs = (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : [])
+    .map((/** @type {unknown} */ row) => (isPlainObject(row) ? { ...row, gb: null, gff: null, fasta: null } : row));
+  const linearOff = kept.modes?.linear?.config?.recordsOff;
+  if (Array.isArray(linearOff)) {
+    const uids = new Set(bindings.linearSeqs.map((/** @type {Record<string, unknown>} */ row) => row?.uid));
+    kept.modes.linear.config.recordsOff = linearOff.filter((uid) => uids.has(uid));
+  }
+  /** @type {Set<unknown>} */
+  const referenced = new Set();
+  /** @param {unknown} value */
+  const visit = (value) => {
+    if (!value || typeof value !== 'object') return;
+    if (Object.hasOwn(value, 'resourceId')) referenced.add(/** @type {{ resourceId: unknown }} */ (value).resourceId);
+    Object.values(value).forEach(visit);
+  };
+  visit(bindings);
+  return /** @type {SessionEnvelope} */ ({
+    ...kept,
+    renderRequest: null,
+    results: [],
+    editorState,
+    runMetadata: {},
+    ...(Object.hasOwn(kept, 'losatCache') ? { losatCache: emptyCache(kept.losatCache) } : {}),
+    ...(Object.hasOwn(kept, 'losatDerivedCache') ? { losatDerivedCache: emptyCache(kept.losatDerivedCache) } : {}),
+    ...(Object.hasOwn(kept, 'proteinIdentityManifest')
+      ? { proteinIdentityManifest: { schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} } } : {}),
+    webFiles: { bindings },
+    resources: Object.fromEntries(Object.entries(isPlainObject(kept.resources) ? kept.resources : {})
+      .filter(([id]) => referenced.has(id)))
+  });
+};
 
 /** @param {SessionEnvelope} data */
 const validateSettingsOnlyDocument = data => {
@@ -499,8 +565,9 @@ const validateSettingsOnlyFlatDraft = (data) => {
 /**
  * @param {Record<string, any>} set
  * @param {number | string} version
+ * @param {unknown} [storedSchema] The schema the file stored, before Load read the request (RK-1).
  */
-const validateCommittedResultSet = (set, version) => {
+const validateCommittedResultSet = (set, version, storedSchema = set.renderRequest?.schema) => {
   if (!Array.isArray(set.results)) {
     throw new Error(`Session version ${String(version)} requires a results array.`);
   }
@@ -531,8 +598,8 @@ const validateCommittedResultSet = (set, version) => {
       `Session version ${String(version)} requires editorState.featureCatalog.`
     );
   }
-  if (set.renderRequest?.schema >= 8
-    && set.renderRequest.layout?.similarityAlignment
+  if (Number(storedSchema) >= 8
+    && set.renderRequest?.layout?.similarityAlignment
     && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
     throw new Error('Current alignment Session requires editorState.alignmentResetReceipt.');
   }
@@ -564,19 +631,19 @@ const validateCommittedResultSet = (set, version) => {
 /**
  * @param {Record<string, any>} sessionData
  * @param {number | string} version
+ * @param {StoredRequestSchemas} storedSchemas
  */
-const validateOtherModeResult = (sessionData, version) => {
+const validateOtherModeResult = (sessionData, version, storedSchemas) => {
   const other = sessionData.otherModeResult;
   if (!isPlainObject(other) || Object.keys(other).some((key) => !OTHER_MODE_RESULT_FIELDS.includes(key))) {
     throw new Error('Session otherModeResult must contain only a committed Result set.');
   }
   const mode = /** @type {UnvalidatedFields<'mode'>} */ (other.renderRequest)?.mode;
   if (!isPlainObject(sessionData.renderRequest) || !isPlainObject(other.renderRequest)
-    || !(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode) || mode === sessionData.renderRequest.mode
-    || other.renderRequest.schema !== sessionData.renderRequest.schema) {
+    || !(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode) || mode === sessionData.renderRequest.mode) {
     throw new Error('Session otherModeResult requires a committed request of the other mode.');
   }
-  validateCommittedResultSet(other, version);
+  validateCommittedResultSet(other, version, storedSchemas.otherModeResult ?? other.renderRequest?.schema);
   // `validateCommittedResultSet` proved `results` an array of named SVG Results and `editorState` an object.
   const results = /** @type {SessionResult[]} */ (other.results);
   const editorState = /** @type {Record<string, unknown>} */ (other.editorState);
@@ -636,9 +703,10 @@ const validateModeScopedFields = (sessionData) => {
 /**
  * @param {SessionEnvelope} sessionData Unvalidated Session data.
  * @param {number | string} version
+ * @param {StoredRequestSchemas} [storedSchemas] The request schemas the file stored, when Load read them.
  * @returns {void}
  */
-export const validateSessionAuthorityInventory = (sessionData, version) => {
+export const validateSessionAuthorityInventory = (sessionData, version, storedSchemas = {}) => {
   if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
     throw new Error('Session authority inventory requires an object.');
   }
@@ -729,9 +797,10 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
         `Session version ${String(version)} cannot contain duplicated orthogroup groups.`
       );
     }
-    validateCommittedResultSet(sessionData, version);
+    validateCommittedResultSet(sessionData, version,
+      storedSchemas.renderRequest ?? /** @type {UnvalidatedFields<'schema'>} */ (sessionData.renderRequest)?.schema);
   }
-  if (Object.hasOwn(sessionData, 'otherModeResult')) validateOtherModeResult(sessionData, version);
+  if (Object.hasOwn(sessionData, 'otherModeResult')) validateOtherModeResult(sessionData, version, storedSchemas);
   const unknown = Object.keys(sessionData).filter(
     (key) => !Object.prototype.hasOwnProperty.call(SESSION_TOP_LEVEL_AUTHORITY, key)
   );
@@ -772,10 +841,11 @@ export const adoptRuntimeCanonicalSession = (canonical) => {
 /**
  * @param {SessionEnvelope} sessionData Unvalidated Session data.
  * @param {number} currentVersion
+ * @param {StoredRequestSchemas} [storedSchemas]
  * @returns {{ document: SessionEnvelope, canonical: Record<string, any> | null }}
  */
-export const adoptCurrentSessionDocument = (sessionData, currentVersion) => {
-  validateSessionAuthorityInventory(sessionData, currentVersion);
+export const adoptCurrentSessionDocument = (sessionData, currentVersion, storedSchemas = {}) => {
+  validateSessionAuthorityInventory(sessionData, currentVersion, storedSchemas);
   if (sessionData.version !== currentVersion) {
     throw new Error('Only the current session schema can use adoptive ownership.');
   }

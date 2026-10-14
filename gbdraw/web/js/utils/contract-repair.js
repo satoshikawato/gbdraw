@@ -174,7 +174,15 @@ const unionOption = (value, shape, at, context) => {
       return tag.kind === 'literal' && tag.values.some((item) => item === value[field]);
     }) ?? null;
   }
-  return shape.options[counts.indexOf(Math.min(...counts))];
+  // An object or a list is repaired as the option of its own kind; among
+  // those (or all, when none is), the first with the fewest violations.
+  const ownKind = shape.options.map((option) => {
+    const { kind } = resolve(option, context.types);
+    return isPlainObject(value) ? kind === 'object' || kind === 'record'
+      : Array.isArray(value) ? kind === 'array' || kind === 'tuple' : true;
+  });
+  const candidates = counts.map((count, index) => (ownKind.includes(true) && !ownKind[index] ? Infinity : count));
+  return shape.options[candidates.indexOf(Math.min(...candidates))];
 };
 
 /**

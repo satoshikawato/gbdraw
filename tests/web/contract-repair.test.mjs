@@ -498,3 +498,20 @@ test('an annotation colour: a spelling of a name reads as it, another text takes
     { path: 'style.labelColor', reason: 'pattern', rule: 3, used: '#202020' }
   ]);
 });
+
+test('a union: an object is repaired as the object option, even with more violations than null has', () => {
+  /** @type {ContractDescription} */
+  const description = {
+    root: 'Holder',
+    types: {
+      Holder: { kind: 'object', fields: { style: { kind: 'union', options: [{ kind: 'ref', name: 'Style' }, { kind: 'null' }] } }, optional: [], open: false },
+      Style: {
+        kind: 'object', fields: { a: { kind: 'integer' }, b: { kind: 'integer' } }, optional: [], open: false, defaults: { a: 1, b: 2 }
+      }
+    }
+  };
+  const result = repairByDescription({ style: { a: 'x', b: 'y' } }, { type: 'Holder', path: 'h' }, description,
+    { positionalArrays: [], partBoundary: () => false });
+  assert.deepEqual(result.value, { style: { a: 1, b: 2 } });
+  assert.deepEqual(result.rows.map(({ path, rule }) => ({ path, rule })), [{ path: 'h.style.a', rule: 3 }, { path: 'h.style.b', rule: 3 }]);
+});

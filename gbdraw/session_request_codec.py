@@ -5039,7 +5039,10 @@ def describe_canonical_request() -> dict[str, Any]:
 
     # RecordDisplayOptions.__post_init__: a positive integer.
     data(RecordDisplayOptions, replace={"start_coordinate": bound(RecordDisplayOptions, "start_coordinate", minimum=1)})
-    data(RecordPresentation)
+    # _encode_record: every presentation value is the writer's default when unset.
+    data(RecordPresentation, defaults={
+        _camel(item.name): getattr(RecordPresentation(), item.name) for item in fields(RecordPresentation)
+    })
     region_hints = _class_type_hints(RegionSpec)
     region = named("RecordRegion", obj({  # _encode_region
         "selector": nullable(selector),
@@ -5053,7 +5056,10 @@ def describe_canonical_request() -> dict[str, Any]:
         "source": source,
         "region": nullable(region),
         "record_key": bounded(STRING, pattern=r"\S"),  # written as given or as record-<n>
-    }, defaults={"display": _encode_record_display(RecordDisplayOptions())})), minItems=1)
+    }, defaults={
+        "display": _encode_record_display(RecordDisplayOptions()),
+        "cardinality": RecordInput.__dataclass_fields__["cardinality"].default.value,
+    })), minItems=1)
 
     # _encode_output: output_directory is the caller's, overwrite is read and ignored.
     output_hints = _class_type_hints(RenderOutputRequest)
@@ -5082,6 +5088,9 @@ def describe_canonical_request() -> dict[str, Any]:
             ),
             "multi_record_column_gap_ratio": bound(CircularMultiRecordOptions, "multi_record_column_gap_ratio", minimum=0),
             "multi_record_row_gap_ratio": bound(CircularMultiRecordOptions, "multi_record_row_gap_ratio", minimum=0),
+        }, defaults={
+            _camel(item.name): getattr(CircularMultiRecordOptions(), item.name)
+            for item in fields(CircularMultiRecordOptions) if item.name != "multi_record_positions"
         })),
         "linear": union(empty, data(LinearMultiRecordOptions, "LinearLayout", extra={
             "similarityAlignment": nullable(wire[SimilarityAlignmentPlan]),
