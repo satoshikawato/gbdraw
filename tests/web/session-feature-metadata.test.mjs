@@ -911,4 +911,27 @@ for (const invalidRecordIndex of [
   assert.equal(circularPlan.recoveredFeatureState, undefined);
 }
 
+// OV-751 (r4 F1): two features of one record that share a hash (a 0.13.0
+// Linear Session such as hash-color-rule-linear-rc.v30, whose SVG draws both
+// under one ID) both agree with that element. They differ by no record, so
+// both stay aligned, as before OV-751.
+{
+  const twin = (id, product) => ({ id, svg_id: 'h', stable_svg_id: 'h', rendered_feature_svg_id: 'h',
+    fileIdx: 0, record_idx: 0, record_id: 'TESTA', type: 'CDS', product });
+  const twins = [twin('f1', 'TWIN_A'), twin('f2', 'dupA')];
+  const drawn = '<path id="h_record_1" data-gbdraw-feature-id="h_record_1" data-gbdraw-stable-feature-id="h" '
+    + 'data-gbdraw-record-index="0" data-gbdraw-record-id="TESTA" />';
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb: { name: 'a.gb' } }], selectedResultIndex: 0,
+      results: committedResults(`<svg>${drawn}${drawn}</svg>`),
+      featureState: {}, editorState: {}
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async () => ({ features: twins, record_ids: ['TESTA'] })
+  });
+  assert.equal(plan.status, 'recovered', plan.reason);
+  assert.deepEqual(plan.recoveredFeatureState.extractedFeatures.map((feature) => feature.rendered_svg_id), ['h_record_1', 'h_record_1']);
+}
+
 console.log('session feature metadata tests passed');

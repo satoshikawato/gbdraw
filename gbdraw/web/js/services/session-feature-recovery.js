@@ -668,16 +668,28 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
     });
   });
 
-  // One drawn element is one feature. Features that differ only by a record
-  // the element does not carry all agree with it (OV-751): none is aligned.
-  /** @type {Map<string, number>} */
+  // Features that differ only by a record the drawn element does not carry
+  // all agree with it (OV-751): when the features claiming one element differ
+  // by record, or one's record is unknown, none is aligned. Twins of one record
+  // (one hash drawn twice) stay aligned.
+  /** @param {number} index */
+  const claimRecord = (index) => {
+    const { valid, supplied, value } = readings[index].recordIndex;
+    return valid && supplied && value !== null ? String(value) : '';
+  };
+  /** @type {Map<string, string[]>} */
   const claims = new Map();
-  resolutions.forEach(({ renderedId }) => {
-    if (renderedId) claims.set(renderedId, (claims.get(renderedId) || 0) + 1);
+  resolutions.forEach(({ renderedId }, index) => {
+    if (renderedId) claims.set(renderedId, [...(claims.get(renderedId) || []), claimRecord(index)]);
   });
+  /** @param {string} renderedId */
+  const claimedAcrossRecords = (renderedId) => {
+    const records = claims.get(renderedId) || [];
+    return records.length > 1 && (new Set(records).size > 1 || records.includes(''));
+  };
   resolutions.forEach((resolution, index) => {
     const { renderedId, status } = resolution;
-    if (!renderedId || (claims.get(renderedId) || 0) < 2) return;
+    if (!renderedId || !claimedAcrossRecords(renderedId)) return;
     const feature = sourceFeatures[index];
     if (status === 'exact') exactCount -= 1;
     else alignedCount -= 1;
