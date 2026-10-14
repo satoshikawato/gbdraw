@@ -5535,6 +5535,62 @@
    "python": "accept",
    "web": "loaded",
    "note": "A settings-only Session 47 as the Web's Save writes it (null request, settings present)."
+  },
+  {
+   "id": "ov865-settings-only-46-slices-unreadable",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {
+      "circular": 5,
+      "linear": 5
+     }
+    }
+   ],
+   "finding": "OV-865: R4 counts a part whose every held member was dropped (the two drawing slices of `modes`) or that holds nothing below its members, as it counts a part dropped whole: Load restores nothing of this settings-only file",
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular must be an object.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "ov865-settings-only-46-one-slice-unreadable",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {
+      "circular": 5
+     }
+    }
+   ],
+   "finding": "OV-865: R4 counts a part whose every held member was dropped (the two drawing slices of `modes`) or that holds nothing below its members, as it counts a part dropped whole: Load restores nothing of this settings-only file",
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular must be an object.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "ov865-settings-only-46-slices-null",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {
+      "circular": null,
+      "linear": null
+     }
+    }
+   ],
+   "finding": "OV-865: R4 counts a part whose every held member was dropped (the two drawing slices of `modes`) or that holds nothing below its members, as it counts a part dropped whole: Load restores nothing of this settings-only file",
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular must be an object.",
+   "web": "refused",
+   "webClass": "R4"
   }
  ]
 }

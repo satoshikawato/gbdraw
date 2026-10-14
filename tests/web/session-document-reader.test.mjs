@@ -80,6 +80,23 @@ test('R4 (E-OD21, OV-864): the row-less drops of a request Load cannot read coun
   assert.equal(restoresNothing(cli, []), false);
 });
 
+test('R4 (OV-865): a part whose every held member was dropped, or whose members hold nothing, restores nothing', () => {
+  const settingsOnly = { format: 'gbdraw-session', version: 46, renderRequest: null, title: 't' };
+  const slices = (paths) => paths.map((path) => ({ code: 'session-part-dropped', path, effect: 'dropped' }));
+  const both = { ...settingsOnly, modes: { circular: 5, linear: 5 } };
+  assert.equal(restoresNothing(both, slices(['modes.circular', 'modes.linear'])), true);
+  assert.equal(restoresNothing(both, slices(['modes.circular'])), false);
+  assert.equal(restoresNothing({ ...settingsOnly, modes: { circular: 5 } }, slices(['modes.circular'])), true);
+  assert.equal(restoresNothing({ ...settingsOnly, modes: { circular: null, linear: {} } }, []), true);
+  // Every input file dropped one by one is the part dropped.
+  const stored = fixture(V44_BOUND);
+  const parts = Object.keys(stored).filter((key) => SESSION_TOP_LEVEL_AUTHORITY[key]?.part && key !== 'resources');
+  const ids = Object.keys(stored.resources);
+  const rest = slices(parts);
+  assert.equal(restoresNothing(stored, [...rest, ...ids.map((id) => ({ code: 'file-entry-dropped', path: `resources.${id}`, effect: 'dropped' }))]), true);
+  assert.equal(restoresNothing(stored, rest), false);
+});
+
 const V44_BOUND = 'inactive-class-m.v44.gbdraw-session.json.gz';
 const V44_CIRCULAR = 'HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz';
 

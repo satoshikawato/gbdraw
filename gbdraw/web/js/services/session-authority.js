@@ -500,8 +500,9 @@ export const readSessionDocument = (value) => {
  * settings-only file, whose content is its settings, when its settings hold
  * nothing or were dropped (D1a: `modes` null or text). A file that holds no
  * part (an envelope-only Session 27-30) loads as before (BA-D20). Each
- * producer that drops a part records the part's key as its path; a part
- * dropped with no row still counts (E-OD21): the `request-dropped` row of a
+ * producer that drops a part records the part's key (or `key.member` for
+ * each member it drops) as its path; a part dropped with no row still
+ * counts (E-OD21): the `request-dropped` row of a
  * request Load cannot read (K22) loads the file as settings only, which drops
  * every other part, so it is judged as a settings-only file (OV-864).
  * @param {SessionEnvelope} stored The document as the file holds it.
@@ -511,16 +512,30 @@ export const restoresNothing = (stored, repairs) => {
   // The other mode's set dropped for its request is the part `otherModeResult`.
   const dropped = new Set(repairs.filter(({ effect }) => effect === 'dropped' || effect === 'defaulted')
     .map(({ code, path }) => (code === 'other-result-set-dropped' ? 'otherModeResult' : path)));
+  /**
+   * What a part holds: the members of an object part that hold something
+   * (`key.member`; a part whose members hold nothing holds nothing), the
+   * value of another part (`key`).
+   * @param {string} key
+   */
+  const members = (key) => {
+    const value = stored[/** @type {keyof SessionInput} */ (key)];
+    if (!isPlainObject(value)) return holdsNothing(value) ? [] : [key];
+    return Object.entries(/** @type {Record<string, unknown>} */ (value))
+      .filter(([, member]) => !holdsNothing(member)).map(([member]) => `${key}.${member}`);
+  };
+  // A part is dropped whole, or member by member (both slices of `modes`, OV-865).
+  /** @param {string} key */
+  const lost = (key) => dropped.has(key) || members(key).every((path) => dropped.has(path));
   /** @param {SessionContentPart | null} [only] */
   const held = (only) => Object.entries(SESSION_TOP_LEVEL_AUTHORITY)
-    .filter(([key, { part }]) => part !== null && (only === undefined || part === only)
-      && !holdsNothing(stored[/** @type {keyof SessionInput} */ (key)]))
+    .filter(([key, { part }]) => part !== null && (only === undefined || part === only) && members(key).length > 0)
     .map(([key]) => key);
   if (isSettingsOnlySessionDocument(stored) || repairs.some(({ code }) => code === 'request-dropped')) {
-    return held('settings').every((key) => dropped.has(key));
+    return held('settings').every(lost);
   }
   const parts = held();
-  return parts.length > 0 && parts.every((key) => dropped.has(key));
+  return parts.length > 0 && parts.every(lost);
 };
 
 const adoptedCurrentDocuments = new WeakSet();
