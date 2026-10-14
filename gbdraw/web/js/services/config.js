@@ -15,27 +15,21 @@ import {
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
-import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
+import { isNoStrokeColor, normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
 import {
   applyCircularTrackOrderPlacements,
-  clampCircularTrackAxisIndex,
-  inferLegacyAxisIndexFromFeature,
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
-  parseCircularTrackSlotSpec,
-  normalizeCircularTrackSlots
+  parseCircularTrackSlotSpec
 } from './circular-track-slot-model.js';
 import {
   applyLinearTrackOrderPlacements,
-  clampLinearTrackAxisIndex,
   LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-  migrateLinearTrackSlotsToCurrentSchema,
-  normalizeLinearTrackSlots,
-  resolveLinearTrackAxisIndex
+  migrateLinearTrackSlotsToCurrentSchema
 } from './linear-track-slot-model.js';
 import { depthFileSlotsFromValue, fitDepthStateToSources, padDepthFileSlots } from './depth-track-state.js';
-import { isUnsetValue, truthy } from '../utils/field-reading.js';
+import { isUnsetValue, noteReplacedLeaf, truthy } from '../utils/field-reading.js';
 import {
   decodeDepthText,
   isEncodedDepthFileEntry
@@ -45,8 +39,9 @@ import {
   readGeneratedCircularPlotTitlePosition, readImportedComparisonAction, draftLinearRecordGap, readLinearRecordGap, readLinearRecordLayoutEnabled,
   readLinearRecordRows, readFeaturePanelTab, readList, readLosatProgram, readPaletteColors, readPlainObject,
   readColorRules, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
-  featurePlacementsReader, readFeatureOverrides, readPalette, recordsOffReader, sessionUiFieldRepairs, sliceFieldRepairs, unreadFieldRepairs, valueRepairs,
-  LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields, readSessionInputType, readSimilarityAlignment
+  featurePlacementsReader, notedLossRepairs, readFeatureOverrides, readPalette, recordsOffReader, resolvedTrackStacks, sessionUiFieldRepairs, sliceFieldRepairs,
+  unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
+  readSessionInputType, readSimilarityAlignment
 } from './config-field-readers.js';
 import { drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
@@ -268,7 +263,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 ));
 
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
-/** @import { SettingsContainers } from './config-field-readers.js' */
+/** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
+/** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { CommittedCanonicalSession } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
@@ -573,17 +569,10 @@ const withCurrentLinearLabelVisibility = (configData) => {
 const migrateImportedCircularTrackSlots = (configData = {}) => {
   const adv = configData && typeof configData === 'object' ? configData.adv : null;
   if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return configData;
-  if (!Object.prototype.hasOwnProperty.call(adv, 'circular_track_slots')) return configData;
-  if (!Array.isArray(adv.circular_track_slots)) {
-    throw new Error('Custom Track Slots must be an array.');
-  }
-  const sourceSchemaVersion = adv.circular_track_slots_schema_version;
-  if (sourceSchemaVersion === CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) return configData;
-  if (sourceSchemaVersion !== LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) {
-    throw new Error(
-      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${CIRCULAR_TRACK_SLOT_SCHEMA_VERSION}.`
-    );
-  }
+  // Only schema-3 slots migrate: the stack's reader reads any other stack in
+  // the current schema and lists what it cannot use (OV-758).
+  if (!Array.isArray(adv.circular_track_slots)
+    || adv.circular_track_slots_schema_version !== LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) return configData;
 
   const defaultNt = adv.nt || 'GC';
   const preset = configData.form?.track_type || 'tuckin';
@@ -623,27 +612,10 @@ const migratePersistedWebOptionValues = (configData = {}) => {
 const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion = null) => {
   const adv = configData && typeof configData === 'object' ? configData.adv : null;
   if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return configData;
-  if (!Object.prototype.hasOwnProperty.call(adv, 'linear_track_slots')) return configData;
-  if (!Array.isArray(adv.linear_track_slots)) {
-    throw new Error('Custom Track Slots must be an array.');
-  }
-
-  const hasStoredSchemaVersion = Object.prototype.hasOwnProperty.call(
-    adv,
-    'linear_track_slots_schema_version'
-  );
+  // A stack of another kind or schema is not migrated: its reader reads it in
+  // the current schema and lists what it cannot use (OV-758).
+  if (!Array.isArray(adv.linear_track_slots)) return configData;
   const storedSchemaVersion = adv.linear_track_slots_schema_version;
-  if (
-    hasStoredSchemaVersion &&
-    (
-      !Number.isInteger(storedSchemaVersion) ||
-      ![LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_SLOT_SCHEMA_VERSION].includes(storedSchemaVersion)
-    )
-  ) {
-    throw new Error(
-      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`
-    );
-  }
   const sessionUsesLegacySemantics = (
     Number.isInteger(sourceSessionVersion) &&
     // Number.isInteger above is false for null, so the version is a number here.
@@ -652,11 +624,7 @@ const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion =
   const sourceSchemaVersion = sessionUsesLegacySemantics
     ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
     : storedSchemaVersion;
-  if (![LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_SLOT_SCHEMA_VERSION].includes(sourceSchemaVersion)) {
-    throw new Error(
-      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`
-    );
-  }
+  if (![LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_SLOT_SCHEMA_VERSION].includes(sourceSchemaVersion)) return configData;
 
   return {
     ...configData,
@@ -679,14 +647,20 @@ const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim(
 // there for the Load dialog (D-43) under `path`, the stored Legend. A list
 // holds one entry per row key (Session 47: two rows may show one name); a
 // Session 46 or older kept the first entry of each caption (OV-719). A later
-// entry of one row is dropped and listed.
+// entry of one row is dropped and listed, and so is an entry that is no object
+// or has no caption (TB8).
 /**
  * @param {unknown} entries
  * @param {'entries' | 'dormantEntries' | 'deletedEntries'} list
  * @param {{ repairs: LoadRepair[] | null, path: string, sessionVersion: number }} load
  */
 const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVersion }) => {
-  if (!Array.isArray(entries)) return [];
+  /** @type {SettingLoss[]} */
+  const losses = [];
+  if (!Array.isArray(entries)) {
+    if (!isUnsetValue(entries)) repairs?.push(...notedLossRepairs([{ at: list, stored: entries, used: [] }], path));
+    return [];
+  }
   const rowOf = sessionVersion >= ROW_KEYED_LEGEND_SESSION_VERSION
     ? (/** @type {Record<string, unknown>} */ entry) => legendEntryKey(entry)
     : (/** @type {Record<string, unknown>} */ entry) => String(entry.caption || '').trim();
@@ -696,12 +670,20 @@ const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVe
   const keys = new Set();
   /** @type {{ list: string, caption: string, key: string }[]} */
   const dropped = [];
-  entries.forEach((entry) => {
-    if (!isPlainObject(entry)) return;
+  /** @type {Map<string, number>} An entry that holds something but is no object or has no caption, by list. */
+  const unread = new Map();
+  /** @param {string} from */
+  const countUnread = (from) => unread.set(from, (unread.get(from) ?? 0) + 1);
+  entries.forEach((entry, index) => {
+    if (!isPlainObject(entry)) {
+      if (!isUnsetValue(entry)) countUnread(list);
+      return;
+    }
     const caption = String(entry.caption || '').trim();
     const key = rowOf(entry);
     const color = normalizeDefaultColor(entry.color);
     const from = entry.dormant === true ? 'dormantEntries' : list;
+    if (!caption && Object.values(entry).some((field) => !isUnsetValue(field))) countUnread(from);
     if (caption && !color && !keys.has(key)) dropped.push({ list: from, caption, key });
     if (caption && color && keys.has(key)) {
       repairs?.push(loadRepair({ code: 'legend-entry-duplicate', path: `${path}.${from}`, effect: 'dropped', label: caption }));
@@ -712,6 +694,9 @@ const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVe
     // is view state (OV-157).
     const stored = cloneJsonData(entry);
     delete stored.showStroke;
+    if (!Array.isArray(entry.featureIds) && !isUnsetValue(entry.featureIds)) {
+      losses.push({ at: `${list}[${index}].featureIds`, stored: entry.featureIds, used: [] });
+    }
     normalized.push({
       ...stored,
       caption,
@@ -721,6 +706,10 @@ const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVe
         : []
     });
   });
+  repairs?.push(...notedLossRepairs(losses, path));
+  unread.forEach((count, from) => repairs?.push(loadRepair({
+    code: 'setting-entries-dropped', path: `${path}.${from}`, effect: 'dropped', count
+  })));
   // A row that a later entry with a valid color keeps is shown, not dropped.
   dropped.filter(({ key }) => !keys.has(key)).forEach(({ list: from, caption }) => repairs?.push(loadRepair({
     code: 'legend-color-dropped', path: `${path}.${from}`, effect: 'dropped', label: caption
@@ -743,12 +732,26 @@ const cloneJsonObject = (value) => {
   return cloneJsonValue(value, {});
 };
 
-/** @param {unknown} source */
-const normalizeStringArray = (source) => {
-  if (!Array.isArray(source)) return [];
-  return source
-    .map((value) => String(value || '').trim())
-    .filter(Boolean);
+/**
+ * @param {unknown} source
+ * @param {string} at Where `source` is, for `losses`.
+ * @param {SettingLoss[] | null} [losses] Written: a list that is no list, an entry read as other text, and the
+ *   number of entries that hold something but read as no text.
+ */
+const normalizeStringArray = (source, at, losses = null) => {
+  if (!Array.isArray(source)) {
+    if (!isUnsetValue(source)) losses?.push({ at, stored: source, used: [] });
+    return [];
+  }
+  let dropped = 0;
+  const read = source.flatMap((value, index) => {
+    const text = String(value || '').trim();
+    if (!text && !isUnsetValue(value)) dropped += 1;
+    else if (text) noteReplacedLeaf(losses, `${at}[${index}]`, value, text);
+    return text ? [text] : [];
+  });
+  if (dropped) losses?.push({ at, stored: source, used: read, dropped });
+  return read;
 };
 
 /** @type {string | null} */
@@ -942,6 +945,32 @@ export const buildEditorStateData = (drawing) => ({
 });
 
 /**
+ * The losses of a stroke override map read at `at` (a dropped entry is
+ * counted, and a count names no value).
+ * @param {StrokeOverrideLosses} losses
+ * @param {string} at
+ * @returns {SettingLoss[]}
+ */
+const strokeOverrideLosses = ({ leaves, dropped }, at) => [
+  ...leaves.map((leaf) => ({ ...leaf, at: `${at}.${leaf.at}` })),
+  ...(dropped ? [{ at, stored: null, used: {}, dropped }] : [])
+];
+/**
+ * The rows of the Legend edits Load could not read (TB9) of the Legend stored
+ * at `path`: the color edits dropped (one row per caption) and the stroke
+ * edits' losses.
+ * @param {LegendEditsUnread} unread
+ * @param {string} path
+ * @returns {LoadRepair[]}
+ */
+const legendEditRepairs = ({ colors, strokes }, path) => [
+  ...notedLossRepairs(strokeOverrideLosses(strokes, 'strokeOverrides'), path),
+  ...[...new Set(colors)].map((caption) => loadRepair({
+    code: 'legend-color-dropped', path: `${path}.colorOverrides`, effect: 'dropped', label: caption
+  }))
+];
+
+/**
  * @param {Record<string, any>} [editorState]
  * @param {{ featureCatalog?: unknown, repairs?: LoadRepair[] | null, path?: string, sessionVersion?: number }} [options]
  *   `repairs` collects what Load cannot restore of the editor state stored at `path`; `sessionVersion`: the
@@ -963,34 +992,84 @@ export const normalizeEditorStateData = (editorState = {}, {
     ...normalizeSessionLegendEntries(legend.dormantEntries, 'dormantEntries', legendLoad),
     ...entries.filter((entry) => entry.dormant === true)
   ].map(({ dormant: _dormant, ...entry }) => entry);
+  // What Load cannot read of the edits is listed when `repairs` is given (TB9);
+  // an edit that holds nothing (an empty override) is no row.
+  /** @type {SettingLoss[] | null} */
+  const losses = repairs ? [] : null;
+  /** @type {LegendEditsUnread | null} The Legend's color edits and the stroke edits of both stores. */
+  const unreadEdits = repairs ? { colors: [], strokes: { leaves: [], dropped: 0 } } : null;
+  const droppedColors = unreadEdits?.colors ?? null;
+  /**
+   * A map of edits that is no object is read as none.
+   * @param {unknown} map
+   * @param {string} at
+   */
+  const noteNoMap = (map, at) => {
+    if (!isPlainObject(map) && !isUnsetValue(map)) losses?.push({ at, stored: map, used: {} });
+  };
+  /**
+   * @param {unknown} map
+   * @param {string} at
+   */
+  const readColors = (map, at) => {
+    noteNoMap(map, at);
+    return normalizeLegendColorOverrides(map, droppedColors);
+  };
+  /**
+   * @param {unknown} map
+   * @param {string} at
+   */
+  const readStrokeOverrides = (map, at) => {
+    noteNoMap(map, at);
+    /** @type {StrokeOverrideLosses | null} */
+    const strokeLosses = losses ? { leaves: [], dropped: 0 } : null;
+    const read = normalizeStrokeOverrideMap(map, { requireOverride: true, losses: strokeLosses });
+    if (losses && strokeLosses) losses.push(...strokeOverrideLosses(strokeLosses, at));
+    return read;
+  };
+  /**
+   * @template T
+   * @param {unknown} stored
+   * @param {string} field
+   * @param {(value: unknown) => T | null} read
+   * @param {T | null} fallback
+   * @returns {T | null}
+   */
+  const readSvgStroke = (stored, field, read, fallback) => {
+    if (!Object.hasOwn(originalSvgStroke, field)) return fallback;
+    const value = read(stored);
+    if (!isUnsetValue(stored) && value === null && !isNoStrokeColor(stored)) losses?.push({ at: `originalSvgStroke.${field}`, stored, used: null });
+    return value;
+  };
+  if (!isPlainObject(source.originalSvgStroke) && !isUnsetValue(source.originalSvgStroke)) {
+    losses?.push({ at: 'originalSvgStroke', stored: source.originalSvgStroke, used: defaults.originalSvgStroke });
+  }
 
-  return {
+  const read = {
     legend: {
       entries: entries.filter((entry) => entry.dormant !== true),
       deletedEntries: normalizeSessionLegendEntries(legend.deletedEntries, 'deletedEntries', legendLoad),
       dormantEntries,
-      originalOrder: normalizeStringArray(legend.originalOrder),
-      originalColors: normalizeLegendColorOverrides(legend.originalColors),
-      colorOverrides: normalizeLegendColorOverrides(legend.colorOverrides),
-      strokeOverrides: normalizeStrokeOverrideMap(legend.strokeOverrides, { requireOverride: true }),
-      addedCaptions: normalizeStringArray(legend.addedCaptions)
+      originalOrder: normalizeStringArray(legend.originalOrder, 'legend.originalOrder', losses),
+      originalColors: readColors(legend.originalColors, 'legend.originalColors'),
+      colorOverrides: readColors(legend.colorOverrides, 'legend.colorOverrides'),
+      strokeOverrides: readStrokeOverrides(legend.strokeOverrides, 'legend.strokeOverrides'),
+      addedCaptions: normalizeStringArray(legend.addedCaptions, 'legend.addedCaptions', losses)
     },
     featureStrokes: {
-      overrides: normalizeStrokeOverrideMap(featureStrokes.overrides, { requireOverride: true })
+      overrides: readStrokeOverrides(featureStrokes.overrides, 'featureStrokes.overrides')
     },
     originalSvgStroke: {
-      color: Object.prototype.hasOwnProperty.call(originalSvgStroke, 'color')
-        ? normalizeOptionalHexColor(originalSvgStroke.color)
-        : defaults.originalSvgStroke.color,
-      width: Object.prototype.hasOwnProperty.call(originalSvgStroke, 'width')
-        ? normalizeStrokeWidth(originalSvgStroke.width)
-        : defaults.originalSvgStroke.width
+      color: readSvgStroke(originalSvgStroke.color, 'color', normalizeOptionalHexColor, defaults.originalSvgStroke.color),
+      width: readSvgStroke(originalSvgStroke.width, 'width', normalizeStrokeWidth, defaults.originalSvgStroke.width)
     },
     alignmentResetReceipt: cloneJsonValue(source.alignmentResetReceipt, null),
     featureCatalog: admittedFeatureCatalog(
       featureCatalog !== undefined ? featureCatalog : source.featureCatalog
     )
   };
+  if (repairs && losses && unreadEdits) repairs.push(...notedLossRepairs(losses, path), ...legendEditRepairs(unreadEdits, `${path}.legend`));
+  return read;
 };
 
 /**
@@ -1943,7 +2022,12 @@ const preflightSessionImport = async (sessionData, repairs) => {
   // reader below reads them by row key (PD-OI-061 revision 5). An edit a later
   // edit of its row overwrote is dropped; a Session 46 drew the later edit, so
   // its drop has a code the dialog does not list (Q1).
-  const legendRead = sessionLegendEditsByRowKey(await convertMainSessionComparisonFrames(sessionData), sourceSessionVersion);
+  /** @type {{ slice: string, unread: LegendEditsUnread }[]} */
+  const unreadLegendEdits = [];
+  const legendRead = sessionLegendEditsByRowKey(await convertMainSessionComparisonFrames(sessionData), sourceSessionVersion, unreadLegendEdits);
+  unreadLegendEdits.forEach(({ slice, unread }) => repairs.push(
+    ...legendEditRepairs(unread, `${slice === 'draft' ? '' : `modes.${slice}.`}editorState.legend`)
+  ));
   legendRead.outcomes.forEach((outcome) => {
     if (outcome.outcome !== 'collision') return;
     const draft = outcome.slice === 'draft';
@@ -2001,7 +2085,6 @@ const preflightSessionImport = async (sessionData, repairs) => {
   } else {
     validateSessionAuthorityInventory(rawData, sourceSessionVersion, requestRead.storedSchemas);
     normalizedData = normalizeSessionData(rawData, repairs);
-    migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   }
 
   // A Gallery Session that stored a schema-2 request (31-33) is rebuilt by
@@ -2161,14 +2244,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
       const slice = data.modes?.[mode];
       if (slice === undefined) return;
       requireModeSliceFields(slice);
-      if (isPlainObject(slice.config)) {
-        requireActiveConfigContainers({
-          mode,
-          storedConfig: migrateImportedLinearTrackSlots(migrateImportedCircularTrackSlots(
-            { form: {}, adv: {}, ...slice.config }
-          ), sourceSessionVersion)
-        });
-      }
+      if (isPlainObject(slice.config)) requireActiveConfigContainers({ mode, storedConfig: { form: {}, adv: {}, ...slice.config } });
     });
     restoredConfig = canonicalProjection && !settingsOnly
       ? overlayModeSliceConfig(canonicalProjection.config, runtimeStoredConfig)
@@ -2212,23 +2288,6 @@ const preflightSessionImport = async (sessionData, repairs) => {
           source: /** @type {const} */ ('storedRequest')
         }
     : null;
-  if (restoredConfig) {
-    const activeDepthTrackCount = Array.isArray(restoredConfig?.adv?.depth_tracks)
-      ? restoredConfig.adv.depth_tracks.length
-      : null;
-    validateImportedCircularTrackSlots(restoredConfig, {
-      depthTrackCount: canonicalProjection?.mode === 'circular' &&
-        restoredConfig.adv?.circular_track_slots_enabled
-        ? activeDepthTrackCount
-        : null
-    });
-    validateImportedLinearTrackSlots(restoredConfig, {
-      depthTrackCount: canonicalProjection?.mode === 'linear' &&
-        restoredConfig.adv?.linear_track_slots_enabled
-        ? activeDepthTrackCount
-        : null
-    });
-  }
   if (currentSession) recordSessionLifecycleEvent('artifact-projection-start');
   const projectionResult = canonicalProjection
     ? (() => {
@@ -2516,33 +2575,6 @@ export const applyLabelFitValues = (drawing, values, mode) => {
   }
   form.forEach(([field, value]) => LABEL_FIT_FORM_WRITERS[field](drawing.form, value));
   adv.forEach(([field, value]) => LABEL_FIT_ADV_WRITERS[field](drawing.adv, value));
-};
-
-// The track stacks a drawing's settings resolve to: each stack with its
-// axis index read and its placements applied (`applyConfigData`'s
-// `resolveTrackPlacements`). Pure: Load reads the stacks it installs with it
-// before the commit.
-/**
- * @param {DrawingState['adv']} adv The drawing's settings, read.
- * @param {DrawingState['form']} form
- */
-const resolvedTrackStacks = (adv, form) => {
-  const normalizedSlots = normalizeCircularTrackSlots(adv.circular_track_slots, adv.nt, form.track_type);
-  const importedAxis = clampCircularTrackAxisIndex(adv.circular_track_slots_axis_index, normalizedSlots.length);
-  const circularAxis = importedAxis === null
-    ? inferLegacyAxisIndexFromFeature(normalizedSlots, form.track_type)
-    : importedAxis;
-  const normalizedLinearSlots = normalizeLinearTrackSlots(adv.linear_track_slots, adv.nt, form.linear_track_layout);
-  const linearAxis = resolveLinearTrackAxisIndex(
-    normalizedLinearSlots,
-    clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length)
-  );
-  return {
-    circularAxis,
-    circularSlots: applyCircularTrackOrderPlacements(adv.circular_track_slots, adv.nt, form.track_type, circularAxis),
-    linearAxis,
-    linearSlots: applyLinearTrackOrderPlacements(normalizedLinearSlots, linearAxis, adv.nt, form.linear_track_layout)
-  };
 };
 
 // Captured or stored settings (History Undo and Redo, the failed Session Load
@@ -5637,7 +5669,9 @@ const importSessionDocument = async (e, options = {}) => {
       // What `applyModeSliceData` installs.
       const installedConfig = overlayModeSliceConfig(null, modeConfigs[mode]);
       repairs.push(...configFieldRepairs(installedSettings[mode], installedConfig,
-        modeScopedSession ? `modes.${mode}.config` : 'config', { stored: modeSlices[mode].config, mode }));
+        modeScopedSession ? `modes.${mode}.config` : 'config', {
+          stored: modeSlices[mode].config, mode, resolveTrackPlacements: !settingsOnly && !isStoredSlice(mode)
+        }));
       repairs.push(...unreadFieldRepairs(modeScopedSession ? modeSlices[mode].config : flatDraft,
         modeScopedSession ? `modes.${mode}.config` : 'config', mode, { slice: modeScopedSession }));
       // (A Session 27-44 keeps them in its `ui` and `features`.)

@@ -27,7 +27,7 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { exportSession, importSession, normalizeEditorStateData, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
 const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-settings.generated.js');
 // The Worker's typed override check, run by Python (as session-cli-compatibility does).
 setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
@@ -41,6 +41,8 @@ print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
+const { createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
+const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
 
 const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))));
 const input = (session) => ({
@@ -175,13 +177,13 @@ const UNLISTED_LEAVES = [
   [/^modes\.\w+\.ui\.pendingPaletteColors$/, 'no pending palette'],
   // The committed mode's request sets a layout slot that is no object.
   [/^modes\.circular\.ui\.layoutPreferences$/, 'the request\'s layout wins'],
-  // The track slot model's normalizers do not report what they replace yet
-  // (until the slot readers return what they lose); the stack's
-  // axis index is read with its slots.
-  [/^modes\.\w+\.config\.adv\.(circular|linear)_track_slots(\[\d+\]\.|_axis_index$)/, 'track slot leaves'],
+  // The Stroke options disclosure an earlier Session saved with a Legend entry (OV-157).
+  [/^modes\.\w+\.editorState\.legend\.\w+\[\d+\]\.showStroke$/, 'view state'],
   // A record row that names no record of the Session names nothing the
-  // figure draws; it is dropped without a row (as B47, BA-OD88).
-  [/^modes\.\w+\.config\.linearRecordLayout\.rows\[\d+\]\.uid$/, 'a row naming no record']
+  // figure draws; it is dropped without a row (as B47, BA-OD88). So is a
+  // record turned OFF that names no record of its drawing.
+  [/^modes\.\w+\.config\.linearRecordLayout\.rows\[\d+\]\.uid$/, 'a row naming no record'],
+  [/^(modes\.\w+\.config\.)?recordsOff\[\d+\]$/, 'a record key naming no record']
 ];
 const MODE_ROWS = MODE_SCOPED_SETTINGS.rows;
 /** A value the drawing of its slice never draws (the registry gives it to the other mode). */
@@ -193,22 +195,18 @@ const otherModeValue = (path) => {
     ?? MODE_ROWS.find((entry) => entry.domain === part && entry.path === head);
   return Boolean(row) && row.modes !== 'both' && row.modes !== mode;
 };
-// The editor state is read before the dialog by its own readers, which do not
-// report every value they replace yet: a leaf saved as that reading
-// gives it is theirs; a leaf the apply changes further is not.
-const readBeforeTheDialog = (session, parts, saved) => {
-  const [, mode, part, ...rest] = parts;
-  if (parts[0] !== 'modes' || part !== 'editorState') return false;
-  const read = normalizeEditorStateData(session.modes[mode].editorState, { sessionVersion: session.version });
-  return JSON.stringify(valueAt(read, rest)) === JSON.stringify(saved);
-};
-const named = (path, repairs) => repairs.some((repair) => repair.path === path || path.startsWith(`${repair.path}.`)
-  || path.startsWith(`${repair.path}[`) || repair.path.startsWith(`${path}.`) || repair.path.startsWith(`${path}[`));
+// A row names a key that holds a dot as `["key"]`.
+const plainPath = (path) => path.replace(/\["([^"]*)"\]/g, '.$1');
+const named = (path, repairs) => repairs.map((repair) => plainPath(repair.path)).some((at) => at === path || path.startsWith(`${at}.`)
+  || path.startsWith(`${at}[`) || at.startsWith(`${path}.`) || at.startsWith(`${path}[`));
 const G2_FIXTURE = 'legend-renamed-rows.v46.gbdraw-session.json.gz';
 /** A Depth series' fields with nothing set. */
 const DEFAULT_SERIES = { height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null };
-/** The G2 fixture as the current Web saves it with an entry in each list and two Depth series. */
-const filledSession = async () => {
+/**
+ * The G2 fixture as the current Web saves it with an entry in each list and two Depth series. `overrides`: with an
+ * unmanaged config override, whose check runs Python once per Load (about 2 s), so only its own leaves are mutated.
+ */
+const filledSession = async ({ overrides = false } = {}) => {
   const draft = fixture(G2_FIXTURE);
   for (const mode of ['circular', 'linear']) {
     const { config } = draft.modes[mode];
@@ -220,7 +218,25 @@ const filledSession = async () => {
     }];
     config.circularConservation.series = [{ sourceIndex: 0, label: 'Danio' }];
     config.adv.depth_tracks = [config.adv.depth_tracks[0], { ...DEFAULT_SERIES, label: 'Coverage B', color: '#123456' }];
+    const { features } = draft.modes[mode];
+    features.featureColorOverrides = { 'feature-a': '#112233' };
+    features.labelOverrideRows = [{ recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: 'x', labelText: 'y' }];
   }
+  // Each list the E1 readers read holds an entry, so G2 changes it. (A
+  // comparison edge names two records; the fixture has one Linear record.)
+  const circular = draft.modes.circular;
+  const recordKey = 'circular:#1';
+  circular.config.recordsOff = ['#1'];
+  circular.config.featurePlacementOverrides = {
+    [JSON.stringify([recordKey, 'f1234abcd'])]: { recordKey, biologicalFeatureId: 'f1234abcd', placement: { kind: 'main' } }
+  };
+  if (overrides) circular.config.unmanagedConfigOverrides = { 'objects.gc_content.percent_background_opacity': 0.42 };
+  circular.config.recordDisplayDrafts = [{
+    sourceUid: 'circular', selector: '#1', recordId: 'same', topologyOverride: null, startCoordinate: 25,
+    reverseComplementOverride: null, anchorIntent: null
+  }];
+  draft.modes.linear.config.recordsOff = [draft.webFiles.bindings.linearSeqs[0].uid];
+  draft.modes.linear.editorState.legend.strokeOverrides = { CDS: { strokeColor: '#123456', strokeWidth: 1 } };
   const loaded = await importSession(input(draft), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   for (const drawing of Object.values(state.drawings)) {
@@ -271,15 +287,17 @@ const mutationFindings = async (base, roots, savedParts = (parts) => parts) => {
         continue;
       }
       const saved = valueAt(savedFile, savedParts(parts));
-      const kept = JSON.stringify(saved) === JSON.stringify(mutated) || (typeof mutated === 'number' && saved === String(mutated));
-      if (!kept && !named(path, loaded.repairs) && !readBeforeTheDialog(file, savedParts(parts), saved)) {
+      // A number may be saved as its text, and a track slot measure as pixels.
+      const kept = JSON.stringify(saved) === JSON.stringify(mutated)
+        || (typeof mutated === 'number' && (saved === String(mutated) || saved === `${mutated}px`));
+      if (!kept && !named(path, loaded.repairs)) {
         silent.push(`${kind} ${path}: ${JSON.stringify(mutated)} -> ${JSON.stringify(saved)}`);
       }
     }
   }
   return { checked, refusedAfterTheCommit, silent };
 };
-test('no apply step after the dialog drops or changes a stored value the dialog did not list, apart from the track-slot leaves (G2)', async () => {
+test('no apply step after the dialog drops or changes a stored value the dialog did not list (G2)', async () => {
   const base = await filledSession();
   for (const mode of ['circular', 'linear']) {
     const { config } = base.modes[mode];
@@ -287,10 +305,20 @@ test('no apply step after the dialog drops or changes a stored value the dialog 
       config.circularConservation.series, config.linearRecordLayout.rows]) assert.ok(list.length > 0, mode);
     assert.equal(config.adv.depth_tracks.length, 2, mode);
   }
+  const circular = base.modes.circular;
+  for (const list of [circular.features.featureColorOverrides, circular.features.labelOverrideRows, circular.config.recordsOff,
+    circular.config.featurePlacementOverrides, circular.config.recordDisplayDrafts,
+    circular.config.adv.circular_track_slots, base.modes.linear.config.recordsOff, base.modes.linear.config.adv.linear_track_slots,
+    base.modes.linear.editorState.legend.strokeOverrides]) assert.ok(Object.keys(list).length > 0);
   const roots = [['ui'], ...['circular', 'linear'].flatMap((mode) => ['config', 'ui', 'features', 'editorState'].map((part) => ['modes', mode, part]))];
   const { checked, refusedAfterTheCommit, silent } = await mutationFindings(base, roots);
   assert.ok(checked > 100, String(checked));
   assert.deepEqual({ refusedAfterTheCommit, silent }, { refusedAfterTheCommit: [], silent: [] });
+  const withOverrides = await filledSession({ overrides: true });
+  const overrides = await mutationFindings(withOverrides, [['modes', 'circular', 'config', 'unmanagedConfigOverrides']]);
+  assert.ok(overrides.checked > 0, String(overrides.checked));
+  assert.deepEqual({ refusedAfterTheCommit: overrides.refusedAfterTheCommit, silent: overrides.silent },
+    { refusedAfterTheCommit: [], silent: [] });
 });
 
 // G2 for a configuration file (BA-OD99 b): the stored settings of the shown
@@ -478,6 +506,93 @@ test('a Legend entry that repeats an earlier one is dropped and listed, by capti
   const read47 = await loadAnswering(session47);
   assert.deepEqual(read47.items, ['Legend: entry "Q" repeats an earlier entry of its list and was dropped.']);
   assert.deepEqual(state.drawings.circular.legendEntries.value.filter(({ caption }) => caption === 'tRNA').length, 2);
+});
+
+// OV-758 (A10, E-OD08): the track stacks' readers list what they replace
+// before the dialog. A slot value Load refused is dropped and its default
+// used; a stack with a slot that is no object, or one the slot check still
+// refuses then, is read as the default stack, with its axis index (a place
+// in the stack) unset. An axis index the stack clamps keeps today's value.
+// A schema version Load does not know reads the slots as the current schema.
+test('a track slot value Load cannot use is listed; a slot that cannot be read resets its stack (OV-758, A10)', async () => {
+  const v46 = () => fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  let session = v46();
+  session.modes.circular.config.adv.circular_track_slots_axis_index = 9;
+  let read = await loadAnswering(session);
+  assert.deepEqual(read.items, ['Settings: the value "9" (modes.circular.config.adv.circular_track_slots_axis_index) cannot be used; 4 is used.']);
+  assert.equal(state.drawings.circular.adv.circular_track_slots_axis_index, 4);
+
+  session = v46();
+  const slots = session.modes.circular.config.adv.circular_track_slots;
+  Object.assign(slots[1], { width: 'wide', z: 'top' });
+  slots[2].side = 'zigzag';
+  slots[3].params = 5;
+  session.modes.linear.config.adv.linear_track_slots[0].height = -7.5;
+  read = await loadAnswering(session);
+  assert.deepEqual(read.items, [
+    'Settings: the value "wide" (modes.circular.config.adv.circular_track_slots[1].width) cannot be used; it is left unset.',
+    'Settings: the value "top" (modes.circular.config.adv.circular_track_slots[1].z) cannot be used; it is left unset.',
+    'Settings: the value "zigzag" (modes.circular.config.adv.circular_track_slots[2].side) cannot be used; it is left unset.',
+    'Settings: the value "5" (modes.circular.config.adv.circular_track_slots[3].params) cannot be used; its default is used.',
+    'Settings: the value "-7.5" (modes.linear.config.adv.linear_track_slots[0].height) cannot be used; it is left unset.'
+  ]);
+  const circularSlots = state.drawings.circular.adv.circular_track_slots;
+  assert.deepEqual([circularSlots[1].width, circularSlots[1].z, circularSlots[3].params], [null, 0, {}]);
+  assert.ok([undefined, null, ''].includes(state.drawings.linear.adv.linear_track_slots[0].height));
+
+  session = v46();
+  session.modes.circular.config.adv.circular_track_slots[1] = 5;
+  session.modes.circular.config.adv.circular_track_slots_axis_index = 2;
+  read = await loadAnswering(session);
+  assert.deepEqual(read.items, [
+    'Settings: the value "2" (modes.circular.config.adv.circular_track_slots_axis_index) cannot be used; its default is used.',
+    'Settings: the value of modes.circular.config.adv.circular_track_slots cannot be used; its default is used.'
+  ]);
+  const ids = (stack) => stack.map(({ id }) => id);
+  assert.deepEqual(ids(state.drawings.circular.adv.circular_track_slots), ids(createDefaultCircularTrackSlots()));
+
+  for (const stack of ['x', [{ id: 'x', renderer: 'zzz' }]]) {
+    session = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+    session.config.adv.linear_track_slots = stack;
+    read = await loadAnswering(session);
+    assert.deepEqual(read.items, ['Settings: the value of config.adv.linear_track_slots cannot be used; its default is used.'], JSON.stringify(stack));
+    assert.deepEqual(ids(state.drawings.linear.adv.linear_track_slots), ids(createDefaultLinearTrackSlots()));
+  }
+
+  session = fixture('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz');
+  session.config.adv.circular_track_slots_schema_version = 1;
+  const quiet = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+  assert.equal(quiet.status, 'ok', JSON.stringify(quiet.error));
+});
+
+// TB8, TB9 (E-OD08): the editor state's readers list the Legend entries,
+// color and stroke edits, orders and original stroke they drop. An edit with
+// no value edits nothing, and `showStroke` is view state: no row.
+test('a Legend entry, color or stroke edit, order or original stroke Load cannot read is listed (TB8, TB9)', async () => {
+  const session = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+  session.editorState = {
+    ...session.editorState,
+    legend: {
+      entries: [{ caption: '', color: '#123456' }, 5, { caption: 'A', color: '#111111', showStroke: true }],
+      colorOverrides: { X: 'notacolor', Y: '' },
+      strokeOverrides: { Y: { strokeColor: 'bad', strokeWidth: -1 }, Z: { strokeColor: '#00aa00', strokeWidth: 'w' }, E: {} },
+      originalOrder: [5, '', 'A', false]
+    },
+    featureStrokes: { overrides: { f1: { strokeColor: 'bad' } } },
+    originalSvgStroke: { color: 'bad', width: -2 }
+  };
+  const { items } = await loadAnswering(session);
+  assert.deepEqual(items, [
+    'Settings: the value "w" (editorState.legend.strokeOverrides.Z.strokeWidth) cannot be used; it is left unset.',
+    'Settings: the value "bad" (editorState.originalSvgStroke.color) cannot be used; its default is used.',
+    'Settings: the value "-2" (editorState.originalSvgStroke.width) cannot be used; its default is used.',
+    'Settings: 1 entry of editorState.legend.strokeOverrides could not be read and was dropped.',
+    'Settings: 2 entries of editorState.legend.entries could not be read and were dropped.',
+    'Settings: 1 entry of editorState.legend.originalOrder could not be read and was dropped.',
+    'Settings: 1 entry of editorState.featureStrokes.overrides could not be read and was dropped.',
+    'Legend: entry "X" had a color the app does not accept and was dropped.'
+  ]);
+  assert.deepEqual(state.drawings.linear.legendStrokeOverrides, { Z: { strokeColor: '#00aa00' } });
 });
 
 // Inventory B50: an older Session whose feature information cannot be

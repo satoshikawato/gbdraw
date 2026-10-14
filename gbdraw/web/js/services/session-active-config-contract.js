@@ -2,15 +2,17 @@
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
+/** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
 import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
 import { createDefaultLinearDefinitionLineStyles } from './definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from './circular-track-slot-model.js';
-import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from './linear-track-slot-model.js'; import { validateTrackSlotBindingInvariants } from './track-slot-validation.js';
+import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from './linear-track-slot-model.js'; import { trackSlotLeafFaults, validateTrackSlotBindingInvariants } from './track-slot-validation.js';
 import { requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentConfigFields } from './current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { isUnsetValue } from '../utils/field-reading.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
@@ -218,17 +220,26 @@ const validateCollections = (config) => {
     assertRows(set.annotations, ANNOTATION_FIELDS, `config.annotationSets[${index}].annotations`);
   });
 };
+/** @param {Record<string, unknown>} slot The obsolete fields of a Circular slot row, at its top level and in its params. */
+const obsoleteCircularSlotFields = (slot) => [...OBSOLETE_SLOT_KEYS].filter((key) => has(slot, key))
+  .concat(isObject(slot.params) ? [...OBSOLETE_SLOT_PARAM_KEYS].filter((key) => has(slot.params, key)).map((key) => `params.${key}`) : []);
 /** @param {unknown} slots */
 const obsoleteCircularSlotField = (slots) => {
   if (!Array.isArray(slots)) return null;
   for (const [slotIndex, slot] of slots.entries()) {
     if (!isObject(slot)) continue;
-    const field = [...OBSOLETE_SLOT_KEYS].find((key) => has(slot, key))
-      ?? (isObject(slot.params) ? [...OBSOLETE_SLOT_PARAM_KEYS].find((key) => has(slot.params, key)) : undefined);
-    if (field) return { field, slotIndex };
+    const [field] = obsoleteCircularSlotFields(slot);
+    if (field) return { field: field.replace(/^params\./, ''), slotIndex };
   }
   return null;
 };
+/** What each mode's slot check reads (`validateTrackSlotBindingInvariants`). */
+const TRACK_SLOT_CHECKS = Object.freeze({
+  circular: { modeLabel: 'Circular', layoutKind: 'circular', supportedRenderers: CIRCULAR_TRACK_RENDERERS,
+    supportedSides: ['inside', 'outside', 'overlay'], anchorlessRenderers: ['ticks', 'spacer'] },
+  linear: { modeLabel: 'Linear', layoutKind: 'linear', supportedRenderers: LINEAR_TRACK_RENDERERS,
+    supportedSides: ['above', 'below', 'overlay'], anchorlessRenderers: ['spacer'] }
+});
 /**
  * @param {Record<string, any>} [config] The active configuration.
  * @param {{ depthTrackCount?: number | null }} [options]
@@ -242,9 +253,7 @@ export const validateImportedCircularTrackSlots = (config = {}, { depthTrackCoun
   // Any value and either enablement: readers drop only the lossless legacy null.
   const obsolete = obsoleteCircularSlotField(adv.circular_track_slots);
   if (obsolete) throw diagnosticError('TRACK_INVALID', { ...obsolete, reason: 'OBSOLETE_TRACK_FIELD' });
-  validateTrackSlotBindingInvariants(adv.circular_track_slots, { modeLabel: 'Circular', layoutKind: 'circular',
-    supportedRenderers: CIRCULAR_TRACK_RENDERERS, supportedSides: ['inside', 'outside', 'overlay'],
-    anchorlessRenderers: ['ticks', 'spacer'], depthTrackCount });
+  validateTrackSlotBindingInvariants(adv.circular_track_slots, { ...TRACK_SLOT_CHECKS.circular, depthTrackCount });
 };
 /**
  * @param {Record<string, any>} [config] The active configuration.
@@ -257,15 +266,52 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
   if (![LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_SLOT_SCHEMA_VERSION].includes(adv.linear_track_slots_schema_version))
     throw new Error(`Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`);
   if (!Array.isArray(adv.linear_track_slots)) throw new Error('Custom Track Slots must be an array.');
-  validateTrackSlotBindingInvariants(adv.linear_track_slots, { modeLabel: 'Linear', layoutKind: 'linear',
-    supportedRenderers: LINEAR_TRACK_RENDERERS, supportedSides: ['above', 'below', 'overlay'],
-    anchorlessRenderers: ['spacer'], depthTrackCount });
+  validateTrackSlotBindingInvariants(adv.linear_track_slots, { ...TRACK_SLOT_CHECKS.linear, depthTrackCount });
+};
+/**
+ * Load's reading of a drawing's track stack (OV-758, A10), where Save checks
+ * it (`validateImported*TrackSlots`, E-OD02). A slot value the check refuses
+ * is dropped and its default used (`params` that is no object reads as {});
+ * a stack the check still refuses then (a slot that is no object, a missing
+ * or repeated id, an unknown renderer, slots that contradict each other)
+ * reads as the drawing's default stack, which `reset` reports: the stack's
+ * axis index, a place in it, is unset with it.
+ * @param {'circular' | 'linear'} mode
+ * @param {unknown} slots A list (the settings' merge keeps a stack of another kind out).
+ * @returns {FieldReading<unknown> & { reset: boolean }}
+ */
+export const readImportedTrackSlots = (mode, slots) => {
+  const check = TRACK_SLOT_CHECKS[mode];
+  const defaultStack = () => (mode === 'circular' ? createDefaultCircularTrackSlots() : createDefaultLinearTrackSlots());
+  if (!Array.isArray(slots)) return { value: defaultStack(), lost: false, reset: true };
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  const read = slots.map((slot, index) => {
+    if (!isObject(slot) || typeof slot.id !== 'string') return slot;
+    /** @type {Record<string, unknown>} */
+    const row = { ...slot, ...(isObject(slot.params) ? { params: { ...slot.params } } : {}) };
+    const faults = trackSlotLeafFaults(row, slot.id.trim(), { ...check, sideSet: new Set(check.supportedSides) }).map(({ field }) => field);
+    new Set([...(mode === 'circular' ? obsoleteCircularSlotFields(row) : []), ...faults]).forEach((field) => {
+      const [container, key] = field === 'params' ? [null, field] : field.startsWith('params.') ? [/** @type {Record<string, unknown>} */ (row.params), field.slice(7)] : [row, field];
+      const stored = container ? container[key] : row.params;
+      if (container) delete container[key];
+      else row.params = {};
+      if (!isUnsetValue(stored)) leaves.push({ at: `[${index}].${field}`, stored, used: container ? undefined : {} });
+    });
+    return row;
+  });
+  try {
+    validateTrackSlotBindingInvariants(read, check);
+  } catch {
+    return { value: defaultStack(), lost: slots.length > 0, reset: true };
+  }
+  return { value: read, lost: leaves.length > 0, ...(leaves.length ? { leaves } : {}), reset: false };
 };
 /**
  * The containers Load cannot read a drawing's settings without: the mode, the
- * configuration object and its `form` and `adv`, and the Custom Track Slots.
- * Load reads the values inside them with the reader table
- * (`config-field-readers.js`), which lists what it cannot restore.
+ * configuration object and its `form` and `adv`. Load reads the values inside
+ * them, the track stacks included (`readImportedTrackSlots`), with the reader
+ * table (`config-field-readers.js`), which lists what it cannot restore.
  * @param {{ mode: unknown, storedConfig: unknown }} input
  * @returns {Record<string, unknown> & { form: Record<string, unknown>, adv: Record<string, unknown> }} The configuration.
  */
@@ -274,7 +320,6 @@ export const requireActiveConfigContainers = ({ mode, storedConfig: config }) =>
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');
   assertSafeObjectKeys(config, 'Current session active configuration');
   if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
-  validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
   // The cast: the two tests above.
   return /** @type {Record<string, unknown> & { form: Record<string, unknown>, adv: Record<string, unknown> }} */ (config);
 };
@@ -288,6 +333,7 @@ export const requireActiveConfigContainers = ({ mode, storedConfig: config }) =>
  */
 export const validateCurrentWriterActiveConfig = ({ mode, storedConfig, scopedDrafts = false }) => {
   const config = requireActiveConfigContainers({ mode, storedConfig });
+  validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
   const domains = new Set(STORED_CONFIG_DOMAINS);
   const unknownDomains = Object.keys(config).filter((domain) => !domains.has(domain));
   if (unknownDomains.length)

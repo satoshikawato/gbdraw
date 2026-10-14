@@ -24,10 +24,16 @@ import {
 } from './losat-normalization.js';
 import { normalizeOrthogroupDormantOverrides } from './orthogroup-feature-metadata.js';
 import {
-  DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, DEFAULT_PNG_DPI, PNG_DPI_CHOICES, RETIRED_STORED_FIELDS, SESSION_INPUT_TYPES, STORED_CONFIG_DOMAINS,
-  STORED_ROW_FIELDS, createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat,
-  createDefaultLosatpHitLimits, readLinearTypographyLinked
+  CIRCULAR_TRACK_SLOT_SCHEMA_VERSION, DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, DEFAULT_PNG_DPI, PNG_DPI_CHOICES, RETIRED_STORED_FIELDS,
+  SESSION_INPUT_TYPES, STORED_CONFIG_DOMAINS, STORED_ROW_FIELDS, createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
+  createDefaultLosat, createDefaultLosatpHitLimits, readImportedTrackSlots, readLinearTypographyLinked
 } from './session-active-config-contract.js';
+import {
+  applyCircularTrackOrderPlacements, clampCircularTrackAxisIndex, inferLegacyAxisIndexFromFeature, normalizeCircularTrackSlots
+} from './circular-track-slot-model.js';
+import {
+  LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, clampLinearTrackAxisIndex, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
+} from './linear-track-slot-model.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { readRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
@@ -550,7 +556,26 @@ const ADV_ROWS = Object.freeze([
   row('linear_length_visibility', readLinearLabelVisibility),
   row('feature_shapes', readFeatureShapes),
   row('pairwise_match_style', textChoice(PAIRWISE_MATCH_STYLES, 'ribbon')),
-  row('linear_definition_line_styles', readDefinitionLineStyles)
+  row('linear_definition_line_styles', readDefinitionLineStyles),
+  // The track stacks (OV-758): each axis index is read before its stack, as a
+  // stack read as the default unsets it; the stacks are read in the current
+  // slot schema.
+  .../** @type {const} */ ([['circular', CIRCULAR_TRACK_SLOT_SCHEMA_VERSION], ['linear', LINEAR_TRACK_SLOT_SCHEMA_VERSION]]).flatMap(([mode, schema]) => [
+    {
+      field: `${mode}_track_slots_axis_index`,
+      /** @type {FieldRow['read']} */
+      read: (value, adv) => (readImportedTrackSlots(mode, adv[`${mode}_track_slots`]).reset
+        ? { value: null, lost: !isUnsetValue(value) } : { value, lost: false })
+    },
+    { field: `${mode}_track_slots`, read: (/** @type {unknown} */ value) => readImportedTrackSlots(mode, value), inPlace: true },
+    // A version up to the current one is migrated without a loss.
+    {
+      field: `${mode}_track_slots_schema_version`,
+      read: (/** @type {unknown} */ value) => ({
+        value: schema, lost: !isUnsetValue(value) && !(typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= schema)
+      })
+    }
+  ])
 ]);
 
 /**
@@ -1180,7 +1205,9 @@ const readValueTables = (tables, value) => tables.flatMap(({ at, rows }) => {
 /** Free text: Load names the place of such a value, not the value (12.3). */
 const FREE_TEXT_KEYS = new Set([
   'label', 'name', 'fileName', 'sourceKey', 'uid', 'caption', 'prefix', 'species', 'strain', 'plot_title',
-  'circular_record_label', 'circular_record_subtitle', 'labels', 'blacklistText', 'legendLabel', 'description', 'id'
+  'circular_record_label', 'circular_record_subtitle', 'labels', 'blacklistText', 'legendLabel', 'description', 'id',
+  // A track stack holds slot ids.
+  'circular_track_slots', 'linear_track_slots'
 ]);
 /** @param {string} at */
 const isFreeText = (at) => FREE_TEXT_KEYS.has(at.replace(/\[\d+\]/g, '').split('.').pop() || '');
@@ -1264,17 +1291,73 @@ const lossRepairs = (losses, path, stored, { mode = null, root = '', targets = '
  * @param {SettingsContainers} targets Written.
  * @param {Record<string, unknown>} config
  * @param {string} path Where the configuration is in the file.
- * @param {{ stored?: unknown, mode: 'circular' | 'linear', current?: boolean }} options
+ * @param {{ stored?: unknown, mode: 'circular' | 'linear', current?: boolean, resolveTrackPlacements?: boolean }} options
  *   `current`: `targets` are the drawing's current settings (a configuration
- *   file), so a value not used keeps the drawing's.
+ *   file), so a value not used keeps the drawing's. `resolveTrackPlacements`:
+ *   the apply resolves the track stacks (`resolvedTrackStacks`), so what that
+ *   replaces is listed too.
  * @returns {LoadRepair[]}
  */
-export const configFieldRepairs = (targets, config, path, { stored = config, mode, current = false }) => lossRepairs([
-  ...installStoredSettings(targets, config, mode),
-  ...readValueTables(VALUE_TABLES, config),
-  ...readValueTables(DRAWING_TABLES[mode], config),
-  ...unknownDomainLosses(config)
-], path, stored, { mode, root: 'config', targets: current ? 'current' : 'default' });
+export const configFieldRepairs = (targets, config, path, {
+  stored = config, mode, current = false, resolveTrackPlacements = true
+}) => {
+  /** @type {SettingLoss[]} */
+  const losses = installStoredSettings(targets, config, mode);
+  if (resolveTrackPlacements) resolvedTrackStacks(targets.adv, targets.form, losses);
+  return lossRepairs([
+    ...losses,
+    ...readValueTables(VALUE_TABLES, config),
+    ...readValueTables(DRAWING_TABLES[mode], config),
+    ...unknownDomainLosses(config)
+  ], path, stored, { mode, root: 'config', targets: current ? 'current' : 'default' });
+};
+
+/**
+ * The track stacks a drawing's settings resolve to: each stack with its axis
+ * index read and its placements applied (`applyStoredConfigData`'s
+ * `resolveTrackPlacements`). Pure: Load reads the stacks it installs with it
+ * before the commit, and `losses` collects what the slot readers replace
+ * (OV-758; `at` under the settings).
+ * @param {Record<string, unknown>} adv The drawing's settings, read.
+ * @param {Record<string, unknown>} form
+ * @param {SettingLoss[] | null} [losses]
+ */
+export const resolvedTrackStacks = (adv, form, losses = null) => {
+  /** @type {FieldLeaf[]} */
+  const circularLosses = [];
+  /** @type {FieldLeaf[]} */
+  const circularAxisLosses = [];
+  /** @type {FieldLeaf[]} */
+  const linearLosses = [];
+  /** @type {FieldLeaf[]} */
+  const linearAxisLosses = [];
+  // The read settings hold text here (the reader rows); the casts name what the slot readers take.
+  const nt = /** @type {string | undefined} */ (adv.nt);
+  const trackType = /** @type {string | undefined} */ (form.track_type);
+  const normalizedSlots = normalizeCircularTrackSlots(adv.circular_track_slots, nt, trackType, circularLosses);
+  const importedAxis = clampCircularTrackAxisIndex(adv.circular_track_slots_axis_index, normalizedSlots.length, circularAxisLosses);
+  const circularAxis = importedAxis === null
+    ? inferLegacyAxisIndexFromFeature(normalizedSlots, trackType)
+    : importedAxis;
+  const linearStack = /** @type {Parameters<typeof normalizeLinearTrackSlots>[0]} */ (adv.linear_track_slots);
+  const normalizedLinearSlots = normalizeLinearTrackSlots(linearStack, nt, form.linear_track_layout, linearLosses);
+  const linearAxis = resolveLinearTrackAxisIndex(
+    normalizedLinearSlots,
+    clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length, linearAxisLosses)
+  );
+  losses?.push(...[
+    ...circularLosses.map((leaf) => ({ ...leaf, at: `adv.circular_track_slots${leaf.at}` })),
+    ...circularAxisLosses.map((leaf) => ({ ...leaf, at: 'adv.circular_track_slots_axis_index' })),
+    ...linearLosses.map((leaf) => ({ ...leaf, at: `adv.linear_track_slots${leaf.at}` })),
+    ...linearAxisLosses.map((leaf) => ({ ...leaf, at: 'adv.linear_track_slots_axis_index' }))
+  ]);
+  return {
+    circularAxis,
+    circularSlots: applyCircularTrackOrderPlacements(adv.circular_track_slots, nt, trackType, circularAxis),
+    linearAxis,
+    linearSlots: applyLinearTrackOrderPlacements(normalizedLinearSlots, linearAxis, nt, form.linear_track_layout)
+  };
+};
 
 /**
  * The fields of a Session's stored draft its drawings do not install: they
@@ -1345,6 +1428,16 @@ export const valueRepairs = (read, value, path) => {
   const reading = read(value);
   return reading.lost ? lossRepairs([{ at: '', stored: value, used: reading.value }], path, value) : [];
 };
+
+/**
+ * The rows of what a normalizer noted it could not read (each loss at a place
+ * the file holds, `at` under `path`; a key may hold a dot).
+ * @param {readonly SettingLoss[]} losses
+ * @param {string} path
+ */
+export const notedLossRepairs = (losses, path) => losses.flatMap((loss) => lossRepairs(
+  [{ ...loss, at: '' }], [path, loss.at].filter(Boolean).join('.'), loss.stored
+));
 
 /**
  * The same for the LOSAT execution settings (`ui.losatExecution` of a Session

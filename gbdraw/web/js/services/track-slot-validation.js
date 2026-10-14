@@ -1,5 +1,8 @@
 // @ts-check
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
+import { noteReplacedLeaf } from '../utils/field-reading.js';
+
+/** @import { FieldLeaf } from '../utils/field-reading.js' */
 
 /**
  * A `{ value, unit }` Width or Radius draft. Both fields are checked on read.
@@ -195,75 +198,159 @@ export const parseOptionalCircularScalar = (value, fieldName = 'Circular measure
   return { value: resolved, unit: isPx ? 'px' : 'factor' };
 };
 
+const ANNOTATION_OVERFLOWS = ['error', 'compress', 'clip'];
 /**
- * @param {Record<string, unknown>} slot The row.
- * @param {string} id
- * @param {string} layoutKind 'linear' or 'circular'; anything else throws.
- * @returns {void}
+ * An annotation slot's params as both stacks read them, edited in place. What
+ * the reading replaces is recorded in `losses` (OV-758).
+ * @param {Record<string, unknown>} params
+ * @param {string} at Where the params are under the stack (`[2].params`).
+ * @param {FieldLeaf[] | null} [losses]
  */
-const validateSlotGeometry = (slot, id, layoutKind) => {
-  if (layoutKind === 'linear') {
-    parseOptionalPixel(slot.height, `Linear track slot '${id}' height`, { allowZero: false });
-    parseOptionalPixel(slot.spacing, `Linear track slot '${id}' spacing`, { allowZero: true });
-    return;
+export const normalizeAnnotationSlotParams = (params, at, losses = null) => {
+  /** @type {[string, unknown][]} */
+  const read = [
+    ['set_id', String(params.set_id || '').trim()],
+    ['overflow', ANNOTATION_OVERFLOWS.find((overflow) => overflow === String(params.overflow || '').toLowerCase()) ?? 'error'],
+    ['show_labels', params.show_labels !== false && String(params.show_labels).toLowerCase() !== 'false'],
+    ['layer', String(params.layer || '').toLowerCase() === 'underlay' ? 'underlay' : 'foreground']
+  ];
+  read.forEach(([field, value]) => {
+    noteReplacedLeaf(losses, `${at}.${field}`, params[field], value);
+    params[field] = value;
+  });
+  if (Array.isArray(params.marks)) {
+    params.marks = Array.from(new Set(
+      params.marks
+        .map((mark) => String(mark || '').trim().toLowerCase())
+        .filter(Boolean)
+    ));
+    // params.marks is the array assigned just above.
+    if (/** @type {unknown[]} */ (params.marks).length === 0) delete params.marks;
   }
-  if (layoutKind !== 'circular') {
-    throw new Error(`Unsupported track-slot layout kind: ${layoutKind}.`);
-  }
-  const obsoleteKey = Object.keys(slot).find((key) => (
-    OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedString(key))
-  ));
-  if (obsoleteKey) {
-    throw new Error(
-      `Circular track slot '${id}' uses obsolete field '${obsoleteKey}'. ` +
-      'Use inner_gap_px and outer_gap_px for physical gaps.'
-    );
-  }
-  for (const field of ['radius', 'width']) {
-    try {
-      parseOptionalCircularScalar(slot[field], `Circular track slot '${id}' ${field}`);
-    } catch (error) {
-      // The row's Width or Radius field shows this failure itself (TK-12).
-      throw Object.assign(error, { field });
+  for (const [field, defaultValue] of /** @type {[string, number][]} */ ([['lane_gap_px', 3], ['padding_px', 2]])) {
+    if (params[field] === null || params[field] === undefined || params[field] === '') {
+      delete params[field];
+      continue;
+    }
+    const numeric = Number(params[field]);
+    if (Number.isFinite(numeric) && numeric >= 0) {
+      if (numeric === defaultValue) delete params[field];
+      else params[field] = numeric;
     }
   }
-  parseOptionalPixel(
-    slot.inner_gap_px,
-    `Circular track slot '${id}' inner_gap_px`,
-    { allowZero: true }
-  );
-  parseOptionalPixel(
-    slot.outer_gap_px,
-    `Circular track slot '${id}' outer_gap_px`,
-    { allowZero: true }
-  );
+  if (params.cover_anchor === true || String(params.cover_anchor).toLowerCase() === 'true') {
+    params.cover_anchor = true;
+  } else if (params.cover_anchor === false || String(params.cover_anchor).toLowerCase() === 'false') {
+    delete params.cover_anchor;
+  }
 };
 
 /**
+ * A leaf of a track slot row the binding check refuses, with the error it
+ * raises: `field` is its place in the row (`width`, `params.side`).
+ * @typedef {{ field: string, error: Error }} TrackSlotLeafFault
+ */
+
+/**
+ * @param {TrackSlotLeafFault[]} faults Appended to.
+ * @param {string} field
+ * @param {() => unknown} read A reader that throws for a value it refuses.
+ */
+const checkLeaf = (faults, field, read) => {
+  try {
+    read();
+  } catch (error) {
+    faults.push({ field, error: /** @type {Error} */ (error) });
+  }
+};
+
+/**
+ * The geometry fields of a row the binding check refuses, in its order.
+ * @param {Record<string, unknown>} slot The row.
+ * @param {string} id
+ * @param {string} layoutKind 'linear' or 'circular'; anything else is a fault.
+ * @returns {TrackSlotLeafFault[]}
+ */
+const slotGeometryFaults = (slot, id, layoutKind) => {
+  /** @type {TrackSlotLeafFault[]} */
+  const faults = [];
+  if (layoutKind === 'linear') {
+    checkLeaf(faults, 'height', () => parseOptionalPixel(slot.height, `Linear track slot '${id}' height`, { allowZero: false }));
+    checkLeaf(faults, 'spacing', () => parseOptionalPixel(slot.spacing, `Linear track slot '${id}' spacing`, { allowZero: true }));
+    return faults;
+  }
+  if (layoutKind !== 'circular') {
+    return [{ field: 'geometry', error: new Error(`Unsupported track-slot layout kind: ${layoutKind}.`) }];
+  }
+  Object.keys(slot).filter((key) => OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedString(key))).forEach((key) => faults.push({
+    field: key,
+    error: new Error(`Circular track slot '${id}' uses obsolete field '${key}'. Use inner_gap_px and outer_gap_px for physical gaps.`)
+  }));
+  for (const field of ['radius', 'width']) {
+    checkLeaf(faults, field, () => {
+      try {
+        parseOptionalCircularScalar(slot[field], `Circular track slot '${id}' ${field}`);
+      } catch (error) {
+        // The row's Width or Radius field shows this failure itself (TK-12).
+        throw Object.assign(/** @type {Error} */ (error), { field });
+      }
+    });
+  }
+  for (const field of ['inner_gap_px', 'outer_gap_px']) {
+    checkLeaf(faults, field, () => parseOptionalPixel(slot[field], `Circular track slot '${id}' ${field}`, { allowZero: true }));
+  }
+  return faults;
+};
+
+/**
+ * The generic layout fields a row stores in its params, which the binding check refuses.
  * @param {Record<string, unknown>} params
  * @param {string} id
  * @param {string} layoutKind 'linear' selects the Linear keys; any other value the Circular keys.
- * @returns {void}
+ * @returns {TrackSlotLeafFault[]}
  */
-const validateGenericParams = (params, id, layoutKind) => {
-  const genericKeys = layoutKind === 'linear'
-    ? LINEAR_GENERIC_LAYOUT_KEYS
-    : CIRCULAR_GENERIC_LAYOUT_KEYS;
-  const invalidKey = Object.keys(params).find((key) => genericKeys.has(normalizedString(key)));
-  if (invalidKey) {
-    if (
-      layoutKind === 'circular' &&
-      OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedString(invalidKey))
-    ) {
-      throw new Error(
-        `Circular track slot '${id}' uses obsolete field 'params.${invalidKey}'. ` +
-        'Use inner_gap_px and outer_gap_px for physical gaps.'
-      );
-    }
-    throw new Error(
-      `${layoutKind === 'linear' ? 'Linear' : 'Circular'} track slot '${id}' stores generic layout field '${invalidKey}' in params.`
-    );
+const genericParamFaults = (params, id, layoutKind) => {
+  const genericKeys = layoutKind === 'linear' ? LINEAR_GENERIC_LAYOUT_KEYS : CIRCULAR_GENERIC_LAYOUT_KEYS;
+  return Object.keys(params).filter((key) => genericKeys.has(normalizedString(key))).map((key) => ({
+    field: `params.${key}`,
+    error: layoutKind === 'circular' && OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedString(key))
+      ? new Error(`Circular track slot '${id}' uses obsolete field 'params.${key}'. Use inner_gap_px and outer_gap_px for physical gaps.`)
+      : new Error(`${layoutKind === 'linear' ? 'Linear' : 'Circular'} track slot '${id}' stores generic layout field '${key}' in params.`)
+  }));
+};
+
+/**
+ * The leaves of one row (an object with an id) that the binding check
+ * refuses, in the order it checks them. Generate and Save throw the first
+ * (`validateTrackSlotBindingInvariants`); Load drops each and lists it
+ * (`readImportedTrackSlots`).
+ * @param {Record<string, unknown>} slot The row.
+ * @param {string} id
+ * @param {{ modeLabel: string, layoutKind: string, sideSet: ReadonlySet<string> }} options
+ * @returns {TrackSlotLeafFault[]}
+ */
+export const trackSlotLeafFaults = (slot, id, { modeLabel, layoutKind, sideSet }) => {
+  /** @type {TrackSlotLeafFault[]} */
+  const faults = [];
+  if (Object.hasOwn(slot, 'enabled') && typeof slot.enabled !== 'boolean') {
+    faults.push({ field: 'enabled', error: new Error(`${modeLabel} track slot '${id}' enabled must be boolean.`) });
   }
+  faults.push(...slotGeometryFaults(slot, id, layoutKind));
+  if (slot.side !== null && slot.side !== undefined && slot.side !== '') {
+    if (typeof slot.side !== 'string') {
+      faults.push({ field: 'side', error: new Error(`${modeLabel} track slot '${id}' side must be a string or null.`) });
+    } else if (!sideSet.has(normalizedString(slot.side))) {
+      faults.push({ field: 'side', error: new Error(`${modeLabel} track slot '${id}' has unsupported side=${JSON.stringify(slot.side)}.`) });
+    }
+  }
+  const params = Object.hasOwn(slot, 'params') ? slot.params : {};
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    faults.push({ field: 'params', error: new Error(`${modeLabel} track slot '${id}' params must be an object.`) });
+  } else {
+    faults.push(...genericParamFaults(/** @type {Record<string, unknown>} */ (params), id, layoutKind));
+  }
+  checkLeaf(faults, 'z', () => parseSlotZIndex(slot.z, `${modeLabel} track slot '${id}' z`));
+  return faults;
 };
 
 /**
@@ -346,35 +433,13 @@ export const validateTrackSlotBindingInvariants = (
     if (!rendererSet.has(renderer)) {
       throw new Error(`${modeLabel} track slot '${id}' has unsupported renderer=${JSON.stringify(slot.renderer)}.`);
     }
-    if (
-      Object.prototype.hasOwnProperty.call(slot, 'enabled') &&
-      typeof slot.enabled !== 'boolean'
-    ) {
-      throw new Error(`${modeLabel} track slot '${id}' enabled must be boolean.`);
-    }
+    const [leafFault] = trackSlotLeafFaults(slot, id, { modeLabel, layoutKind, sideSet });
+    if (leafFault) throw leafFault.error;
     const enabled = slot.enabled !== false;
-
-    validateSlotGeometry(slot, id, layoutKind);
-
     /** @type {string | null} */
-    let side = null;
-    if (slot.side !== null && slot.side !== undefined && slot.side !== '') {
-      if (typeof slot.side !== 'string') {
-        throw new Error(`${modeLabel} track slot '${id}' side must be a string or null.`);
-      }
-      side = normalizedString(slot.side);
-      if (!sideSet.has(side)) {
-        throw new Error(`${modeLabel} track slot '${id}' has unsupported side=${JSON.stringify(slot.side)}.`);
-      }
-    }
-
-    const hasParams = Object.prototype.hasOwnProperty.call(slot, 'params');
-    const paramsValue = hasParams ? slot.params : {};
-    if (!paramsValue || typeof paramsValue !== 'object' || Array.isArray(paramsValue)) {
-      throw new Error(`${modeLabel} track slot '${id}' params must be an object.`);
-    }
-    const params = { ...paramsValue };
-    validateGenericParams(params, id, layoutKind);
+    let side = typeof slot.side === 'string' && slot.side !== '' ? normalizedString(slot.side) : null;
+    // An object (`trackSlotLeafFaults`).
+    const params = { .../** @type {Record<string, unknown>} */ (Object.hasOwn(slot, 'params') ? slot.params : {}) };
     const z = parseSlotZIndex(slot.z, `${modeLabel} track slot '${id}' z`);
 
     if (enabled && layoutKind === 'linear') {
@@ -978,14 +1043,15 @@ const collectCustomTrackIssues = ({
       });
     }
 
-    try {
-      validateSlotGeometry(slot, id || `#${index + 1}`, mode);
-    } catch (error) {
+    const [geometryFault] = slotGeometryFaults(slot, id || `#${index + 1}`, mode);
+    if (geometryFault) {
+      // The cast: a Width or Radius error names its field (TK-12).
+      const { field } = /** @type {Error & { field?: unknown }} */ (geometryFault.error);
       addRowIssue(rowIssues, index, {
         code: 'geometry_invalid',
-        field: typeof error?.field === 'string' ? error.field : 'geometry',
+        field: typeof field === 'string' ? field : 'geometry',
         slotId: id || null,
-        message: error instanceof Error ? error.message : String(error)
+        message: geometryFault.error.message
       });
     }
     try {
@@ -999,15 +1065,9 @@ const collectCustomTrackIssues = ({
       });
     }
     if (params) {
-      try {
-        validateGenericParams(params, id || `#${index + 1}`, mode);
-      } catch (error) {
-        addRowIssue(rowIssues, index, {
-          code: 'generic_param',
-          field: 'params',
-          slotId: id || null,
-          message: error instanceof Error ? error.message : String(error)
-        });
+      const [genericFault] = genericParamFaults(params, id || `#${index + 1}`, mode);
+      if (genericFault) {
+        addRowIssue(rowIssues, index, { code: 'generic_param', field: 'params', slotId: id || null, message: genericFault.error.message });
       }
       const mismatchedParam = Object.keys(params).find(
         (key) => !paramsAllowedForRenderer(renderer, normalizedString(key))

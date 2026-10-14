@@ -157,19 +157,22 @@ test('writer and current admission reject invalid scalar drafts without altering
     const before = buildConfigData(state.activeDrawing());
     await assert.rejects(exportSession('invalid scalar settings'), /width|positive|scalar/i);
     assert.deepEqual(buildConfigData(state.activeDrawing()), before);
-    // Session 46 Load checks each slice as a current-writer draft of its mode
-    // (a value JSON cannot write is the writer's check only).
+    // Session 46 Load lists a slot value Save refuses (OV-758; a value JSON
+    // cannot write is the writer's check only).
     const text = JSON.stringify(scalar);
     if (text === undefined || text === 'null' || /null/.test(text)) continue;
     const invalid = structuredClone(valid);
     invalid.modes.circular.config.adv.circular_track_slots[0].width = scalar;
     const invalidBefore = structuredClone(invalid);
+    /** @type {unknown} */
+    let listed = null;
     const loaded = await importSession({
       target: { files: [new Blob([JSON.stringify(invalid)], { type: 'application/json' })], value: 'selected' }
-    }, { confirmLoadRepairs: refuseLoadDialog });
-    assert.equal(loaded.status, 'error', text);
+    }, { confirmLoadRepairs: async (dialog) => { listed = dialog; return false; } });
+    assert.equal(loaded.status, 'canceled', text);
+    assert.match(JSON.stringify(listed), /circular_track_slots\[0\]\.width/, text);
     assert.deepEqual(invalid, invalidBefore);
-    // A rejected Load leaves the drawing as it was.
-    assert.deepEqual(buildConfigData(state.activeDrawing()), before, `drawing after the rejected Load of ${text}`);
+    // A refused Load leaves the drawing as it was.
+    assert.deepEqual(buildConfigData(state.activeDrawing()), before, `drawing after the refused Load of ${text}`);
   }
 });
