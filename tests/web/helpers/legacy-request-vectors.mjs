@@ -38,11 +38,21 @@ export const caseRequest = (vectors, { base, edits }) => {
   return request;
 };
 
-// As a script: every corpus request and case input with its lift, as JSON.
+// As a script: every corpus request and case input with its lift, or the
+// code and context of the lift's refusal, as JSON.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const vectors = readVectors(process.argv[2]);
   const { liftLegacyRenderRequest } = await import('../../../gbdraw/web/js/services/legacy-render-request.js');
-  const lift = (id, renderRequest) => ({ id, input: renderRequest, ...liftLegacyRenderRequest(renderRequest) });
+  /** @param {string} id @param {unknown} renderRequest */
+  const lift = (id, renderRequest) => {
+    try {
+      return { id, input: renderRequest, ...liftLegacyRenderRequest(renderRequest) };
+    } catch (error) {
+      const { code, context } = /** @type {{ code?: unknown, context?: unknown }} */ (error);
+      if (typeof code !== 'string') throw error;
+      return { id, input: renderRequest, refused: { code, context } };
+    }
+  };
   process.stdout.write(JSON.stringify({
     requests: vectors.requests.map(({ id, renderRequest }) => lift(id, renderRequest)),
     cases: vectors.cases.map((vectorCase) => lift(vectorCase.id, caseRequest(vectors, vectorCase)))

@@ -1,5 +1,5 @@
 {
- "description": "Request schemas 1 and 2 (Sessions 31-33), read by the Web lift (gbdraw/web/js/services/legacy-render-request.js) and Python's decoder (gbdraw/session_request_codec.py). `requests`: every distinct schema 1/2 renderRequest stored in a Gallery Session of first-parent main history, as stored, with every commit/path/blob that holds it; sha256 is the SHA-256 of JSON.stringify(renderRequest). `fixtureReferences`: the committed (33, 2) Session fixtures. `cases`: forms the corpus does not hold, each a corpus request with `edits` (set or delete at a key path), the lift's expected `values`, `absent` paths and repair rows, and `python`: equal: true when Python decodes the edited request and its lift to the same request, the finding and reason of a deliberate difference, or refused: true and the reason when Python refuses both (the lift leaves the form to the reader). Provenance: tests/fixtures/sessions/README.md.",
+ "description": "Request schemas 1 and 2 (Sessions 31-33), read by the Web lift (gbdraw/web/js/services/legacy-render-request.js) and Python's decoder (gbdraw/session_request_codec.py). `requests`: every distinct schema 1/2 renderRequest stored in a Gallery Session of first-parent main history, as stored, with every commit/path/blob that holds it; sha256 is the SHA-256 of JSON.stringify(renderRequest). `fixtureReferences`: the committed (33, 2) Session fixtures. `cases`: forms the corpus does not hold, each a corpus request with `edits` (set or delete at a key path), the lift's expected `values`, `absent` paths and repair rows, and `python`: equal: true when Python decodes the edited request and its lift to the same request, the finding and reason of a deliberate difference, or refused: true and the reason when Python refuses both (the lift leaves the form to the reader). A case whose `expect` holds `refused` (code and context) is a field of a later schema, which the lift refuses as the base Web did and Python refuses too (D-OD13 F3). Provenance: tests/fixtures/sessions/README.md.",
  "requests": [
   {
    "id": "BGC0000708-BGC0000713@10d3a3d2",
@@ -21303,6 +21303,398 @@
     "equal": false,
     "finding": "OV-798",
     "reason": "Python reads a slot spacing without a unit as a multiple of the axis radius; no current schema holds one, and the lift keeps the Web's reading (pixels, or dropped for a structured factor) with a row"
+   }
+  },
+  {
+   "id": "b17-full-config-circular",
+   "base": "HmmtDNA_basic_circular@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "config",
+      "canvas",
+      "linear",
+      "comparison_height"
+     ],
+     "value": 0
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "config",
+       "canvas",
+       "linear",
+       "comparison_height"
+      ],
+      60
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": false,
+    "finding": "B17",
+    "reason": "Python refuses an invalid Linear comparison height even in a Circular request, which does not draw it; the lift writes the default without a row (D-OD10 open 1)"
+   }
+  },
+  {
+   "id": "b17-overrides-circular",
+   "base": "HmmtDNA_basic_circular@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "config"
+     ],
+     "delete": true
+    },
+    {
+     "path": [
+      "diagramOptions",
+      "configOverrides"
+     ],
+     "value": {
+      "comparison_height": 0
+     }
+    }
+   ],
+   "expect": {
+    "absent": [
+     [
+      "diagramOptions",
+      "configOverrides",
+      "comparison_height"
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": false,
+    "finding": "B17",
+    "reason": "Python refuses a Linear override in a Circular request; the Web drew the Circular figure without it, and the lift drops an invalid one without a row (D-OD10 open 1)"
+   }
+  },
+  {
+   "id": "spacing-object-text-percent",
+   "base": "WSSV_genome_comparison@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      1,
+      "spacing"
+     ],
+     "value": "5%"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       1,
+       "innerGapPx"
+      ],
+      null
+     ],
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       1,
+       "outerGapPx"
+      ],
+      null
+     ]
+    ],
+    "absent": [
+     [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      1,
+      "spacing"
+     ]
+    ],
+    "repairs": [
+     {
+      "code": "setting-replaced",
+      "path": "renderRequest.diagramOptions.tracks.circularTrackSlots[1].spacing",
+      "effect": "dropped",
+      "stored": "5%"
+     }
+    ]
+   },
+   "python": {
+    "equal": false,
+    "finding": "OV-798",
+    "reason": "Python reads a '%' slot spacing as a factor of the axis radius; no current schema holds one, so the lift drops it with a row (D-OD10 open 2)"
+   }
+  },
+  {
+   "id": "spacing-object-text-percent-zero",
+   "base": "WSSV_genome_comparison@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      1,
+      "spacing"
+     ],
+     "value": "0%"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       1,
+       "innerGapPx"
+      ],
+      0
+     ],
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       1,
+       "outerGapPx"
+      ],
+      0
+     ]
+    ],
+    "absent": [
+     [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      1,
+      "spacing"
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": true
+   }
+  },
+  {
+   "id": "spacing-string-percent",
+   "base": "tobacco-chloroplast@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      2
+     ],
+     "value": "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,spacing=5%"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       2
+      ],
+      "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08"
+     ]
+    ],
+    "repairs": [
+     {
+      "code": "setting-replaced",
+      "path": "renderRequest.diagramOptions.tracks.circularTrackSlots[2]",
+      "effect": "dropped",
+      "stored": "spacing=5%"
+     }
+    ]
+   },
+   "python": {
+    "equal": false,
+    "finding": "OV-798",
+    "reason": "Python reads a '%' slot spacing as a factor of the axis radius; no current schema holds one, so the lift drops it with a row (D-OD10 open 2)"
+   }
+  },
+  {
+   "id": "spacing-string-percent-zero",
+   "base": "tobacco-chloroplast@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      2
+     ],
+     "value": "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,spacing=0%"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       2
+      ],
+      "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,inner_gap_px=0,outer_gap_px=0"
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": true
+   }
+  },
+  {
+   "id": "later-schema-record-display",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "records",
+      0,
+      "display"
+     ],
+     "value": {}
+    }
+   ],
+   "expect": {
+    "refused": {
+     "code": "INPUT_INVALID",
+     "context": {
+      "field": "schema",
+      "reason": "SESSION_FORMAT"
+     }
+    }
+   },
+   "python": {
+    "refused": true,
+    "reason": "a field of a later schema in a schema 1/2 request: no writer stored it; both runtimes refuse it, as the base Web did (D-OD13 F3)"
+   }
+  },
+  {
+   "id": "later-schema-feature-placements",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "featurePlacements"
+     ],
+     "value": {}
+    }
+   ],
+   "expect": {
+    "refused": {
+     "code": "INPUT_INVALID",
+     "context": {
+      "field": "schema",
+      "reason": "SESSION_FORMAT"
+     }
+    }
+   },
+   "python": {
+    "refused": true,
+    "reason": "a field of a later schema in a schema 1/2 request: no writer stored it; both runtimes refuse it, as the base Web did (D-OD13 F3)"
+   }
+  },
+  {
+   "id": "later-schema-record-translations",
+   "base": "vibrio-harveyi-group-collinear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "layout",
+      "recordTranslations"
+     ],
+     "value": []
+    }
+   ],
+   "expect": {
+    "refused": {
+     "code": "INPUT_INVALID",
+     "context": {
+      "field": "schema",
+      "reason": "SESSION_FORMAT"
+     }
+    }
+   },
+   "python": {
+    "refused": true,
+    "reason": "a field of a later schema in a schema 1/2 request: no writer stored it; both runtimes refuse it, as the base Web did (D-OD13 F3)"
+   }
+  },
+  {
+   "id": "later-schema-similarity-alignment",
+   "base": "vibrio-harveyi-group-collinear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "layout",
+      "similarityAlignment"
+     ],
+     "value": null
+    }
+   ],
+   "expect": {
+    "refused": {
+     "code": "INPUT_INVALID",
+     "context": {
+      "field": "schema",
+      "reason": "SESSION_FORMAT"
+     }
+    }
+   },
+   "python": {
+    "refused": true,
+    "reason": "a field of a later schema in a schema 1/2 request: no writer stored it; both runtimes refuse it, as the base Web did (D-OD13 F3)"
+   }
+  },
+  {
+   "id": "later-schema-feature-overrides",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "featureOverrides"
+     ],
+     "value": []
+    }
+   ],
+   "expect": {
+    "refused": {
+     "code": "INPUT_INVALID",
+     "context": {
+      "field": "featureOverrides",
+      "reason": "SESSION_FORMAT"
+     }
+    }
+   },
+   "python": {
+    "refused": true,
+    "reason": "a field of a later schema in a schema 1/2 request: no writer stored it; both runtimes refuse it, as the base Web did (D-OD13 F3)"
    }
   }
  ]

@@ -34,8 +34,9 @@ commit, path, blob and Session version of every place that holds it; the four
 committed (33, 2) fixtures are listed by reference (`fixtureReferences`). Its
 `cases` are forms the corpus does not hold, written by hand: a corpus request
 with edits, what the lift writes and lists, and whether Python decodes both
-alike, the finding of a deliberate difference, or that Python refuses both. Its SHA-256 is
-`1128aca2ddaf2587d020367c2d48277eb34c4e1a14431017d4d751507e8bafb1`.
+alike, the finding of a deliberate difference, or that Python refuses both;
+a case may instead expect the lift to refuse a field of a later schema. Its SHA-256 is
+`e93aa270c42543cd80a23be76ab581cfa643aa0129e4f9d68a7e61d7b3a35859`.
 `legacy-request-load.expected.json` records what the Web Load and Save Session
 do with the six full legacy fixtures (`tests/web/legacy-request-sessions.test.mjs`).
 

@@ -155,6 +155,12 @@ def test_each_vector_request_decodes_as_its_lift(
         assert decoded(lift["value"]) == decoded(lift["input"]), lift["id"]
     assert [lift["id"] for lift in lifts["cases"]] == [case["id"] for case in vectors["cases"]]
     for case, lift in zip(vectors["cases"], lifts["cases"]):
+        if "refused" in case["expect"]:
+            # A field of a later schema: the lift refuses it, and so does Python (D-OD13 F3).
+            assert lift.get("refused") == case["expect"]["refused"], case["id"]
+            assert case["python"]["refused"] and case["python"]["reason"], case["id"]
+            assert decoded(lift["input"]).startswith("refused"), case["id"]
+            continue
         stored, lifted = decoded(lift["input"]), decoded(lift["value"])
         if case["python"].get("refused"):
             # A form both runtimes refuse: the lift leaves it to the reader.
