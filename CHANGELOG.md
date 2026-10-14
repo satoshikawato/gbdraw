@@ -325,13 +325,15 @@ write-up of a release.
   instead of refusing the file, and lists each repair in the **Load this
   file?** dialog: an unknown setting, an invalid value, an unreadable list
   entry, a part of the settings, or a reference to a file or record the
-  Session does not hold. A Session of version 42, 44, 46 or 47 whose saved
-  settings cannot be read at all loads as settings only (the saved Results,
-  inputs, feature list and caches are left out); one of version 31 to 41 is
-  still refused. The five comparison settings read the same spellings as
-  Python: eight search-scope spellings only the web app accepted are no longer
-  read and the default is used, and a file that holds `top1` or `legacy` now
-  loads. See [Saved diagram settings that cannot be read](docs/REFERENCE/session-and-request-compatibility.md#saved-diagram-settings-that-cannot-be-read).
+  Session does not hold. A Session whose saved settings cannot be read at all
+  loads as settings only (the saved Results, inputs, feature list and caches
+  are left out) when it holds the web app's settings (version 46 or 47, or a
+  web app Session of version 42 or 44); otherwise (version 31 to 41, or a CLI
+  or Python API Session of version 42 or 44) it is refused. Eight search-scope
+  spellings only the web app accepted are no longer read: a generated
+  comparison that holds one is dropped with a row, and a Session whose
+  comparison settings hold one is still refused. A file that holds `top1` or
+  `legacy` now loads. See [Saved diagram settings that cannot be read](docs/REFERENCE/session-and-request-compatibility.md#saved-diagram-settings-that-cannot-be-read).
 - Fixed (web app): the shape set for a feature type added to the feature list
   was dropped when its Session was loaded again; Load now keeps it.
 - Fixed: the records of one multi-record File were named differently in

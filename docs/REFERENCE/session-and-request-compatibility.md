@@ -250,21 +250,26 @@ instead of refused, and each repair is a row in the dialog:
   replaced by its default when it has one;
 - a reference to a file or record the Session does not hold is left out.
 
-When the saved diagram's settings cannot be read at all, or are missing, in a
-Session of version 42, 44, 46 or 47, the file loads as settings only. A row
+When the saved diagram's settings cannot be read at all, or are missing, the
+file loads as settings only if it holds the web app's own settings: a Session
+of version 46 or 47, or one of version 42 or 44 saved by the web app. A row
 says that the saved Results, the GenBank, GFF and FASTA inputs, the feature
-list and the caches are left out. When the settings of the other diagram
-mode's saved result cannot be read, that diagram and its Results are left out,
-with a row. A Session of version 31–41 whose saved settings cannot be read is
-still refused.
+list and the caches are left out. A Session of version 31–41, and one of
+version 42 or 44 saved by the CLI or the Python API, has no settings to load
+without them, so it is refused (`INPUT_INVALID`). When the settings of the
+other diagram mode's saved result cannot be read, that diagram and its Results
+are left out, with a row.
 
 The five comparison settings (unit, anchor, search scope, color and
-membership) read the same spellings in the web app and in Python. Eight
-search-scope spellings that only the web app accepted (`adjacent_pairs`,
-`adjacent_pair`, `neighbor_pairs`, `neighboring_pairs`, `all_records`,
-`all_pairs`, `all_record_pairs`, `global`) are no longer read: a saved value
-that holds one is listed, and the default is used. A file that holds `top1` or
-`legacy` now loads.
+membership) read the same spellings in the web app and in Python in request
+schemas 5–8. In a schema 9 request the web app also reads another spelling of
+a value (such as `top1` or ` ALL `) as that value, without a row, while the CLI
+and the Python API refuse it. Eight search-scope spellings that only the web
+app accepted (`adjacent_pairs`, `adjacent_pair`, `neighbor_pairs`,
+`neighboring_pairs`, `all_records`, `all_pairs`, `all_record_pairs`, `global`)
+are no longer read: in the saved diagram's settings, a generated comparison
+that holds one is dropped, with a row; in a Session's comparison settings, Load
+refuses the file, as before. A file that holds `top1` or `legacy` now loads.
 
 The Web app refuses these files and shows an error instead:
 
