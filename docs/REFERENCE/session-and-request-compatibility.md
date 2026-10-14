@@ -252,11 +252,11 @@ instead of refused, and each repair is a row in the dialog:
 
 When the saved diagram's settings cannot be read at all, or are missing, the
 file loads as settings only if it holds the web app's own settings: a Session
-of version 46 or 47, or one of version 42 or 44 saved by the web app. A row
-says that the saved Results, the GenBank, GFF and FASTA inputs, the feature
-list and the caches are left out. A Session of version 31–41, and one of
-version 42 or 44 saved by the CLI or the Python API, has no settings to load
-without them, so it is refused (`INPUT_INVALID`). When the settings of the
+of version 42, 44, 46 or 47 saved by the web app. A row says that the saved
+Results, the GenBank, GFF and FASTA inputs, the feature list and the caches
+are left out. A Session of version 42, 44 or 47 written by the CLI or the
+Python API, and a Session of version 31–41, has no saved settings that can be
+read without them, so it is refused. When the settings of the
 other diagram mode's saved result cannot be read, that diagram and its Results
 are left out, with a row.
 

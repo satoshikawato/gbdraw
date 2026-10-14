@@ -327,9 +327,9 @@ write-up of a release.
   entry, a part of the settings, or a reference to a file or record the
   Session does not hold. A Session whose saved settings cannot be read at all
   loads as settings only (the saved Results, inputs, feature list and caches
-  are left out) when it holds the web app's settings (version 46 or 47, or a
-  web app Session of version 42 or 44); otherwise (version 31 to 41, or a CLI
-  or Python API Session of version 42 or 44) it is refused. Eight search-scope
+  are left out) when it is a Session of version 42, 44, 46 or 47 saved by the
+  web app; a Session of version 42, 44 or 47 written by the CLI or the Python
+  API, and a Session of version 31 to 41, is refused. Eight search-scope
   spellings only the web app accepted are no longer read: a generated
   comparison that holds one is dropped with a row, and a Session whose
   comparison settings hold one is still refused. A file that holds `top1` or
