@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
-from typing import Any, cast
+from collections.abc import Sequence
+from typing import cast
 
 from ..exceptions import LabelLayoutError, ValidationError
 from ..layout.spatial import Aabb, AabbIndex
@@ -15,7 +15,7 @@ from ..layout.text_geometry import (
 )
 from .circular_leaders import leader_crossing_count, leader_segments
 from .fit import overlapping_pairs
-from .circular_types import CircularLabelLayoutResult
+from .circular_types import CircularLabel, CircularLabelLayoutResult
 
 _TAU = 2.0 * math.pi
 _ANGLE_EPSILON = 1e-9
@@ -59,11 +59,11 @@ def radial_text_orientation(
     return rotation, text_anchor, "middle"
 
 
-def _preferred_middle(label: Mapping[str, Any]) -> float:
+def _preferred_middle(label: CircularLabel) -> float:
     return float(label.get("preferred_middle", label.get("middle", 0.0)))
 
 
-def _preferred_angle_rad(label: Mapping[str, Any], total_length: int) -> float:
+def _preferred_angle_rad(label: CircularLabel, total_length: int) -> float:
     return (_TAU * (_preferred_middle(label) / float(total_length))) % _TAU
 
 
@@ -71,7 +71,7 @@ def _radius_of_point(x_coord: float, y_coord: float) -> float:
     return math.hypot(float(x_coord), float(y_coord))
 
 
-def _outer_base_anchor(label: Mapping[str, Any], outer_reserved_radius_px: float) -> float:
+def _outer_base_anchor(label: CircularLabel, outer_reserved_radius_px: float) -> float:
     elbow_radius = _radius_of_point(label.get("middle_x", 0.0), label.get("middle_y", 0.0))
     feature_outer = float(label.get("feature_outer_radius_px", 0.0))
     configured_minimum = float(label.get("min_outer_start_radius_px", 0.0))
@@ -83,14 +83,14 @@ def _outer_base_anchor(label: Mapping[str, Any], outer_reserved_radius_px: float
     )
 
 
-def _inner_base_anchor(label: Mapping[str, Any]) -> float:
+def _inner_base_anchor(label: CircularLabel) -> float:
     elbow_radius = _radius_of_point(label.get("middle_x", 0.0), label.get("middle_y", 0.0))
     feature_inner = float(label.get("feature_inner_radius_px", elbow_radius))
     configured_maximum = float(label.get("max_inner_start_radius_px", feature_inner))
     return max(0.0, min(elbow_radius - _RADIAL_CLEARANCE_PX, feature_inner - _RADIAL_CLEARANCE_PX, configured_maximum))
 
 
-def _seam_order(labels: Sequence[dict[str, Any]], total_length: int) -> list[dict[str, Any]]:
+def _seam_order(labels: Sequence[CircularLabel], total_length: int) -> list[CircularLabel]:
     ordered = sorted(
         labels,
         key=lambda label: (
@@ -111,7 +111,7 @@ def _seam_order(labels: Sequence[dict[str, Any]], total_length: int) -> list[dic
     return ordered[start:] + ordered[:start]
 
 
-def _pair_clearance_px(first: Mapping[str, Any], second: Mapping[str, Any], spacing_px: float) -> float:
+def _pair_clearance_px(first: CircularLabel, second: CircularLabel, spacing_px: float) -> float:
     return (
         0.5 * float(first.get("height_px", 0.0))
         + 0.5 * float(second.get("height_px", 0.0))
@@ -120,7 +120,7 @@ def _pair_clearance_px(first: Mapping[str, Any], second: Mapping[str, Any], spac
     )
 
 
-def _required_collision_radius(labels: Sequence[dict[str, Any]], spacing_px: float) -> float:
+def _required_collision_radius(labels: Sequence[CircularLabel], spacing_px: float) -> float:
     if len(labels) < 2:
         return 0.0
     circumference = sum(
@@ -131,7 +131,7 @@ def _required_collision_radius(labels: Sequence[dict[str, Any]], spacing_px: flo
 
 
 def _pack_angles(
-    labels: Sequence[dict[str, Any]],
+    labels: Sequence[CircularLabel],
     total_length: int,
     collision_radius_px: float,
     spacing_px: float,
@@ -193,13 +193,13 @@ def _pack_angles(
 
 
 def _make_placed_label(
-    source: Mapping[str, Any],
+    source: CircularLabel,
     *,
     total_length: int,
     placed_angle_rad: float,
     text_anchor_radius_px: float,
-) -> dict[str, Any]:
-    label = dict(source)
+) -> CircularLabel:
+    label = source.copy()
     is_inner = bool(label.get("is_inner", False))
     placed_angle_deg = math.degrees(placed_angle_rad) % 360.0
     radial_angle = placed_angle_rad - (0.5 * math.pi)
@@ -253,7 +253,7 @@ def _make_placed_label(
     return label
 
 
-def _box_for_label(label: Mapping[str, Any], padding_px: float = 0.0) -> OrientedTextBox:
+def _box_for_label(label: CircularLabel, padding_px: float = 0.0) -> OrientedTextBox:
     return oriented_text_box(
         float(label.get("text_x", label.get("start_x", 0.0))),
         float(label.get("text_y", label.get("start_y", 0.0))),
@@ -265,7 +265,7 @@ def _box_for_label(label: Mapping[str, Any], padding_px: float = 0.0) -> Oriente
     )
 
 
-def _text_collision_pairs(labels: Sequence[Mapping[str, Any]], spacing_px: float) -> list[tuple[int, int]]:
+def _text_collision_pairs(labels: Sequence[CircularLabel], spacing_px: float) -> list[tuple[int, int]]:
     padding = 0.5 * max(0.0, float(spacing_px))
     return overlapping_pairs(
         [(_box_for_label(label, padding_px=padding).corners,) for label in labels],
@@ -282,7 +282,7 @@ def _segment_aabb(segment: tuple[tuple[float, float], tuple[float, float]]) -> A
     )
 
 
-def _leader_text_collision_count(labels: Sequence[Mapping[str, Any]]) -> int:
+def _leader_text_collision_count(labels: Sequence[CircularLabel]) -> int:
     boxes = [_box_for_label(label) for label in labels]
     box_index = AabbIndex(bucket_size=64.0)
     for index, box in enumerate(boxes):
@@ -300,7 +300,7 @@ def _leader_text_collision_count(labels: Sequence[Mapping[str, Any]]) -> int:
     return count
 
 
-def _order_violation_count(labels: Sequence[Mapping[str, Any]]) -> int:
+def _order_violation_count(labels: Sequence[CircularLabel]) -> int:
     if len(labels) < 2:
         return 0
     preferred = sorted(range(len(labels)), key=lambda index: float(labels[index]["preferred_angle_deg"]))
@@ -311,7 +311,7 @@ def _order_violation_count(labels: Sequence[Mapping[str, Any]]) -> int:
     return 0 if any(doubled[offset : offset + len(preferred)] == preferred for offset in range(len(placed))) else 1
 
 
-def _content_bounds(labels: Sequence[Mapping[str, Any]]) -> tuple[float, float, float, float] | None:
+def _content_bounds(labels: Sequence[CircularLabel]) -> tuple[float, float, float, float] | None:
     if not labels:
         return None
     points: list[tuple[float, float]] = []
@@ -330,15 +330,15 @@ def _content_bounds(labels: Sequence[Mapping[str, Any]]) -> tuple[float, float, 
 
 
 def _place_side(
-    labels: Sequence[Mapping[str, Any]],
+    labels: Sequence[CircularLabel],
     *,
     total_length: int,
     spacing_px: float,
     is_inner: bool,
     outer_reserved_radius_px: float,
     inner_reserved_outer_radius_px: float,
-) -> tuple[list[dict[str, Any]], float]:
-    copied = [dict(label) for label in labels]
+) -> tuple[list[CircularLabel], float]:
+    copied = [label.copy() for label in labels]
     if not copied:
         return [], 0.0
     ordered = _seam_order(copied, total_length)
@@ -406,8 +406,8 @@ def _place_side(
 
 
 def place_radial_labels(
-    outer_labels: Sequence[Mapping[str, Any]],
-    inner_labels: Sequence[Mapping[str, Any]],
+    outer_labels: Sequence[CircularLabel],
+    inner_labels: Sequence[CircularLabel],
     *,
     total_length: int,
     spacing_px: float,

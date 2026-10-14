@@ -16,6 +16,7 @@ from .filtering import label_filter_maps
 from .circular_candidates import build_circular_label_candidates
 from .circular_leaders import chosen_contact_end, leader_polyline
 from .circular_radial import place_radial_labels
+from .circular_types import CircularLabel
 from .fit import FITS, LabelFit, LabelKind, LabelShape, Polygon, label_fits_by_kind
 from ..config.models import (
     CircularRenderProfile,
@@ -137,8 +138,8 @@ def _effective_outer_text_clearance_px(
 
 
 def _resolve_label_spacing_px(
-    label1: dict | None = None,
-    label2: dict | None = None,
+    label1: CircularLabel | None = None,
+    label2: CircularLabel | None = None,
     *,
     base_margin_px: float | None = None,
 ) -> float:
@@ -167,7 +168,7 @@ def _effective_group_spacing_px(
     return max(0.0, float(requested_spacing_px))
 
 
-def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float | None = None) -> float:
+def minimum_bbox_gap_px(label1: CircularLabel, label2: CircularLabel, base_margin_px: float | None = None) -> float:
     """Return a minimum spacing margin in pixels derived from label bbox size."""
     resolved_base_margin_px = _resolve_label_spacing_px(label1, label2, base_margin_px=base_margin_px)
     width_scale = max(float(label1.get("width_px", 0.0)), float(label2.get("width_px", 0.0)))
@@ -183,7 +184,7 @@ def _all_label_pairs(label_count: int) -> set[tuple[int, int]]:
     return {(idx, jdx) for idx in range(label_count) for jdx in range(idx + 1, label_count)}
 
 
-def _label_pair_index_padding(labels: list[dict], *, use_min_gap: bool) -> float:
+def _label_pair_index_padding(labels: list[CircularLabel], *, use_min_gap: bool) -> float:
     if not use_min_gap:
         return 1.0
     return max((minimum_bbox_gap_px(label, label) for label in labels), default=0.0)
@@ -201,7 +202,7 @@ def _label_aabb_bucket_size(bboxes: list[Aabb], padding: float) -> float:
 
 
 def _candidate_label_pairs(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     padding: float,
 ) -> set[tuple[int, int]]:
@@ -230,7 +231,7 @@ def _candidate_label_pairs(
     return pairs
 
 
-def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bool) -> int:
+def _count_label_overlaps(labels: list[CircularLabel], total_length: int, use_min_gap: bool) -> int:
     """Count overlapping label pairs using the existing overlap predicates."""
     overlap_count = 0
     candidate_pairs = _candidate_label_pairs(
@@ -251,7 +252,7 @@ def circular_label_font_size(cfg: GbdrawConfig, total_length: int) -> float:
     return float(cfg.labels.font_size.for_length_param(length_param))
 
 
-def _label_fit_box(label: dict, total_length: int) -> Polygon:
+def _label_fit_box(label: CircularLabel, total_length: int) -> Polygon:
     """A horizontal label's box for the fit count, with the overlap margins (x 1.0 px, y 0.1 px)."""
 
     min_x, max_x = _label_x_bounds(label, 1.0)
@@ -259,7 +260,7 @@ def _label_fit_box(label: dict, total_length: int) -> Polygon:
     return ((min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y))
 
 
-def _embedded_label_parts(label: dict, total_length: int) -> tuple[Polygon, ...]:
+def _embedded_label_parts(label: CircularLabel, total_length: int) -> tuple[Polygon, ...]:
     """An embedded label as the annular sector its text path covers, cut into nearly flat parts."""
 
     radius = float(label["feature_center_radius_px"])
@@ -285,7 +286,7 @@ def _embedded_label_parts(label: dict, total_length: int) -> tuple[Polygon, ...]
     )
 
 
-def circular_label_shapes(labels: Sequence[dict], total_length: int) -> list[LabelShape]:
+def circular_label_shapes(labels: Sequence[CircularLabel], total_length: int) -> list[LabelShape]:
     """The drawn labels of one record as the fit count sees them.
 
     Horizontal labels are their boxes, radial labels their rotated text boxes,
@@ -296,7 +297,7 @@ def circular_label_shapes(labels: Sequence[dict], total_length: int) -> list[Lab
     return [shape for shape in (circular_label_shape(label, total_length) for label in labels) if shape.parts]
 
 
-def circular_label_shape(label: dict, total_length: int) -> LabelShape:
+def circular_label_shape(label: CircularLabel, total_length: int) -> LabelShape:
     """One drawn label as the fit count sees it (no parts: an embedded label too small to draw)."""
 
     if label.get("is_embedded"):
@@ -308,7 +309,7 @@ def circular_label_shape(label: dict, total_length: int) -> LabelShape:
 
 
 def circular_label_fits(
-    labels: Sequence[dict],
+    labels: Sequence[CircularLabel],
     total_length: int,
     *,
     definition_text: Sequence[Aabb] = (),
@@ -323,7 +324,7 @@ def circular_label_fits(
     )
 
 
-def _label_y_bounds(label: dict, total_len: int, minimum_margin: float) -> tuple[float, float]:
+def _label_y_bounds(label: CircularLabel, total_len: int, minimum_margin: float) -> tuple[float, float]:
     """Return (min_y, max_y) for label bbox using the same baseline model as rendering."""
     return _label_y_bounds_cached(
         float(label["start_y"]),
@@ -383,7 +384,7 @@ def _label_y_bounds_cached(
     return min_y, max_y
 
 
-def _label_x_bounds(label: dict, minimum_margin: float) -> tuple[float, float]:
+def _label_x_bounds(label: CircularLabel, minimum_margin: float) -> tuple[float, float]:
     """Return (min_x, max_x) for label bbox using current text-anchor semantics."""
     return _label_x_bounds_cached(
         float(label["start_x"]),
@@ -422,7 +423,7 @@ def _label_x_bounds_cached(
 
 
 
-def _leader_start_meta(label: dict, total_length: int | None) -> tuple[str, float, float, float, float] | None:
+def _leader_start_meta(label: CircularLabel, total_length: int | None) -> tuple[str, float, float, float, float] | None:
     """
     Return leader anchor metadata as (side, fixed_coord, lower, upper, preferred).
 
@@ -487,7 +488,7 @@ def _leader_start_meta(label: dict, total_length: int | None) -> tuple[str, floa
     return "top", max_y, x_min_usable, x_max_usable, middle_x
 
 
-def _leader_start_point(label: dict, total_length: int | None = None) -> tuple[float, float]:
+def _leader_start_point(label: CircularLabel, total_length: int | None = None) -> tuple[float, float]:
     """Choose a visually stable leader anchor on the label bbox perimeter."""
     start_x = float(label.get("start_x", 0.0))
     start_y = float(label.get("start_y", 0.0))
@@ -566,7 +567,7 @@ def _fit_monotonic_leader_coords(group: list[dict], min_gap: float) -> list[floa
     return coords
 
 
-def _refine_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
+def _refine_leader_start_points(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
     """
     Improve readability by reducing leader-end inversions and excessive crowding.
 
@@ -634,7 +635,7 @@ def _refine_leader_start_points(labels: list[dict], total_length: int) -> list[d
     return labels
 
 
-def _optimize_top_bottom_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
+def _optimize_top_bottom_leader_start_points(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
     """
     Prefer long-edge midpoint anchors for top/bottom labels when safe.
 
@@ -721,12 +722,12 @@ def _optimize_top_bottom_leader_start_points(labels: list[dict], total_length: i
     return labels
 
 
-def _assign_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
+def _assign_leader_start_points(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
     """Populate `leader_start_x/y` used for drawing the first leader segment.
 
     A contact the local repair chose stays (LP-D52), and its label leaves the edge-group refinement.
     """
-    engine_labels: list[dict] = []
+    engine_labels: list[CircularLabel] = []
     for label in labels:
         chosen = chosen_contact_end(label, total_length)
         leader_x, leader_y = chosen if chosen is not None else _leader_start_point(label, total_length)
@@ -739,12 +740,12 @@ def _assign_leader_start_points(labels: list[dict], total_length: int) -> list[d
     return labels
 
 
-def assign_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
+def assign_leader_start_points(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
     """Public wrapper to (re)compute leader start anchors after label motion."""
     return _assign_leader_start_points(labels, total_length)
 
 
-def _leader_length_px(label: dict, total_length: int | None = None) -> float:
+def _leader_length_px(label: CircularLabel, total_length: int | None = None) -> float:
     """Return leader length from label middle anchor to chosen label-side leader anchor."""
     if "middle_x" not in label or "middle_y" not in label:
         return 0.0
@@ -755,7 +756,7 @@ def _leader_length_px(label: dict, total_length: int | None = None) -> float:
     )
 
 
-def _leader_distance_score(labels: list[dict], total_length: int | None = None) -> tuple[float, float]:
+def _leader_distance_score(labels: list[CircularLabel], total_length: int | None = None) -> tuple[float, float]:
     """Return (sum_length, max_length) for leader segments."""
     if not labels:
         return 0.0, 0.0
@@ -763,14 +764,14 @@ def _leader_distance_score(labels: list[dict], total_length: int | None = None) 
     return sum(leader_lengths), max(leader_lengths)
 
 
-def _label_bbox_rect(label: dict, total_length: int, margin_px: float) -> tuple[float, float, float, float]:
+def _label_bbox_rect(label: CircularLabel, total_length: int, margin_px: float) -> tuple[float, float, float, float]:
     """Return label bbox rectangle as (min_x, min_y, max_x, max_y)."""
     min_x, max_x = _label_x_bounds(label, minimum_margin=float(margin_px))
     min_y, max_y = _label_y_bounds(label, total_length, minimum_margin=float(margin_px))
     return min_x, min_y, max_x, max_y
 
 
-def _leader_segments(label: dict) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+def _leader_segments(label: CircularLabel) -> list[tuple[tuple[float, float], tuple[float, float]]]:
     """Return two leader segments drawn for non-embedded circular labels."""
     middle_x = float(label.get("middle_x", 0.0))
     middle_y = float(label.get("middle_y", 0.0))
@@ -785,7 +786,7 @@ def _leader_segments(label: dict) -> list[tuple[tuple[float, float], tuple[float
     ]
 
 
-def _primary_leader_segment(label: dict) -> tuple[tuple[float, float], tuple[float, float]]:
+def _primary_leader_segment(label: CircularLabel) -> tuple[tuple[float, float], tuple[float, float]]:
     """Return the primary leader segment (middle -> leader-start) for line-cross checks."""
     middle_x = float(label.get("middle_x", 0.0))
     middle_y = float(label.get("middle_y", 0.0))
@@ -795,7 +796,7 @@ def _primary_leader_segment(label: dict) -> tuple[tuple[float, float], tuple[flo
 
 
 def _build_label_leader_collision_geometry(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     margin_px: float,
 ) -> tuple[
@@ -809,7 +810,7 @@ def _build_label_leader_collision_geometry(
 
 
 def _build_primary_leader_segments(
-    labels: list[dict],
+    labels: list[CircularLabel],
 ) -> list[tuple[tuple[float, float], tuple[float, float]]]:
     """Precompute primary leader segments used by line-cross checks."""
     return [_primary_leader_segment(label) for label in labels]
@@ -864,7 +865,7 @@ def _segments_properly_intersect(
 
 
 def _count_leader_line_intersections(
-    labels: list[dict],
+    labels: list[CircularLabel],
     *,
     primary_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
 ) -> int:
@@ -879,10 +880,10 @@ def _count_leader_line_intersections(
 
 
 def _count_local_leader_line_intersections(
-    labels: list[dict],
+    labels: list[CircularLabel],
     idx: int,
     *,
-    candidate: dict | None = None,
+    candidate: CircularLabel | None = None,
     primary_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
     candidate_segment: tuple[tuple[float, float], tuple[float, float]] | None = None,
     peers: list[int] | None = None,
@@ -970,7 +971,7 @@ def _segment_intersects_rect_interior(
 
 
 def _count_label_leader_line_collisions(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     margin_px: float,
     *,
@@ -1001,12 +1002,12 @@ def _count_label_leader_line_collisions(
 
 
 def _count_local_leader_line_collisions(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     idx: int,
     margin_px: float,
     *,
-    candidate: dict | None = None,
+    candidate: CircularLabel | None = None,
     rects: list[tuple[float, float, float, float]] | None = None,
     segments: list[list[tuple[tuple[float, float], tuple[float, float]]]] | None = None,
     candidate_rect: tuple[float, float, float, float] | None = None,
@@ -1061,7 +1062,7 @@ def _reach_pad(margin_bound_px: float) -> float:
     return 0.5 * max(margin_bound_px, 1.0) + 1.0
 
 
-def _label_reach_pad(labels: list[dict], *, extra_margin_px: float = 0.0) -> float:
+def _label_reach_pad(labels: list[CircularLabel], *, extra_margin_px: float = 0.0) -> float:
     """Reach pad covering the bbox-overlap and leader predicates of these labels.
 
     The min-gap margin of a pair never exceeds the largest single-label min gap plus
@@ -1075,7 +1076,7 @@ def _label_reach_pad(labels: list[dict], *, extra_margin_px: float = 0.0) -> flo
 
 
 def _label_reach_box(
-    label: dict,
+    label: CircularLabel,
     pad: float,
     *,
     anchors: Sequence[tuple[float, float]] | None = None,
@@ -1097,7 +1098,7 @@ def _label_reach_box(
     return None if point_box is None else union_aabbs((box, point_box))
 
 
-def _labels_overlap(label_a: dict, label_b: dict, total_length: int, *, use_min_gap: bool) -> bool:
+def _labels_overlap(label_a: CircularLabel, label_b: CircularLabel, total_length: int, *, use_min_gap: bool) -> bool:
     """Return whether two label bboxes overlap, at their min gap or at the plain margins."""
     if use_min_gap:
         margin = minimum_bbox_gap_px(label_a, label_b)
@@ -1112,10 +1113,10 @@ def _labels_overlap(label_a: dict, label_b: dict, total_length: int, *, use_min_
 
 
 def _count_local_label_overlaps(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     label_idx: int,
-    candidate_label: dict,
+    candidate_label: CircularLabel,
     *,
     use_min_gap: bool,
     peers: Iterable[int] | None = None,
@@ -1146,9 +1147,9 @@ class _MovedLabelOverlaps:
 
     def __init__(
         self,
-        labels: Sequence[dict],
+        labels: Sequence[CircularLabel],
         overlapping_pairs: Iterable[tuple[int, int]],
-        overlaps: Callable[[dict, dict, int, int], bool],
+        overlaps: Callable[[CircularLabel, CircularLabel, int, int], bool],
         reach_pad: float,
     ) -> None:
         self._labels = labels
@@ -1168,7 +1169,7 @@ class _MovedLabelOverlaps:
             if box is not None:
                 self._index.insert(idx, box)
 
-    def count_after_move(self, moved: Mapping[int, dict], cap: int | None = None) -> int:
+    def count_after_move(self, moved: Mapping[int, CircularLabel], cap: int | None = None) -> int:
         """Overlapping pairs once each label `idx` in `moved` is replaced by `moved[idx]`.
 
         With `cap` the count may stop once it exceeds `cap`: exact up to `cap`, above it otherwise.
@@ -1207,7 +1208,7 @@ class _MovedLabelOverlaps:
 
 
 def _resolve_label_leader_line_collisions(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     *,
     margin_px: float,
@@ -1215,7 +1216,7 @@ def _resolve_label_leader_line_collisions(
     max_shift_deg: float,
     max_passes: int,
     min_order_gap_deg: float,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """Reduce label-vs-leader collisions by angular shifts without overlap regressions."""
     if len(labels) < 2:
         return labels
@@ -1367,7 +1368,7 @@ def _resolve_label_leader_line_collisions(
                 _leader_length_px(label, total_length),
             )
             best_score = current_score
-            best_candidate: dict | None = None
+            best_candidate: CircularLabel | None = None
             best_candidate_rect: tuple[float, float, float, float] | None = None
             best_candidate_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None
             best_candidate_primary_segment: tuple[tuple[float, float], tuple[float, float]] | None = None
@@ -1566,7 +1567,7 @@ def _resolve_label_leader_line_collisions(
     return labels
 
 
-def _label_bbox_min_radius(label: dict, total_length: int, minimum_margin: float = 0.0) -> float:
+def _label_bbox_min_radius(label: CircularLabel, total_length: int, minimum_margin: float = 0.0) -> float:
     """Return minimum distance from origin to the label bbox."""
     min_x, max_x = _label_x_bounds(label, minimum_margin=minimum_margin)
     min_y, max_y = _label_y_bounds(label, total_length, minimum_margin=minimum_margin)
@@ -1575,7 +1576,7 @@ def _label_bbox_min_radius(label: dict, total_length: int, minimum_margin: float
     return math.hypot(closest_x, closest_y)
 
 
-def _label_bbox_max_radius(label: dict, total_length: int, minimum_margin: float = 0.0) -> float:
+def _label_bbox_max_radius(label: CircularLabel, total_length: int, minimum_margin: float = 0.0) -> float:
     """Return maximum distance from origin to the label bbox."""
     min_x, max_x = _label_x_bounds(label, minimum_margin=minimum_margin)
     min_y, max_y = _label_y_bounds(label, total_length, minimum_margin=minimum_margin)
@@ -1750,7 +1751,7 @@ def _min_inner_feature_radius_at_position(
     return 0.0 if min_inner_radius is None else float(min_inner_radius)
 
 
-def _label_genome_intervals_for_clearance(label: dict, total_length: int) -> list[tuple[float, float]]:
+def _label_genome_intervals_for_clearance(label: CircularLabel, total_length: int) -> list[tuple[float, float]]:
     """Return genome intervals covered by the current label width estimate."""
     if total_length <= 0:
         return []
@@ -1854,12 +1855,12 @@ def _min_inner_feature_radius_for_intervals(
 
 
 def _update_outer_label_minimum_radii_against_features(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     feature_radius_intervals: list[tuple[float, float, float]],
     *,
     text_clearance_px: float,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """Raise minimum outer-label radii so text clears local feature tracks."""
     if not labels or not feature_radius_intervals:
         return labels
@@ -1890,12 +1891,12 @@ def _update_outer_label_minimum_radii_against_features(
 
 
 def _update_outer_label_minimum_middle_radii_against_features(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     feature_radius_intervals: list[tuple[float, float, float]],
     *,
     anchor_clearance_px: float,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """Raise leader middle-point radii so elbows stay outside local feature tracks."""
     if not labels or not feature_radius_intervals:
         return labels
@@ -1926,12 +1927,12 @@ def _update_outer_label_minimum_middle_radii_against_features(
 
 
 def _update_inner_label_maximum_radii_against_features(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     feature_radius_intervals: list[tuple[float, float, float]],
     *,
     text_clearance_px: float,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """Lower maximum inner-label radii so text stays inside local feature tracks."""
     if not labels or not feature_radius_intervals:
         return labels
@@ -1963,12 +1964,12 @@ def _update_inner_label_maximum_radii_against_features(
 
 
 def _update_inner_label_maximum_middle_radii_against_features(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     feature_radius_intervals: list[tuple[float, float, float]],
     *,
     anchor_clearance_px: float,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """Lower maximum inner-label middle radii so elbows stay inside local feature tracks."""
     if not labels or not feature_radius_intervals:
         return labels
@@ -1999,7 +2000,7 @@ def _update_inner_label_maximum_middle_radii_against_features(
     return labels
 
 
-def _enforce_outer_label_minimum_radius(labels: list[dict], total_length: int) -> list[dict]:
+def _enforce_outer_label_minimum_radius(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
     """Push outer labels outward until their text bboxes clear required radii."""
     for label in labels:
         required_outer_radius = float(label.get("min_outer_start_radius_px", 0.0))
@@ -2038,7 +2039,7 @@ def _enforce_outer_label_minimum_radius(labels: list[dict], total_length: int) -
     return labels
 
 
-def _enforce_outer_label_minimum_middle_radius(labels: list[dict], total_length: int) -> list[dict]:
+def _enforce_outer_label_minimum_middle_radius(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
     """Push leader middle points outward until they clear required radii."""
     for label in labels:
         required_middle_radius = float(label.get("min_outer_middle_radius_px", 0.0))
@@ -2062,7 +2063,7 @@ def _enforce_outer_label_minimum_middle_radius(labels: list[dict], total_length:
     return labels
 
 
-def _enforce_inner_label_maximum_radius(labels: list[dict], total_length: int) -> list[dict]:
+def _enforce_inner_label_maximum_radius(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
     """Pull inner labels inward until their text bboxes stay inside required radii."""
     for label in labels:
         allowed_outer_radius = float(label.get("max_inner_start_radius_px", float("inf")))
@@ -2101,7 +2102,7 @@ def _enforce_inner_label_maximum_radius(labels: list[dict], total_length: int) -
     return labels
 
 
-def _enforce_inner_label_maximum_middle_radius(labels: list[dict], total_length: int) -> list[dict]:
+def _enforce_inner_label_maximum_middle_radius(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
     """Pull inner label middle points inward until they stay inside required radii."""
     for label in labels:
         allowed_middle_radius = float(label.get("max_inner_middle_radius_px", float("inf")))
@@ -2127,13 +2128,13 @@ def _enforce_inner_label_maximum_middle_radius(labels: list[dict], total_length:
 
 
 def _stabilize_inner_label_clearance(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     feature_inner_radius_intervals: list[tuple[float, float, float]],
     *,
     text_clearance_px: float,
     anchor_clearance_px: float,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """Apply iterative inner-label clearance passes against local feature tracks."""
     if not labels or not feature_inner_radius_intervals:
         return labels
@@ -2190,12 +2191,12 @@ def _stabilize_inner_label_clearance(
 
 
 def _resolve_outer_label_overlaps_with_fixed_radii(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     *,
     max_angle_shift_deg: float = 40.0,
     step_deg: float = 0.2,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """Resolve overlaps by shifting label angles while keeping each label radius fixed."""
     if len(labels) < 2:
         return labels
@@ -2253,7 +2254,7 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
         label["_angle_unwrapped_fixed"] = candidate
         prev_angle = candidate
 
-    def _apply_angle(label: dict) -> None:
+    def _apply_angle(label: CircularLabel) -> None:
         radius = float(label["_fixed_radius_px"])
         angle_unwrapped = float(label["_angle_unwrapped_fixed"])
         label["start_x"] = radius * math.cos(math.radians(angle_unwrapped))
@@ -2264,7 +2265,7 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
             return pair_margins[idx][jdx]
         return pair_margins[jdx][idx]
 
-    def _pair_overlaps(left: dict, right: dict, idx: int, jdx: int) -> bool:
+    def _pair_overlaps(left: CircularLabel, right: CircularLabel, idx: int, jdx: int) -> bool:
         min_gap_px = _pair_margin(idx, jdx)
         return y_overlap(left, right, total_length, min_gap_px) and x_overlap(
             left,
@@ -2387,7 +2388,7 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
     return sort_labels(labels)
 
 
-def _angle_deviation_score(labels: list[dict], total_length: int) -> tuple[float, float]:
+def _angle_deviation_score(labels: list[CircularLabel], total_length: int) -> tuple[float, float]:
     """
     Return (sum_delta, max_delta) where deltas are angular deviations from each
     label's target feature angle.
@@ -2414,7 +2415,7 @@ def _angle_deviation_score(labels: list[dict], total_length: int) -> tuple[float
     return sum_delta, max_delta
 
 
-def _placement_score(labels: list[dict], total_length: int) -> tuple[int, int, int, float, float, float, float, float]:
+def _placement_score(labels: list[CircularLabel], total_length: int) -> tuple[int, int, int, float, float, float, float, float]:
     """Return tuple score used to compare placement candidates."""
     overlap_plain = _count_label_overlaps(labels, total_length, use_min_gap=False)
     overlap_min_gap = _count_label_overlaps(labels, total_length, use_min_gap=True)
@@ -2553,7 +2554,7 @@ def _current_half_from_x(x: float, axis_eps_px: float = HEMISPHERE_AXIS_EPS_PX) 
 
 
 def _preferred_half_for_label(
-    label: dict,
+    label: CircularLabel,
     total_length: int,
     axis_neutral_deg: float = HEMISPHERE_AXIS_NEUTRAL_DEG,
 ) -> int:
@@ -2578,7 +2579,7 @@ def _preferred_half_for_label(
 
 
 def _hemisphere_mismatch_metrics(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     axis_neutral_deg: float = HEMISPHERE_AXIS_NEUTRAL_DEG,
 ) -> tuple[int, float]:
@@ -2600,7 +2601,7 @@ def _hemisphere_mismatch_metrics(
 
 
 def _label_hemisphere_mismatch_weight(
-    label: dict,
+    label: CircularLabel,
     total_length: int,
     axis_neutral_deg: float = HEMISPHERE_AXIS_NEUTRAL_DEG,
 ) -> float | None:
@@ -2622,7 +2623,7 @@ def _label_hemisphere_mismatch_weight(
 
 
 def place_labels_on_arc_fc(
-    labels: list[dict],
+    labels: list[CircularLabel],
     center_x: float,
     center_y: float,
     x_radius: float,
@@ -2631,7 +2632,7 @@ def place_labels_on_arc_fc(
     end_angle: float,
     total_length: int,
     spacing_px: float | None = None,
-) -> list[dict]:
+) -> list[CircularLabel]:
     requested_spacing_px = 2.0 if spacing_px is None else max(0.0, float(spacing_px))
     resolved_spacing_px = _effective_group_spacing_px(
         requested_spacing_px,
@@ -2651,7 +2652,7 @@ def place_labels_on_arc_fc(
         label["_spacing_px"] = resolved_spacing_px
         label["_enforce_spacing_px"] = True
 
-    rearranged_labels: list[dict] = []
+    rearranged_labels: list[CircularLabel] = []
     labels = sort_labels(labels)
     angle_step = 0.25
     max_shift = 25.0
@@ -2734,7 +2735,7 @@ def sort_labels(labels):
 
 
 def _legacy_place_labels_on_arc_fc(
-    labels: list[dict],
+    labels: list[CircularLabel],
     center_x: float,
     center_y: float,
     x_radius: float,
@@ -2744,7 +2745,7 @@ def _legacy_place_labels_on_arc_fc(
     total_length: int,
     *,
     spacing_px: float,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """
     Legacy placement strategy (from pre-93dc098 implementation).
 
@@ -2753,7 +2754,7 @@ def _legacy_place_labels_on_arc_fc(
     vertical gap kept between neighbouring labels.
     """
 
-    def move_label(label: dict, angle: float) -> tuple[float, float]:
+    def move_label(label: CircularLabel, angle: float) -> tuple[float, float]:
         new_x = center_x + x_radius * math.cos(math.radians(angle))
         new_y = center_y + y_radius * math.sin(math.radians(angle))
         return new_x, new_y
@@ -2806,7 +2807,7 @@ def _legacy_place_labels_on_arc_fc(
 
 
 def _legacy_improved_label_placement_fc(
-    labels: list[dict],
+    labels: list[CircularLabel],
     center_x: float,
     center_y: float,
     x_radius: float,
@@ -2818,7 +2819,7 @@ def _legacy_improved_label_placement_fc(
     *,
     y_margin: float,
     max_iterations: int = 10000,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """
     Legacy local optimizer (from pre-93dc098 implementation).
 
@@ -2826,12 +2827,12 @@ def _legacy_improved_label_placement_fc(
     improve dense-label robustness.
     """
 
-    def move_label(label: dict, angle: float) -> tuple[float, float]:
+    def move_label(label: CircularLabel, angle: float) -> tuple[float, float]:
         new_x = center_x + x_radius * math.cos(math.radians(angle))
         new_y = center_y + y_radius * math.sin(math.radians(angle))
         return new_x, new_y
 
-    def feature_angle_scorer(label: dict) -> Callable[[float, float], float]:
+    def feature_angle_scorer(label: CircularLabel) -> Callable[[float, float], float]:
         """Return the angle in degrees at the origin between the label's feature middle and a point."""
         v1_x = float(label["feature_middle_x"])
         v1_y = float(label["feature_middle_y"])
@@ -2849,7 +2850,7 @@ def _legacy_improved_label_placement_fc(
 
         return angle_to
 
-    def check_overlap(label1: dict, label2: dict, total_length: int) -> bool:
+    def check_overlap(label1: CircularLabel, label2: CircularLabel, total_length: int) -> bool:
         return y_overlap(label1, label2, total_length, y_margin) and x_overlap(
             label1, label2, minimum_margin=1
         )
@@ -3064,7 +3065,7 @@ def improved_label_placement_fc(
                     break
         return overlaps
 
-    def update_label_coordinates(label: dict, angle_unwrapped: float) -> None:
+    def update_label_coordinates(label: CircularLabel, angle_unwrapped: float) -> None:
         label["angle_unwrapped"] = angle_unwrapped
         label["start_x"], label["start_y"] = move_label(label, angle_unwrapped)
 
@@ -3288,7 +3289,7 @@ def improved_label_placement_fc(
                         if center_delta > center_delta_cap:
                             continue
 
-                        moved: dict[int, dict] = {}
+                        moved: dict[int, CircularLabel] = {}
                         for idx in range(n_labels):
                             if ordered[idx] != current_angles[idx] or not at_angle[idx]:
                                 moved_label = labels[idx].copy()
@@ -3666,7 +3667,7 @@ def improved_label_placement_fc(
     return labels
 
 
-def _derive_monotonic_unwrapped_angles(labels: list[dict], total_length: int) -> list[float]:
+def _derive_monotonic_unwrapped_angles(labels: list[CircularLabel], total_length: int) -> list[float]:
     """Derive monotonically increasing unwrapped angles from current label coordinates."""
     unwrapped_angles: list[float] = []
     prev_unwrapped: float | None = None
@@ -3692,9 +3693,9 @@ def _derive_monotonic_unwrapped_angles(labels: list[dict], total_length: int) ->
 
 
 def _neighbor_min_gap_overlap_count(
-    labels: list[dict],
+    labels: list[CircularLabel],
     label_idx: int,
-    candidate_label: dict,
+    candidate_label: CircularLabel,
     total_length: int,
 ) -> int:
     """Count min-gap overlaps for immediate neighbors only."""
@@ -3714,7 +3715,7 @@ def _neighbor_min_gap_overlap_count(
 
 
 def _inner_rebalance_metrics(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     plain_overlap: int | None = None,
 ) -> tuple[int, int, int, float, int, int]:
@@ -3743,7 +3744,7 @@ def _inner_rebalance_metrics(
     )
 
 
-def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) -> list[dict]:
+def _rebalance_inner_labels_strict_order(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
     """
     Rebalance inner labels without overtaking, using suffix block pushes only.
 
@@ -3802,7 +3803,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
     )
 
     def _metrics_cache_key(
-        label_list: list[dict],
+        label_list: list[CircularLabel],
     ) -> tuple[tuple[float, float, float, float, float, float, float, float, float, bool, bool], ...]:
         return tuple(
             (
@@ -3821,7 +3822,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
             for label in label_list
         )
 
-    def _inner_rebalance_metrics_cached(label_list: list[dict]) -> tuple[int, int, int, float, int, int]:
+    def _inner_rebalance_metrics_cached(label_list: list[CircularLabel]) -> tuple[int, int, int, float, int, int]:
         cache_key = _metrics_cache_key(label_list)
         cached = metrics_cache.get(cache_key)
         if cached is None:
@@ -3829,7 +3830,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
             metrics_cache[cache_key] = cached
         return cached
 
-    def _plain_overlap_cached(label_list: list[dict]) -> int:
+    def _plain_overlap_cached(label_list: list[CircularLabel]) -> int:
         cache_key = _metrics_cache_key(label_list)
         cached = plain_overlap_cache.get(cache_key)
         if cached is None:
@@ -3837,7 +3838,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
             plain_overlap_cache[cache_key] = cached
         return cached
 
-    def _mismatch_metrics_cached(label_list: list[dict]) -> tuple[int, float]:
+    def _mismatch_metrics_cached(label_list: list[CircularLabel]) -> tuple[int, float]:
         cache_key = _metrics_cache_key(label_list)
         cached = mismatch_cache.get(cache_key)
         if cached is None:
@@ -3845,7 +3846,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
             mismatch_cache[cache_key] = cached
         return cached
 
-    def _mismatch_indices(label_list: list[dict]) -> list[int]:
+    def _mismatch_indices(label_list: list[CircularLabel]) -> list[int]:
         mismatch_indices: list[int] = []
         for idx, label in enumerate(label_list):
             preferred_half = _preferred_half_for_label(label, total_length)
@@ -3856,7 +3857,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
                 mismatch_indices.append(idx)
         return mismatch_indices
 
-    def _mismatch_priority(label: dict) -> tuple[float, float]:
+    def _mismatch_priority(label: CircularLabel) -> tuple[float, float]:
         target_angle_unwrapped = float(
             label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
         )
@@ -3867,7 +3868,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
         block_start: int,
         block_end: int,
         shift_deg: float,
-    ) -> tuple[list[dict], list[float]]:
+    ) -> tuple[list[CircularLabel], list[float]]:
         candidate_labels = [item.copy() for item in ordered_labels]
         candidate_angles = current_angles.copy()
         for move_idx in range(block_start, block_end + 1):
@@ -3880,8 +3881,8 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
         return candidate_labels, candidate_angles
 
     def _half_progress_non_worsening(
-        before_labels: list[dict],
-        after_labels: list[dict],
+        before_labels: list[CircularLabel],
+        after_labels: list[CircularLabel],
         block_start: int,
         block_end: int,
     ) -> bool:
@@ -3895,7 +3896,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
                 return False
         return True
 
-    def _is_strict_no_overtake(label_list: list[dict]) -> bool:
+    def _is_strict_no_overtake(label_list: list[CircularLabel]) -> bool:
         ordered = sort_labels(label_list)
         prev_unwrapped: float | None = None
         for label in ordered:
@@ -3956,7 +3957,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
         if -primary_direction != primary_direction:
             directions.append(-primary_direction)
 
-        best_candidate_labels: list[dict] | None = None
+        best_candidate_labels: list[CircularLabel] | None = None
         best_candidate_angles: list[float] | None = None
         best_candidate_score: tuple[int, int, float, int, int, int, int, float] | None = None
 
@@ -4065,7 +4066,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
     if baseline_plain_overlap == 0 and baseline_mismatch_count <= 3 and baseline_line_intersections == 0:
         return ordered_labels
 
-    fallback_best_labels: list[dict] | None = None
+    fallback_best_labels: list[CircularLabel] | None = None
     fallback_best_score: tuple[int, float, int, int, int, float] | None = None
     for max_shift_cap in (22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 30.0):
         candidate_labels = _resolve_outer_label_overlaps_with_fixed_radii(
@@ -4120,7 +4121,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
 
 
 def _refine_labels_to_preferred_hemisphere(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     center_x: float,
     center_y: float,
@@ -4131,7 +4132,7 @@ def _refine_labels_to_preferred_hemisphere(
     axis_eps_px: float = HEMISPHERE_AXIS_EPS_PX,
     max_shift_deg: float = HEMISPHERE_REFINE_MAX_SHIFT_DEG,
     angle_step_deg: float = HEMISPHERE_REFINE_STEP_DEG,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """
     Refine mismatched labels toward their preferred hemisphere without increasing plain overlaps.
 
@@ -4147,7 +4148,7 @@ def _refine_labels_to_preferred_hemisphere(
     base_plain_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=False)
     current_unwrapped_angles = _derive_monotonic_unwrapped_angles(labels, total_length)
 
-    def plain_overlap_count_for_candidate(label_idx: int, candidate_label: dict) -> int:
+    def plain_overlap_count_for_candidate(label_idx: int, candidate_label: CircularLabel) -> int:
         overlap_count = 0
         for other_idx, other in enumerate(labels):
             if other_idx == label_idx:
@@ -4191,7 +4192,7 @@ def _refine_labels_to_preferred_hemisphere(
                 label,
                 total_length,
             )
-            best_candidate: tuple[dict, float, int, int] | None = None
+            best_candidate: tuple[CircularLabel, float, int, int] | None = None
             best_score: tuple[int, int, float] | None = None
 
             for step in range(max_steps + 1):
@@ -4289,7 +4290,7 @@ def _refine_labels_to_preferred_hemisphere(
                             block_candidates.append((block_start, block_end))
 
                     best_block_score: tuple[int, int, float, int] | None = None
-                    best_block_result: tuple[list[dict], list[float], int, int] | None = None
+                    best_block_result: tuple[list[CircularLabel], list[float], int, int] | None = None
                     current_block_neighbor_overlap = _neighbor_min_gap_overlap_count(
                         labels,
                         label_idx,
@@ -4411,7 +4412,7 @@ def _refine_labels_to_preferred_hemisphere(
 
 
 def _polish_total_leader_distance(
-    labels: list[dict],
+    labels: list[CircularLabel],
     total_length: int,
     center_x: float,
     center_y: float,
@@ -4421,7 +4422,7 @@ def _polish_total_leader_distance(
     min_order_gap: float = 0.05,
     angle_step_deg: float = 0.25,
     max_passes: int = 8,
-) -> list[dict]:
+) -> list[CircularLabel]:
     """
     Reduce total leader length while preserving overlap/order/hemisphere quality.
 
@@ -4431,7 +4432,7 @@ def _polish_total_leader_distance(
     if not labels:
         return labels
 
-    def _target_angle_unwrapped(label: dict) -> float:
+    def _target_angle_unwrapped(label: CircularLabel) -> float:
         return float(
             label.get(
                 "target_angle_unwrapped",
@@ -4439,7 +4440,7 @@ def _polish_total_leader_distance(
             )
         )
 
-    def _update_label_coordinates(label: dict, angle_unwrapped: float) -> None:
+    def _update_label_coordinates(label: CircularLabel, angle_unwrapped: float) -> None:
         label["angle_unwrapped"] = angle_unwrapped
         label["start_x"], label["start_y"] = calculate_coordinates(
             center_x,
@@ -4733,7 +4734,7 @@ def rearrange_labels_fc(
         else LEGACY_MIN_ROW_GAP_PX
     )
 
-    def _build_legacy_candidate() -> list[dict]:
+    def _build_legacy_candidate() -> list[CircularLabel]:
         candidate_legacy = [label.copy() for label in sorted_labels]
         candidate_legacy = _legacy_place_labels_on_arc_fc(
             candidate_legacy,
@@ -4770,7 +4771,7 @@ def rearrange_labels_fc(
 
     candidate_legacy = None
     legacy_score = None
-    legacy_with_leaders: list[dict] | None = None
+    legacy_with_leaders: list[CircularLabel] | None = None
     legacy_leader_collisions: int | None = None
     is_dense = len(sorted_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD
 
@@ -4928,7 +4929,7 @@ def prepare_label_list(
     probe: bool = False,
     definition_text: Sequence[Aabb] = (),
     label_filtering: Mapping[str, Any] | None = None,
-):
+) -> list[CircularLabel]:
     """Return the record's drawn label list: embedded labels, then external labels.
 
     With ``probe`` (a fit search), horizontal placement raises
@@ -4939,9 +4940,9 @@ def prepare_label_list(
     ``label_filtering``: the compiled maps when the caller holds them.
     """
     cfg = profile.config
-    embedded_labels = []
-    outer_labels = []
-    inner_labels = []
+    embedded_labels: list[CircularLabel] = []
+    outer_labels: list[CircularLabel] = []
+    inner_labels: list[CircularLabel] = []
     if label_filtering is None:
         label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
     label_rendering = profile.label_rendering
@@ -5142,7 +5143,7 @@ def prepare_label_list(
             elif label_rendering == "embedded_only" and not is_embedded:
                 continue
             feature_id = feature_ids[stable_id]
-            label_entry = {
+            label_entry: CircularLabel = {
                 "track_id": track_id,
                 "label_text": feature_label_text,
                 "feature_id": (
@@ -5249,7 +5250,7 @@ def prepare_label_list(
             outer_reserved_radius_px=outer_reserved_radius_px,
             inner_reserved_outer_radius_px=inner_reserved_outer_radius_px,
         )
-        external_labels = [dict(label) for label in radial_result.labels]
+        external_labels = [label.copy() for label in radial_result.labels]
         for label in external_labels:
             label["layout_content_bounds"] = radial_result.content_bounds
             label["required_radius_growth_px"] = radial_result.required_radius_growth_px
@@ -5261,9 +5262,9 @@ def prepare_label_list(
             )
         return embedded_labels + external_labels
 
-    def place_external_labels(dense_outer_rows: DenseOuterRows) -> list[dict]:
+    def place_external_labels(dense_outer_rows: DenseOuterRows) -> list[CircularLabel]:
         outer_labels_rearranged = rearrange_labels_fc(
-            [dict(label) for label in outer_labels],
+            [label.copy() for label in outer_labels],
             radius,
             total_length,
             length_param,
@@ -5377,7 +5378,7 @@ def prepare_label_list(
         inner_labels_rearranged = []
         if inner_labels_enabled:
             inner_labels_rearranged = rearrange_labels_fc(
-                [dict(label) for label in inner_labels],
+                [label.copy() for label in inner_labels],
                 radius,
                 total_length,
                 length_param,
