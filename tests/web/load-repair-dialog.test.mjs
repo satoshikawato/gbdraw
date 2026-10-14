@@ -663,6 +663,23 @@ test('a feature shape of a feature type the user added survives Save and Load', 
   assert.equal(state.drawings.linear.adv.feature_shapes.gene, 'arrow');
 });
 
+// r3 N1: a similarity-group name that is no text (an object, a boolean) is
+// dropped and counted, not applied as its text; a number is its text. r3 N2:
+// the older `priorityRules` is read only when `qualifierPriorityRules` is
+// absent, as the apply reads it.
+test('a group name that is no text is dropped and listed; priorityRules is read only without qualifierPriorityRules (r3 N1, N2)', async () => {
+  const { configFieldRepairs, defaultSettingsContainers, readStringMap } = await import('../../gbdraw/web/js/services/config-field-readers.js');
+  const itemsOf = (config) => describeLoadRepairs(configFieldRepairs(defaultSettingsContainers('linear'), config, 'config', { mode: 'linear' }))?.items ?? [];
+  const names = { og1: { x: 1 }, og2: true, og3: 5, og4: 'Kept' };
+  assert.deepEqual(readStringMap(names).value, { og3: '5', og4: 'Kept' });
+  assert.deepEqual(itemsOf({ webEdits: { orthogroupNameOverrides: names } }),
+    ['Settings: 2 entries of config.webEdits.orthogroupNameOverrides could not be read and were dropped.']);
+  const unreadable = [{ feat: '', order: 'x' }];
+  assert.deepEqual(itemsOf({ qualifierPriorityRules: [{ feat: 'CDS', order: 'gene' }], priorityRules: unreadable }), []);
+  assert.deepEqual(itemsOf({ priorityRules: unreadable }),
+    ['Settings: 1 entry of config.priorityRules could not be read and was dropped.']);
+});
+
 // B47: a group name edit of a group the Session does not hold names nothing
 // the figure draws; B46: a cache entry Load does not keep is computed again
 // by the next comparison. Both are dropped without a row (Q1, BA-OD88).

@@ -242,30 +242,29 @@ export const readAnnotationSets = (value) => {
 
 /**
  * A map of text by key (similarity group names and descriptions, bulk label
- * text): a key without text is dropped; a value is read as its text.
+ * text): a key without text, or a value that is no text (a number is its
+ * text), is dropped.
  * @type {FieldReader<Record<string, string>>}
  */
 export const readStringMap = (value) => {
   /** @type {Record<string, string>} */
   const map = {};
-  /** @type {FieldLeaf[]} */
-  const leaves = [];
   let dropped = 0;
   Object.entries(isPlainObject(value) ? value : {}).forEach(([key, text]) => {
     const name = String(key || '').trim();
-    if (!name) {
+    // An entry without a key, or whose value is no text (an object, a
+    // boolean; a number is its text), is dropped (r3 N1).
+    if (!name || (text !== null && !keepsMeaning(text, String(text)))) {
       dropped += 1;
       return;
     }
-    if (text !== null && typeof text === 'object') leaves.push({ at: `.${key}`, stored: text, used: undefined });
     map[name] = String(text ?? '');
   });
   const notObject = !isPlainObject(value) && !isUnsetValue(value);
   return {
     value: map,
-    lost: notObject || dropped > 0 || leaves.length > 0,
-    ...(dropped && !notObject ? { dropped } : {}),
-    ...(leaves.length && !notObject ? { leaves } : {})
+    lost: notObject || dropped > 0,
+    ...(dropped && !notObject ? { dropped } : {})
   };
 };
 /** The dormant group names (D-21): an entry with neither text is dropped. @type {FieldReader<Record<string, unknown>>} */
@@ -456,7 +455,12 @@ const VALUE_TABLES = Object.freeze([
     rows: [
       row('losatProgram', readLosatProgram),
       row('qualifierPriorityRules', readQualifierPriorityRules),
-      row('priorityRules', readQualifierPriorityRules),
+      // The older name is read only without the current one (r3 N2).
+      {
+        field: 'priorityRules',
+        read: (value, container) => (Object.hasOwn(container, 'qualifierPriorityRules')
+          ? { value, lost: false } : readQualifierPriorityRules(value))
+      },
       row('annotationSets', readAnnotationSets)
     ]
   }
