@@ -471,7 +471,7 @@ test('a required field with a default takes it, at its own violation and as a pa
   }]);
 });
 
-test('an annotation colour: a spelling of a name reads as it, another text takes the default', () => {
+test('an annotation colour: a name in any case is kept as stored, another text takes the default', () => {
   // annotations.models._color, described as data: a hex of 3 or 6 digits or a
   // colour name in any case, with outer spaces; a fill is unset as null or blank.
   /** @param {Record<string, unknown>} changes */
@@ -487,9 +487,9 @@ test('an annotation colour: a spelling of a name reads as it, another text takes
   const read = (changes) => repairByDescription(style(changes), root, CANONICAL_REQUEST_DESCRIPTION, policy);
   const kept = style({ stroke: ' #AbC ', fill: '  ', labelColor: 'navy' });
   assert.equal(repairByDescription(kept, root, CANONICAL_REQUEST_DESCRIPTION, policy).value, kept);
-  const spelled = read({ stroke: ' Red ', labelColor: 'NAVY' });
-  assert.deepEqual(spelled.rows, []);
-  assert.deepEqual([obj(spelled.value).stroke, obj(spelled.value).labelColor], ['red', 'navy']);
+  // Python's _color reads a name in any case, so the stored text is kept.
+  const spelled = style({ stroke: ' Red ', labelColor: 'NAVY' });
+  assert.equal(repairByDescription(spelled, root, CANONICAL_REQUEST_DESCRIPTION, policy).value, spelled);
   const unusable = read({ stroke: 'notacolor', fill: '#abcd', labelColor: 'rgb(1,2,3)', hatch: { ...style({}).hatch, color: 'none' } });
   assert.deepEqual(unusable.rows.map(({ path, reason, rule, used }) => ({ path, reason, rule, used })), [
     { path: 'style.stroke', reason: 'pattern', rule: 3, used: '#404040' },

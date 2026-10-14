@@ -4954,8 +4954,7 @@ def describe_canonical_request() -> dict[str, Any]:
         union,
     )
     from .mode_profiles import DINUCLEOTIDE_PATTERN
-    from .annotations.models import BLANK_TEXT_PATTERN, HEX_COLOR_TEXT_PATTERN
-    from .io.colors import COLOR_NAMES
+    from .annotations.models import BLANK_TEXT_PATTERN, COLOR_NAME_TEXT_PATTERN, HEX_COLOR_TEXT_PATTERN
     from .session_resources import SessionResourceTable
 
     types_: dict[str, Shape] = {}
@@ -5105,7 +5104,7 @@ def describe_canonical_request() -> dict[str, Any]:
     # annotations.models._color: a hex of 3 or 6 digits or a color name in any
     # case, with outer spaces; an unset fill is null or a blank text.
     color = named("AnnotationColor", union(
-        bounded(STRING, pattern=HEX_COLOR_TEXT_PATTERN), literal(*COLOR_NAMES, spellings={}),
+        bounded(STRING, pattern=HEX_COLOR_TEXT_PATTERN), bounded(STRING, pattern=COLOR_NAME_TEXT_PATTERN),
     ))
     hatch_default, style_default = HatchStyle(), RegionAnnotationStyle()
     data(HatchStyle, replace={"color": color}, defaults={"color": hatch_default.color})

@@ -3,13 +3,16 @@
   "Shared vectors of the structural checker of a gbdraw.contract_shapes description:",
   "Python's gbdraw.contract_shapes.shape_violations (tests/test_contract_shape_vectors.py) and",
   "its Web twin shapeViolations in gbdraw/web/js/utils/contract-shape.js",
-  "(tests/web/contract-shape-vectors.test.mjs). Each vector checks value against shape, with",
+  "(tests/web/contract-shape.test.mjs). Each vector checks value against shape, with",
   "the named shapes of types, from the root path \"value\"; violations lists each {path, reason}",
   "in order, and reasons lists every reason code both checkers report. A reason never repeats",
   "the value. Only values JSON.parse and Python's json read alike are vectors; jsonDifferences",
   "lists the JSON texts the two read differently, with each checker's violations.",
   "spellings lists, for a literal with spellings, the name each value reads as (read; null when",
-  "none): Python's gbdraw.contract_shapes.read_spelling and the Web's readSpelling."
+  "none): Python's gbdraw.contract_shapes.read_spelling and the Web's readSpelling.",
+  "requestTypes lists values of a named type of the canonical request description",
+  "(gbdraw.session_request_codec.describe_canonical_request and the Web's generated",
+  "CANONICAL_REQUEST_DESCRIPTION), checked by both against that description's types."
  ],
  "types": {
   "Point": {
@@ -1455,6 +1458,77 @@
    },
    "value": "A-B",
    "read": "a_b"
+  }
+ ],
+ "requestTypes": [
+  {
+   "id": "annotation-color-name",
+   "type": "CanonicalAnnotationColor",
+   "value": "navy",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-name-in-another-case",
+   "type": "CanonicalAnnotationColor",
+   "value": "Navy",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-name-in-capitals",
+   "type": "CanonicalAnnotationColor",
+   "value": "RED",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-name-with-outer-spaces",
+   "type": "CanonicalAnnotationColor",
+   "value": " red ",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-short-hex-in-capitals",
+   "type": "CanonicalAnnotationColor",
+   "value": "#ABC",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-hex-with-outer-spaces",
+   "type": "CanonicalAnnotationColor",
+   "value": " #aabbcc ",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-unknown-name",
+   "type": "CanonicalAnnotationColor",
+   "value": "notacolor",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
+  },
+  {
+   "id": "annotation-color-hex-of-eight-digits",
+   "type": "CanonicalAnnotationColor",
+   "value": "#aabbccdd",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
+  },
+  {
+   "id": "annotation-color-name-with-inner-space",
+   "type": "CanonicalAnnotationColor",
+   "value": "dark blue",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
   }
  ]
 }

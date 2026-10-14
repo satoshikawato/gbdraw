@@ -1,6 +1,6 @@
 """The structural checker gives each shared vector's violations (tests/fixtures/contract_shape_vectors.json).
 
-The Web twin runs the same file: tests/web/contract-shape-vectors.test.mjs.
+The Web twin runs the same file: tests/web/contract-shape.test.mjs.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from typing import Any, get_args
 import pytest
 
 from gbdraw.contract_shapes import ViolationReason, read_spelling, shape_violations, violations
+from gbdraw.session_request_codec import describe_canonical_request
 
 VECTORS: dict[str, Any] = json.loads(
     (Path(__file__).resolve().parent / "fixtures" / "contract_shape_vectors.json").read_text(encoding="utf-8")
@@ -26,7 +27,10 @@ def _rows(value: object, shape: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def test_vector_ids_are_unique() -> None:
-    ids = [vector["id"] for vector in [*VECTORS["vectors"], *VECTORS["jsonDifferences"], *VECTORS["spellings"]]]
+    ids = [
+        vector["id"]
+        for vector in [*VECTORS["vectors"], *VECTORS["jsonDifferences"], *VECTORS["spellings"], *VECTORS["requestTypes"]]
+    ]
     assert len(ids) == len(set(ids))
 
 
@@ -50,6 +54,13 @@ def test_the_checker_reports_python_s_reading_of_a_json_difference(difference: d
 def test_a_literal_reads_each_spelling_as_its_name(vector: dict[str, Any]) -> None:
     shape = vector["shape"]
     assert read_spelling(vector["value"], shape["values"], shape["spellings"]) == vector["read"]
+
+
+@pytest.mark.parametrize("vector", VECTORS["requestTypes"], ids=lambda vector: vector["id"])
+def test_the_request_description_reports_the_vector_violations(vector: dict[str, Any]) -> None:
+    types = describe_canonical_request()["types"]
+    found = shape_violations(vector["value"], {"kind": "ref", "name": vector["type"]}, types, "value")
+    assert [{"path": problem.path, "reason": problem.reason} for problem in found] == vector["violations"]
 
 
 def test_a_message_names_the_expectation_and_never_the_value() -> None:

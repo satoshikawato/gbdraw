@@ -20,7 +20,8 @@ import { SHAPE_VIOLATION_REASONS, readSpelling, shapeViolations } from '../../gb
  * @typedef {{ id: string, shape: ContractShape, value: unknown, violations: Row[] }} Vector
  * @typedef {{ id: string, shape: ContractShape, text: string, python: Row[], web: Row[] }} JsonDifference
  * @typedef {{ id: string, shape: LiteralShape, value: unknown, read: string | null }} Spelling
- * @typedef {{ types: Record<string, ContractShape>, reasons: string[], vectors: Vector[], jsonDifferences: JsonDifference[], spellings: Spelling[] }} Vectors
+ * @typedef {{ id: string, type: string, value: unknown, violations: Row[] }} RequestTypeVector
+ * @typedef {{ types: Record<string, ContractShape>, reasons: string[], vectors: Vector[], jsonDifferences: JsonDifference[], spellings: Spelling[], requestTypes: RequestTypeVector[] }} Vectors
  */
 
 const REPO = new URL('../../', import.meta.url);
@@ -48,6 +49,14 @@ test('the Web reads each listed JSON difference as listed', () => {
 test('the Web reads each shared spelling as Python does', () => {
   for (const { id, shape, value, read } of VECTORS.spellings) {
     assert.equal(readSpelling(value, shape), read, id);
+  }
+});
+
+test('the generated request description reports each shared request-type vector as Python does', () => {
+  for (const { id, type, value, violations } of VECTORS.requestTypes) {
+    assert.deepEqual(
+      shapeViolations(value, { kind: 'ref', name: type }, CANONICAL_REQUEST_DESCRIPTION.types, 'value'), violations, id
+    );
   }
 });
 

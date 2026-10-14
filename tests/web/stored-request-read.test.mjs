@@ -112,14 +112,14 @@ test('a request of schema 5 to 8 is promoted once, with the Load context, withou
   assert.deepEqual(rows(blind), [{ code: 'request-part-dropped', path: 'renderRequest.layout.similarityAlignment' }]);
 });
 
-test('an annotation colour the decoder refuses takes its default; another spelling of a name reads as it (C-OD11)', () => {
+test('an annotation colour the decoder refuses takes its default; a name in any case is kept as stored (C-OD11, C-OD25)', () => {
   const session = gallery('tobacco-chloroplast');
   const result = readRequest(session, (request) => {
     const style = request.diagramOptions.annotations.sets[0].annotations[0].style;
     Object.assign(style, { stroke: 'valueTheDescriptionDoesNotName', fill: '#abcd', labelColor: ' Navy ' });
   });
   const style = result.value.diagramOptions.annotations.sets[0].annotations[0].style;
-  assert.deepEqual([style.stroke, style.fill, style.labelColor], ['#404040', null, 'navy']);
+  assert.deepEqual([style.stroke, style.fill, style.labelColor], ['#404040', null, ' Navy ']);
   const at = 'renderRequest.diagramOptions.annotations.sets[0].annotations[0].style';
   assert.deepEqual(rows(result), [
     { code: 'setting-replaced', path: `${at}.stroke`, used: '#404040' },
