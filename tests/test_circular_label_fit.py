@@ -302,6 +302,18 @@ def test_warn_search_stops_at_its_time_limit_and_computes_a_row_later(
     assert combination.values == {**{path: 13.0 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.075}
 
 
+def test_the_warning_names_the_search_bound_the_caller_passed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-708: a caller's bound (the Web passes 0 s) is the one the warning names, not the 5 s default."""
+
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
+    verify, _calls = _verifier(_p1_like)
+
+    with pytest.warns(LabelLeadersCrossWarning) as caught:
+        check_circular_label_fit([_layout("lambda", _p1_like, fit=CROSSES)], verify, warn_search_seconds=0.0)
+
+    assert str(caught[0].message).splitlines()[-1].startswith("Not searched within 0 s: ")
+
+
 def test_overlaps_compute_every_row_without_a_time_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = [0.0]
     monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])

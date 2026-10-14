@@ -569,8 +569,12 @@ def _first_line(report: LabelFitReport) -> str:
     return f"Labels do not fit: {listed}. {outcome}"
 
 
-def format_label_fit_report(report: LabelFitReport) -> str:
-    """The CLI and Python text of the error and the warning (OD-F5, OD-F8)."""
+def format_label_fit_report(report: LabelFitReport, *, search_seconds: float | None = None) -> str:
+    """The CLI and Python text of the error and the warning (OD-F5, OD-F8).
+
+    ``search_seconds`` is the bound the row search used (OV-708); by default
+    the warning's or the error's default bound.
+    """
 
     lines = [_first_line(report)]
     fitting = [(row, row.values) for row in report.rows if row.values is not None]
@@ -591,17 +595,21 @@ def format_label_fit_report(report: LabelFitReport) -> str:
     elif missing:
         lines.append("No single change of the label settings fits this map.")
     if skipped:
-        seconds = WARN_SEARCH_SECONDS if report.drawn else SWITCH_SEARCH_SECONDS
+        seconds = search_seconds
+        if seconds is None:
+            seconds = WARN_SEARCH_SECONDS if report.drawn else SWITCH_SEARCH_SECONDS
         lines.append(
             f"Not searched within {seconds:g} s: {_joined([_ROW_NAMES[kind] for kind in skipped])}."
         )
     return "\n".join(lines)
 
 
-def raise_or_warn(report: LabelFitReport, *, row_search: LabelFitRows | None = None) -> None:
+def raise_or_warn(
+    report: LabelFitReport, *, row_search: LabelFitRows | None = None, search_seconds: float | None = None
+) -> None:
     """Stop with ``LabelsDoNotFitError`` when nothing was drawn, else warn with the same words."""
 
-    message = format_label_fit_report(report)
+    message = format_label_fit_report(report, search_seconds=search_seconds)
     if not report.drawn:
         raise LabelsDoNotFitError(message, report=report, row_search=row_search)
     warnings.warn(LabelLeadersCrossWarning(message, report=report), stacklevel=4)
