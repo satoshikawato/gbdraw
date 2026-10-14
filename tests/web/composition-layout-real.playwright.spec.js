@@ -129,7 +129,7 @@ const inspectLiveComposition = async (page, key = addedLegendKey) => (
     // Zero shift: the Legend's recorded local bounds are the bounds the Legend
     // layout owner gives its rows (Python's layout), not its painted box.
     const { createLegendLayoutActions } = await import('./js/app/legend/layout-actions.js');
-    const legendLayout = createLegendLayoutActions();
+    const legendLayout = createLegendLayoutActions({ readRegisteredFontFaces: () => [] });
     await legendLayout.prepareLegendLayout();
     const laidOut = svg.getElementById('legend')
       ? legendLayout.layOutLegend(new DOMParser().parseFromString(

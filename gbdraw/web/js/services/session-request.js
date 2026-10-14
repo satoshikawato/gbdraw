@@ -877,37 +877,29 @@ export const draftFieldsForConfigValues = (values, mode, adv) => {
   return { form: formFields, adv: advFields };
 };
 
-// Config leaves that a Session kept as GUI-unmanaged preserved overrides
-// (PD-OI-009) before the GUI had a setting for them, and that setting's `adv`
-// key. A reader moves each into its setting, so a preserved override is never
-// a path the GUI manages.
-const PROMOTED_PRESERVED_OVERRIDES = Object.freeze({
-  [CONFIG_OVERRIDE_PATHS.fontFamily]: 'font_family'
-});
+// The font leaf that a Session kept as a GUI-unmanaged preserved override
+// (PD-OI-009) before the GUI had a Font setting. A reader moves it into
+// `adv.font_family`, so a preserved override is never a path the GUI manages.
+const PROMOTED_FONT_FAMILY_PATH = CONFIG_OVERRIDE_PATHS.fontFamily;
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isPlainRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 /**
  * A stored draft (`config` of a Session 27-44, or of a Session 46 slice) with
- * each promoted preserved override moved into its setting. A setting the draft
+ * the preserved font override moved into the Font setting. A font the draft
  * already holds wins; the preserved leaf is dropped either way.
  * @template T
  * @param {T} config
  * @returns {T}
  */
 export const adoptPromotedPreservedOverrides = (config) => {
-  if (!isPlainRecord(config) || !isPlainRecord(config.unmanagedConfigOverrides)) return config;
-  const preserved = { ...config.unmanagedConfigOverrides };
+  if (!isPlainRecord(config) || !isPlainRecord(config.unmanagedConfigOverrides)
+    || !Object.hasOwn(config.unmanagedConfigOverrides, PROMOTED_FONT_FAMILY_PATH)) return config;
+  const { [PROMOTED_FONT_FAMILY_PATH]: fontFamily, ...preserved } = config.unmanagedConfigOverrides;
   const adv = isPlainRecord(config.adv) ? { ...config.adv } : {};
-  let moved = false;
-  for (const [path, key] of Object.entries(PROMOTED_PRESERVED_OVERRIDES)) {
-    if (!Object.hasOwn(preserved, path)) continue;
-    if (adv[key] === undefined || adv[key] === null) adv[key] = preserved[path];
-    delete preserved[path];
-    moved = true;
-  }
-  return moved ? /** @type {T} */ ({ ...config, adv, unmanagedConfigOverrides: preserved }) : config;
+  adv.font_family ??= fontFamily;
+  return /** @type {T} */ ({ ...config, adv, unmanagedConfigOverrides: preserved });
 };
 
 /** @param {string} semanticName */

@@ -4534,12 +4534,12 @@
 
                 <div v-settings-section="'font'" class="card">
                     <details>
-                        <summary aria-label="Font"><settings-section-title section="font"></settings-section-title> <help-tip text="The font of all diagram text: labels, titles, legend, and scale."></help-tip></summary>
+                        <summary aria-label="Font"><settings-section-title section="font"></settings-section-title> <help-tip id="help-font-family" text="The font of all diagram text: labels, titles, legend, and scale."></help-tip></summary>
                         <p class="apply-note mt-2" data-applies-on-generate="font"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <label class="block">
                                 <span class="input-label text-[10px] mb-1">Font</span>
-                                <select v-model="fontSettings.selectedChoice.value" class="form-select form-input-compact" aria-label="Font" data-font-select
+                                <select v-model="fontSettings.selectedChoice.value" class="form-select form-input-compact" aria-label="Font" aria-describedby="help-font-family" data-font-select
                                     :disabled="!semanticMutationAvailable || fontSettings.loading.value"
                                     @change="$event.target.value === 'load-file' ? ($event.target.value = fontSettings.selectedChoice.value, fontSettings.loadFontFile())
                                         : $event.target.value === 'installed' ? ($event.target.value = fontSettings.selectedChoice.value, fontSettings.openInstalledFonts()) : null">

@@ -28,6 +28,9 @@ await copyModule('gbdraw/web/js/services/result-paint-bases.js', 'services/resul
 await copyModule('gbdraw/web/js/services/svg-transform.js', 'services/svg-transform.js');
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
 await copyModule('gbdraw/web/js/services/label-fit.js', 'services/label-fit.js');
+await copyModule('gbdraw/web/js/services/font-store.js', 'services/font-store.js');
+await copyModule('gbdraw/web/js/services/font-families.js', 'services/font-families.js');
+await copyModule('gbdraw/web/js/utils/font-family-rules.generated.js', 'utils/font-family-rules.generated.js');
 await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schema.generated.js');
 await copyModule('gbdraw/web/js/services/bounded-json-transport.js', 'services/bounded-json-transport.js');
 await copyModule(

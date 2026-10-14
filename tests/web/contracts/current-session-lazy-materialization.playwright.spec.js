@@ -1219,6 +1219,9 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect(worker.constructions).toBe(1);
   expect(worker.initializations).toBe(1);
   expect(worker.helpers).toBeGreaterThanOrEqual(1);
+  // No font is loaded, so no request reaches the Worker for fonts.
+  expect(worker.instances[0].helpers.map(({ operation }) => operation)
+    .filter((operation) => ['registerFonts', 'embedFonts', 'pdfFonts'].includes(operation))).toEqual([]);
   // Two Generates, and the automatic rerender of the color edit, which adds a
   // Legend row (OV-42, OV-43, #857).
   expect(generated.runsAfterEdit).toBe(3);
