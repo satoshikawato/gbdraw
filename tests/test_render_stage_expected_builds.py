@@ -81,9 +81,6 @@ P1_P2_OPTIONS: Mapping[str, frozenset[str]] = {
 _LEGEND = frozenset({"legend_table", "legend_measurement", "legend_content"})
 _LEGEND_LAYOUT = frozenset({"legend_measurement", "legend_content"})
 _TITLE = frozenset({"plot_title_content"})
-# The composition plan is keyed by the bounds of the primary content, the
-# legend and the title, which every P1 or P2 option may move.
-_COMPOSITION = frozenset({"composition_plan"})
 _FEATURE_PLACEMENT = frozenset({"feature_layers", "feature_dom_index"})
 _LABEL_FILTER = _FEATURE_PLACEMENT | {"label_filter_maps"}
 _FEATURE_EDIT = _FEATURE_PLACEMENT | _LEGEND | {"catalog_normalization", "interactive_context"}
@@ -184,15 +181,43 @@ _RIBBON_INPUTS = frozenset({"feature_dom_index", "gc_content_content", "depth_co
 _CATALOG_INPUTS = frozenset({"record_content", "annotation_content", "comparison_content", "interactive_context"})
 
 
+# The composition plan is keyed by the bounds of the primary content, the
+# legend and the title, and by their placements. These stages hold those bounds.
+_BOUNDS_STAGES = (
+    _LEGEND_LAYOUT
+    | _TITLE
+    | _FEATURE_PLACEMENT
+    | _DEPTH_DATA
+    | {
+        "record_content", "gc_content_content", "gc_skew_content", "annotation_content", "definition_content",
+        "length_bar_content", "comparison_content",
+    }
+)
+# The options the composition request reads without a stage: the placements, and
+# the Circular definition text, which the primary bounds hold (no Circular content
+# stage holds it before PR 4).
+_COMPOSITION_INPUTS = frozenset({"legend", "plot_title_position", "species (no plot title)", "strain (no plot title)"})
+# Options that reshape a mark inside the box its content measures. With a paint
+# option (its ID ends in ``_color``) they move no bound, so the plan must be a hit.
+_MARK_SHAPE_OPTIONS = frozenset({"arrow_head_length_ratio", "arrow_shaft_width_ratio", "pairwise_match_style"})
+
+
+def _moves_bounds(option_id: str, allowed: frozenset[str]) -> bool:
+    if option_id.endswith("_color") or option_id in _MARK_SHAPE_OPTIONS:
+        return False
+    return option_id in _COMPOSITION_INPUTS or bool(allowed & _BOUNDS_STAGES)
+
+
 def allowed_builds(option_id: str) -> frozenset[str]:
     allowed = (
         EXPECTED_BUILDS.get(option_id, frozenset())
         | CONTENT_BUILDS.get(option_id, frozenset())
         | (frozenset({"record_content"}) if option_id in _RECORD_CONTENT_OPTIONS else frozenset())
-        | _COMPOSITION
     )
     if allowed & _RIBBON_INPUTS:
         allowed |= {"comparison_content"}
+    if _moves_bounds(option_id, allowed):
+        allowed |= {"composition_plan"}
     return allowed | ({"catalog_item"} if allowed & _CATALOG_INPUTS else frozenset())
 
 
