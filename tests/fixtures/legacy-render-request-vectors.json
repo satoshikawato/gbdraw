@@ -1,5 +1,5 @@
 {
- "description": "Request schemas 1 and 2 (Sessions 31-33), read by the Web lift (gbdraw/web/js/services/legacy-render-request.js) and Python's decoder (gbdraw/session_request_codec.py). `requests`: every distinct schema 1/2 renderRequest stored in a Gallery Session of first-parent main history, as stored, with every commit/path/blob that holds it; sha256 is the SHA-256 of JSON.stringify(renderRequest). `fixtureReferences`: the committed (33, 2) Session fixtures. `cases`: forms the corpus does not hold, each a corpus request with `edits` (set or delete at a key path), the lift's expected `values`, `absent` paths and repair rows, and `python`: equal: true when Python decodes the edited request and its lift to the same request, or the finding and reason of a deliberate difference. Provenance: tests/fixtures/sessions/README.md.",
+ "description": "Request schemas 1 and 2 (Sessions 31-33), read by the Web lift (gbdraw/web/js/services/legacy-render-request.js) and Python's decoder (gbdraw/session_request_codec.py). `requests`: every distinct schema 1/2 renderRequest stored in a Gallery Session of first-parent main history, as stored, with every commit/path/blob that holds it; sha256 is the SHA-256 of JSON.stringify(renderRequest). `fixtureReferences`: the committed (33, 2) Session fixtures. `cases`: forms the corpus does not hold, each a corpus request with `edits` (set or delete at a key path), the lift's expected `values`, `absent` paths and repair rows, and `python`: equal: true when Python decodes the edited request and its lift to the same request, the finding and reason of a deliberate difference, or refused: true and the reason when Python refuses both (the lift leaves the form to the reader). Provenance: tests/fixtures/sessions/README.md.",
  "requests": [
   {
    "id": "BGC0000708-BGC0000713@10d3a3d2",
@@ -20655,6 +20655,654 @@
    },
    "python": {
     "equal": true
+   }
+  },
+  {
+   "id": "linear-dotted-legacy-values",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "config"
+     ],
+     "delete": true
+    },
+    {
+     "path": [
+      "diagramOptions",
+      "configOverrides"
+     ],
+     "value": {
+      "labels.linear.placement": "on_feature",
+      "canvas.linear.track_layout": "tuckin"
+     }
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "configOverrides",
+       "labels.linear.placement"
+      ],
+      "above_feature"
+     ],
+     [
+      [
+       "diagramOptions",
+       "configOverrides",
+       "canvas.linear.track_layout"
+      ],
+      "below"
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": false,
+    "finding": "OV-795",
+    "reason": "dotted-path Linear tokens: the Web read the retired values on canonical paths too; Python rewrites only the flat names and refuses the stored request"
+   }
+  },
+  {
+   "id": "b17-overrides-both-names",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "config"
+     ],
+     "delete": true
+    },
+    {
+     "path": [
+      "diagramOptions",
+      "configOverrides"
+     ],
+     "value": {
+      "comparison_height": "tall",
+      "canvas.linear.comparison_height": 40
+     }
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "configOverrides",
+       "canvas.linear.comparison_height"
+      ],
+      40
+     ]
+    ],
+    "absent": [
+     [
+      "diagramOptions",
+      "configOverrides",
+      "comparison_height"
+     ]
+    ],
+    "repairs": [
+     {
+      "code": "setting-replaced",
+      "path": "renderRequest.diagramOptions.configOverrides.comparison_height",
+      "effect": "dropped",
+      "stored": "tall"
+     }
+    ]
+   },
+   "python": {
+    "equal": false,
+    "finding": "OV-795",
+    "reason": "both names: Python refuses the stored request; the Web drops the invalid flat height with a row (B17) and keeps the canonical one"
+   }
+  },
+  {
+   "id": "b17-overrides-canonical",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "config"
+     ],
+     "delete": true
+    },
+    {
+     "path": [
+      "diagramOptions",
+      "configOverrides"
+     ],
+     "value": {
+      "canvas.linear.comparison_height": 0
+     }
+    }
+   ],
+   "expect": {
+    "absent": [
+     [
+      "diagramOptions",
+      "configOverrides",
+      "canvas.linear.comparison_height"
+     ]
+    ],
+    "repairs": [
+     {
+      "code": "setting-replaced",
+      "path": "renderRequest.diagramOptions.configOverrides.canvas.linear.comparison_height",
+      "effect": "dropped",
+      "stored": "0"
+     }
+    ]
+   },
+   "python": {
+    "equal": false,
+    "finding": "B17",
+    "reason": "the Web drew a stored height Python now refuses (D-OD05); the lift drops it with a row"
+   }
+  },
+  {
+   "id": "circular-keeps-linear-values",
+   "base": "HmmtDNA_basic_circular@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "config"
+     ],
+     "delete": true
+    },
+    {
+     "path": [
+      "diagramOptions",
+      "configOverrides"
+     ],
+     "value": {
+      "label_placement": "on_feature",
+      "linear_track_layout": "spreadout"
+     }
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "configOverrides",
+       "label_placement"
+      ],
+      "on_feature"
+     ],
+     [
+      [
+       "diagramOptions",
+       "configOverrides",
+       "linear_track_layout"
+      ],
+      "spreadout"
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "refused": true,
+    "reason": "Python reads Linear tokens only in a Linear request and refuses these values in both; the Web's Load check refuses them too"
+   }
+  },
+  {
+   "id": "linear-layout-schema-2",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "layout"
+     ],
+     "value": {
+      "recordGapPx": 48,
+      "multiRecordPositions": [
+       "#1@1"
+      ]
+     }
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "layout"
+      ],
+      {
+       "recordGapPx": 48,
+       "multiRecordPositions": [
+        "#1@1"
+       ]
+      }
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": true
+   }
+  },
+  {
+   "id": "b17-full-config-canonical-override",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "config",
+      "canvas",
+      "linear",
+      "comparison_height"
+     ],
+     "value": 0
+    },
+    {
+     "path": [
+      "diagramOptions",
+      "configOverrides"
+     ],
+     "value": {
+      "canvas.linear.comparison_height": 40
+     }
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "config",
+       "canvas",
+       "linear",
+       "comparison_height"
+      ],
+      60
+     ],
+     [
+      [
+       "diagramOptions",
+       "configOverrides",
+       "canvas.linear.comparison_height"
+      ],
+      40
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": false,
+    "finding": "B17",
+    "reason": "Python refuses the stored full config; the lift writes the default without a row, since the override's height is the one drawn"
+   }
+  },
+  {
+   "id": "b17-full-config-flat-override",
+   "base": "lambda_basic_linear@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "config",
+      "canvas",
+      "linear",
+      "comparison_height"
+     ],
+     "value": "tall"
+    },
+    {
+     "path": [
+      "diagramOptions",
+      "configOverrides"
+     ],
+     "value": {
+      "comparison_height": 40
+     }
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "config",
+       "canvas",
+       "linear",
+       "comparison_height"
+      ],
+      60
+     ],
+     [
+      [
+       "diagramOptions",
+       "configOverrides",
+       "comparison_height"
+      ],
+      40
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": false,
+    "finding": "B17",
+    "reason": "Python refuses the stored full config; the lift writes the default without a row, since the override's height is the one drawn"
+   }
+  },
+  {
+   "id": "spacing-object-structured-factor-zero",
+   "base": "WSSV_genome_comparison@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      1,
+      "spacing"
+     ],
+     "value": {
+      "value": 0,
+      "unit": "factor"
+     }
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       1,
+       "innerGapPx"
+      ],
+      0
+     ],
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       1,
+       "outerGapPx"
+      ],
+      0
+     ]
+    ],
+    "absent": [
+     [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      1,
+      "spacing"
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": true
+   }
+  },
+  {
+   "id": "spacing-string-unitless-zero",
+   "base": "tobacco-chloroplast@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      2
+     ],
+     "value": "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,spacing=0"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       2
+      ],
+      "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,inner_gap_px=0,outer_gap_px=0"
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": true
+   }
+  },
+  {
+   "id": "spacing-string-private-param",
+   "base": "tobacco-chloroplast@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      2
+     ],
+     "value": "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,__gbdraw_legacy_spacing=5"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       2
+      ],
+      "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,inner_gap_px=5,outer_gap_px=5"
+     ]
+    ],
+    "repairs": [
+     {
+      "code": "setting-replaced",
+      "path": "renderRequest.diagramOptions.tracks.circularTrackSlots[2]",
+      "effect": "changed",
+      "stored": "__gbdraw_legacy_spacing=5",
+      "used": "5 px"
+     }
+    ]
+   },
+   "python": {
+    "equal": false,
+    "finding": "OV-798",
+    "reason": "Python reads a slot spacing without a unit as a multiple of the axis radius; no current schema holds one, and the lift keeps the Web's reading (pixels, or dropped for a structured factor) with a row"
+   }
+  },
+  {
+   "id": "spacing-string-private-param-px",
+   "base": "tobacco-chloroplast@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      2
+     ],
+     "value": "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,__gbdraw_legacy_spacing=4px"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       2
+      ],
+      "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,inner_gap_px=4px,outer_gap_px=4px"
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": true
+   }
+  },
+  {
+   "id": "spacing-string-private-param-zero",
+   "base": "tobacco-chloroplast@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      2
+     ],
+     "value": "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,__gbdraw_legacy_spacing=0"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       2
+      ],
+      "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,inner_gap_px=0,outer_gap_px=0"
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": true
+   }
+  },
+  {
+   "id": "spacing-string-repeated-key",
+   "base": "tobacco-chloroplast@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      2
+     ],
+     "value": "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,spacing=4px,spacing=5"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       2
+      ],
+      "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,inner_gap_px=5,outer_gap_px=5"
+     ]
+    ],
+    "repairs": [
+     {
+      "code": "setting-replaced",
+      "path": "renderRequest.diagramOptions.tracks.circularTrackSlots[2]",
+      "effect": "changed",
+      "stored": "spacing=5",
+      "used": "5 px"
+     }
+    ]
+   },
+   "python": {
+    "equal": false,
+    "finding": "OV-798",
+    "reason": "Python reads a slot spacing without a unit as a multiple of the axis radius; no current schema holds one, and the lift keeps the Web's reading (pixels, or dropped for a structured factor) with a row"
+   }
+  },
+  {
+   "id": "spacing-string-repeated-key-px-last",
+   "base": "tobacco-chloroplast@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      2
+     ],
+     "value": "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,spacing=5,spacing=4px"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       2
+      ],
+      "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,inner_gap_px=4px,outer_gap_px=4px"
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": true
+   }
+  },
+  {
+   "id": "spacing-string-key-case",
+   "base": "tobacco-chloroplast@6b89c781",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "tracks",
+      "circularTrackSlots",
+      2
+     ],
+     "value": "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,SPACING=5"
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "tracks",
+       "circularTrackSlots",
+       2
+      ],
+      "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,inner_gap_px=5,outer_gap_px=5"
+     ]
+    ],
+    "repairs": [
+     {
+      "code": "setting-replaced",
+      "path": "renderRequest.diagramOptions.tracks.circularTrackSlots[2]",
+      "effect": "changed",
+      "stored": "SPACING=5",
+      "used": "5 px"
+     }
+    ]
+   },
+   "python": {
+    "equal": false,
+    "finding": "OV-798",
+    "reason": "Python reads a slot spacing without a unit as a multiple of the axis radius; no current schema holds one, and the lift keeps the Web's reading (pixels, or dropped for a structured factor) with a row"
    }
   }
  ]

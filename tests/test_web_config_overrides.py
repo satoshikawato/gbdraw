@@ -7,6 +7,7 @@ import pytest
 from gbdraw.api.config import load_default_config
 from gbdraw.exceptions import ValidationError
 from gbdraw.web_support.config_overrides import (
+    validate_and_project_stored_request_config_overrides,
     validate_and_project_web_config_overrides,
     validate_web_config_overrides_json,
 )
@@ -203,7 +204,7 @@ def test_stored_full_config_is_read_as_the_request_decoder_reads_it(mode):
     legacy = _legacy_label_config()
     migrated = migrate_legacy_full_config(legacy, mode=mode, path="diagramOptions.config")
     assert "show_labels" not in migrated["canvas"]
-    projected = validate_and_project_web_config_overrides(mode=mode, config=legacy, managed_paths=[])
+    projected = validate_and_project_stored_request_config_overrides(mode=mode, config=legacy, managed_paths=[])
     assert projected == validate_and_project_web_config_overrides(
         mode=mode, config=migrated, managed_paths=[]
     )
@@ -221,7 +222,7 @@ def test_stored_full_config_with_conflicting_label_values_is_refused():
         "code": "VALIDATION_UNCLASSIFIED", "operation": "validateConfigOverrides", "stage": "helper", "context": {},
     }
     with pytest.raises(ValidationError, match="diagramOptions.config.canvas contains conflicting Circular label values"):
-        validate_and_project_web_config_overrides(mode="circular", config=legacy, managed_paths=[])
+        validate_and_project_stored_request_config_overrides(mode="circular", config=legacy, managed_paths=[])
 
 
 @pytest.mark.parametrize(
@@ -235,10 +236,30 @@ def test_stored_full_config_with_conflicting_label_values_is_refused():
 def test_flat_override_names_are_read_as_the_request_decoder_reads_them(mode, flat, canonical):
     # The Load check reads persisted flat override names with the decoder's
     # migration (OV-799), as decode_canonical_request does at every schema.
-    assert validate_and_project_web_config_overrides(mode=mode, overrides=flat, managed_paths=[]) == (
+    assert validate_and_project_stored_request_config_overrides(mode=mode, overrides=flat, managed_paths=[]) == (
         validate_and_project_web_config_overrides(mode=mode, overrides=canonical, managed_paths=[])
     )
     with pytest.raises(ValidationError, match="cannot contain both"):
-        validate_and_project_web_config_overrides(
+        validate_and_project_stored_request_config_overrides(
             mode=mode, overrides={**flat, **{path: "other" for path in canonical}}, managed_paths=[],
         )
+
+
+@pytest.mark.parametrize(
+    ("flat", "managed"),
+    [({"gc_stroke_color": "red"}, []), ({"label_blacklist": "foo,bar"}, ["labels.filtering.blacklist_keywords"])],
+)
+def test_a_draft_check_reads_no_flat_override_name(flat, managed):
+    # Only a stored request's check reads flat names (OV-799, D-OD11); the
+    # check of a draft's unmanaged overrides keeps its reading and its error.
+    draft = json.loads(validate_web_config_overrides_json(
+        "circular", "null", json.dumps(flat), json.dumps(managed), True,
+    ))
+    assert draft["error"] == {
+        "code": "INPUT_INVALID", "operation": "validateConfigOverrides", "stage": "helper",
+        "context": {"field": "configOverrides", "reason": "UNKNOWN_CONFIG_PATH"},
+    }
+    with pytest.raises(ValidationError, match="Unknown config override path"):
+        validate_and_project_web_config_overrides(mode="circular", overrides=flat, managed_paths=managed)
+    stored = json.loads(validate_web_config_overrides_json("circular", "null", json.dumps({"gc_stroke_color": "red"}), "[]"))
+    assert stored == {"overrides": {"objects.gc_content.stroke_color": "red"}}

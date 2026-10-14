@@ -80,14 +80,8 @@ def validate_and_project_web_config_overrides(
     # Web Load checks a stored request, which reads a scale interval <= 0 as automatic.
     stored = with_automatic_scale_interval({"config": config, "configOverrides": overrides})
     config, overrides = stored["config"], stored["configOverrides"]
-    # It reads a stored full config as the request decoder reads it (OV-790).
-    if isinstance(config, Mapping):
-        config = migrate_legacy_full_config(config, mode=mode, path="diagramOptions.config")
     if overrides is not None and not isinstance(overrides, Mapping):
         raise ValidationError("diagramOptions.configOverrides must be an object or null.")
-    # ... and its flat (persisted) override names as the decoder reads them (OV-799).
-    if overrides is not None:
-        overrides = migrate_flat_config_overrides(overrides, mode=mode, path="diagramOptions.configOverrides")
     if managed_paths is None:
         managed_paths = []
     if not isinstance(managed_paths, list) or not all(
@@ -173,6 +167,31 @@ def validate_and_project_web_config_overrides(
     return projected
 
 
+def validate_and_project_stored_request_config_overrides(
+    *,
+    mode: Literal["circular", "linear"],
+    config: object = None,
+    overrides: object = None,
+    managed_paths: object = None,
+) -> dict[str, object]:
+    """The check of a stored request's ``diagramOptions``, as the decoder reads them.
+
+    The decoder's migrations read the stored full config (OV-790) and the flat
+    (persisted) override names (OV-799) first. A draft's unmanaged overrides
+    and Python's Session reader use ``validate_and_project_web_config_overrides``
+    without them (D-OD11).
+    """
+
+    if mode in {"circular", "linear"}:
+        if isinstance(config, Mapping):
+            config = migrate_legacy_full_config(config, mode=mode, path="diagramOptions.config")
+        if isinstance(overrides, Mapping):
+            overrides = migrate_flat_config_overrides(overrides, mode=mode, path="diagramOptions.configOverrides")
+    return validate_and_project_web_config_overrides(
+        mode=mode, config=config, overrides=overrides, managed_paths=managed_paths
+    )
+
+
 def validate_web_config_overrides_json(
     mode: object,
     config_json: object,
@@ -180,19 +199,27 @@ def validate_web_config_overrides_json(
     managed_paths_json: object,
     require_unmanaged_only: object = False,
 ) -> str:
-    """JSON boundary used by the existing diagram-Worker helper channel."""
+    """JSON boundary used by the existing diagram-Worker helper channel.
+
+    ``require_unmanaged_only`` marks the check of a draft's unmanaged
+    overrides; every other call checks a stored request's ``diagramOptions``.
+    """
 
     try:
         config = json.loads(str(config_json))
         overrides = json.loads(str(overrides_json))
         managed_paths = json.loads(str(managed_paths_json))
-        projected = validate_and_project_web_config_overrides(
-            # The function re-validates the mode and raises ValidationError.
-            mode=cast(Literal["circular", "linear"], str(mode)),
-            config=config,
-            overrides=overrides,
-            managed_paths=managed_paths,
-            require_unmanaged_only=bool(require_unmanaged_only),
+        # The functions re-validate the mode and raise ValidationError.
+        checked_mode = cast(Literal["circular", "linear"], str(mode))
+        projected = (
+            validate_and_project_web_config_overrides(
+                mode=checked_mode, config=config, overrides=overrides, managed_paths=managed_paths,
+                require_unmanaged_only=True,
+            )
+            if require_unmanaged_only
+            else validate_and_project_stored_request_config_overrides(
+                mode=checked_mode, config=config, overrides=overrides, managed_paths=managed_paths
+            )
         )
     except ValidationError as exc:
         return json.dumps({"error": serialize_web_error(exc, operation="validateConfigOverrides", stage="helper")}, ensure_ascii=False)
@@ -205,6 +232,7 @@ def validate_web_config_overrides_json(
 
 
 __all__ = [
+    "validate_and_project_stored_request_config_overrides",
     "validate_and_project_web_config_overrides",
     "validate_web_config_overrides_json",
 ]

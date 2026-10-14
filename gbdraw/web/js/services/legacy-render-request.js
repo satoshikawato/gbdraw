@@ -9,7 +9,7 @@
 import { LEGACY_REQUEST_TABLES } from '../contracts/schema.generated.js';
 import { loadRepair } from '../utils/load-repairs.js';
 import { classifyOptionalPositiveNumber, DECIMAL_NUMBER_PATTERN } from '../utils/optional-positive-number.js';
-import { migrateLegacyCircularTrackSlot, migrateLegacyCircularTrackSlotSpec } from './circular-track-slot-model.js';
+import { migrateLegacyCircularTrackSlot, readLegacyCircularTrackSlotSpec } from './circular-track-slot-model.js';
 import { parseOptionalPixel } from './track-slot-validation.js';
 
 /** @import { LoadRepair, Repaired } from '../utils/load-repairs.js' */
@@ -135,7 +135,8 @@ const liftConfigOverrides = (options, mode, repairs) => {
  * The Linear leaves of a stored full config the schema-5 reader requires in
  * their current form (A7: the two rewrites of Python's full-config
  * migration), and an invalid comparison height, which the config cannot
- * leave unset: its default is used (B17, F1).
+ * leave unset: its default is used (B17, F1), with a row unless a valid
+ * override of the leaf was drawn instead (N3).
  * @param {JsonObject} options
  * @param {LoadRepair[]} repairs
  */
@@ -149,10 +150,15 @@ const liftLinearFullConfig = (options, repairs) => {
   if (!canvas) return;
   if (Object.hasOwn(canvas, 'track_layout')) canvas.track_layout = renamedToken(canvas.track_layout, values.linear_track_layout);
   if (Object.hasOwn(canvas, 'comparison_height') && classifyOptionalPositiveNumber(canvas.comparison_height).status === 'invalid') {
-    repairs.push(loadRepair({
-      code: 'setting-replaced', path: `${OPTIONS_PATH}.config.canvas.linear.comparison_height`, effect: 'defaulted',
-      stored: excerpt(canvas.comparison_height)
-    }));
+    const overrides = isObject(options.configOverrides) ? options.configOverrides : {};
+    const overridden = ['comparison_height', ...LEGACY_REQUEST_TABLES.configOverridePaths.comparison_height]
+      .some((key) => Object.hasOwn(overrides, key) && classifyOptionalPositiveNumber(overrides[key]).status === 'valid');
+    if (!overridden) {
+      repairs.push(loadRepair({
+        code: 'setting-replaced', path: `${OPTIONS_PATH}.config.canvas.linear.comparison_height`, effect: 'defaulted',
+        stored: excerpt(canvas.comparison_height)
+      }));
+    }
     canvas.comparison_height = LEGACY_REQUEST_TABLES.comparisonHeightDefault;
   }
 };
@@ -174,6 +180,9 @@ const legacyPixel = (value) => {
 };
 
 const PRIVATE_SPACING = '__gbdraw_legacy_spacing';
+// A slot's legacy spacing, in both forms: its `spacing`, else the private
+// spacing parameter Python's decoder read (N2, N3).
+const LEGACY_SPACING_KEYS = ['spacing', PRIVATE_SPACING];
 const GAP_NAMES = [['inner_gap_px', 'innerGapPx'], ['outer_gap_px', 'outerGapPx']];
 const GAP_KEYS = new Set(GAP_NAMES.flat());
 
@@ -189,6 +198,12 @@ const spacingUnit = (value) => {
   if (typeof value === 'number') return 'unitless';
   return typeof value === 'string' && DECIMAL_NUMBER_PATTERN.test(value.trim()) ? 'unitless' : 'other';
 };
+
+/**
+ * A factor spacing of 0: no gap, read as 0 px with no row (N4).
+ * @param {unknown} value
+ */
+const isZeroFactor = (value) => isObject(value) && spacingUnit(value) === 'factor' && legacyPixel({ ...value, unit: 'px' }) === 0;
 
 /**
  * The row of a legacy spacing read with another meaning (OV-798): a
@@ -225,6 +240,7 @@ const liftCircularObjectSlot = (slot, at, repairs) => {
     source = { ...slot, spacing, params };
     spacingPath = `${at}.params.${PRIVATE_SPACING}`;
   }
+  if (isZeroFactor(source.spacing)) source = { ...source, spacing: 0 };
   const gapUnset = isUnset(source.innerGapPx ?? source.inner_gap_px) || isUnset(source.outerGapPx ?? source.outer_gap_px);
   const repair = isUnset(source.spacing) || !gapUnset ? null : spacingRepair(source.spacing, spacingPath, excerpt(source.spacing));
   if (spacingUnit(source.spacing) === 'factor') source = { ...source, spacing: null };
@@ -245,20 +261,18 @@ const liftCircularObjectSlot = (slot, at, repairs) => {
 };
 
 /**
- * A Circular string slot under current tokens (A9), with the row of a
- * legacy spacing token without a unit (OV-798).
+ * A Circular string slot under current tokens (A9), its legacy spacing read
+ * as the object form reads it (N2), with the row of the spacing token the
+ * parser consumed when it has no unit (OV-798).
  * @param {unknown} spec
  * @param {string} at its path in the file
  * @param {LoadRepair[]} repairs
  */
 const liftCircularStringSlot = (spec, at, repairs) => {
-  const options = String(spec ?? '').split('@').slice(1).join('@').split(',')
-    .map((token) => token.split('=').map((part) => part.trim()));
-  const spacing = options.find(([key]) => key.toLowerCase() === 'spacing')?.[1];
-  const gapUnset = ['inner_gap_px', 'outer_gap_px'].some((name) => !options.some(([key]) => key.toLowerCase() === name));
-  const repair = spacing && gapUnset ? spacingRepair(spacing, at, `spacing=${spacing}`) : null;
+  const { spec: lifted, spacing } = readLegacyCircularTrackSlotSpec(spec, LEGACY_SPACING_KEYS);
+  const repair = spacing?.filled ? spacingRepair(spacing.value, at, spacing.stored) : null;
   if (repair) repairs.push(repair);
-  return migrateLegacyCircularTrackSlotSpec(spec);
+  return lifted;
 };
 
 /**

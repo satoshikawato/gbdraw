@@ -1369,13 +1369,6 @@ test('a History restore reads a blank as the reader\'s default, other values as 
   assert.equal(drawing.losatProgram.value, 'blastn');
 });
 
-// G3: every Gallery Session and every Session fixture loads without a repair;
-// a repair there is a producer bug. Two fixtures are lossy on purpose. Node
-// supplies no diagram Worker: a Session older than 40 reads its features again
-// through it, so eight fixtures list that recovery here (and only because the
-// Worker is missing: each asks for it). The browser specs load them (OV-751):
-// gui-audit-20260930-inputs and live-generate-parity assert no dialog for
-// seven; session-loading-feedback answers the one table row of
 // Request schemas 1 and 2 (PR-D): an invalid Linear comparison height of the
 // stored full config is replaced by its default and listed (B17, F1), on the
 // direct read of a schema-1 Session and on the Gallery promotion of a schema-2
@@ -1405,6 +1398,26 @@ test('a flat configuration override name of a schema-1 request loads as the deco
   assert.equal(state.drawings.circular.form.suppress_gc, true);
 });
 
+// Only a stored request is read with the decoder's flat names (D-OD11): a
+// draft's unmanaged overrides keep the base check and its error.
+test('a flat override name in a draft is refused as before (OV-799)', async () => {
+  for (const [overrides, reason] of [[{ gc_stroke_color: 'red' }, 'UNKNOWN_CONFIG_PATH'], [{ label_blacklist: 'foo,bar' }, 'UNKNOWN_CONFIG_PATH']]) {
+    const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+    session.modes.circular.config.unmanagedConfigOverrides = overrides;
+    const refused = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(refused.status, 'error', JSON.stringify(overrides));
+    assert.deepEqual([refused.error.code, refused.error.context?.field, refused.error.context?.reason],
+      ['INPUT_INVALID', 'configOverrides', reason], JSON.stringify(refused.error));
+  }
+});
+
+// G3: every Gallery Session and every Session fixture loads without a repair;
+// a repair there is a producer bug. Two fixtures are lossy on purpose. Node
+// supplies no diagram Worker: a Session older than 40 reads its features again
+// through it, so eight fixtures list that recovery here (and only because the
+// Worker is missing: each asks for it). The browser specs load them (OV-751):
+// gui-audit-20260930-inputs and live-generate-parity assert no dialog for
+// seven; session-loading-feedback answers the one table row of
 // whitelist-tab-keyword.v39. Five fixtures need a Worker service to load at
 // all; feature-identity-overrides and gui-audit-20260930-comparisons load them.
 const LOSSY_FIXTURES = {

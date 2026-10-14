@@ -156,6 +156,11 @@ def test_each_vector_request_decodes_as_its_lift(
     assert [lift["id"] for lift in lifts["cases"]] == [case["id"] for case in vectors["cases"]]
     for case, lift in zip(vectors["cases"], lifts["cases"]):
         stored, lifted = decoded(lift["input"]), decoded(lift["value"])
+        if case["python"].get("refused"):
+            # A form both runtimes refuse: the lift leaves it to the reader.
+            assert case["python"]["reason"], case["id"]
+            assert stored.startswith("refused") and lifted.startswith("refused"), case["id"]
+            continue
         assert not lifted.startswith("refused"), (case["id"], lifted)
         if case["python"]["equal"]:
             assert lifted == stored, case["id"]
