@@ -12,7 +12,7 @@ import { caseRequest, readVectors, valueAt } from './helpers/legacy-request-vect
 import { liftLegacyRenderRequest } from '../../gbdraw/web/js/services/legacy-render-request.js';
 import {
   projectCanonicalSessionRequest,
-  promoteCanonicalRenderRequestToCurrent
+  readStoredRenderRequest
 } from '../../gbdraw/web/js/services/session-request.js';
 import { loadRepair } from '../../gbdraw/web/js/utils/load-repairs.js';
 
@@ -22,6 +22,23 @@ const gunzipped = (name) => JSON.parse(gunzipSync(readFileSync(new URL(name, SES
 const vectors = readVectors(new URL('../fixtures/legacy-render-request-vectors.json', import.meta.url));
 const corpus = vectors;
 const bgcSession = gunzipped('BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz');
+// Empty resources for every resource a request names.
+const resourcesOf = (renderRequest) => {
+  /** @type {Record<string, object>} */
+  const resources = {};
+  JSON.stringify(renderRequest, (key, value) => {
+    if (/resourceId$/i.test(key) && typeof value === 'string') {
+      resources[value] = { kind: 'canonical-tsv', name: `${value}.txt`, type: 'text/plain', size: 0, lastModified: 0, encoding: 'base64', data: '' };
+    }
+    return value;
+  });
+  return resources;
+};
+// The one reader of a stored request, as Load calls it (step (2) lifts).
+const readStored = (renderRequest, context = {}) => readStoredRenderRequest(renderRequest, {
+  featureCatalog: null, legacyOrthogroupState: null,
+  resourceIds: new Set(Object.keys(resourcesOf(renderRequest))), path: 'renderRequest', ...context
+});
 
 const request = ({ schema = 2, mode = 'linear', options = {}, ...rest } = {}) => ({
   schema,
@@ -78,6 +95,11 @@ test('forms the lift leaves to the reader stay as stored, with no row', () => {
 test('each arm case of the shared vector lifts to its expected values and rows', () => {
   assert.ok(vectors.cases.length >= 30, String(vectors.cases.length));
   for (const vectorCase of vectors.cases) {
+    if (vectorCase.expect.refused) {
+      // A field of a later schema: refused as the base refused it (D-OD13 F3).
+      assert.throws(() => liftLegacyRenderRequest(caseRequest(vectors, vectorCase)), vectorCase.expect.refused, vectorCase.id);
+      continue;
+    }
     const { value, repairs } = liftLegacyRenderRequest(caseRequest(vectors, vectorCase));
     const { values = [], absent = [], repairs: rows } = vectorCase.expect;
     for (const [path, expected] of values) assert.deepEqual(valueAt(value, path), expected, `${vectorCase.id}: ${path.join('.')}`);
@@ -87,7 +109,7 @@ test('each arm case of the shared vector lifts to its expected values and rows',
   }
 });
 
-test('each request of the corpus lifts without repairs to a request promoted to the current schema', () => {
+test('each request of the corpus lifts and reads without repairs to the current schema', () => {
   assert.equal(corpus.requests.length, 23);
   const promotion = {
     featureCatalog: bgcSession.editorState?.featureCatalog ?? null,
@@ -98,21 +120,20 @@ test('each request of the corpus lifts without repairs to a request promoted to 
     assert.deepEqual(repairs, [], id);
     assert.equal(value.schema, 5, id);
     assert.equal(liftLegacyRenderRequest(value).value, value, `${id}: a lifted request is not lifted again`);
-    assert.equal(promoteCanonicalRenderRequestToCurrent(value, /^BGC/.test(id) ? promotion : {}).schema, 9, id);
+    const read = readStored(renderRequest, /^BGC/.test(id) ? promotion : {});
+    assert.ok(!('kind' in read), `${id}: ${JSON.stringify(read)}`);
+    assert.deepEqual(read.repairs, [], id);
+    assert.equal(read.value.schema, 9, id);
   }
 });
 
 test('a full config whose small tick interval Python reads as unset projects as null (OV-791)', () => {
   const { renderRequest } = corpus.requests.find(({ id }) => id === 'lambda_basic_linear@10d3a3d2');
   assert.equal(renderRequest.diagramOptions.config.objects.gc_content.small_tick_interval, 'none');
-  /** @type {Record<string, object>} */
-  const resources = {};
-  JSON.stringify(renderRequest, (key, value) => {
-    if (/resourceId$/i.test(key) && typeof value === 'string') {
-      resources[value] = { kind: 'canonical-tsv', name: `${value}.txt`, type: 'text/plain', size: 0, lastModified: 0, encoding: 'base64', data: '' };
-    }
-    return value;
+  const read = readStored(renderRequest);
+  assert.ok(!('kind' in read));
+  const { config } = projectCanonicalSessionRequest({
+    renderRequest: read.value, resources: resourcesOf(renderRequest), deferResourceContent: true
   });
-  const { config } = projectCanonicalSessionRequest({ renderRequest, resources, deferResourceContent: true });
   assert.deepEqual([config.adv.gc_content_small_tick_interval, config.adv.depth_small_tick_interval], [null, null]);
 });

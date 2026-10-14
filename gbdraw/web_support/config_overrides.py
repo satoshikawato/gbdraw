@@ -192,20 +192,25 @@ def validate_and_project_stored_request_config_overrides(
     )
 
 
+_CONFIG_CHECK_SOURCES = ("draft", "storedRequest")
+
+
 def validate_web_config_overrides_json(
     mode: object,
     config_json: object,
     overrides_json: object,
     managed_paths_json: object,
-    require_unmanaged_only: object = False,
+    source: object = "storedRequest",
 ) -> str:
     """JSON boundary used by the existing diagram-Worker helper channel.
 
-    ``require_unmanaged_only`` marks the check of a draft's unmanaged
-    overrides; every other call checks a stored request's ``diagramOptions``.
+    ``source`` names the check: ``"draft"`` checks a draft's unmanaged
+    overrides, ``"storedRequest"`` a stored request's ``diagramOptions``.
     """
 
     try:
+        if source not in _CONFIG_CHECK_SOURCES:
+            raise ValidationError("Unknown configuration check.")
         config = json.loads(str(config_json))
         overrides = json.loads(str(overrides_json))
         managed_paths = json.loads(str(managed_paths_json))
@@ -216,7 +221,7 @@ def validate_web_config_overrides_json(
                 mode=checked_mode, config=config, overrides=overrides, managed_paths=managed_paths,
                 require_unmanaged_only=True,
             )
-            if require_unmanaged_only
+            if source == "draft"
             else validate_and_project_stored_request_config_overrides(
                 mode=checked_mode, config=config, overrides=overrides, managed_paths=managed_paths
             )

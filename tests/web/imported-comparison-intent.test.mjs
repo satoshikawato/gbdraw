@@ -326,10 +326,18 @@ const circular = classifyImportedComparisonIntent({
 });
 assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
 
-console.log('imported comparison intent tests passed');
+// OV-796 (PR-D): a schema-1 request is classified as its reader reads it,
+// through the lift, like the schema-2 re-save of the same Gallery entry.
+{
+  const { readFileSync } = await import('node:fs');
+  const { gunzipSync } = await import('node:zlib');
+  const session = JSON.parse(gunzipSync(readFileSync(new URL(
+    '../fixtures/sessions/lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', import.meta.url
+  ))));
+  assert.equal(session.renderRequest.schema, 1);
+  assert.equal(classifyImportedComparisonIntent({
+    renderRequest: session.renderRequest, resources: session.resources
+  }).disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
+}
 
-// A committed request Load kept as stored (schema 1) is no comparison owner.
-assert.throws(() => inheritCommittedComparisonIntent({
-  candidate: structuredClone(candidate),
-  committed: { ...committed, renderRequest: { ...committed.renderRequest, schema: 1 } }
-}), /Reload the Session/);
+console.log('imported comparison intent tests passed');

@@ -122,6 +122,7 @@ _EXACT = {
     "LOSATP blastp conversion payload must be an object with 'records' and 'pairs' lists.": ("HELPER_PROTOCOL", {"reason": "FIELDS"}),
     "LOSATP blastp conversion payload must contain 'records' and 'pairs' lists.": ("HELPER_PROTOCOL", {"reason": "FIELDS"}),
     "Unknown rule kind": ("HELPER_PROTOCOL", {}),
+    "Unknown configuration check.": ("HELPER_PROTOCOL", {}),
 }
 
 # Anchored producer templates; private interpolations are discarded, not shown.

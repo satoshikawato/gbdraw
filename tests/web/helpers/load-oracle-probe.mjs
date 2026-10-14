@@ -93,7 +93,7 @@ if p.get('migrateConfig') and isinstance(p.get('config'), dict):
     if hasattr(codec, '_migrate_legacy_full_config'):
         p['config'] = codec._migrate_legacy_full_config(p['config'], mode=p['mode'], path='renderRequest.diagramOptions.config')
 print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['requireUnmanagedOnly']))
+    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source'] if 'source' in p else p['requireUnmanagedOnly']))
 `], { input: JSON.stringify({ ...payload, migrateConfig: VALIDATOR_MODE === 'migrated' }), encoding: 'utf8', cwd: TREE }));
   validatorCalls.push({ mode: payload.mode, result: canon(result) });
   return { result };

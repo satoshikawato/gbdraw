@@ -4,11 +4,13 @@
 // `helpers/load-oracle-probe.mjs` for each full fixture, recorded in
 // `legacy-request-load.expected.json` as one SHA-256 per state area and saved
 // part. The committed request is recorded apart: a new reading changes it.
-// The record is the Load of PR-D: the lift and Load's configuration check
+// The record is the Load of PR-D: the one request reader lifting schemas 1
+// and 2 and promoting them to schema 9, and Load's configuration check
 // running the decoder's migration of a stored full config (OV-790). It equals
 // the base Load with that migration added, but for the differences the
-// hand-off of PR-D step D2 classes (no rows for Python's "none" small tick
-// interval, OV-791; schema-1 comparisons read as their schema-2 re-saves).
+// hand-offs of PR-D steps D2 and D3a class (no rows for Python's "none" small
+// tick interval, OV-791; schema-1 comparisons read as their schema-2
+// re-saves; the committed request of schema 9).
 //
 //   UPDATE_LEGACY_LOAD_EXPECTATIONS=1 node --test tests/web/legacy-request-sessions.test.mjs
 //

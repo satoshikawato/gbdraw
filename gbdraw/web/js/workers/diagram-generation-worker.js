@@ -615,7 +615,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'config',
       'configOverrides',
       'managedPaths',
-      'requireUnmanagedOnly'
+      'source'
     ],
     fileRoles: [],
     run: (pyodide, payload) => callJsonHelper(
@@ -626,7 +626,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         jsonArgument(payload.config, null),
         jsonArgument(payload.configOverrides, {}),
         jsonArgument(payload.managedPaths, []),
-        Boolean(payload.requireUnmanagedOnly)
+        String(payload.source || '')
       ]
     )
   },

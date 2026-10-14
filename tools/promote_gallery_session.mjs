@@ -20,7 +20,12 @@ const main = async () => {
     ? gunzipSync(input)
     : input;
   const session = JSON.parse(decoded.toString('utf8'));
-  const promoted = promoteGallerySessionToCurrent(session);
+  const repairs = [];
+  const promoted = promoteGallerySessionToCurrent(session, { repairs });
+  // A promoted Gallery Session is published: one that Load would repair is refused.
+  if (repairs.length > 0) {
+    throw new Error(`The Session request cannot be promoted without repairs: ${JSON.stringify(repairs)}`);
+  }
   const payload = Buffer.from(JSON.stringify(promoted), 'utf8');
   const output = outputPath.toLowerCase().endsWith('.gz')
     ? gzipSync(payload, { level: 6, mtime: 0 })

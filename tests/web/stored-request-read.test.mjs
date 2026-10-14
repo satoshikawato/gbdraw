@@ -30,14 +30,16 @@ installSessionImportWorker();
 
 const REPO = new URL('../../', import.meta.url);
 const { importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
-const { readStoredRenderRequest, readPublishedRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+const {
+  readStoredRenderRequest, readPublishedRenderRequest, projectCommittedEditorIntent
+} = await import('../../gbdraw/web/js/services/session-request.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
 import json, sys
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 p = json.load(sys.stdin)
 print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['requireUnmanagedOnly']))
+    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
 `], { input: JSON.stringify(payload), encoding: 'utf8', cwd: fileURLToPath(REPO) })) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -87,14 +89,15 @@ test('a request schema the app does not read is a Session-format error (OV-773);
   }
 });
 
-test('a request that needs no repair comes back as the stored object (RK-3); schema 1 and 2 as stored', () => {
+test('a request that needs no repair comes back as the stored object (RK-3); schema 1 and 2 are lifted first', () => {
   const session = gallery('lambda_basic_linear');
   const result = readStoredRenderRequest(session.renderRequest, contextOf(session));
   assert.equal(result.value, session.renderRequest);
   assert.deepEqual(result.repairs, []);
   for (const schema of [1, 2]) {
-    const stored = { schema, mode: 'linear', records: [] };
-    assert.equal(readStoredRenderRequest(stored, contextOf(session)).value, stored);
+    // A schema 1 or 2 request the lift cannot read leaves nothing to read (K22).
+    assert.deepEqual(readStoredRenderRequest({ schema, mode: 'linear', records: [] }, contextOf(session)),
+      { kind: 'request-dropped', path: 'renderRequest', reason: 'wrong-kind' });
   }
 });
 
@@ -411,8 +414,8 @@ test('a saved comparison entry that is neither resource-backed nor a generated c
 
 // G3 on the request path: every stored Session the app ships or pins (the
 // Gallery and the Session fixtures) loads with no row about its stored
-// request and commits it at the current schema (schema 1 as stored until its
-// reader, PR-D). A row here is a defect of the input's producer.
+// request and commits it at the current schema (schemas 1 and 2 through the
+// lift, PR-D). A row here is a defect of the input's producer.
 /** Inputs this Node harness cannot load, by name, with the reason. */
 const fixture = (name) => read(`tests/fixtures/sessions/${name}`);
 
@@ -559,7 +562,7 @@ test('every Gallery Session and Session fixture loads with no stored-request row
       const { result } = await load(session);
       const committed = result.status === 'ok' || result.status === 'legacy'
         ? getCommittedCanonicalSession()?.renderRequest?.schema ?? null : 'not loaded';
-      const expected = stored === null ? null : stored === 1 ? 1 : 9;
+      const expected = stored === null ? null : 9;
       const rows = (result.repairs || []).filter(requestRow).map(({ code, path }) => `${code} ${path}`);
       if (rows.length || committed !== expected) findings[folder + name] = { status: result.status, rows, committed, expected };
       loaded += 1;
@@ -643,4 +646,29 @@ test('Load commits a stored request that differs from the stored one only where 
   }
   assert.ok(checked > 200, String(checked));
   assert.deepEqual(silent, [], String(checked));
+});
+
+// H2 (PR-D): Load lifts a schema-1 request and commits schema 9, so a live
+// edit (the committed request with the drawing's tables) works before any
+// Generate, and Save writes schema 9. Save still asks for one Generate while
+// the Session holds Results without their feature metadata (D-25, PD-OI-079),
+// as it does for a schema-2 Session; the same Session without Results saves.
+test('a schema-1 Session takes a live edit and Save before any Generate (H2)', async () => {
+  const save = (name) => exportSession(name, { askChoice: async () => 'download' });
+  for (const name of ['lambda_basic_linear.v31-schema1', 'HmmtDNA_basic_circular.v32-schema1']) {
+    const session = read(`tests/fixtures/sessions/${name}.gbdraw-session.json.gz`);
+    assert.equal(session.renderRequest.schema, 1);
+    assert.ok(session.results.length > 0);
+    assert.equal((await load(session)).result.status, 'ok', name);
+    await assert.rejects(save(name), { code: 'SESSION_SAVE_REQUIRES_GENERATE' }, name);
+    assert.equal((await load({ ...session, results: [] })).result.status, 'ok', name);
+    const committed = getCommittedCanonicalSession();
+    assert.equal(committed.renderRequest.schema, 9, name);
+    const edited = projectCommittedEditorIntent({ committed, state, drawing: state.activeDrawing() });
+    assert.equal(edited.renderRequest.schema, 9, name);
+    const saved = await save(name);
+    assert.equal(saved.status, 'saved', `${name}: ${saved.error?.code}`);
+    const document = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+    assert.equal(document.renderRequest.schema, 9, name);
+  }
 });

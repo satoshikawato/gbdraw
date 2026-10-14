@@ -17,6 +17,7 @@ import {
 } from '../contracts/schema.generated.js';
 import { migrateSessionFeatureEdits, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
 } from './imported-comparison-intent.js';
@@ -43,6 +44,7 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { LoadRepair } from '../utils/load-repairs.js' */
 
 /** @typedef {Partial<ActiveWebConfig> & Record<string, unknown>} PublicationConfig A Session 46 slice may omit a field; it reads that mode's default (plan 4.1). */
 /** @typedef {PublicationConfig & Pick<ActiveWebConfig, 'form' | 'adv'>} PublishedConfig The configuration the publication rebuilds: it always has `form` and `adv`. */
@@ -341,8 +343,8 @@ const mergeReplayResources = (prepared, replayed) => {
  * (`services/session-request.js`, `services/gallery-session-migration.js`) and
  * the Linear comparison planner. Each takes and returns unvalidated documents.
  * @typedef {object} GallerySessionPublicationOwners
- * @property {(session: Record<string, any>) => PublicationSession} promoteSession
- *   Promotes a historical Session to the current version.
+ * @property {(session: Record<string, any>, options: { repairs: LoadRepair[] }) => PublicationSession} promoteSession
+ *   Promotes a historical Session to the current version; `repairs` receives what its request could not carry.
  * @property {(input: Record<string, any>) => Promise<Record<string, any>>} assertRequestsEquivalent
  * @property {(input: Record<string, any>) => { renderRequest: CanonicalRenderRequest, resources: NonNullable<PublicationSession['resources']>, webFiles: Record<string, unknown> }} buildRequest
  * @property {(input: Record<string, any>) => { state: Record<string, any>, drawing: Record<string, any>, features: Record<string, unknown> }} buildRequestState
@@ -410,7 +412,12 @@ export const createGallerySessionPublication = (owners) => {
     if ([40, 41, 42, 44].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
       renderRequest: publicationCanonicalRequest(session, owners.readRequest) }));
     if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44/${MODE_SCOPED_SESSION_VERSION}; received ${String(session?.version)}.`);
-    return validateCurrent(promoteVisibilityState(owners.promoteSession(session)));
+    /** @type {LoadRepair[]} */
+    const repairs = [];
+    const promoted = owners.promoteSession(session, { repairs });
+    // A published Session must read without a repair, as its request does.
+    if (repairs.length > 0) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+    return validateCurrent(promoteVisibilityState(promoted));
   };
   /** @param {PublicationSession} session */
   const rebuild = (session) => rebuildIntent(session, owners);

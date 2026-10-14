@@ -6,7 +6,6 @@
      "status": "ok",
      "error": null,
      "dialog": [
-      "Settings: 1 entry of files.linearCanonicalComparisons could not be read and was dropped.",
       "Features: the feature information of the saved diagram could not be restored from this file; the SVG preview stays, and the next Generate restores it."
      ],
      "notices": []
@@ -15,13 +14,13 @@
      "status": "error",
      "error": "SESSION_SAVE_REQUIRES_GENERATE"
     },
-    "areas": "7685f6722e2a"
+    "areas": "37856be310ba"
    },
    "requests": {
     "committed": {
-     "schema": 5,
+     "schema": 9,
      "mode": "linear",
-     "sha256": "d79e5537190aa7363e64bb0fb4e4e1cc14fc6958f630b42ab309c9e7ac7df63a"
+     "sha256": "4ce296cb594687e6bb963373a1159e50911d7801645177e1694e5b7d3d83ff5d"
     },
     "saved": null
    }
@@ -42,9 +41,9 @@
    },
    "requests": {
     "committed": {
-     "schema": 5,
+     "schema": 9,
      "mode": "circular",
-     "sha256": "d53a4fb34595d7e7c17c4664d026dbcb02a807f717473e2b831e4cca0264589e"
+     "sha256": "9e3c64dbc0ce219f375b7a7c8061c8c7327b0a60e81516871ed178052d142562"
     },
     "saved": null
    }
@@ -468,14 +467,14 @@
    "save.version": "31489056e0916d59",
    "save.webFiles": "c6a50302d72b1c15"
   },
-  "7685f6722e2a": {
+  "37856be310ba": {
    "state.mode": "5ca9f085671a9ddf",
    "state.sessionTitle": "a536a4afcf7f36dd",
    "state.results": "db4ef099c7d90688",
    "state.selectedResultIndex": "23d7b286bd429460",
    "state.cInputType": "8e5a70e03ba5cc79",
    "state.lInputType": "8e5a70e03ba5cc79",
-   "state.files": "f5b4d30095972d0b",
+   "state.files": "8f980123c1224a03",
    "state.linearSeqs": "a99f4d1cc9b9a8e4",
    "state.losatCacheInfo": "99bcfca61a865fe7",
    "state.losatCache": "9824fab45bb6e8f5",

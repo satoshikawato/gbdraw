@@ -356,13 +356,15 @@ export const migrateLegacyCircularTrackSlot = (slot) => {
 /**
  * A legacy Circular slot spec under current tokens, and the legacy spacing
  * token it consumed: the last token of the first of `spacingKeys` the spec
- * holds, as stored, with its value and whether that value filled a gap the
- * spec leaves unset.
+ * holds, as stored, with its value and whether it applied to a gap the spec
+ * leaves unset. `gapOf` gives the gap value a spacing fills, or null when it
+ * fills none.
  * @param {unknown} spec
  * @param {readonly string[]} [spacingKeys] the keys read as the spacing, in lower case, the first one first
+ * @param {(value: string) => string | null} [gapOf]
  * @returns {{ spec: string, spacing: { stored: string, value: string, filled: boolean } | null }}
  */
-export const readLegacyCircularTrackSlotSpec = (spec, spacingKeys = ['spacing']) => {
+export const readLegacyCircularTrackSlotSpec = (spec, spacingKeys = ['spacing'], gapOf = (value) => value) => {
   const text = String(spec || '').trim();
   const atIndex = text.indexOf('@');
   if (atIndex < 0) return { spec: text, spacing: null };
@@ -382,9 +384,10 @@ export const readLegacyCircularTrackSlotSpec = (spec, spacingKeys = ['spacing'])
   const filled = consumed && consumed.value !== ''
     ? ['inner_gap_px', 'outer_gap_px'].filter((name) => !retained.some(({ normalizedKey }) => normalizedKey === name))
     : [];
+  const gap = consumed && filled.length > 0 ? gapOf(consumed.value) : null;
   const options = [
     ...retained.map(({ key, value }) => `${key}=${value}`),
-    ...filled.map((name) => `${name}=${consumed?.value}`)
+    ...(gap === null ? [] : filled.map((name) => `${name}=${gap}`))
   ];
   return {
     spec: options.length > 0 ? `${head}@${options.join(',')}` : head,

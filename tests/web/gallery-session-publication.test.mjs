@@ -146,6 +146,16 @@ for (const name of sessionNames) {
   assert.deepEqual(admitted.modes[mode].editorState.legend.colorOverrides, { 'GC content': '#ff0000' });
 }
 
+// D-OD08 (5): a historical Session is promoted through the one request
+// reader; one whose request Load would repair is not published.
+{
+  const historical = await loadReleasedSession('lambda_basic_linear.v31-schema1.gbdraw-session.json.gz');
+  assert.equal(admitGallerySession(structuredClone(historical)).renderRequest.schema, 9);
+  historical.renderRequest.diagramOptions.config.canvas.linear.comparison_height = 0;
+  assert.throws(() => admitGallerySession(historical),
+    { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } });
+}
+
 const lambda = await loadReleasedSession('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
 const admittedLambda = admitGallerySession(lambda);
 assert.equal(admittedLambda.version, CURRENT_SESSION_VERSION);

@@ -1,7 +1,6 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
-import { isCurrentRequestSchema } from '../utils/request-schema.js';
 import { shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import {
@@ -149,9 +148,8 @@ import {
 } from './canonical-comparisons.js';
 import {
   migrateLegacyLinearComparisonDraft,
-  promoteGallerySessionToCurrent
+  promoteReadGallerySession
 } from './gallery-session-migration.js';
-import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import {
   compressSessionData,
   largeSessionDownloadMegabytes
@@ -1038,7 +1036,7 @@ export const setUnmanagedConfigOverrideValidator = (validator) => {
 };
 
 /**
- * @param {{ mode: DiagramMode, config?: unknown, configOverrides?: unknown, requireUnmanagedOnly?: boolean }} options
+ * @param {{ mode: DiagramMode, config?: unknown, configOverrides?: unknown, source?: 'draft' | 'storedRequest' }} options
  *   `mode`: a slice's mode, or the mode of a Session's projection (the projection refuses another value; a
  *   settings-only Session's is checked with its draft). `config` and `configOverrides` are saved values,
  *   unvalidated: the validator service checks them.
@@ -1047,7 +1045,7 @@ const validateUnmanagedConfigOverrides = async ({
   mode,
   config = null,
   configOverrides = {},
-  requireUnmanagedOnly = false
+  source = 'storedRequest'
 }) => {
   const managedPaths = managedConfigOverridePathsForMode(mode);
   const overrides = isPlainObject(configOverrides)
@@ -1063,7 +1061,7 @@ const validateUnmanagedConfigOverrides = async ({
   }
   if (
     config === null
-    && !requireUnmanagedOnly
+    && source !== 'draft'
     && overridePaths.every((path) => managedPaths.includes(path))
   ) {
     return {};
@@ -1076,7 +1074,7 @@ const validateUnmanagedConfigOverrides = async ({
     config,
     configOverrides: overrides,
     managedPaths,
-    requireUnmanagedOnly
+    source
   });
   if (result?.result?.error && typeof result.result.error === 'object') {
     throw Object.assign(new Error('Configuration validation failed.'), result.result.error);
@@ -1243,21 +1241,6 @@ const applyModeSliceData = (drawing, mode, slice, {
 };
 
 const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
-
-/**
- * The Session with a stored request of schema 1 or 2 read as schema 5 (PR-D);
- * any other Session as it is.
- * @template {Record<string, unknown>} T
- * @param {T} data
- * @param {LoadRepair[]} repairs
- * @returns {T}
- */
-const withLiftedRenderRequest = (data, repairs) => {
-  const lifted = liftLegacyRenderRequest(data.renderRequest);
-  if (lifted.value === data.renderRequest) return data;
-  repairs.push(...lifted.repairs);
-  return { ...data, renderRequest: lifted.value };
-};
 
 /** @param {LoadRepair[]} repairs */
 const normalizeSessionData = (data, repairs) => {
@@ -1943,14 +1926,14 @@ const preflightSessionImport = async (sessionData, repairs) => {
     migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   }
 
-  // A stored request of schema 1 or 2 is read as schema 5 (PR-D); the
-  // Gallery promotion of a schema-2 Session reads its own.
+  // A Gallery Session that stored a schema-2 request (31-33) is rebuilt by
+  // its promotion from the request its reader read.
   const promotedData = !currentSession && (
     sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
-    Number(normalizedData.renderRequest?.schema) === 2
+    Number(requestRead.storedSchemas.renderRequest) === 2
   )
-    ? readRebuiltGalleryRequest(promoteGallerySessionToCurrent(normalizedData, { repairs }), repairs)
-    : withLiftedRenderRequest(normalizedData, repairs);
+    ? readRebuiltGalleryRequest(promoteReadGallerySession(normalizedData), repairs)
+    : normalizedData;
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
   await validateSessionLosatArtifactsForImport(promotedData, sourceSessionVersion);
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
@@ -2029,7 +2012,6 @@ const preflightSessionImport = async (sessionData, repairs) => {
         linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
           : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-        repairInvalidComparisonHeight: sourceSessionVersion >= 31 && sourceSessionVersion <= 33,
         repairLegacyTableRows: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
         sessionResourceTable: currentResourceTable,
         // A Session without a Web draft (CLI, Python) holds its tables only
@@ -2142,7 +2124,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
       ? {
           mode: canonicalProjection.mode,
           configOverrides: runtimeStoredConfig.unmanagedConfigOverrides,
-          requireUnmanagedOnly: true
+          source: /** @type {const} */ ('draft')
         }
       : {
           mode: canonicalProjection.mode,
@@ -4657,21 +4639,6 @@ const admitSavedFeatureCatalog = (featureCatalog, logicalResults, mode) => {
     throw requiresGenerate();
   }
 };
-/**
- * Save writes the committed request as Load read it or Generate built it. A
- * schema-1 request, which Load keeps as stored until its reader lifts it, is
- * saved after a Generate in its mode.
- * @template {{ renderRequest: unknown } | null} T
- * @param {T} committed
- * @param {'circular' | 'linear'} mode
- * @returns {T}
- */
-const requireCurrentSavedRequest = (committed, mode) => {
-  if (committed && !isCurrentRequestSchema(committed.renderRequest)) {
-    throw sessionSaveRequiresGenerate(mode === state.mode.value ? {} : { diagramMode: mode });
-  }
-  return committed;
-};
 /** @param {SessionArtifactView} view */
 const artifactRunMetadata = (view) => ({
   ...(view.trackSlotResolvedGeometry
@@ -4707,12 +4674,9 @@ const prepareOtherModeArtifact = (view) => {
   const editorState = buildArtifactEditorState(view);
   editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, results, view.mode);
   if (!view.committedCanonicalSession) throw sessionSaveRequiresGenerate({ diagramMode: view.mode });
-  const committed = requireCurrentSavedRequest(
-    isAdoptedCanonicalSession(view.committedCanonicalSession)
-      ? view.committedCanonicalSession
-      : cloneCanonicalSession(view.committedCanonicalSession),
-    view.mode
-  );
+  const committed = isAdoptedCanonicalSession(view.committedCanonicalSession)
+    ? view.committedCanonicalSession
+    : cloneCanonicalSession(view.committedCanonicalSession);
   return { view, results, editorState, committed };
 };
 /**
@@ -4816,7 +4780,7 @@ const exportSessionDocument = async (
     config.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
       mode,
       configOverrides: config.unmanagedConfigOverrides,
-      requireUnmanagedOnly: true
+      source: 'draft'
     });
   }
   let committed = isAdoptedCanonicalSession(artifact.committedCanonicalSession)
@@ -4874,7 +4838,6 @@ const exportSessionDocument = async (
       omitUnsourcedDepth: true
     });
   }
-  committed = requireCurrentSavedRequest(committed, artifact.mode);
   const canonical = await assembleSessionResources(state, committed, state.drawings.linear, other?.committed ?? null);
   await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
   if (other) {
@@ -5565,7 +5528,7 @@ const importSessionDocument = async (e, options = {}) => {
       const savedOverrides = modeSlices[mode].config?.unmanagedConfigOverrides;
       if (isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
         modeConfigs[mode].unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
-          mode, configOverrides: savedOverrides, requireUnmanagedOnly: true
+          mode, configOverrides: savedOverrides, source: 'draft'
         });
       }
     }

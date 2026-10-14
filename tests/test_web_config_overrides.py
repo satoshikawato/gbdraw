@@ -253,7 +253,7 @@ def test_a_draft_check_reads_no_flat_override_name(flat, managed):
     # Only a stored request's check reads flat names (OV-799, D-OD11); the
     # check of a draft's unmanaged overrides keeps its reading and its error.
     draft = json.loads(validate_web_config_overrides_json(
-        "circular", "null", json.dumps(flat), json.dumps(managed), True,
+        "circular", "null", json.dumps(flat), json.dumps(managed), "draft",
     ))
     assert draft["error"] == {
         "code": "INPUT_INVALID", "operation": "validateConfigOverrides", "stage": "helper",
@@ -263,3 +263,13 @@ def test_a_draft_check_reads_no_flat_override_name(flat, managed):
         validate_and_project_web_config_overrides(mode="circular", overrides=flat, managed_paths=managed)
     stored = json.loads(validate_web_config_overrides_json("circular", "null", json.dumps({"gc_stroke_color": "red"}), "[]"))
     assert stored == {"overrides": {"objects.gc_content.stroke_color": "red"}}
+
+
+@pytest.mark.parametrize("source", [True, False, "", "stored", None])
+def test_json_boundary_names_its_check(source):
+    # One field names the check (D-OD12): a value that names neither is refused.
+    result = json.loads(validate_web_config_overrides_json("circular", "null", "{}", "[]", source))
+    assert result["error"]["code"] == "HELPER_PROTOCOL"
+    named = json.loads(validate_web_config_overrides_json(
+        "circular", "null", json.dumps({"gc_stroke_color": "red"}), "[]", "storedRequest"))
+    assert named == {"overrides": {"objects.gc_content.stroke_color": "red"}}
