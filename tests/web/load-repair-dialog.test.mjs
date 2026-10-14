@@ -811,7 +811,7 @@ test('a configuration file with a shape or Linear visibility that is no text, or
 // entry that is no object is dropped and listed before the dialog, and the
 // apply reads the lists with the same readers, so nothing is refused after
 // [Load]. A Session refuses such an entry before the dialog, as before.
-test('a configuration file drops and lists a rule or whitelist entry that is no object; a Session refuses it (r4 S1)', async () => {
+test('a configuration file drops and lists a rule or whitelist entry that is no object; a Session refuses it', async () => {
   const rule = { feat: 'CDS', qual: 'product', val: 'kinase', color: 'red', cap: 'Kinase' };
   const file = { form: { plot_title: 'Rules' }, rules: [null, rule, 5], whitelist: [null, { feat: 'CDS', qual: 'gene', key: 'dnaA' }] };
   let committed = false;
@@ -901,7 +901,7 @@ test('a feature shape of a feature type the user added survives Save and Load', 
 // dropped and counted, not applied as its text; a number is its text. r3 N2:
 // the older `priorityRules` is read only when `qualifierPriorityRules` is
 // absent, as the apply reads it.
-test('a group name that is no text is dropped and listed; priorityRules is read only without qualifierPriorityRules (r3 N1, N2)', async () => {
+test('a group name that is no text is dropped and listed; priorityRules is read only without qualifierPriorityRules', async () => {
   const { configFieldRepairs, defaultSettingsContainers, readStringMap } = await import('../../gbdraw/web/js/services/config-field-readers.js');
   const itemsOf = (config) => describeLoadRepairs(configFieldRepairs(defaultSettingsContainers('linear'), config, 'config', { mode: 'linear' }))?.items ?? [];
   const names = { og1: { x: 1 }, og2: true, og3: 5, og4: 'Kept' };
