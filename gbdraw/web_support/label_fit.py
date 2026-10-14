@@ -6,11 +6,13 @@ canvas sizes as given, and nothing in JavaScript places labels or searches
 values (LP-D43, LP-D48). Rows a bounded search did not reach arrive
 ``not_computed`` (OD-F14 for a drawn figure, the font scan bound when nothing
 was drawn); :class:`LabelFitRowSearches` keeps the last such figure or failure
-of each mode so the Web can compute one row through :func:`label_fit_row`.
+of each mode so the Web can compute one row through :func:`label_fit_row`,
+searched for at most ``WEB_ROW_SEARCH_SECONDS`` (LP-D60).
 """
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Literal, TypeAlias, TypedDict, cast, get_args
 
@@ -43,6 +45,9 @@ from gbdraw.labels.fit import (
 )
 
 LABEL_FIT_PAYLOAD_SCHEMA: Literal[1] = 1
+# How long the Web searches one row on demand (LP-D60): Apply and Cancel wait
+# at most this long for the row being computed.
+WEB_ROW_SEARCH_SECONDS = 30.0
 LabelFitMode: TypeAlias = Literal["circular", "linear"]
 _MODES: frozenset[str] = frozenset(get_args(LabelFitMode))
 
@@ -241,7 +246,8 @@ class LabelFitRowSearches:
     stays), and released tokens answer with a ``not_computed`` row.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, row_search_seconds: float = WEB_ROW_SEARCH_SECONDS) -> None:
+        self._row_search_seconds = row_search_seconds
         self._generation = 0
         self._drawn: dict[LabelFitMode, _Kept] = {}
         self._failed: dict[LabelFitMode, _Kept] = {}
@@ -292,7 +298,7 @@ class LabelFitRowSearches:
         return {"report": label_fit_report_payload(error.report, mode), "rowToken": token}
 
     def row(self, token: str, kind: str) -> LabelFitRowPayload:
-        """Compute one row of a kept figure or failure (no time limit)."""
+        """Compute one row of a kept figure or failure, searched for at most the row bound."""
 
         if kind not in _ROW_KINDS:
             raise ValidationError(f"Unknown label fit row kind: {kind}.", diagnostic=_UNKNOWN_ROW_KIND)
@@ -312,14 +318,20 @@ class LabelFitRowSearches:
             if generation_text.isdigit() and index_text.isdigit()
             else None
         )
-        row = label_fit_row(source, row_kind) if source is not None else None
+        deadline = time.monotonic() + self._row_search_seconds
+        row = label_fit_row(source, row_kind, deadline=deadline) if source is not None else None
         if row is None:
             return label_fit_row_payload(LabelFitRow(row_kind, "not_computed", reason=_STALE_REASON), mode)
+        if row.status == "not_computed":
+            # The bound stopped the search: no value, which is neither "does not fit" nor stale.
+            reason = f"No value found within {self._row_search_seconds:g} seconds."
+            return label_fit_row_payload(LabelFitRow(row_kind, "not_computed", reason=reason), mode)
         return label_fit_row_payload(row, mode)
 
 
 __all__ = [
     "LABEL_FIT_PAYLOAD_SCHEMA",
+    "WEB_ROW_SEARCH_SECONDS",
     "LabelFitFailurePayload",
     "LabelFitMode",
     "LabelFitRecordPayload",

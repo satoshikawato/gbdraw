@@ -33,6 +33,7 @@ from gbdraw.labels.fit import (
 )
 from gbdraw.session import build_session_document
 from gbdraw.web_support.label_fit import (
+    WEB_ROW_SEARCH_SECONDS,
     LabelFitRowSearches,
     label_fit_failure,
     label_fit_report_payload,
@@ -157,9 +158,11 @@ def test_every_control_a_row_names_has_that_accessible_name() -> None:
 class _Rows:
     def __init__(self) -> None:
         self.asked: list[str] = []
+        self.deadlines: list[float | None] = []
 
-    def row(self, kind: LabelFitRowKind) -> LabelFitRow:
+    def row(self, kind: LabelFitRowKind, *, deadline: float | None = None) -> LabelFitRow:
         self.asked.append(kind)
+        self.deadlines.append(deadline)
         return LabelFitRow(kind, "found", {path: 11.0 for path in FONT_SIZE_PATHS}, (800.0, 800.0))
 
 
@@ -536,3 +539,41 @@ def test_the_notice_bar_words_are_pythons_with_one_plural_rule() -> None:
     assert notice(1, 0) == ["Leader lines cross (1 pair)."]
     assert notice(2, 3) == ["Leader lines cross (2 pairs).", "Labels cover the definition text (3)."]
     assert notice(0, 1) == ["Labels cover the definition text (1)."]
+
+
+def test_a_web_row_stops_at_its_bound_and_says_no_value_was_found() -> None:
+    """LP-D60: the Web searches each row for at most 30 s; a row that finds nothing says so."""
+
+    import time
+
+    from gbdraw.api.diagram import build_circular_diagram
+
+    assert WEB_ROW_SEARCH_SECONDS == 30.0
+    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    options = CircularDiagramOptions(
+        config_overrides={
+            "labels.circular.scope": "outer",
+            "labels.rendering": "external_only",
+            "labels.font_size.short": 14.0,
+            "labels.font_size.long": 14.0,
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
+    # A bound of 0 s stops the search before its first probe, as 30 s stops a long one.
+    searches = LabelFitRowSearches(row_search_seconds=0.0)
+    (token,) = searches.retain("circular", [drawing])
+    row = searches.row(str(token), "outward_vertical")
+    assert row["status"] == "not_computed" and row["values"] is None
+    assert row["reason"] == "No value found within 0 seconds."
+
+    # The rows a stopped Generate left are searched with the same bound.
+    rows = _Rows()
+    failure = LabelsDoNotFitError("labels overlap", report=_report(drawn=False), row_search=rows)
+    bounded = LabelFitRowSearches()
+    failed = bounded.retain_failure("circular", failure)
+    before = time.monotonic()
+    assert bounded.row(str(failed), "combination")["status"] == "found"
+    (deadline,) = rows.deadlines
+    assert deadline is not None and before + WEB_ROW_SEARCH_SECONDS <= deadline <= time.monotonic() + WEB_ROW_SEARCH_SECONDS

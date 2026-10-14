@@ -3456,19 +3456,22 @@ def label_fit_report(drawing: Drawing) -> LabelFitReport | None:
     return checked[0] if checked is not None else None
 
 
-def label_fit_row(source: Drawing | LabelsDoNotFitError, kind: LabelFitRowKind) -> LabelFitRow | None:
-    """Compute one row of a report without a time limit.
+def label_fit_row(
+    source: Drawing | LabelsDoNotFitError, kind: LabelFitRowKind, *, deadline: float | None = None
+) -> LabelFitRow | None:
+    """Compute one row of a report, until a ``time.monotonic()`` ``deadline`` if given.
 
     ``source`` is a figure drawn with a report or the error of a figure that
     was not drawn. Rows that the bounded search did not reach are
     ``not_computed`` in the report; this returns the computed row (rows found
-    earlier cost nothing).
+    earlier cost nothing), or ``not_computed`` again when ``deadline`` came
+    first.
     """
 
     if isinstance(source, LabelsDoNotFitError):
-        return source.row_search.row(kind) if source.row_search is not None else None
+        return source.row_search.row(kind, deadline=deadline) if source.row_search is not None else None
     checked = _label_fit(source)
-    return checked[1].row(kind) if checked is not None else None
+    return checked[1].row(kind, deadline=deadline) if checked is not None else None
 
 
 def _circular_builder_options(

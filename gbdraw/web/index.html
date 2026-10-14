@@ -8375,7 +8375,7 @@
             </div>
         </choice-dialog>
         <!-- Labels that do not fit (LP-D43, LP-D45): every row of Python's report, in its order -->
-        <choice-dialog v-if="labelFitDialog.show" :busy="dialogChoicePending" labelledby="label-fit-title" describedby="label-fit-description"
+        <choice-dialog v-if="labelFitDialog.show" :busy="dialogChoicePending || labelFitDialog.finishing" labelledby="label-fit-title" describedby="label-fit-description"
              data-label-fit-dialog
              @cancel="resolveLabelFitChoice('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
@@ -8412,6 +8412,7 @@
                     </li>
                 </ul>
             </fieldset>
+            <p v-if="labelFitDialog.finishing" class="mt-3 text-sm text-slate-600" role="status">Finishing the choice being computed…</p>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
                 <button type="button" data-history-ignore @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
                 <button type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">Apply and Generate</button>

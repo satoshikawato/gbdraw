@@ -321,6 +321,14 @@ search share 30 seconds, and a setting is tried only if drawing the figure once
 more ends within that time. Linear labels get only the separate overlapping
 features row, because the Linear layout keeps its other labels apart.
 
+In the Web app, the rows appear in the **Labels do not fit** dialog. Generate
+searches no row of a figure drawn anyway; the dialog computes each row that
+Generate did not reach, one after another, for at most 30 seconds each. A row
+that finds no value in that time shows "No value found within 30 seconds."
+While a row is being computed, Apply and Cancel first wait for it to finish,
+at most 30 seconds, and the dialog shows "Finishing the choice being
+computed…".
+
 With 50 or more outer labels, gbdraw packs the labels in rows with
 `--circular_label_spacing` between them. If those rows do not fit, the labels
 are packed 0.1 px apart, as in 0.13, so a map that fit in 0.13 still draws.

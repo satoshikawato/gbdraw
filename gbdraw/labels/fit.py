@@ -407,9 +407,9 @@ class LabelFitReport:
 
 
 class LabelFitRows(Protocol):
-    """Computes one row of a report on request, without a time limit."""
+    """Computes one row of a report on request; a ``time.monotonic()`` deadline may stop it (``not_computed``)."""
 
-    def row(self, kind: LabelFitRowKind) -> LabelFitRow: ...
+    def row(self, kind: LabelFitRowKind, *, deadline: float | None = None) -> LabelFitRow: ...
 
 
 # --- wording --------------------------------------------------------------------------------------

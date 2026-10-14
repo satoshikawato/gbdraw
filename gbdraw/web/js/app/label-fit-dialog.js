@@ -6,7 +6,9 @@
 // A Generate that drew nothing opens it; crossing leaders or labels over the
 // definition text open it from the notice bar over the drawn figure. Rows a
 // bounded search did not reach are computed here, one after another, by the
-// Worker (OD-F14, the font scan bound). Apply writes the row's settings as one History step
+// Worker (OD-F14, the font scan bound), each for at most Python's row bound
+// (LP-D60). Apply and Cancel first let the row being computed finish, which
+// starts no further row. Apply writes the row's settings as one History step
 // (PD-OI-088) and runs Generate; Cancel writes nothing.
 import { labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -32,6 +34,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
  *   counts: string }[]} records Python's counts text per record (OV-699: a refused record says why).
  * @property {LabelFitDialogRow[]} rows
  * @property {LabelFitRowKind | ''} selectedKind
+ * @property {boolean} finishing Apply or Cancel waits for the row being computed.
  */
 /** @typedef {'circular' | 'linear'} LabelFitMode */
 /**
@@ -69,14 +72,18 @@ export const createLabelFitDialog = ({
   reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary
 }) => {
   const dialog = reactive({
-    show: false, drawn: false, records: [], rows: [], selectedKind: ''
+    show: false, drawn: false, records: [], rows: [], selectedKind: '', finishing: false
   });
   // The rows' values stay with the report, out of the reactive display state.
   /** @type {Map<LabelFitRowKind, LabelFitRow>} */
   let rowsByKind = new Map();
   /** @type {LabelFitMode} */
   let dialogMode = 'circular';
+  /** @type {LabelFitRowToken | null} */
+  let dialogRowToken = null;
   let openCount = 0;
+  /** @type {Promise<unknown> | null} The Worker's reply for the row being computed. */
+  let runningRow = null;
 
   const close = () => { dialog.show = false; openCount += 1; };
   /** @param {LabelFitRowKind} kind @param {Partial<LabelFitDialogRow>} update */
@@ -98,11 +105,12 @@ export const createLabelFitDialog = ({
   const computeMissingRows = async (opened, rowToken) => {
     for (const row of [...rowsByKind.values()]) {
       if (row.status !== 'not_computed') continue;
-      if (opened !== openCount) return;
+      if (opened !== openCount || dialog.finishing) return;
       if (!rowToken) continue;
       updateRow(row.kind, { status: 'computing' });
+      const computing = runningRow = computeRow(rowToken, row.kind);
       try {
-        const reply = /** @type {{ row?: unknown } | null} */ (await computeRow(rowToken, row.kind));
+        const reply = /** @type {{ row?: unknown } | null} */ (await computing);
         const computed = normalizeLabelFitRow(reply?.row);
         if (opened !== openCount) return;
         if (computed.kind !== row.kind) throw diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
@@ -112,6 +120,8 @@ export const createLabelFitDialog = ({
       } catch (error) {
         if (opened !== openCount) return;
         updateRow(row.kind, { status: 'failed', reason: errorSummary(error) });
+      } finally {
+        if (runningRow === computing) runningRow = null;
       }
     }
   };
@@ -126,6 +136,7 @@ export const createLabelFitDialog = ({
     openCount += 1;
     const opened = openCount;
     dialogMode = mode;
+    dialogRowToken = rowToken;
     rowsByKind = new Map(report.rows.map((row) => [row.kind, row]));
     dialog.drawn = report.drawn;
     dialog.records = report.records.map((record) => ({
@@ -137,6 +148,7 @@ export const createLabelFitDialog = ({
     }));
     dialog.rows = report.rows.map(displayRow);
     dialog.selectedKind = '';
+    dialog.finishing = false;
     selectFirstOffered();
     dialog.show = true;
     return computeMissingRows(opened, rowToken);
@@ -154,13 +166,25 @@ export const createLabelFitDialog = ({
     close
   );
 
-  /** @param {'apply' | 'cancel'} choice */
+  /**
+   * Waits for the row being computed (the Worker runs one call at a time; at
+   * most Python's row bound), then applies the choice.
+   * @param {'apply' | 'cancel'} choice
+   */
   const resolveLabelFitChoice = async (choice) => {
-    if (choice === 'cancel') {
-      if (choicePending()) return undefined;
-      return applyRow('cancel');
+    if (dialog.finishing || choicePending()) return undefined;
+    const opened = openCount;
+    const running = runningRow;
+    if (running) {
+      dialog.finishing = true;
+      await running.then(() => undefined, () => undefined);
+      dialog.finishing = false;
+      if (opened !== openCount) return undefined;
     }
-    return await applyRow('apply') === true ? runAnalysis() : undefined;
+    const chosen = await applyRow(choice);
+    // A choice History refused leaves the dialog open: the rows the wait stopped go on.
+    if (running && opened === openCount) void computeMissingRows(opened, dialogRowToken);
+    return choice === 'apply' && chosen === true ? runAnalysis() : undefined;
   };
 
   return { labelFitDialog: dialog, openLabelFitDialog, resolveLabelFitChoice };
