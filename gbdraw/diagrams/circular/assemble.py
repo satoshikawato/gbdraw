@@ -2452,7 +2452,9 @@ def add_record_on_circular_canvas(
                 feature_dict=layout_feature_dict,
                 definition_reserved_radius_px=reserved_radius_px,
                 preferred_anchor_slot_ids=preferred_anchor_slot_ids,
-                depth_config=depth_config if show_depth_track else None,
+                depth_config=(
+                    DepthAxisStyle.of(depth_config) if show_depth_track and depth_config is not None else None
+                ),
                 center_reserved_radius_explicit=center_reserved_radius is not None,
             ),
             gb_record=gb_record,

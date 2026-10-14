@@ -26,6 +26,7 @@ from ...layout.circular import (
 from ...layout.circular_depth_axis import (
     DepthAxisFootprint,
     DepthAxisSource,
+    DepthAxisStyle,
     resolve_depth_axis_footprint,
 )
 from ...tracks.circular import (
@@ -1923,7 +1924,7 @@ class _RadialLayoutInputs(TypedDict):
     slots: Sequence[CircularTrackSlot]
     feature_dict: Mapping[str, Any] | None
     preferred_anchor_slot_ids: Collection[str]
-    depth_config: DepthAxisSource | None
+    depth_config: DepthAxisStyle | None
     center_reserved_radius_explicit: bool
     keep_preset_lanes: bool
 
@@ -1937,7 +1938,7 @@ def resolve_circular_radial_layout(
     feature_dict: Mapping[str, Any] | None = None,
     definition_reserved_radius_px: float | None = None,
     preferred_anchor_slot_ids: Collection[str] = (),
-    depth_config: DepthAxisSource | None = None,
+    depth_config: DepthAxisStyle | None = None,
     center_reserved_radius_explicit: bool = False,
 ) -> CircularRadialLayout:
     """Resolve every slot band; a failed inside placement names its cause.
