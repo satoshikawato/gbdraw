@@ -150,6 +150,9 @@ _CIRCULAR_LABEL_OPTIONS = (
     "keep_full_definition_with_plot_title",
 )
 
+# The placed labels and the two contents that draw them.
+_CIRCULAR_LABELS = frozenset({"circular_labels", "label_leaders_content", "label_text_content"})
+
 # The group contents an option changes, besides the stages above.
 CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
     "annotation_table": frozenset({"annotation_content"}),
@@ -236,7 +239,7 @@ def allowed_builds(option_id: str) -> frozenset[str]:
         EXPECTED_BUILDS.get(option_id, frozenset())
         | CONTENT_BUILDS.get(option_id, frozenset())
         | (frozenset({"record_content"}) if option_id in _RECORD_CONTENT_OPTIONS else frozenset())
-        | (frozenset({"circular_labels"}) if option_id in _CIRCULAR_LABEL_OPTIONS else frozenset())
+        | (_CIRCULAR_LABELS if option_id in _CIRCULAR_LABEL_OPTIONS else frozenset())
     )
     if allowed & _RIBBON_INPUTS:
         allowed |= {"comparison_content"}

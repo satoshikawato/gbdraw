@@ -2008,25 +2008,9 @@ class CircularLabelPlacement:
     feature_layers: FeatureBuildResult
     layout_slots: tuple[CircularTrackSlot, ...]
     feature_slot: CircularTrackSlot | None
-    outer_arena: tuple[float, float] | None
     radial_refused: bool
     # Text measurements per label font size, for the fit probes.
     label_candidates: tuple[tuple[float, object], ...]
-
-
-def _outer_label_arena(
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    *,
-    strandedness: bool,
-    enabled: bool,
-) -> tuple[float, float] | None:
-    if not enabled:
-        return None
-    anchor_px, arc_outer_px = _default_outer_label_arena(geometry=geometry, cfg=cfg, strandedness=strandedness)
-    if arc_outer_px < anchor_px:
-        anchor_px, arc_outer_px = arc_outer_px, anchor_px
-    return anchor_px, arc_outer_px
 
 
 def circular_labels(
@@ -2228,12 +2212,6 @@ def circular_labels(
         feature_layers=feature_layers,
         layout_slots=tuple(slots),
         feature_slot=feature_slot,
-        outer_arena=_outer_label_arena(
-            geometry,
-            cfg,
-            strandedness=profile.strandedness,
-            enabled=feature_width_override_requested,
-        ),
         radial_refused=radial_refused,
         label_candidates=tuple(
             (font_size, cache["candidates"])
@@ -2494,7 +2472,6 @@ def add_record_on_circular_canvas(
         )
     # External labels: separate group (label arena). Embedded labels remain in the record group.
     # Add labels BEFORE features so leader lines appear behind features.
-    outer_arena: tuple[float, float] | None = None
     precalculated_labels: list[CircularLabel] | None = None
     # LP-D49 DEF-WARN and the LP-D57 repair: labels over the centre definition text (not a plot title).
     definition_text: tuple[Aabb, ...] = (
@@ -2559,7 +2536,6 @@ def add_record_on_circular_canvas(
         feature_lane_direction = label_state.feature_lane_direction
         resolved_feature_anchor_radius_px = label_state.resolved_feature_anchor_radius_px
         feature_track_ratio_factor_override = label_state.feature_track_ratio_factor_override
-        outer_arena = placement.outer_arena
         radial_refused = placement.radial_refused
         label_candidate_caches.update(
             (font_size, {"candidates": candidates}) for font_size, candidates in placement.label_candidates
@@ -2657,31 +2633,14 @@ def add_record_on_circular_canvas(
     canvas = add_axis_group_on_canvas(canvas, canvas_config, group_key=GroupKey(record_key, GroupKind.AXIS))
 
     if show_external_labels:
-        labels_group_kwargs: dict[str, Any] = {
-            "outer_arena": outer_arena,
-            "render_context": render_context,
-            "precalculated_labels": precalculated_labels,
-            "feature_track_ratio_factor_override": feature_track_ratio_factor_override,
-        }
-        if resolved_feature_anchor_radius_px is not None and (
-            precalculated_labels is None
-            and (
-                user_slot_mode
-                or not math.isclose(
-                    float(resolved_feature_anchor_radius_px),
-                    float(canvas_config.radius),
-                    rel_tol=1e-9,
-                    abs_tol=1e-9,
-                )
-            )
-        ):
-            labels_group_kwargs["feature_anchor_radius_px"] = resolved_feature_anchor_radius_px
         canvas = add_labels_group_on_canvas(
             canvas,
             gb_record,
             canvas_config,
+            group_key=GroupKey(record_key, GroupKind.LABEL_LEADERS),
+            render_context=render_context,
+            precalculated_labels=precalculated_labels or (),
             phase="leaders",
-            **labels_group_kwargs,
         )
 
     drawable_slots = [
@@ -2724,8 +2683,10 @@ def add_record_on_circular_canvas(
             canvas,
             gb_record,
             canvas_config,
+            group_key=GroupKey(record_key, GroupKind.LABEL_TEXT),
+            render_context=render_context,
+            precalculated_labels=precalculated_labels or (),
             phase="text",
-            **labels_group_kwargs,
         )
 
     definition_kwargs: dict[str, Any] = {}

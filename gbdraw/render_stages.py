@@ -81,6 +81,8 @@ RenderStageName = Literal[
     "ticks_content",
     "conservation_tracks",
     "conservation_content",
+    "label_leaders_content",
+    "label_text_content",
 ]
 
 # The sections of GbdrawConfig each stage reads (design 2.2). A section is a
@@ -155,6 +157,8 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "ticks_content": _CIRCULAR_TRACK_SECTIONS | {"objects.scale", "objects.text", "objects.ticks"},
     "conservation_tracks": frozenset(),
     "conservation_content": frozenset({"objects.conservation"}),
+    "label_leaders_content": frozenset({"labels.stroke_color", "labels.stroke_width"}),
+    "label_text_content": frozenset({"labels.font_size", "labels.length_threshold", "objects.text"}),
 }
 
 _TOP_SECTIONS = ("canvas", "labels", "objects")

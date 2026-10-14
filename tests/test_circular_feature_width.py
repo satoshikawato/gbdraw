@@ -355,16 +355,9 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         canvas,
         gb_record,
         canvas_config,
-        *,
-        outer_arena=None,
-        feature_layers=None,
-        precalculated_labels=None,
-        feature_track_ratio_factor_override=None,
-        feature_anchor_radius_px=None,
         **kwargs,
     ):
-        captured["labels_outer_arena"] = outer_arena
-        captured["labels_feature_ratio"] = feature_track_ratio_factor_override
+        captured["labels_drawn"] = True
         return canvas
 
     def fake_add_record_group_on_canvas(
@@ -408,13 +401,11 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
     )
 
     assert captured["record_feature_ratio"] is not None
-    assert captured["labels_feature_ratio"] is not None
     assert captured["axis_radius"] is None
     assert captured["ticks_radius"] is not None
     assert captured["gc_norm"] is not None
     assert captured["skew_norm"] is not None
-    assert captured["labels_outer_arena"] is not None
-    assert float(captured["labels_outer_arena"][1]) > float(captured["labels_outer_arena"][0])
+    assert captured["labels_drawn"]
 
 
 def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -440,14 +431,9 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         canvas,
         gb_record,
         canvas_config,
-        *,
-        outer_arena=None,
-        feature_layers=None,
-        precalculated_labels=None,
-        feature_track_ratio_factor_override=None,
         **kwargs,
     ):
-        captured["labels_outer_arena"] = outer_arena
+        captured["labels_drawn"] = True
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", fake_add_axis_group_on_canvas)
@@ -487,7 +473,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
     assert math.isclose(float(captured["gc_width"]), 22.0, rel_tol=1e-6, abs_tol=1e-6)
     assert math.isclose(float(captured["skew_width"]), 18.0, rel_tol=1e-6, abs_tol=1e-6)
 
-    assert captured["labels_outer_arena"] is not None
+    assert captured["labels_drawn"]
 
 
 def test_feature_slot_width_ratio_ignores_radius() -> None:
@@ -1545,14 +1531,9 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             canvas,
             gb_record,
             canvas_config,
-            *,
-            outer_arena=None,
-            feature_layers=None,
-            precalculated_labels=None,
-            feature_track_ratio_factor_override=None,
             **kwargs,
         ):
-            captured["outer_arena"] = outer_arena
+            captured["labels_drawn"] = True
             return canvas
 
         original_axis = circular_assemble_module.add_axis_group_on_canvas
@@ -1597,8 +1578,8 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
 
     off = captured_by_show[False]
     on = captured_by_show[True]
-    assert off.get("outer_arena") is None
-    assert on.get("outer_arena") is not None
+    assert "labels_drawn" not in off
+    assert on["labels_drawn"]
     assert off["axis"] is None
     assert on["axis"] is None
     for key in ("ticks", "gc_norm", "skew_norm"):

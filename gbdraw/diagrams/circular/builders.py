@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Literal, ParamSpec
+from typing import TYPE_CHECKING, Callable, Literal, ParamSpec, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -481,37 +481,28 @@ def add_labels_group_on_canvas(
     gb_record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
     *,
+    group_key: GroupKey,
     render_context: CircularRecordRenderContext,
-    outer_arena: tuple[float, float] | None = None,
-    precalculated_labels: list[CircularLabel] | None = None,
-    feature_track_ratio_factor_override: float | None = None,
-    feature_anchor_radius_px: float | None = None,
-    phase: Literal["all", "leaders", "text"] = "all",
+    precalculated_labels: Sequence[CircularLabel],
+    phase: Literal["leaders", "text"],
 ) -> Drawing:
-    """
-    Adds the labels group to the canvas.
+    """Add the leader lines or the text of the placed external labels.
 
-    Parameters:
-    canvas (Drawing): The SVG drawing canvas.
-    gb_record (SeqRecord): The GenBank record.
-    canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    outer_arena (tuple[float, float] | None): Optional outer arena bounds.
-
-    Returns:
-    Drawing: The updated SVG drawing with the labels group added.
+    Two stages, so a leader stroke change keeps the text and a font change
+    keeps the leaders. The labels are this request's copies after the legend
+    shift; they are keyed by value.
     """
-    labels_group: Group = LabelsGroup(
-        gb_record=gb_record,
-        geometry=canvas_config.geometry(),
-        render_context=render_context,
-        outer_arena=outer_arena,
-        precalculated_labels=precalculated_labels,
-        feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-        feature_anchor_radius_px=feature_anchor_radius_px,
+    content = render_stage(
+        "label_leaders_content" if phase == "leaders" else "label_text_content",
+        build_group_content,
+        LabelsGroup,
+        len(gb_record.seq),
+        canvas_config.geometry(),
+        render_context,
+        precalculated_labels=tuple(precalculated_labels),
         phase=phase,
-    ).get_group()
-    labels_group = center_group_on_canvas(labels_group, canvas_config)
-    canvas.add(labels_group)
+    )
+    canvas.add(center_group_on_canvas(place_content(canvas, content, group_key), canvas_config))
     return canvas
 
 
