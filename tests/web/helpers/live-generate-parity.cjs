@@ -5,27 +5,8 @@
 // Generate and diffs the two states, minus the differences that
 // tests/web/contracts/live-generate-parity-allowed.json allows.
 const { expect, test } = require('@playwright/test');
-const { generateAndWaitForResult } = require('./app-lifecycle.cjs');
+const { generateAndWaitForResult, settleLive } = require('./app-lifecycle.cjs');
 const ALLOWED_DIFFERENCES = require('../contracts/live-generate-parity-allowed.json').entries;
-
-// No Generate, label reflow, automatic rerender, rule matching, Session import,
-// or History step is running, over two frames in a row.
-const settleLive = async (page, { timeout = 120_000 } = {}) => {
-  const idle = () => {
-    const app = window.__GBDRAW_APP__;
-    const history = window.__GBDRAW_HISTORY__;
-    return !app.processing && !app.labelReflowProcessing && !app.sessionImportPending
-      && !app.ruleMatchingPending && !history?.capturing?.value && !history?.restoring?.value
-      && !history?.mutationPending?.();
-  };
-  for (let stableFrames = 0; stableFrames < 2;) {
-    await page.waitForFunction(idle, null, { timeout });
-    await page.evaluate(() => new Promise((resolve) => (
-      requestAnimationFrame(() => requestAnimationFrame(resolve))
-    )));
-    stableFrames = await page.evaluate(idle) ? stableFrames + 1 : 0;
-  }
-};
 
 // Shows the batch Result at `index` through the Result selector and waits until
 // it is mounted.

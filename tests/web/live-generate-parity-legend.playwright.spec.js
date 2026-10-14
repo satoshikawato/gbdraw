@@ -3,11 +3,11 @@
 // Legend colors on rows that the draft removes or that only one Result or mode
 // draws (OV-63, OV-80), and Legend renames (OV-62). The matrix of edit kinds is
 // in live-generate-parity.playwright.spec.js.
-const { test, expect } = require('@playwright/test');
+const { expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
-const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const {
   diffSemanticSnapshots, expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult
 } = require('./helpers/live-generate-parity.cjs');
