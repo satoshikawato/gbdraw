@@ -9,7 +9,7 @@ import math
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import lru_cache
-from typing import Any, Literal, TypeAlias, cast
+from typing import Any, Literal, NamedTuple, TypeAlias, cast
 
 from ..features.coordinates import get_strand
 from .filtering import label_filter_maps
@@ -502,7 +502,19 @@ def _leader_start_point(label: CircularLabel, total_length: int | None = None) -
     return movable, fixed_coord
 
 
-def _leader_start_group_score(group: list[dict], coords: list[float], side: str) -> tuple[int, int, float, float]:
+class _LeaderEdgeItem(NamedTuple):
+    """One label on a box edge while its leader start is refined (``_leader_start_meta``)."""
+
+    label: CircularLabel
+    fixed: float
+    lower: float
+    upper: float
+    preferred: float
+    current: float
+    order: float
+
+
+def _leader_start_group_score(group: list[_LeaderEdgeItem], coords: list[float], side: str) -> tuple[int, int, float, float]:
     """Score leader-start coordinates for one edge group."""
     inversion_count = 0
     for idx in range(len(coords)):
@@ -518,49 +530,49 @@ def _leader_start_group_score(group: list[dict], coords: list[float], side: str)
     leader_sum = 0.0
     preference_deviation = 0.0
     for item, coord in zip(group, coords):
-        label = item["label"]
+        label = item.label
         if side in ("left", "right"):
-            x = float(item["fixed"])
+            x = float(item.fixed)
             y = float(coord)
         else:
             x = float(coord)
-            y = float(item["fixed"])
+            y = float(item.fixed)
         leader_sum += math.hypot(x - float(label["middle_x"]), y - float(label["middle_y"]))
-        preference_deviation += abs(float(coord) - float(item["preferred"]))
+        preference_deviation += abs(float(coord) - float(item.preferred))
 
     return inversion_count, close_pairs, leader_sum, preference_deviation
 
 
-def _fit_monotonic_leader_coords(group: list[dict], min_gap: float) -> list[float] | None:
+def _fit_monotonic_leader_coords(group: list[_LeaderEdgeItem], min_gap: float) -> list[float] | None:
     """Fit edge coordinates under bounds while enforcing monotonic order."""
     if not group:
         return []
 
-    coords = [min(max(float(item["preferred"]), float(item["lower"])), float(item["upper"])) for item in group]
+    coords = [min(max(float(item.preferred), float(item.lower)), float(item.upper)) for item in group]
 
     for _ in range(max(3, len(coords) * 2)):
         changed = False
         for idx in range(1, len(coords)):
-            lower_bound = max(float(group[idx]["lower"]), coords[idx - 1] + min_gap)
+            lower_bound = max(float(group[idx].lower), coords[idx - 1] + min_gap)
             if coords[idx] < lower_bound:
                 coords[idx] = lower_bound
                 changed = True
-            if coords[idx] > (float(group[idx]["upper"]) + 1e-9):
+            if coords[idx] > (float(group[idx].upper) + 1e-9):
                 return None
 
         for idx in range(len(coords) - 2, -1, -1):
-            upper_bound = min(float(group[idx]["upper"]), coords[idx + 1] - min_gap)
+            upper_bound = min(float(group[idx].upper), coords[idx + 1] - min_gap)
             if coords[idx] > upper_bound:
                 coords[idx] = upper_bound
                 changed = True
-            if coords[idx] < (float(group[idx]["lower"]) - 1e-9):
+            if coords[idx] < (float(group[idx].lower) - 1e-9):
                 return None
 
         if not changed:
             break
 
     for idx, coord in enumerate(coords):
-        if coord < (float(group[idx]["lower"]) - 1e-9) or coord > (float(group[idx]["upper"]) + 1e-9):
+        if coord < (float(group[idx].lower) - 1e-9) or coord > (float(group[idx].upper) + 1e-9):
             return None
         if idx > 0 and coord < (coords[idx - 1] + min_gap - 1e-9):
             return None
@@ -576,7 +588,7 @@ def _refine_leader_start_points(labels: list[CircularLabel], total_length: int) 
     if len(labels) < 2:
         return labels
 
-    edge_groups: dict[str, list[dict]] = {"left": [], "right": [], "bottom": [], "top": []}
+    edge_groups: dict[str, list[_LeaderEdgeItem]] = {"left": [], "right": [], "bottom": [], "top": []}
     for label in labels:
         meta = _leader_start_meta(label, total_length)
         if meta is None:
@@ -592,22 +604,14 @@ def _refine_leader_start_points(labels: list[CircularLabel], total_length: int) 
             order_coord = float(label.get("middle_x", 0.0))
 
         edge_groups[side].append(
-            {
-                "label": label,
-                "fixed": fixed,
-                "lower": lower,
-                "upper": upper,
-                "preferred": preferred,
-                "current": current_coord,
-                "order": order_coord,
-            }
+            _LeaderEdgeItem(label, fixed, lower, upper, preferred, current_coord, order_coord)
         )
 
     for side, group in edge_groups.items():
         if len(group) < 2:
             continue
-        group.sort(key=lambda item: float(item["order"]))
-        current_coords = [float(item["current"]) for item in group]
+        group.sort(key=lambda item: float(item.order))
+        current_coords = [float(item.current) for item in group]
         current_score = _leader_start_group_score(group, current_coords, side)
         best_coords = current_coords
         best_score = current_score
@@ -625,13 +629,13 @@ def _refine_leader_start_points(labels: list[CircularLabel], total_length: int) 
             continue
 
         for item, coord in zip(group, best_coords):
-            label = item["label"]
+            label = item.label
             if side in ("left", "right"):
-                label["leader_start_x"] = float(item["fixed"])
+                label["leader_start_x"] = float(item.fixed)
                 label["leader_start_y"] = float(coord)
             else:
                 label["leader_start_x"] = float(coord)
-                label["leader_start_y"] = float(item["fixed"])
+                label["leader_start_y"] = float(item.fixed)
     return labels
 
 
@@ -2663,7 +2667,6 @@ def place_labels_on_arc_fc(
     for label in labels:
         target_angle_unwrapped = angle_from_middle_unwrapped(label["middle"], total_length)
         label["target_angle_unwrapped"] = target_angle_unwrapped
-        label["target_angle"] = target_angle_unwrapped % 360.0
         lower_bound = prev_angle_unwrapped + min_order_gap
         best_x = None
         best_y = None
@@ -3005,7 +3008,6 @@ def improved_label_placement_fc(
             while target_angle_unwrapped <= prev_target_unwrapped:
                 target_angle_unwrapped += 360.0
         label["target_angle_unwrapped"] = target_angle_unwrapped
-        label["target_angle"] = target_angle_unwrapped % 360.0
         prev_target_unwrapped = target_angle_unwrapped
 
     pair_margins: list[list[float]] = []
@@ -5168,7 +5170,6 @@ def prepare_label_list(
                 "feature_center_radius_px": feature_center_radius,
                 "feature_outer_radius_px": feature_outer_radius,
                 "track_preset": track_type,
-                "feature_lane_direction": lane_direction,
                 "width_px": bbox_width_px,
                 "height_px": bbox_height_px,
                 "strand": coordinate_strand,
@@ -5252,7 +5253,6 @@ def prepare_label_list(
         )
         external_labels = [label.copy() for label in radial_result.labels]
         for label in external_labels:
-            label["layout_content_bounds"] = radial_result.content_bounds
             label["required_radius_growth_px"] = radial_result.required_radius_growth_px
             label["layout_collision_counts"] = (
                 radial_result.text_collision_count,

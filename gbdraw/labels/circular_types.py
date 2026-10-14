@@ -74,7 +74,6 @@ class _CircularLabelRequired(TypedDict):
     feature_center_radius_px: float
     feature_outer_radius_px: float
     track_preset: str
-    feature_lane_direction: str
     width_px: float
     height_px: float
     strand: str
@@ -95,7 +94,7 @@ class CircularLabel(_CircularLabelRequired, total=False):
       ``max_inner_start_radius_px``, ``max_inner_middle_radius_px``,
       ``min_outer_middle_radius_px``;
     - placed text: ``start_x``, ``start_y``, ``angle_unwrapped``,
-      ``target_angle_unwrapped``, ``target_angle``;
+      ``target_angle_unwrapped``;
     - placement stage only: ``_spacing_px``, ``_enforce_spacing_px``,
       ``_fixed_radius_px``, ``_target_angle_unwrapped_fixed``,
       ``_angle_unwrapped_fixed``, ``_opt_original_idx``;
@@ -103,9 +102,9 @@ class CircularLabel(_CircularLabelRequired, total=False):
       contact as fractions of the ink box);
     - radial placement: ``placement``, ``placed_angle_deg``, ``text_x``,
       ``text_y``, ``rotation_deg``, ``text_anchor``, ``dominant_baseline``,
-      ``oriented_corners``, ``aabb_local``, ``text_anchor_radius_px``;
+      ``oriented_corners``, ``aabb_local``;
     - radial layout summary: ``required_radius_growth_px``,
-      ``layout_collision_counts``, ``layout_content_bounds``.
+      ``layout_collision_counts``.
     """
 
     is_inner: bool
@@ -117,7 +116,6 @@ class CircularLabel(_CircularLabelRequired, total=False):
     start_y: float
     angle_unwrapped: float
     target_angle_unwrapped: float
-    target_angle: float
     _spacing_px: float
     _enforce_spacing_px: bool
     _fixed_radius_px: float
@@ -136,10 +134,8 @@ class CircularLabel(_CircularLabelRequired, total=False):
     dominant_baseline: str
     oriented_corners: tuple[Point, ...]
     aabb_local: AabbTuple
-    text_anchor_radius_px: float
     required_radius_growth_px: float
     layout_collision_counts: tuple[int, int, int, int]
-    layout_content_bounds: AabbTuple | None
 
 
 @dataclass(frozen=True)

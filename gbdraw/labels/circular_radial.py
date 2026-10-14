@@ -247,7 +247,6 @@ def _make_placed_label(
             "leader_start_y": text_y,
             "oriented_corners": box.corners,
             "aabb_local": box.aabb,
-            "text_anchor_radius_px": float(text_anchor_radius_px),
         }
     )
     return label
