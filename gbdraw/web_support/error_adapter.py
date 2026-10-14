@@ -59,8 +59,7 @@ LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
 RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES CIRCULAR_SETTING LINEAR_SETTING
 ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK RECORD_ID OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE""".split())
 _DIAGNOSTIC_INTEGER_KEYS = frozenset(
-    "row column columnCount seriesIndex slotIndex innerPx outerPx placementIndex queryRecordIndex subjectRecordIndex"
-    " overlapPairs crossingPairs".split()
+    "row column columnCount seriesIndex slotIndex innerPx outerPx placementIndex queryRecordIndex subjectRecordIndex".split()
 )
 
 # The engine computes a Result from the request alone, so an unclassified failure
@@ -218,6 +217,10 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
         value = diagnostic[key]
         if type(value) is int and 0 <= value <= 10_000_000:
             context[key] = value
+    # Python words the label fit counts (gbdraw.labels.fit); the Web shows the sentence as sent.
+    counts = diagnostic.get("labelFitCounts")
+    if diagnostic["code"] == "LABEL_LAYOUT" and isinstance(counts, str):
+        context["labelFitCounts"] = counts
     return diagnostic["code"], context
 
 

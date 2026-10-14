@@ -3637,8 +3637,10 @@ def test_tobacco_14pt_outer_labels_that_overlap_are_not_drawn() -> None:
     assert failing.fit.overlap_pairs > 0
     assert raised.value.diagnostic == {
         "code": "LABEL_LAYOUT",
-        "overlapPairs": failing.fit.overlap_pairs,
-        "crossingPairs": failing.fit.crossing_pairs,
+        "labelFitCounts": (
+            f"Overlapping label pairs: {failing.fit.overlap_pairs}."
+            f" Crossing leader pairs: {failing.fit.crossing_pairs}."
+        ),
     }
     assert [row.kind for row in report.rows] == [
         "outward_both",

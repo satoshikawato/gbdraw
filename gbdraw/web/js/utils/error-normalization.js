@@ -267,8 +267,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [placementIndex]
  * @property {number} [queryRecordIndex]
  * @property {number} [subjectRecordIndex]
- * @property {number} [overlapPairs]
- * @property {number} [crossingPairs]
+ * @property {string} [labelFitCounts] Python's sentence of the label fit counts, shown as sent.
  */
 
 /**
@@ -542,8 +541,12 @@ const contextFor = (value) => {
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
-  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex' | 'overlapPairs' | 'crossingPairs'>} */ ([
-    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex', 'overlapPairs', 'crossingPairs'
+  // Python words the label fit counts (gbdraw/labels/fit.py): one line of printable text, shown as sent.
+  if (typeof value.labelFitCounts === 'string' && value.labelFitCounts.length <= 80 && /^[\x20-\x7e]+$/.test(value.labelFitCounts)) {
+    context.labelFitCounts = value.labelFitCounts;
+  }
+  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex'>} */ ([
+    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex'
   ])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
@@ -608,9 +611,7 @@ export const normalizeUserFacingError = (value, {
   const position = result.context.position !== undefined ? ` At character ${result.context.position + 1}.` : '';
   const columns = result.context.columnCount !== undefined ? ` Required columns: ${result.context.columnCount}.` : '';
   const count = result.context.recordCount !== undefined ? ` Loaded records: ${result.context.recordCount}.` : '';
-  const { overlapPairs, crossingPairs } = result.context;
-  const labelFit = overlapPairs !== undefined && crossingPairs !== undefined
-    ? ` Overlapping label pairs: ${overlapPairs}. Crossing leader pairs: ${crossingPairs}.` : '';
+  const labelFit = result.context.labelFitCounts ? ` ${result.context.labelFitCounts}` : '';
   const exception = result.context.exceptionType ? ` Python exception: ${result.context.exceptionType}.` : '';
   const schemaGuidance = result.code === 'INPUT_INVALID' && result.context.field === 'schema'
     ? ' Load a supported Session file or recreate it with the current writer.' : '';

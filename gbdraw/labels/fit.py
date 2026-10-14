@@ -499,6 +499,12 @@ def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
     return tuple(sentences)
 
 
+def label_fit_error_counts(report: LabelFitReport) -> str:
+    """The counts sentence of the Web error over a figure that was not drawn."""
+
+    return f"Overlapping label pairs: {report.overlap_pairs}. Crossing leader pairs: {report.crossing_pairs}."
+
+
 def label_fit_record_counts(record: LabelFitRecord) -> str:
     """A record's counts as the report states them, or why radial labels were refused."""
 
@@ -635,6 +641,7 @@ __all__ = [
     "crossing_pairs",
     "fit_counts",
     "format_label_fit_report",
+    "label_fit_error_counts",
     "label_fit_notice",
     "label_fit_outcome",
     "label_fit_record_counts",

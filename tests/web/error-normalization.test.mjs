@@ -347,6 +347,16 @@ test('every operation error panel action is a small secondary button', () => {
 });
 
 // R6: locators the producer keeps are shown in the summary, wording only here.
+test('the label fit counts are Python\'s sentence; the wording owner holds no counts words of its own', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/utils/error-normalization.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /Overlapping label pairs|Crossing leader pairs|overlapPairs|crossingPairs/);
+  const model = roundtrip({ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'Overlapping label pairs: 2. Crossing leader pairs: 0.' } });
+  assert.match(model.summary, / Overlapping label pairs: 2\. Crossing leader pairs: 0\.$/);
+  // A value that is not one line of printable text is dropped.
+  assert.equal(roundtrip({ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'a\nb' } }).context.labelFitCounts, undefined);
+  assert.equal(roundtrip({ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'x'.repeat(81) } }).context.labelFitCounts, undefined);
+});
+
 test('summary shows Sequence, Line, Track row, Depth series, band and setting locators', () => {
   for (const [source, pattern] of [
     [diagnosticError('INPUT_REQUIRED', { inputOrdinal: 2 }), /^Supply GenBank input or matching GFF3 and FASTA inputs\. Sequence 2\.$/],
@@ -357,7 +367,8 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
     [{ code: 'TRACK_LAYOUT', context: { reason: 'CANNOT_FIT', slotIndex: 1, innerPx: 181, outerPx: 209 } },
       /^A circular track does not fit\. Track row 2\. Move the track.*the other side of the Axis\. Available band: 181–209 px\.$/],
     [{ code: 'DEPTH_INVALID', context: { reason: 'DEPTH_VALUES', seriesIndex: 0 } }, / Depth series 1\. Use integer positions/],
-    [{ code: 'LABEL_LAYOUT', context: { overlapPairs: 20, crossingPairs: 21 } },
+    // Python's sentence of the counts, shown as sent (one wording owner, LP-D60).
+    [{ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'Overlapping label pairs: 20. Crossing leader pairs: 21.' } },
       // Every label kind and both modes (SCOPE-ALL-LABELS), not only Circular outer labels (OV-723).
       /^Labels do not fit\. Generate again to choose a fix, or change the label settings\. Overlapping label pairs: 20\. Crossing leader pairs: 21\.$/],
     [{ code: 'INPUT_INVALID', context: { reason: 'INTEGER', configPath: 'objects.scale.interval' } }, / Setting: objects\.scale\.interval\. Use an integer\.$/]

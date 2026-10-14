@@ -77,11 +77,9 @@ class ExportError(GbdrawError):
 
 def _label_fit_diagnostic(report: LabelFitReport) -> dict[str, object]:
     # The code alone names the failure; the shared CANNOT_FIT reason carries track wording.
-    return {
-        "code": "LABEL_LAYOUT",
-        "overlapPairs": report.overlap_pairs,
-        "crossingPairs": report.crossing_pairs,
-    }
+    from gbdraw.labels.fit import label_fit_error_counts
+
+    return {"code": "LABEL_LAYOUT", "labelFitCounts": label_fit_error_counts(report)}
 
 
 class LabelsDoNotFitError(GbdrawError):

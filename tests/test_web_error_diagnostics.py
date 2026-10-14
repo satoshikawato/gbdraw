@@ -558,5 +558,6 @@ def test_circular_labels_that_do_not_fit_reach_the_web_as_label_layout():
         "code": "LABEL_LAYOUT",
         "operation": "generate",
         "stage": "render",
-        "context": {"crossingPairs": 24, "overlapPairs": 20},
+        # Python words the counts (one wording owner); the Web shows the sentence as sent.
+        "context": {"labelFitCounts": "Overlapping label pairs: 20. Crossing leader pairs: 24."},
     }
