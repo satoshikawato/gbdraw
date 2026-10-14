@@ -188,7 +188,6 @@ import {
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
-  holdsSettingsOnlyContent,
   readSessionAuthorityParts,
   readSessionDocument,
   readSessionInput,
@@ -2108,9 +2107,11 @@ const readSessionRequests = (rawData, version, repairs) => {
   const topRead = read(top, 'renderRequest', comparisonClassification);
   if ('kind' in topRead) {
     const envelope = /** @type {SessionEnvelope} */ (rawData);
-    // Without a settings-only form, or without the settings it keeps, nothing
-    // can be restored (R4, C-OD25); an unread request is never committed.
-    if (!settingsOnlyForm || !holdsSettingsOnlyContent(envelope)) throw SESSION_FIELDS_ERROR();
+    // Without a settings-only form, an unread request is never committed
+    // (C-OD25). A settings-only reading that keeps no settings (a CLI or
+    // Python API Session 42, 44 or 47) restores nothing: R4 refuses it
+    // (`restoresNothing`, E-OD22).
+    if (!settingsOnlyForm) throw SESSION_FIELDS_ERROR();
     repairs.push(loadRepair({ code: 'request-dropped', path: topRead.path, effect: 'dropped' }));
     return {
       data: /** @type {T} */ (settingsOnlySessionCandidate(envelope)), storedSchemas, settingsOnly: true,

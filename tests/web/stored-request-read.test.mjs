@@ -6,7 +6,9 @@
 // top-level request and `otherModeResult` (OV-670).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
@@ -528,6 +530,41 @@ test('a request whose schema is no integer is unreadable (K22): settings only wi
     session.renderRequest.schema = schema;
     const { result } = await load(session);
     assert.deepEqual([result.error?.code, result.error?.context?.reason], ['INPUT_INVALID', 'SESSION_FORMAT'], String(schema));
+  }
+});
+
+// R4 has one owner (E-OD22, C-OD27): a Session 42, 44 or 47 the CLI or the
+// Python API wrote keeps no settings apart from its request, so when Load
+// drops that request at its root (K22), `restoresNothing` refuses the file.
+test('R4 alone refuses a CLI or Python API Session 42, 44 or 47 whose request is missing, unreadable or of no integer schema: nothing restored, nothing committed (E-OD21, E-OD22)', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gbdraw-cli-47-'));
+  let cli47;
+  try {
+    const file = join(directory, 'cli.gbdraw-session.json.gz');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', fileURLToPath(new URL('tests/test_inputs/NC_001416.gb', REPO)),
+      '-o', join(directory, 'cli'), '-f', 'svg', '--session_output', file], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: fileURLToPath(REPO) }, stdio: 'pipe'
+    });
+    cli47 = JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  const sessions = [
+    ['se08-main-linear-cli.v42', fixture('se08-main-linear-cli.v42.gbdraw-session.json.gz')],
+    ['scale-interval-zero-circular-cli.v44', fixture('scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz')],
+    ['cli.v47', cli47]
+  ];
+  assert.equal(cli47.version, 47);
+  for (const [name, base] of sessions) {
+    assert.ok(!Object.hasOwn(base, 'config') && !Object.hasOwn(base, 'modes'), name);
+    const missing = clone(base);
+    delete missing.renderRequest;
+    await assertRefusedUnread(missing, `${name} missing`);
+    for (const request of [...UNREADABLE_REQUESTS, 'x', 5, []]) {
+      const session = clone(base);
+      session.renderRequest = clone(request);
+      await assertRefusedUnread(session, `${name} ${JSON.stringify(request)}`);
+    }
   }
 });
 
