@@ -1832,6 +1832,7 @@ test('steady-state topology removes legacy main producers without changing final
   );
   assert.equal([...BASE_POLICY_WORKFLOW.matchAll(/name: Promotion \/ gate/g)].length, 1);
   assert.deepEqual(WORKFLOW_NAMES, [
+    'ci-inventory.yml',
     'deploy_web.yml',
     'gallery-publication.yml',
     'losat-distribution.yml',

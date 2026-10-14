@@ -398,6 +398,42 @@ reporter names the running case, and the JSON report records durations,
 retries and final results alongside traces on every completed job. A job killed
 at its limit may not reach upload; its last running case remains in the log.
 
+## Weekly CI inventory
+
+The `CI inventory` workflow (`.github/workflows/ci-inventory.yml`) runs
+`tools/ci-inventory.mjs` every Monday at 00:17 UTC and on manual dispatch. It
+checks out `dev`, needs no session, and never runs on a pull request. GitHub
+runs scheduled workflows from the default branch, so the schedule starts once
+the workflow reaches `main`. Its report covers the last 7 days:
+
+- runner-minutes by workflow and event, and by job name (matrix jobs together);
+- `Tests` wall time (run start to its last job) and queue time (job created to
+  job started), p50 and p90, for pull request and `dev` push runs;
+- the functional shards of the latest green `dev` push `Tests` run that kept
+  every shard report: test-minutes per shard, the slowest shard against the
+  mean, the case count, the 15 spec files with the most test-minutes, and the
+  plan `tools/balance-functional-shards.mjs` would write from that run;
+- changes since the previous week in functional cases, functional
+  test-minutes, runner-minutes, and jobs in `test.yml`.
+
+The report goes to the job summary and to one comment a week on the open issue
+labelled `ci-inventory`; the workflow creates the label and the issue when they
+are missing, and a second run in the same week replaces that week's comment.
+Each comment ends with a data block that the next week's run reads back. When
+the job lists of all runs would exceed the token's request budget, the
+remaining runs count by their own duration, and the report says how many.
+
+A report asks for a rebalance when the slowest shard has more than 1.2 times
+the mean test-minutes, or when a functional spec file has no recorded minutes
+in `tests/ci/functional-shards.json`. A session that reads a flagged report:
+
+1. Rebalances the shards with the reports of two green `dev` runs (above).
+2. Reviews the spec files and jobs that grew most: merges cases that repeat a
+   journey another case already proves, moves checks that need no browser to
+   node or pytest, and removes cases and jobs whose behaviour is covered
+   elsewhere. Removing an acceptance case follows "Smoke inventory and
+   regression retention".
+
 ## Trust and aggregate checks
 
 PR planning and `PR / gate` execute the PR base's helper under `.ci-trusted-base`.
