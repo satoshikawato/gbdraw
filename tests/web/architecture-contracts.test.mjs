@@ -1770,7 +1770,12 @@ test('trusted promotion uses base code for topology, exact-SHA evidence, and tre
   const devPolicy = workflowJob('trusted-base-policy', BASE_POLICY_WORKFLOW);
   assert.match(devPolicy, /\n    name: Web base policy \(trusted base\)\n/);
   assert.match(devPolicy, /if: github\.event\.pull_request\.base\.ref == 'dev'/);
-  assert.equal([...devPolicy.matchAll(/uses: actions\/checkout@/g)].length, 1);
+  // The trusted base checkout plus a sparse checkout of .node-version from the base branch tip.
+  assert.equal([...devPolicy.matchAll(/uses: actions\/checkout@/g)].length, 2);
+  assert.match(
+    devPolicy,
+    /ref: \$\{\{ github\.sha \}\}\n {10}path: \.ci-node-version\n {10}sparse-checkout: \.node-version\n {10}sparse-checkout-cone-mode: false\n {10}persist-credentials: false\n/
+  );
   assert.match(devPolicy, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
   assert.match(devPolicy, /fetch-depth: 0/);
   assert.match(devPolicy, /persist-credentials: false/);
@@ -1783,7 +1788,12 @@ test('trusted promotion uses base code for topology, exact-SHA evidence, and tre
   const promotion = workflowJob('promotion-gate', BASE_POLICY_WORKFLOW);
   assert.match(promotion, /\n    name: Promotion \/ gate\n/);
   assert.match(promotion, /if: github\.event\.pull_request\.base\.ref == 'main'/);
-  assert.equal([...promotion.matchAll(/uses: actions\/checkout@/g)].length, 1);
+  // The trusted base checkout plus a sparse checkout of .node-version from the base branch tip.
+  assert.equal([...promotion.matchAll(/uses: actions\/checkout@/g)].length, 2);
+  assert.match(
+    promotion,
+    /ref: \$\{\{ github\.sha \}\}\n {10}path: \.ci-node-version\n {10}sparse-checkout: \.node-version\n {10}sparse-checkout-cone-mode: false\n {10}persist-credentials: false\n/
+  );
   assert.match(promotion, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
   assert.match(promotion, /fetch-depth: 0/);
   assert.match(promotion, /persist-credentials: false/);
@@ -1862,10 +1872,19 @@ test('every workflow reads its Node version from the root .node-version', () => 
     const source = WORKFLOW_SOURCES[index];
     assert.doesNotMatch(source, /^\s*node-version:/m, name);
     assert.equal(
-      (source.match(/uses: actions\/setup-node@v\d+\n\s+with:\n\s+node-version-file: \.node-version\n/g) || []).length,
+      (source.match(/uses: actions\/setup-node@v\d+\n\s+with:\n\s+node-version-file: (?:\.ci-node-version\/)?\.node-version\n/g) || []).length,
       (source.match(/uses: actions\/setup-node@/g) || []).length,
       name
     );
+    // pull_request.base.sha can predate the .node-version file, so no job reads it from that checkout.
+    for (const job of source.split(/\n(?=  [a-z0-9-]+:\n)/)) {
+      for (const checkout of job.match(/uses: actions\/checkout@[^\n]*\n {8}with:\n(?: {10}[^\n]*\n)*/g) || []) {
+        if (!/ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/.test(checkout)) continue;
+        const path = checkout.match(/\n {10}path: (\S+)/)?.[1];
+        const file = path ? `${path}/.node-version` : '.node-version';
+        assert.ok(!job.includes(`node-version-file: ${file}\n`), `${name}: ${file} comes from base.sha`);
+      }
+    }
   });
 });
 
