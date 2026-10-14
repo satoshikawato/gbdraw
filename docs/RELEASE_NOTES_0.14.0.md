@@ -328,7 +328,10 @@ but cannot edit it yet. See
 Small label defects of horizontal Circular labels, up to 100 per record, are
 now repaired by moving outer and inner labels slightly: overlapping labels,
 crossing leader lines, and inner labels over the definition text in the centre.
-A record is changed only when the repair clears all of them.
+A record is changed only when the repair clears all of them. After a repair,
+the neighbouring labels make room around the repaired spot, so the leader lines
+there become shorter and straighter; maps that fit without a repair are drawn
+as before.
 Labels that would still overlap are no longer drawn: Circular outer, inner, and
 embedded labels in either placement, and Linear labels. The command line exits
 with an error and Python raises `LabelsDoNotFitError`; the message lists

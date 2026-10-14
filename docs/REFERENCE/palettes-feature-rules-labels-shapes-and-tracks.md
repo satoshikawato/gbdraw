@@ -277,6 +277,15 @@ layout is kept only if it leaves no defect; otherwise the record keeps its
 layout and the rules below apply. Records without a defect, and records with
 radial labels, are not changed.
 
+After a successful repair, the labels around the repaired defects make room:
+the labels of the defects and up to 12 neighbouring labels on each side of
+them, on the same side of the circle, may move within the same limits toward
+shorter, more radial leader lines, and labels next to a crowded run may move
+up away from it. Each moved leader meets its label at the point its direction
+of arrival selects. This step never adds a defect or a leader line through
+another label's text; if it would, the repaired layout is kept. Records the
+repair does not change are not affected.
+
 - If any labels overlap, or radial labels need more room than the circular
   tracks leave, nothing is drawn. The command line prints `ERROR:` with the
   message and exits with status 1. Python raises `LabelsDoNotFitError`, a

@@ -1,8 +1,9 @@
-"""Local repair of slight Circular label defects (LP-D50, LP-D57).
+"""Local repair of slight Circular label defects (LP-D50, LP-D57) and the yield after it (LP-D59).
 
 Before the fit check counts a record, its final horizontal layout is repaired
 when it has 1 to 100 defects: labels move a little, never past a neighbour,
-and the repair is kept only when the record then fits.
+and the repair is kept only when the record then fits. A repaired record then
+yields room around its repaired defects, under the same rules.
 """
 
 from __future__ import annotations
@@ -113,14 +114,18 @@ def test_inner_labels_over_the_definition_text_are_repaired(tmp_path: Path) -> N
 
 
 def test_plasmid_crossing_is_repaired_by_a_contact_change() -> None:
-    """Plasmid NZ_AP024092.1 at 14 pt: 1 crossing; the leader meets another point of its label, nothing moves."""
+    """Plasmid NZ_AP024092.1 at 14 pt: 1 crossing; the leader meets another point of its label, nothing moves.
+
+    This is the repair's own result, before the yield (LP-D59) moves its neighbours.
+    """
 
     labels, total_length, definition = _fixture("o_plasmid37_f14")
     assert defect_count(labels, total_length, definition) == 1
 
-    repaired = repair_circular_labels(labels, total_length, definition_text=definition)
+    search = repair_module._Repair(labels, total_length, definition)
+    assert search.run()
+    repaired = search.labels
 
-    assert repaired is not None
     assert defect_count(repaired, total_length, definition) == 0
     changed = [new for old, new in zip(labels, repaired) if old.get("leader_contact") != new.get("leader_contact")]
     assert len(changed) == 1
@@ -153,7 +158,7 @@ def test_n4_crossings_at_defaults_are_repaired() -> None:
 # ---- rules -------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["o_n4_default", "o_plasmid37_f14"])
+@pytest.mark.parametrize("name", ["o_n4_default", "o_plasmid37_f14", "o_lambda_f14"])
 def test_repairs_stay_within_their_bounds(name: str) -> None:
     """Text moves at most 24 px, an elbow 12 px; a label keeps its half and never comes inside its own elbow circle."""
 
@@ -290,6 +295,146 @@ def test_fit_probes_do_not_repair(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         )
     assert True in probes
     assert len(calls) == probes.count(False)
+
+
+# ---- the yield after a repair (LP-D59) -------------------------------------------
+
+
+def _repaired_only(name: str) -> tuple[list[dict], list[dict], int, tuple[Aabb, ...]]:
+    """(engine labels, the repair's own result before the yield, record length, definition text)."""
+
+    labels, total_length, definition = _fixture(name)
+    search = repair_module._Repair(labels, total_length, definition)
+    assert search.run()
+    return labels, [label.copy() for label in search.labels], total_length, definition
+
+
+def _through_pairs(labels: list[dict], total_length: int) -> set[tuple[str, str]]:
+    """(leader of, text of) by label text: the repair's own font-box test, over the whole record."""
+
+    search = repair_module._Repair(labels, total_length, ())
+    return {
+        (labels[leader]["label_text"], labels[text]["label_text"])
+        for leader, text in search._current_through(search.external)
+    }
+
+
+def _moved(first: list[dict], second: list[dict]) -> list[int]:
+    return [
+        index
+        for index, (old, new) in enumerate(zip(first, second))
+        if not old.get("is_embedded")
+        and max(
+            math.dist((old["start_x"], old["start_y"]), (new["start_x"], new["start_y"])),
+            math.dist((old["middle_x"], old["middle_y"]), (new["middle_x"], new["middle_y"])),
+        )
+        > 0.05
+    ]
+
+
+@pytest.mark.parametrize("name", ["o_plasmid37_f14", "o_lambda_f14"])
+def test_the_labels_around_repaired_defects_yield_room(name: str) -> None:
+    """The window (the original defects' labels and up to 12 neighbours on their side) moves; the record still fits."""
+
+    labels, repaired, total_length, definition = _repaired_only(name)
+    yielded = repair_circular_labels(labels, total_length, definition_text=definition)
+
+    assert yielded is not None
+    assert defect_count(yielded, total_length, definition) == 0
+    moved = _moved(repaired, yielded)
+    assert len(moved) >= 10
+    search = repair_module._Repair(labels, total_length, definition)
+    search.run()
+    window = {index for run in search._window_runs(max(repair_module.YIELD_WINDOWS)) for index in run}
+    assert set(moved) <= window
+    _assert_order_kept(labels, yielded)
+
+
+@pytest.mark.parametrize("name", ["o_plasmid37_f14", "o_lambda_f14", "o_n4_default"])
+def test_the_yield_never_draws_a_new_leader_through_another_labels_text(name: str) -> None:
+    labels, repaired, total_length, definition = _repaired_only(name)
+    yielded = repair_circular_labels(labels, total_length, definition_text=definition)
+
+    assert yielded is not None
+    assert _through_pairs(yielded, total_length) <= _through_pairs(repaired, total_length)
+
+
+def test_a_lift_that_trades_one_leader_through_text_for_another_is_refused() -> None:
+    """The preview's guard compared counts: a lift that removed two through pairs and added one passed.
+
+    The yield compares pairs, so every such lift of the lambda 14 pt window is refused.
+    """
+
+    labels, _repaired, total_length, definition = _repaired_only("o_lambda_f14")
+    search = repair_module._Repair(labels, total_length, definition)
+    assert search.run()
+    runs = search._window_runs(max(repair_module.YIELD_WINDOWS))
+    search.window = frozenset(index for run in runs for index in run)
+    traded = 0
+    for run in runs:
+        for split in range(1, len(run)):
+            for yielders, crowd in ((run[max(0, split - 4) : split], run[split : split + 8]), (run[split : split + 4], run[max(0, split - 8) : split][::-1])):
+                for distance in repair_module.LIFT_STEPS_PX:
+                    moved = search._lift(yielders, crowd, distance)
+                    probe = {index: label.copy() for index, label in moved.items()}
+                    if not probe or not all(search._takes_rule_contact(label) for label in probe.values()):
+                        continue
+                    for label in probe.values():
+                        search._finish(label)
+                    geometry = {index: search._geometry_of(label) for index, label in probe.items()}
+                    before = search._current_through(list(moved))
+                    after = search._through(probe, geometry)
+                    if after - before and len(after) <= len(before):
+                        traded += 1
+                        assert search._try_yield(moved) is None
+    assert traded > 0
+
+
+def test_a_yield_that_ends_with_a_defect_keeps_the_repaired_layout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """All or nothing: when the yield's result does not fit, the repair's own result is returned."""
+
+    labels, repaired, total_length, definition = _repaired_only("o_plasmid37_f14")
+    make_room = repair_module._Repair.make_room
+
+    def overlapping(self: repair_module._Repair) -> bool:
+        make_room(self)
+        first, second = self.order["out"][:2]
+        self.labels[second] = {**self.labels[second], "start_x": self.labels[first]["start_x"], "start_y": self.labels[first]["start_y"]}
+        return True
+
+    monkeypatch.setattr(repair_module._Repair, "make_room", overlapping)
+    result = repair_circular_labels(labels, total_length, definition_text=definition)
+
+    assert result is not None
+    assert json.dumps(result, sort_keys=True) == json.dumps(repaired, sort_keys=True)
+
+
+def test_a_yield_that_ends_with_a_new_leader_through_text_keeps_the_repaired_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    labels, repaired, total_length, definition = _repaired_only("o_plasmid37_f14")
+    monkeypatch.setattr(repair_module._Repair, "make_room", lambda self: False)
+
+    result = repair_circular_labels(labels, total_length, definition_text=definition)
+
+    assert result is not None
+    assert json.dumps(result, sort_keys=True) == json.dumps(repaired, sort_keys=True)
+
+
+@pytest.mark.parametrize("name", ["fits", "c_tobacco_both_f14"])
+def test_records_the_repair_does_not_change_never_yield(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """LP-D59: a record that fits, or whose repair fails, gets no yield call (and no added time)."""
+
+    if name == "fits":
+        labels, repaired, total_length, definition = _repaired_only("o_plasmid37_f14")
+        labels = repaired
+    else:
+        labels, total_length, definition = _fixture(name)
+    calls: list[int] = []
+    monkeypatch.setattr(repair_module._Repair, "make_room", lambda self: calls.append(1) or True)
+
+    assert repair_circular_labels(labels, total_length, definition_text=definition) is None
+    assert calls == []
 
 
 # ---- contact points (LP-D23, LP-D25, LP-D55) -----------------------------------
