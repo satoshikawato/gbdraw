@@ -621,16 +621,14 @@ def check_circular_label_fit(
     search = CircularLabelFitSearch(
         failing, verify, offer_notice_rows=not drawn, assembly_seconds=assembly_seconds
     )
-    if drawn:
-        deadline: float | None = time.monotonic() + warn_search_seconds
-    elif search.outer_only:
-        deadline = None
-    else:
-        deadline = time.monotonic() + SWITCH_SEARCH_SECONDS
+    search_seconds: float | None = (
+        warn_search_seconds if drawn else None if search.outer_only else SWITCH_SEARCH_SECONDS
+    )
+    deadline = None if search_seconds is None else time.monotonic() + search_seconds
     report = LabelFitReport(
         records=_fit_records(failing), rows=search.rows(deadline=deadline), drawn=drawn
     )
-    raise_or_warn(report, row_search=search)
+    raise_or_warn(report, row_search=search, search_seconds=search_seconds)
     return report, search
 
 

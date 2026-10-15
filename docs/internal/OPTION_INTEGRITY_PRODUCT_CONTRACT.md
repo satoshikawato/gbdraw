@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `52`
+- Contract revision: `53`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -1106,6 +1106,42 @@ Status: active Product authority
   - `PD-OI-096` keeps its text; the confirmation dialog its Accepted residual
     risk names is the dialog of this record. No other record is amended or
     retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 53 changes: `PD-OI-097` is replaced for scenario revision `8`
+  (concern `product.circular-outer-label-fit`). It comes from the Product
+  Decision Owner `satoshikawato`'s reply of `2026-10-14` on where the labels
+  around a repaired defect yield room after the automatic repair of scenario
+  revision `7`. Each quotation below is the part of a reply that carries the
+  answer; Replies 1 to 10 are those of the Revision 50 entry.
+  - Reply 11 (scenario revision `8`, `2026-10-14`), to the question
+    「【譲り合いを効かせる範囲】今収まっている Epifagus 14 pt に、譲り合いを効かせた場合を 4 つ並べました（logs/owner-seen-P1_epifagus14_scope-20261014.png。tobacco は P2）。1 は今の #1053、2 は接点の規則だけ（ラベルは動かず、見た目はほぼ同じ。追加 0.01 s）、3 は譲り合い（50 個が動き、追加 2.0 s）、4 は譲り合い＋上へ譲る（51 個が動き、追加 2.8 s）です。小さな図でも、譲り合いを効かせると全ラベルが動き、約 1 s 増えます。4 では maturase の線が tRNA-His の文字を貫いています（拡大：owner-seen-P1_panel4_maturase_through_tRNA-His-20261014.png）。この種類の欠陥は、どの選択肢でも起きないようにします。譲り合いをどこに効かせますか？」
+    the selected option and its description:
+    「微調整した図だけ (推奨)」
+    「修正が入った図（N4 など）だけ、修正の後で周りを整える。収まっている図は 0.13.0 と同じまま（②を変えない）。速さも変わらない」
+    (`YIELD-REPAIRED-ONLY`)
+  - Reply 12 (`2026-10-14`), approving the receipt text below:
+    「Contract 受領文の案をOKします」
+  - The receipt of this change (SHA-256, UTF-8, excluding the final newline:
+    `38b212f4fa546885f1edf3767718cb8b15811b6dc30b195b1f7f4312c57eba3b`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 8
+    Choice: YIELD-REPAIRED-ONLY
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-14
+    ```
+
+  - Scope: the record's receipt for scenario revision `8` is recorded below;
+    the scenario revision `7` receipt keeps its text and its SHA-256.
+    `PD-OI-088` applies unchanged. No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -5554,19 +5590,31 @@ Decision date: 2026-10-13
 ### PD-OI-097: Labels that do not fit
 
 - Concern key: `product.circular-outer-label-fit`
-- Scenario revision: `7`
+- Scenario revision: `8`
+- Supersedes: `PD-OI-097`, scenario revision `7`. Scenario revision `8`
+  keeps every outcome and field of scenario revision `7` and adds
+  `YIELD-REPAIRED-ONLY`.
 - Status: `ACCEPTED`
-- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its JSON representation below.
-- Decision source: the Owner replies quoted verbatim in the Revision 50 entry
-  above. The receipt reproduces the approved field texts without translation
-  or additional terms. Dependent runtime requires this authority merged into
-  its base, or merged together with it through the reviewed static Product
-  Contract co-change route; this record supplies no runtime acceptance
-  evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY`
+- Normative outcome: exactly the complete approved scenario revision `8`
+  `PRODUCT_DECISION` receipt and its JSON representation below. The
+  scenario revision `7` receipt is kept as it was approved.
+- Decision source (scenario revision `7`): the Owner replies quoted verbatim in
+  the Revision 50 entry above. The receipt reproduces the approved field texts
+  without translation or additional terms. Dependent runtime requires this
+  authority merged into its base, or merged together with it through the
+  reviewed static Product Contract co-change route; this record supplies no
+  runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `7`; UTF-8, excluding the final newline):
   `e77d81603000fc47273f5bc86fc1331bf27b666be988cef11cc388301a7324e8`.
+- Decision source (scenario revision `8`): the Owner replies of `2026-10-14`
+  quoted verbatim in the Revision 53 entry above. The second receipt and JSON
+  below reproduce all nine approved fields without translation or additional
+  terms. The runtime, tests, and documentation that implement it merge with it
+  (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (scenario revision `8`; UTF-8, excluding the final newline):
+  `405597f512e865299b743d4307924a44955721a391917fa7360230ba4004417b`.
 
 ```text
 PRODUCT_DECISION
@@ -5586,6 +5634,35 @@ Decision date: 2026-10-14
   "concern": "product.circular-outer-label-fit",
   "scenarioRevision": 7,
   "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-14"
+}
+```
+
+Scenario revision `8` receipt, confirmed by `satoshikawato` on `2026-10-14`:
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 8
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。
+Owner: satoshikawato
+Decision date: 2026-10-14
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 8,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY",
   "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。",
   "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
   "mayRetire": "ラベルが重なったまま図を出す動作。",
