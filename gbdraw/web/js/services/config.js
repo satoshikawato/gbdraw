@@ -35,7 +35,7 @@ import {
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 import {
-  configFieldRepairs, defaultSettingsContainers, installStoredSettings, losatExecutionRepairs, readAnnotationSets, readCanvasPadding,
+  configFieldRepairs, defaultSettingsContainers, installStoredSettings, readBlacklistText, losatExecutionRepairs, readAnnotationSets, readCanvasPadding,
   readGeneratedCircularPlotTitlePosition, readImportedComparisonAction, draftLinearRecordGap, readLinearRecordGap, readLinearRecordLayoutEnabled,
   readLinearRecordRows, readFeaturePanelTab, readList, readLosatProgram, readPaletteColors, readPlainObject,
   readColorRules, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
@@ -1341,7 +1341,7 @@ const applyModeSliceData = (drawing, mode, slice, {
   projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true
 } = {}) => {
   const config = overlayModeSliceConfig(projectedConfig, slice.config);
-  if (Object.keys(config).length) applyStoredConfigData(drawing, config, { resolveTrackPlacements });
+  if (Object.keys(config).length) applyConfigData(drawing, config, { resolveTrackPlacements });
   const features = isPlainObject(slice.features) ? slice.features : {};
   applyDrawingFeatureData(drawing, { ...features, featureColorOverrides: savedFeatureColorEdits(features.featureColorOverrides) });
   const editorState = slice.editorState;
@@ -1771,7 +1771,7 @@ const applyLegacyConfigPayload = (drawing, config) => {
   state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
     drawing, /** @type {UnvalidatedFields<'multi_record_canvas'>} */ (config.form)
   );
-  applyStoredConfigData(drawing, config);
+  applyConfigData(drawing, config);
   restorePaletteStateAfterConfigImport(drawing);
 };
 
@@ -2754,7 +2754,7 @@ export const applyLabelFitValues = (drawing, values, mode) => {
  * @param {Record<string, unknown>} data
  * @param {{ resolveTrackPlacements?: boolean, applyAlignment?: boolean }} [options]
  */
-const applyStoredConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true } = {}) => {
+const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true } = {}) => {
   const mode = drawing === state.drawings.linear ? 'linear' : 'circular';
   // The execution settings of a Session 44 or older draft or of a request
   // projection are app-level (`state.losatExecution`); the drawing keeps the
@@ -2765,7 +2765,8 @@ const applyStoredConfigData = (drawing, data, { resolveTrackPlacements = true, a
     applyLosatExecutionData(Object.fromEntries(executionFields.map((field) => [field, losat[field]])));
   }
   // The stored settings' merge and readers (Load lists what they cannot restore first).
-  installStoredSettings(drawing, data, drawing === state.drawings.linear ? 'linear' : 'circular');
+  const { arrowRatios } = installStoredSettings(drawing, data, drawing === state.drawings.linear ? 'linear' : 'circular');
+  if (arrowRatios) Object.assign(drawing.adv, arrowRatios);
   replacePlainObject(drawing.unmanagedConfigOverrides, cloneJsonData(readPlainObject(data.unmanagedConfigOverrides).value));
   drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(readRecordDisplayDrafts(data.recordDisplayDrafts).value));
   // Omitted: every record is drawn.
@@ -2854,7 +2855,7 @@ const applyStoredConfigData = (drawing, data, { resolveTrackPlacements = true, a
   if (!storedWhitelist.kept) {
     drawing.manualWhitelist.splice(0, drawing.manualWhitelist.length, ...storedWhitelist.value);
   }
-  if (data.blacklistText !== undefined) drawing.manualBlacklist.value = String(data.blacklistText || '');
+  if (data.blacklistText !== undefined) drawing.manualBlacklist.value = readBlacklistText(data.blacklistText).value;
   if (data.losatProgram) {
     drawing.losatProgram.value = readLosatProgram(data.losatProgram).value;
   }
@@ -2878,9 +2879,9 @@ const applyStoredConfigData = (drawing, data, { resolveTrackPlacements = true, a
  * @param {Record<string, unknown>} data
  * @param {{ resolveTrackPlacements?: boolean, applyAlignment?: boolean }} [options]
  */
-export const applyConfigData = (drawing, data, options = {}) => {
+export const applyCapturedConfigData = (drawing, data, options = {}) => {
   requireCurrentConfigFields(data);
-  applyStoredConfigData(drawing, data, options);
+  applyConfigData(drawing, data, options);
 };
 
 /** @param {DrawingState} drawing */
@@ -4389,7 +4390,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     restoreOrder.forEach((drawingMode) => {
       const drawing = state.drawings[drawingMode];
       const saved = snapshot.drawings[drawingMode];
-      applyConfigData(drawing, saved.config, { resolveTrackPlacements: false });
+      applyCapturedConfigData(drawing, saved.config, { resolveTrackPlacements: false });
       applyUiStateData(drawing, saved.ui);
     });
     applyUiStateData(state.drawings[shownMode], snapshot.ui);

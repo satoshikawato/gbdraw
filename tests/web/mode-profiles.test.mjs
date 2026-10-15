@@ -408,7 +408,7 @@ assert.deepEqual(
 }
 
 {
-  const { applyConfigData, buildConfigData } = await import(
+  const { applyCapturedConfigData, buildConfigData } = await import(
     pathToFileURL(join(tempDir, 'js', 'services', 'config.js'))
   );
   state.mode.value = 'circular';
@@ -434,7 +434,7 @@ assert.deepEqual(
   Object.assign(state.activeDrawing().adv, createDefaultAdv('linear'));
   state.activeDrawing().form.show_scale = true;
   state.activeDrawing().unmanagedConfigOverrides.stale = true;
-  applyConfigData(state.activeDrawing(), savedConfig);
+  applyCapturedConfigData(state.activeDrawing(), savedConfig);
   assert.equal(state.activeDrawing().form.show_scale, false);
   assert.equal(state.activeDrawing().adv.identity, 77);
   assert.deepEqual(state.activeDrawing().unmanagedConfigOverrides, {
@@ -452,21 +452,21 @@ assert.deepEqual(
     const layoutConfig = structuredClone(savedConfig);
     if (layout === undefined) delete layoutConfig.linearRecordLayout;
     else layoutConfig.linearRecordLayout = layout;
-    applyConfigData(state.activeDrawing(), layoutConfig);
+    applyCapturedConfigData(state.activeDrawing(), layoutConfig);
     assert.equal(state.activeDrawing().linearRecordLayoutEnabled.value, expected, JSON.stringify(layout));
   }
 
   const cliProjectedNumericConfig = structuredClone(savedConfig);
   cliProjectedNumericConfig.adv.arrow_head_length_ratio = '1.25';
   cliProjectedNumericConfig.adv.arrow_shaft_width_ratio = '0.25';
-  applyConfigData(state.activeDrawing(), cliProjectedNumericConfig);
+  applyCapturedConfigData(state.activeDrawing(), cliProjectedNumericConfig);
   assert.equal(state.activeDrawing().adv.arrow_head_length_ratio, 1.25);
   assert.equal(state.activeDrawing().adv.arrow_shaft_width_ratio, 0.25);
 
   const cliProjectedAutoConfig = structuredClone(savedConfig);
   cliProjectedAutoConfig.adv.arrow_head_length_ratio = 'auto';
   cliProjectedAutoConfig.adv.arrow_shaft_width_ratio = '1';
-  applyConfigData(state.activeDrawing(), cliProjectedAutoConfig);
+  applyCapturedConfigData(state.activeDrawing(), cliProjectedAutoConfig);
   assert.equal(state.activeDrawing().adv.arrow_head_length_ratio, null);
   assert.equal(state.activeDrawing().adv.arrow_shaft_width_ratio, 1.0);
 
@@ -620,7 +620,7 @@ assert.equal(
   // D-04: a request reads a Scale Interval of 0 or less as the automatic interval
   // (a loaded Session may hold one; Generate sends the field literally, R7), so the
   // Source recipe omits it instead of writing a value the CLI rejects.
-  const { applyConfigData, buildConfigData } = await import(
+  const { applyCapturedConfigData, buildConfigData } = await import(
     pathToFileURL(join(tempDir, 'js', 'services', 'config.js'))
   );
   const { buildSourceRecipe } = await import(pathToFileURL(join(tempDir, 'js', 'app', 'run-info.js')));
@@ -631,7 +631,7 @@ assert.equal(
   for (const [stored, flag] of [[-5, null], [0, null], [250, '250']]) {
     const loaded = structuredClone(buildConfigData(state.activeDrawing()));
     loaded.adv.scale_interval = stored;
-    applyConfigData(state.activeDrawing(), loaded);
+    applyCapturedConfigData(state.activeDrawing(), loaded);
     const canonical = buildCanonicalRenderRequest({
       state, drawing: state.activeDrawing(), filesData: { c_gb: genbank, linearSeqs: [] }, comparisonPlanSnapshot: null
     });

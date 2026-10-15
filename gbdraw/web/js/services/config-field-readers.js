@@ -53,7 +53,7 @@ import { isLabelOverrideRow } from './label-override-table.js';
 
 // The readers of the stored settings of a configuration (a drawing's draft, a
 // legacy configuration file) and of a Session's app `ui`, a drawing's `ui`
-// and its feature edits. `applyStoredConfigData` and Load's apply read with
+// and its feature edits. `applyConfigData` and Load's apply read with
 // these readers, History restores included; before Load applies a file it
 // reads the file with the same readers and lists what they cannot restore
 // (BA-D25, B36, B37, B43), so the apply makes no repair of its own (G2). A
@@ -672,6 +672,13 @@ const readLosatProgramText = exactChoice(['blastn', 'tblastx', 'blastp'], 'blast
 export const readFilterMode = textChoice(['None', 'Whitelist', 'Blacklist'], 'None', {
   aliases: { none: 'None', whitelist: 'Whitelist', blacklist: 'Blacklist' }
 });
+/**
+ * The Label blacklist, text: a number reads as its text; another value keeps
+ * the text it always read as (`String`, nothing for an unset or false value),
+ * with its row (E-OD26). @type {FieldReader<string>}
+ */
+export const readBlacklistText = (value) => (typeof value === 'string' || typeof value === 'number'
+  ? { value: String(value), lost: false } : { value: String(value || ''), lost: !isUnsetValue(value) });
 /** Read as text. @type {FieldReader<string>} */
 export const readLosatProgram = (value) => readLosatProgramText(value ? String(value) : value);
 
@@ -769,7 +776,12 @@ export const readHitLimitsByMode = (value) => {
 
 /** The containers the merge reads first, then their rows (`installStoredSettings`). @type {readonly FieldTable[]} */
 const CONTAINER_TABLES = Object.freeze([
-  { at: 'form', rows: [row('linear_track_layout', textChoice(LINEAR_TRACK_LAYOUTS, 'middle', { aliases: LINEAR_TRACK_LAYOUT_ALIASES }))] },
+  { at: 'form', rows: [
+    row('linear_track_layout', textChoice(LINEAR_TRACK_LAYOUTS, 'middle', { aliases: LINEAR_TRACK_LAYOUT_ALIASES })),
+    // A null lock is an omission, the historical OFF (`importSessionDocument`; E-OD24, no row); the merge keeps
+    // the target's value for one of another kind, with its row.
+    row('keep_definition_left_aligned', onlyTrue)
+  ] },
   { at: 'adv', rows: ADV_ROWS },
   { at: 'losat.blastp', rows: LOSAT_SEARCH_ROWS },
   { at: 'circularConservation', rows: CONSERVATION_ROWS }
@@ -820,6 +832,7 @@ const VALUE_TABLES = Object.freeze([
       row('rules', readColorRules),
       row('whitelist', readWhitelistRules),
       row('filterMode', readFilterMode),
+      row('blacklistText', readBlacklistText),
       row('palette', readPalette),
       row('colors', readPlainObject),
       row('unmanagedConfigOverrides', readPlainObject),
@@ -1119,15 +1132,18 @@ const RAW_FIELDS = Object.freeze([
 /** @param {unknown} value */
 const copied = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
+/** @typedef {{ arrow_head_length_ratio: number | null, arrow_shaft_width_ratio: number | null }} StoredArrowRatios */
 /**
  * Installs a configuration's settings into `targets`: each container is
- * merged, then read by its rows. `applyStoredConfigData` installs a drawing's
+ * merged, then read by its rows. `applyConfigData` installs a drawing's
  * settings with it, and Load reads a file with it before it applies it, so
- * both lose the same values.
+ * both lose the same values. The arrow ratios are read, not installed: the
+ * caller that writes the drawing writes them (`applyConfigData`, R10).
  * @param {SettingsContainers} targets
  * @param {Record<string, unknown>} stored
  * @param {'circular' | 'linear'} mode The drawing's mode, whose defaults a blank reads as.
- * @returns {SettingLoss[]}
+ * @returns {{ losses: SettingLoss[], arrowRatios: StoredArrowRatios | null }} `arrowRatios` is null when the stored
+ *   `adv` is not used (the target keeps its ratios).
  */
 export const installStoredSettings = (targets, stored, mode) => {
   // A retired field name reads as its current name at every version (A17g).
@@ -1156,15 +1172,15 @@ export const installStoredSettings = (targets, stored, mode) => {
   const used = (at) => !losses.some((loss) => loss.kept && loss.at === at);
   // The arrow ratios the stored `adv` holds, else their defaults (an older
   // file draws the arrow it was drawn with); an `adv` not used keeps the target's.
+  /** @type {StoredArrowRatios | null} */
+  let arrowRatios = null;
   if (used('adv')) {
     const storedAdv = containerAt(config, 'adv');
-    /** @type {[string, (value: unknown) => FieldReading<number | null>][]} */ ([
-      ['arrow_head_length_ratio', readPersistedArrowHeadLengthRatio], ['arrow_shaft_width_ratio', readPersistedArrowShaftWidthRatio]
-    ]).forEach(([field, read]) => {
-      const reading = read(storedAdv?.[field]);
-      targets.adv[field] = reading.value;
-      losses.push(...readingLosses(reading, `adv.${field}`, storedAdv?.[field]));
-    });
+    const head = readPersistedArrowHeadLengthRatio(storedAdv?.arrow_head_length_ratio);
+    const shaft = readPersistedArrowShaftWidthRatio(storedAdv?.arrow_shaft_width_ratio);
+    arrowRatios = { arrow_head_length_ratio: head.value, arrow_shaft_width_ratio: shaft.value };
+    losses.push(...readingLosses(head, 'adv.arrow_head_length_ratio', storedAdv?.arrow_head_length_ratio),
+      ...readingLosses(shaft, 'adv.arrow_shaft_width_ratio', storedAdv?.arrow_shaft_width_ratio));
   }
   if (config.losat && used('losat') && used('losat.blastp')) {
     // The inference flag as stored, else on for a collinear search; the hit
@@ -1181,7 +1197,7 @@ export const installStoredSettings = (targets, stored, mode) => {
       losses.push(...readingLosses(limits, 'losat.blastp.hitLimitsByMode', blastp?.hitLimitsByMode));
     }
   }
-  return losses;
+  return { losses, arrowRatios };
 };
 
 /**
@@ -1285,7 +1301,7 @@ const lossRepairs = (losses, path, stored, { mode = null, root = '', targets = '
  * Reads the containers of `config` as `installStoredSettings` installs them
  * into `targets` (fresh defaults for a Session's drawing, a copy of the
  * drawing for a legacy configuration) and the other fields as
- * `applyStoredConfigData` reads them; lists what they cannot restore. Only the
+ * `applyConfigData` reads them; lists what they cannot restore. Only the
  * values `stored` holds are listed (the file's draft; a value the stored
  * request supplies is read with the request), and only those the drawing of
  * `mode` draws.
@@ -1302,8 +1318,7 @@ const lossRepairs = (losses, path, stored, { mode = null, root = '', targets = '
 export const configFieldRepairs = (targets, config, path, {
   stored = config, mode, current = false, resolveTrackPlacements = true
 }) => {
-  /** @type {SettingLoss[]} */
-  const losses = installStoredSettings(targets, config, mode);
+  const { losses } = installStoredSettings(targets, config, mode);
   if (resolveTrackPlacements) resolvedTrackStacks(targets.adv, targets.form, losses);
   return lossRepairs([
     ...losses,
@@ -1315,7 +1330,7 @@ export const configFieldRepairs = (targets, config, path, {
 
 /**
  * The track stacks a drawing's settings resolve to: each stack with its axis
- * index read and its placements applied (`applyStoredConfigData`'s
+ * index read and its placements applied (`applyConfigData`'s
  * `resolveTrackPlacements`). Pure: Load reads the stacks it installs with it
  * before the commit, and `losses` collects what the slot readers replace
  * (OV-758; `at` under the settings).

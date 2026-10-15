@@ -2,7 +2,7 @@
 import { validateAnnotationWarnings } from './session-feature-metadata.js';
 import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
-import { readSessionResources, validateWebFileBindings, webFileBindingFaults } from './session-resource-backing.js';
+import { readSessionResources, validateWebFileBindings, webFileBindingFaults, webFileBindingPath } from './session-resource-backing.js';
 import { SESSION_INPUT_TYPES, alignmentResetReceiptShapeHolds, requireActiveConfigContainers } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
@@ -14,6 +14,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { SESSION_ADMISSION_DESCRIPTION } from '../contracts/session-shape.generated.js';
 import { repairByDescription } from '../utils/contract-repair.js';
+import { isPlainObject } from '../utils/contract-shape.js';
 import { SESSION_PART_PATHS, loadRepair } from '../utils/load-repairs.js';
 import {
   CANONICAL_SESSION_MIN_VERSION,
@@ -150,14 +151,6 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
   'labelTextBulkOverrides',
   ...RENDERED_ID_FEATURE_EDIT_FIELDS
 ]);
-
-/**
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-const isPlainObject = (value) => (
-  value !== null && typeof value === 'object' && !Array.isArray(value)
-);
 
 const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
 const OLDEST_SESSION_VERSION = Math.min(...SUPPORTED_SESSION_VERSIONS);
@@ -414,12 +407,8 @@ const readWebOnlyFields = (document, repairs) => {
   return /** @type {SessionChecked} */ (next); // only fields the description leaves open were dropped
 };
 
-/**
- * The place of one binding under `webFiles.bindings`, as
- * `webFileBindingFaults` names it: a slot, an element of a slot's list, or a
- * slot of a list row.
- */
-const BINDING_PATH = /^(\w+)(?:\[(\d+)\])?(?:\.(\w+))?$/;
+/** Depth file lists are positional (a list index is a track slot): a dropped binding leaves its place empty. */
+const POSITIONAL_BINDING_SLOTS = new Set(['c_depth', 'depth']);
 
 /**
  * The input files of a Session as the app reads them (A8, A6b): a resource
@@ -448,25 +437,29 @@ const readSessionInputs = (document, repairs) => {
   const faults = webFileBindingFaults(webFiles,
     /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (next.resources));
   if (!faults.length || !isPlainObject(webFiles)) return /** @type {SessionChecked} */ (next);
-  if (faults.some(({ path }) => path === null)) {
+  if (faults.some(({ at }) => at === null)) {
     repairs.push(loadRepair({ code: 'session-field-dropped', path: 'webFiles.bindings', effect: 'dropped' }));
     const { bindings: _dropped, ...kept } = webFiles;
     return /** @type {SessionChecked} */ ({ ...next, webFiles: kept }); // the inventory is optional in every band
   }
   // `webFileBindingFaults` found an object inventory.
   const bindings = /** @type {Record<string, unknown>} */ (JSON.parse(JSON.stringify(webFiles.bindings)));
-  /** @type {Map<string, Set<number>>} */
+  /** @type {Map<unknown[], Set<number>>} */
   const removed = new Map();
-  faults.forEach(({ path, field }) => {
-    repairs.push(loadRepair({ code: field ? 'session-field-dropped' : 'file-entry-dropped', path: `webFiles.bindings.${path}`, effect: 'dropped' }));
-    const [, key, index, slot] = /** @type {RegExpExecArray} */ (BINDING_PATH.exec(/** @type {string} */ (path)));
-    if (field) delete bindings[key];
-    else if (index === undefined) bindings[key] = null;
-    else if (slot !== undefined) /** @type {Record<string, unknown>[]} */ (bindings[key])[Number(index)][slot] = null;
-    else removed.set(key, (removed.get(key) ?? new Set()).add(Number(index)));
+  faults.forEach(({ at, field }) => {
+    const keys = /** @type {ReadonlyArray<string | number>} */ (at); // no inventory fault is left
+    repairs.push(loadRepair({ code: field ? 'session-field-dropped' : 'file-entry-dropped', path: `webFiles.bindings.${webFileBindingPath(keys)}`, effect: 'dropped' }));
+    const last = /** @type {string | number} */ (keys.at(-1));
+    // `webFileBindingFaults` reached the binding through these keys: each one holds an object or a list.
+    /** @type {unknown} */
+    const parent = keys.slice(0, -1).reduce((container, key) => /** @type {Record<string | number, unknown>} */ (container)[key], /** @type {unknown} */ (bindings));
+    if (Array.isArray(parent) && !field && !POSITIONAL_BINDING_SLOTS.has(String(keys.findLast((key) => typeof key === 'string')))) {
+      removed.set(parent, (removed.get(parent) ?? new Set()).add(Number(last)));
+    } else if (field) delete /** @type {Record<string | number, unknown>} */ (parent)[last];
+    else /** @type {Record<string | number, unknown>} */ (parent)[last] = null;
   });
-  removed.forEach((indices, key) => {
-    bindings[key] = /** @type {unknown[]} */ (bindings[key]).filter((_, index) => !indices.has(index));
+  removed.forEach((indices, list) => {
+    [...indices].sort((a, b) => b - a).forEach((index) => list.splice(index, 1));
   });
   return /** @type {SessionChecked} */ ({ ...next, webFiles: { ...webFiles, bindings } }); // bindings read as above
 };
@@ -926,11 +919,10 @@ const readSettingsOnlyParts = (stored, repairs) => {
   if (faults.results) repairs.push(loadRepair({ code: 'session-part-dropped', path: 'results', effect: 'dropped' }));
   const bindings = /** @type {UnvalidatedFields<'bindings'>} */ (document.webFiles)?.bindings;
   if (isPlainObject(bindings)) {
-    const held = /** @type {Record<string, unknown>} */ (bindings); // isPlainObject is no type predicate
-    BIOLOGICAL_BINDINGS.filter((key) => hasBiologicalSessionInputs({ [key]: held[key] })).forEach((key) => repairs.push(
+    BIOLOGICAL_BINDINGS.filter((key) => hasBiologicalSessionInputs({ [key]: bindings[key] })).forEach((key) => repairs.push(
       loadRepair({ code: 'session-field-dropped', path: `webFiles.bindings.${key}`, effect: 'dropped' })
     ));
-    (Array.isArray(held.linearSeqs) ? held.linearSeqs : []).forEach((row, index) => {
+    (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((row, index) => {
       if (hasBiologicalSessionInputs({ linearSeqs: [row] })) {
         repairs.push(loadRepair({ code: 'session-field-dropped', path: `webFiles.bindings.linearSeqs[${index}]`, effect: 'changed' }));
       }

@@ -630,6 +630,44 @@ test('an older Session whose match sequences cannot be read again lists it (OV-7
   assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'match-sequences-unrestored').map(({ path }) => path), ['files']);
 });
 
+// OV-890: a Depth binding sits one list deeper (`c_depth[record][slot]`); one
+// that names a resource the Session does not hold is dropped with the row the
+// other bindings get, its slot left empty. With no resources left at all,
+// R4 refuses the file when nothing else is restored.
+test('a Depth binding that names no resource is dropped with its row (OV-890)', async () => {
+  const depthId = 'depth-tracks-1-source-record-1';
+  const session = fixture('two-mode-project.v44.gbdraw-session.json.gz');
+  assert.deepEqual(session.webFiles.bindings.c_depth.map((row) => row.map((binding) => binding?.resourceId)), [[depthId]]);
+  delete session.resources[depthId];
+  const read = readSessionDocument(session);
+  assert.ok(read.repairs.some(({ code, path }) => code === 'file-entry-dropped' && path === 'webFiles.bindings.c_depth[0][0]'),
+    JSON.stringify(read.repairs));
+  assert.deepEqual(read.value.webFiles.bindings.c_depth, [[null]]);
+  const { loaded } = await loadAnswering(session);
+  assert.ok(loaded.repairs.some(({ path }) => path === 'webFiles.bindings.c_depth[0][0]'), JSON.stringify(loaded.repairs));
+  for (const resources of [null, [], undefined]) {
+    const bare = fixture('two-mode-project.v44.gbdraw-session.json.gz');
+    if (resources === undefined) delete bare.resources;
+    else bare.resources = resources;
+    const repairs = readSessionDocument(bare).repairs;
+    assert.ok(repairs.some(({ path }) => path === 'webFiles.bindings.c_depth[0][0]'), JSON.stringify(repairs));
+    const result = await importSession(input(bare), { confirmLoadRepairs: async () => true });
+    if (result.status === 'ok') assert.ok(result.repairs.some(({ path }) => path === 'webFiles.bindings.c_depth[0][0]'));
+    else assert.deepEqual([result.error?.code, result.error?.context?.reason], ['INPUT_INVALID', 'FIELDS'], JSON.stringify(result.error));
+  }
+});
+
+// OV-891 (E-OD24): a null definition lock reads as an omission, the
+// historical OFF: the drawing holds false, and no row is listed (E-OD06).
+test('a null definition lock loads as OFF with no row (OV-891)', async () => {
+  const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  assert.equal(session.modes.linear.config.form.keep_definition_left_aligned, true);
+  session.modes.linear.config.form.keep_definition_left_aligned = null;
+  const loaded = await importSession(input(session), { confirmLoadRepairs: async () => assert.fail('no row (E-OD06)') });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.equal(state.drawings.linear.form.keep_definition_left_aligned, false);
+});
+
 // Inventory B51 (Q2): a Session older than 27 stays refused, and the error
 // says it is from an older gbdraw. A file that is no gbdraw Session is not
 // called an old one.

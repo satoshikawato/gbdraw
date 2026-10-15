@@ -185,6 +185,40 @@ test('K14: record display drafts of no list are listed before the dialog and app
   await saved();
 });
 
+// OV-892 (E-OD26): a stored Label blacklist that is no text keeps today's
+// text (`String(value)`, nothing for null), listed when it is an object, a list
+// or a boolean; a number reads as its text with no row. One table row serves a
+// Session slice, a Session 44 draft and a configuration file.
+test('OV-892: a Label blacklist that is no text is listed and keeps its text', async () => {
+  const configFile = () => {
+    const config = structuredClone(BASES.g47L().modes.linear.config);
+    state.mode.value = 'linear';
+    return config;
+  };
+  const cases = [
+    ['g47L', () => BASES.g47L(), 'modes.linear.config.blacklistText', 'linear'],
+    ['v44', () => BASES.v44(), 'config.blacklistText', 'circular'],
+    ['configuration file', configFile, 'blacklistText', 'linear']
+  ];
+  await load(BASES.g47L());
+  for (const [name, base, path, mode] of cases) {
+    for (const [value, text, listed] of [
+      [{ a: 1 }, '[object Object]', true], [['x', 'y'], 'x,y', true], [true, 'true', true], [false, '', true],
+      [5, '5', false], [null, '', false]
+    ]) {
+      const dialogs = [];
+      const loaded = await importSession(input(set(base(), path, value)), {
+        transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { dialogs.push(dialog.items); return true; }
+      });
+      const label = `${name} ${JSON.stringify(value)}`;
+      assert.ok(['ok', 'legacy'].includes(loaded.status), `${label}: ${JSON.stringify(loaded.error)}`);
+      assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), listed ? [`setting-replaced ${path}`] : [], label);
+      assert.deepEqual(dialogs, listed ? [describeLoadRepairs(loaded.repairs)?.items] : [], label);
+      assert.equal(state.drawings[mode].manualBlacklist.value, text, label);
+    }
+  }
+});
+
 test('E1b: an unknown field of a stored comparison edge is dropped with a row (E-OD12)', async () => {
   const session = BASES.g47L();
   session.modes.linear.config.linearComparisonPlan.edges = [{

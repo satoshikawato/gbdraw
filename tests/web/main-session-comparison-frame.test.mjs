@@ -86,3 +86,17 @@ test('a stored record index is read as a property key, as the stored request was
     assert.equal(calls.length, convertedCount, JSON.stringify(index));
   }
 });
+
+// OV-869: a reversed record with no region reads its length from its record
+// file; one the Session does not hold (`readSessionDocument` dropped it) leaves
+// the comparison to the request reader, which drops it with its row.
+test('a comparison whose reversed record file the Session does not hold is left to the request reader (OV-869)', async () => {
+  for (const source of [{ kind: 'genbank', resourceId: 'q' }, { kind: 'gffFasta', gffResourceId: 'q', fastaResourceId: 's' }]) {
+    const { calls, convertTable } = recordingConverter();
+    const stored = session();
+    stored.renderRequest.records[0] = { source, presentation: { reverseComplement: true } };
+    delete stored.resources.q;
+    assert.equal(await convertMainSessionComparisonFrames(stored, { convertTable, discover: NO_DISCOVERY }), stored, source.kind);
+    assert.deepEqual(calls, []);
+  }
+});

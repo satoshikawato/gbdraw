@@ -58,12 +58,11 @@ const entryAt = (list, index) => list.find((_, position) => String(position) ===
 /**
  * @param {Record<string, unknown>} resources `readSessionDocument` kept each descriptor it could read.
  * @param {unknown} resourceId
+ * @returns {File | null} null for a file the Session does not hold
  */
 const resourceFile = (resources, resourceId) => {
   const entry = /** @type {StoredResource} */ (resources[String(resourceId)]);
-  if (!entry || typeof entry.data !== 'string') {
-    throw new Error(`Missing Session resource: ${resourceId}`);
-  }
+  if (!entry || typeof entry.data !== 'string') return null;
   return new File([base64ToBytes(entry.data)], String(entry.name || resourceId), {
     type: String(entry.type || 'text/plain')
   });
@@ -73,15 +72,17 @@ const resourceFile = (resources, resourceId) => {
  * @param {StoredRecord} record
  * @param {Record<string, unknown>} resources
  * @param {RecordDiscovery} discover
+ * @returns {Promise<number | null>} null when the Session does not hold the record's files
  */
 const selectedRecordLength = async (record, resources, discover) => {
   const source = /** @type {StoredSource} */ (record?.source);
-  const catalog = source?.kind === 'gffFasta'
-    ? await discover.gffFasta({
-        gffFile: resourceFile(resources, source.gffResourceId),
-        fastaFile: resourceFile(resources, source.fastaResourceId)
-      })
-    : await discover.sequence({ file: resourceFile(resources, source?.resourceId), format: 'genbank' });
+  const gffFasta = source?.kind === 'gffFasta';
+  const file = resourceFile(resources, gffFasta ? source.gffResourceId : source?.resourceId);
+  const fastaFile = gffFasta ? resourceFile(resources, source.fastaResourceId) : null;
+  if (!file || (gffFasta && !fastaFile)) return null;
+  const catalog = fastaFile
+    ? await discover.gffFasta({ gffFile: file, fastaFile })
+    : await discover.sequence({ file, format: 'genbank' });
   const selector = /** @type {StoredSelector} */ (record?.selector || null);
   const selected = selector?.kind === 'recordIndex'
     ? entryAt(catalog, selector.index)
@@ -99,7 +100,8 @@ const selectedRecordLength = async (record, resources, discover) => {
  * @param {unknown} stored A record of the stored request, or nothing.
  * @param {Record<string, unknown>} resources
  * @param {RecordDiscovery} discover
- * @returns {Promise<EndpointFrame>}
+ * @returns {Promise<EndpointFrame | null>} null when the length of a reversed record cannot be read: the
+ *   Session does not hold its files
  */
 const endpointFrame = async (stored, resources, discover) => {
   const record = /** @type {StoredRecord} */ (stored);
@@ -110,7 +112,7 @@ const endpointFrame = async (stored, resources, discover) => {
   const length = region
     ? Number(region.end) - Number(region.start) + 1
     : await selectedRecordLength(record, resources, discover);
-  return { length, reverse: true };
+  return length === null ? null : { length, reverse: true };
 };
 
 /**
@@ -148,7 +150,8 @@ export const convertMainSessionComparisonFrames = async (
     if (!table) continue;
     const queryFrame = await endpointFrame(entryAt(records, comparison.queryRecordIndex), resources, discover);
     const subjectFrame = await endpointFrame(entryAt(records, comparison.subjectRecordIndex), resources, discover);
-    if (!queryFrame.reverse && !subjectFrame.reverse) continue;
+    // A record file the Session does not hold, like a table, is the request reader's to drop (OV-869).
+    if (!queryFrame || !subjectFrame || (!queryFrame.reverse && !subjectFrame.reverse)) continue;
     if (!convertTable) throw new Error('Session comparison conversion service is unavailable.');
     const response = /** @type {UnvalidatedFields<'result', UnvalidatedFields<'tsv'>>} */ (await convertTable(
       { tableText: bytesToText(base64ToBytes(String(table.data)), { fatal: true }), queryFrame, subjectFrame }

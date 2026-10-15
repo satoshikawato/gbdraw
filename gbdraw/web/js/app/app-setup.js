@@ -48,7 +48,7 @@ import {
 import { state, sessionOperationAvailability, createLinearSeq, normalizeLinearSeqList } from '../state.js';
 import {
   adoptCanonicalRenderArtifacts,
-  applyConfigData,
+  applyCapturedConfigData,
   applyEditorStateData,
   applyFeatureStateData,
   applyOrthogroupStateData,
@@ -1555,7 +1555,7 @@ export const createAppSetup = () => {
     nextTick,
     normalizeLinearSeqList,
     buildConfigData,
-    applyConfigData,
+    applyConfigData: applyCapturedConfigData,
     buildUiStateData,
     applyUiStateData,
     buildFeatureStateData,

@@ -72,7 +72,7 @@ const {
   projectRequest: projectCanonicalSessionRequest,
   resolveComparisonPlan: resolveLinearComparisonPlan
 });
-const { applyConfigData } = await import(
+const { applyCapturedConfigData } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'config.js'))
 );
 const { splitDraftIntoModes } = await import(
@@ -207,7 +207,7 @@ const cliEditorProjection = projectCanonicalSessionRequest({
 });
 webState.mode.value = 'linear';
 webState.lInputType.value = cliEditorProjection.inputType;
-applyConfigData(webState.activeDrawing(), promotedSyntheticCli.config);
+applyCapturedConfigData(webState.activeDrawing(), promotedSyntheticCli.config);
 const cliNextComparisonSnapshot = resolveLinearComparisonPlan({
   plan: webState.activeDrawing().linearComparisonPlan,
   sequences: cliEditorProjection.files.linearSeqs,

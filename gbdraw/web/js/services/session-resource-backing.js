@@ -232,13 +232,20 @@ export const readSessionResources = (resources) => {
 // Binding grammar belongs beside the File backing; envelope/version and
 // comparison-plan authority remain with their existing owners.
 /**
- * One thing a Web input inventory holds that the app cannot read. `path` is
+ * One thing a Web input inventory holds that the app cannot read. `at` is
  * null for the inventory itself (no object, or a schema no writer wrote), or
- * the place of one binding under `webFiles.bindings` (`c_gb`,
- * `c_conservation_blasts[1]`, `linearSeqs[0].gb`), or of a field no writer
- * wrote (`field`).
- * @typedef {{ path: string | null, field?: boolean, message: string }} WebFileBindingFault
+ * the keys of one binding under `webFiles.bindings` (`['c_gb']`,
+ * `['c_conservation_blasts', 1]`, `['c_depth', 0, 0]`, `['linearSeqs', 0, 'gb']`),
+ * or of a field no writer wrote (`field`). `webFileBindingPath` writes it as text.
+ * @typedef {{ at: ReadonlyArray<string | number> | null, field?: boolean, message: string }} WebFileBindingFault
  */
+/**
+ * The place of a binding as a row names it: `c_depth[0][0]`, `linearSeqs[0].gb`.
+ * @param {ReadonlyArray<string | number>} at
+ * @returns {string}
+ */
+export const webFileBindingPath = (at) => at.map((key, index) => (
+  typeof key === 'number' ? `[${key}]` : `${index ? '.' : ''}${key}`)).join('');
 /**
  * The one check of a Web input inventory: Load drops what it names
  * (`readWebFileBindings` in session-authority.js), Save and the runtime refuse
@@ -256,10 +263,10 @@ export const webFileBindingFaults = (webFiles, resources = {}) => {
    * @returns {value is Record<string, unknown>}
    */
   const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-  if (!object(bindings)) return [{ path: null, message: 'Session webFiles.bindings must be an object.' }];
-  if (!(/** @type {unknown[]} */ ([1, 2])).includes(bindings.schema)) return [{ path: null, message: 'Unsupported Web file binding schema.' }];
+  if (!object(bindings)) return [{ at: null, message: 'Session webFiles.bindings must be an object.' }];
+  if (!(/** @type {unknown[]} */ ([1, 2])).includes(bindings.schema)) return [{ at: null, message: 'Unsupported Web file binding schema.' }];
   const current = bindings.schema === 2;
-  if (current && !Object.hasOwn(bindings, 'c_gb')) return [{ path: null, message: 'Web binding schema 2 requires c_gb.' }];
+  if (current && !Object.hasOwn(bindings, 'c_gb')) return [{ at: null, message: 'Web binding schema 2 requires c_gb.' }];
   /** @param {Record<string, unknown>} value @returns {string | null} */
   const metadata = value => (typeof value.name !== 'string' || typeof value.type !== 'string'
     || typeof value.lastModified !== 'number' || !Number.isFinite(value.lastModified) || value.lastModified < 0
@@ -295,15 +302,15 @@ export const webFileBindingFaults = (webFiles, resources = {}) => {
   };
   /** @type {WebFileBindingFault[]} */
   const faults = [];
-  /** @param {unknown} binding @param {string} path @param {boolean} [compositeAllowed] */
-  const value = (binding, path, compositeAllowed = false) => {
+  /** @param {unknown} binding @param {ReadonlyArray<string | number>} at @param {boolean} [compositeAllowed] */
+  const value = (binding, at, compositeAllowed = false) => {
     if (binding === null || binding === undefined) return;
     if (Array.isArray(binding)) {
-      binding.forEach((item, index) => value(item, `${path}[${index}]`));
+      binding.forEach((item, index) => value(item, [...at, index]));
       return;
     }
     const message = single(binding, compositeAllowed);
-    if (message !== null) faults.push({ path, message });
+    if (message !== null) faults.push({ at, message });
   };
   const slots = [
     'c_gb', 'c_gff', 'c_fasta', 'c_depth', 'c_conservation_blasts',
@@ -313,15 +320,15 @@ export const webFileBindingFaults = (webFiles, resources = {}) => {
   if (current) {
     Object.keys(bindings).filter(key => ![
       'schema', ...slots, 'c_conservation_blasts_source', 'linearSeqs', 'linearComparisons'
-    ].includes(key)).forEach(key => faults.push({ path: key, field: true, message: 'Unknown Web binding inventory field.' }));
+    ].includes(key)).forEach(key => faults.push({ at: [key], field: true, message: 'Unknown Web binding inventory field.' }));
   }
-  slots.forEach(slot => value(bindings[slot], slot, slot === 'c_gb'));
+  slots.forEach(slot => value(bindings[slot], [slot], slot === 'c_gb'));
   (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((/** @type {WebFileBindingRow} */ sequence, index) => {
-    ['gb', 'gff', 'fasta', 'depth', 'blast'].forEach(slot => value(sequence?.[slot], `linearSeqs[${index}].${slot}`));
+    ['gb', 'gff', 'fasta', 'depth', 'blast'].forEach(slot => value(sequence?.[slot], ['linearSeqs', index, slot]));
   });
   ['linearComparisons', 'linearCanonicalComparisons'].forEach(slot => {
     (Array.isArray(bindings[slot]) ? bindings[slot] : []).forEach((/** @type {WebFileBindingRow} */ row, index) => (
-      value(row?.file, `${slot}[${index}].file`)));
+      value(row?.file, [slot, index, 'file'])));
   });
   return faults;
 };
